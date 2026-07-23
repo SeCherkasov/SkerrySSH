@@ -12,37 +12,33 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.appearance_default_value
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Shared settings-section widgets (used by several *Section.kt files in this package).
 
 /**
- * Section subtitle: dimmed line under the sticky header. The section's bold title now lives in the
- * panel's static header strip (see SettingsPanel), so it is not repeated here.
+ * Settings group heading: small caps in a muted color, top padding to separate sections.
+ * The single typography for group headings across all settings tabs — ad-hoc headings must
+ * delegate here (padding is tunable, the type style is not).
  */
 @Composable
-internal fun SectionSubtitle(subtitle: String) {
-    Txt(subtitle, color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 14.dp, bottom = 16.dp))
-}
-
-/** Settings group heading: small caps in a muted color, top padding to separate sections. */
-@Composable
-internal fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String, top: Dp = 24.dp, bottom: Dp = 4.dp) {
     Txt(
         text,
-        color = D.faint,
+        color = Skerry.colors.faint,
         size = 11.sp,
         weight = FontWeight.SemiBold,
         letterSpacing = 1.sp,
-        modifier = Modifier.padding(top = 24.dp, bottom = 4.dp),
+        modifier = Modifier.padding(top = top, bottom = bottom),
     )
 }
 
@@ -54,8 +50,8 @@ internal fun SettingToggleRow(title: String, desc: String, on: Boolean, onToggle
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Txt(title, color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            if (desc.isNotEmpty()) Txt(desc, color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
+            Txt(title, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+            if (desc.isNotEmpty()) Txt(desc, color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
         }
         Toggle(on, onToggle, Modifier.padding(top = 2.dp))
     }
@@ -83,7 +79,7 @@ internal fun SettingRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f).padding(end = 16.dp)) {
-            Txt(label, color = D.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(label, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
             if (hasHint) DefaultValueHint(isDefault, defaultText, onReset)
         }
         control()
@@ -98,15 +94,15 @@ internal fun SettingRow(
 private fun DefaultValueHint(isDefault: Boolean, defaultText: String, onReset: () -> Unit) {
     val text = stringResource(Res.string.appearance_default_value, defaultText)
     if (isDefault) {
-        Txt(text, color = D.faint, size = 11.sp, modifier = Modifier.padding(top = 2.dp))
+        Txt(text, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(top = 2.dp))
     } else {
         Row(
             Modifier.padding(top = 2.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onReset),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            Sym("restart_alt", size = 13.sp, color = D.cyan)
-            Txt(text, color = D.cyan, size = 11.sp)
+            Sym("restart_alt", size = 13.sp, color = Skerry.colors.cyan)
+            Txt(text, color = Skerry.colors.cyan, size = 11.sp)
         }
     }
 }

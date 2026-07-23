@@ -25,9 +25,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /**
  * Shared mobile form primitives (sheets/dialogs/settings): a field label and a text field. Single
@@ -40,7 +40,7 @@ internal fun MobileFormField(label: String, modifier: Modifier = Modifier, conte
     Column(modifier) {
         Txt(
             label.uppercase(),
-            color = D.faint,
+            color = Skerry.colors.faint,
             size = 10.5.sp,
             weight = FontWeight.SemiBold,
             letterSpacing = 0.6.sp,
@@ -54,7 +54,7 @@ internal fun MobileFormField(label: String, modifier: Modifier = Modifier, conte
  * Sheet text field (dark background + cyan border, radius 11). [masked] hides input (password/
  * passphrase); [singleLine] = false + [mono] + [minHeightDp] gives a multiline monospace area
  * (pasting a PEM key, a snippet command), like desktop `ModalTextField`. [background] is the
- * field's fill color (snippet command uses [D.terminalBg]). [onSubmit] fires on Done/Send/Go.
+ * field's fill color (snippet command uses [Skerry.colors.terminalBg]). [onSubmit] fires on Done/Send/Go.
  */
 @Composable
 internal fun MobileFormInput(
@@ -65,7 +65,7 @@ internal fun MobileFormInput(
     masked: Boolean = false,
     singleLine: Boolean = true,
     mono: Boolean = false,
-    background: Color = D.bg,
+    background: Color = Skerry.colors.bg,
     minHeightDp: Int? = null,
     imeAction: ImeAction = ImeAction.Default,
     onSubmit: (() -> Unit)? = null,
@@ -73,8 +73,9 @@ internal fun MobileFormInput(
     val fonts = LocalFonts.current
     val family = if (mono) fonts.mono else fonts.ui
     val fontSize = if (mono) 12.5.sp else 15.sp
-    val textStyle = remember(family, fontSize) {
-        TextStyle(color = D.text, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 17.sp else 20.sp)
+    val textColor = Skerry.colors.text
+    val textStyle = remember(family, fontSize, textColor) {
+        TextStyle(color = textColor, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 17.sp else 20.sp)
     }
     // Border/padding live in decorationBox so a click anywhere in the field places the caret.
     BasicTextField(
@@ -82,7 +83,7 @@ internal fun MobileFormInput(
         onValueChange = onValueChange,
         singleLine = singleLine,
         textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType, imeAction = imeAction),
         keyboardActions = if (onSubmit != null) {
@@ -98,10 +99,10 @@ internal fun MobileFormInput(
                     .then(if (minHeightDp != null) Modifier.heightIn(min = minHeightDp.dp) else Modifier)
                     .clip(RoundedCornerShape(11.dp))
                     .background(background)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                     .padding(horizontal = 14.dp, vertical = 13.dp),
             ) {
-                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = fontSize, font = if (mono) fonts.mono else null)
+                if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = fontSize, font = if (mono) fonts.mono else null)
                 inner()
             }
         },

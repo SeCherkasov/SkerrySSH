@@ -22,7 +22,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -34,7 +33,6 @@ import app.skerry.shared.vault.SecurityEventType
 import app.skerry.shared.vault.securityMoment
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.Badge
-import app.skerry.ui.design.D
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.GhostButton
@@ -83,12 +81,11 @@ import app.skerry.ui.generated.resources.settings_security_no_events
 import app.skerry.ui.generated.resources.settings_security_pw_changed_days
 import app.skerry.ui.generated.resources.settings_security_pw_changed_today
 import app.skerry.ui.generated.resources.settings_security_pw_changed_yesterday
-import app.skerry.ui.generated.resources.settings_security_subtitle
-import app.skerry.ui.generated.resources.settings_security_touch_id
-import app.skerry.ui.generated.resources.settings_security_touch_id_desc
-import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
-import app.skerry.ui.generated.resources.settings_security_touch_id_unsupported
-import app.skerry.ui.generated.resources.settings_security_touch_id_weak_binding
+import app.skerry.ui.generated.resources.settings_security_biometric
+import app.skerry.ui.generated.resources.settings_security_biometric_desc
+import app.skerry.ui.generated.resources.settings_security_biometric_recheck
+import app.skerry.ui.generated.resources.settings_security_biometric_unsupported
+import app.skerry.ui.generated.resources.settings_security_biometric_weak_binding
 import app.skerry.ui.generated.resources.settings_time_days_ago
 import app.skerry.ui.generated.resources.settings_time_today
 import app.skerry.ui.generated.resources.settings_time_yesterday
@@ -113,6 +110,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Security section: master password, biometrics, auto-lock, event log.
 
@@ -136,7 +134,6 @@ internal fun SecuritySection(
     onChangeAccountPassword: () -> Unit,
     onBiometricToggled: () -> Unit,
 ) {
-    SectionSubtitle(stringResource(Res.string.settings_security_subtitle))
 
     // Master password subtitle is the real "last changed" from the log (or a neutral fallback).
     // Reading the log is file I/O + JSON parsing, so it runs off the composition thread.
@@ -147,13 +144,13 @@ internal fun SecuritySection(
         Column(Modifier.weight(1f)) {
             Txt(
                 stringResource(if (syncConfigured) Res.string.settings_security_account_password else Res.string.settings_security_master_password),
-                color = D.text,
+                color = Skerry.colors.text,
                 size = 13.sp,
                 weight = FontWeight.Medium,
             )
             Txt(
                 if (syncConfigured) stringResource(Res.string.settings_security_account_password_desc) else masterPasswordSubtitle(lastChange),
-                color = D.dim,
+                color = Skerry.colors.dim,
                 size = 11.5.sp,
                 modifier = Modifier.padding(top = 3.dp),
             )
@@ -162,7 +159,7 @@ internal fun SecuritySection(
         if (controller != null) {
             GhostButton(stringResource(Res.string.settings_change), onClick = if (syncConfigured) onChangeAccountPassword else onChangeMasterPassword)
         } else {
-            GhostButton(stringResource(Res.string.settings_change), onClick = {}, fg = D.faint, border = D.line)
+            GhostButton(stringResource(Res.string.settings_change), onClick = {}, fg = Skerry.colors.faint, border = Skerry.colors.line)
         }
     }
     HLine()
@@ -175,16 +172,16 @@ internal fun SecuritySection(
     if (controller != null && controller.biometricUnsupported) {
         Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Txt(stringResource(Res.string.settings_security_touch_id), color = D.faint, size = 13.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.settings_security_biometric), color = Skerry.colors.faint, size = 13.sp, weight = FontWeight.Medium)
                 Txt(
-                    stringResource(Res.string.settings_security_touch_id_unsupported),
-                    color = D.dim,
+                    stringResource(Res.string.settings_security_biometric_unsupported),
+                    color = Skerry.colors.dim,
                     size = 11.5.sp,
                     modifier = Modifier.padding(top = 3.dp),
                 )
             }
             GhostButton(
-                stringResource(Res.string.settings_security_touch_id_recheck),
+                stringResource(Res.string.settings_security_biometric_recheck),
                 onClick = { controller.recheckBiometricSupport() },
             )
         }
@@ -204,11 +201,11 @@ internal fun SecuritySection(
             subtitle = stringResource(Res.string.more_biometric_verify_subtitle),
         )
         SettingToggleRow(
-            stringResource(Res.string.settings_security_touch_id),
+            stringResource(Res.string.settings_security_biometric),
             // The subtitle doubles as the place to admit a weaker key binding when that's what the
             // device would take (see VaultGateController.biometricReducedBinding).
-            if (controller.biometricReducedBinding) stringResource(Res.string.settings_security_touch_id_weak_binding)
-            else stringResource(Res.string.settings_security_touch_id_desc),
+            if (controller.biometricReducedBinding) stringResource(Res.string.settings_security_biometric_weak_binding)
+            else stringResource(Res.string.settings_security_biometric_desc),
             on = controller.biometricEnabled,
             onToggle = {
                 if (controller.biometricInFlight) return@SettingToggleRow
@@ -225,8 +222,8 @@ internal fun SecuritySection(
     // Auto-lock: real idle threshold, applied to VaultGate's idle timer via state.autoLock.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.settings_security_auto_lock), color = D.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.settings_security_auto_lock_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+            Txt(stringResource(Res.string.settings_security_auto_lock), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.settings_security_auto_lock_desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
         Box(Modifier.width(170.dp)) { AutoLockPicker(state.autoLock, onPick = state::chooseAutoLock) }
     }
@@ -236,27 +233,28 @@ internal fun SecuritySection(
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Txt(stringResource(Res.string.settings_security_2fa), color = D.dim, size = 13.sp, weight = FontWeight.Medium)
-                Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = D.amber, radius = 3, size = 9.sp)
+                Txt(stringResource(Res.string.settings_security_2fa), color = Skerry.colors.dim, size = 13.sp, weight = FontWeight.Medium)
+                Badge(stringResource(Res.string.settings_badge_soon), bg = Skerry.colors.amber.copy(alpha = 0.10f), fg = Skerry.colors.amber, radius = 3, size = 9.sp)
             }
-            Txt(stringResource(Res.string.settings_security_2fa_desc), color = D.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+            Txt(stringResource(Res.string.settings_security_2fa_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
         // Inert (dimmed) button: feature not ready yet.
-        GhostButton(stringResource(Res.string.settings_manage), onClick = {}, fg = D.faint, border = D.line)
+        GhostButton(stringResource(Res.string.settings_manage), onClick = {}, fg = Skerry.colors.faint, border = Skerry.colors.line)
     }
+    HLine()
 
     // Recent security events from the real log (or "no events yet").
-    Txt(stringResource(Res.string.settings_recent_security_events), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+    SectionLabel(stringResource(Res.string.settings_recent_security_events), top = 16.dp, bottom = 8.dp)
     val events by produceState(emptyList<SecurityEvent>(), controller, reload) {
         value = withContext(Dispatchers.Default) { controller?.recentSecurityEvents(8) ?: emptyList() }
     }
     if (events.isEmpty()) {
-        Txt(stringResource(Res.string.settings_security_no_events), color = D.faint, size = 12.sp, modifier = Modifier.padding(vertical = 3.dp))
+        Txt(stringResource(Res.string.settings_security_no_events), color = Skerry.colors.faint, size = 12.sp, modifier = Modifier.padding(vertical = 3.dp))
     } else {
         events.forEach { event ->
             Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Txt("●", color = D.moss, size = 9.sp)
-                Txt(securityEventLine(event), color = D.dim, size = 12.sp)
+                Txt("●", color = Skerry.colors.moss, size = 9.sp)
+                Txt(securityEventLine(event), color = Skerry.colors.dim, size = 12.sp)
             }
         }
     }
@@ -380,12 +378,12 @@ internal fun ChangeMasterPasswordDialog(
             Modifier
                 .width(360.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks()
                 .padding(26.dp),
         ) {
-            Txt(stringResource(Res.string.settings_change_pw_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+            Txt(stringResource(Res.string.settings_change_pw_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold)
             Box(Modifier.height(16.dp))
             FieldLabel(stringResource(Res.string.settings_change_pw_current), top = 0.dp)
             SyncField(placeholder = "••••••••", value = current, icon = "lock", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { current = it; wrongCurrent = false }
@@ -393,21 +391,21 @@ internal fun ChangeMasterPasswordDialog(
             SyncField(placeholder = "••••••••", value = fresh, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { fresh = it }
             FieldLabel(stringResource(Res.string.settings_change_pw_confirm))
             SyncField(placeholder = "••••••••", value = confirm, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, secret = true, onSubmit = submit) { confirm = it }
-            if (error != null) Txt(error, color = D.storm, size = 11.5.sp, modifier = Modifier.padding(top = 10.dp))
+            if (error != null) Txt(error, color = Skerry.colors.storm, size = 11.5.sp, modifier = Modifier.padding(top = 10.dp))
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onClose).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt(stringResource(Res.string.settings_cancel), color = D.dim, size = 12.5.sp)
+                    Txt(stringResource(Res.string.settings_cancel), color = Skerry.colors.dim, size = 12.5.sp)
                 }
                 PrimaryButton(
                     stringResource(Res.string.settings_change_pw_submit),
                     onClick = submit,
                     enabled = canSubmit,
-                    bg = if (canSubmit) D.cyan else D.cyan10,
-                    fg = if (canSubmit) D.ink else D.faint,
+                    bg = if (canSubmit) Skerry.colors.cyan else Skerry.colors.cyan10,
+                    fg = if (canSubmit) Skerry.colors.ink else Skerry.colors.faint,
                 )
             }
         }
@@ -476,14 +474,14 @@ internal fun ChangeAccountPasswordDialog(
             Modifier
                 .width(360.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks()
                 .padding(26.dp),
         ) {
-            Txt(stringResource(Res.string.settings_change_account_pw_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+            Txt(stringResource(Res.string.settings_change_account_pw_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold)
             Box(Modifier.height(8.dp))
-            Txt(stringResource(Res.string.settings_change_account_pw_note), color = D.dim, size = 11.5.sp)
+            Txt(stringResource(Res.string.settings_change_account_pw_note), color = Skerry.colors.dim, size = 11.5.sp)
             Box(Modifier.height(14.dp))
             FieldLabel(stringResource(Res.string.settings_change_pw_current), top = 0.dp)
             SyncField(placeholder = "••••••••", value = current, icon = "lock", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { current = it; result = null }
@@ -491,21 +489,21 @@ internal fun ChangeAccountPasswordDialog(
             SyncField(placeholder = "••••••••", value = fresh, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { fresh = it; result = null }
             FieldLabel(stringResource(Res.string.settings_change_pw_confirm))
             SyncField(placeholder = "••••••••", value = confirm, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, secret = true, onSubmit = submit) { confirm = it; result = null }
-            if (error != null) Txt(error, color = D.storm, size = 11.5.sp, modifier = Modifier.padding(top = 10.dp))
+            if (error != null) Txt(error, color = Skerry.colors.storm, size = 11.5.sp, modifier = Modifier.padding(top = 10.dp))
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onClose).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt(stringResource(Res.string.settings_cancel), color = D.dim, size = 12.5.sp)
+                    Txt(stringResource(Res.string.settings_cancel), color = Skerry.colors.dim, size = 12.5.sp)
                 }
                 PrimaryButton(
                     stringResource(Res.string.settings_change_account_pw_submit),
                     onClick = submit,
                     enabled = canSubmit,
-                    bg = if (canSubmit) D.cyan else D.cyan10,
-                    fg = if (canSubmit) D.ink else D.faint,
+                    bg = if (canSubmit) Skerry.colors.cyan else Skerry.colors.cyan10,
+                    fg = if (canSubmit) Skerry.colors.ink else Skerry.colors.faint,
                 )
             }
         }

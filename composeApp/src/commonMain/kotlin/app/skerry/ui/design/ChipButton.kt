@@ -16,10 +16,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.theme.Skerry
 
 /**
  * Compact chip button (6dp corner radius, border, 12dp horizontal padding). Two variants:
- * outline (default — transparent background + [D.cyan14] border) and filled ([filled] —
+ * outline (default — transparent background + [Skerry.colors.cyan14] border) and filled ([filled] —
  * tinted background/border from [color]; disabled state is dimmed).
  */
 @Composable
@@ -34,8 +35,8 @@ fun ChipButton(
     weight: FontWeight = FontWeight.Normal,
     verticalPadding: Dp = 6.dp,
 ) {
-    val background = if (filled) (if (enabled) color.copy(alpha = 0.16f) else Color(0x0AFFFFFF)) else Color.Transparent
-    val border = if (filled) (if (enabled) color.copy(alpha = 0.5f) else D.line) else D.cyan14
+    val background = if (filled) (if (enabled) color.copy(alpha = 0.16f) else Skerry.colors.overlaySoft) else Color.Transparent
+    val border = if (filled) (if (enabled) color.copy(alpha = 0.5f) else Skerry.colors.line) else Skerry.colors.cyan14
     Box(
         modifier
             .clip(RoundedCornerShape(6.dp))
@@ -45,6 +46,6 @@ fun ChipButton(
             .padding(horizontal = 12.dp, vertical = verticalPadding),
         contentAlignment = Alignment.Center,
     ) {
-        Txt(label, color = if (enabled) color else D.faint, size = size, weight = weight)
+        Txt(label, color = if (enabled) color else Skerry.colors.faint, size = size, weight = weight)
     }
 }

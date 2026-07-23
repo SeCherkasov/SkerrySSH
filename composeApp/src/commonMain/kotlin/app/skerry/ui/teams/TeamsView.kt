@@ -46,7 +46,6 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.design.ConfirmActionDialog
-import app.skerry.ui.design.D
 import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
@@ -103,6 +102,7 @@ import app.skerry.ui.generated.resources.lib_teams_sync_now
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /** Teams: E2E sharing of hosts/snippets. Live data from [LocalTeams]; null — mock preview. */
 @Composable
@@ -143,18 +143,18 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     }
 
     Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
+        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
             SidebarSectionTitle(stringResource(Res.string.lib_teams_sidebar), modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
             teams.forEach { team ->
                 LiveTeamRow(team, active = team.id == selected?.id) { selectedId = team.id }
             }
             Spacer(Modifier.weight(1f))
-            error?.let { Txt(teamsFailureText(it), color = D.sunset, size = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+            error?.let { Txt(teamsFailureText(it), color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
             PrimaryButton(stringResource(Res.string.lib_teams_create), onClick = { showCreate = true }, icon = "group_add", modifier = Modifier.fillMaxWidth())
         }
-        VLine(D.line)
+        VLine(Skerry.colors.line)
         Column(
-            Modifier.weight(1f).fillMaxHeight().background(D.bg)
+            Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg)
                 // Scroll only the team detail; the empty state needs the full height to center in it.
                 .then(if (selected != null) Modifier.verticalScroll(rememberScrollState()) else Modifier),
         ) {
@@ -325,9 +325,9 @@ private fun TeamDetail(
             if (canAudit) GhostButton(stringResource(Res.string.lib_teams_history), onClick = onShowHistory, icon = "history")
             if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
             if (owner) {
-                GhostButton(stringResource(Res.string.lib_teams_delete), onClick = { onConfirm(TeamsConfirm.Delete(team.id)) }, icon = "delete", fg = D.sunset, border = D.sunset.copy(alpha = 0.3f))
+                GhostButton(stringResource(Res.string.lib_teams_delete), onClick = { onConfirm(TeamsConfirm.Delete(team.id)) }, icon = "delete", fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f))
             } else if (!invited) {
-                GhostButton(stringResource(Res.string.lib_teams_leave), onClick = { onConfirm(TeamsConfirm.Leave(team.id)) }, icon = "logout", fg = D.sunset, border = D.sunset.copy(alpha = 0.3f))
+                GhostButton(stringResource(Res.string.lib_teams_leave), onClick = { onConfirm(TeamsConfirm.Leave(team.id)) }, icon = "logout", fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f))
             }
         },
     )
@@ -340,8 +340,8 @@ private fun TeamDetail(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(9.dp))
-                    .background(D.amber.copy(alpha = 0.08f))
-                    .border(1.dp, D.amber.copy(alpha = 0.25f), RoundedCornerShape(9.dp))
+                    .background(Skerry.colors.amber.copy(alpha = 0.08f))
+                    .border(1.dp, Skerry.colors.amber.copy(alpha = 0.25f), RoundedCornerShape(9.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -349,23 +349,23 @@ private fun TeamDetail(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Sym("mail", size = 18.sp, color = D.amber)
-                    Txt(stringResource(Res.string.lib_teams_invited_banner), color = D.text, size = 12.5.sp, modifier = Modifier.weight(1f))
-                    GhostButton(stringResource(Res.string.lib_teams_decline), onClick = onDecline, fg = D.dim)
+                    Sym("mail", size = 18.sp, color = Skerry.colors.amber)
+                    Txt(stringResource(Res.string.lib_teams_invited_banner), color = Skerry.colors.text, size = 12.5.sp, modifier = Modifier.weight(1f))
+                    GhostButton(stringResource(Res.string.lib_teams_decline), onClick = onDecline, fg = Skerry.colors.dim)
                     PrimaryButton(stringResource(Res.string.lib_teams_accept), onClick = onAccept, enabled = !busy)
                 }
                 acceptPreview.let { p ->
                     if (p == null) {
-                        Txt(stringResource(Res.string.lib_teams_invite_unverified), color = D.sunset, size = 11.5.sp)
+                        Txt(stringResource(Res.string.lib_teams_invite_unverified), color = Skerry.colors.sunset, size = 11.5.sp)
                     } else {
-                        Txt(stringResource(Res.string.lib_teams_invited_by, p.accountId), color = D.dim, size = 11.5.sp)
-                        Txt(stringResource(Res.string.lib_teams_invited_fingerprint, p.fingerprint), color = D.cyanBright, size = 11.5.sp, font = mono)
+                        Txt(stringResource(Res.string.lib_teams_invited_by, p.accountId), color = Skerry.colors.dim, size = 11.5.sp)
+                        Txt(stringResource(Res.string.lib_teams_invited_fingerprint, p.fingerprint), color = Skerry.colors.cyanBright, size = 11.5.sp, font = mono)
                     }
                 }
             }
             Box(Modifier.padding(top = 24.dp))
         } else if (!team.hasKey) {
-            Txt(stringResource(Res.string.lib_teams_no_key), color = D.amber, size = 12.sp, modifier = Modifier.padding(bottom = 16.dp))
+            Txt(stringResource(Res.string.lib_teams_no_key), color = Skerry.colors.amber, size = 12.sp, modifier = Modifier.padding(bottom = 16.dp))
         }
         LiveSectionLabel(stringResource(Res.string.lib_teams_members))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -384,7 +384,7 @@ private fun TeamDetail(
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 Column(Modifier.weight(1f)) {
                     LiveSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
-                    if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
+                    if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
                     sharedHosts.forEach { host ->
                         SharedRecordRow(host.label, "${host.username}@${host.address}", mono, canUnshare = canWrite) { onUnshare(host.id) }
                     }
@@ -394,7 +394,7 @@ private fun TeamDetail(
                 }
                 Column(Modifier.weight(1f)) {
                     LiveSectionLabel(stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size))
-                    if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = D.faint, size = 11.5.sp)
+                    if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
                     sharedSnippets.forEach { snippet ->
                         SharedRecordRow(snippet.label, snippet.command, mono, canUnshare = canWrite) { onUnshare(snippet.id) }
                     }
@@ -416,12 +416,12 @@ private fun TeamsEmptyState(subtitle: String) {
 private fun LiveTeamRow(team: TeamUi, active: Boolean, onClick: () -> Unit) {
     val invited = team.status == TeamMemberStatus.INVITED
     val fg = when {
-        active -> D.cyanBright
-        invited -> D.amber
-        else -> D.dim
+        active -> Skerry.colors.cyanBright
+        invited -> Skerry.colors.amber
+        else -> Skerry.colors.dim
     }
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (active) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (active) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -432,7 +432,7 @@ private fun LiveTeamRow(team: TeamUi, active: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun LiveSectionLabel(text: String) {
-    Txt(text.uppercase(), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 12.dp))
+    Txt(text.uppercase(), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 12.dp))
 }
 
 @Composable
@@ -448,23 +448,23 @@ private fun LiveMemberRow(
     val invited = m.status == TeamMemberStatus.INVITED
     val (roleFg, roleBg) = roleBadgeColors(m.role)
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.size(32.dp).clip(CircleShape).background(if (isOwnerRow) D.cyan else D.moss), contentAlignment = Alignment.Center) {
-            Txt(initials, color = Color(0xFF0A1A26), size = 13.sp, weight = FontWeight.SemiBold)
+        Box(Modifier.size(32.dp).clip(CircleShape).background(if (isOwnerRow) Skerry.colors.cyan else Skerry.colors.moss), contentAlignment = Alignment.Center) {
+            Txt(initials, color = Skerry.colors.ink, size = 13.sp, weight = FontWeight.SemiBold)
         }
-        Txt(m.accountId, color = D.text, size = 13.sp, font = mono, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
+        Txt(m.accountId, color = Skerry.colors.text, size = 13.sp, font = mono, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
         if (invited) {
-            RoleBadge(stringResource(Res.string.lib_teams_status_invited), D.cyanBright, D.cyan.copy(alpha = 0.12f))
+            RoleBadge(stringResource(Res.string.lib_teams_status_invited), Skerry.colors.cyanBright, Skerry.colors.cyan.copy(alpha = 0.12f))
         }
         // Clicking the role badge changes it (owner/admin within anti-escalation limits).
         val badgeModifier = if (canManageMember) Modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onChangeRole) else Modifier
         RoleBadge(teamRoleLabel(m.role), roleFg, roleBg, modifier = badgeModifier)
         if (canManageMember) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(4.dp)) {
-                Sym("close", size = 15.sp, color = D.faint)
+                Sym("close", size = 15.sp, color = Skerry.colors.faint)
             }
         }
     }
@@ -477,11 +477,11 @@ private fun SharedRecordRow(label: String, detail: String, mono: androidx.compos
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-        Txt(label, color = D.textBright, size = 12.sp, font = mono)
-        Txt(detail, color = D.faint, size = 10.5.sp, modifier = Modifier.weight(1f))
+        Txt(label, color = Skerry.colors.textBright, size = 12.sp, font = mono)
+        Txt(detail, color = Skerry.colors.faint, size = 10.5.sp, modifier = Modifier.weight(1f))
         if (canUnshare) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onUnshare).padding(3.dp)) {
-                Sym("close", size = 14.sp, color = D.faint)
+                Sym("close", size = 14.sp, color = Skerry.colors.faint)
             }
         }
     }

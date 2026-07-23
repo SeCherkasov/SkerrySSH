@@ -37,7 +37,6 @@ import app.skerry.ui.app.LocalSync
 import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.app.SettingsTab
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Sym
@@ -46,7 +45,13 @@ import app.skerry.ui.design.VLine
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.appearance_subtitle
+import app.skerry.ui.generated.resources.settings_ai_live_subtitle
+import app.skerry.ui.generated.resources.settings_keyboard_subtitle
 import app.skerry.ui.generated.resources.settings_nav_header
+import app.skerry.ui.generated.resources.settings_security_subtitle
+import app.skerry.ui.generated.resources.settings_sync_subtitle
+import app.skerry.ui.generated.resources.settings_terminal_subtitle
 import app.skerry.ui.generated.resources.shtail_nav_about
 import app.skerry.ui.generated.resources.shtail_nav_ai
 import app.skerry.ui.generated.resources.shtail_nav_appearance
@@ -56,6 +61,7 @@ import app.skerry.ui.generated.resources.shtail_nav_sync
 import app.skerry.ui.generated.resources.shtail_nav_terminal
 import app.skerry.ui.vault.VaultGateController
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Height of the content pane's sticky header strip: tall enough to clear the top-right close button,
 // so the divider line lands just below it and section content scrolls beneath the band.
@@ -78,14 +84,14 @@ fun SettingsPanel(state: DesktopDesignState) {
     var securityReload by remember { mutableStateOf(0) }
     var changePwOpen by remember { mutableStateOf(false) }
     var changeAccountPwOpen by remember { mutableStateOf(false) }
-    ModalScrim(onDismiss = state::closeSettings, scrimColor = Color(0xA6060E16)) {
+    ModalScrim(onDismiss = state::closeSettings, scrimColor = Skerry.colors.modalScrim) {
         Box(
             Modifier
                 .width(760.dp)
                 .height(560.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks(),
         ) {
         Row(Modifier.fillMaxSize()) {
@@ -95,13 +101,13 @@ fun SettingsPanel(state: DesktopDesignState) {
             val features = LocalFeatures.current
             val aiVisible = features.ai || LocalAi.current != null
             val effectiveTab = if (state.settingsTab == SettingsTab.AI && !aiVisible) SettingsTab.Sync else state.settingsTab
-            Column(Modifier.width(200.dp).fillMaxHeight().background(Color(0x33000000)).padding(horizontal = 8.dp, vertical = 16.dp)) {
-                Txt(stringResource(Res.string.settings_nav_header), color = D.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
+            Column(Modifier.width(200.dp).fillMaxHeight().background(Skerry.colors.card).padding(horizontal = 8.dp, vertical = 16.dp)) {
+                Txt(stringResource(Res.string.settings_nav_header), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
                 SETTINGS_NAV.filter { aiVisible || it.tab != SettingsTab.AI }.forEach { item ->
                     NavRow(item, active = effectiveTab == item.tab, onClick = { state.showSettingsTab(item.tab) })
                 }
             }
-            VLine(D.line)
+            VLine(Skerry.colors.line)
             // Content pane with a static header strip: the section title sits above a divider line
             // (aligned under the close button) and stays put; section content scrolls beneath the
             // line and disappears behind the opaque band. The About tab has its own centered layout
@@ -113,7 +119,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 26.dp)
-                        .padding(top = if (hasHeader) SETTINGS_HEADER_HEIGHT else 22.dp, bottom = 22.dp),
+                        .padding(top = if (hasHeader) SETTINGS_HEADER_HEIGHT + 14.dp else 22.dp, bottom = 22.dp),
                 ) {
                     when (effectiveTab) {
                         SettingsTab.AI -> AiSection(state)
@@ -133,17 +139,18 @@ fun SettingsPanel(state: DesktopDesignState) {
                         SettingsTab.About -> AboutSection()
                     }
                 }
-                // Static header: the section title over an opaque band (card background) the scrolled
-                // content hides behind, capped by the divider line under the close button. Declared
-                // after the scroll content so it draws on top; the close button (card-level TopEnd
-                // overlay) stays above both. The title reuses the nav label (same string per tab).
+                // Static header: the section description over an opaque band (card background) the
+                // scrolled content hides behind, capped by the divider line under the close button.
+                // Declared after the scroll content so it draws on top; the close button (card-level
+                // TopEnd overlay) stays above both. The band holds the subtitle, not the section
+                // title — the title already lives in the nav and would be a duplicate here.
                 if (hasHeader) {
                     Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
                         Box(
-                            Modifier.fillMaxWidth().height(SETTINGS_HEADER_HEIGHT - 1.dp).background(D.surfaceDeep).padding(horizontal = 26.dp),
+                            Modifier.fillMaxWidth().height(SETTINGS_HEADER_HEIGHT - 1.dp).background(Skerry.colors.surfaceDeep).padding(horizontal = 26.dp).padding(end = 20.dp),
                             contentAlignment = Alignment.CenterStart,
                         ) {
-                            Txt(effectiveTab.navLabel(), color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+                            Txt(effectiveTab.headerSubtitle(), color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium, maxLines = 1)
                         }
                         HLine()
                     }
@@ -161,7 +168,7 @@ fun SettingsPanel(state: DesktopDesignState) {
             Box(
                 Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = state::closeSettings).padding(8.dp),
             ) {
-                Sym(name = "close", size = 18.sp, color = D.dim)
+                Sym(name = "close", size = 18.sp, color = Skerry.colors.dim)
             }
         }
         // Change master password dialog: overlay over the whole settings card (outside the scroll).
@@ -203,13 +210,25 @@ private fun rememberSecurityController(): VaultGateController? {
 @Composable
 private fun NavRow(item: SettingsNavItem, active: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(bottom = 1.dp).clip(RoundedCornerShape(6.dp)).background(if (active) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
+        Modifier.fillMaxWidth().padding(bottom = 1.dp).clip(RoundedCornerShape(6.dp)).background(if (active) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym(item.icon, size = 16.sp, color = if (active) D.cyanBright else D.dim)
-        Txt(item.tab.navLabel(), color = if (active) D.cyanBright else D.dim, size = 12.5.sp)
+        Sym(item.icon, size = 16.sp, color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim)
+        Txt(item.tab.navLabel(), color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim, size = 12.5.sp)
     }
+}
+
+/** Localized header-band description for a tab (the nav label holds the section title). */
+@Composable
+private fun SettingsTab.headerSubtitle(): String = when (this) {
+    SettingsTab.AI -> stringResource(Res.string.settings_ai_live_subtitle)
+    SettingsTab.Sync -> stringResource(Res.string.settings_sync_subtitle)
+    SettingsTab.Security -> stringResource(Res.string.settings_security_subtitle)
+    SettingsTab.Appearance -> stringResource(Res.string.appearance_subtitle)
+    SettingsTab.Terminal -> stringResource(Res.string.settings_terminal_subtitle)
+    SettingsTab.Keyboard -> stringResource(Res.string.settings_keyboard_subtitle)
+    SettingsTab.About -> "" // About opts out of the header band
 }
 
 /** Localized label for a settings navigation item. */

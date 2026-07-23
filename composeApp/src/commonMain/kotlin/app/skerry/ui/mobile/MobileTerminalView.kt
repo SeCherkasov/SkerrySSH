@@ -92,7 +92,6 @@ import app.skerry.ui.generated.resources.term_disconnect
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.AiPolicy
 import app.skerry.ui.terminal.ArrowKey
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.app.LocalAi
@@ -112,11 +111,7 @@ import kotlinx.coroutines.launch
 import app.skerry.shared.terminal.castFileName
 import app.skerry.shared.terminal.recordingStamp
 import app.skerry.ui.vault.exportTextFile
-
-/** Terminal key panel background (`#0E1A24`). Keys — white 6%, monospaced. */
-private val KeybarBg = Color(0xFF0E1A24)
-private val KeyCapBg = Color(0x0FFFFFFF)
-private val KeyCapFg = Color(0xFFC9D6DE)
+import app.skerry.ui.theme.Skerry
 
 /** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
 private const val ESC = "\u001b"
@@ -212,7 +207,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(D.terminalBg)) {
+    Box(Modifier.fillMaxSize().background(Skerry.colors.terminalBg)) {
         // imePadding here, not at the app root: this screen opts out of the root safeDrawing padding
         // to run edge to edge, so lifting the content above the soft keyboard is its own job now.
         Column(Modifier.fillMaxSize().imePadding()) {
@@ -256,7 +251,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                     )
                 }
                 is ConnectionUiState.Error ->
-                    MobileTerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = D.sunset)
+                    MobileTerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = Skerry.colors.sunset)
                 // Drop: frozen screen at the moment of loss, no keybar (channel is dead). Header status —
                 // "disconnected" in red. Detailed mobile parity (auto-reconnect) is a separate task.
                 is ConnectionUiState.Disconnected ->
@@ -327,7 +322,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 onDismiss = { menuOpen = false },
                 panelModifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
             ) {
-                Txt(active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+                Txt(active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback), color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold)
                 Spacer(Modifier.height(14.dp))
                 Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                     if (activeTerminal != null) {
@@ -423,9 +418,9 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
     val danger = risk == CommandRisk.Danger
     // Red for any destructive command (delete/overwrite), even Warn.
     val severe = danger || controller.pendingRisk?.destructive == true
-    val accent = if (severe) D.sunset else D.moss
+    val accent = if (severe) Skerry.colors.sunset else Skerry.colors.moss
     var armed by remember(pending) { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().background(if (pending != null) accent.copy(alpha = 0.08f) else D.surface2)) {
+    Column(Modifier.fillMaxWidth().background(if (pending != null) accent.copy(alpha = 0.08f) else Skerry.colors.surface2)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -433,12 +428,12 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
         ) {
             Sym(
                 if (pending != null) (if (severe) "block" else "terminal") else "auto_awesome",
-                size = 16.sp, color = if (pending != null) accent else D.amber,
+                size = 16.sp, color = if (pending != null) accent else Skerry.colors.amber,
             )
             Box(Modifier.weight(1f)) {
                 when {
                     pending != null -> {
-                        val infoColor = if (severe) D.sunset else if (risk == CommandRisk.Warn) D.amber else D.dim
+                        val infoColor = if (severe) Skerry.colors.sunset else if (risk == CommandRisk.Warn) Skerry.colors.amber else Skerry.colors.dim
                         val info = when (risk) {
                             CommandRisk.None -> controller.pendingInfo
                             else -> controller.pendingRisk?.reason
@@ -446,25 +441,25 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             // The command wraps (up to 6 lines), not truncated: the user sees in full what
                             // they confirm and run (see TerminalView — the same safety invariant).
-                            Txt(pending, color = if (severe) D.sunset else D.text, size = 12.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
+                            Txt(pending, color = if (severe) Skerry.colors.sunset else Skerry.colors.text, size = 12.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
                             if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }
-                    controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = D.dim, size = 13.sp)
+                    controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = Skerry.colors.dim, size = 13.sp)
                     controller.notice != null -> when (val notice = controller.notice!!) {
-                        is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Ask -> Txt(notice.question, color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        AiNotice.Rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = D.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = D.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        is AiNotice.Ask -> Txt(notice.question, color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        AiNotice.Rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = Skerry.colors.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     else -> {
-                        if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_short), color = D.dim, size = 13.sp)
+                        if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_short), color = Skerry.colors.dim, size = 13.sp)
                         BasicTextField(
                             value = prompt,
                             onValueChange = { prompt = it },
                             singleLine = true,
-                            textStyle = TextStyle(color = D.text, fontSize = 13.sp),
-                            cursorBrush = SolidColor(D.cyan),
+                            textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp),
+                            cursorBrush = SolidColor(Skerry.colors.cyan),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { submit() }),
                             modifier = Modifier.fillMaxWidth(),
@@ -478,18 +473,18 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                         if (danger && !armed) armed = true
                         else controller.confirm()?.let { terminal.sendUserInput(it + "\r") }
                     }
-                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
+                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
                 }
                 controller.notice != null ->
-                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), D.faint) { controller.dismiss() }
+                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
                 else -> {
-                    Txt(labelUppercase(controller.policy.shortLabel()), color = D.faint, size = 10.sp, font = mono)
+                    Txt(labelUppercase(controller.policy.shortLabel()), color = Skerry.colors.faint, size = 10.sp, font = mono)
                     Box(
-                        Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(D.cyan)
+                        Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.cyan)
                             .clickable(enabled = !controller.busy) { submit() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Sym("arrow_upward", size = 16.sp, color = D.ink)
+                        Sym("arrow_upward", size = 16.sp, color = Skerry.colors.ink)
                     }
                 }
             }
@@ -536,7 +531,7 @@ private fun MobileTerminalHeader(
     val ping = remember(controller, connected) {
         if (connected && controller != null) controller.openPing() else null
     }
-    Column(Modifier.fillMaxWidth().background(D.surface2)) {
+    Column(Modifier.fillMaxWidth().background(Skerry.colors.surface2)) {
         Row(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -545,7 +540,7 @@ private fun MobileTerminalHeader(
             Sym(
                 "chevron_left",
                 size = 24.sp,
-                color = D.cyanBright,
+                color = Skerry.colors.cyanBright,
                 modifier = Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -553,7 +548,7 @@ private fun MobileTerminalHeader(
                 ),
             )
             Column(Modifier.weight(1f)) {
-                Txt(title, color = D.text, size = 14.sp, weight = FontWeight.SemiBold, font = mono)
+                Txt(title, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold, font = mono)
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()),
                     verticalAlignment = Alignment.CenterVertically,
@@ -578,7 +573,7 @@ private fun MobileTerminalHeader(
                 Sym(
                     "bolt",
                     size = 21.sp,
-                    color = D.dim,
+                    color = Skerry.colors.dim,
                     modifier = Modifier.clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -589,7 +584,7 @@ private fun MobileTerminalHeader(
             Sym(
                 "more_horiz",
                 size = 21.sp,
-                color = D.dim,
+                color = Skerry.colors.dim,
                 modifier = Modifier.clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -597,7 +592,7 @@ private fun MobileTerminalHeader(
                 ),
             )
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan08))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan08))
     }
 }
 
@@ -605,14 +600,14 @@ private fun MobileTerminalHeader(
 @Composable
 private fun MobileTerminalMetric(icon: String, text: String, mono: FontFamily) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        Sym(icon, size = 11.sp, color = D.faint)
-        Txt(text, color = D.faint, size = 10.5.sp, font = mono)
+        Sym(icon, size = 11.sp, color = Skerry.colors.faint)
+        Txt(text, color = Skerry.colors.faint, size = 10.5.sp, font = mono)
     }
 }
 
 /** Centered message over the terminal background (no session / connecting / error). */
 @Composable
-private fun MobileTerminalNotice(icon: String, title: String, subtitle: String, color: Color = D.dim) {
+private fun MobileTerminalNotice(icon: String, title: String, subtitle: String, color: Color = Skerry.colors.dim) {
     val mono = LocalFonts.current.mono
     Column(
         Modifier.fillMaxSize().padding(40.dp),
@@ -620,11 +615,11 @@ private fun MobileTerminalNotice(icon: String, title: String, subtitle: String, 
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Sym(icon, size = 30.sp, color = color)
-        Txt(title, color = D.text, size = 14.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
+        Txt(title, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
         // Long texts (Mosh setup errors) must wrap into a readable centered block, not one
         // screen-wide line.
         Txt(
-            subtitle, color = D.faint, size = 12.sp, font = mono, lineHeight = 18.sp,
+            subtitle, color = Skerry.colors.faint, size = 12.sp, font = mono, lineHeight = 18.sp,
             align = TextAlign.Center, modifier = Modifier.widthIn(max = 480.dp),
         )
     }
@@ -660,7 +655,7 @@ private fun MobileKeybar(
     Row(
         Modifier
             .fillMaxWidth()
-            .background(KeybarBg)
+            .background(Skerry.colors.surface2)
             // The screen runs edge to edge, so the panel keeps itself off the navigation bar.
             .hiddenSystemBarsPadding(top = false, bottom = true)
             .horizontalScroll(rememberScrollState())
@@ -711,14 +706,14 @@ private fun MobileKeybar(
 @Composable
 private fun KeyCap(label: String, accent: Boolean = false, active: Boolean = false, onClick: () -> Unit) {
     val bg = when {
-        active -> D.cyan
-        accent -> D.cyan14
-        else -> KeyCapBg
+        active -> Skerry.colors.cyan
+        accent -> Skerry.colors.cyan14
+        else -> Skerry.colors.overlayMed
     }
     val fg = when {
-        active -> D.ink
-        accent -> D.cyanBright
-        else -> KeyCapFg
+        active -> Skerry.colors.ink
+        accent -> Skerry.colors.cyanBright
+        else -> Skerry.colors.textBright
     }
     Box(
         Modifier
@@ -737,12 +732,12 @@ private fun KeyCapIcon(icon: String, accent: Boolean = false, onClick: () -> Uni
     Box(
         Modifier
             .clip(RoundedCornerShape(7.dp))
-            .background(if (accent) D.cyan14 else KeyCapBg)
+            .background(if (accent) Skerry.colors.cyan14 else Skerry.colors.overlayMed)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(icon, size = 16.sp, color = if (accent) D.cyanBright else KeyCapFg)
+        Sym(icon, size = 16.sp, color = if (accent) Skerry.colors.cyanBright else Skerry.colors.textBright)
     }
 }
 
@@ -761,11 +756,11 @@ fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -
         onDismiss = onDismiss,
         panelModifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
     ) {
-        Txt(host.label, color = D.text, size = 20.sp, weight = FontWeight.Bold)
+        Txt(host.label, color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(3.dp))
-            Txt("${host.username}@${host.address}:${host.port}", color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono)
+            Txt("${host.username}@${host.address}:${host.port}", color = Skerry.colors.dim, size = 12.5.sp, font = LocalFonts.current.mono)
             Spacer(Modifier.height(18.dp))
-            Txt(stringResource(Res.string.term_password_label), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
+            Txt(stringResource(Res.string.term_password_label), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
             Spacer(Modifier.height(6.dp))
             MobileFormInput(
                 value = password,
@@ -780,12 +775,12 @@ fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (password.isNotEmpty()) D.cyan else D.cyan.copy(alpha = 0.4f))
+                    .background(if (password.isNotEmpty()) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.4f))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(stringResource(Res.string.term_connect), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
+                Txt(stringResource(Res.string.term_connect), color = Skerry.colors.ink, size = 16.sp, weight = FontWeight.Bold)
             }
         }
 }

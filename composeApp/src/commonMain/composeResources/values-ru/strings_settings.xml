@@ -14,7 +14,7 @@
     <string name="settings_manage">Управление</string>
 
     <!-- Раздел AI -->
-    <string name="settings_ai_live_subtitle">AI на этом устройстве, через свой OpenAI-совместимый ключ (BYOK) или выключен. Ключи хранятся зашифрованными и отправляются только выбранному провайдеру.</string>
+    <string name="settings_ai_live_subtitle">Провайдер и настройки AI-ассистента.</string>
     <string name="settings_ai_field_api_key">КЛЮЧ API OPENAI</string>
     <string name="settings_ai_field_model">МОДЕЛЬ</string>
     <string name="settings_ai_field_endpoint">АДРЕС</string>
@@ -24,24 +24,24 @@
     <string name="settings_ai_key_saved">Ключ сохранён</string>
     <string name="settings_ai_not_configured">Ещё не настроено</string>
     <string name="settings_ai_quick_chat">Быстрый чат</string>
-    <string name="settings_ai_quick_chat_desc">Задайте ассистенту вопрос, чтобы проверить соединение.</string>
+    <string name="settings_ai_quick_chat_desc">Проверка соединения с ассистентом.</string>
     <string name="settings_ai_prompt_placeholder_ready">Спросите про ssh, scp, туннели…</string>
     <string name="settings_ai_prompt_placeholder_needs_key">Сначала сохраните ключ API</string>
     <string name="settings_ai_sending">Отправка…</string>
     <string name="settings_ai_ask">Спросить</string>
-    <string name="settings_ai_mock_subtitle">Выберите, где выполняется AI. По умолчанию — на этом устройстве, команды не покидают Skerry. Каждое подключение может переопределить.</string>
+    <string name="settings_ai_mock_subtitle">Где выполняется AI. По умолчанию — локально; для каждого подключения можно переопределить.</string>
     <string name="settings_ai_default_provider">Провайдер AI по умолчанию</string>
-    <string name="settings_ai_default_provider_desc">Используется для подключений без отдельного переопределения.</string>
+    <string name="settings_ai_default_provider_desc">Для подключений без переопределения.</string>
     <string name="settings_ai_provider_device">На этом устройстве</string>
     <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 ГБ · готово. Данные не покидают вашу машину.</string>
     <string name="settings_ai_badge_private">ЛОКАЛЬНО</string>
     <string name="settings_ai_provider_byok">Мой ключ API (BYOK)</string>
-    <string name="settings_ai_provider_byok_desc">Используйте свой ключ OpenAI, Anthropic или OpenRouter. Оплата напрямую провайдеру.</string>
+    <string name="settings_ai_provider_byok_desc">Свой ключ OpenAI, Anthropic или OpenRouter. Оплата — напрямую провайдеру.</string>
     <string name="settings_ai_provider_off">Выключен — без AI</string>
-    <string name="settings_ai_provider_off_desc">Полностью выключить ассистента. Ничего никуда не отправляется.</string>
-    <string name="settings_ai_off_note">AI выключен: ассистент в терминале и быстрый чат скрыты. Выберите провайдера выше, чтобы включить.</string>
+    <string name="settings_ai_provider_off_desc">Ассистент выключен, запросы не отправляются.</string>
+    <string name="settings_ai_off_note">AI выключен. Для включения выберите провайдера выше.</string>
     <!-- Живая карточка «На этом устройстве»: каталог локальных моделей и их статусы -->
-    <string name="settings_ai_local_desc">Ассистент работает полностью офлайн. Данные никогда не покидают устройство.</string>
+    <string name="settings_ai_local_desc">Работает офлайн, данные не покидают устройство.</string>
     <string name="settings_ai_local_ready">Готова</string>
     <string name="settings_ai_local_verifying">Проверка…</string>
     <string name="settings_ai_local_download">Скачать</string>
@@ -63,18 +63,18 @@
     <string name="settings_ai_error_engine_crashed">Движок локальной модели аварийно завершился. Попробуйте ещё раз.</string>
     <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">Очищать секреты перед отправкой</string>
-    <string name="settings_ai_sanitize_desc">Вырезать очевидные пароли, токены и ключи до отправки запросов внешним провайдерам.</string>
+    <string name="settings_ai_sanitize_desc">Удалять пароли, токены и ключи из запросов к внешним провайдерам.</string>
     <string name="settings_ai_preview">Показывать запрос перед отправкой</string>
-    <string name="settings_ai_preview_desc">Показать точный текст, уходящий наружу, с подсветкой скрытых мест. Можно отредактировать или отменить до отправки.</string>
+    <string name="settings_ai_preview_desc">Предпросмотр исходящего текста; правка или отмена до отправки.</string>
     <string name="settings_ai_confirm">Подтверждать перед выполнением подсказок AI</string>
-    <string name="settings_ai_confirm_desc">Требовать клик перед выполнением любой предложенной AI команды. Снижает риск инъекции промпта со скомпрометированных серверов.</string>
+    <string name="settings_ai_confirm_desc">Запрашивать подтверждение перед выполнением команд от AI.</string>
 
     <!-- Раздел Terminal -->
-    <string name="settings_terminal_subtitle">Тема и шрифт; прокрутка и поведение шелла.</string>
+    <string name="settings_terminal_subtitle">Шрифт, прокрутка, поведение.</string>
     <string name="settings_terminal_section_font">ШРИФТ</string>
     <string name="settings_terminal_section_behavior">ПОВЕДЕНИЕ</string>
     <string name="settings_terminal_scrollback">Буфер прокрутки</string>
-    <string name="settings_terminal_scrollback_desc">Сколько строк хранить на сессию.</string>
+    <string name="settings_terminal_scrollback_desc">Строк на сессию.</string>
     <string name="settings_terminal_cursor_style">Стиль курсора</string>
     <string name="settings_terminal_cursor_block_blink">Блок (мигающий)</string>
     <string name="settings_terminal_cursor_block_steady">Блок</string>
@@ -83,12 +83,12 @@
     <string name="settings_terminal_cursor_bar_blink">Черта (мигающая)</string>
     <string name="settings_terminal_cursor_bar_steady">Черта</string>
     <string name="settings_terminal_show_title">Показывать заголовок терминала на вкладках</string>
-    <string name="settings_terminal_show_title_desc">Разрешить подключённому шеллу переименовывать вкладку (например, по запущенной программе). Выкл: вкладки показывают сохранённое имя хоста.</string>
+    <string name="settings_terminal_show_title_desc">Шелл может переименовывать вкладку (OSC-заголовок). Выкл — показывается имя хоста.</string>
     <string name="settings_terminal_clipboard_write">Разрешить серверу писать в буфер обмена (OSC 52)</string>
     <string name="settings_terminal_host_connect">Подключение к хосту</string>
     <string name="settings_terminal_host_connect_single">Одинарный клик</string>
     <string name="settings_terminal_host_connect_double">Двойной клик (клик выделяет)</string>
-    <string name="settings_terminal_clipboard_write_desc">Разрешить подключённому шеллу заменять системный буфер обмена (copy в tmux/vim). По умолчанию выкл: иначе вредоносный хост может подсунуть свой текст в то, что вы вставите.</string>
+    <string name="settings_terminal_clipboard_write_desc">Удалённая сторона может писать в системный буфер (tmux/vim). По умолчанию выкл.</string>
 
     <!-- Раздел Sync (включая карточку аккаунта и устройства — бывшая вкладка Account влита сюда) -->
     <string name="settings_disconnect">Отключить</string>
@@ -97,12 +97,12 @@
     <string name="settings_linked_devices">ПРИВЯЗАННЫЕ УСТРОЙСТВА</string>
     <string name="settings_loading_devices">Загрузка устройств…</string>
     <string name="settings_devices_load_failed">Не удалось загрузить устройства. Попробуйте «Синхронизировать».</string>
-    <string name="settings_only_this_device">Пока только это устройство.</string>
+    <string name="settings_only_this_device">Только это устройство.</string>
     <string name="settings_device_sub_current">привязано · это устройство</string>
     <string name="settings_device_sub_other">привязанное устройство</string>
     <string name="settings_this_device">● это устройство</string>
     <string name="settings_link_device">Привязать устройство</string>
-    <string name="settings_sync_subtitle">Сквозное шифрование синхронизации между устройствами. Skerry никогда не видит ваши данные в открытом виде.</string>
+    <string name="settings_sync_subtitle">Синхронизация между устройствами со сквозным шифрованием.</string>
     <string name="settings_sync_now">Синхронизировать</string>
     <string name="settings_what_syncs">ЧТО СИНХРОНИЗИРУЕТСЯ</string>
     <string name="settings_hosts_groups">Хосты и группы</string>
@@ -110,24 +110,24 @@
     <string name="settings_sync_connected">Подключено</string>
     <string name="settings_sync_pushed_pulled">Отправлено %1$d · получено %2$d за сессию</string>
     <string name="settings_sync_syncing">Синхронизация…</string>
-    <string name="settings_sync_syncing_desc">Идёт обмен с вашим сервером синхронизации.</string>
+    <string name="settings_sync_syncing_desc">Обмен с сервером синхронизации.</string>
     <string name="settings_sync_error">Ошибка синхронизации</string>
 
     <!-- Раздел Security -->
     <string name="settings_security_title">Безопасность</string>
-    <string name="settings_security_subtitle">Мастер-пароль, автоблокировка и двухфакторная аутентификация защищают ваше хранилище.</string>
+    <string name="settings_security_subtitle">Мастер-пароль, автоблокировка, двухфакторная аутентификация.</string>
     <string name="settings_security_master_password">Мастер-пароль</string>
-    <string name="settings_security_master_password_desc">Защищает ваше хранилище.</string>
+    <string name="settings_security_master_password_desc">Защищает хранилище.</string>
     <string name="settings_security_pw_changed_today">Изменён сегодня.</string>
     <string name="settings_security_pw_changed_yesterday">Изменён вчера.</string>
     <string name="settings_security_pw_changed_days">Последнее изменение %1$d дн. назад.</string>
-    <string name="settings_security_touch_id">Разблокировка по Touch ID</string>
-    <string name="settings_security_touch_id_desc">Использовать биометрию вместо ввода мастер-пароля.</string>
-    <string name="settings_security_touch_id_unsupported">Этот телефон не может открыть хранилище по биометрии.</string>
-    <string name="settings_security_touch_id_recheck">Проверить снова</string>
-    <string name="settings_security_touch_id_weak_binding">Включено с ослабленной привязкой ключа — биометрия по-прежнему нужна.</string>
+    <string name="settings_security_biometric">Разблокировка по биометрии</string>
+    <string name="settings_security_biometric_desc">Биометрия вместо мастер-пароля.</string>
+    <string name="settings_security_biometric_unsupported">Биометрическая разблокировка недоступна на этом устройстве.</string>
+    <string name="settings_security_biometric_recheck">Проверить снова</string>
+    <string name="settings_security_biometric_weak_binding">Включено с ослабленной привязкой ключа — биометрия по-прежнему нужна.</string>
     <string name="settings_security_auto_lock">Автоблокировка</string>
-    <string name="settings_security_auto_lock_desc">Блокировать Skerry после простоя.</string>
+    <string name="settings_security_auto_lock_desc">Блокировка после простоя.</string>
     <string name="settings_autolock_1m">Через 1 минуту</string>
     <string name="settings_autolock_5m">Через 5 минут</string>
     <string name="settings_autolock_15m">Через 15 минут</string>
@@ -159,14 +159,14 @@
 
     <!-- Диалог смены пароля аккаунта (issue #32) -->
     <string name="settings_security_account_password">Пароль аккаунта</string>
-    <string name="settings_security_account_password_desc">Общий для всех синхронизированных устройств.</string>
+    <string name="settings_security_account_password_desc">Общий для всех устройств.</string>
     <string name="settings_change_account_pw_title">Смена пароля аккаунта</string>
     <string name="settings_change_account_pw_note">Меняет пароль на всех синхронизированных устройствах. На остальных нужно войти заново с новым паролём.</string>
     <string name="settings_change_account_pw_submit">Сменить пароль</string>
     <string name="settings_change_account_pw_err_rewrap">Пароль аккаунта изменён, но это устройство нужно переподключить с новым паролём.</string>
 
     <!-- Раздел Keyboard -->
-    <string name="settings_keyboard_subtitle">Горячие клавиши подстраиваются под вашу платформу. Терминальные привязки работают, когда сессия в фокусе.</string>
+    <string name="settings_keyboard_subtitle">Горячие клавиши приложения и терминала.</string>
     <string name="settings_kb_new_connection">Новое подключение</string>
     <string name="settings_kb_command_palette">Палитра команд / поиск</string>
     <string name="settings_kb_snippet_palette">Палитра сниппетов</string>
@@ -201,7 +201,7 @@
     <string name="settings_about_licenses">Лицензии открытого ПО</string>
     <string name="settings_about_footer">Построено на открытых морях · © 2026 Skerry</string>
     <string name="settings_about_check_updates">Проверять обновления</string>
-    <string name="settings_about_check_updates_desc">Раз в день Skerry запрашивает у GitHub Releases API последнюю версию. Больше ничего не отправляется.</string>
+    <string name="settings_about_check_updates_desc">Раз в день проверять последнюю версию через GitHub Releases API.</string>
     <string name="settings_about_update_available">Доступна версия %1$s</string>
     <string name="settings_about_update_open">Открыть страницу релиза</string>
     <string name="settings_update_status">Обновление %1$s</string>

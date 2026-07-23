@@ -23,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,8 +47,8 @@ import app.skerry.ui.generated.resources.shell_details
 import app.skerry.ui.generated.resources.shell_edit_host
 import app.skerry.ui.generated.resources.shell_delete_host
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.D
 import app.skerry.ui.app.LocalConnectHost
+import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalOpenSftp
@@ -58,10 +57,7 @@ import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.i18n.label
-
-/** Coral used for the Delete host action; not a token in the `D` palette. */
-private val DetailCoral = Color(0xFFE07A5F)
-private val DetailCoralBorder = Color(0x40E07A5F)
+import app.skerry.ui.theme.Skerry
 
 /** Details card row: label, value, and whether the value is monospace (address/port). */
 @Immutable
@@ -105,7 +101,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
         if (host == null) {
             Txt(
                 stringResource(Res.string.shell_host_not_found),
-                color = D.faint,
+                color = Skerry.colors.faint,
                 size = 13.sp,
                 modifier = Modifier.padding(horizontal = 22.dp, vertical = 8.dp),
             )
@@ -118,17 +114,17 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(
-                Modifier.size(62.dp).clip(RoundedCornerShape(18.dp)).background(D.cyan.copy(alpha = 0.1f)),
+                Modifier.size(62.dp).clip(RoundedCornerShape(18.dp)).background(Skerry.colors.cyan.copy(alpha = 0.1f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Sym("dns", size = 32.sp, color = D.cyanBright)
+                Sym("dns", size = 32.sp, color = Skerry.colors.cyanBright)
             }
             Spacer(Modifier.height(12.dp))
-            Txt(host.label, color = D.text, size = 20.sp, weight = FontWeight.Bold)
+            Txt(host.label, color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(3.dp))
             Txt(
                 "${host.username}@${host.address}",
-                color = D.dim,
+                color = Skerry.colors.dim,
                 size = 12.5.sp,
                 font = LocalFonts.current.mono,
             )
@@ -142,7 +138,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(D.cyan)
+                    .background(Skerry.colors.cyan)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -152,8 +148,8 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             ) {
-                Sym("terminal", size = 21.sp, color = D.ink)
-                Txt(stringResource(Res.string.shell_connect), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
+                Sym("terminal", size = 21.sp, color = Skerry.colors.ink)
+                Txt(stringResource(Res.string.shell_connect), color = Skerry.colors.ink, size = 16.sp, weight = FontWeight.Bold)
             }
         }
 
@@ -175,8 +171,8 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             Modifier
                 .padding(horizontal = 18.dp)
                 .clip(RoundedCornerShape(13.dp))
-                .background(D.card)
-                .border(1.dp, D.cyan.copy(alpha = 0.07f), RoundedCornerShape(13.dp)),
+                .background(Skerry.colors.card)
+                .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.07f), RoundedCornerShape(13.dp)),
         ) {
             val rows = mobileHostDetailRows(host) { jumpId -> controller?.find(jumpId) }
             rows.forEachIndexed { i, row ->
@@ -185,16 +181,16 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Txt(row.label, color = D.dim, size = 13.sp)
+                    Txt(row.label, color = Skerry.colors.dim, size = 13.sp)
                     Txt(
                         row.value,
-                        color = D.text,
+                        color = Skerry.colors.text,
                         size = 13.sp,
                         font = if (row.mono) LocalFonts.current.mono else null,
                     )
                 }
                 if (i < rows.lastIndex) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan.copy(alpha = 0.05f)))
+                    HLine()
                 }
             }
         }
@@ -210,7 +206,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(13.dp))
-                        .border(1.dp, D.cyan.copy(alpha = 0.4f), RoundedCornerShape(13.dp))
+                        .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.4f), RoundedCornerShape(13.dp))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -219,7 +215,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                         .padding(13.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Txt(stringResource(Res.string.shell_edit_host), color = D.cyanBright, size = 14.sp, weight = FontWeight.Medium)
+                    Txt(stringResource(Res.string.shell_edit_host), color = Skerry.colors.cyanBright, size = 14.sp, weight = FontWeight.Medium)
                 }
             }
             val onDelete = controller?.let { ctrl -> { ctrl.delete(host.id); state.pop() } }
@@ -227,12 +223,12 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(13.dp))
-                    .border(1.dp, DetailCoralBorder, RoundedCornerShape(13.dp))
+                    .border(1.dp, Skerry.colors.sunset.copy(alpha = 0.25f), RoundedCornerShape(13.dp))
                     .then(if (onDelete != null) Modifier.clickable(onClick = onDelete) else Modifier)
                     .padding(13.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(stringResource(Res.string.shell_delete_host), color = DetailCoral, size = 14.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.shell_delete_host), color = Skerry.colors.sunset, size = 14.sp, weight = FontWeight.Medium)
             }
         }
     }
@@ -244,8 +240,8 @@ private fun QuickAction(icon: String, label: String, modifier: Modifier, onClick
     Column(
         modifier
             .clip(RoundedCornerShape(13.dp))
-            .background(D.card)
-            .border(1.dp, D.cyan08, RoundedCornerShape(13.dp))
+            .background(Skerry.colors.card)
+            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(13.dp))
             .then(
                 if (onClick != null) {
                     Modifier.clickable(
@@ -261,8 +257,8 @@ private fun QuickAction(icon: String, label: String, modifier: Modifier, onClick
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Sym(icon, size = 22.sp, color = D.cyanBright)
-        Txt(label, color = D.dim, size = 11.sp)
+        Sym(icon, size = 22.sp, color = Skerry.colors.cyanBright)
+        Txt(label, color = Skerry.colors.dim, size = 11.sp)
     }
 }
 
@@ -271,7 +267,7 @@ private fun QuickAction(icon: String, label: String, modifier: Modifier, onClick
 private fun HostsDetailLabel(name: String) {
     Txt(
         name.uppercase(),
-        color = D.faint,
+        color = Skerry.colors.faint,
         size = 11.5.sp,
         weight = FontWeight.SemiBold,
         letterSpacing = 0.6.sp,

@@ -52,7 +52,6 @@ import app.skerry.ui.generated.resources.shell_hosts
 import app.skerry.ui.generated.resources.shell_search_hosts
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.host.ALL_HOSTS_CHIP
-import app.skerry.ui.design.D
 import app.skerry.ui.host.HostDragState
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
@@ -71,6 +70,7 @@ import app.skerry.ui.host.icon
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.host.draggableFolderHeader
 import app.skerry.ui.host.draggableHostRow
+import app.skerry.ui.theme.Skerry
 
 /** Preview catalog for the path without a live [LocalHosts] (offscreen/preview). */
 internal val MOBILE_PREVIEW_HOSTS = listOf(
@@ -232,7 +232,7 @@ private fun MobileDropLine(horizontal: Dp = 18.dp) {
             .padding(horizontal = horizontal, vertical = 3.dp)
             .height(2.dp)
             .clip(RoundedCornerShape(1.dp))
-            .background(D.cyan),
+            .background(Skerry.colors.cyan),
     )
 }
 
@@ -252,16 +252,16 @@ private fun HostsHeader(onAvatar: () -> Unit) {
             val ind = syncC?.let { syncIndicatorLocalized(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
             if (ind != null) {
                 Sym(ind.icon, size = 19.sp, color = when (ind.level) {
-                    SyncIndicatorLevel.OK -> D.moss
-                    SyncIndicatorLevel.WARN -> D.amber
-                    SyncIndicatorLevel.ERROR -> D.sunset
+                    SyncIndicatorLevel.OK -> Skerry.colors.moss
+                    SyncIndicatorLevel.WARN -> Skerry.colors.amber
+                    SyncIndicatorLevel.ERROR -> Skerry.colors.sunset
                 })
             }
             Box(
-                Modifier.size(34.dp).clip(CircleShape).background(D.cyan).clickable(onClick = onAvatar),
+                Modifier.size(34.dp).clip(CircleShape).background(Skerry.colors.cyan).clickable(onClick = onAvatar),
                 contentAlignment = Alignment.Center,
             ) {
-                Sym("person", size = 19.sp, color = D.ink)
+                Sym("person", size = 19.sp, color = Skerry.colors.ink)
             }
         }
     }
@@ -275,8 +275,8 @@ private fun HostsSearch(query: String, onChange: (String) -> Unit) {
         value = query,
         onValueChange = onChange,
         singleLine = true,
-        textStyle = TextStyle(color = D.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
-        cursorBrush = SolidColor(D.cyan),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 6.dp),
@@ -285,15 +285,15 @@ private fun HostsSearch(query: String, onChange: (String) -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(11.dp))
-                    .background(Color(0x0DFFFFFF))
-                    .border(1.dp, D.cyan08, RoundedCornerShape(11.dp))
+                    .background(Skerry.colors.card)
+                    .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(11.dp))
                     .padding(start = 12.dp, end = 12.dp, top = 11.dp, bottom = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Sym("search", size = 19.sp, color = D.faint)
+                Sym("search", size = 19.sp, color = Skerry.colors.faint)
                 Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Txt(stringResource(Res.string.shell_search_hosts), color = D.faint, size = 15.sp)
+                    if (query.isEmpty()) Txt(stringResource(Res.string.shell_search_hosts), color = Skerry.colors.faint, size = 15.sp)
                     inner()
                 }
             }
@@ -318,7 +318,7 @@ private fun HostsChips(chips: List<String>, active: String, onSelect: (String) -
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (on) D.cyan.copy(alpha = 0.14f) else Color(0x0DFFFFFF))
+                        .background(if (on) Skerry.colors.cyan14 else Skerry.colors.overlayMed)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -328,7 +328,7 @@ private fun HostsChips(chips: List<String>, active: String, onSelect: (String) -
                 ) {
                     Txt(
                         hostChipLabel(chip),
-                        color = if (on) D.cyanBright else D.dim,
+                        color = if (on) Skerry.colors.cyanBright else Skerry.colors.dim,
                         size = 12.5.sp,
                         weight = if (on) FontWeight.Medium else FontWeight.Normal,
                     )
@@ -370,11 +370,11 @@ private fun MobileFolderHeader(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = D.faint)
+            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
         }
         Txt(
             name.uppercase(),
-            color = if (dropTarget) D.cyanBright else D.faint,
+            color = if (dropTarget) Skerry.colors.cyanBright else Skerry.colors.faint,
             size = 12.sp,
             weight = FontWeight.SemiBold,
             letterSpacing = 0.6.sp,
@@ -391,11 +391,11 @@ private fun MobileFolderHeader(
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                Sym("edit", size = 14.sp, color = D.faint)
+                Sym("edit", size = 14.sp, color = Skerry.colors.faint)
             }
         }
         Spacer(Modifier.weight(1f))
-        Txt(count.toString(), color = D.faint, size = 11.sp)
+        Txt(count.toString(), color = Skerry.colors.faint, size = 11.sp)
     }
 }
 
@@ -414,8 +414,8 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(D.card)
-            .border(1.dp, D.cyan08, RoundedCornerShape(14.dp))
+            .background(Skerry.colors.card)
+            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(14.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -426,17 +426,17 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(D.cyan.copy(alpha = 0.1f)),
+            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(Skerry.colors.cyan.copy(alpha = 0.1f)),
             contentAlignment = Alignment.Center,
         ) {
-            Sym(host.connectionType.icon, size = 21.sp, color = D.cyanBright)
+            Sym(host.connectionType.icon, size = 21.sp, color = Skerry.colors.cyanBright)
         }
         Column(Modifier.weight(1f)) {
-            Txt(host.label, color = D.text, size = 15.sp, weight = FontWeight.SemiBold, maxLines = 1)
+            Txt(host.label, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold, maxLines = 1)
             Spacer(Modifier.height(2.dp))
             Txt(
                 "${host.username}@${host.address}",
-                color = D.dim,
+                color = Skerry.colors.dim,
                 size = 11.5.sp,
                 font = LocalFonts.current.mono,
                 maxLines = 1,

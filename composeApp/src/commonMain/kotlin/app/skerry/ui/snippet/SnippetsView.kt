@@ -81,7 +81,6 @@ import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.Chip
-import app.skerry.ui.design.D
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.GhostButton
@@ -95,6 +94,7 @@ import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
+import app.skerry.ui.theme.Skerry
 
 private data class MockSnippet(val icon: String, val title: String, val cmd: String, val selected: Boolean = false)
 
@@ -145,8 +145,8 @@ private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibrarySta
             onInstallStarterPack = { manager.installStarterPack() },
             onRenameTag = { oldTag, newTag -> manager.renameTag(oldTag, newTag)?.let { library.onTagRenamed(oldTag, it) } },
         )
-        VLine(D.line)
-        Box(Modifier.weight(1f).fillMaxHeight().background(D.bg)) {
+        VLine(Skerry.colors.line)
+        Box(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg)) {
             if (!adding && selected == null) {
                 EmptyState(icon = "code_blocks", title = stringResource(Res.string.lib_snippets_select_or_create))
             } else {
@@ -192,8 +192,8 @@ private fun SnippetEditor(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Sym("code_blocks", size = 20.sp, color = D.cyanBright)
-                Txt(form.label.ifBlank { stringResource(Res.string.lib_snippets_new) }, color = D.text, size = 17.sp, weight = FontWeight.SemiBold)
+                Sym("code_blocks", size = 20.sp, color = Skerry.colors.cyanBright)
+                Txt(form.label.ifBlank { stringResource(Res.string.lib_snippets_new) }, color = Skerry.colors.text, size = 17.sp, weight = FontWeight.SemiBold)
                 // Tags sit inline right after the name, not on a line of their own.
                 if (form.tags.isNotEmpty()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -254,7 +254,7 @@ private fun SnippetEditor(
                     enabled = form.canSave,
                 )
                 if (entry != null) {
-                    GhostButton(stringResource(Res.string.lib_snippets_delete), onClick = { manager.delete(entry.id); onDeleted() }, fg = D.sunset, border = D.sunset.copy(alpha = 0.3f))
+                    GhostButton(stringResource(Res.string.lib_snippets_delete), onClick = { manager.delete(entry.id); onDeleted() }, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f))
                 }
             }
         }
@@ -284,26 +284,27 @@ private fun SnipTagsField(
         trigger = {
             FlowRow(
                 // Tapping anywhere in the capsule (padding, gaps between pills) focuses the input.
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { focus.requestFocus() }
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 tags.forEach { tag -> key(tag) { SnipTagPill(tag) { onRemove(tag) } } }
-                val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = mono) }
+                val textColor = Skerry.colors.text
+                val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 12.5.sp, fontFamily = mono) }
                 BasicTextField(
                     value = draft,
                     onValueChange = onDraftChange,
                     singleLine = true,
                     textStyle = textStyle,
-                    cursorBrush = SolidColor(D.cyan),
+                    cursorBrush = SolidColor(Skerry.colors.cyan),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onCommit() }),
                     modifier = Modifier.widthIn(min = 72.dp).focusRequester(focus).onFocusChanged { focused = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
-                            if (draft.isEmpty()) Txt(stringResource(Res.string.lib_snippets_add_tag), color = D.faint, size = 12.5.sp, font = mono)
+                            if (draft.isEmpty()) Txt(stringResource(Res.string.lib_snippets_add_tag), color = Skerry.colors.faint, size = 12.5.sp, font = mono)
                             inner()
                         }
                     },
@@ -315,8 +316,8 @@ private fun SnipTagsField(
                 Modifier
                     .width(width)
                     .clip(RoundedCornerShape(7.dp))
-                    .background(D.surface2)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                    .background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
                     .heightIn(max = 220.dp)
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 4.dp),
@@ -328,7 +329,7 @@ private fun SnipTagsField(
                         Box(
                             Modifier.fillMaxWidth().clickable { onPick(tag) }.padding(horizontal = 12.dp, vertical = 9.dp),
                         ) {
-                            Txt("#$tag", color = D.cyanBright, size = 12.5.sp, font = mono)
+                            Txt("#$tag", color = Skerry.colors.cyanBright, size = 12.5.sp, font = mono)
                         }
                     }
                 }
@@ -340,13 +341,13 @@ private fun SnipTagsField(
 @Composable
 private fun SnipTagPill(tag: String, onRemove: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(20.dp)).background(D.cyan.copy(alpha = 0.12f)).padding(start = 9.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        Modifier.clip(RoundedCornerShape(20.dp)).background(Skerry.colors.cyan.copy(alpha = 0.12f)).padding(start = 9.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Txt("#$tag", color = D.cyanBright, size = 11.sp)
+        Txt("#$tag", color = Skerry.colors.cyanBright, size = 11.sp)
         Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(2.dp), contentAlignment = Alignment.Center) {
-            Sym("close", size = 12.sp, color = D.cyanBright)
+            Sym("close", size = 12.sp, color = Skerry.colors.cyanBright)
         }
     }
 }
@@ -363,8 +364,8 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictText: String
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(7.dp))
-                .background(D.bg)
-                .border(1.dp, if (hasConflict) D.storm else if (focused) D.cyan else D.cyan14, RoundedCornerShape(7.dp))
+                .background(Skerry.colors.bg)
+                .border(1.dp, if (hasConflict) Skerry.colors.storm else if (focused) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(7.dp))
                 .focusRequester(requester)
                 .onFocusChanged { focused = it.isFocused }
                 .onPreviewKeyEvent { event ->
@@ -384,14 +385,14 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictText: String
                 .padding(horizontal = 11.dp, vertical = 9.dp),
         ) {
             val text = value ?: if (focused) stringResource(Res.string.lib_snippets_press_keys) else "—"
-            Txt(text, color = if (value != null) D.text else D.faint, size = 13.sp, font = mono)
+            Txt(text, color = if (value != null) Skerry.colors.text else Skerry.colors.faint, size = 13.sp, font = mono)
         }
         // The chord may already be taken (by another snippet or by the shell); the assignment still
         // takes effect, we just warn — saving is never blocked.
         if (conflictText != null) {
             Txt(
                 conflictText,
-                color = D.storm, size = 11.sp,
+                color = Skerry.colors.storm, size = 11.sp,
                 modifier = Modifier.padding(top = 6.dp),
             )
         }
@@ -403,15 +404,15 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictText: String
 @Composable
 private fun MockSnippetsView(mono: FontFamily) {
     Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2)) {
+        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)) {
             Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Color(0x08FFFFFF)).border(1.dp, D.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.card).border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Sym("search", size = 16.sp, color = D.faint)
-                    Txt(stringResource(Res.string.lib_snippets_search), color = D.faint, size = 12.5.sp)
+                    Sym("search", size = 16.sp, color = Skerry.colors.faint)
+                    Txt(stringResource(Res.string.lib_snippets_search), color = Skerry.colors.faint, size = 12.5.sp)
                 }
             }
             HLine()
@@ -426,12 +427,12 @@ private fun MockSnippetsView(mono: FontFamily) {
                 PrimaryButton(stringResource(Res.string.lib_snippets_new), onClick = {}, icon = "add", modifier = Modifier.fillMaxWidth())
             }
         }
-        VLine(D.line)
-        Column(Modifier.weight(1f).fillMaxHeight().background(D.bg).verticalScroll(rememberScrollState())) {
+        VLine(Skerry.colors.line)
+        Column(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
             Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Sym("monitoring", size = 20.sp, color = D.cyanBright)
-                    Txt("Disk usage report", color = D.text, size = 17.sp, weight = FontWeight.SemiBold)
+                    Sym("monitoring", size = 20.sp, color = Skerry.colors.cyanBright)
+                    Txt("Disk usage report", color = Skerry.colors.text, size = 17.sp, weight = FontWeight.SemiBold)
                 }
                 Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Chip("#monitoring")
@@ -443,14 +444,14 @@ private fun MockSnippetsView(mono: FontFamily) {
             Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
                 FieldLabelSnip(stringResource(Res.string.lib_snippets_field_command))
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(D.terminalBg).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
                 ) {
-                    Txt("df", color = D.moss, size = 13.sp, font = mono)
-                    Txt(" -h | ", color = D.textBright, size = 13.sp, font = mono)
-                    Txt("sort", color = D.moss, size = 13.sp, font = mono)
-                    Txt(" -k5 -r | ", color = D.textBright, size = 13.sp, font = mono)
-                    Txt("head", color = D.moss, size = 13.sp, font = mono)
-                    Txt(" -n 10", color = D.textBright, size = 13.sp, font = mono)
+                    Txt("df", color = Skerry.colors.moss, size = 13.sp, font = mono)
+                    Txt(" -h | ", color = Skerry.colors.textBright, size = 13.sp, font = mono)
+                    Txt("sort", color = Skerry.colors.moss, size = 13.sp, font = mono)
+                    Txt(" -k5 -r | ", color = Skerry.colors.textBright, size = 13.sp, font = mono)
+                    Txt("head", color = Skerry.colors.moss, size = 13.sp, font = mono)
+                    Txt(" -n 10", color = Skerry.colors.textBright, size = 13.sp, font = mono)
                 }
                 Column(Modifier.padding(top = 20.dp).width(220.dp)) {
                     FieldLabelSnip(stringResource(Res.string.lib_snippets_field_shortcut))
@@ -470,15 +471,15 @@ private fun MockSnippetRow(snippet: MockSnippet, mono: FontFamily) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(7.dp))
-            .background(if (snippet.selected) D.cyan10 else Color.Transparent)
-            .border(1.dp, if (snippet.selected) D.cyan.copy(alpha = 0.18f) else Color.Transparent, RoundedCornerShape(7.dp))
+            .background(if (snippet.selected) Skerry.colors.cyan10 else Color.Transparent)
+            .border(1.dp, if (snippet.selected) Skerry.colors.cyan.copy(alpha = 0.18f) else Color.Transparent, RoundedCornerShape(7.dp))
             .padding(horizontal = 11.dp, vertical = 9.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Sym(snippet.icon, size = 15.sp, color = if (snippet.selected) D.cyanBright else D.dim)
-            Txt(snippet.title, color = if (snippet.selected) D.cyanBright else D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+            Sym(snippet.icon, size = 15.sp, color = if (snippet.selected) Skerry.colors.cyanBright else Skerry.colors.dim)
+            Txt(snippet.title, color = if (snippet.selected) Skerry.colors.cyanBright else Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
         }
-        Txt(snippet.cmd, color = if (snippet.selected) D.dim else D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
+        Txt(snippet.cmd, color = if (snippet.selected) Skerry.colors.dim else Skerry.colors.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
     }
 }
 
@@ -486,23 +487,24 @@ private fun MockSnippetRow(snippet: MockSnippet, mono: FontFamily) {
 
 @Composable
 private fun FieldLabelSnip(text: String) {
-    Txt(labelUppercase(text), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 8.dp))
+    Txt(labelUppercase(text), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 8.dp))
 }
 
 /** Single-line editable field ([SnipInput] style plus placeholder and input). */
 @Composable
 private fun SnipEditField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
-    val textStyle = remember(mono) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = mono) }
+    val textColor = Skerry.colors.text
+    val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
         textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
-                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp, font = mono)
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
+                if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = mono)
                 inner()
             }
         },
@@ -512,16 +514,17 @@ private fun SnipEditField(value: String, onValueChange: (String) -> Unit, placeh
 /** Multiline command field (monospace, terminal-dark background). */
 @Composable
 private fun SnipCommandField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
-    val textStyle = remember(mono) { TextStyle(color = D.textBright, fontSize = 13.sp, fontFamily = mono) }
+    val textColor = Skerry.colors.textBright
+    val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         modifier = Modifier.fillMaxWidth(),
         decorationBox = { inner ->
-            Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(D.terminalBg).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp)) {
-                if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp, font = mono)
+            Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp)) {
+                if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = mono)
                 inner()
             }
         },
@@ -530,7 +533,7 @@ private fun SnipCommandField(value: String, onValueChange: (String) -> Unit, pla
 
 @Composable
 private fun SnipInput(value: String, mono: FontFamily) {
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
-        Txt(value, color = D.text, size = 13.sp, font = mono)
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
+        Txt(value, color = Skerry.colors.text, size = 13.sp, font = mono)
     }
 }

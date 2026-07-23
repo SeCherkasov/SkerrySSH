@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,12 +25,12 @@ import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_delete
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.CancelButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
+import app.skerry.ui.theme.Skerry
 
 /**
  * Confirmation dialog for deleting a host profile (from the sidebar context menu). Only the
@@ -47,16 +46,16 @@ fun DesktopDeleteHostDialog(host: Host, onDismiss: () -> Unit, onConfirm: () -> 
                 .fillMaxWidth()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks()
                 .padding(26.dp),
         ) {
-            Txt(stringResource(Res.string.shell_delete_host_title, host.label), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-            Txt(host.connectionSubtitle(), color = D.dim, size = 12.5.sp, font = LocalFonts.current.mono, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+            Txt(stringResource(Res.string.shell_delete_host_title, host.label), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(host.connectionSubtitle(), color = Skerry.colors.dim, size = 12.5.sp, font = LocalFonts.current.mono, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
             Txt(
                 stringResource(Res.string.shell_delete_host_body),
-                color = D.dim, size = 12.5.sp, lineHeight = 18.sp,
+                color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp,
             )
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
@@ -64,7 +63,7 @@ fun DesktopDeleteHostDialog(host: Host, onDismiss: () -> Unit, onConfirm: () -> 
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                PrimaryButton(stringResource(Res.string.shell_delete), onClick = onConfirm, bg = D.sunset, fg = Color(0xFF1A0B07))
+                PrimaryButton(stringResource(Res.string.shell_delete), onClick = onConfirm, bg = Skerry.colors.sunset, fg = Skerry.colors.sunsetInk)
             }
         }
     }

@@ -35,7 +35,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.CancelButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
@@ -58,6 +57,7 @@ import app.skerry.ui.generated.resources.lib_teams_your_fingerprint
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_create
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /** Share-picker item (a host or snippet from the own vault): [detail] is the second line (address/command). */
 data class ShareItem(val id: String, val label: String, val detail: String)
@@ -72,8 +72,8 @@ internal fun TeamsDialogCard(onDismiss: () -> Unit, content: @Composable () -> U
                 .fillMaxWidth()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks()
                 .padding(26.dp),
         ) { content() }
@@ -94,8 +94,8 @@ private fun TeamsTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = TextStyle(color = D.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
-        cursorBrush = SolidColor(D.cyan),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
         modifier = modifier.fillMaxWidth().focusRequester(focus),
@@ -104,13 +104,13 @@ private fun TeamsTextField(
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(7.dp))
-                    .background(D.card)
-                    .border(1.dp, D.line, RoundedCornerShape(7.dp))
+                    .background(Skerry.colors.card)
+                    .border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp))
                     .padding(horizontal = 11.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.fillMaxWidth()) {
-                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = 13.sp)
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp)
                     inner()
                 }
             }
@@ -128,8 +128,8 @@ fun CreateTeamDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
         if (name.trim().isNotEmpty()) onCreate(name.trim())
     }
     TeamsDialogCard(onDismiss) {
-        Txt(stringResource(Res.string.lib_teams_create_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-        Txt(stringResource(Res.string.lib_teams_create_subtitle), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
+        Txt(stringResource(Res.string.lib_teams_create_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+        Txt(stringResource(Res.string.lib_teams_create_subtitle), color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
         TeamsTextField(name, { name = it }, stringResource(Res.string.lib_teams_name_placeholder), ::save, focus)
         Row(
             Modifier.fillMaxWidth().padding(top = 18.dp),
@@ -171,8 +171,8 @@ fun InviteMemberDialog(
         if (ready) onSend(id, role) else onLookup(id)
     }
     TeamsDialogCard(onDismiss) {
-        Txt(stringResource(Res.string.lib_teams_invite_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-        Txt(stringResource(Res.string.lib_teams_invite_subtitle), color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
+        Txt(stringResource(Res.string.lib_teams_invite_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+        Txt(stringResource(Res.string.lib_teams_invite_subtitle), color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
         TeamsTextField(accountId, { accountId = it; onEdited() }, stringResource(Res.string.lib_teams_invite_account_placeholder), ::submit, focus)
         if (preview != null && ready) {
             Column(
@@ -180,20 +180,20 @@ fun InviteMemberDialog(
                     .fillMaxWidth()
                     .padding(top = 12.dp)
                     .clip(RoundedCornerShape(7.dp))
-                    .background(D.cyan.copy(alpha = 0.06f))
-                    .border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                    .background(Skerry.colors.cyan.copy(alpha = 0.06f))
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
                     .padding(12.dp),
             ) {
-                Txt(stringResource(Res.string.lib_teams_invite_fingerprint).uppercase(), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
-                Txt(preview.fingerprint, color = D.cyanBright, size = 14.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
-                Txt(stringResource(Res.string.lib_teams_invite_verify), color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp))
+                Txt(stringResource(Res.string.lib_teams_invite_fingerprint).uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+                Txt(preview.fingerprint, color = Skerry.colors.cyanBright, size = 14.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
+                Txt(stringResource(Res.string.lib_teams_invite_verify), color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp))
                 if (ownFingerprint != null) {
-                    Txt(stringResource(Res.string.lib_teams_your_fingerprint, ownFingerprint), color = D.faint, size = 11.sp, font = mono, modifier = Modifier.padding(top = 8.dp))
+                    Txt(stringResource(Res.string.lib_teams_your_fingerprint, ownFingerprint), color = Skerry.colors.faint, size = 11.sp, font = mono, modifier = Modifier.padding(top = 8.dp))
                 }
             }
         }
         if (assignableRoles.isNotEmpty()) {
-            Txt(stringResource(Res.string.lib_teams_invite_role).uppercase(), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+            Txt(stringResource(Res.string.lib_teams_invite_role).uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
             RoleChips(assignableRoles, role) { role = it }
         }
         Row(
@@ -222,9 +222,9 @@ fun SharePickerDialog(
 ) {
     val mono = LocalFonts.current.mono
     TeamsDialogCard(onDismiss) {
-        Txt(title, color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp, modifier = Modifier.padding(bottom = 14.dp))
+        Txt(title, color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp, modifier = Modifier.padding(bottom = 14.dp))
         if (items.isEmpty()) {
-            Txt(emptyText, color = D.dim, size = 12.5.sp)
+            Txt(emptyText, color = Skerry.colors.dim, size = 12.5.sp)
         } else {
             Column(
                 Modifier.fillMaxWidth().heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
@@ -235,14 +235,14 @@ fun SharePickerDialog(
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(7.dp))
-                            .border(1.dp, D.cyan08, RoundedCornerShape(7.dp))
+                            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(7.dp))
                             .clickable { onPick(item) }
                             .padding(horizontal = 12.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Txt(item.label, color = D.textBright, size = 12.5.sp, modifier = Modifier.weight(1f))
-                        Txt(item.detail, color = D.faint, size = 11.sp, font = mono)
+                        Txt(item.label, color = Skerry.colors.textBright, size = 12.5.sp, modifier = Modifier.weight(1f))
+                        Txt(item.detail, color = Skerry.colors.faint, size = 11.sp, font = mono)
                     }
                 }
             }

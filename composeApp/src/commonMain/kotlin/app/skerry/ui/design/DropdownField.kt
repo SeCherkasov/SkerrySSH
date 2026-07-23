@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.theme.Skerry
 
 /**
  * Form select built on [AnchoredDropdown]: a "value + chevron" trigger row ([SelectTrigger])
@@ -54,14 +55,14 @@ fun <T> DropdownField(
 @Composable
 fun SelectTrigger(value: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).clickable(onClick = onClick).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).clickable(onClick = onClick).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         // Single line: a value longer than the trigger ellipsizes instead of wrapping to a second
         // line (which would grow the trigger's height and desync it from neighbouring controls).
-        Txt(value, color = D.text, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Sym("expand_more", size = 16.sp, color = D.faint)
+        Txt(value, color = Skerry.colors.text, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Sym("expand_more", size = 16.sp, color = Skerry.colors.faint)
     }
 }
 
@@ -69,7 +70,7 @@ fun SelectTrigger(value: String, onClick: () -> Unit) {
 @Composable
 fun DropdownMenuColumn(width: Dp, content: @Composable () -> Unit) {
     Column(
-        Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(D.surface2).border(1.dp, D.cyan14, RoundedCornerShape(8.dp)),
+        Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)),
     ) { content() }
 }
 
@@ -78,7 +79,7 @@ fun DropdownMenuColumn(width: Dp, content: @Composable () -> Unit) {
 fun DropdownOption(label: String, selected: Boolean, onClick: () -> Unit) {
     Txt(
         label,
-        color = if (selected) D.cyanBright else D.text,
+        color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text,
         size = 12.5.sp,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp),
     )

@@ -26,7 +26,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.TextUnit
-import app.skerry.ui.design.D
+import app.skerry.ui.theme.Skerry
 
 /**
  * Type-to-jump path editor shared by the desktop SFTP panes and the mobile Files breadcrumb.
@@ -55,8 +55,8 @@ fun PathJumpField(
         value = draft,
         onValueChange = { draft = it },
         singleLine = true,
-        textStyle = TextStyle(color = D.text, fontSize = textSize, fontFamily = mono),
-        cursorBrush = SolidColor(D.cyan),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = textSize, fontFamily = mono),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
         keyboardActions = KeyboardActions(onGo = { onCommit(draft.text) }),
         modifier = modifier

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import app.skerry.ui.theme.Skerry
 
 /**
  * Drag-to-dismiss for a mobile bottom sheet via its handle. Dragging down follows the finger; on
@@ -141,7 +142,7 @@ fun SheetHandle(drag: SheetDrag, modifier: Modifier = Modifier) {
             Modifier
                 .size(width = 38.dp, height = 5.dp)
                 .clip(RoundedCornerShape(3.dp))
-                .background(Color(0x2EFFFFFF)),
+                .background(Skerry.colors.whiteFaint),
         )
     }
 }

@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Txt
@@ -30,6 +29,7 @@ import app.skerry.ui.generated.resources.sync_password_replace_confirm
 import app.skerry.ui.generated.resources.sync_password_replace_title
 import app.skerry.ui.generated.resources.sync_setup_title
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Confirmation for [SyncStatus.NeedsPasswordReplaceConfirm] (issue #28): the typed password is a valid
@@ -44,7 +44,7 @@ import org.jetbrains.compose.resources.stringResource
 fun PasswordReplaceConfirm(sync: SyncCoordinator, accountId: String) {
     SyncStatusNotice(
         icon = "warning",
-        iconColor = D.amber,
+        iconColor = Skerry.colors.amber,
         title = stringResource(Res.string.sync_password_replace_title),
         subtitle = stringResource(Res.string.sync_password_replace_body, accountId),
     )
@@ -55,14 +55,14 @@ fun PasswordReplaceConfirm(sync: SyncCoordinator, accountId: String) {
         GhostButton(
             stringResource(Res.string.sync_password_replace_cancel),
             onClick = { sync.cancelPasswordReplace() },
-            fg = D.dim,
+            fg = Skerry.colors.dim,
         )
         GhostButton(
             stringResource(Res.string.sync_password_replace_confirm),
             onClick = { sync.confirmPasswordReplace() },
             icon = "cloud_sync",
-            fg = D.amber,
-            border = D.amber.copy(alpha = 0.4f),
+            fg = Skerry.colors.amber,
+            border = Skerry.colors.amber.copy(alpha = 0.4f),
         )
     }
 }
@@ -82,21 +82,21 @@ fun dismissPasswordReplace(sync: SyncCoordinator, onDismiss: () -> Unit): () -> 
 @Composable
 fun PasswordReplaceConfirmDialog(sync: SyncCoordinator, accountId: String, onDismiss: () -> Unit) {
     val noop = remember { MutableInteractionSource() }
-    ModalScrim(onDismiss = dismissPasswordReplace(sync, onDismiss), scrimColor = Color(0xB3060E16)) {
+    ModalScrim(onDismiss = dismissPasswordReplace(sync, onDismiss), scrimColor = Skerry.colors.modalScrim) {
         Column(
             Modifier
                 .widthIn(max = 440.dp)
                 .fillMaxWidth()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .clickable(interactionSource = noop, indication = null, onClick = {})
                 .padding(26.dp),
         ) {
             Txt(
                 stringResource(Res.string.sync_setup_title),
-                color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
+                color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
                 modifier = Modifier.padding(bottom = 16.dp),
             )
             PasswordReplaceConfirm(sync, accountId)

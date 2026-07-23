@@ -19,9 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 // Shared mobile screen chrome: push-screen header, root-tab title, FAB.
 
@@ -47,15 +47,15 @@ internal fun MobilePushHeader(title: String, onBack: () -> Unit, plainBack: Bool
         } else {
             Modifier.clickable(onClick = onBack)
         }
-        Sym("chevron_left", size = 27.sp, color = D.cyanBright, modifier = backModifier)
-        Txt(title, color = D.text, size = 18.sp, weight = FontWeight.Bold)
+        Sym("chevron_left", size = 27.sp, color = Skerry.colors.cyanBright, modifier = backModifier)
+        Txt(title, color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
     }
 }
 
 /** Root-tab title (28sp Bold, letterSpacing -0.5) — Hosts/Snippets/Vault/More/Files. */
 @Composable
 internal fun MobileScreenTitle(text: String) {
-    Txt(text, color = D.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
+    Txt(text, color = Skerry.colors.text, size = 28.sp, weight = FontWeight.Bold, letterSpacing = (-0.5).sp)
 }
 
 /**
@@ -79,10 +79,10 @@ internal fun MobileFabButton(
         modifier
             .size(56.dp)
             .clip(RoundedCornerShape(18.dp))
-            .background(D.cyan)
+            .background(Skerry.colors.cyan)
             .then(clickModifier),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(icon, size = iconSize, color = D.ink)
+        Sym(icon, size = iconSize, color = Skerry.colors.ink)
     }
 }

@@ -15,7 +15,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.connection.ConnectionController
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_monitor_title
@@ -24,6 +23,7 @@ import app.skerry.ui.metrics.HostMonitorSections
 import app.skerry.ui.metrics.MetricsAvailability
 import app.skerry.ui.metrics.MetricsSample
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Phone counterpart of the desktop info panel's monitor: the same blocks (CPU/memory/swap with
@@ -62,7 +62,7 @@ internal fun MobileHostMonitorSheet(
         panelModifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
         maxHeightFraction = 0.8f,
     ) {
-        Txt(stringResource(Res.string.term_monitor_title), color = D.text, size = 15.sp, weight = FontWeight.SemiBold)
+        Txt(stringResource(Res.string.term_monitor_title), color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold)
         Spacer(Modifier.height(10.dp))
         // Capped height rather than a weight: the sheet panel itself is a plain Column, and a
         // weighted child inside it fails to measure the scrollable content.

@@ -13,7 +13,7 @@ import kotlinx.serialization.Serializable
  * - [Permissive] — cloud allowed without sanitization (non-sensitive systems only).
  * - [Off] — AI disabled entirely for this host.
  *
- * Value order matches the UI prototype; serialization is by name, so order doesn't affect backward
+ * Value order matches the UI ordering; serialization is by name, so order doesn't affect backward
  * compatibility of saved hosts.
  */
 @Serializable

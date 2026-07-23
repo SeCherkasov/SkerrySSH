@@ -1,10 +1,24 @@
 <resources>
     <!-- Appearance / раздел оформления -->
     <string name="appearance_title">Оформление</string>
-    <string name="appearance_subtitle">Язык интерфейса и боковая панель.</string>
+    <string name="appearance_subtitle">Тема, язык интерфейса и боковая панель.</string>
+    <string name="appearance_theme">Тема оформления</string>
+    <string name="theme_system">Системная</string>
+    <string name="theme_light">Skerry Светлая</string>
+    <string name="theme_dark">Skerry Тёмная</string>
+    <string name="theme_blackwater">Blackwater</string>
+    <string name="theme_tokyo_night">Tokyo Night</string>
+    <string name="theme_tokyo_day">Tokyo Day</string>
+    <string name="theme_catppuccin_mocha">Catppuccin Mocha</string>
+    <string name="theme_gruvbox_dark">Gruvbox Dark</string>
+    <string name="theme_dracula">Dracula</string>
+    <string name="theme_solarized_light">Solarized Light</string>
     <string name="appearance_badge_active">АКТИВНА</string>
     <string name="appearance_section_terminal">ТЕРМИНАЛ</string>
     <string name="appearance_section_interface">ИНТЕРФЕЙС</string>
+    <string name="appearance_section_theme">ТЕМА</string>
+    <string name="appearance_custom_term_theme">Отдельная тема терминала</string>
+    <string name="appearance_custom_term_theme_desc">Выбрать тему терминала, отличную от темы приложения.</string>
     <string name="appearance_font">Шрифт</string>
     <string name="appearance_font_size">Размер шрифта</string>
     <string name="appearance_line_height">Высота строки</string>

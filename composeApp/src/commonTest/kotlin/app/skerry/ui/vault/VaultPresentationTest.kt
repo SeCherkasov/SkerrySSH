@@ -3,10 +3,10 @@ package app.skerry.ui.vault
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
-import app.skerry.ui.design.D
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import app.skerry.ui.theme.nightSeaColors
 
 class VaultPresentationTest {
 
@@ -47,9 +47,10 @@ class VaultPresentationTest {
 
     @Test
     fun `secretStyle maps secret type to icon, accent color and tint`() {
-        assertEquals(SecretTypeStyle("key", D.cyanBright, tinted = true), VaultPresentation.secretStyle(key("k1").secret))
-        assertEquals(SecretTypeStyle("password", D.dim, tinted = false), VaultPresentation.secretStyle(pwd("p1").secret))
-        assertEquals(SecretTypeStyle("workspace_premium", D.moss, tinted = true), VaultPresentation.secretStyle(cert("c1").secret))
+        val c = nightSeaColors()
+        assertEquals(SecretTypeStyle("key", c.cyanBright, tinted = true), VaultPresentation.secretStyle(key("k1").secret, c))
+        assertEquals(SecretTypeStyle("password", c.dim, tinted = false), VaultPresentation.secretStyle(pwd("p1").secret, c))
+        assertEquals(SecretTypeStyle("workspace_premium", c.moss, tinted = true), VaultPresentation.secretStyle(cert("c1").secret, c))
     }
 
     // usedByLabel is now @Composable (plural string resource), so its string unit test was dropped;

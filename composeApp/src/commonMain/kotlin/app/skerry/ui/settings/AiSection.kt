@@ -26,7 +26,6 @@ import app.skerry.ui.ai.isInsecureAiEndpoint
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.design.ChipButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.PrimaryButton
@@ -42,8 +41,6 @@ import app.skerry.ui.generated.resources.settings_ai_field_api_key
 import app.skerry.ui.generated.resources.settings_ai_field_endpoint
 import app.skerry.ui.generated.resources.settings_ai_field_model
 import app.skerry.ui.generated.resources.settings_ai_key_saved
-import app.skerry.ui.generated.resources.settings_ai_live_subtitle
-import app.skerry.ui.generated.resources.settings_ai_mock_subtitle
 import app.skerry.ui.generated.resources.settings_ai_not_configured
 import app.skerry.ui.generated.resources.settings_ai_off_note
 import app.skerry.ui.generated.resources.settings_ai_placeholder_api_key
@@ -70,6 +67,7 @@ import app.skerry.ui.generated.resources.settings_save
 import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.sync.SyncField
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // AI settings section: live BYOK tab (LocalAi) or mock preview.
 
@@ -95,15 +93,13 @@ private fun SectionDivider() {
  */
 @Composable
 private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
-    SectionSubtitle(stringResource(Res.string.settings_ai_live_subtitle))
-
     AiProviderCards(ai, byokContent = { DesktopByokFields(ai) })
 
     // AI disabled: hide quick chat; config is preserved and returns with the provider.
     if (!ai.enabled) {
         Txt(
             stringResource(Res.string.settings_ai_off_note),
-            color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 14.dp),
+            color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 14.dp),
         )
         return
     }
@@ -121,7 +117,7 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
 
     ai.turns.forEach { turn -> AiChatBubble(turn.role, turn.text) }
     ai.streaming?.let { AiChatBubble(AiRole.ASSISTANT, if (it.isEmpty()) "…" else it) }
-    ai.error?.let { Txt(aiFailureMessage(it), color = D.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
+    ai.error?.let { Txt(aiFailureMessage(it), color = Skerry.colors.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
 
     var prompt by remember { mutableStateOf("") }
     val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }
@@ -139,8 +135,8 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
     ) { prompt = it }
     Spacer(Modifier.height(8.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        ChipButton(if (ai.busy) stringResource(Res.string.settings_ai_sending) else stringResource(Res.string.settings_ai_ask), color = if (ai.ready && !ai.busy) D.cyan else D.faint, onClick = { send() })
-        if (ai.turns.isNotEmpty()) ChipButton(stringResource(Res.string.settings_clear), color = D.dim, onClick = { ai.clearConversation() })
+        ChipButton(if (ai.busy) stringResource(Res.string.settings_ai_sending) else stringResource(Res.string.settings_ai_ask), color = if (ai.ready && !ai.busy) Skerry.colors.cyan else Skerry.colors.faint, onClick = { send() })
+        if (ai.turns.isNotEmpty()) ChipButton(stringResource(Res.string.settings_clear), color = Skerry.colors.dim, onClick = { ai.clearConversation() })
     }
 }
 
@@ -163,22 +159,21 @@ private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
     // http:// sends the API key and prompt (with secrets under Permissive) in cleartext; warn,
     // except for localhost where cleartext is intentional for a local proxy.
     if (isInsecureAiEndpoint(baseUrl)) {
-        Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+        Txt(stringResource(Res.string.sync_insecure_url_warning), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
     }
 
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         PrimaryButton(stringResource(Res.string.settings_save), onClick = { ai.save(key, model, baseUrl) })
-        if (ai.isConfigured) Txt(stringResource(Res.string.settings_ai_key_saved), color = D.moss, size = 11.5.sp)
-        else Txt(stringResource(Res.string.settings_ai_not_configured), color = D.faint, size = 11.5.sp)
+        if (ai.isConfigured) Txt(stringResource(Res.string.settings_ai_key_saved), color = Skerry.colors.moss, size = 11.5.sp)
+        else Txt(stringResource(Res.string.settings_ai_not_configured), color = Skerry.colors.faint, size = 11.5.sp)
     }
 }
 
 @Composable
 private fun AiSectionMock(state: DesktopDesignState) {
-    SectionSubtitle(stringResource(Res.string.settings_ai_mock_subtitle))
-    Txt(stringResource(Res.string.settings_ai_default_provider), color = D.text, size = 13.sp, weight = FontWeight.Medium)
-    Txt(stringResource(Res.string.settings_ai_default_provider_desc), color = D.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
+    Txt(stringResource(Res.string.settings_ai_default_provider), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
+    Txt(stringResource(Res.string.settings_ai_default_provider_desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
     ProviderCard("lock", stringResource(Res.string.settings_ai_provider_device), stringResource(Res.string.settings_ai_provider_device_desc), selected = true, badge = stringResource(Res.string.settings_ai_badge_private))
     Spacer(Modifier.height(8.dp))
     ProviderCard("key", stringResource(Res.string.settings_ai_provider_byok), stringResource(Res.string.settings_ai_provider_byok_desc), selected = false)
@@ -188,6 +183,8 @@ private fun AiSectionMock(state: DesktopDesignState) {
     HLine()
     Spacer(Modifier.height(6.dp))
     SettingToggleRow(stringResource(Res.string.settings_ai_sanitize), stringResource(Res.string.settings_ai_sanitize_desc), state.sanitize, state::toggleSanitize)
+    HLine()
     SettingToggleRow(stringResource(Res.string.settings_ai_preview), stringResource(Res.string.settings_ai_preview_desc), state.preview, state::togglePreview)
+    HLine()
     SettingToggleRow(stringResource(Res.string.settings_ai_confirm), stringResource(Res.string.settings_ai_confirm_desc), state.confirm, state::toggleConfirm)
 }

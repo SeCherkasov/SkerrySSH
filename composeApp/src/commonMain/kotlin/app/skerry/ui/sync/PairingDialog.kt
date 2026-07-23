@@ -46,7 +46,6 @@ import app.skerry.ui.generated.resources.sync_expires_in
 import app.skerry.ui.generated.resources.sync_copied
 import app.skerry.ui.generated.resources.sync_copy
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.D
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
@@ -55,6 +54,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.vault.copyPasswordToClipboard
+import app.skerry.ui.theme.Skerry
 
 /**
  * Desktop "Link a device" dialog (already signed-in device): [ModalScrim] plus card, like
@@ -64,22 +64,22 @@ import app.skerry.ui.vault.copyPasswordToClipboard
 @Composable
 fun PairingShowDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val noop = remember { MutableInteractionSource() }
-    ModalScrim(onDismiss = onDismiss, scrimColor = Color(0xB3060E16)) {
+    ModalScrim(onDismiss = onDismiss, scrimColor = Skerry.colors.modalScrim) {
         Column(
             Modifier
                 .widthIn(max = 380.dp)
                 .fillMaxWidth()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .clickable(interactionSource = noop, indication = null, onClick = {})
                 .padding(26.dp),
         ) {
-            Txt(stringResource(Res.string.sync_link_device), color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(stringResource(Res.string.sync_link_device), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
             Txt(
                 stringResource(Res.string.sync_pairing_dialog_desc),
-                color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+                color = Skerry.colors.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
             PairingOfferContent(sync)
             Row(
@@ -88,8 +88,8 @@ fun PairingShowDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Sym("shield_lock", size = 14.sp, color = D.moss)
-                    Txt(stringResource(Res.string.sync_zero_knowledge), color = D.faint, size = 11.sp)
+                    Sym("shield_lock", size = 14.sp, color = Skerry.colors.moss)
+                    Txt(stringResource(Res.string.sync_zero_knowledge), color = Skerry.colors.faint, size = 11.sp)
                 }
                 PrimaryButton(stringResource(Res.string.sync_done), onClick = onDismiss)
             }
@@ -138,15 +138,15 @@ fun PairingOfferContent(sync: SyncCoordinator) {
             Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Sym("error", size = 14.sp, color = D.sunset)
-            Txt(error!!, color = D.sunset, size = 11.5.sp)
+            Sym("error", size = 14.sp, color = Skerry.colors.sunset)
+            Txt(error!!, color = Skerry.colors.sunset, size = 11.5.sp)
         }
 
         offer == null -> Row(
             Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Txt(stringResource(Res.string.sync_generating_code), color = D.dim, size = 12.sp)
+            Txt(stringResource(Res.string.sync_generating_code), color = Skerry.colors.dim, size = 12.sp)
         }
 
         else -> {
@@ -158,11 +158,11 @@ fun PairingOfferContent(sync: SyncCoordinator) {
             // Text code for cameraless devices / desktop-to-desktop: selectable, monospace.
             SelectionContainer {
                 Box(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg)
-                        .border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)
+                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
                         .horizontalScroll(rememberScrollState()).padding(horizontal = 11.dp, vertical = 9.dp),
                 ) {
-                    Txt(offer!!.payload, color = D.dim, size = 11.sp, font = mono, maxLines = 1)
+                    Txt(offer!!.payload, color = Skerry.colors.dim, size = 11.sp, font = mono, maxLines = 1)
                 }
             }
             Row(
@@ -178,7 +178,7 @@ fun PairingOfferContent(sync: SyncCoordinator) {
                         left != null -> stringResource(Res.string.sync_expires_in, formatMmSs(left))
                         else -> ""
                     },
-                    color = if (expired) D.sunset else D.faint, size = 11.sp,
+                    color = if (expired) Skerry.colors.sunset else Skerry.colors.faint, size = 11.sp,
                     modifier = Modifier.weight(1f),
                 )
                 GhostButton(

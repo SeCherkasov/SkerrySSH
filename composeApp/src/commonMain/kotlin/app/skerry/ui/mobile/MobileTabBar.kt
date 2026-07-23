@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileTab
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -32,6 +31,7 @@ import app.skerry.ui.generated.resources.nav_tab_more
 import app.skerry.ui.generated.resources.nav_tab_snippets
 import app.skerry.ui.generated.resources.nav_tab_vault
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 // Mobile bottom tab bar.
 
@@ -44,9 +44,9 @@ internal fun MobileTabBar(state: MobileDesignState, modifier: Modifier = Modifie
     Column(
         modifier
             .fillMaxWidth()
-            .background(Color(0xEB0A1620)),
+            .background(Skerry.colors.railBg.copy(alpha = 0.92f)),
     ) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(D.cyan08))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan08))
         Row(
             Modifier
                 .fillMaxWidth()
@@ -63,7 +63,7 @@ internal fun MobileTabBar(state: MobileDesignState, modifier: Modifier = Modifie
 
 @Composable
 private fun MobileTabItem(tab: MobileTab, active: Boolean, onClick: () -> Unit) {
-    val color = if (active) D.cyanBright else D.faint
+    val color = if (active) Skerry.colors.cyanBright else Skerry.colors.faint
     val interaction = remember { MutableInteractionSource() }
     Column(
         Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick),

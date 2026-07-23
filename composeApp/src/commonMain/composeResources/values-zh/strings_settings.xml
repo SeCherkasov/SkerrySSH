@@ -14,7 +14,7 @@
     <string name="settings_manage">管理</string>
 
     <!-- AI 部分 -->
-    <string name="settings_ai_live_subtitle">在本设备运行 AI、使用你自己的 OpenAI 兼容密钥 (BYOK)，或关闭。密钥加密存储，仅发送到你配置的提供商。</string>
+    <string name="settings_ai_live_subtitle">AI 助手提供商与设置。</string>
     <string name="settings_ai_field_api_key">OPENAI API 密钥</string>
     <string name="settings_ai_field_model">模型</string>
     <string name="settings_ai_field_endpoint">端点</string>
@@ -24,24 +24,24 @@
     <string name="settings_ai_key_saved">密钥已保存</string>
     <string name="settings_ai_not_configured">尚未配置</string>
     <string name="settings_ai_quick_chat">快速聊天</string>
-    <string name="settings_ai_quick_chat_desc">向助手提问以验证连接。</string>
+    <string name="settings_ai_quick_chat_desc">测试助手连接。</string>
     <string name="settings_ai_prompt_placeholder_ready">询问 ssh、scp、隧道相关问题…</string>
     <string name="settings_ai_prompt_placeholder_needs_key">请先保存 API 密钥</string>
     <string name="settings_ai_sending">发送中…</string>
     <string name="settings_ai_ask">提问</string>
-    <string name="settings_ai_mock_subtitle">选择 AI 运行位置。默认在本设备，命令永不离开 Skerry。每个连接可单独覆盖。</string>
+    <string name="settings_ai_mock_subtitle">AI 运行位置。默认在本机；每个连接可单独覆盖。</string>
     <string name="settings_ai_default_provider">默认 AI 提供商</string>
-    <string name="settings_ai_default_provider_desc">用于无特定覆盖的连接。</string>
+    <string name="settings_ai_default_provider_desc">用于未单独设置的连接。</string>
     <string name="settings_ai_provider_device">本设备</string>
     <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 GB · 就绪。数据永不离开你的设备。</string>
     <string name="settings_ai_badge_private">私密</string>
     <string name="settings_ai_provider_byok">我的 API 密钥 (BYOK)</string>
-    <string name="settings_ai_provider_byok_desc">使用你的 OpenAI、Anthropic 或 OpenRouter 密钥。你直接向提供商付费。</string>
+    <string name="settings_ai_provider_byok_desc">使用自己的 OpenAI、Anthropic 或 OpenRouter 密钥，费用直付提供商。</string>
     <string name="settings_ai_provider_off">关闭——无 AI</string>
-    <string name="settings_ai_provider_off_desc">在所有地方禁用助手。不会发送任何数据。</string>
-    <string name="settings_ai_off_note">AI 已关闭：终端助手和快速聊天已隐藏。在上方选择一个提供商以重新启用。</string>
+    <string name="settings_ai_provider_off_desc">助手已关闭，不发送任何内容。</string>
+    <string name="settings_ai_off_note">AI 已关闭。在上方选择提供商以启用。</string>
     <!-- 本地模型卡片 -->
-    <string name="settings_ai_local_desc">完全离线运行助手。数据永不离开你的设备。</string>
+    <string name="settings_ai_local_desc">离线运行，数据不离开设备。</string>
     <string name="settings_ai_local_ready">就绪</string>
     <string name="settings_ai_local_verifying">验证中…</string>
     <string name="settings_ai_local_download">下载</string>
@@ -63,14 +63,14 @@
     <string name="settings_ai_error_engine_crashed">本地模型引擎意外停止。请重试。</string>
     <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">发送前清除敏感信息</string>
-    <string name="settings_ai_sanitize_desc">在提示发送到外部提供商前，移除明显的密码、令牌和密钥。</string>
+    <string name="settings_ai_sanitize_desc">向外部提供商发送前移除密码、令牌和密钥。</string>
     <string name="settings_ai_preview">发送前预览提示</string>
-    <string name="settings_ai_preview_desc">显示发送到外部的精确文本，高亮已隐去的内容。发送前可编辑或取消。</string>
+    <string name="settings_ai_preview_desc">预览外发文本，可在发送前编辑或取消。</string>
     <string name="settings_ai_confirm">运行 AI 建议前确认</string>
-    <string name="settings_ai_confirm_desc">运行任何 AI 建议的命令前需点击确认。降低来自被入侵服务器的提示注入风险。</string>
+    <string name="settings_ai_confirm_desc">执行 AI 建议的命令前需确认。</string>
 
     <!-- 终端部分 -->
-    <string name="settings_terminal_subtitle">选择主题和字体；调整滚动缓冲和终端行为。</string>
+    <string name="settings_terminal_subtitle">字体、缓冲与行为。</string>
     <string name="settings_terminal_section_font">字体</string>
     <string name="settings_terminal_section_behavior">行为</string>
     <string name="settings_terminal_scrollback">滚动缓冲</string>
@@ -83,12 +83,12 @@
     <string name="settings_terminal_cursor_bar_blink">竖线（闪烁）</string>
     <string name="settings_terminal_cursor_bar_steady">竖线</string>
     <string name="settings_terminal_show_title">在标签页上显示终端标题</string>
-    <string name="settings_terminal_show_title_desc">允许连接的终端重命名标签页（如运行中的程序）。关闭：标签页显示保存的主机名。</string>
+    <string name="settings_terminal_show_title_desc">允许 shell 重命名标签页（OSC 标题）。关闭时显示主机名。</string>
     <string name="settings_terminal_clipboard_write">允许服务器写入剪贴板 (OSC 52)</string>
     <string name="settings_terminal_host_connect">连接主机方式</string>
     <string name="settings_terminal_host_connect_single">单击</string>
     <string name="settings_terminal_host_connect_double">双击（单击选中）</string>
-    <string name="settings_terminal_clipboard_write_desc">允许连接的终端替换系统剪贴板（tmux/vim 复制）。默认关闭：否则恶意主机可能将攻击者控制的文本注入你粘贴的内容。</string>
+    <string name="settings_terminal_clipboard_write_desc">允许远端写入系统剪贴板（tmux/vim）。默认关闭。</string>
 
     <!-- 同步部分 -->
     <string name="settings_disconnect">断开连接</string>
@@ -97,12 +97,12 @@
     <string name="settings_linked_devices">已关联设备</string>
     <string name="settings_loading_devices">加载设备列表…</string>
     <string name="settings_devices_load_failed">无法加载设备列表。请尝试立即同步。</string>
-    <string name="settings_only_this_device">目前仅此设备。</string>
+    <string name="settings_only_this_device">仅此设备。</string>
     <string name="settings_device_sub_current">已关联 · 此设备</string>
     <string name="settings_device_sub_other">已关联设备</string>
     <string name="settings_this_device">● 此设备</string>
     <string name="settings_link_device">关联设备</string>
-    <string name="settings_sync_subtitle">端到端加密跨设备同步。Skerry 永远不会看到你的明文数据。</string>
+    <string name="settings_sync_subtitle">设备间端到端加密同步。</string>
     <string name="settings_sync_now">立即同步</string>
     <string name="settings_what_syncs">同步内容</string>
     <string name="settings_hosts_groups">主机和分组</string>
@@ -110,24 +110,24 @@
     <string name="settings_sync_connected">已连接</string>
     <string name="settings_sync_pushed_pulled">本会话已推送 %1$d · 已拉取 %2$d</string>
     <string name="settings_sync_syncing">同步中…</string>
-    <string name="settings_sync_syncing_desc">正在与同步服务器通信。</string>
+    <string name="settings_sync_syncing_desc">正在与同步服务器交换数据。</string>
     <string name="settings_sync_error">同步错误</string>
 
     <!-- 安全部分 -->
     <string name="settings_security_title">安全</string>
-    <string name="settings_security_subtitle">主密码、自动锁定和双因素认证保护你的保险库。</string>
+    <string name="settings_security_subtitle">主密码、自动锁定、双因素认证。</string>
     <string name="settings_security_master_password">主密码</string>
-    <string name="settings_security_master_password_desc">保护你的保险库。</string>
+    <string name="settings_security_master_password_desc">保护保险库。</string>
     <string name="settings_security_pw_changed_today">今天已更改。</string>
     <string name="settings_security_pw_changed_yesterday">昨天已更改。</string>
     <string name="settings_security_pw_changed_days">上次更改于 %1$d 天前。</string>
-    <string name="settings_security_touch_id">使用 Touch ID 解锁</string>
-    <string name="settings_security_touch_id_desc">使用生物识别代替输入主密码。</string>
-    <string name="settings_security_touch_id_unsupported">此手机无法通过生物识别解锁保险库。</string>
-    <string name="settings_security_touch_id_recheck">重新检查</string>
-    <string name="settings_security_touch_id_weak_binding">已启用，但密钥绑定较弱 — 仍需生物识别。</string>
+    <string name="settings_security_biometric">生物识别解锁</string>
+    <string name="settings_security_biometric_desc">用生物识别代替主密码。</string>
+    <string name="settings_security_biometric_unsupported">此设备不支持生物识别解锁。</string>
+    <string name="settings_security_biometric_recheck">重新检查</string>
+    <string name="settings_security_biometric_weak_binding">已启用，但密钥绑定较弱 — 仍需生物识别。</string>
     <string name="settings_security_auto_lock">自动锁定</string>
-    <string name="settings_security_auto_lock_desc">闲置后锁定 Skerry。</string>
+    <string name="settings_security_auto_lock_desc">空闲后锁定。</string>
     <string name="settings_autolock_1m">1 分钟后</string>
     <string name="settings_autolock_5m">5 分钟后</string>
     <string name="settings_autolock_15m">15 分钟后</string>
@@ -159,14 +159,14 @@
 
     <!-- 更改账户密码对话框 (issue #32) -->
     <string name="settings_security_account_password">账户密码</string>
-    <string name="settings_security_account_password_desc">由所有已同步设备共享。</string>
+    <string name="settings_security_account_password_desc">所有设备通用。</string>
     <string name="settings_change_account_pw_title">更改账户密码</string>
     <string name="settings_change_account_pw_note">更改所有已同步设备的密码。其他设备需用新密码重新登录。</string>
     <string name="settings_change_account_pw_submit">更改密码</string>
     <string name="settings_change_account_pw_err_rewrap">账户密码已更改，但此设备需用新密码重新连接。</string>
 
     <!-- 键盘部分 -->
-    <string name="settings_keyboard_subtitle">快捷键适配你的平台。终端快捷键在会话聚焦时生效。</string>
+    <string name="settings_keyboard_subtitle">应用与终端快捷键。</string>
     <string name="settings_kb_new_connection">新建连接</string>
     <string name="settings_kb_command_palette">命令面板 / 搜索</string>
     <string name="settings_kb_snippet_palette">片段面板</string>
@@ -201,7 +201,7 @@
     <string name="settings_about_licenses">开源许可</string>
     <string name="settings_about_footer">开源之海 · © 2026 Skerry</string>
     <string name="settings_about_check_updates">检查更新</string>
-    <string name="settings_about_check_updates_desc">每天查询一次 GitHub Releases API 获取最新版本。不发送其他数据。</string>
+    <string name="settings_about_check_updates_desc">每天通过 GitHub Releases API 检查最新版本。</string>
     <string name="settings_about_update_available">版本 %1$s 可用</string>
     <string name="settings_about_update_open">打开发布页面</string>
     <string name="settings_update_status">更新 %1$s</string>

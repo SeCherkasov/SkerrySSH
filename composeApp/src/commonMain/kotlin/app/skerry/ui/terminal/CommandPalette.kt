@@ -40,7 +40,6 @@ import app.skerry.shared.terminal.CommandSuggestion
 import app.skerry.shared.terminal.TerminalHistoryRecord
 import app.skerry.shared.terminal.TerminalHistoryStore
 import app.skerry.shared.terminal.commandSuggestions
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Sym
@@ -60,6 +59,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
+import app.skerry.ui.theme.Skerry
 
 /**
  * Command palette (⌘K / Ctrl+Shift+K): fuzzy search over the command history of every host, with
@@ -96,8 +96,8 @@ internal fun CommandPalette(
                 .width(560.dp)
                 .consumeClicks()
                 .clip(RoundedCornerShape(10.dp))
-                .background(D.surface2)
-                .border(1.dp, D.lineStrong, RoundedCornerShape(10.dp))
+                .background(Skerry.colors.surface2)
+                .border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(10.dp))
                 .padding(8.dp)
                 // Enter on the first hit: the palette is meant to be driven without the mouse.
                 .onPreviewKeyEvent { event ->
@@ -109,7 +109,7 @@ internal fun CommandPalette(
                     }
                 },
         ) {
-            Txt(stringResource(Res.string.term_palette_title), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+            Txt(stringResource(Res.string.term_palette_title), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
             PaletteSearch(query, { query = it }, mono, searchFocus)
             // Lazy, not a scrolling Column: the list runs to [commandSuggestions]'s cap of 200 and
             // is rebuilt on every keystroke, so only the visible rows should be laid out.
@@ -118,7 +118,7 @@ internal fun CommandPalette(
                     // Still loading; an empty box beats flashing "no commands" for a frame.
                 } else if (suggestions.isEmpty()) {
                     item {
-                        Txt(stringResource(Res.string.term_palette_empty), color = D.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
+                        Txt(stringResource(Res.string.term_palette_empty), color = Skerry.colors.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
                     }
                 } else {
                     items(suggestions, key = { it.command }) { suggestion ->
@@ -126,28 +126,29 @@ internal fun CommandPalette(
                     }
                 }
             }
-            Txt(stringResource(Res.string.term_palette_hint), color = D.faint, size = 10.sp, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp))
+            Txt(stringResource(Res.string.term_palette_hint), color = Skerry.colors.faint, size = 10.sp, modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp))
         }
     }
 }
 
 @Composable
 private fun PaletteSearch(value: String, onValueChange: (String) -> Unit, mono: FontFamily, focus: FocusRequester) {
-    val style = remember(mono) { TextStyle(color = D.text, fontSize = 13.sp, fontFamily = mono) }
+    val textColor = Skerry.colors.text
+    val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.line, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym("search", size = 16.sp, color = D.faint)
+        Sym("search", size = 16.sp, color = Skerry.colors.faint)
         Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Txt(stringResource(Res.string.term_palette_placeholder), color = D.faint, size = 13.sp, font = mono)
+            if (value.isEmpty()) Txt(stringResource(Res.string.term_palette_placeholder), color = Skerry.colors.faint, size = 13.sp, font = mono)
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
                 textStyle = style,
-                cursorBrush = SolidColor(D.cyan),
+                cursorBrush = SolidColor(Skerry.colors.cyan),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
             )
         }
@@ -159,9 +160,10 @@ private fun PaletteSearch(value: String, onValueChange: (String) -> Unit, mono: 
  * ("dcp" matching `docker compose pull`). Positions come from the matcher, which is the only thing
  * that knows which characters they were.
  */
+@Composable
 internal fun highlightMatches(suggestion: CommandSuggestion): AnnotatedString = buildAnnotatedString {
     append(suggestion.command)
-    val hit = SpanStyle(color = D.cyanBright, fontWeight = FontWeight.SemiBold)
+    val hit = SpanStyle(color = Skerry.colors.cyanBright, fontWeight = FontWeight.SemiBold)
     for (i in suggestion.positions) {
         if (i in suggestion.command.indices) addStyle(hit, i, i + 1)
     }
@@ -174,13 +176,13 @@ private fun CommandRow(suggestion: CommandSuggestion, mono: FontFamily, onClick:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Txt(highlightMatches(suggestion), color = D.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+        Txt(highlightMatches(suggestion), color = Skerry.colors.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
         val origin = when {
             suggestion.fromCurrentHost -> stringResource(Res.string.term_palette_this_host)
             else -> suggestion.hostLabel
         }
         if (origin != null) {
-            Txt(origin, color = if (suggestion.fromCurrentHost) D.cyanBright else D.faint, size = 10.sp)
+            Txt(origin, color = if (suggestion.fromCurrentHost) Skerry.colors.cyanBright else Skerry.colors.faint, size = 10.sp)
         }
     }
 }

@@ -1,6 +1,7 @@
 package app.skerry.ui.app
 
 import app.skerry.shared.host.Host
+import app.skerry.ui.settings.SETTINGS_NAV
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -17,23 +18,33 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import app.skerry.ui.design.D
+import app.skerry.ui.theme.ThemeMode
 
 class DesktopDesignStateTest {
 
     @Test
-    fun defaults_match_prototype() {
+    fun defaults_match_reference() {
         val s = DesktopDesignState()
         assertEquals(DesktopView.Terminal, s.view)
         assertFalse(s.locked)
         assertFalse(s.modalOpen)
         assertFalse(s.settingsOpen)
-        assertEquals(SettingsTab.AI, s.settingsTab)
+        assertEquals(SettingsTab.Sync, s.settingsTab)
         assertEquals("prod-web-01", s.selectedHost)
         assertEquals(0, s.activeTab)
         assertEquals(4, s.tabs.size)
         assertTrue(s.infoPanel)
         assertTrue(s.sanitize && s.preview && s.confirm)
+    }
+
+    @Test
+    fun open_settings_resets_to_the_first_nav_tab() {
+        val s = DesktopDesignState()
+        s.openSettings()
+        s.showSettingsTab(SettingsTab.About)
+        s.closeSettings()
+        s.openSettings()
+        assertEquals(SETTINGS_NAV.first().tab, s.settingsTab)
     }
 
     @Test
@@ -171,7 +182,8 @@ class DesktopDesignStateTest {
         s.onCmd("nope --x")
         s.runCmd()
         assertEquals("nope: command not found", s.termLines[1].text)
-        assertEquals(D.sunset, s.termLines[1].color)
+        // The state layer stores only the semantic flag; the renderer maps it to the theme's sunset.
+        assertTrue(s.termLines[1].error)
     }
 
     @Test
@@ -485,6 +497,17 @@ class DesktopDesignStateTest {
         s.chooseTerminalTheme(TerminalThemes.GruvboxDark) // repeat of the same theme — no-op
         assertEquals(TerminalThemes.GruvboxDark, s.terminalTheme)
         assertEquals(listOf(TerminalThemes.GruvboxDark), seen)
+    }
+
+    @Test
+    fun setThemeMode_updates_and_reports_once_skipping_repeat() {
+        val seen = mutableListOf<ThemeMode>()
+        val s = DesktopDesignState(onThemeModeChange = { seen += it })
+        assertEquals(ThemeMode.DEFAULT, s.themeMode) // default is night-sea dark, preserving the prior look
+        s.chooseThemeMode(ThemeMode.LIGHT)
+        s.chooseThemeMode(ThemeMode.LIGHT) // repeat of the same mode — no-op
+        assertEquals(ThemeMode.LIGHT, s.themeMode)
+        assertEquals(listOf(ThemeMode.LIGHT), seen)
     }
 
     @Test

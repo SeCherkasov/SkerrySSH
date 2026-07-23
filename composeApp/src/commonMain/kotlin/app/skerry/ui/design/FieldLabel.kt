@@ -7,6 +7,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.theme.Skerry
 
 /**
  * Uppercase form field label (small caps, dimmed color), with [top] spacing from the previous
@@ -16,7 +17,7 @@ import androidx.compose.ui.unit.sp
 fun FieldLabel(text: String, top: Dp = 12.dp) {
     Txt(
         text,
-        color = D.faint,
+        color = Skerry.colors.faint,
         size = 10.5.sp,
         weight = FontWeight.SemiBold,
         letterSpacing = 0.6.sp,

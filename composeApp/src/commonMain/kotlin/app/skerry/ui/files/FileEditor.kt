@@ -38,7 +38,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
@@ -66,6 +65,7 @@ import app.skerry.ui.generated.resources.sftp_overwrite
 import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.sftp.ConfirmDangerDialog
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Built-in file viewer/editor (F3/F4). It takes over the file panel's own screen rather than opening
@@ -126,7 +126,7 @@ fun FileEditorScreen(
 
     Column(
         modifier
-            .background(D.bg)
+            .background(Skerry.colors.bg)
             .imePadding()
             .focusRequester(focus)
             .onPreviewKeyEvent { event ->
@@ -150,7 +150,7 @@ fun FileEditorScreen(
         EditorHeader(controller, mono, showButtons = !showKeyBar, onSave = { controller.save() }, onClose = requestClose)
         HLine()
         controller.saveFailure?.let { failure ->
-            EditorStrip("error", fileEditFailureText(failure), D.sunset)
+            EditorStrip("error", fileEditFailureText(failure), Skerry.colors.sunset)
             HLine()
         }
         if (searching) {
@@ -166,8 +166,8 @@ fun FileEditorScreen(
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val st = controller.state) {
-                FileEditState.Loading -> EditorNotice("sync", stringResource(Res.string.sftp_loading), D.faint)
-                is FileEditState.Failed -> EditorNotice("error", fileEditFailureText(st.failure), D.sunset)
+                FileEditState.Loading -> EditorNotice("sync", stringResource(Res.string.sftp_loading), Skerry.colors.faint)
+                is FileEditState.Failed -> EditorNotice("error", fileEditFailureText(st.failure), Skerry.colors.sunset)
                 is FileEditState.Ready -> EditorBuffer(
                     controller = controller,
                     state = st,
@@ -230,21 +230,21 @@ private fun EditorHeader(
     onClose: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().background(D.surface2).padding(start = 16.dp, end = 6.dp, top = 9.dp, bottom = 9.dp),
+        Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(start = 16.dp, end = 6.dp, top = 9.dp, bottom = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Sym(if (controller.readOnly) "visibility" else "edit_note", size = 18.sp, color = D.cyanBright)
+        Sym(if (controller.readOnly) "visibility" else "edit_note", size = 18.sp, color = Skerry.colors.cyanBright)
         Txt(
             if (controller.readOnly) stringResource(Res.string.sftp_edit_title_view) else stringResource(Res.string.sftp_edit_title),
-            color = D.text,
+            color = Skerry.colors.text,
             size = 13.sp,
             weight = FontWeight.SemiBold,
         )
-        Txt(controller.name, color = D.textBright, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Txt(controller.name, color = Skerry.colors.textBright, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Txt(
             controller.path,
-            color = D.faint,
+            color = Skerry.colors.faint,
             size = 11.sp,
             font = mono,
             maxLines = 1,
@@ -252,9 +252,9 @@ private fun EditorHeader(
             modifier = Modifier.weight(1f),
         )
         when {
-            controller.saving -> Txt(stringResource(Res.string.sftp_edit_saving), color = D.cyan, size = 11.sp)
-            controller.readOnly -> Txt(stringResource(Res.string.sftp_edit_readonly), color = D.faint, size = 11.sp)
-            controller.dirty -> Txt(stringResource(Res.string.sftp_edit_modified), color = D.sunset, size = 11.sp)
+            controller.saving -> Txt(stringResource(Res.string.sftp_edit_saving), color = Skerry.colors.cyan, size = 11.sp)
+            controller.readOnly -> Txt(stringResource(Res.string.sftp_edit_readonly), color = Skerry.colors.faint, size = 11.sp)
+            controller.dirty -> Txt(stringResource(Res.string.sftp_edit_modified), color = Skerry.colors.sunset, size = 11.sp)
         }
         if (showButtons) {
             if (!controller.readOnly) {
@@ -263,7 +263,7 @@ private fun EditorHeader(
                     onClick = onSave,
                     box = 26,
                     icon = 16.sp,
-                    tint = if (controller.dirty && !controller.saving) D.cyanBright else D.faint,
+                    tint = if (controller.dirty && !controller.saving) Skerry.colors.cyanBright else Skerry.colors.faint,
                 )
             }
             IconBtn("close", onClick = onClose, box = 26, icon = 16.sp)
@@ -301,8 +301,8 @@ private fun EditorBuffer(
             controller.edit(next.text)
         },
         readOnly = !editable,
-        textStyle = TextStyle(color = D.textBright, fontSize = 12.5.sp, fontFamily = mono),
-        cursorBrush = SolidColor(D.cyan),
+        textStyle = TextStyle(color = Skerry.colors.textBright, fontSize = 12.5.sp, fontFamily = mono),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         modifier = Modifier
             .fillMaxSize()
             .padding(14.dp)
@@ -339,18 +339,18 @@ private fun EditorSearchBar(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Row(
-        Modifier.fillMaxWidth().background(D.panel).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().background(Skerry.colors.panel).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Sym("search", size = 15.sp, color = D.cyanBright)
-        Txt(stringResource(Res.string.sftp_edit_find), color = D.faint, size = 11.5.sp)
+        Sym("search", size = 15.sp, color = Skerry.colors.cyanBright)
+        Txt(stringResource(Res.string.sftp_edit_find), color = Skerry.colors.faint, size = 11.5.sp)
         BasicTextField(
             value = query,
             onValueChange = onQueryChange,
             singleLine = true,
-            textStyle = TextStyle(color = D.textBright, fontSize = 12.sp, fontFamily = mono),
-            cursorBrush = SolidColor(D.cyan),
+            textStyle = TextStyle(color = Skerry.colors.textBright, fontSize = 12.sp, fontFamily = mono),
+            cursorBrush = SolidColor(Skerry.colors.cyan),
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focus)
@@ -363,7 +363,7 @@ private fun EditorSearchBar(
                     }
                 },
         )
-        if (notFound) Txt(stringResource(Res.string.sftp_edit_not_found), color = D.sunset, size = 11.sp)
+        if (notFound) Txt(stringResource(Res.string.sftp_edit_not_found), color = Skerry.colors.sunset, size = 11.sp)
     }
 }
 
@@ -371,7 +371,7 @@ private fun EditorSearchBar(
 @Composable
 private fun EditorStrip(icon: String, text: String, color: Color) {
     Row(
-        Modifier.fillMaxWidth().background(D.surface2).padding(horizontal = 16.dp, vertical = 7.dp),
+        Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 16.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -389,7 +389,7 @@ private fun EditorNotice(icon: String, text: String, color: Color) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Sym(icon, size = 26.sp, color = color)
-            Txt(text, color = D.text, size = 12.5.sp)
+            Txt(text, color = Skerry.colors.text, size = 12.5.sp)
         }
     }
 }

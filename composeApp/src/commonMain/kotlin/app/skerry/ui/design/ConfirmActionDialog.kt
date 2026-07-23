@@ -20,11 +20,12 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_cancel
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Confirmation dialog for a destructive action (disconnect session, close split panel, delete
  * tunnel): scrim + card, title + message + Cancel/[confirmLabel]. Same visual language as
- * [DesktopDeleteHostDialog]/[DesktopPasswordDialog]; confirm button defaults to [D.sunset].
+ * [DesktopDeleteHostDialog]/[DesktopPasswordDialog]; confirm button defaults to [Skerry.colors.sunset].
  * [onDismiss] fires on Cancel or Esc (not on a click outside the card).
  */
 @Composable
@@ -34,7 +35,7 @@ fun ConfirmActionDialog(
     confirmLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    confirmColor: Color = D.sunset,
+    confirmColor: Color = Skerry.colors.sunset,
 ) {
     ModalScrim(onDismiss = onDismiss) {
         Column(
@@ -43,20 +44,20 @@ fun ConfirmActionDialog(
                 .fillMaxWidth()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks()
                 .padding(26.dp),
         ) {
-            Txt(title, color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-            Txt(message, color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 10.dp))
+            Txt(title, color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(message, color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 10.dp))
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmColor, fg = Color(0xFF1A0B07))
+                PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmColor, fg = Skerry.colors.sunsetInk)
             }
         }
     }

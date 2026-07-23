@@ -8,13 +8,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.LocalUpdates
-import app.skerry.ui.design.D
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_about_update_available
 import app.skerry.ui.generated.resources.settings_about_update_open
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * "Version X is available" line plus the release-page button, shared by the desktop About section
@@ -27,7 +27,7 @@ fun UpdateAvailableBlock() {
     val uriHandler = LocalUriHandler.current
     Txt(
         stringResource(Res.string.settings_about_update_available, update.versionLabel),
-        color = D.amber, size = 12.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 10.dp),
+        color = Skerry.colors.amber, size = 12.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 10.dp),
     )
     GhostButton(
         stringResource(Res.string.settings_about_update_open),

@@ -31,7 +31,6 @@ import app.skerry.ui.ai.isInsecureAiEndpoint
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.ChipButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -58,6 +57,7 @@ import app.skerry.ui.generated.resources.settings_save
 import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.settings.AiProviderCards
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Mobile AI settings screen (More -> "AI & privacy"), parity with desktop `LiveAiSection`:
@@ -69,13 +69,13 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun MobileAiScreen(state: MobileDesignState) {
     val ai = LocalAi.current
-    Column(Modifier.fillMaxSize().background(D.bg)) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         MobilePushHeader(stringResource(Res.string.more_ai_privacy), onBack = state::pop)
         if (ai == null) return@Column
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Txt(
                 stringResource(Res.string.settings_ai_live_subtitle),
-                color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(bottom = 12.dp),
+                color = Skerry.colors.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(bottom = 12.dp),
             )
 
             // Provider selection is shared with desktop settings (AiProviderCards): same state and
@@ -86,7 +86,7 @@ fun MobileAiScreen(state: MobileDesignState) {
             if (!ai.enabled) {
                 Txt(
                     stringResource(Res.string.settings_ai_off_note),
-                    color = D.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 14.dp),
+                    color = Skerry.colors.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 14.dp),
                 )
                 Spacer(Modifier.height(96.dp))
                 return@Column
@@ -104,8 +104,8 @@ fun MobileAiScreen(state: MobileDesignState) {
                 Spacer(Modifier.height(8.dp))
                 ai.turns.forEach { turn -> AiChatBubble(turn.role, turn.text) }
                 ai.streaming?.let { AiChatBubble(AiRole.ASSISTANT, if (it.isEmpty()) "…" else it) }
-                // Request error uses the error token (D.storm), as on desktop; D.sunset is reserved for warnings.
-                ai.error?.let { Txt(aiFailureMessage(it), color = D.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
+                // Request error uses the error token (Skerry.colors.storm), as on desktop; Skerry.colors.sunset is reserved for warnings.
+                ai.error?.let { Txt(aiFailureMessage(it), color = Skerry.colors.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
 
                 var prompt by remember { mutableStateOf("") }
                 val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }
@@ -122,8 +122,8 @@ fun MobileAiScreen(state: MobileDesignState) {
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ChipButton(if (ai.busy) stringResource(Res.string.settings_ai_sending) else stringResource(Res.string.settings_ai_ask), color = if (ai.ready && !ai.busy) D.cyan else D.faint, onClick = { send() })
-                    if (ai.turns.isNotEmpty()) ChipButton(stringResource(Res.string.settings_clear), color = D.dim, onClick = { ai.clearConversation() })
+                    ChipButton(if (ai.busy) stringResource(Res.string.settings_ai_sending) else stringResource(Res.string.settings_ai_ask), color = if (ai.ready && !ai.busy) Skerry.colors.cyan else Skerry.colors.faint, onClick = { send() })
+                    if (ai.turns.isNotEmpty()) ChipButton(stringResource(Res.string.settings_clear), color = Skerry.colors.dim, onClick = { ai.clearConversation() })
                 }
             }
             Spacer(Modifier.height(96.dp))
@@ -155,14 +155,14 @@ private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
         }
         // http:// sends the key/prompt in plaintext (see SettingsPanel) — warn, except for localhost.
         if (isInsecureAiEndpoint(baseUrl)) {
-            Txt(stringResource(Res.string.sync_insecure_url_warning), color = D.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            Txt(stringResource(Res.string.sync_insecure_url_warning), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
         }
 
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            ChipButton(stringResource(Res.string.settings_save), color = D.cyan, onClick = { ai.save(key, model, baseUrl) })
-            if (ai.isConfigured) Txt(stringResource(Res.string.settings_ai_key_saved), color = D.moss, size = 11.5.sp)
-            else Txt(stringResource(Res.string.settings_ai_not_configured), color = D.faint, size = 11.5.sp)
+            ChipButton(stringResource(Res.string.settings_save), color = Skerry.colors.cyan, onClick = { ai.save(key, model, baseUrl) })
+            if (ai.isConfigured) Txt(stringResource(Res.string.settings_ai_key_saved), color = Skerry.colors.moss, size = 11.5.sp)
+            else Txt(stringResource(Res.string.settings_ai_not_configured), color = Skerry.colors.faint, size = 11.5.sp)
         }
     }
 }

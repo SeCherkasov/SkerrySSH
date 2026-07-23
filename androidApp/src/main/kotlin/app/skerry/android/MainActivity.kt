@@ -4,8 +4,11 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import app.skerry.shared.ai.local.IsolatedLlmRuntime
@@ -54,6 +57,11 @@ import app.skerry.ui.terminal.TERMINAL_FONT_SIZE_RANGE
 import app.skerry.ui.terminal.TERMINAL_SCROLLBACK_OPTIONS
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
+import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.terminal.TerminalThemes
+import app.skerry.ui.theme.SkerryTheme
+import app.skerry.ui.theme.ThemeMode
+import app.skerry.ui.theme.isDark
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnelHost
 import app.skerry.ui.vault.AutoLockDuration
@@ -162,16 +170,36 @@ class MainActivity : FragmentActivity() {
                     onTerminalScrollbackChange = { writeTerminalScrollback(dir, it) },
                     initialTerminalCursorStyle = readTerminalCursorStyle(dir),
                     onTerminalCursorStyleChange = { writeTerminalCursorStyle(dir, it) },
+                    initialTerminalTheme = readTerminalTheme(dir),
+                    onTerminalThemeChange = { writeTerminalTheme(dir, it) },
+                    initialCustomTerminalTheme = readCustomTerminalTheme(dir),
+                    onCustomTerminalThemeChange = { writeCustomTerminalTheme(dir, it) },
+                    initialThemeMode = readThemeMode(dir),
+                    onThemeModeChange = { writeThemeMode(dir, it) },
                 )
             }
+            // System-bar icon contrast follows the APP theme, not the OS: edge-to-edge draws the
+            // app's background behind the bars, so a light app theme needs dark icons even when
+            // the OS itself is in dark mode (enableEdgeToEdge alone keys off the OS uiMode).
+            val appDark = designState.themeMode.isDark(isSystemInDarkTheme())
+            LaunchedEffect(appDark) {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !appDark
+                    isAppearanceLightNavigationBars = !appDark
+                }
+            }
             AppLocaleProvider(currentUiLanguage.value) {
-                MobileDesignApp(
-                    deps,
-                    state = designState,
-                    onVaultReset = onVaultReset,
-                    // Secret migration + reload + sync session restore.
-                    onVaultUnlocked = onVaultUnlocked,
-                )
+                // App theme at the root: reads designState.themeMode, so a change from the theme picker
+                // recomposes the whole tree with the new palette (mirrors the desktop wiring in main.kt).
+                SkerryTheme(mode = designState.themeMode) {
+                    MobileDesignApp(
+                        deps,
+                        state = designState,
+                        onVaultReset = onVaultReset,
+                        // Secret migration + reload + sync session restore.
+                        onVaultUnlocked = onVaultUnlocked,
+                    )
+                }
             }
         }
     }
@@ -238,6 +266,17 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /** Separately-picked terminal theme flag (unified theming): `custom_terminal_theme`, default off. */
+    private fun readCustomTerminalTheme(dir: File): Boolean = runCatching {
+        File(dir, "custom_terminal_theme").readText().trim().toBoolean()
+    }.getOrDefault(false)
+
+    private fun writeCustomTerminalTheme(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "custom_terminal_theme").writeText(enabled.toString()) }
+        }
+    }
+
     /**
      * Terminal font size, px (More → Appearance → Font size): a number in `terminal_font_size`.
      * Missing/unreadable/outside [TERMINAL_FONT_SIZE_RANGE] → [DEFAULT_TERMINAL_FONT_SIZE].
@@ -300,6 +339,36 @@ class MainActivity : FragmentActivity() {
         val id = language.id
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "ui_language").writeText(id) }
+        }
+    }
+
+    /**
+     * Terminal color theme (More → Appearance → cards): stable [TerminalTheme.id] in `terminal_theme`.
+     * Missing/unreadable/unknown → [TerminalThemes.DEFAULT]. Write is best-effort, off the UI thread.
+     */
+    private fun readTerminalTheme(dir: File): TerminalTheme = runCatching {
+        TerminalThemes.fromId(File(dir, "terminal_theme").readText().trim())
+    }.getOrDefault(TerminalThemes.DEFAULT)
+
+    private fun writeTerminalTheme(dir: File, theme: TerminalTheme) {
+        val id = theme.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_theme").writeText(id) }
+        }
+    }
+
+    /**
+     * App theme (More → Appearance → theme): stable [ThemeMode.id] in `app_theme`.
+     * Missing/unreadable/unknown → [ThemeMode.DEFAULT] (night-sea dark). Best-effort, off the UI thread.
+     */
+    private fun readThemeMode(dir: File): ThemeMode = runCatching {
+        ThemeMode.fromId(File(dir, "app_theme").readText().trim())
+    }.getOrDefault(ThemeMode.DEFAULT)
+
+    private fun writeThemeMode(dir: File, mode: ThemeMode) {
+        val id = mode.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "app_theme").writeText(id) }
         }
     }
 
@@ -469,6 +538,8 @@ class MainActivity : FragmentActivity() {
                 writeTerminalFontSize(dir, DEFAULT_TERMINAL_FONT_SIZE)
                 writeTerminalScrollback(dir, DEFAULT_TERMINAL_SCROLLBACK)
                 writeTerminalCursorStyle(dir, TerminalCursorStyle.DEFAULT)
+                writeTerminalTheme(dir, TerminalThemes.DEFAULT)
+                writeThemeMode(dir, ThemeMode.DEFAULT)
                 writeClipboardWrite(dir, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)

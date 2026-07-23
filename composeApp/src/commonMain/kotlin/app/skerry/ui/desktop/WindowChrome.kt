@@ -10,8 +10,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.design.D
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.theme.Skerry
 
 /**
  * Hooks into the undecorated desktop window: the OS titlebar is replaced by the app's own chrome,
@@ -37,10 +37,10 @@ fun WindowButtons(chrome: WindowChrome, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        IconBtn("remove", onClick = chrome.onMinimize, icon = 15.sp, hoverTint = D.text)
-        IconBtn(if (chrome.isMaximized()) "filter_none" else "crop_square", onClick = chrome.onToggleMaximize, icon = 15.sp, hoverTint = D.text)
+        IconBtn("remove", onClick = chrome.onMinimize, icon = 15.sp, hoverTint = Skerry.colors.text)
+        IconBtn(if (chrome.isMaximized()) "filter_none" else "crop_square", onClick = chrome.onToggleMaximize, icon = 15.sp, hoverTint = Skerry.colors.text)
         // The close button warns with the storm accent on hover, like native chrome does.
-        IconBtn("close", onClick = chrome.onClose, icon = 15.sp, hoverBg = D.storm, hoverTint = D.white)
+        IconBtn("close", onClick = chrome.onClose, icon = 15.sp, hoverBg = Skerry.colors.storm, hoverTint = Skerry.colors.white)
     }
 }
 

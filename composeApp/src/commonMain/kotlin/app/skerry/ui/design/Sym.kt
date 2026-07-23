@@ -12,6 +12,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.theme.Skerry
 
 /** Layout font set provided via [LocalFonts]: UI, monospace, and icon fonts. */
 @Immutable
@@ -27,13 +28,13 @@ val LocalFonts: ProvidableCompositionLocal<DesignFonts> = staticCompositionLocal
 
 /**
  * Material Symbols Outlined icon: [name] (e.g. `folder_open`) renders as an icon-font ligature
- * in [BasicText]. Size/color mirror the prototype's inline styles (`font-size`).
+ * in [BasicText]. Size/color are set per call site.
  */
 @Composable
 fun Sym(
     name: String,
     size: TextUnit = 18.sp,
-    color: Color = D.dim,
+    color: Color = Skerry.colors.dim,
     modifier: Modifier = Modifier,
 ) {
     val symbols = LocalFonts.current.symbols

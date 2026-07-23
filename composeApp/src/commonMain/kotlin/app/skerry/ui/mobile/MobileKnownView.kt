@@ -44,12 +44,12 @@ import app.skerry.ui.generated.resources.lib_known_forget_key
 import app.skerry.ui.generated.resources.lib_known_reject
 import app.skerry.ui.generated.resources.lib_known_title
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalKnownHosts
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.theme.Skerry
 
 /**
  * Push screen for Known hosts: back header + key-change banners (Accept/Reject inline — no
@@ -61,7 +61,7 @@ import app.skerry.ui.design.Txt
 @Composable
 fun MobileKnownScreen(state: MobileDesignState) {
     val mono = LocalFonts.current.mono
-    Column(Modifier.fillMaxSize().background(D.bg)) {
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         MobilePushHeader(stringResource(Res.string.lib_known_title), onBack = state::pop, plainBack = true)
         when (val controller = LocalKnownHosts.current) {
             null -> MockMobileKnownBody(mono)
@@ -150,9 +150,9 @@ private fun LiveKnownRow(entry: KnownHostEntry, mono: FontFamily, onForget: () -
 private fun MobileEmptyKnown() {
     Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym("fingerprint", size = 28.sp, color = D.faint)
-            Txt(stringResource(Res.string.lib_known_empty_title), color = D.text, size = 14.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.lib_known_empty_desc_mobile), color = D.faint, size = 12.sp)
+            Sym("fingerprint", size = 28.sp, color = Skerry.colors.faint)
+            Txt(stringResource(Res.string.lib_known_empty_title), color = Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium)
+            Txt(stringResource(Res.string.lib_known_empty_desc_mobile), color = Skerry.colors.faint, size = 12.sp)
         }
     }
 }
@@ -170,32 +170,32 @@ private fun MobileMismatchBanner(title: String, body: String, onAccept: () -> Un
             .fillMaxWidth()
             .padding(bottom = 14.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(D.sunset.copy(alpha = 0.05f))
-            .border(1.dp, D.sunset.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
+            .background(Skerry.colors.sunset.copy(alpha = 0.05f))
+            .border(1.dp, Skerry.colors.sunset.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym("gpp_maybe", size = 19.sp, color = D.sunset)
-            Txt(title, color = D.sunset, size = 13.5.sp, weight = FontWeight.SemiBold)
+            Sym("gpp_maybe", size = 19.sp, color = Skerry.colors.sunset)
+            Txt(title, color = Skerry.colors.sunset, size = 13.5.sp, weight = FontWeight.SemiBold)
         }
         Spacer(Modifier.height(6.dp))
-        Txt(body, color = D.dim, size = 12.sp, lineHeight = 18.sp)
+        Txt(body, color = Skerry.colors.dim, size = 12.sp, lineHeight = 18.sp)
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BannerButton(
                 label = stringResource(Res.string.lib_known_accept),
-                fg = D.text,
+                fg = Skerry.colors.text,
                 bg = Color.Transparent,
-                border = D.cyan14,
+                border = Skerry.colors.cyan14,
                 bold = false,
                 onClick = onAccept,
                 modifier = Modifier.weight(1f),
             )
             BannerButton(
                 label = stringResource(Res.string.lib_known_reject),
-                fg = D.sunset,
-                bg = D.sunset.copy(alpha = 0.12f),
-                border = D.sunset.copy(alpha = 0.3f),
+                fg = Skerry.colors.sunset,
+                bg = Skerry.colors.sunset.copy(alpha = 0.12f),
+                border = Skerry.colors.sunset.copy(alpha = 0.3f),
                 bold = true,
                 onClick = onReject,
                 modifier = Modifier.weight(1f),
@@ -241,17 +241,17 @@ private fun KnownRowContent(
         modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (changed) D.sunset.copy(alpha = 0.05f) else D.card)
-            .border(1.dp, if (changed) D.sunset.copy(alpha = 0.2f) else D.cyan08, RoundedCornerShape(12.dp))
+            .background(if (changed) Skerry.colors.sunset.copy(alpha = 0.05f) else Skerry.colors.card)
+            .border(1.dp, if (changed) Skerry.colors.sunset.copy(alpha = 0.2f) else Skerry.colors.cyan08, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
         Column(Modifier.weight(1f)) {
-            Txt(name, color = D.text, size = 13.sp, font = mono)
-            Txt(subtitle, color = if (changed) D.sunset else D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 2.dp))
+            Txt(name, color = Skerry.colors.text, size = 13.sp, font = mono)
+            Txt(subtitle, color = if (changed) Skerry.colors.sunset else Skerry.colors.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 2.dp))
         }
-        Sym(mobileKnownStatusIcon(status), size = 15.sp, color = if (changed) D.sunset else D.moss)
+        Sym(mobileKnownStatusIcon(status), size = 15.sp, color = if (changed) Skerry.colors.sunset else Skerry.colors.moss)
     }
 }
 

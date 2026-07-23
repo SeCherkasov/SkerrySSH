@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.ChipButton
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
@@ -61,6 +60,7 @@ import app.skerry.ui.generated.resources.term_broadcast_sent
 import app.skerry.ui.generated.resources.term_broadcast_subtitle
 import app.skerry.ui.generated.resources.term_broadcast_title
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Every connected terminal a broadcast can reach: top-level tabs and their split panes, VNC tabs
@@ -122,25 +122,25 @@ internal fun BroadcastPanel(
                 .width(520.dp)
                 .consumeClicks()
                 .clip(RoundedCornerShape(10.dp))
-                .background(D.surface2)
-                .border(1.dp, D.lineStrong, RoundedCornerShape(10.dp))
+                .background(Skerry.colors.surface2)
+                .border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(10.dp))
                 .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Column {
-                Txt(stringResource(Res.string.term_broadcast_title), color = D.textBright, size = 15.sp, weight = FontWeight.SemiBold)
-                Txt(stringResource(Res.string.term_broadcast_subtitle), color = D.faint, size = 11.sp)
+                Txt(stringResource(Res.string.term_broadcast_title), color = Skerry.colors.textBright, size = 15.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.term_broadcast_subtitle), color = Skerry.colors.faint, size = 11.sp)
             }
 
             if (targets.isEmpty()) {
-                Txt(stringResource(Res.string.term_broadcast_none), color = D.faint, size = 12.sp, font = mono)
+                Txt(stringResource(Res.string.term_broadcast_none), color = Skerry.colors.faint, size = 12.sp, font = mono)
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    ChipButton(stringResource(Res.string.term_broadcast_select_all), color = D.cyan, size = 11.sp, verticalPadding = 4.dp, onClick = { controller.selectAll(targets) })
-                    ChipButton(stringResource(Res.string.term_broadcast_clear), color = D.dim, size = 11.sp, verticalPadding = 4.dp, onClick = controller::clear)
+                    ChipButton(stringResource(Res.string.term_broadcast_select_all), color = Skerry.colors.cyan, size = 11.sp, verticalPadding = 4.dp, onClick = { controller.selectAll(targets) })
+                    ChipButton(stringResource(Res.string.term_broadcast_clear), color = Skerry.colors.dim, size = 11.sp, verticalPadding = 4.dp, onClick = controller::clear)
                     Txt(
                         stringResource(Res.string.term_broadcast_selected, selected.toString(), targets.size.toString()),
-                        color = D.faint, size = 11.sp, modifier = Modifier.padding(start = 4.dp),
+                        color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(start = 4.dp),
                     )
                 }
                 Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -153,7 +153,7 @@ internal fun BroadcastPanel(
                 CommandField(command, { command = it }, mono, inputFocus, submit)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     lastSentTo?.let {
-                        Txt(stringResource(Res.string.term_broadcast_sent, it.toString()), color = D.cyanBright, size = 11.sp, modifier = Modifier.weight(1f))
+                        Txt(stringResource(Res.string.term_broadcast_sent, it.toString()), color = Skerry.colors.cyanBright, size = 11.sp, modifier = Modifier.weight(1f))
                     } ?: Box(Modifier.weight(1f))
                     PrimaryButton(stringResource(Res.string.term_broadcast_send), onClick = submit, icon = "send")
                 }
@@ -168,16 +168,16 @@ private fun TargetRow(label: String, selected: Boolean, mono: FontFamily, onTogg
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(if (selected) D.cyan10 else Color.Transparent)
+            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
             .clickable(onClick = onToggle)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
-            Sym(if (selected) "check_box" else "check_box_outline_blank", size = 16.sp, color = if (selected) D.cyanBright else D.faint)
+            Sym(if (selected) "check_box" else "check_box_outline_blank", size = 16.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.faint)
         }
-        Txt(label, color = if (selected) D.textBright else D.dim, size = 12.5.sp, font = mono)
+        Txt(label, color = if (selected) Skerry.colors.textBright else Skerry.colors.dim, size = 12.5.sp, font = mono)
     }
 }
 
@@ -189,22 +189,23 @@ private fun CommandField(
     focus: FocusRequester,
     onSubmit: () -> Unit,
 ) {
-    val style = remember(mono) { TextStyle(color = D.textBright, fontSize = 13.sp, fontFamily = mono) }
+    val textColor = Skerry.colors.textBright
+    val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
     Box(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(7.dp))
-            .background(D.terminalBg)
-            .border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+            .background(Skerry.colors.terminalBg)
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
             .padding(horizontal = 11.dp, vertical = 10.dp),
     ) {
-        if (value.isEmpty()) Txt(stringResource(Res.string.term_broadcast_placeholder), color = D.faint, size = 13.sp, font = mono)
+        if (value.isEmpty()) Txt(stringResource(Res.string.term_broadcast_placeholder), color = Skerry.colors.faint, size = 13.sp, font = mono)
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
             singleLine = true,
             textStyle = style,
-            cursorBrush = SolidColor(D.cyan),
+            cursorBrush = SolidColor(Skerry.colors.cyan),
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focus)

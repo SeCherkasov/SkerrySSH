@@ -1,0 +1,445 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  App-chrome design tokens. Single source of truth for SkerryColors; :composeApp:generateThemeSources
+  turns this into theme/GeneratedChromeThemes.kt at build time. Token names mirror the SkerryColors
+  constructor 1:1 (all 40 required). The derived getters (cyan06…, strictBg, devBg, amberSoft,
+  shade15/shade30) live in the data class and are NOT listed here.
+
+  A color is either a literal — <color name="x">#RRGGBB</color> or 8-digit #AARRGGBB — or an
+  alpha-over-base — <color name="x" over="cyan" alpha="0.06"/> — where `over` is another token name
+  in the same theme or a raw #RRGGBB. Alpha derivations are kept as `.copy(alpha=)` (not baked into
+  ARGB) so they stay bit-identical to the previous hand-written palette.
+-->
+<themes>
+
+    <!-- "Night sea" — the app's original dark theme; the default and the reference for token values. -->
+    <chrome id="night-sea" fn="nightSeaColors" dark="true">
+        <!-- Base backgrounds and surfaces -->
+        <color name="bg">#07141E</color>
+        <color name="railBg">#0A1620</color>
+        <color name="titleTop">#0C1A24</color>
+        <color name="titleBottom">#0A1620</color>
+        <color name="surface">#0A141B</color>
+        <color name="surface2">#0B1A26</color>
+        <color name="surfaceDeep">#0E2230</color>
+        <color name="panel">#08121C</color>
+        <color name="terminalBg">#050E16</color>
+        <!-- Text -->
+        <color name="text">#E6ECEF</color>
+        <color name="textBright">#C9D6DE</color>
+        <color name="textMid">#B7C5CC</color>
+        <color name="dim">#8FA3B0</color>
+        <color name="faint">#5A7080</color>
+        <!-- Accents -->
+        <color name="cyan">#2BBDEE</color>
+        <color name="cyanBright">#5FD1F4</color>
+        <color name="moss">#5DCE9E</color>
+        <color name="sunset">#E07A5F</color>
+        <color name="amber">#F2A65A</color>
+        <color name="amberBright">#FFC078</color>
+        <!-- Teal logo accent -->
+        <color name="teal">#34D3C0</color>
+        <color name="tealLight">#7FF0E2</color>
+        <color name="tealDeep">#22B3A4</color>
+        <!-- Fixed tones -->
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#E94B4B</color>
+        <!-- Borders — cyan tint on the dark surfaces -->
+        <color name="line" over="cyan" alpha="0.06"/>
+        <color name="lineStrong" over="cyan" alpha="0.14"/>
+        <!-- Shared surfaces / accents -->
+        <color name="strictFg">#E07060</color>
+        <color name="whiteFaint">#1AFFFFFF</color>  <!-- disabled toggle background, rgba(255,255,255,0.1) -->
+        <color name="ink">#0A1A26</color>           <!-- text/icon color on cyan-accented buttons -->
+        <color name="card">#08FFFFFF</color>        <!-- row card background, rgba(255,255,255,0.03) -->
+        <color name="scrim">#B304080C</color>       <!-- dimming under mobile sheets/dialogs -->
+        <color name="modalScrim">#B3060E16</color>  <!-- dimming under desktop modals -->
+        <!-- Raise fills — neutral "lift" tints for chips/tiles/tracks/hover; white on dark -->
+        <color name="overlayFaint" over="white" alpha="0.02"/>   <!-- table header rows -->
+        <color name="overlaySoft" over="white" alpha="0.04"/>    <!-- inactive chips, input fills -->
+        <color name="overlayMed" over="white" alpha="0.055"/>    <!-- icon tiles, badges, keycaps -->
+        <color name="overlayStrong" over="white" alpha="0.075"/> <!-- progress tracks, disabled buttons -->
+        <color name="hover" over="white" alpha="0.12"/>          <!-- hovered rows/buttons -->
+        <color name="sunsetInk">#1A0B07</color>     <!-- text/icon color on sunset (danger) buttons -->
+        <color name="bannerScrim">#CC1A0E0E</color> <!-- backdrop of the disconnect banner over a frozen terminal -->
+    </chrome>
+
+    <!-- "Daybreak" — a cool, high-key light counterpart. Accents darkened for AA contrast on light
+         surfaces; borders are a neutral ink tint rather than the cyan tint used on dark. -->
+    <chrome id="daybreak" fn="daybreakColors" dark="false">
+        <!-- Base backgrounds and surfaces -->
+        <color name="bg">#F3F6F8</color>
+        <color name="railBg">#EBF0F3</color>
+        <color name="titleTop">#FFFFFF</color>
+        <color name="titleBottom">#EDF2F5</color>
+        <color name="surface">#FFFFFF</color>
+        <color name="surface2">#EEF3F6</color>
+        <color name="surfaceDeep">#E1E9EE</color>
+        <color name="panel">#F3F6F8</color>
+        <color name="terminalBg">#EDF1F4</color>
+        <!-- Text — inverted lightness ladder: darkest is the primary text -->
+        <color name="text">#0D1E29</color>
+        <color name="textBright">#243B49</color>
+        <color name="textMid">#3B5361</color>
+        <color name="dim">#5E7583</color>
+        <color name="faint">#6B7E8D</color> <!-- ~3.8:1 on the light panels; #93A6B2 washed out labels/section headers -->
+        <!-- Accents — darkened for contrast on light surfaces -->
+        <color name="cyan">#0E90BF</color>
+        <color name="cyanBright">#14A6DB</color>
+        <color name="moss">#2C9E71</color>
+        <color name="sunset">#CE5B3E</color>
+        <color name="amber">#B9761B</color>
+        <color name="amberBright">#D98E2C</color>
+        <!-- Teal logo accent — kept vivid for brand recognition -->
+        <color name="teal">#12A897</color>
+        <color name="tealLight">#4FD1C2</color>
+        <color name="tealDeep">#0B7F73</color>
+        <!-- Fixed tones -->
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#CE3B3B</color>
+        <!-- Borders — neutral ink tint over the darkest base, not cyan -->
+        <color name="line" over="#0D1E29" alpha="0.07"/>
+        <color name="lineStrong" over="#0D1E29" alpha="0.18"/>
+        <!-- Shared surfaces / accents -->
+        <color name="strictFg">#B4543E</color>
+        <color name="whiteFaint" over="#0D1E29" alpha="0.08"/> <!-- disabled toggle: dark tint on light -->
+        <color name="ink">#08303F</color>                      <!-- text/icon color on cyan-accented buttons -->
+        <color name="card">#0D0D1E29</color>                   <!-- row card — faint ink darkening on light -->
+        <color name="scrim">#66101922</color>                  <!-- dimming under mobile sheets/dialogs -->
+        <color name="modalScrim">#73101922</color>             <!-- dimming under desktop modals -->
+        <!-- Raise fills invert to ink tints on light (white tint would be invisible); alphas bumped
+             vs dark for the same reason card's is: ink needs more alpha to read on light surfaces. -->
+        <color name="overlayFaint" over="#0D1E29" alpha="0.035"/>
+        <color name="overlaySoft" over="#0D1E29" alpha="0.06"/>
+        <color name="overlayMed" over="#0D1E29" alpha="0.08"/>
+        <color name="overlayStrong" over="#0D1E29" alpha="0.10"/>
+        <color name="hover" over="#0D1E29" alpha="0.14"/>
+        <color name="sunsetInk">#38130A</color>     <!-- deep coral ink on the light sunset button -->
+        <color name="bannerScrim">#E6FBF1EE</color> <!-- warm high-key backdrop for the disconnect banner -->
+    </chrome>
+
+    <!-- "Blackwater" — a second dark chrome: near-black indigo surfaces with a green accent.
+         The `cyan` token carries the accent ROLE (green here); borders are a neutral white tint
+         rather than the accent tint, so the grid doesn't wash the chrome green. The brand teal
+         stays untouched — the logo keeps its identity across themes. -->
+    <chrome id="blackwater" fn="blackwaterColors" dark="true">
+        <!-- Base backgrounds and surfaces -->
+        <color name="bg">#0E101D</color>
+        <color name="railBg">#0C0E1B</color>
+        <color name="titleTop">#151829</color>
+        <color name="titleBottom">#101221</color>
+        <color name="surface">#151728</color>
+        <color name="surface2">#181A2B</color>
+        <color name="surfaceDeep">#22263A</color>
+        <color name="panel">#0E111E</color>
+        <color name="terminalBg">#141527</color>
+        <!-- Text -->
+        <color name="text">#E9EAF1</color>
+        <color name="textBright">#C9CDDB</color>
+        <color name="textMid">#ABAFC2</color>
+        <color name="dim">#8D91A5</color>
+        <color name="faint">#5D6071</color>
+        <!-- Accents — the accent role is green -->
+        <color name="cyan">#20B668</color>
+        <color name="cyanBright">#2ED07E</color>
+        <color name="moss">#35C97F</color>
+        <color name="sunset">#D55B4C</color>
+        <color name="amber">#D9A23F</color>
+        <color name="amberBright">#E8BC5C</color>
+        <!-- Teal logo accent — brand, same as night-sea -->
+        <color name="teal">#34D3C0</color>
+        <color name="tealLight">#7FF0E2</color>
+        <color name="tealDeep">#22B3A4</color>
+        <!-- Fixed tones -->
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#E5484D</color>
+        <!-- Borders — neutral white tint (a green tint would color the whole chrome) -->
+        <color name="line" over="white" alpha="0.06"/>
+        <color name="lineStrong" over="white" alpha="0.14"/>
+        <!-- Shared surfaces / accents -->
+        <color name="strictFg">#E06A5A</color>
+        <color name="whiteFaint">#1AFFFFFF</color>
+        <color name="ink">#071A12</color>            <!-- deep green-black on the green accent buttons -->
+        <color name="card">#08FFFFFF</color>
+        <color name="scrim">#B3050816</color>
+        <color name="modalScrim">#B30C0E1B</color>
+        <color name="overlayFaint" over="white" alpha="0.02"/>
+        <color name="overlaySoft" over="white" alpha="0.04"/>
+        <color name="overlayMed" over="white" alpha="0.055"/>
+        <color name="overlayStrong" over="white" alpha="0.075"/>
+        <color name="hover" over="white" alpha="0.12"/>
+        <color name="sunsetInk">#1A0B07</color>
+        <color name="bannerScrim">#CC1A0E0E</color>
+    </chrome>
+
+    <!-- Catalog chrome themes — counterparts of the terminal themes, derived from each palette's
+         canonical upstream colors. Conventions shared with blackwater/daybreak: the `cyan` token
+         carries the accent ROLE; dark themes use neutral white-tint borders/overlays, light themes
+         use ink tints with bumped alphas; the brand teal trio is invariant (night-sea's on dark,
+         daybreak's darkened trio on light) so the logo stays recognizable. -->
+
+    <!-- Tokyo Night — dark indigo, blue accent. -->
+    <chrome id="tokyo-night" fn="tokyoNightColors" dark="true">
+        <color name="bg">#1A1B26</color>
+        <color name="railBg">#16161E</color>
+        <color name="titleTop">#1E202E</color>
+        <color name="titleBottom">#16161E</color>
+        <color name="surface">#1E2030</color>
+        <color name="surface2">#222840</color>
+        <color name="surfaceDeep">#292E42</color>
+        <color name="panel">#181925</color>
+        <color name="terminalBg">#16161E</color>
+        <color name="text">#C0CAF5</color>
+        <color name="textBright">#A9B1D6</color>
+        <color name="textMid">#9AA5CE</color>
+        <color name="dim">#737AA2</color>
+        <color name="faint">#565F89</color>
+        <color name="cyan">#7AA2F7</color>
+        <color name="cyanBright">#7DCFFF</color>
+        <color name="moss">#9ECE6A</color>
+        <color name="sunset">#FF9E64</color>
+        <color name="amber">#E0AF68</color>
+        <color name="amberBright">#EDC584</color>
+        <color name="teal">#34D3C0</color>
+        <color name="tealLight">#7FF0E2</color>
+        <color name="tealDeep">#22B3A4</color>
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#F7768E</color>
+        <color name="line" over="white" alpha="0.06"/>
+        <color name="lineStrong" over="white" alpha="0.14"/>
+        <color name="strictFg">#F7768E</color>
+        <color name="whiteFaint">#1AFFFFFF</color>
+        <color name="ink">#15161E</color>
+        <color name="card">#08FFFFFF</color>
+        <color name="scrim">#B30F0F17</color>
+        <color name="modalScrim">#B316161E</color>
+        <color name="overlayFaint" over="white" alpha="0.02"/>
+        <color name="overlaySoft" over="white" alpha="0.04"/>
+        <color name="overlayMed" over="white" alpha="0.055"/>
+        <color name="overlayStrong" over="white" alpha="0.075"/>
+        <color name="hover" over="white" alpha="0.12"/>
+        <color name="sunsetInk">#1A0B07</color>
+        <color name="bannerScrim">#CC1A0E0E</color>
+    </chrome>
+
+    <!-- Tokyo Day — the light Tokyo variant; slate-indigo text, blue accent. -->
+    <chrome id="tokyo-day" fn="tokyoDayColors" dark="false">
+        <color name="bg">#E1E2E7</color>
+        <color name="railBg">#D6D8E3</color>
+        <color name="titleTop">#F4F5F9</color>
+        <color name="titleBottom">#DBDDE8</color>
+        <color name="surface">#F2F3F8</color>
+        <color name="surface2">#D9DCE8</color>
+        <color name="surfaceDeep">#C4C8DA</color>
+        <color name="panel">#E4E5EB</color>
+        <color name="terminalBg">#DCDEE8</color>
+        <color name="text">#2D3658</color>
+        <color name="textBright">#3B477E</color>
+        <color name="textMid">#4C5895</color>
+        <color name="dim">#6172B0</color>
+        <color name="faint">#6F7BA6</color>
+        <color name="cyan">#2E7DE9</color>
+        <color name="cyanBright">#4E97F0</color>
+        <color name="moss">#587539</color>
+        <color name="sunset">#B15C00</color>
+        <color name="amber">#8C6C3E</color>
+        <color name="amberBright">#A5813F</color>
+        <color name="teal">#12A897</color>
+        <color name="tealLight">#4FD1C2</color>
+        <color name="tealDeep">#0B7F73</color>
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#F52A65</color>
+        <color name="line" over="#2D3658" alpha="0.07"/>
+        <color name="lineStrong" over="#2D3658" alpha="0.18"/>
+        <color name="strictFg">#C53B53</color>
+        <color name="whiteFaint" over="#2D3658" alpha="0.08"/>
+        <color name="ink">#14264E</color>
+        <color name="card">#0D2D3658</color>
+        <color name="scrim">#66161A2E</color>
+        <color name="modalScrim">#73161A2E</color>
+        <color name="overlayFaint" over="#2D3658" alpha="0.035"/>
+        <color name="overlaySoft" over="#2D3658" alpha="0.06"/>
+        <color name="overlayMed" over="#2D3658" alpha="0.08"/>
+        <color name="overlayStrong" over="#2D3658" alpha="0.10"/>
+        <color name="hover" over="#2D3658" alpha="0.14"/>
+        <color name="sunsetInk">#38130A</color>
+        <color name="bannerScrim">#E6FBF1EE</color>
+    </chrome>
+
+    <!-- Catppuccin Mocha — soft dark-purple pastel; blue accent, sky bright. -->
+    <chrome id="catppuccin-mocha" fn="catppuccinMochaColors" dark="true">
+        <color name="bg">#1E1E2E</color>
+        <color name="railBg">#181825</color>
+        <color name="titleTop">#252537</color>
+        <color name="titleBottom">#181825</color>
+        <color name="surface">#24243A</color>
+        <color name="surface2">#2A2A40</color>
+        <color name="surfaceDeep">#313244</color>
+        <color name="panel">#1B1B2B</color>
+        <color name="terminalBg">#1E1E2E</color>
+        <color name="text">#CDD6F4</color>
+        <color name="textBright">#BAC2DE</color>
+        <color name="textMid">#A6ADC8</color>
+        <color name="dim">#9399B2</color>
+        <color name="faint">#6C7086</color>
+        <color name="cyan">#89B4FA</color>
+        <color name="cyanBright">#89DCEB</color>
+        <color name="moss">#A6E3A1</color>
+        <color name="sunset">#FAB387</color>
+        <color name="amber">#F9E2AF</color>
+        <color name="amberBright">#FBEBC5</color>
+        <color name="teal">#34D3C0</color>
+        <color name="tealLight">#7FF0E2</color>
+        <color name="tealDeep">#22B3A4</color>
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#F38BA8</color>
+        <color name="line" over="white" alpha="0.06"/>
+        <color name="lineStrong" over="white" alpha="0.14"/>
+        <color name="strictFg">#F38BA8</color>
+        <color name="whiteFaint">#1AFFFFFF</color>
+        <color name="ink">#11111B</color>
+        <color name="card">#08FFFFFF</color>
+        <color name="scrim">#B30F0F1A</color>
+        <color name="modalScrim">#B3181825</color>
+        <color name="overlayFaint" over="white" alpha="0.02"/>
+        <color name="overlaySoft" over="white" alpha="0.04"/>
+        <color name="overlayMed" over="white" alpha="0.055"/>
+        <color name="overlayStrong" over="white" alpha="0.075"/>
+        <color name="hover" over="white" alpha="0.12"/>
+        <color name="sunsetInk">#1A0B07</color>
+        <color name="bannerScrim">#CC1A0E0E</color>
+    </chrome>
+
+    <!-- Gruvbox Dark — warm retro; muted blue accent, orange for danger. -->
+    <chrome id="gruvbox-dark" fn="gruvboxDarkColors" dark="true">
+        <color name="bg">#282828</color>
+        <color name="railBg">#1D2021</color>
+        <color name="titleTop">#32302F</color>
+        <color name="titleBottom">#1D2021</color>
+        <color name="surface">#32302F</color>
+        <color name="surface2">#3C3836</color>
+        <color name="surfaceDeep">#504945</color>
+        <color name="panel">#252423</color>
+        <color name="terminalBg">#1D2021</color>
+        <color name="text">#EBDBB2</color>
+        <color name="textBright">#D5C4A1</color>
+        <color name="textMid">#BDAE93</color>
+        <color name="dim">#A89984</color>
+        <color name="faint">#7C6F64</color>
+        <color name="cyan">#83A598</color>
+        <color name="cyanBright">#8EC07C</color>
+        <color name="moss">#B8BB26</color>
+        <color name="sunset">#FE8019</color>
+        <color name="amber">#FABD2F</color>
+        <color name="amberBright">#FCD060</color>
+        <color name="teal">#34D3C0</color>
+        <color name="tealLight">#7FF0E2</color>
+        <color name="tealDeep">#22B3A4</color>
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#FB4934</color>
+        <color name="line" over="white" alpha="0.06"/>
+        <color name="lineStrong" over="white" alpha="0.14"/>
+        <color name="strictFg">#FB4934</color>
+        <color name="whiteFaint">#1AFFFFFF</color>
+        <color name="ink">#1D2021</color>
+        <color name="card">#08FFFFFF</color>
+        <color name="scrim">#B3141414</color>
+        <color name="modalScrim">#B31D2021</color>
+        <color name="overlayFaint" over="white" alpha="0.02"/>
+        <color name="overlaySoft" over="white" alpha="0.04"/>
+        <color name="overlayMed" over="white" alpha="0.055"/>
+        <color name="overlayStrong" over="white" alpha="0.075"/>
+        <color name="hover" over="white" alpha="0.12"/>
+        <color name="sunsetInk">#1A0B07</color>
+        <color name="bannerScrim">#CC1A0E0E</color>
+    </chrome>
+
+    <!-- Dracula — purple accent on cool charcoal. -->
+    <chrome id="dracula" fn="draculaColors" dark="true">
+        <color name="bg">#282A36</color>
+        <color name="railBg">#21222C</color>
+        <color name="titleTop">#2F3140</color>
+        <color name="titleBottom">#21222C</color>
+        <color name="surface">#2C2E3C</color>
+        <color name="surface2">#313445</color>
+        <color name="surfaceDeep">#44475A</color>
+        <color name="panel">#23242F</color>
+        <color name="terminalBg">#21222C</color>
+        <color name="text">#F8F8F2</color>
+        <color name="textBright">#DCDDD8</color>
+        <color name="textMid">#BFC2CC</color>
+        <color name="dim">#9BA3C6</color>
+        <color name="faint">#6272A4</color>
+        <color name="cyan">#BD93F9</color>
+        <color name="cyanBright">#D6ACFF</color>
+        <color name="moss">#50FA7B</color>
+        <color name="sunset">#FFB86C</color>
+        <color name="amber">#F1FA8C</color>
+        <color name="amberBright">#FFFFA5</color>
+        <color name="teal">#34D3C0</color>
+        <color name="tealLight">#7FF0E2</color>
+        <color name="tealDeep">#22B3A4</color>
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#FF5555</color>
+        <color name="line" over="white" alpha="0.06"/>
+        <color name="lineStrong" over="white" alpha="0.14"/>
+        <color name="strictFg">#FF5555</color>
+        <color name="whiteFaint">#1AFFFFFF</color>
+        <color name="ink">#21222C</color>
+        <color name="card">#08FFFFFF</color>
+        <color name="scrim">#B3191A21</color>
+        <color name="modalScrim">#B321222C</color>
+        <color name="overlayFaint" over="white" alpha="0.02"/>
+        <color name="overlaySoft" over="white" alpha="0.04"/>
+        <color name="overlayMed" over="white" alpha="0.055"/>
+        <color name="overlayStrong" over="white" alpha="0.075"/>
+        <color name="hover" over="white" alpha="0.12"/>
+        <color name="sunsetInk">#1A0B07</color>
+        <color name="bannerScrim">#CC1A0E0E</color>
+    </chrome>
+
+    <!-- Solarized Light — warm paper background, petrol text, blue accent. -->
+    <chrome id="solarized-light" fn="solarizedLightColors" dark="false">
+        <color name="bg">#FDF6E3</color>
+        <color name="railBg">#F3ECD9</color>
+        <color name="titleTop">#FFFBEE</color>
+        <color name="titleBottom">#F1EAD7</color>
+        <color name="surface">#FFFCF0</color>
+        <color name="surface2">#F3EDDB</color>
+        <color name="surfaceDeep">#EEE8D5</color>
+        <color name="panel">#F9F2DF</color>
+        <color name="terminalBg">#F5EFDC</color>
+        <color name="text">#073642</color>
+        <color name="textBright">#2F4C55</color>
+        <color name="textMid">#48626B</color>
+        <color name="dim">#657B83</color>
+        <color name="faint">#839496</color>
+        <color name="cyan">#268BD2</color>
+        <color name="cyanBright">#2E9BE0</color>
+        <color name="moss">#859900</color>
+        <color name="sunset">#CB4B16</color>
+        <color name="amber">#B58900</color>
+        <color name="amberBright">#C9A21C</color>
+        <color name="teal">#12A897</color>
+        <color name="tealLight">#4FD1C2</color>
+        <color name="tealDeep">#0B7F73</color>
+        <color name="white">#FFFFFF</color>
+        <color name="storm">#DC322F</color>
+        <color name="line" over="#073642" alpha="0.07"/>
+        <color name="lineStrong" over="#073642" alpha="0.18"/>
+        <color name="strictFg">#DC322F</color>
+        <color name="whiteFaint" over="#073642" alpha="0.08"/>
+        <color name="ink">#062F41</color>
+        <color name="card">#0D073642</color>
+        <color name="scrim">#66062B36</color>
+        <color name="modalScrim">#73062B36</color>
+        <color name="overlayFaint" over="#073642" alpha="0.035"/>
+        <color name="overlaySoft" over="#073642" alpha="0.06"/>
+        <color name="overlayMed" over="#073642" alpha="0.08"/>
+        <color name="overlayStrong" over="#073642" alpha="0.10"/>
+        <color name="hover" over="#073642" alpha="0.14"/>
+        <color name="sunsetInk">#38130A</color>
+        <color name="bannerScrim">#E6FBF1EE</color>
+    </chrome>
+
+</themes>

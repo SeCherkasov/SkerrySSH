@@ -101,7 +101,6 @@ import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.AiPolicy
 import app.skerry.ui.ai.shortLabel
 import app.skerry.ui.design.AnchoredDropdown
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalCredentials
@@ -120,6 +119,7 @@ import app.skerry.ui.host.listSerialPorts
 import app.skerry.ui.host.tagSuggestions
 import app.skerry.ui.host.pickerIcon
 import app.skerry.ui.host.pickerTypeLabel
+import app.skerry.ui.theme.Skerry
 
 
 /**
@@ -189,11 +189,11 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(if (editHost != null) stringResource(Res.string.conn_title_edit) else stringResource(Res.string.conn_title_new), color = D.text, size = 20.sp, weight = FontWeight.Bold)
+                Txt(if (editHost != null) stringResource(Res.string.conn_title_edit) else stringResource(Res.string.conn_title_new), color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
                 Sym(
                     "close",
                     size = 24.sp,
-                    color = D.dim,
+                    color = Skerry.colors.dim,
                     modifier = Modifier.clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
@@ -203,7 +203,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             }
             Txt(
                 stringResource(Res.string.conn_subtitle_mobile),
-                color = D.dim,
+                color = Skerry.colors.dim,
                 size = 12.5.sp,
                 lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 18.dp),
@@ -274,7 +274,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     suggestions = suggestions,
                     placeholder = stringResource(Res.string.conn_tag_add_placeholder),
                     onPick = { tag -> form.addTag(tag); tagDraft = "" },
-                    menuBackground = SheetPanel,
+                    menuBackground = Skerry.colors.surface2,
                 )
             }
 
@@ -289,12 +289,12 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(if (canSave) D.cyan else D.cyan.copy(alpha = 0.4f))
+                    .background(if (canSave) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.4f))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onSave)
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save_connection), color = D.ink, size = 16.sp, weight = FontWeight.Bold)
+                Txt(if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save_connection), color = Skerry.colors.ink, size = 16.sp, weight = FontWeight.Bold)
             }
     }
     // "New group" overlay is a sibling above the sheet (its own full-screen scrim), so it rises correctly above the keyboard.
@@ -326,15 +326,15 @@ private fun MobileSerialPortPicker(form: NewConnectionFormState) {
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(7.dp))
-                        .background(if (selected) D.cyan14 else D.bg)
-                        .border(1.dp, if (selected) D.cyan else D.cyan14, RoundedCornerShape(7.dp))
+                        .background(if (selected) Skerry.colors.cyan14 else Skerry.colors.bg)
+                        .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(7.dp))
                         .clickable { form.address = port.systemName }
                         .padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Sym("usb", size = 14.sp, color = if (selected) D.cyanBright else D.faint)
-                    Txt(port.description, color = if (selected) D.text else D.dim, size = 12.sp)
+                    Sym("usb", size = 14.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.faint)
+                    Txt(port.description, color = if (selected) Skerry.colors.text else Skerry.colors.dim, size = 12.sp)
                 }
             }
         }
@@ -344,7 +344,7 @@ private fun MobileSerialPortPicker(form: NewConnectionFormState) {
 @Composable
 private fun MobileProtocolPicker(form: NewConnectionFormState) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(11.dp)).padding(4.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_ssh), form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
@@ -360,12 +360,12 @@ private fun MobileProtocolSegment(label: String, selected: Boolean, modifier: Mo
     Box(
         modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) D.cyan10 else Color.Transparent)
+            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(vertical = 11.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Txt(label, color = if (selected) D.cyanBright else D.dim, size = 14.sp, weight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Txt(label, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim, size = 14.sp, weight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -398,15 +398,15 @@ private fun MobileAuthPicker(form: NewConnectionFormState, allowKey: Boolean = t
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(11.dp))
-                        .background(D.bg)
-                        .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                        .background(Skerry.colors.bg)
+                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { menuOpen = !menuOpen }
                         .padding(horizontal = 14.dp, vertical = 13.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Txt(selectedLabel, color = D.text, size = 15.sp)
-                    Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+                    Txt(selectedLabel, color = Skerry.colors.text, size = 15.sp)
+                    Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = Skerry.colors.faint)
                 }
             },
             menu = { width ->
@@ -415,8 +415,8 @@ private fun MobileAuthPicker(form: NewConnectionFormState, allowKey: Boolean = t
                     Modifier
                         .width(width)
                         .clip(RoundedCornerShape(11.dp))
-                        .background(SheetPanel)
-                        .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                        .background(Skerry.colors.surface2)
+                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                         .heightIn(max = 320.dp)
                         .verticalScroll(rememberScrollState())
                         .padding(vertical = 4.dp),
@@ -485,15 +485,15 @@ private fun MobileJumpHostPicker(form: NewConnectionFormState, allHosts: List<Ho
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(11.dp))
-                    .background(D.bg)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .background(Skerry.colors.bg)
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { menuOpen = !menuOpen }
                     .padding(horizontal = 14.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(selected?.label ?: stringResource(Res.string.conn_jump_none), color = if (selected != null) D.text else D.faint, size = 15.sp)
-                Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+                Txt(selected?.label ?: stringResource(Res.string.conn_jump_none), color = if (selected != null) Skerry.colors.text else Skerry.colors.faint, size = 15.sp)
+                Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = Skerry.colors.faint)
             }
         },
         menu = { width ->
@@ -501,8 +501,8 @@ private fun MobileJumpHostPicker(form: NewConnectionFormState, allHosts: List<Ho
                 Modifier
                     .width(width)
                     .clip(RoundedCornerShape(11.dp))
-                    .background(SheetPanel)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                     .heightIn(max = 320.dp)
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 4.dp),
@@ -534,15 +534,15 @@ private fun MobileKeepAlivePicker(form: NewConnectionFormState) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(11.dp))
-                    .background(D.bg)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .background(Skerry.colors.bg)
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { menuOpen = !menuOpen }
                     .padding(horizontal = 14.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(keepAliveLabel(form.keepAliveSeconds), color = D.text, size = 15.sp)
-                Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+                Txt(keepAliveLabel(form.keepAliveSeconds), color = Skerry.colors.text, size = 15.sp)
+                Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = Skerry.colors.faint)
             }
         },
         menu = { width ->
@@ -550,8 +550,8 @@ private fun MobileKeepAlivePicker(form: NewConnectionFormState) {
                 Modifier
                     .width(width)
                     .clip(RoundedCornerShape(11.dp))
-                    .background(SheetPanel)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                    .background(Skerry.colors.surface2)
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                     .heightIn(max = 320.dp)
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 4.dp),
@@ -589,15 +589,15 @@ private fun MobileGroupPicker(form: NewConnectionFormState, allHosts: List<Host>
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(11.dp))
-                        .background(D.bg)
-                        .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                        .background(Skerry.colors.bg)
+                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { menuOpen = !menuOpen }
                         .padding(horizontal = 14.dp, vertical = 13.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Txt(if (hasGroup) form.group else stringResource(Res.string.conn_group_none), color = if (hasGroup) D.text else D.faint, size = 15.sp)
-                    Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = D.faint)
+                    Txt(if (hasGroup) form.group else stringResource(Res.string.conn_group_none), color = if (hasGroup) Skerry.colors.text else Skerry.colors.faint, size = 15.sp)
+                    Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = Skerry.colors.faint)
                 }
             },
             menu = { width ->
@@ -605,8 +605,8 @@ private fun MobileGroupPicker(form: NewConnectionFormState, allHosts: List<Host>
                     Modifier
                         .width(width)
                         .clip(RoundedCornerShape(11.dp))
-                        .background(SheetPanel)
-                        .border(1.dp, D.cyan14, RoundedCornerShape(11.dp))
+                        .background(Skerry.colors.surface2)
+                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
                         .heightIn(max = 320.dp)
                         .verticalScroll(rememberScrollState())
                         .padding(vertical = 4.dp),
@@ -631,15 +631,15 @@ private fun MobileGroupOption(title: String, selected: Boolean, icon: String? = 
     Row(
         Modifier
             .fillMaxWidth()
-            .background(if (selected) D.cyan10 else Color.Transparent)
+            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 13.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        if (icon != null) Sym(icon, size = 18.sp, color = D.cyanBright)
-        Txt(title, color = if (selected) D.cyanBright else D.text, size = 14.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
-        if (selected) Sym("check", size = 17.sp, color = D.cyanBright)
+        if (icon != null) Sym(icon, size = 18.sp, color = Skerry.colors.cyanBright)
+        Txt(title, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 14.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
+        if (selected) Sym("check", size = 17.sp, color = Skerry.colors.cyanBright)
     }
 }
 
@@ -649,7 +649,7 @@ private fun MobileAuthOption(icon: String, title: String, subtitle: String, sele
     Row(
         Modifier
             .fillMaxWidth()
-            .background(if (selected) D.cyan10 else Color.Transparent)
+            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
             // No explicit interactionSource (parity with desktop AuthOption): remember in forEach is
             // positional — reordering saved would shift the slot onto a different row.
             .clickable(onClick = onClick)
@@ -657,12 +657,12 @@ private fun MobileAuthOption(icon: String, title: String, subtitle: String, sele
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(11.dp),
     ) {
-        Sym(icon, size = 18.sp, color = if (selected) D.cyanBright else D.dim)
+        Sym(icon, size = 18.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
         Column(Modifier.weight(1f)) {
-            Txt(title, color = if (selected) D.cyanBright else D.text, size = 14.sp, weight = FontWeight.Medium)
-            Txt(subtitle, color = D.faint, size = 11.sp)
+            Txt(title, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = Skerry.colors.faint, size = 11.sp)
         }
-        if (selected) Sym("check", size = 17.sp, color = D.cyanBright)
+        if (selected) Sym("check", size = 17.sp, color = Skerry.colors.cyanBright)
     }
 }
 
@@ -677,8 +677,8 @@ private fun AiPolicyPills(form: NewConnectionFormState) {
                 Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (on) D.cyan.copy(alpha = 0.1f) else Color.Transparent)
-                    .border(1.dp, if (on) D.cyan else D.cyan.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
+                    .background(if (on) Skerry.colors.cyan.copy(alpha = 0.1f) else Color.Transparent)
+                    .border(1.dp, if (on) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.1f), RoundedCornerShape(10.dp))
                     .clickable(
                         interactionSource = remember(policy) { MutableInteractionSource() },
                         indication = null,
@@ -689,7 +689,7 @@ private fun AiPolicyPills(form: NewConnectionFormState) {
             ) {
                 Txt(
                     policy.shortLabel(),
-                    color = if (on) D.cyanBright else D.dim,
+                    color = if (on) Skerry.colors.cyanBright else Skerry.colors.dim,
                     size = 11.sp,
                     weight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                 )

@@ -23,7 +23,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.LocalTeams
-import app.skerry.ui.design.D
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -35,6 +34,7 @@ import app.skerry.ui.generated.resources.sync_sharing_fingerprint_label
 import app.skerry.ui.vault.copyTextToClipboard
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Account identifiers for Teams invites: accountId and the own sharing-key fingerprint (X25519).
@@ -57,14 +57,14 @@ fun AccountIdentityBlock(accountId: String, modifier: Modifier = Modifier) {
     }
 
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, D.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         IdentityRow(stringResource(Res.string.sync_account_id_label), accountId, mono, copied == accountId) { copied = accountId }
         if (fingerprint != null) {
             IdentityRow(stringResource(Res.string.sync_sharing_fingerprint_label), fingerprint, mono, copied == fingerprint) { copied = fingerprint }
         }
-        Txt(stringResource(Res.string.sync_identity_hint), color = D.faint, size = 11.sp, lineHeight = 15.sp)
+        Txt(stringResource(Res.string.sync_identity_hint), color = Skerry.colors.faint, size = 11.sp, lineHeight = 15.sp)
     }
 }
 
@@ -72,13 +72,13 @@ fun AccountIdentityBlock(accountId: String, modifier: Modifier = Modifier) {
 private fun IdentityRow(label: String, value: String, mono: FontFamily, copied: Boolean, onCopied: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.weight(1f)) {
-            Txt(label.uppercase(), color = D.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
-            Txt(value, color = D.cyanBright, size = 13.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
+            Txt(label.uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+            Txt(value, color = Skerry.colors.cyanBright, size = 13.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
         }
         if (copied) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Sym("check", size = 16.sp, color = D.moss)
-                Txt(stringResource(Res.string.sync_copied), color = D.moss, size = 11.sp)
+                Sym("check", size = 16.sp, color = Skerry.colors.moss)
+                Txt(stringResource(Res.string.sync_copied), color = Skerry.colors.moss, size = 11.sp)
             }
         } else {
             Box(
@@ -89,7 +89,7 @@ private fun IdentityRow(label: String, value: String, mono: FontFamily, copied: 
                     }
                     .padding(6.dp),
             ) {
-                Sym("content_copy", size = 16.sp, color = D.dim)
+                Sym("content_copy", size = 16.sp, color = Skerry.colors.dim)
             }
         }
     }

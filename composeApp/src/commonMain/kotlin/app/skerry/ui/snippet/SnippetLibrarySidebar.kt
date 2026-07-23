@@ -40,7 +40,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.FilterChipRow
 import app.skerry.ui.design.SidebarSearchField
-import app.skerry.ui.design.D
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
@@ -67,6 +66,7 @@ import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_save
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.runtime.key
+import app.skerry.ui.theme.Skerry
 
 /**
  * Snippet library sidebar: search, category chips and the snippet list grouped into collapsible
@@ -90,7 +90,7 @@ internal fun SnippetLibrarySidebar(
     // Tag being renamed via the category pencil (null = dialog closed).
     var renamingTag by remember { mutableStateOf<String?>(null) }
 
-    Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(D.surface2)) {
+    Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)) {
         Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
             SnipSearchField(library.query, { library.query = it })
         }
@@ -104,14 +104,14 @@ internal fun SnippetLibrarySidebar(
             if (categories.isEmpty()) {
                 Txt(
                     if (all.isEmpty()) stringResource(Res.string.lib_snippets_empty) else stringResource(Res.string.lib_snippets_no_matches),
-                    color = D.faint, size = 11.5.sp, font = mono,
+                    color = Skerry.colors.faint, size = 11.5.sp, font = mono,
                     modifier = Modifier.padding(start = 10.dp, top = 6.dp),
                 )
                 if (all.isEmpty()) {
                     Box(Modifier.padding(start = 10.dp, top = 10.dp)) {
                         ChipButton(
                             label = stringResource(Res.string.lib_snippets_starter_pack),
-                            color = D.cyan,
+                            color = Skerry.colors.cyan,
                             size = 11.sp,
                             onClick = onInstallStarterPack,
                         )
@@ -158,26 +158,26 @@ private fun RenameTagDialog(initialName: String, onDismiss: () -> Unit, onSave: 
                 .fillMaxWidth()
                 .padding(20.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks()
                 .padding(26.dp),
         ) {
             Txt(
                 stringResource(Res.string.lib_snippets_rename_tag_title),
-                color = D.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
+                color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
             )
             Txt(
                 stringResource(Res.string.lib_snippets_rename_tag_subtitle),
-                color = D.dim, size = 12.5.sp, lineHeight = 18.sp,
+                color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
             BasicTextField(
                 value = name,
                 onValueChange = { name = it },
                 singleLine = true,
-                textStyle = TextStyle(color = D.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
-                cursorBrush = SolidColor(D.cyan),
+                textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
+                cursorBrush = SolidColor(Skerry.colors.cyan),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { save() }),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
@@ -186,13 +186,13 @@ private fun RenameTagDialog(initialName: String, onDismiss: () -> Unit, onSave: 
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(7.dp))
-                            .background(D.card)
-                            .border(1.dp, D.line, RoundedCornerShape(7.dp))
+                            .background(Skerry.colors.card)
+                            .border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp))
                             .padding(horizontal = 11.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.fillMaxWidth()) {
-                            if (name.isEmpty()) Txt(stringResource(Res.string.lib_snippets_rename_tag_placeholder), color = D.faint, size = 13.sp)
+                            if (name.isEmpty()) Txt(stringResource(Res.string.lib_snippets_rename_tag_placeholder), color = Skerry.colors.faint, size = 13.sp)
                             inner()
                         }
                     }
@@ -205,7 +205,7 @@ private fun RenameTagDialog(initialName: String, onDismiss: () -> Unit, onSave: 
             ) {
                 Box(Modifier.weight(1f))
                 Box(Modifier.clip(RoundedCornerShape(7.dp)).clickable(onClick = onDismiss).padding(horizontal = 16.dp, vertical = 9.dp)) {
-                    Txt(stringResource(Res.string.shell_cancel), color = D.dim, size = 12.5.sp)
+                    Txt(stringResource(Res.string.shell_cancel), color = Skerry.colors.dim, size = 12.5.sp)
                 }
                 PrimaryButton(stringResource(Res.string.shell_save), onClick = save, enabled = canSave)
             }
@@ -246,10 +246,10 @@ private fun SnippetCategorySection(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Sym(if (collapsed) "chevron_right" else "expand_more", size = 15.sp, color = D.faint)
+        Sym(if (collapsed) "chevron_right" else "expand_more", size = 15.sp, color = Skerry.colors.faint)
         Txt(
             if (editable) snippetTagLabel(category.name) else uncategorizedSnippetsLabel(),
-            color = D.dim, size = 11.sp, weight = FontWeight.Medium,
+            color = Skerry.colors.dim, size = 11.sp, weight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
         )
         if (editable) {
@@ -258,11 +258,11 @@ private fun SnippetCategorySection(
                 onClick = { onEditCategory(category.name) },
                 box = 20,
                 icon = 13.sp,
-                tint = D.faint,
+                tint = Skerry.colors.faint,
                 tooltip = stringResource(Res.string.lib_snippets_edit),
             )
         }
-        Txt(category.snippets.size.toString(), color = D.faint, size = 10.5.sp, font = mono)
+        Txt(category.snippets.size.toString(), color = Skerry.colors.faint, size = 10.5.sp, font = mono)
     }
     if (!collapsed) SnippetRows(category.snippets, selectedId, mono, onSelect)
 }
@@ -286,16 +286,16 @@ private fun SnippetRow(entry: SnippetEntry, selected: Boolean, mono: FontFamily,
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(7.dp))
-            .background(if (selected) D.cyan10 else Color.Transparent)
-            .border(1.dp, if (selected) D.cyan.copy(alpha = 0.18f) else Color.Transparent, RoundedCornerShape(7.dp))
+            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
+            .border(1.dp, if (selected) Skerry.colors.cyan.copy(alpha = 0.18f) else Color.Transparent, RoundedCornerShape(7.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 9.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Sym("code_blocks", size = 15.sp, color = if (selected) D.cyanBright else D.dim)
-            Txt(s.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = if (selected) D.cyanBright else D.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+            Sym("code_blocks", size = 15.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
+            Txt(s.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
         }
-        Txt(s.command, color = if (selected) D.dim else D.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
+        Txt(s.command, color = if (selected) Skerry.colors.dim else Skerry.colors.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
     }
 }
 

@@ -13,12 +13,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.LocalUpdates
 import app.skerry.ui.design.LocalFonts
-import app.skerry.ui.design.D
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_update_status
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.theme.Skerry
 
 /**
  * Passive update notice in the desktop status bar: appears only while
@@ -41,11 +41,11 @@ fun UpdateStatusItem() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            Sym("arrow_circle_up", size = 13.sp, color = D.cyanBright)
-            Txt(stringResource(Res.string.settings_update_status, update.versionLabel), color = D.cyanBright, size = 10.5.sp, font = mono)
+            Sym("arrow_circle_up", size = 13.sp, color = Skerry.colors.cyanBright)
+            Txt(stringResource(Res.string.settings_update_status, update.versionLabel), color = Skerry.colors.cyanBright, size = 10.5.sp, font = mono)
         }
         Sym(
-            "close", size = 12.sp, color = D.faint,
+            "close", size = 12.sp, color = Skerry.colors.faint,
             modifier = Modifier.clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

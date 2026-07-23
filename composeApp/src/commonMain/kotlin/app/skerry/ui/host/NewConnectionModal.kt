@@ -125,7 +125,6 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.CancelButton
-import app.skerry.ui.design.D
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
@@ -145,6 +144,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.i18n.label
 import app.skerry.ui.vault.title
+import app.skerry.ui.theme.Skerry
 
 /**
  * "New connection" / "Edit connection" modal: host profile form plus AI policy selection. With a
@@ -207,17 +207,17 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 .padding(20.dp)
                 .heightIn(max = 720.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(D.surfaceDeep)
-                .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                .background(Skerry.colors.surfaceDeep)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .consumeClicks(),
         ) {
             Box(Modifier.fillMaxWidth().padding(start = 26.dp, end = 26.dp, top = 22.dp, bottom = 14.dp)) {
                 Column {
-                    Txt(if (editHost != null) stringResource(Res.string.conn_title_edit) else stringResource(Res.string.conn_title_new), color = D.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+                    Txt(if (editHost != null) stringResource(Res.string.conn_title_edit) else stringResource(Res.string.conn_title_new), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
                     Txt(
                         if (editHost != null) stringResource(Res.string.conn_subtitle_edit)
                         else stringResource(Res.string.conn_subtitle_new),
-                        color = D.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp),
+                        color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp),
                     )
                 }
                 IconBtn("close", onClick = state::closeModal, modifier = Modifier.align(Alignment.TopEnd))
@@ -231,15 +231,15 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 // auto-sent), this is a heads-up, not a block.
                 if (form.connectionType == ConnectionType.TELNET) {
                     Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Sym("warning", size = 14.sp, color = D.sunset)
-                        Txt(stringResource(Res.string.conn_telnet_plaintext_warning), color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
+                        Sym("warning", size = 14.sp, color = Skerry.colors.sunset)
+                        Txt(stringResource(Res.string.conn_telnet_plaintext_warning), color = Skerry.colors.sunset, size = 11.5.sp, lineHeight = 15.sp)
                     }
                 }
                 // VNC/RFB has no transport encryption either — same heads-up as Telnet.
                 if (form.connectionType == ConnectionType.VNC) {
                     Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Sym("warning", size = 14.sp, color = D.sunset)
-                        Txt(stringResource(Res.string.conn_vnc_plaintext_warning), color = D.sunset, size = 11.5.sp, lineHeight = 15.sp)
+                        Sym("warning", size = 14.sp, color = Skerry.colors.sunset)
+                        Txt(stringResource(Res.string.conn_vnc_plaintext_warning), color = Skerry.colors.sunset, size = 11.5.sp, lineHeight = 15.sp)
                     }
                 }
                 Spacer14()
@@ -298,7 +298,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                         trigger = {
                             FlowRow(
                                 // Tapping anywhere in the capsule (padding, gaps between pills) focuses the input.
-                                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { tagFocus.requestFocus() }
                                     .padding(horizontal = 10.dp, vertical = 7.dp),
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -340,7 +340,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
             }
             HLine()
             Row(
-                Modifier.fillMaxWidth().background(Color(0x26000000)).padding(horizontal = 26.dp, vertical = 14.dp),
+                Modifier.fillMaxWidth().background(Skerry.colors.shade15).padding(horizontal = 26.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -348,8 +348,8 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                     // Before the test runs, an encryption hint; otherwise the test status takes its place.
                     val status = tester?.status ?: ConnectionTestStatus.Idle
                     if (status == ConnectionTestStatus.Idle) {
-                        Sym("shield_lock", size = 14.sp, color = D.moss)
-                        Txt(stringResource(Res.string.conn_footer_encrypted), color = D.faint, size = 11.sp)
+                        Sym("shield_lock", size = 14.sp, color = Skerry.colors.moss)
+                        Txt(stringResource(Res.string.conn_footer_encrypted), color = Skerry.colors.faint, size = 11.sp)
                     } else {
                         TestStatusLabel(status)
                     }
@@ -377,8 +377,8 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                             tester?.fail(ConnectionTestProblem.IncompleteForm)
                         }
                     },
-                    fg = if (canTest) D.text else D.faint,
-                    border = if (canTest) D.lineStrong else D.line,
+                    fg = if (canTest) Skerry.colors.text else Skerry.colors.faint,
+                    border = if (canTest) Skerry.colors.lineStrong else Skerry.colors.line,
                 )
                 PrimaryButton(
                     if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save),
@@ -423,7 +423,7 @@ private fun Spacer14() = Box(Modifier.size(14.dp))
 @Composable
 private fun Field(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(modifier) {
-        Txt(label.uppercase(), color = D.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
+        Txt(label.uppercase(), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
         content()
     }
 }
@@ -448,8 +448,9 @@ private fun ModalTextField(
     val fonts = LocalFonts.current
     val family = if (mono) fonts.mono else fonts.ui
     val fontSize = if (mono) 11.5.sp else 13.sp
-    val textStyle = remember(family, fontSize) {
-        TextStyle(color = D.text, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 16.sp else 18.sp)
+    val textColor = Skerry.colors.text
+    val textStyle = remember(family, fontSize, textColor) {
+        TextStyle(color = textColor, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 16.sp else 18.sp)
     }
     // Border/icon live in decorationBox so a click anywhere on the field places the caret.
     BasicTextField(
@@ -457,7 +458,7 @@ private fun ModalTextField(
         onValueChange = onValueChange,
         singleLine = singleLine,
         textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
         modifier = Modifier.fillMaxWidth(),
@@ -466,14 +467,14 @@ private fun ModalTextField(
                 Modifier
                     .fillMaxWidth()
                     .then(if (minHeightDp != null) Modifier.heightIn(min = minHeightDp.dp) else Modifier)
-                    .clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+                    .clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
                     .padding(horizontal = 11.dp, vertical = 9.dp),
                 verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (icon != null) Sym(icon, size = 16.sp, color = D.faint)
+                if (icon != null) Sym(icon, size = 16.sp, color = Skerry.colors.faint)
                 Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = D.faint, size = fontSize, font = if (mono) fonts.mono else null)
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = fontSize, font = if (mono) fonts.mono else null)
                     inner()
                 }
             }
@@ -502,15 +503,15 @@ private fun SerialPortPicker(form: NewConnectionFormState) {
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(7.dp))
-                        .background(if (selected) D.cyan14 else D.bg)
-                        .border(1.dp, if (selected) D.cyan else D.cyan14, RoundedCornerShape(7.dp))
+                        .background(if (selected) Skerry.colors.cyan14 else Skerry.colors.bg)
+                        .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(7.dp))
                         .clickable { form.address = port.systemName }
                         .padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Sym("usb", size = 14.sp, color = if (selected) D.cyanBright else D.faint)
-                    Txt(port.description, color = if (selected) D.text else D.dim, size = 12.sp)
+                    Sym("usb", size = 14.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.faint)
+                    Txt(port.description, color = if (selected) Skerry.colors.text else Skerry.colors.dim, size = 12.sp)
                 }
             }
         }
@@ -520,7 +521,7 @@ private fun SerialPortPicker(form: NewConnectionFormState) {
 @Composable
 private fun ProtocolPicker(form: NewConnectionFormState) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
         // Driven off ConnectionType.entries: a new protocol gets its segment for free, and the
@@ -547,12 +548,12 @@ private val ConnectionType.labelRes: StringResource
 @Composable
 private fun ProtocolSegment(label: String, icon: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Row(
-        modifier.clip(RoundedCornerShape(5.dp)).background(if (selected) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(vertical = 8.dp),
+        modifier.clip(RoundedCornerShape(5.dp)).background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
     ) {
-        Sym(icon, size = 15.sp, color = if (selected) D.cyanBright else D.faint)
-        Txt(label, color = if (selected) D.cyanBright else D.dim, size = 12.5.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
+        Sym(icon, size = 15.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.faint)
+        Txt(label, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim, size = 12.5.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
     }
 }
 
@@ -581,17 +582,17 @@ private fun AuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
             onDismiss = { menuOpen = false },
             trigger = {
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).clickable { menuOpen = !menuOpen }.padding(horizontal = 11.dp, vertical = 9.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).clickable { menuOpen = !menuOpen }.padding(horizontal = 11.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Txt(selectedLabel, color = D.text, size = 13.sp)
-                    Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
+                    Txt(selectedLabel, color = Skerry.colors.text, size = 13.sp)
+                    Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
                 }
             },
             menu = { width ->
                 // The menu floats ABOVE the form (Popup) rather than pushing it apart; width = trigger width, scrolls on overflow.
-                Column(Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+                Column(Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
                     AuthOption("vpn_key_off", stringResource(Res.string.conn_auth_ask), stringResource(Res.string.conn_auth_ask_desc), form.authMode == AuthMode.ASK) {
                         form.authMode = AuthMode.ASK; menuOpen = false
                     }
@@ -636,16 +637,16 @@ private fun AuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
 @Composable
 private fun AuthOption(icon: String, title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(if (selected) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-        Sym(icon, size = 16.sp, color = if (selected) D.cyanBright else D.dim)
+        Sym(icon, size = 16.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
         Column(Modifier.weight(1f)) {
-            Txt(title, color = if (selected) D.cyanBright else D.text, size = 12.5.sp, weight = FontWeight.Medium)
-            Txt(subtitle, color = D.faint, size = 10.5.sp)
+            Txt(title, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 12.5.sp, weight = FontWeight.Medium)
+            Txt(subtitle, color = Skerry.colors.faint, size = 10.5.sp)
         }
-        if (selected) Sym("check", size = 15.sp, color = D.cyanBright)
+        if (selected) Sym("check", size = 15.sp, color = Skerry.colors.cyanBright)
     }
 }
 
@@ -700,12 +701,12 @@ private fun GroupPicker(form: NewConnectionFormState, allHosts: List<Host>) {
         onDismiss = { menuOpen = false },
         trigger = {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(D.bg).border(1.dp, D.cyan14, RoundedCornerShape(7.dp)).clickable { menuOpen = !menuOpen }.padding(horizontal = 11.dp, vertical = 9.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).clickable { menuOpen = !menuOpen }.padding(horizontal = 11.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(if (hasGroup) form.group else stringResource(Res.string.conn_group_none), color = if (hasGroup) D.text else D.faint, size = 13.sp)
-                Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = D.faint)
+                Txt(if (hasGroup) form.group else stringResource(Res.string.conn_group_none), color = if (hasGroup) Skerry.colors.text else Skerry.colors.faint, size = 13.sp)
+                Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
             }
         },
         menu = { width ->
@@ -728,13 +729,13 @@ private fun GroupPicker(form: NewConnectionFormState, allHosts: List<Host>) {
 @Composable
 private fun GroupOption(title: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(if (selected) D.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-        if (icon != null) Sym(icon, size = 15.sp, color = D.cyanBright)
-        Txt(title, color = if (selected) D.cyanBright else D.text, size = 12.5.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
-        if (selected) Sym("check", size = 15.sp, color = D.cyanBright)
+        if (icon != null) Sym(icon, size = 15.sp, color = Skerry.colors.cyanBright)
+        Txt(title, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 12.5.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
+        if (selected) Sym("check", size = 15.sp, color = Skerry.colors.cyanBright)
     }
 }
 
@@ -755,12 +756,12 @@ private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit)
                     .fillMaxWidth()
                     .padding(20.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(D.surfaceDeep)
-                    .border(1.dp, D.cyan14, RoundedCornerShape(12.dp))
+                    .background(Skerry.colors.surfaceDeep)
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                     .consumeClicks()
                     .padding(22.dp),
             ) {
-                Txt(stringResource(Res.string.conn_group_new_title), color = D.text, size = 16.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.conn_group_new_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold)
                 Spacer14()
                 ModalTextField(name, { name = it }, "Production")
                 Spacer14()
@@ -777,7 +778,7 @@ private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit)
 @Composable
 private fun SuggestionMenu(width: Dp, content: @Composable () -> Unit) {
     Column(
-        Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(D.surfaceDeep).border(1.dp, D.cyan14, RoundedCornerShape(7.dp))
+        Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
             .heightIn(max = 240.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
     ) { content() }
 }
@@ -789,7 +790,7 @@ private fun SuggestionRow(label: String, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Txt(label, color = D.text, size = 12.5.sp)
+        Txt(label, color = Skerry.colors.text, size = 12.5.sp)
     }
 }
 
@@ -797,13 +798,13 @@ private fun SuggestionRow(label: String, onClick: () -> Unit) {
 @Composable
 private fun RemovableTagPill(tag: String, onRemove: () -> Unit) {
     Row(
-        Modifier.clip(RoundedCornerShape(20.dp)).background(D.cyan.copy(alpha = 0.12f)).padding(start = 9.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        Modifier.clip(RoundedCornerShape(20.dp)).background(Skerry.colors.cyan.copy(alpha = 0.12f)).padding(start = 9.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Txt("#$tag", color = D.cyanBright, size = 11.sp)
+        Txt("#$tag", color = Skerry.colors.cyanBright, size = 11.sp)
         Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(2.dp), contentAlignment = Alignment.Center) {
-            Sym("close", size = 12.sp, color = D.cyanBright)
+            Sym("close", size = 12.sp, color = Skerry.colors.cyanBright)
         }
     }
 }
@@ -814,23 +815,23 @@ private fun TestStatusLabel(status: ConnectionTestStatus) {
     when (status) {
         ConnectionTestStatus.Idle -> {}
         ConnectionTestStatus.Checking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("progress_activity", size = 14.sp, color = D.dim)
-            Txt(stringResource(Res.string.conn_test_checking), color = D.dim, size = 11.5.sp)
+            Sym("progress_activity", size = 14.sp, color = Skerry.colors.dim)
+            Txt(stringResource(Res.string.conn_test_checking), color = Skerry.colors.dim, size = 11.5.sp)
         }
         is ConnectionTestStatus.Success -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("check_circle", size = 14.sp, color = D.moss)
+            Sym("check_circle", size = 14.sp, color = Skerry.colors.moss)
             // RTT goes on its own line: the footer slot is narrow and a single "Connected · N ms"
             // string used to wrap mid-unit.
             Column {
-                Txt(stringResource(Res.string.conn_test_connected), color = D.moss, size = 11.5.sp)
+                Txt(stringResource(Res.string.conn_test_connected), color = Skerry.colors.moss, size = 11.5.sp)
                 status.roundTripMillis?.let {
-                    Txt(stringResource(Res.string.conn_test_rtt_ms, it), color = D.moss.copy(alpha = 0.75f), size = 10.5.sp)
+                    Txt(stringResource(Res.string.conn_test_rtt_ms, it), color = Skerry.colors.moss.copy(alpha = 0.75f), size = 10.5.sp)
                 }
             }
         }
         is ConnectionTestStatus.Failure -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("error", size = 14.sp, color = D.storm)
-            Txt(connectionTestFailureText(status.problem), color = D.storm, size = 11.5.sp)
+            Sym("error", size = 14.sp, color = Skerry.colors.storm)
+            Txt(connectionTestFailureText(status.problem), color = Skerry.colors.storm, size = 11.5.sp)
         }
     }
 }
@@ -839,19 +840,20 @@ private fun TestStatusLabel(status: ConnectionTestStatus) {
 @Composable
 private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: () -> Unit, onFocusChanged: ((Boolean) -> Unit)? = null, modifier: Modifier = Modifier) {
     val fonts = LocalFonts.current
-    val textStyle = remember(fonts.ui) { TextStyle(color = D.text, fontSize = 12.5.sp, fontFamily = fonts.ui) }
+    val textColor = Skerry.colors.text
+    val textStyle = remember(fonts.ui, textColor) { TextStyle(color = textColor, fontSize = 12.5.sp, fontFamily = fonts.ui) }
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
         textStyle = textStyle,
-        cursorBrush = SolidColor(D.cyan),
+        cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onCommit() }),
         modifier = modifier.widthIn(min = 72.dp).onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) Txt(stringResource(Res.string.conn_tag_add_placeholder), color = D.faint, size = 12.5.sp)
+                if (value.isEmpty()) Txt(stringResource(Res.string.conn_tag_add_placeholder), color = Skerry.colors.faint, size = 12.5.sp)
                 inner()
             }
         },
@@ -864,24 +866,24 @@ private fun PolicyRow(opt: PolicyOption, selected: Boolean, onClick: () -> Unit)
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) D.cyan10 else Color.Transparent)
-            .border(1.dp, if (selected) D.cyan else D.cyan06, RoundedCornerShape(8.dp))
+            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
+            .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.cyan06, RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
-            Modifier.padding(top = 2.dp).size(16.dp).clip(CircleShape).border(1.5.dp, if (selected) D.cyan else D.faint, CircleShape),
+            Modifier.padding(top = 2.dp).size(16.dp).clip(CircleShape).border(1.5.dp, if (selected) Skerry.colors.cyan else Skerry.colors.faint, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            if (selected) Box(Modifier.size(8.dp).clip(CircleShape).background(D.cyan))
+            if (selected) Box(Modifier.size(8.dp).clip(CircleShape).background(Skerry.colors.cyan))
         }
         Column {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Sym(opt.icon, size = 14.sp, color = D.dim)
-                Txt(stringResource(opt.title), color = D.text, size = 13.sp, weight = FontWeight.Medium)
+                Sym(opt.icon, size = 14.sp, color = Skerry.colors.dim)
+                Txt(stringResource(opt.title), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
             }
-            Txt(stringResource(opt.desc), color = D.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp))
+            Txt(stringResource(opt.desc), color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }

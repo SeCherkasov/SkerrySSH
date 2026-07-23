@@ -119,6 +119,9 @@ import app.skerry.ui.terminal.LocalTerminalTheme
 import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalTheme
+import app.skerry.ui.theme.ThemeMode
+import app.skerry.ui.theme.systemInDarkTheme
+import app.skerry.ui.theme.terminalThemeId
 import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.terminal.TerminalSessionPrefs
 import app.skerry.ui.i18n.UiLanguage
@@ -149,12 +152,12 @@ import app.skerry.ui.generated.resources.shtail_new_tab
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.BrandMark
 import app.skerry.ui.design.ConfirmActionDialog
-import app.skerry.ui.design.D
 import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.vault.DesktopCorruptedScreen
 import app.skerry.ui.vault.DesktopCreateScreen
 import app.skerry.ui.host.DesktopDeleteHostDialog
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.SessionDot
 import app.skerry.ui.connection.DesktopPasswordDialog
 import app.skerry.ui.vault.DesktopResetScreen
 import app.skerry.ui.vault.DesktopUnlockScreen
@@ -206,11 +209,12 @@ import app.skerry.ui.app.isAppLevel
 import app.skerry.ui.i18n.label
 import app.skerry.ui.design.rememberMaterialSymbols
 import app.skerry.ui.design.rememberMono
-import app.skerry.ui.design.rememberSpaceGrotesk
+import app.skerry.ui.design.rememberUiFont
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.session.tabBoundsAnchor
 import app.skerry.ui.app.asDesktopView
 import app.skerry.ui.session.draggableTab
+import app.skerry.ui.theme.Skerry
 
 /**
  * Root of the desktop app. Supplies fonts
@@ -219,7 +223,7 @@ import app.skerry.ui.session.draggableTab
  *
  * The live layer is wired in via [vault]: if passed, the whole chrome is gated behind the master
  * password ([app.skerry.ui.vault.VaultGate]) on top of [app.skerry.ui.vault.VaultGateController] —
- * the create/unlock screens are drawn in the mockup style ([DesktopCreateScreen]/[DesktopUnlockScreen]),
+ * the styled create/unlock screens are drawn ([DesktopCreateScreen]/[DesktopUnlockScreen]),
  * and the "Unlocked" chip in the titlebar actually locks the vault. Without [vault] (the
  * screenshot/preview path) data stays mock-static ([DesktopMockData]) and locking is a stub
  * ([DesktopDesignState]).
@@ -271,6 +275,12 @@ fun DesktopDesignApp(
     // Terminal color theme (Appearance → theme cards) — persisted externally (desktop main).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     onTerminalThemeChange: (TerminalTheme) -> Unit = {},
+    // Separately-picked terminal theme flag (unified theming) — persisted externally (desktop main).
+    initialCustomTerminalTheme: Boolean = false,
+    onCustomTerminalThemeChange: (Boolean) -> Unit = {},
+    // App theme (Settings → Appearance) — persisted externally (desktop main).
+    initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
     // Idle auto-lock threshold (Settings → Security) — persisted externally (desktop main).
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     onAutoLockChange: (AutoLockDuration) -> Unit = {},
@@ -292,6 +302,8 @@ fun DesktopDesignApp(
             initialHostClickConnectMode, onHostClickConnectModeChange,
             initialAllowServerClipboardWrite, onAllowServerClipboardWriteChange,
             initialTerminalTheme, onTerminalThemeChange,
+            initialCustomTerminalTheme, onCustomTerminalThemeChange,
+            initialThemeMode, onThemeModeChange,
             initialAutoLock, onAutoLockChange,
             initialShowRecent, onShowRecentChange,
             initialRecentLimit, onRecentLimitChange,
@@ -344,7 +356,7 @@ fun DesktopDesignApp(
     windowChrome: WindowChrome? = null,
 ) {
     val fonts = DesignFonts(
-        ui = rememberSpaceGrotesk(),
+        ui = rememberUiFont(),
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
@@ -444,6 +456,12 @@ fun DesktopDesignApp(
     androidx.compose.runtime.SideEffect {
         ai?.uiLanguageProvider = { app.skerry.ui.i18n.aiResponseLanguageName(aiLocaleTag) }
     }
+    // Unified theming: unless the user opted into a separate terminal theme, the terminal follows
+    // the app theme's twin ([ThemeMode.terminalThemeId]); SYSTEM tracks the OS side live.
+    val termSystemDark = systemInDarkTheme(enabled = !state.customTerminalTheme && state.themeMode == ThemeMode.SYSTEM)
+    val effectiveTerminalTheme =
+        if (state.customTerminalTheme) state.terminalTheme
+        else TerminalThemes.fromId(state.themeMode.terminalThemeId(termSystemDark))
     CompositionLocalProvider(
         LocalFonts provides fonts,
         LocalHosts provides hosts,
@@ -460,8 +478,8 @@ fun DesktopDesignApp(
         LocalSftpPrefs provides sftpPrefs,
         // Terminal appearance from settings: font + size, read by [app.skerry.ui.terminal.TerminalScreen].
         LocalTerminalAppearance provides terminalAppearance,
-        // Terminal color theme (Appearance → cards): background/text/ANSI/cursor — same rendering.
-        LocalTerminalTheme provides state.terminalTheme,
+        // Terminal color theme: the app theme's twin, or the separately-picked one (Appearance → cards).
+        LocalTerminalTheme provides effectiveTerminalTheme,
         // The open vault + biometrics behind the gate — needed for re-authentication before copying
         // a password from the keychain (desktop has no biometrics, so the path reduces to the master password).
         LocalVault provides vault,
@@ -658,13 +676,13 @@ private fun DesktopChrome(
                 }
             }
         }
-        Box(Modifier.fillMaxSize().background(D.bg).onPreviewKeyEvent(onRootKey)) {
+        Box(Modifier.fillMaxSize().background(Skerry.colors.bg).onPreviewKeyEvent(onRootKey)) {
             Column(Modifier.fillMaxSize()) {
                 TitleBar(state, onLockWithTunnels, windowChrome)
                 HLine()
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     IconRail(state)
-                    VLine(D.line)
+                    VLine(Skerry.colors.line)
                     Box(Modifier.weight(1f).fillMaxHeight()) { Viewport(state) }
                 }
                 HLine()
@@ -976,7 +994,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
         Modifier
             .fillMaxWidth()
             .height(44.dp)
-            .background(Brush.verticalGradient(listOf(D.titleTop, D.titleBottom)))
+            .background(Brush.verticalGradient(listOf(Skerry.colors.titleTop, Skerry.colors.titleBottom)))
             .padding(start = 14.dp, end = if (windowChrome != null) 8.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -990,7 +1008,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             BrandMark(size = 28.dp)
-            Txt("Skerry", color = D.text, size = 14.5.sp, weight = FontWeight.Bold, letterSpacing = (-0.2).sp)
+            Txt("Skerry", color = Skerry.colors.text, size = 14.5.sp, weight = FontWeight.Bold, letterSpacing = (-0.2).sp)
         }
         Row(
             Modifier.weight(1f).fillMaxHeight(),
@@ -1019,8 +1037,8 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                         name = focused.tabTitle(state.showTerminalTitleOnTabs),
                         // A recording tab has no connection: its dot and accent are sunset, so it
                         // never reads as a live (or dead) session.
-                        dot = if (s.isPlayer) D.sunset else sessionDotColor(focused.controller.uiState),
-                        accent = if (s.isPlayer) D.sunset else D.cyan,
+                        dot = if (s.isPlayer) Skerry.colors.sunset else sessionDotColor(focused.controller.uiState),
+                        accent = if (s.isPlayer) Skerry.colors.sunset else Skerry.colors.cyan,
                         split = s.splitOpen,
                         active = s.id == sessions.activeId,
                         onClick = { sessions.activate(s.id) },
@@ -1035,7 +1053,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                 if (tabDrag.insertLineIndex == sessions.sessions.size) TabInsertLine()
             } else {
                 state.tabs.forEachIndexed { i, tab ->
-                    SessionTabChip(tab.name, tab.dot, active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
+                    SessionTabChip(tab.name, tab.dot.tint(), active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
                 }
             }
             // "+" creates a BLANK tab with no session (live mode) and switches to its terminal
@@ -1061,15 +1079,15 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
             Row(
                 Modifier
                     .clip(RoundedCornerShape(6.dp))
-                    .background(D.cyan08)
-                    .border(1.dp, D.cyan20, RoundedCornerShape(6.dp))
+                    .background(Skerry.colors.cyan08)
+                    .border(1.dp, Skerry.colors.cyan20, RoundedCornerShape(6.dp))
                     .clickable(onClick = onLock ?: state::lock)
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Sym("lock_open", size = 14.sp, color = D.cyan)
-                Txt(stringResource(Res.string.shell_lock), color = D.cyan, size = 11.sp, weight = FontWeight.Medium)
+                Sym("lock_open", size = 14.sp, color = Skerry.colors.cyan)
+                Txt(stringResource(Res.string.shell_lock), color = Skerry.colors.cyan, size = 11.sp, weight = FontWeight.Medium)
             }
             if (windowChrome != null) WindowButtons(windowChrome, Modifier.padding(start = 8.dp))
         }
@@ -1083,6 +1101,14 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
  * on the active or hovered tab; others reserve the space with an empty box so text doesn't jump when the
  * cross appears.
  */
+/** Demo-tab status dot color from the active theme (the state layer stores only the semantic [SessionDot]). */
+@Composable
+private fun SessionDot.tint(): Color = when (this) {
+    SessionDot.On -> Skerry.colors.moss
+    SessionDot.Warn -> Skerry.colors.amber
+    SessionDot.Off -> Skerry.colors.faint
+}
+
 @Composable
 private fun SessionTabChip(
     name: String,
@@ -1094,7 +1120,7 @@ private fun SessionTabChip(
     dragging: Boolean = false,
     // Chip accent (strip/border/background tint). Sessions use cyan; a recording tab is sunset, so a
     // replay is never mistaken for a live shell at a glance.
-    accent: Color = D.cyan,
+    accent: Color = Skerry.colors.cyan,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(8.dp)
@@ -1115,11 +1141,11 @@ private fun SessionTabChip(
             .background(
                 when {
                     active -> accentBg
-                    hovered -> Color(0x1FFFFFFF)
-                    else -> D.card
+                    hovered -> Skerry.colors.hover
+                    else -> Skerry.colors.card
                 },
             )
-            .border(1.dp, if (active) accentBorder else D.line, shape)
+            .border(1.dp, if (active) accentBorder else Skerry.colors.line, shape)
             // Accent strip on the active tab's top edge (editor tab style). drawBehind renders over the
             // background/border but under content; doesn't inflate the chip's width.
             .then(
@@ -1136,10 +1162,10 @@ private fun SessionTabChip(
     ) {
         Dot(dot)
         // Split marker: the tab holds two panes.
-        if (split) Sym("splitscreen_right", size = 13.sp, color = if (active) accent else D.faint)
+        if (split) Sym("splitscreen_right", size = 13.sp, color = if (active) accent else Skerry.colors.faint)
         Txt(
             name,
-            color = if (active) D.text else D.dim,
+            color = if (active) Skerry.colors.text else Skerry.colors.dim,
             size = 12.sp,
             weight = if (active) FontWeight.SemiBold else FontWeight.Medium,
             maxLines = 1,
@@ -1147,7 +1173,7 @@ private fun SessionTabChip(
             modifier = Modifier.widthIn(max = 150.dp),
         )
         if (showClose) {
-            IconBtn("close", onClick = onClose, box = 16, icon = 14.sp, tint = if (active) D.dim else D.faint)
+            IconBtn("close", onClick = onClose, box = 16, icon = 14.sp, tint = if (active) Skerry.colors.dim else Skerry.colors.faint)
         } else {
             Box(Modifier.width(16.dp))
         }
@@ -1157,7 +1183,7 @@ private fun SessionTabChip(
 /** Vertical insertion-position indicator during tab drag-reorder (cyan accent). */
 @Composable
 private fun TabInsertLine() {
-    Box(Modifier.width(2.dp).height(22.dp).clip(RoundedCornerShape(1.dp)).background(D.cyan))
+    Box(Modifier.width(2.dp).height(22.dp).clip(RoundedCornerShape(1.dp)).background(Skerry.colors.cyan))
 }
 
 @Composable
@@ -1170,7 +1196,7 @@ private fun IconRail(state: DesktopDesignState) {
         Modifier
             .width(52.dp)
             .fillMaxHeight()
-            .background(D.railBg)
+            .background(Skerry.colors.railBg)
             .padding(horizontal = 7.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -1222,17 +1248,17 @@ private fun SidebarToggle(hidden: Boolean, onToggle: () -> Unit) {
             .height(22.dp)
             .clip(RoundedCornerShape(6.dp))
             .hoverable(interaction)
-            .background(if (hovered) D.cyan.copy(alpha = 0.06f) else Color.Transparent)
+            .background(if (hovered) Skerry.colors.cyan.copy(alpha = 0.06f) else Color.Transparent)
             .clickable(onClick = onToggle),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(if (hidden) "chevron_right" else "chevron_left", size = 17.sp, color = if (hovered) D.dim else D.faint)
+        Sym(if (hidden) "chevron_right" else "chevron_left", size = 17.sp, color = if (hovered) Skerry.colors.dim else Skerry.colors.faint)
     }
 }
 
 @Composable
 private fun RailButton(icon: String, label: String, active: Boolean, onClick: () -> Unit) {
-    val fg = if (active) D.cyanBright else D.faint
+    val fg = if (active) Skerry.colors.cyanBright else Skerry.colors.faint
     // Icons without labels: the item name goes to a hover tooltip (desktop) so the narrow column doesn't
     // wrap long words.
     val interaction = remember { MutableInteractionSource() }
@@ -1245,7 +1271,7 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
                     .padding(vertical = 9.dp)
                     .width(2.dp)
                     .height(20.dp)
-                    .background(D.cyan, RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)),
+                    .background(Skerry.colors.cyan, RoundedCornerShape(topEnd = 2.dp, bottomEnd = 2.dp)),
             )
         }
         Box(
@@ -1253,7 +1279,7 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
                 .align(Alignment.Center)
                 .size(38.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (active) D.cyan10 else if (hovered) D.cyan.copy(alpha = 0.06f) else Color.Transparent)
+                .background(if (active) Skerry.colors.cyan10 else if (hovered) Skerry.colors.cyan.copy(alpha = 0.06f) else Color.Transparent)
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
@@ -1282,11 +1308,11 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(D.railBg)
-                        .border(1.dp, D.cyan.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
+                        .background(Skerry.colors.railBg)
+                        .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                 ) {
-                    Txt(label, color = D.textBright, size = 11.sp, weight = FontWeight.Medium)
+                    Txt(label, color = Skerry.colors.textBright, size = 11.sp, weight = FontWeight.Medium)
                 }
             }
         }
@@ -1302,7 +1328,7 @@ private fun StatusBar() {
     val connected = active?.controller?.uiState is ConnectionUiState.Connected
     val live = sessions != null
     val statusText = if (!live || connected) stringResource(Res.string.shell_status_connected) else stringResource(Res.string.shell_status_disconnected)
-    val statusColor = if (!live || connected) D.moss else D.faint
+    val statusColor = if (!live || connected) Skerry.colors.moss else Skerry.colors.faint
     // Channel throughput poller for the active session (when connected). The remember is unconditional —
     // keys (session + connected flag) recreate it on session/connection change; openThroughput is
     // idempotent (cached in ConnectionController).
@@ -1322,7 +1348,7 @@ private fun StatusBar() {
         ?.terminal?.let { "${it.cols} × ${it.rows}" } ?: "80 × 24"
     // ProxyJump route of the active session's profile ("outer → inner", entry hop first) — the
     // at-a-glance "this session rides through a bastion" marker. Hidden for direct connections
-    // and in mock mode, so the prototype's bar is unchanged.
+    // and in mock mode, so the static bar is unchanged.
     val statusHosts = LocalHosts.current
     val jumpRoute = if (live) {
         active?.hostId?.let { id -> statusHosts?.find(id) }?.let { h -> jumpRouteLabel(h) { statusHosts?.find(it) } }
@@ -1331,7 +1357,7 @@ private fun StatusBar() {
         Modifier
             .fillMaxWidth()
             .height(26.dp)
-            .background(D.ink)
+            .background(Skerry.colors.railBg)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1344,7 +1370,7 @@ private fun StatusBar() {
             } else {
                 StatusItem("circle", statusText, color = statusColor, iconSize = 11.sp, mono = mono)
                 // Jump route right next to the connection status, cyan so it reads at a glance.
-                if (jumpRoute != null) StatusItem("alt_route", jumpRoute, color = D.cyan, mono = mono)
+                if (jumpRoute != null) StatusItem("alt_route", jumpRoute, color = Skerry.colors.cyan, mono = mono)
                 // Live RTT ping of the active session (before the first sample — "—"); mock mode — template label.
                 StatusItem("network_ping", if (live) (rttMs?.let { "$it ms" } ?: "—") else "42 ms", mono = mono)
                 // Live channel throughput (before connect — "—"); mock mode (offscreen) — template labels.
@@ -1357,12 +1383,12 @@ private fun StatusBar() {
             // App-level — shown regardless of any session.
             app.skerry.ui.update.UpdateStatusItem()
             // Server ident, encoding, and grid size describe the active terminal — with no session they
-            // are just template values, so off-connection they drop out (mock mode keeps the prototype's).
+            // are just template values, so off-connection they drop out (mock mode keeps them).
             if (!live || connected) {
                 // Server version — live ident of the active session (before connect / if the transport is silent — "—").
                 StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
-                Txt(stringResource(Res.string.shell_status_encoding), color = D.faint, size = 10.5.sp, font = mono)
-                Txt(gridLabel, color = D.faint, size = 10.5.sp, font = mono)
+                Txt(stringResource(Res.string.shell_status_encoding), color = Skerry.colors.faint, size = 10.5.sp, font = mono)
+                Txt(gridLabel, color = Skerry.colors.faint, size = 10.5.sp, font = mono)
             }
             // The sync indicator follows session status (see syncIndicator): green only with an active
             // session + reachable server; linked-but-not-connected → amber, etc. Hidden when sync isn't
@@ -1375,9 +1401,9 @@ private fun StatusBar() {
                     ind.icon,
                     size = 13.sp,
                     color = when (ind.level) {
-                        SyncIndicatorLevel.OK -> D.moss
-                        SyncIndicatorLevel.WARN -> D.amber
-                        SyncIndicatorLevel.ERROR -> D.sunset
+                        SyncIndicatorLevel.OK -> Skerry.colors.moss
+                        SyncIndicatorLevel.WARN -> Skerry.colors.amber
+                        SyncIndicatorLevel.ERROR -> Skerry.colors.sunset
                     },
                 )
             }
@@ -1389,7 +1415,7 @@ private fun StatusBar() {
 private fun StatusItem(
     icon: String,
     text: String,
-    color: Color = D.faint,
+    color: Color = Skerry.colors.faint,
     iconSize: TextUnit = 13.sp,
     mono: FontFamily,
 ) {

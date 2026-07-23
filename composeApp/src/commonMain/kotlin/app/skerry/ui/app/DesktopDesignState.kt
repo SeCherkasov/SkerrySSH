@@ -4,9 +4,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
 import app.skerry.ui.i18n.UiLanguage
+import app.skerry.ui.settings.SETTINGS_NAV
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.session.SessionView
@@ -26,9 +26,9 @@ import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
+import app.skerry.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import app.skerry.ui.design.D
 
 /** Left rail / top-level views of the layout. */
 enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
@@ -94,13 +94,16 @@ sealed interface GroupDialog {
     data class Rename(val name: String) : GroupDialog
 }
 
-/** A session tab in the titlebar: host name + status-dot color. */
-@Stable
-data class SessionTab(val name: String, val dot: Color)
+/** Demo-tab status dot; resolved to a theme color at render time (state must stay theme-agnostic). */
+enum class SessionDot { On, Warn, Off }
 
-/** A demo-terminal line: a command (with prompt) or output. */
+/** A session tab in the titlebar: host name + status dot. */
 @Stable
-data class TermLine(val text: String, val isCmd: Boolean, val color: Color = D.textMid)
+data class SessionTab(val name: String, val dot: SessionDot)
+
+/** A demo-terminal line: a command (with prompt) or output; [error] tints the output as a failure. */
+@Stable
+data class TermLine(val text: String, val isCmd: Boolean, val error: Boolean = false)
 
 /**
  * UI state for the desktop app without a backend: demo terminal (`exec`) and toggles are stubs;
@@ -172,6 +175,13 @@ class DesktopDesignState(
     // mock/preview/tests.
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
+    // Unified theming: by default the terminal follows the app theme's twin; this flag opts into
+    // a separately-picked terminal theme ([terminalTheme]). Persisted like the other appearance bits.
+    initialCustomTerminalTheme: Boolean = false,
+    private val onCustomTerminalThemeChange: (Boolean) -> Unit = {},
+    // App theme (Settings → Appearance). Default (night-sea dark, no-op) preserves the prior look.
+    initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
+    private val onThemeModeChange: (ThemeMode) -> Unit = {},
     // Idle auto-lock threshold (Settings → Security). Read from persistence, written back via the
     // callback; threaded into [app.skerry.ui.vault.VaultGate] as the timer's idleMs.
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
@@ -229,7 +239,7 @@ class DesktopDesignState(
 
     /** Whether the "Link a device" dialog is open (quick-pairing code/QR — Settings → Account). */
     var pairingOpen: Boolean by mutableStateOf(false); private set
-    var settingsTab: SettingsTab by mutableStateOf(SettingsTab.AI); private set
+    var settingsTab: SettingsTab by mutableStateOf(SETTINGS_NAV.first().tab); private set
     var split: Boolean by mutableStateOf(false); private set
     /** Whether the terminal's left host sidebar is hidden (toggled from the icon rail). */
     var sidebarHidden: Boolean by mutableStateOf(false); private set
@@ -289,6 +299,12 @@ class DesktopDesignState(
     /** Terminal theme (Appearance → cards). Threaded via [app.skerry.ui.terminal.LocalTerminalTheme]. */
     var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
 
+    /** Whether the terminal theme is picked separately instead of following the app theme. */
+    var customTerminalTheme: Boolean by mutableStateOf(initialCustomTerminalTheme); private set
+
+    /** App theme (Settings → Appearance). Threaded into [app.skerry.ui.theme.SkerryTheme] at the root. */
+    var themeMode: ThemeMode by mutableStateOf(initialThemeMode); private set
+
     /** Idle auto-lock threshold (Settings → Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
     var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
 
@@ -331,10 +347,10 @@ class DesktopDesignState(
 
     var tabs: List<SessionTab> by mutableStateOf(
         listOf(
-            SessionTab("prod-web-01", D.moss),
-            SessionTab("db-master", D.moss),
-            SessionTab("homelab-pi", D.amber),
-            SessionTab("staging-web", D.faint),
+            SessionTab("prod-web-01", SessionDot.On),
+            SessionTab("db-master", SessionDot.On),
+            SessionTab("homelab-pi", SessionDot.Warn),
+            SessionTab("staging-web", SessionDot.Off),
         ),
     )
         private set
@@ -372,7 +388,7 @@ class DesktopDesignState(
 
     /**
      * Close tab [i]: the active index is clamped into the new range (the neighbor on the right shifts
-     * into the freed index, else the nearest one on the left, else 0), matching the prototype.
+     * into the freed index, else the nearest one on the left, else 0).
      */
     fun closeTab(i: Int) {
         if (i !in tabs.indices) return
@@ -410,7 +426,9 @@ class DesktopDesignState(
     fun closeCommandPalette() { commandPaletteOpen = false }
     fun openBroadcast() { broadcastOpen = true }
     fun closeBroadcast() { broadcastOpen = false }
-    fun openSettings() { settingsOpen = true }
+    // Reset to the first nav tab on every open: settings always start from the top item,
+    // not whatever tab was left selected last time.
+    fun openSettings() { settingsTab = SETTINGS_NAV.first().tab; settingsOpen = true }
     fun closeSettings() { settingsOpen = false }
     fun openSyncSetup() { syncSetupOpen = true }
     fun closeSyncSetup() { syncSetupOpen = false }
@@ -549,6 +567,19 @@ class DesktopDesignState(
         onTerminalThemeChange(theme)
     }
 
+    /** Toggle the separately-picked terminal theme and report outward (for persistence). */
+    fun toggleCustomTerminalTheme() {
+        customTerminalTheme = !customTerminalTheme
+        onCustomTerminalThemeChange(customTerminalTheme)
+    }
+
+    /** Choose the app theme and report outward (for persistence). Repeating the same value is a no-op. */
+    fun chooseThemeMode(mode: ThemeMode) {
+        if (mode == themeMode) return
+        themeMode = mode
+        onThemeModeChange(mode)
+    }
+
     /** Choose the auto-lock threshold and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseAutoLock(duration: AutoLockDuration) {
         if (duration == autoLock) return
@@ -652,8 +683,8 @@ class DesktopDesignState(
 
     private fun exec(c: String): TermLine? {
         if (c.isEmpty()) return null
-        DEMO_OUTPUT[c]?.let { return TermLine(text = it, isCmd = false, color = D.textMid) }
-        return TermLine(text = "${c.substringBefore(' ')}: command not found", isCmd = false, color = D.sunset)
+        DEMO_OUTPUT[c]?.let { return TermLine(text = it, isCmd = false) }
+        return TermLine(text = "${c.substringBefore(' ')}: command not found", isCmd = false, error = true)
     }
 
     // internal (not private): MAX_RECENT_HOSTS is read by settings/persistence/tests in this module
