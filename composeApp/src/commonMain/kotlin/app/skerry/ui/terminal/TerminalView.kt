@@ -355,7 +355,7 @@ private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: 
         state.reconnecting -> stringResource(Res.string.term_reconnecting, state.attempt)
         else -> stringResource(Res.string.term_connection_lost)
     }
-    TerminalOverlayBanner(icon = icon, text = text, accent = color, background = Color(0xCC1A0E0E), modifier = modifier)
+    TerminalOverlayBanner(icon = icon, text = text, accent = color, background = Skerry.colors.bannerScrim, modifier = modifier)
 }
 
 /**

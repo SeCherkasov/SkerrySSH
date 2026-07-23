@@ -116,7 +116,7 @@ private fun LocalModelRow(ai: AiAssistantController, models: LocalModelControlle
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(7.dp))
-            .background(if (selected) Skerry.colors.cyan10 else Color(0x08FFFFFF))
+            .background(if (selected) Skerry.colors.cyan10 else Skerry.colors.card)
             .border(1.dp, if (selected) Skerry.colors.cyan14 else Skerry.colors.line, RoundedCornerShape(7.dp))
             .clickable { ai.selectLocalModel(model.id) }
             .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -198,7 +198,7 @@ internal fun ProviderCard(
             .padding(12.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.size(32.dp).clip(RoundedCornerShape(7.dp)).background(if (selected) Skerry.colors.cyan.copy(alpha = 0.2f) else Color(0x0DFFFFFF)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(32.dp).clip(RoundedCornerShape(7.dp)).background(if (selected) Skerry.colors.cyan20 else Skerry.colors.overlayMed), contentAlignment = Alignment.Center) {
                 Sym(icon, size = 18.sp, color = if (selected) Skerry.colors.cyan else Skerry.colors.dim)
             }
             Column(Modifier.weight(1f)) {

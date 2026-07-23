@@ -114,16 +114,24 @@ import app.skerry.ui.design.VLine
 import app.skerry.ui.theme.Skerry
 
 private data class TunnelRule(
-    val type: String, val typeBg: Color, val typeFg: Color,
+    val type: String,
     val source: String, val arrow: String, val dest: String, val destDim: Boolean,
     val via: String, val active: Boolean,
 )
 
 private val TUNNELS = listOf(
-    TunnelRule("LOCAL", Color(0xFF2BBDEE).copy(alpha = 0.12f), Color(0xFF5FD1F4), "127.0.0.1:8080", "arrow_forward", "10.0.0.5:80", false, "prod-web-01", true),
-    TunnelRule("REMOTE", Color(0xFFF2A65A).copy(alpha = 0.14f), Color(0xFFF2A65A), "0.0.0.0:9000", "arrow_forward", "localhost:3000", false, "homelab-pi", true),
-    TunnelRule("SOCKS", Color(0xFF5DCE9E).copy(alpha = 0.14f), Color(0xFF5DCE9E), "127.0.0.1:1080", "all_inclusive", "dynamic proxy", true, "db-master", false),
+    TunnelRule("LOCAL", "127.0.0.1:8080", "arrow_forward", "10.0.0.5:80", false, "prod-web-01", true),
+    TunnelRule("REMOTE", "0.0.0.0:9000", "arrow_forward", "localhost:3000", false, "homelab-pi", true),
+    TunnelRule("SOCKS", "127.0.0.1:1080", "all_inclusive", "dynamic proxy", true, "db-master", false),
 )
+
+/** Badge colors (bg, fg) for a tunnel type chip, from the active theme. */
+@Composable
+private fun tunnelTypeColors(type: String): Pair<Color, Color> = when (type) {
+    "LOCAL" -> Skerry.colors.cyan.copy(alpha = 0.12f) to Skerry.colors.cyanBright
+    "REMOTE" -> Skerry.colors.amberSoft to Skerry.colors.amber
+    else -> Skerry.colors.moss.copy(alpha = 0.14f) to Skerry.colors.moss
+}
 
 /**
  * Port forwarding (Tunnels) — global section: list of saved tunnels with on/off toggles plus an
@@ -682,7 +690,7 @@ private fun MockTunnelsBody() {
 @Composable
 private fun TunnelHeaderRow() {
     Row(
-        Modifier.fillMaxWidth().background(Color(0x05FFFFFF)).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().background(Skerry.colors.overlayFaint).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -711,7 +719,8 @@ private fun TunnelRow(rule: TunnelRule) {
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(Modifier.width(76.dp)) {
-            Badge(rule.type, bg = rule.typeBg, fg = rule.typeFg, radius = 4, size = 10.sp)
+            val (typeBg, typeFg) = tunnelTypeColors(rule.type)
+            Badge(rule.type, bg = typeBg, fg = typeFg, radius = 4, size = 10.sp)
         }
         Txt(rule.source, color = Skerry.colors.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
         Box(Modifier.width(20.dp)) { Sym(rule.arrow, size = 16.sp, color = Skerry.colors.faint) }

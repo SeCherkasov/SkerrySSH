@@ -147,25 +147,33 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.theme.Skerry
 
-private data class FileEntry(val icon: String, val iconColor: Color, val name: String, val meta: String, val selected: Boolean = false)
+private data class FileEntry(val icon: String, val name: String, val meta: String, val selected: Boolean = false)
 
 private val LOCAL_FILES = listOf(
-    FileEntry("arrow_upward", Color(0xFF5A7080), "..", ""),
-    FileEntry("folder", Color(0xFF5FD1F4), "skerry-app", "Jun 21 09:14"),
-    FileEntry("folder", Color(0xFF5FD1F4), "deploy-scripts", "Jun 18 22:40"),
-    FileEntry("description", Color(0xFF8FA3B0), "docker-compose.yml", "2.4 KB"),
-    FileEntry("key", Color(0xFF8FA3B0), "id_ed25519.pub", "96 B"),
-    FileEntry("description", Color(0xFF8FA3B0), "backup.tar.gz", "418 MB"),
+    FileEntry("arrow_upward", "..", ""),
+    FileEntry("folder", "skerry-app", "Jun 21 09:14"),
+    FileEntry("folder", "deploy-scripts", "Jun 18 22:40"),
+    FileEntry("description", "docker-compose.yml", "2.4 KB"),
+    FileEntry("key", "id_ed25519.pub", "96 B"),
+    FileEntry("description", "backup.tar.gz", "418 MB"),
 )
 
 private val REMOTE_FILES = listOf(
-    FileEntry("arrow_upward", Color(0xFF5A7080), "..", ""),
-    FileEntry("folder", Color(0xFF5FD1F4), "html", "drwxr-xr-x"),
-    FileEntry("folder", Color(0xFF5FD1F4), "releases", "drwxr-xr-x"),
-    FileEntry("description", Color(0xFF8FA3B0), "nginx.conf", "3.1 KB", selected = true),
-    FileEntry("description", Color(0xFF8FA3B0), "robots.txt", "112 B"),
-    FileEntry("terminal", Color(0xFF8FA3B0), "deploy.sh", "1.8 KB"),
+    FileEntry("arrow_upward", "..", ""),
+    FileEntry("folder", "html", "drwxr-xr-x"),
+    FileEntry("folder", "releases", "drwxr-xr-x"),
+    FileEntry("description", "nginx.conf", "3.1 KB", selected = true),
+    FileEntry("description", "robots.txt", "112 B"),
+    FileEntry("terminal", "deploy.sh", "1.8 KB"),
 )
+
+/** Mock row icon tint by icon kind, from the active theme (folders — cyan, files — dim). */
+@Composable
+private fun mockFileIconTint(icon: String): Color = when (icon) {
+    "folder" -> Skerry.colors.cyanBright
+    "arrow_upward" -> Skerry.colors.faint
+    else -> Skerry.colors.dim
+}
 
 /**
  * SFTP view (two-pane, Total Commander style): header + Local pane (local FS) + Remote pane (host) +
@@ -1350,7 +1358,7 @@ private fun MockRow(entry: FileEntry, mono: FontFamily) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Sym(entry.icon, size = 17.sp, color = entry.iconColor)
+        Sym(entry.icon, size = 17.sp, color = mockFileIconTint(entry.icon))
         Txt(entry.name, color = if (entry.name == "..") Skerry.colors.dim else Skerry.colors.textBright, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
         if (entry.meta.isNotEmpty()) Txt(entry.meta, color = Skerry.colors.faint, size = 11.sp)
     }

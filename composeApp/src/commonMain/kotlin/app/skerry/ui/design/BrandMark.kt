@@ -1,18 +1,42 @@
 package app.skerry.ui.design
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.skerry.ui.theme.Skerry
+
+/**
+ * Rounded backdrop plate for [BrandMark] (lock screens, About). Deliberately theme-invariant:
+ * the teal logo is designed on the night-sea gradient — like the launcher icon, the plate keeps
+ * that dark backdrop on the light theme too, rather than washing the mark out on white.
+ */
+@Composable
+fun BrandPlate(size: Dp, corner: Dp, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(size)
+            .clip(RoundedCornerShape(corner))
+            .background(Brush.radialGradient(listOf(Color(0xFF142634), Color(0xFF0A141B), Color(0xFF05090D)))),
+        contentAlignment = Alignment.Center,
+    ) {
+        BrandMark(size = size)
+    }
+}
 
 /**
  * Skerry logo — a "signal S": a thick S-curve (light-to-deep teal gradient) with three

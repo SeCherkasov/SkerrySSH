@@ -62,7 +62,7 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
     val submit = { if (password.isNotEmpty()) onConnect(password) }
 
     Box(
-        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = noop, indication = null, onClick = onDismiss),
+        Modifier.fillMaxSize().background(Skerry.colors.modalScrim).clickable(interactionSource = noop, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Column(

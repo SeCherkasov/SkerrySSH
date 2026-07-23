@@ -66,7 +66,11 @@ internal fun MockTerminalPane(state: DesktopDesignState, modifier: Modifier = Mo
             if (LocalFeatures.current.ai) AiSuggestionCard()
 
             state.termLines.forEach { line ->
-                if (line.isCmd) Prompt(mono, line.text) else TermOut(line.text, mono, color = line.color)
+                if (line.isCmd) {
+                    Prompt(mono, line.text)
+                } else {
+                    TermOut(line.text, mono, color = if (line.error) Skerry.colors.sunset else Skerry.colors.textMid)
+                }
             }
 
             Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -154,7 +158,7 @@ private fun AiSuggestionCard() {
                     .fillMaxWidth()
                     .padding(vertical = 6.dp)
                     .clip(RoundedCornerShape(5.dp))
-                    .background(Color(0x4D000000))
+                    .background(Skerry.colors.shade30)
                     .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(5.dp))
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             ) {
@@ -175,7 +179,7 @@ private fun AiSuggestionCard() {
         }
         HLine(Skerry.colors.amber.copy(alpha = 0.15f))
         Row(
-            Modifier.fillMaxWidth().background(Color(0x26000000)).padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().background(Skerry.colors.shade15).padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Box(Modifier.clip(RoundedCornerShape(5.dp)).background(Skerry.colors.amber).padding(horizontal = 14.dp, vertical = 6.dp)) {

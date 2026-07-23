@@ -59,6 +59,15 @@ data class SkerryColors(
     val card: Color,
     val scrim: Color,
     val modalScrim: Color,
+    // Raise fills — neutral "lift" tints (white on dark, ink on light), faintest to strongest
+    val overlayFaint: Color,
+    val overlaySoft: Color,
+    val overlayMed: Color,
+    val overlayStrong: Color,
+    val hover: Color,
+    // Ink on sunset (danger) buttons and the disconnect-banner backdrop
+    val sunsetInk: Color,
+    val bannerScrim: Color,
 ) {
     // Cyan-derived tones (line/background tints) — alpha over the theme's cyan
     val cyan06: Color get() = cyan.copy(alpha = 0.06f)
@@ -71,6 +80,10 @@ data class SkerryColors(
     // Badge fills
     val strictBg: Color get() = sunset.copy(alpha = 0.16f)
     val devBg: Color get() = moss.copy(alpha = 0.16f)
+
+    // Darkening washes — theme-invariant: black-over darkens correctly on both palettes
+    val shade15: Color get() = Color(0x26000000)
+    val shade30: Color get() = Color(0x4D000000)
 }
 
 /**

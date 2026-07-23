@@ -113,10 +113,6 @@ import app.skerry.shared.terminal.recordingStamp
 import app.skerry.ui.vault.exportTextFile
 import app.skerry.ui.theme.Skerry
 
-/** Terminal key panel background (`#0E1A24`). Keys — white 6%, monospaced. */
-private val KeyCapBg = Color(0x0FFFFFFF)
-private val KeyCapFg = Color(0xFFC9D6DE)
-
 /** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
 private const val ESC = "\u001b"
 
@@ -712,12 +708,12 @@ private fun KeyCap(label: String, accent: Boolean = false, active: Boolean = fal
     val bg = when {
         active -> Skerry.colors.cyan
         accent -> Skerry.colors.cyan14
-        else -> KeyCapBg
+        else -> Skerry.colors.overlayMed
     }
     val fg = when {
         active -> Skerry.colors.ink
         accent -> Skerry.colors.cyanBright
-        else -> KeyCapFg
+        else -> Skerry.colors.textBright
     }
     Box(
         Modifier
@@ -736,12 +732,12 @@ private fun KeyCapIcon(icon: String, accent: Boolean = false, onClick: () -> Uni
     Box(
         Modifier
             .clip(RoundedCornerShape(7.dp))
-            .background(if (accent) Skerry.colors.cyan14 else KeyCapBg)
+            .background(if (accent) Skerry.colors.cyan14 else Skerry.colors.overlayMed)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .padding(horizontal = 11.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(icon, size = 16.sp, color = if (accent) Skerry.colors.cyanBright else KeyCapFg)
+        Sym(icon, size = 16.sp, color = if (accent) Skerry.colors.cyanBright else Skerry.colors.textBright)
     }
 }
 

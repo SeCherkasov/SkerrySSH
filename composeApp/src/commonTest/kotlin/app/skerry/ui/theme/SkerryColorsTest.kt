@@ -60,6 +60,21 @@ class SkerryColorsTest {
     }
 
     @Test
+    fun `night-sea raise fills are white tints and fixed shades are black washes`() {
+        val white = Color(0xFFFFFFFF)
+        assertEquals(white.copy(alpha = 0.02f), c.overlayFaint)
+        assertEquals(white.copy(alpha = 0.04f), c.overlaySoft)
+        assertEquals(white.copy(alpha = 0.055f), c.overlayMed)
+        assertEquals(white.copy(alpha = 0.075f), c.overlayStrong)
+        assertEquals(white.copy(alpha = 0.12f), c.hover)
+        assertEquals(Color(0xFF1A0B07), c.sunsetInk)
+        assertEquals(Color(0xCC1A0E0E), c.bannerScrim)
+        // Darkening washes are theme-invariant: black-over works on both palettes.
+        assertEquals(Color(0x26000000), c.shade15)
+        assertEquals(Color(0x4D000000), c.shade30)
+    }
+
+    @Test
     fun `badge fills derive from their accent`() {
         assertEquals(c.sunset.copy(alpha = 0.16f), c.strictBg)
         assertEquals(c.moss.copy(alpha = 0.16f), c.devBg)
@@ -155,6 +170,15 @@ class SkerryColorsTest {
         assertEquals(Color(0xFFB4543E), c.strictFg)
         assertEquals(Color(ink).copy(alpha = 0.08f), c.whiteFaint)
         assertEquals(Color(0xFF08303F), c.ink)
+        // Raise fills invert to ink tints on light — a white tint would be invisible. Alphas are
+        // bumped vs dark (same reasoning as card: ink needs more alpha to read on light surfaces).
+        assertEquals(Color(ink).copy(alpha = 0.035f), c.overlayFaint)
+        assertEquals(Color(ink).copy(alpha = 0.06f), c.overlaySoft)
+        assertEquals(Color(ink).copy(alpha = 0.08f), c.overlayMed)
+        assertEquals(Color(ink).copy(alpha = 0.10f), c.overlayStrong)
+        assertEquals(Color(ink).copy(alpha = 0.14f), c.hover)
+        assertEquals(Color(0xFF38130A), c.sunsetInk)
+        assertEquals(Color(0xE6FBF1EE), c.bannerScrim)
         assertEquals(Color(0x0D0D1E29), c.card)
         assertEquals(Color(0x66101922), c.scrim)
         assertEquals(Color(0x73101922), c.modalScrim)

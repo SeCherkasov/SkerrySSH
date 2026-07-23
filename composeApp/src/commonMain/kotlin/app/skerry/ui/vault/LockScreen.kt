@@ -76,6 +76,7 @@ import app.skerry.ui.generated.resources.shell_password_strength_good
 import app.skerry.ui.generated.resources.shell_password_strength_strong
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.BrandMark
+import app.skerry.ui.design.BrandPlate
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.sync.PairingJoinScreen
@@ -368,19 +369,7 @@ private fun LockScaffold(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Box(
-            Modifier
-                .size(88.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(Color(0xFF142634), Color(0xFF0A141B), Color(0xFF05090D)),
-                    ),
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            BrandMark(size = 88.dp)
-        }
+        BrandPlate(size = 88.dp, corner = 20.dp)
         Box(Modifier.height(22.dp))
         Txt(title, color = Skerry.colors.text, size = 22.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.3).sp)
         Box(Modifier.height(6.dp))

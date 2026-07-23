@@ -8,15 +8,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -24,6 +20,7 @@ import app.skerry.ui.app.AppVersion
 import app.skerry.ui.app.LocalUpdates
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.BrandMark
+import app.skerry.ui.design.BrandPlate
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -54,9 +51,7 @@ fun MobileAboutScreen(state: MobileDesignState) {
                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(Modifier.padding(top = 26.dp).size(72.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF0A141B)), contentAlignment = Alignment.Center) {
-                    BrandMark(size = 72.dp)
-                }
+                BrandPlate(size = 72.dp, corner = 16.dp, modifier = Modifier.padding(top = 26.dp))
                 Txt("Skerry", color = Skerry.colors.text, size = 20.sp, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 14.dp))
                 Txt(stringResource(Res.string.settings_about_version, AppVersion.VERSION), color = Skerry.colors.dim, size = 12.sp, modifier = Modifier.padding(top = 4.dp))
                 UpdateAvailableBlock()

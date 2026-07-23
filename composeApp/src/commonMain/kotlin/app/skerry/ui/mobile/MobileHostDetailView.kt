@@ -23,7 +23,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,10 +57,6 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.i18n.label
 import app.skerry.ui.theme.Skerry
-
-/** Coral used for the Delete host action; not a token in the `D` palette. */
-private val DetailCoral = Color(0xFFE07A5F)
-private val DetailCoralBorder = Color(0x40E07A5F)
 
 /** Details card row: label, value, and whether the value is monospace (address/port). */
 @Immutable
@@ -227,12 +222,12 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(13.dp))
-                    .border(1.dp, DetailCoralBorder, RoundedCornerShape(13.dp))
+                    .border(1.dp, Skerry.colors.sunset.copy(alpha = 0.25f), RoundedCornerShape(13.dp))
                     .then(if (onDelete != null) Modifier.clickable(onClick = onDelete) else Modifier)
                     .padding(13.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Txt(stringResource(Res.string.shell_delete_host), color = DetailCoral, size = 14.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.shell_delete_host), color = Skerry.colors.sunset, size = 14.sp, weight = FontWeight.Medium)
             }
         }
     }

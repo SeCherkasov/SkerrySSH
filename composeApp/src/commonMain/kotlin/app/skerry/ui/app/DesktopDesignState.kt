@@ -4,7 +4,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import app.skerry.shared.host.Host
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.vault.AutoLockDuration
@@ -94,13 +93,16 @@ sealed interface GroupDialog {
     data class Rename(val name: String) : GroupDialog
 }
 
-/** A session tab in the titlebar: host name + status-dot color. */
-@Stable
-data class SessionTab(val name: String, val dot: Color)
+/** Demo-tab status dot; resolved to a theme color at render time (state must stay theme-agnostic). */
+enum class SessionDot { On, Warn, Off }
 
-/** A demo-terminal line: a command (with prompt) or output. */
+/** A session tab in the titlebar: host name + status dot. */
 @Stable
-data class TermLine(val text: String, val isCmd: Boolean, val color: Color = Color(0xFFB7C5CC))
+data class SessionTab(val name: String, val dot: SessionDot)
+
+/** A demo-terminal line: a command (with prompt) or output; [error] tints the output as a failure. */
+@Stable
+data class TermLine(val text: String, val isCmd: Boolean, val error: Boolean = false)
 
 /**
  * UI state for the desktop app without a backend: demo terminal (`exec`) and toggles are stubs;
@@ -337,10 +339,10 @@ class DesktopDesignState(
 
     var tabs: List<SessionTab> by mutableStateOf(
         listOf(
-            SessionTab("prod-web-01", Color(0xFF5DCE9E)),
-            SessionTab("db-master", Color(0xFF5DCE9E)),
-            SessionTab("homelab-pi", Color(0xFFF2A65A)),
-            SessionTab("staging-web", Color(0xFF5A7080)),
+            SessionTab("prod-web-01", SessionDot.On),
+            SessionTab("db-master", SessionDot.On),
+            SessionTab("homelab-pi", SessionDot.Warn),
+            SessionTab("staging-web", SessionDot.Off),
         ),
     )
         private set
@@ -665,8 +667,8 @@ class DesktopDesignState(
 
     private fun exec(c: String): TermLine? {
         if (c.isEmpty()) return null
-        DEMO_OUTPUT[c]?.let { return TermLine(text = it, isCmd = false, color = Color(0xFFB7C5CC)) }
-        return TermLine(text = "${c.substringBefore(' ')}: command not found", isCmd = false, color = Color(0xFFE07A5F))
+        DEMO_OUTPUT[c]?.let { return TermLine(text = it, isCmd = false) }
+        return TermLine(text = "${c.substringBefore(' ')}: command not found", isCmd = false, error = true)
     }
 
     // internal (not private): MAX_RECENT_HOSTS is read by settings/persistence/tests in this module

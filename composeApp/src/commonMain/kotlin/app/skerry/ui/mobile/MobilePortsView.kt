@@ -679,14 +679,22 @@ private fun MobileThroughputRow(icon: String, color: Color, fraction: Float, val
 
 // Mock (preview/offscreen).
 
-private data class MockTunnel(val type: String, val bg: Color, val fg: Color, val via: String, val source: String, val arrow: String, val dest: String, val destDim: Boolean, val on: Boolean)
+private data class MockTunnel(val type: String, val via: String, val source: String, val arrow: String, val dest: String, val destDim: Boolean, val on: Boolean)
 
 /** Static tunnels for preview/offscreen. */
 private val MOCK_TUNNELS = listOf(
-    MockTunnel("LOCAL", Color(0xFF2BBDEE).copy(alpha = 0.12f), Color(0xFF2BBDEE), "via prod-web-01", "127.0.0.1:8080", "arrow_forward", "10.0.0.5:80", false, true),
-    MockTunnel("REMOTE", Color(0xFFF2A65A).copy(alpha = 0.14f), Color(0xFFF2A65A), "via homelab-pi", "0.0.0.0:9000", "arrow_forward", "localhost:3000", false, true),
-    MockTunnel("SOCKS", Color(0xFF5DCE9E).copy(alpha = 0.14f), Color(0xFF5DCE9E), "via db-master", "127.0.0.1:1080", "all_inclusive", "dynamic proxy", true, false),
+    MockTunnel("LOCAL", "via prod-web-01", "127.0.0.1:8080", "arrow_forward", "10.0.0.5:80", false, true),
+    MockTunnel("REMOTE", "via homelab-pi", "0.0.0.0:9000", "arrow_forward", "localhost:3000", false, true),
+    MockTunnel("SOCKS", "via db-master", "127.0.0.1:1080", "all_inclusive", "dynamic proxy", true, false),
 )
+
+/** Badge colors (bg, fg) for a tunnel type chip, from the active theme. */
+@Composable
+private fun mockTunnelTypeColors(type: String): Pair<Color, Color> = when (type) {
+    "LOCAL" -> Skerry.colors.cyan.copy(alpha = 0.12f) to Skerry.colors.cyan
+    "REMOTE" -> Skerry.colors.amberSoft to Skerry.colors.amber
+    else -> Skerry.colors.moss.copy(alpha = 0.14f) to Skerry.colors.moss
+}
 
 @Composable
 private fun MockMobilePortsBody(mono: FontFamily) {
@@ -711,7 +719,8 @@ private fun MockTunnelCard(t: MockTunnel, mono: FontFamily) {
             .padding(14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Badge(t.type, bg = t.bg, fg = t.fg, radius = 4, size = 9.5.sp)
+            val (typeBg, typeFg) = mockTunnelTypeColors(t.type)
+            Badge(t.type, bg = typeBg, fg = typeFg, radius = 4, size = 9.5.sp)
             Txt(t.via, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
             Toggle(on = t.on, onToggle = {})
         }

@@ -2,8 +2,8 @@
 <!--
   App-chrome design tokens. Single source of truth for SkerryColors; :composeApp:generateThemeSources
   turns this into theme/GeneratedChromeThemes.kt at build time. Token names mirror the SkerryColors
-  constructor 1:1 (all 33 required). The derived getters (cyan06…, strictBg, devBg, amberSoft) live
-  in the data class and are NOT listed here.
+  constructor 1:1 (all 40 required). The derived getters (cyan06…, strictBg, devBg, amberSoft,
+  shade15/shade30) live in the data class and are NOT listed here.
 
   A color is either a literal — <color name="x">#RRGGBB</color> or 8-digit #AARRGGBB — or an
   alpha-over-base — <color name="x" over="cyan" alpha="0.06"/> — where `over` is another token name
@@ -54,6 +54,14 @@
         <color name="card">#08FFFFFF</color>        <!-- row card background, rgba(255,255,255,0.03) -->
         <color name="scrim">#B304080C</color>       <!-- dimming under mobile sheets/dialogs -->
         <color name="modalScrim">#B3060E16</color>  <!-- dimming under desktop modals -->
+        <!-- Raise fills — neutral "lift" tints for chips/tiles/tracks/hover; white on dark -->
+        <color name="overlayFaint" over="white" alpha="0.02"/>   <!-- table header rows -->
+        <color name="overlaySoft" over="white" alpha="0.04"/>    <!-- inactive chips, input fills -->
+        <color name="overlayMed" over="white" alpha="0.055"/>    <!-- icon tiles, badges, keycaps -->
+        <color name="overlayStrong" over="white" alpha="0.075"/> <!-- progress tracks, disabled buttons -->
+        <color name="hover" over="white" alpha="0.12"/>          <!-- hovered rows/buttons -->
+        <color name="sunsetInk">#1A0B07</color>     <!-- text/icon color on sunset (danger) buttons -->
+        <color name="bannerScrim">#CC1A0E0E</color> <!-- backdrop of the disconnect banner over a frozen terminal -->
     </chrome>
 
     <!-- "Daybreak" — a cool, high-key light counterpart. Accents darkened for AA contrast on light
@@ -99,6 +107,15 @@
         <color name="card">#0D0D1E29</color>                   <!-- row card — faint ink darkening on light -->
         <color name="scrim">#66101922</color>                  <!-- dimming under mobile sheets/dialogs -->
         <color name="modalScrim">#73101922</color>             <!-- dimming under desktop modals -->
+        <!-- Raise fills invert to ink tints on light (white tint would be invisible); alphas bumped
+             vs dark for the same reason card's is: ink needs more alpha to read on light surfaces. -->
+        <color name="overlayFaint" over="#0D1E29" alpha="0.035"/>
+        <color name="overlaySoft" over="#0D1E29" alpha="0.06"/>
+        <color name="overlayMed" over="#0D1E29" alpha="0.08"/>
+        <color name="overlayStrong" over="#0D1E29" alpha="0.10"/>
+        <color name="hover" over="#0D1E29" alpha="0.14"/>
+        <color name="sunsetInk">#38130A</color>     <!-- deep coral ink on the light sunset button -->
+        <color name="bannerScrim">#E6FBF1EE</color> <!-- warm high-key backdrop for the disconnect banner -->
     </chrome>
 
 </themes>

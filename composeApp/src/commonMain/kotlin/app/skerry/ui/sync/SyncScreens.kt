@@ -295,7 +295,7 @@ internal fun SyncSetupBody(
                 .border(1.dp, if (keepConnected) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(6.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            if (keepConnected) Sym("check", size = 14.sp, color = Color(0xFF0A1A26))
+            if (keepConnected) Sym("check", size = 14.sp, color = Skerry.colors.ink)
         }
         Column(Modifier.weight(1f)) {
             Txt(stringResource(Res.string.sync_keep_connected), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
@@ -460,7 +460,7 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
                 .border(1.dp, if (keepConnected) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(6.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            if (keepConnected) Sym("check", size = 14.sp, color = Color(0xFF0A1A26))
+            if (keepConnected) Sym("check", size = 14.sp, color = Skerry.colors.ink)
         }
         Column(Modifier.weight(1f)) {
             Txt(stringResource(Res.string.sync_keep_connected), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)

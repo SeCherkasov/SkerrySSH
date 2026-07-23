@@ -107,7 +107,7 @@ private fun KnownHostsHeader() {
 @Composable
 private fun KnownHostsTableHeader() {
     Row(
-        Modifier.fillMaxWidth().background(Color(0x05FFFFFF)).padding(horizontal = 16.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().background(Skerry.colors.overlayFaint).padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         KHeader(stringResource(Res.string.lib_known_col_host), Modifier.weight(1f))

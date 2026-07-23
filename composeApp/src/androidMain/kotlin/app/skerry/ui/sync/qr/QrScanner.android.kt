@@ -24,6 +24,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.qr_cancel
 import app.skerry.ui.generated.resources.qr_permission_needed
 import app.skerry.ui.generated.resources.qr_scan_hint
+import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -91,10 +92,10 @@ actual fun QrScannerScreen(onResult: (String) -> Unit, onCancel: () -> Unit) {
         }
         Box(
             Modifier.align(Alignment.BottomCenter).padding(bottom = 44.dp)
-                .clip(RoundedCornerShape(9.dp)).background(Color(0xFF0E2230)).clickable(onClick = onCancel)
+                .clip(RoundedCornerShape(9.dp)).background(Skerry.colors.surfaceDeep).clickable(onClick = onCancel)
                 .padding(horizontal = 22.dp, vertical = 11.dp),
         ) {
-            Text(stringResource(Res.string.qr_cancel), color = Color(0xFF2BBDEE), fontSize = 14.sp)
+            Text(stringResource(Res.string.qr_cancel), color = Skerry.colors.cyan, fontSize = 14.sp)
         }
     }
 }

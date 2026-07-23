@@ -18,7 +18,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import app.skerry.ui.theme.ThemeMode
-import app.skerry.ui.theme.nightSeaColors
 
 class DesktopDesignStateTest {
 
@@ -172,7 +171,8 @@ class DesktopDesignStateTest {
         s.onCmd("nope --x")
         s.runCmd()
         assertEquals("nope: command not found", s.termLines[1].text)
-        assertEquals(nightSeaColors().sunset, s.termLines[1].color)
+        // The state layer stores only the semantic flag; the renderer maps it to the theme's sunset.
+        assertTrue(s.termLines[1].error)
     }
 
     @Test

@@ -248,7 +248,7 @@ private fun AiBarTag(icon: String, text: String, mono: FontFamily) {
     Row(
         Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0x0AFFFFFF))
+            .background(Skerry.colors.overlaySoft)
             .border(1.dp, Skerry.colors.line, RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,

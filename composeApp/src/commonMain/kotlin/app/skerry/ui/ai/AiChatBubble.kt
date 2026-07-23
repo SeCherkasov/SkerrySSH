@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,7 +47,7 @@ internal fun AiChatBubble(role: AiRole, text: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
         Box(
             Modifier.clip(RoundedCornerShape(8.dp))
-                .background(if (mine) Skerry.colors.cyan10 else Color(0x0DFFFFFF))
+                .background(if (mine) Skerry.colors.cyan10 else Skerry.colors.overlayMed)
                 .border(1.dp, if (mine) Skerry.colors.cyan14 else Skerry.colors.line, RoundedCornerShape(8.dp))
                 .padding(horizontal = 11.dp, vertical = 8.dp),
         ) {

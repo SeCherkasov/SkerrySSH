@@ -57,7 +57,7 @@ fun ConfirmActionDialog(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmColor, fg = Color(0xFF1A0B07))
+                PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmColor, fg = Skerry.colors.sunsetInk)
             }
         }
     }

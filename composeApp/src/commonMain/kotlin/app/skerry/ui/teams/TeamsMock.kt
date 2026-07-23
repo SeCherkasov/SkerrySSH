@@ -47,11 +47,16 @@ private data class Member(val initials: String, val avatar: Color, val name: Str
 private data class SharedHost(val name: String, val members: String, val online: Boolean)
 private data class Activity(val icon: String, val iconColor: Color, val prefix: String, val target: String, val time: String)
 
-private val MEMBERS = listOf(
-    Member("MK", Color(0xFF2BBDEE), "Maya Kovac", "maya@skerry.dev", "OWNER", Color(0xFFF2A65A).copy(alpha = 0.14f), Color(0xFFF2A65A)),
-    Member("TR", Color(0xFF5DCE9E), "Theo Reyes", "theo@skerry.dev", "ADMIN", Color(0xFF2BBDEE).copy(alpha = 0.12f), Color(0xFF5FD1F4)),
-    Member("JL", Color(0xFF8FA3B0), "June Lin", "june@skerry.dev", "MEMBER", Color(0x0DFFFFFF), Color(0xFF8FA3B0)),
-)
+// Mock rows resolve their colors from the active theme, so they are built inside the composable.
+@Composable
+private fun mockMembers(): List<Member> {
+    val c = Skerry.colors
+    return listOf(
+        Member("MK", c.cyan, "Maya Kovac", "maya@skerry.dev", "OWNER", c.amberSoft, c.amber),
+        Member("TR", c.moss, "Theo Reyes", "theo@skerry.dev", "ADMIN", c.cyan.copy(alpha = 0.12f), c.cyanBright),
+        Member("JL", c.dim, "June Lin", "june@skerry.dev", "MEMBER", c.overlayMed, c.dim),
+    )
+}
 
 private val SHARED_HOSTS = listOf(
     SharedHost("prod-web-01", "5 members", true),
@@ -60,11 +65,15 @@ private val SHARED_HOSTS = listOf(
     SharedHost("k3s-control", "2 members", false),
 )
 
-private val ACTIVITY = listOf(
-    Activity("login", Color(0xFF5DCE9E), "Theo connected to ", "prod-web-02", "3 min ago"),
-    Activity("add", Color(0xFF2BBDEE), "Maya shared host ", "k3s-control", "1 h ago"),
-    Activity("key", Color(0xFFF2A65A), "June rotated key ", "deploy_ci", "Yesterday"),
-)
+@Composable
+private fun mockActivity(): List<Activity> {
+    val c = Skerry.colors
+    return listOf(
+        Activity("login", c.moss, "Theo connected to ", "prod-web-02", "3 min ago"),
+        Activity("add", c.cyan, "Maya shared host ", "k3s-control", "1 h ago"),
+        Activity("key", c.amber, "June rotated key ", "deploy_ci", "Yesterday"),
+    )
+}
 
 /** Static Teams layout — mock/preview path (LocalTeams == null), renders placeholder data. */
 @Composable
@@ -97,7 +106,7 @@ internal fun TeamsMockView() {
             Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
                 SectionLabel(stringResource(Res.string.lib_teams_members))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MEMBERS.forEach { MemberRow(it) }
+                    mockMembers().forEach { MemberRow(it) }
                 }
                 Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     Column(Modifier.weight(1f)) {
@@ -114,7 +123,7 @@ internal fun TeamsMockView() {
                 }
                 Box(Modifier.padding(top = 24.dp))
                 SectionLabel(stringResource(Res.string.lib_teams_recent_activity))
-                ACTIVITY.forEach { ActivityRow(it, mono) }
+                mockActivity().forEach { ActivityRow(it, mono) }
             }
         }
     }
@@ -145,7 +154,7 @@ private fun MemberRow(m: Member) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(32.dp).clip(CircleShape).background(m.avatar), contentAlignment = Alignment.Center) {
-            Txt(m.initials, color = Color(0xFF0A1A26), size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(m.initials, color = Skerry.colors.ink, size = 13.sp, weight = FontWeight.SemiBold)
         }
         Column(Modifier.weight(1f)) {
             Txt(m.name, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
