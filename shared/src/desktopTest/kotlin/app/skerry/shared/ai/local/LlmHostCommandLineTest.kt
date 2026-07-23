@@ -72,6 +72,18 @@ class LlmHostCommandLineTest {
     }
 
     @Test
+    fun `the jpackage restart marker never reaches the child launcher`() {
+        val environment = mutableMapOf(
+            "_JPACKAGE_LAUNCHER" to "1",
+            "PATH" to "/usr/bin",
+        )
+
+        LlmHostCommandLine.scrubEnvironment(environment)
+
+        assertEquals(mapOf("PATH" to "/usr/bin"), environment)
+    }
+
+    @Test
     fun `the host flag tells a host run from an app run`() {
         assertTrue(LlmHostCommandLine.isHostRun(arrayOf("--llm-host", "/tmp/s", "4096")))
         assertFalse(LlmHostCommandLine.isHostRun(emptyArray()))
