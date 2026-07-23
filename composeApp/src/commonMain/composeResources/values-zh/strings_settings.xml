@@ -70,7 +70,7 @@
     <string name="settings_ai_confirm_desc">运行任何 AI 建议的命令前需点击确认。降低来自被入侵服务器的提示注入风险。</string>
 
     <!-- 终端部分 -->
-    <string name="settings_terminal_subtitle">选择主题和字体；调整滚动缓冲和终端行为。</string>
+    <string name="settings_terminal_subtitle">选择字体；调整滚动缓冲和终端行为。</string>
     <string name="settings_terminal_section_font">字体</string>
     <string name="settings_terminal_section_behavior">行为</string>
     <string name="settings_terminal_scrollback">滚动缓冲</string>

@@ -17,6 +17,8 @@
     <string name="appearance_section_terminal">终端</string>
     <string name="appearance_section_interface">界面</string>
     <string name="appearance_section_theme">主题</string>
+    <string name="appearance_custom_term_theme">独立终端主题</string>
+    <string name="appearance_custom_term_theme_desc">为终端选择与应用主题不同的配色。</string>
     <string name="appearance_font">字体</string>
     <string name="appearance_font_size">字号</string>
     <string name="appearance_line_height">行高</string>

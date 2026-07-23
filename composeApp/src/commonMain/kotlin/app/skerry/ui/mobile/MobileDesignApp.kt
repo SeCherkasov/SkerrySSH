@@ -91,7 +91,11 @@ import app.skerry.ui.app.mobileBackAction
 import app.skerry.ui.design.rememberMaterialSymbols
 import app.skerry.ui.design.rememberMono
 import app.skerry.ui.design.rememberUiFont
+import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.theme.ThemeMode
+import app.skerry.ui.theme.systemInDarkTheme
+import app.skerry.ui.theme.terminalThemeId
 
 /**
  * Root of the mobile layout. Supplies fonts via [LocalFonts] and live backends via
@@ -244,12 +248,18 @@ fun MobileDesignApp(
     androidx.compose.runtime.SideEffect {
         ai?.uiLanguageProvider = { app.skerry.ui.i18n.aiResponseLanguageName(aiLocaleTag) }
     }
+    // Unified theming: unless the user opted into a separate terminal theme, the terminal follows
+    // the app theme's twin ([ThemeMode.terminalThemeId]); SYSTEM tracks the OS side live.
+    val termSystemDark = systemInDarkTheme(enabled = !state.customTerminalTheme && state.themeMode == ThemeMode.SYSTEM)
+    val effectiveTerminalTheme =
+        if (state.customTerminalTheme) state.terminalTheme
+        else TerminalThemes.fromId(state.themeMode.terminalThemeId(termSystemDark))
     CompositionLocalProvider(
         LocalFonts provides fonts,
         // Terminal appearance from settings (More → Appearance): font + size read by TerminalScreen.
         LocalTerminalAppearance provides terminalAppearance,
-        // Terminal color theme (More → Appearance → cards): background/text/ANSI/cursor share the same render.
-        LocalTerminalTheme provides state.terminalTheme,
+        // Terminal color theme: the app theme's twin, or the separately-picked one (More → Appearance → cards).
+        LocalTerminalTheme provides effectiveTerminalTheme,
         LocalHosts provides deps.hosts,
         LocalSessions provides liveSessions,
         LocalKnownHosts provides deps.knownHosts,

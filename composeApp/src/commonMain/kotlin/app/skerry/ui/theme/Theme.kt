@@ -86,6 +86,18 @@ fun ThemeMode.isDark(systemDark: Boolean): Boolean = when (this) {
     else -> true
 }
 
+/**
+ * Stable id of this app theme's terminal twin (unified theming): catalog modes share ids with the
+ * terminal catalog, the stock pair maps to Night Sea / Daybreak, [ThemeMode.SYSTEM] follows the OS
+ * side. Resolved through `TerminalThemes.fromId` by the consumer.
+ */
+fun ThemeMode.terminalThemeId(systemDark: Boolean): String = when (this) {
+    ThemeMode.SYSTEM -> if (systemDark) "night-sea" else "daybreak"
+    ThemeMode.DARK -> "night-sea"
+    ThemeMode.LIGHT -> "daybreak"
+    else -> id
+}
+
 /** Resolves a [ThemeMode] to its palette and dark flag, consulting the OS for [ThemeMode.SYSTEM]. */
 @Composable
 fun ThemeMode.resolveColors(): Pair<SkerryColors, Boolean> {

@@ -290,6 +290,20 @@ class SkerryColorsTest {
         assertTrue(ThemeMode.DRACULA.isDark(systemDark = false))
     }
 
+    /**
+     * Unified theming: every app theme names its terminal twin. Catalog modes share ids with the
+     * terminal catalog; the stock pair maps to Night Sea / Daybreak; SYSTEM follows the OS side.
+     */
+    @Test
+    fun `every app theme maps to an existing terminal theme`() {
+        assertEquals("night-sea", ThemeMode.DARK.terminalThemeId(systemDark = false))
+        assertEquals("daybreak", ThemeMode.LIGHT.terminalThemeId(systemDark = true))
+        assertEquals("night-sea", ThemeMode.SYSTEM.terminalThemeId(systemDark = true))
+        assertEquals("daybreak", ThemeMode.SYSTEM.terminalThemeId(systemDark = false))
+        assertEquals("blackwater", ThemeMode.BLACKWATER.terminalThemeId(systemDark = false))
+        assertEquals("tokyo-day", ThemeMode.TOKYO_DAY.terminalThemeId(systemDark = true))
+    }
+
     @Test
     fun `theme mode catalog is complete and ids are stable`() {
         assertEquals(10, ThemeMode.entries.size)

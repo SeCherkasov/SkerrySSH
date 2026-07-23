@@ -17,6 +17,8 @@
     <string name="appearance_section_terminal">TERMINAL</string>
     <string name="appearance_section_interface">INTERFACE</string>
     <string name="appearance_section_theme">THEME</string>
+    <string name="appearance_custom_term_theme">Separate terminal theme</string>
+    <string name="appearance_custom_term_theme_desc">Pick a terminal theme different from the app theme.</string>
     <string name="appearance_font">Font</string>
     <string name="appearance_font_size">Font size</string>
     <string name="appearance_line_height">Line height</string>

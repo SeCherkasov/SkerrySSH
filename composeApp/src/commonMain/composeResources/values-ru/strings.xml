@@ -17,6 +17,8 @@
     <string name="appearance_section_terminal">ТЕРМИНАЛ</string>
     <string name="appearance_section_interface">ИНТЕРФЕЙС</string>
     <string name="appearance_section_theme">ТЕМА</string>
+    <string name="appearance_custom_term_theme">Отдельная тема терминала</string>
+    <string name="appearance_custom_term_theme_desc">Выбрать тему терминала, отличную от темы приложения.</string>
     <string name="appearance_font">Шрифт</string>
     <string name="appearance_font_size">Размер шрифта</string>
     <string name="appearance_line_height">Высота строки</string>

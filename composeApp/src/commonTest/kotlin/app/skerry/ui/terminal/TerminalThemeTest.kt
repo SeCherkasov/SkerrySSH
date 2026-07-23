@@ -1,6 +1,8 @@
 package app.skerry.ui.terminal
 
 import androidx.compose.ui.graphics.Color
+import app.skerry.ui.theme.ThemeMode
+import app.skerry.ui.theme.terminalThemeId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -10,9 +12,9 @@ import kotlin.test.assertTrue
 class TerminalThemeTest {
 
     @Test
-    fun catalog_has_eight_distinct_themes() {
+    fun catalog_has_nine_distinct_themes() {
         val all = TerminalThemes.all
-        assertEquals(8, all.size)
+        assertEquals(9, all.size)
         assertEquals(all.size, all.map { it.id }.toSet().size, "theme ids should be unique")
         assertEquals(all.size, all.map { it.displayName }.toSet().size, "theme names should be unique")
     }
@@ -144,6 +146,16 @@ class TerminalThemeTest {
                     0xFFD6ACFF, 0xFFFF92DF, 0xFFA4FFFF, 0xFFFFFFFF,
                 ),
             ),
+            "daybreak" to Golden(
+                0xFFEDF1F4, 0xFF0D1E29, 0xFF0E90BF,
+                listOf(
+                    0xFFB7C2CA, 0xFFCE3B3B, 0xFF2C9E71, 0xFFB9761B,
+                    0xFF1F6FB2, 0xFFB04FA8, 0xFF0E90BF, 0xFF52646F,
+                    0xFF93A6B2, 0xFFE05252, 0xFF35B884, 0xFFD98E2C,
+                    0xFF3E8CD0, 0xFFC86BC0, 0xFF14A6DB, 0xFF0D1E29,
+                ),
+                selection = 0xFFC7D8E4,
+            ),
             "blackwater" to Golden(
                 0xFF141527, 0xFFD6DAE6, 0xFF20B668,
                 listOf(
@@ -174,6 +186,17 @@ class TerminalThemeTest {
             assertEquals(g.ansi.map { Color(it) }, theme.ansi, "${theme.id} ansi")
             val expectedSelection = g.selection?.let { Color(it) } ?: theme.cursor.copy(alpha = 0.3f)
             assertEquals(expectedSelection, theme.selection, "${theme.id} selection")
+        }
+    }
+
+    /** Every app-theme mode must resolve to a real catalog terminal theme (unified theming). */
+    @Test
+    fun every_theme_mode_maps_into_the_terminal_catalog() {
+        for (mode in ThemeMode.entries) {
+            for (systemDark in listOf(true, false)) {
+                val id = mode.terminalThemeId(systemDark)
+                assertEquals(id, TerminalThemes.fromId(id).id, "mode ${mode.id} (systemDark=$systemDark) should map to an existing terminal theme")
+            }
         }
     }
 

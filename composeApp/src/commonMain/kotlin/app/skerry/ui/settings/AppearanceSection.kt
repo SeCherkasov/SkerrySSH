@@ -21,11 +21,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.Badge
+import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.NumberStepper
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.appearance_badge_active
+import app.skerry.ui.generated.resources.appearance_custom_term_theme
+import app.skerry.ui.generated.resources.appearance_custom_term_theme_desc
+import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.theme.palette
 import app.skerry.ui.theme.systemInDarkTheme
@@ -105,6 +109,33 @@ internal fun AppearanceSection(state: DesktopDesignState) {
                 )
             }
             if (rowModes.size == 1) Box(Modifier.weight(1f))
+        }
+    }
+    Box(Modifier.height(10.dp))
+    // Unified theming: the terminal follows the app theme's twin unless this opt-in is set, which
+    // reveals the separate terminal-theme cards (moved here from the Terminal section).
+    SettingToggleRow(
+        stringResource(Res.string.appearance_custom_term_theme),
+        stringResource(Res.string.appearance_custom_term_theme_desc),
+        state.customTerminalTheme,
+        { state.toggleCustomTerminalTheme() },
+    )
+    if (state.customTerminalTheme) {
+        val mono = LocalFonts.current.mono
+        TerminalThemes.all.chunked(2).forEachIndexed { rowIndex, rowThemes ->
+            if (rowIndex > 0) Box(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                for (theme in rowThemes) {
+                    ThemeCard(
+                        theme = theme,
+                        active = theme.id == state.terminalTheme.id,
+                        mono = mono,
+                        onClick = { state.chooseTerminalTheme(theme) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                if (rowThemes.size == 1) Box(Modifier.weight(1f))
+            }
         }
     }
 }

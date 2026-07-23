@@ -59,6 +59,8 @@ import app.skerry.ui.generated.resources.appearance_letter_spacing
 import app.skerry.ui.generated.resources.appearance_line_height
 import app.skerry.ui.generated.resources.appearance_section_interface
 import app.skerry.ui.generated.resources.appearance_section_theme
+import app.skerry.ui.generated.resources.appearance_custom_term_theme
+import app.skerry.ui.generated.resources.appearance_custom_term_theme_desc
 import app.skerry.ui.generated.resources.appearance_section_terminal
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
@@ -585,21 +587,6 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
                 }
                 Toggle(on = state.allowServerClipboardWrite, onToggle = state::toggleAllowServerClipboardWrite)
             }
-            // Terminal theme cards after the settings rows, so the frequently-tuned knobs stay on top.
-            Txt(stringResource(Res.string.appearance_section_theme), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
-            TerminalThemes.all.chunked(2).forEach { rowThemes ->
-                Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (theme in rowThemes) {
-                        MobileThemeCard(
-                            theme = theme,
-                            active = theme.id == state.terminalTheme.id,
-                            onClick = { state.chooseTerminalTheme(theme) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    if (rowThemes.size == 1) Box(Modifier.weight(1f))
-                }
-            }
             Txt(stringResource(Res.string.appearance_section_interface), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
             FontSettingRow(stringResource(Res.string.appearance_language)) {
                 MobileLanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage)
@@ -619,6 +606,34 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
                         )
                     }
                     if (rowModes.size == 1) Box(Modifier.weight(1f))
+                }
+            }
+            // Unified theming: the terminal follows the app theme's twin unless this opt-in is
+            // set, which reveals the separate terminal-theme cards.
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Txt(stringResource(Res.string.appearance_custom_term_theme), color = Skerry.colors.text, size = 14.5.sp)
+                    Txt(stringResource(Res.string.appearance_custom_term_theme_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+                Toggle(on = state.customTerminalTheme, onToggle = state::toggleCustomTerminalTheme)
+            }
+            if (state.customTerminalTheme) {
+                TerminalThemes.all.chunked(2).forEach { rowThemes ->
+                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for (theme in rowThemes) {
+                            MobileThemeCard(
+                                theme = theme,
+                                active = theme.id == state.terminalTheme.id,
+                                onClick = { state.chooseTerminalTheme(theme) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        if (rowThemes.size == 1) Box(Modifier.weight(1f))
+                    }
                 }
             }
         }

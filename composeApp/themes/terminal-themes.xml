@@ -22,6 +22,19 @@
         </ansi>
     </terminal>
 
+    <!-- Daybreak — light twin of Night Sea (companion of the daybreak chrome); cool paper
+         background, darkened accents. Explicit light-blue selection, like the other light themes. -->
+    <terminal id="daybreak" name="Daybreak" symbol="Daybreak">
+        <background>#EDF1F4</background>
+        <foreground>#0D1E29</foreground>
+        <cursor>#0E90BF</cursor>
+        <ansi>
+            #B7C2CA #CE3B3B #2C9E71 #B9761B #1F6FB2 #B04FA8 #0E90BF #52646F
+            #93A6B2 #E05252 #35B884 #D98E2C #3E8CD0 #C86BC0 #14A6DB #0D1E29
+        </ansi>
+        <selection>#C7D8E4</selection>
+    </terminal>
+
     <!-- Blackwater — near-black indigo with a green prompt; companion of the blackwater chrome. -->
     <terminal id="blackwater" name="Blackwater" symbol="Blackwater">
         <background>#141527</background>
