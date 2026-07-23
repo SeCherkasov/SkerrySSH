@@ -158,10 +158,14 @@ class SessionTabMiddleClickTest {
                 PointerEventType.Release, Offset(90f, 14f), timeMillis = 48,
                 buttons = PointerButtons(isPrimaryPressed = true), button = PointerButton.Tertiary,
             )
-            sendPointerEvent(PointerEventType.Release, Offset(90f, 14f), timeMillis = 56)
+            // Assert while the scene is still live and the primary button still held: in
+            // production the close removes the chip and cancels the drag coroutine without
+            // onDragEnd, so only tabClosed can reset the state at this point. After the scene
+            // closes (or on a trailing primary release) the gesture's own end() would fire and
+            // mask a missing abort.
+            assertNull(drag.draggingTabId, "closing the dragged tab must abort the drag")
+            assertNull(drag.insertLineIndex, "the insert line must not linger after the dragged tab closes")
         }
         assertEquals(1, closes, "a middle click during a drag of the same tab must still close it")
-        assertNull(drag.draggingTabId, "closing the dragged tab must abort the drag")
-        assertNull(drag.insertLineIndex, "the insert line must not linger after the dragged tab closes")
     }
 }
