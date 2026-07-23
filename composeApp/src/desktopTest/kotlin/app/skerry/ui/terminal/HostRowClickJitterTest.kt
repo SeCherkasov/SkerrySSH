@@ -82,11 +82,13 @@ class HostRowClickJitterTest {
                 LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
                 LocalHostClickConnectMode provides mode,
             ) {
-                // Same layering as HostRow: the drag gesture wraps the clickable row.
+                // Same layering as HostRow: the drag gesture wraps the clickable row. onEdit gives
+                // the row its trailing "⋮" menu button, like the live catalog.
                 Box(Modifier.draggableHostRow(dragState, "h1", { folders }, onDrop = onDrop)) {
                     HostEntryRow(
                         label = "alpha", selected = false, dot = Color.Green, badge = null,
                         onClick = onConnect, mono = FontFamily.Monospace, icon = "dns",
+                        onEdit = {},
                     )
                 }
             }
@@ -112,6 +114,39 @@ class HostRowClickJitterTest {
             jitteryClick(Offset(50f, 13f), jitterPx = 2f, timeMillis = 0)
         }
         assertEquals(1, connects, "a single click with 2px of mouse jitter must still connect")
+    }
+
+    @Test
+    fun relaxedDoubleClickWithinSystemConventionConnects() {
+        // Desktop Compose's built-in double-tap window is 300ms from first UP to second DOWN
+        // (EmptyViewConfiguration) — tighter than OS double-click conventions (GNOME 400ms,
+        // Windows 500ms press-to-press). A relaxed double click within those conventions must
+        // still connect. Real sleep: the built-in window is a real-time withTimeout.
+        var connects = 0
+        runRowScene(HostClickConnectMode.DoubleClick, onConnect = { connects++ }) {
+            sendPointerEvent(PointerEventType.Press, Offset(50f, 13f), timeMillis = 16)
+            sendPointerEvent(PointerEventType.Release, Offset(50f, 13f), timeMillis = 32)
+            Thread.sleep(380)
+            sendPointerEvent(PointerEventType.Press, Offset(50f, 13f), timeMillis = 396)
+            sendPointerEvent(PointerEventType.Release, Offset(50f, 13f), timeMillis = 412)
+        }
+        assertEquals(1, connects, "a 380ms press-to-press double click must still connect")
+    }
+
+    @Test
+    fun menuButtonClickThenRowClickDoesNotConnect() {
+        // The "⋮" menu button is a descendant of the row: a click on it followed by a quick click
+        // on the row body must not read as a row double-click. The button's press is consumed by
+        // its own clickable and must be ignored by the row's double-click detection.
+        var connects = 0
+        runRowScene(HostClickConnectMode.DoubleClick, onConnect = { connects++ }) {
+            // IconBtn: box 22px at the row's right edge (padding end = 2) → center ≈ x 387.
+            sendPointerEvent(PointerEventType.Press, Offset(387f, 13f), timeMillis = 16)
+            sendPointerEvent(PointerEventType.Release, Offset(387f, 13f), timeMillis = 32)
+            sendPointerEvent(PointerEventType.Press, Offset(50f, 13f), timeMillis = 80)
+            sendPointerEvent(PointerEventType.Release, Offset(50f, 13f), timeMillis = 96)
+        }
+        assertEquals(0, connects, "⋮ click + row click must not count as a row double-click")
     }
 
     @Test
