@@ -8,9 +8,11 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okio.Path.Companion.toPath
+import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.time.Duration.Companion.minutes
 
 /**
@@ -35,6 +37,37 @@ class ProcessLlmHostLauncherTest {
 
         assertEquals(AiException.Kind.INVALID_REQUEST, error.kind)
         runtime.close()
+    }
+
+    @Test
+    fun `the jpackage restart marker does not leak into the child`() = runBlocking {
+        if (System.getProperty("os.name").startsWith("Windows")) return@runBlocking
+        // Planted by the Gradle test task to mimic a packaged app's JVM. A child launcher that
+        // inherits it feeds our --llm-host flag to the JVM and dies before reaching main.
+        assertEquals("1", System.getenv("_JPACKAGE_LAUNCHER"), "the test task must plant the marker")
+
+        val recorded = Files.createTempFile("skerry-llm-env", ".txt")
+        val launcher = Files.createTempFile("skerry-fake-launcher", ".sh")
+        try {
+            Files.writeString(launcher, "#!/bin/sh\nprintenv > '$recorded'\n")
+            launcher.toFile().setExecutable(true)
+            val runtime = IsolatedLlmRuntime(
+                ProcessLlmHostLauncher(contextLength = 512, selfCommand = launcher.toString()),
+            )
+
+            // The fake launcher exits without connecting back, so generation fails; only the
+            // environment it saw matters here.
+            assertFailsWith<AiException> { runtime.generate("/m.gguf".toPath(), request).toList() }
+
+            val environment = Files.readString(recorded)
+            assertFalse(
+                environment.lineSequence().any { it.startsWith("_JPACKAGE_LAUNCHER=") },
+                "the child saw the marker:\n$environment",
+            )
+        } finally {
+            Files.deleteIfExists(recorded)
+            Files.deleteIfExists(launcher)
+        }
     }
 
     @Test
