@@ -33,6 +33,7 @@ hood, Compose Multiplatform UI on top. One core codebase and one UI across
 | **Port forwarding** | ✅ local · remote · dynamic | ✅ | ✅ | ✅ |
 | **Serial / Telnet** | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
 | **Mosh** | ✅ | ✅ | ❌ | ❌ |
+| **VNC remote desktop** | ✅ built-in | ❌ | ❌ | ❌ |
 | **AI assistant** | ✅ local or BYOK cloud <sup>4</sup> | ⚠️ cloud, account required | ❌ | ❌ |
 
 **Legend:** ✅ yes · ⚠️ partial / with caveats · ❌ no
@@ -42,7 +43,7 @@ hood, Compose Multiplatform UI on top. One core codebase and one UI across
 <sup>3</sup> via self-hostable Tabby Web &nbsp;·&nbsp;
 <sup>4</sup> optional; model output treated as untrusted, actions require confirmation
 
-*Competitor data collected from the projects' official sites and repositories on 2026-07-12.
+*Competitor data collected from the projects' official sites and repositories on 2026-07-23.
 Spotted an error? Please open a PR.*
 
 ## Status
@@ -58,7 +59,7 @@ Grab a package from the **[latest release](../../releases/latest)**:
 |---|---|---|
 | Linux | x86_64 | `.deb`, `.rpm`, `.AppImage`, `.flatpak` |
 | Linux | arm64 | `.deb`, `.rpm`, `.AppImage` |
-| Windows | x64 | `.msi` |
+| Windows | x64 | `.msi`, portable `.zip` |
 | macOS | Apple Silicon | `Skerry-*-arm64.dmg` |
 | macOS | Intel | `Skerry-*-x64.dmg` |
 | Android | arm64-v8a | `.apk` (signed; sideload) |
@@ -96,11 +97,15 @@ Building it yourself is also easy — see [Building from source](#building-from-
 
 ## Features
 
-- **Connections** — SSH with jump hosts (ProxyJump) and SSH certificates; SFTP (dual-pane
-  commander); port forwarding: local, remote, dynamic/SOCKS; Telnet; serial (desktop and
-  Android USB-OTG).
+- **Connections** — SSH with jump hosts (ProxyJump) and SSH certificates; Mosh; SFTP
+  (dual-pane commander with a built-in file viewer/editor); port forwarding: local, remote,
+  dynamic/SOCKS, plus discovery of listening services with one-tap forwarding; VNC remote
+  desktop; Telnet; serial (desktop and Android USB-OTG).
 - **Terminal** — custom grid emulation, session tabs with split view, SSH auto-reconnect,
-  scrollback search, live host metrics.
+  scrollback search, live host metrics, a command palette over the history, broadcast input
+  to several sessions, and session recording (asciinema v2) with in-app playback.
+- **Themes** — dark and light app themes with a card-based catalog; the terminal follows
+  the app theme, and the System mode tracks the OS live.
 - **Vault** — always-on encryption (Argon2id + XChaCha20-Poly1305) for keys, passwords,
   identities, and certificates; biometric unlock on Android.
 - **Sync** — optional and self-hosted, zero-knowledge, live push over WebSocket, device
@@ -111,7 +116,8 @@ Building it yourself is also easy — see [Building from source](#building-from-
   at run time behind a confirmation preview; AI assistant with
   per-host policies — bring your own OpenAI key or run a local model.
   See [AI and privacy](#ai-and-privacy).
-- **Localization** — English and Russian UI; the assistant replies in the UI language.
+- **Localization** — English, Russian, and Simplified Chinese UI; the assistant replies in
+  the UI language.
 
 ## AI and privacy
 
