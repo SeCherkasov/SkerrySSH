@@ -108,7 +108,7 @@ import app.skerry.ui.app.MobileTab
 import app.skerry.ui.app.SettingsTab
 import app.skerry.ui.design.rememberMaterialSymbols
 import app.skerry.ui.design.rememberMono
-import app.skerry.ui.design.rememberSpaceGrotesk
+import app.skerry.ui.design.rememberUiFont
 
 /**
  * Offscreen render of the desktop design to PNG for visual review without a window/compositor.
@@ -357,7 +357,7 @@ private class PreviewFileSource(private val item: FileItem, private val text: St
 @Composable
 private fun GateScreenPreview(body: @Composable () -> Unit) {
     val fonts = DesignFonts(
-        ui = rememberSpaceGrotesk(),
+        ui = rememberUiFont(),
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )

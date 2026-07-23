@@ -207,7 +207,7 @@ import app.skerry.ui.app.isAppLevel
 import app.skerry.ui.i18n.label
 import app.skerry.ui.design.rememberMaterialSymbols
 import app.skerry.ui.design.rememberMono
-import app.skerry.ui.design.rememberSpaceGrotesk
+import app.skerry.ui.design.rememberUiFont
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.session.tabBoundsAnchor
 import app.skerry.ui.app.asDesktopView
@@ -350,7 +350,7 @@ fun DesktopDesignApp(
     windowChrome: WindowChrome? = null,
 ) {
     val fonts = DesignFonts(
-        ui = rememberSpaceGrotesk(),
+        ui = rememberUiFont(),
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
