@@ -328,6 +328,7 @@ tasks.register<JavaExec>("screenshotDesign") {
     providers.systemProperty("skerry.screenshot.termTheme").orNull?.let { systemProperty("skerry.screenshot.termTheme", it) }
     providers.systemProperty("skerry.screenshot.theme").orNull?.let { systemProperty("skerry.screenshot.theme", it) }
     providers.systemProperty("skerry.screenshot.portsScan").orNull?.let { systemProperty("skerry.screenshot.portsScan", it) }
+    providers.systemProperty("skerry.screenshot.locale").orNull?.let { systemProperty("skerry.screenshot.locale", it) }
     providers.systemProperty("skerry.screenshot.aiProvider").orNull?.let { systemProperty("skerry.screenshot.aiProvider", it) }
     providers.systemProperty("skerry.screenshot.updateAvailable").orNull?.let { systemProperty("skerry.screenshot.updateAvailable", it) }
     // Stub window chrome: draws the custom window buttons of the undecorated window in the titlebar.

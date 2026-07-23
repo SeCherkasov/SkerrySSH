@@ -90,7 +90,7 @@ import app.skerry.ui.app.MobileTab
 import app.skerry.ui.app.mobileBackAction
 import app.skerry.ui.design.rememberMaterialSymbols
 import app.skerry.ui.design.rememberMono
-import app.skerry.ui.design.rememberSpaceGrotesk
+import app.skerry.ui.design.rememberUiFont
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -123,7 +123,7 @@ fun MobileDesignApp(
     onVaultReset: (ResetScope) -> Unit = {},
 ) {
     val fonts = DesignFonts(
-        ui = rememberSpaceGrotesk(),
+        ui = rememberUiFont(),
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
