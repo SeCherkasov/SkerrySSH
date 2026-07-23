@@ -297,6 +297,22 @@ tasks.register<Exec>("packageAppImage") {
     environment("VERSION", providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0")
 }
 
+// Portable build: zip the jpackage app-image (createDistributable) as-is — no installer, the
+// user extracts and runs Skerry.exe. Used by the release workflow for the Windows portable
+// asset (the arch suffix is appended there, like for the msi). The bundled README warns about
+// paths with spaces — libsodium's loader (goterl) fails to initialize from them.
+tasks.register<Zip>("packagePortableZip") {
+    group = "compose desktop"
+    description = "Build a portable .zip from the jpackage app-image"
+    dependsOn("createDistributable")
+
+    val appVersion = providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0"
+    archiveFileName.set("Skerry-$appVersion-portable.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("compose/binaries/main/portable"))
+    from(layout.buildDirectory.dir("compose/binaries/main/app"))
+    from(project.file("portable/README.txt"))
+}
+
 // Build a single-file Skerry.flatpak via flatpak-builder. Unlike the other packaging tasks this
 // does NOT depend on createDistributable: flatpak-builder compiles the app hermetically inside the
 // sandbox from the committed offline sources (composeApp/flatpak/flatpak-sources.json). The task

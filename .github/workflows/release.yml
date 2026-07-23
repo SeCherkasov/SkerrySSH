@@ -157,25 +157,31 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
-      - name: Package msi
+      - name: Package msi + portable zip
+        # packagePortableZip reuses the app-image createDistributable already builds for the
+        # msi, so the extra artifact costs only the zipping.
         shell: bash
         run: >
-          ./gradlew :composeApp:packageMsi --stacktrace
+          ./gradlew :composeApp:packageMsi :composeApp:packagePortableZip --stacktrace
           ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
 
-      - name: Suffix msi with the architecture
+      - name: Suffix msi and portable zip with the architecture
         # jpackage emits Skerry-<version>.msi with no arch marker; every other desktop
         # asset carries one, and a Windows ARM build would otherwise collide.
         shell: bash
         run: |
           cd composeApp/build/compose/binaries/main/msi
           for f in *.msi; do mv "$f" "${f%.msi}-x64.msi"; done
+          cd ../portable
+          for f in *.zip; do mv "$f" "${f%.zip}-x64.zip"; done
 
-      - name: Upload Windows distributable
+      - name: Upload Windows distributables
         uses: actions/upload-artifact@v7
         with:
           name: skerry-windows-x64
-          path: composeApp/build/compose/binaries/main/msi/*.msi
+          path: |
+            composeApp/build/compose/binaries/main/msi/*.msi
+            composeApp/build/compose/binaries/main/portable/*.zip
           if-no-files-found: error
 
   macos-desktop:
