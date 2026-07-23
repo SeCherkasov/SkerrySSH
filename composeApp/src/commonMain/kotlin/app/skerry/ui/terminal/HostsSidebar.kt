@@ -37,6 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -725,7 +726,7 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
  * [LocalRunSnippetOnHost].
  */
 @Composable
-private fun HostEntryRow(
+internal fun HostEntryRow(
     label: String,
     selected: Boolean,
     dot: Color,
@@ -776,7 +777,14 @@ private fun HostEntryRow(
         }
         if (hasMenu) {
             Box {
-                IconBtn("more_vert", onClick = { menuOpen = !menuOpen }, box = 22, icon = 16.sp, tint = Skerry.colors.faint)
+                // Mouse-only: keeping the menu out of Tab traversal makes one Tab = one host row
+                // (otherwise every row costs two presses); keyboard users get Enter/Space to connect.
+                IconBtn(
+                    "more_vert",
+                    onClick = { menuOpen = !menuOpen },
+                    modifier = Modifier.focusProperties { canFocus = false },
+                    box = 22, icon = 16.sp, tint = Skerry.colors.faint,
+                )
                 if (menuOpen) {
                     Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
                         Column(
