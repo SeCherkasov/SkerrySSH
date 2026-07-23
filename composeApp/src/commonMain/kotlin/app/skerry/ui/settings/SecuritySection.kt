@@ -81,7 +81,6 @@ import app.skerry.ui.generated.resources.settings_security_no_events
 import app.skerry.ui.generated.resources.settings_security_pw_changed_days
 import app.skerry.ui.generated.resources.settings_security_pw_changed_today
 import app.skerry.ui.generated.resources.settings_security_pw_changed_yesterday
-import app.skerry.ui.generated.resources.settings_security_subtitle
 import app.skerry.ui.generated.resources.settings_security_touch_id
 import app.skerry.ui.generated.resources.settings_security_touch_id_desc
 import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
@@ -135,7 +134,6 @@ internal fun SecuritySection(
     onChangeAccountPassword: () -> Unit,
     onBiometricToggled: () -> Unit,
 ) {
-    SectionSubtitle(stringResource(Res.string.settings_security_subtitle))
 
     // Master password subtitle is the real "last changed" from the log (or a neutral fallback).
     // Reading the log is file I/O + JSON parsing, so it runs off the composition thread.
@@ -243,9 +241,10 @@ internal fun SecuritySection(
         // Inert (dimmed) button: feature not ready yet.
         GhostButton(stringResource(Res.string.settings_manage), onClick = {}, fg = Skerry.colors.faint, border = Skerry.colors.line)
     }
+    HLine()
 
     // Recent security events from the real log (or "no events yet").
-    Txt(stringResource(Res.string.settings_recent_security_events), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+    SectionLabel(stringResource(Res.string.settings_recent_security_events), top = 16.dp, bottom = 8.dp)
     val events by produceState(emptyList<SecurityEvent>(), controller, reload) {
         value = withContext(Dispatchers.Default) { controller?.recentSecurityEvents(8) ?: emptyList() }
     }

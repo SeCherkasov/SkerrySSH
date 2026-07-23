@@ -14,7 +14,7 @@
     <string name="settings_manage">Manage</string>
 
     <!-- AI section -->
-    <string name="settings_ai_live_subtitle">Run AI on this device, through your own OpenAI-compatible key (BYOK), or off. Keys are stored encrypted and sent only to the provider you configure.</string>
+    <string name="settings_ai_live_subtitle">AI assistant provider and settings.</string>
     <string name="settings_ai_field_api_key">OPENAI API KEY</string>
     <string name="settings_ai_field_model">MODEL</string>
     <string name="settings_ai_field_endpoint">ENDPOINT</string>
@@ -24,24 +24,24 @@
     <string name="settings_ai_key_saved">Key saved</string>
     <string name="settings_ai_not_configured">Not configured yet</string>
     <string name="settings_ai_quick_chat">Quick chat</string>
-    <string name="settings_ai_quick_chat_desc">Ask the assistant a question to verify the connection.</string>
+    <string name="settings_ai_quick_chat_desc">Test the assistant connection.</string>
     <string name="settings_ai_prompt_placeholder_ready">Ask about ssh, scp, tunnels…</string>
     <string name="settings_ai_prompt_placeholder_needs_key">Save an API key first</string>
     <string name="settings_ai_sending">Sending…</string>
     <string name="settings_ai_ask">Ask</string>
-    <string name="settings_ai_mock_subtitle">Choose where AI runs. Default is on this device; commands never leave Skerry. Each connection can override this.</string>
+    <string name="settings_ai_mock_subtitle">Where AI runs. Default is on-device; each connection can override.</string>
     <string name="settings_ai_default_provider">Default AI provider</string>
-    <string name="settings_ai_default_provider_desc">Used for connections without a specific override.</string>
+    <string name="settings_ai_default_provider_desc">Used when a connection has no override.</string>
     <string name="settings_ai_provider_device">On this device</string>
     <string name="settings_ai_provider_device_desc">Qwen2.5 Coder 1.5B · 1.0 GB · ready. No data leaves your machine.</string>
     <string name="settings_ai_badge_private">PRIVATE</string>
     <string name="settings_ai_provider_byok">My API key (BYOK)</string>
-    <string name="settings_ai_provider_byok_desc">Use your OpenAI, Anthropic, or OpenRouter key. You pay the provider directly.</string>
+    <string name="settings_ai_provider_byok_desc">Your OpenAI, Anthropic or OpenRouter key. Billed directly by the provider.</string>
     <string name="settings_ai_provider_off">Off — no AI</string>
-    <string name="settings_ai_provider_off_desc">Disable the assistant everywhere. Nothing is ever sent anywhere.</string>
-    <string name="settings_ai_off_note">AI is off: the terminal assistant and quick chat are hidden. Pick a provider above to re-enable.</string>
+    <string name="settings_ai_provider_off_desc">Assistant disabled; nothing is sent.</string>
+    <string name="settings_ai_off_note">AI is off. Select a provider above to enable.</string>
     <!-- Живая карточка «На этом устройстве»: каталог локальных моделей и их статусы -->
-    <string name="settings_ai_local_desc">Runs the assistant fully offline. No data ever leaves your machine.</string>
+    <string name="settings_ai_local_desc">Runs offline; data never leaves the device.</string>
     <string name="settings_ai_local_ready">Ready</string>
     <string name="settings_ai_local_verifying">Verifying…</string>
     <string name="settings_ai_local_download">Download</string>
@@ -63,14 +63,14 @@
     <string name="settings_ai_error_engine_crashed">The local model engine stopped unexpectedly. Try again.</string>
     <string name="settings_ai_model_meta">%1$s · %2$s</string>
     <string name="settings_ai_sanitize">Sanitize secrets before sending</string>
-    <string name="settings_ai_sanitize_desc">Strip obvious passwords, tokens, and keys before prompts reach external providers.</string>
+    <string name="settings_ai_sanitize_desc">Strip passwords, tokens and keys from requests to external providers.</string>
     <string name="settings_ai_preview">Preview prompt before sending</string>
-    <string name="settings_ai_preview_desc">Show the exact text sent externally, with redactions highlighted. Edit or cancel before it's sent.</string>
+    <string name="settings_ai_preview_desc">Preview outgoing text; edit or cancel before sending.</string>
     <string name="settings_ai_confirm">Confirm before running AI suggestions</string>
-    <string name="settings_ai_confirm_desc">Require a click before running any AI-suggested command. Mitigates prompt injection from compromised servers.</string>
+    <string name="settings_ai_confirm_desc">Require confirmation before running AI-suggested commands.</string>
 
     <!-- Terminal section -->
-    <string name="settings_terminal_subtitle">Pick a font; tune scrollback and shell behaviour.</string>
+    <string name="settings_terminal_subtitle">Font, scrollback, behavior.</string>
     <string name="settings_terminal_section_font">FONT</string>
     <string name="settings_terminal_section_behavior">BEHAVIOUR</string>
     <string name="settings_terminal_scrollback">Scrollback buffer</string>
@@ -83,12 +83,12 @@
     <string name="settings_terminal_cursor_bar_blink">Bar (blink)</string>
     <string name="settings_terminal_cursor_bar_steady">Bar</string>
     <string name="settings_terminal_show_title">Show terminal title on tabs</string>
-    <string name="settings_terminal_show_title_desc">Let the connected shell rename a tab (e.g. the running program). Off: tabs keep the saved host name.</string>
+    <string name="settings_terminal_show_title_desc">The shell may rename the tab (OSC title). Off: tabs show the host name.</string>
     <string name="settings_terminal_clipboard_write">Allow server clipboard writes (OSC 52)</string>
     <string name="settings_terminal_host_connect">Connect to host on</string>
     <string name="settings_terminal_host_connect_single">Single click</string>
     <string name="settings_terminal_host_connect_double">Double click (click selects)</string>
-    <string name="settings_terminal_clipboard_write_desc">Let the connected shell replace your system clipboard (tmux/vim yank). Off by default: a malicious host could otherwise inject attacker-controlled text into what you paste.</string>
+    <string name="settings_terminal_clipboard_write_desc">The remote side may write to the system clipboard (tmux/vim). Off by default.</string>
 
     <!-- Sync section (also covers the account card and linked devices — merged from the former Account tab) -->
     <string name="settings_disconnect">Disconnect</string>
@@ -97,12 +97,12 @@
     <string name="settings_linked_devices">LINKED DEVICES</string>
     <string name="settings_loading_devices">Loading devices…</string>
     <string name="settings_devices_load_failed">Couldn't load devices. Try Sync now.</string>
-    <string name="settings_only_this_device">Only this device so far.</string>
+    <string name="settings_only_this_device">Only this device.</string>
     <string name="settings_device_sub_current">linked · this device</string>
     <string name="settings_device_sub_other">linked device</string>
     <string name="settings_this_device">● this device</string>
     <string name="settings_link_device">Link a device</string>
-    <string name="settings_sync_subtitle">End-to-end encrypted sync across your devices. Skerry never sees your data in plaintext.</string>
+    <string name="settings_sync_subtitle">End-to-end encrypted sync between devices.</string>
     <string name="settings_sync_now">Sync now</string>
     <string name="settings_what_syncs">WHAT SYNCS</string>
     <string name="settings_hosts_groups">Hosts &amp; groups</string>
@@ -110,24 +110,24 @@
     <string name="settings_sync_connected">Connected</string>
     <string name="settings_sync_pushed_pulled">Pushed %1$d · pulled %2$d this session</string>
     <string name="settings_sync_syncing">Syncing…</string>
-    <string name="settings_sync_syncing_desc">Talking to your sync server.</string>
+    <string name="settings_sync_syncing_desc">Exchanging with the sync server.</string>
     <string name="settings_sync_error">Sync error</string>
 
     <!-- Security section -->
     <string name="settings_security_title">Security</string>
-    <string name="settings_security_subtitle">Master password, auto-lock and two-factor authentication protect your vault.</string>
+    <string name="settings_security_subtitle">Master password, auto-lock, two-factor authentication.</string>
     <string name="settings_security_master_password">Master password</string>
-    <string name="settings_security_master_password_desc">Protects your vault.</string>
+    <string name="settings_security_master_password_desc">Protects the vault.</string>
     <string name="settings_security_pw_changed_today">Changed today.</string>
     <string name="settings_security_pw_changed_yesterday">Changed yesterday.</string>
     <string name="settings_security_pw_changed_days">Last changed %1$d days ago.</string>
     <string name="settings_security_touch_id">Unlock with Touch ID</string>
-    <string name="settings_security_touch_id_desc">Use biometrics instead of typing the master password.</string>
-    <string name="settings_security_touch_id_unsupported">This phone can't unlock the vault with biometrics.</string>
+    <string name="settings_security_touch_id_desc">Biometrics instead of the master password.</string>
+    <string name="settings_security_touch_id_unsupported">Biometric unlock is unavailable on this device.</string>
     <string name="settings_security_touch_id_recheck">Check again</string>
     <string name="settings_security_touch_id_weak_binding">On with a weaker key binding — biometrics still required.</string>
     <string name="settings_security_auto_lock">Auto-lock</string>
-    <string name="settings_security_auto_lock_desc">Lock Skerry after inactivity.</string>
+    <string name="settings_security_auto_lock_desc">Lock after idle.</string>
     <string name="settings_autolock_1m">After 1 minute</string>
     <string name="settings_autolock_5m">After 5 minutes</string>
     <string name="settings_autolock_15m">After 15 minutes</string>
@@ -159,14 +159,14 @@
 
     <!-- Change account password dialog (issue #32) -->
     <string name="settings_security_account_password">Account password</string>
-    <string name="settings_security_account_password_desc">Shared by all your synced devices.</string>
+    <string name="settings_security_account_password_desc">Shared across all devices.</string>
     <string name="settings_change_account_pw_title">Change account password</string>
     <string name="settings_change_account_pw_note">Changes the password on every synced device. Others must sign in again with the new password.</string>
     <string name="settings_change_account_pw_submit">Change password</string>
     <string name="settings_change_account_pw_err_rewrap">Account password changed, but this device must reconnect with the new password.</string>
 
     <!-- Keyboard section -->
-    <string name="settings_keyboard_subtitle">Shortcuts adapt to your platform. Terminal bindings apply while a session is focused.</string>
+    <string name="settings_keyboard_subtitle">Application and terminal shortcuts.</string>
     <string name="settings_kb_new_connection">New connection</string>
     <string name="settings_kb_command_palette">Command palette / search</string>
     <string name="settings_kb_snippet_palette">Snippet palette</string>
@@ -201,7 +201,7 @@
     <string name="settings_about_licenses">Open-source licenses</string>
     <string name="settings_about_footer">Built on the open seas · © 2026 Skerry</string>
     <string name="settings_about_check_updates">Check for updates</string>
-    <string name="settings_about_check_updates_desc">Checks the GitHub Releases API once a day for the latest version. Nothing else is sent.</string>
+    <string name="settings_about_check_updates_desc">Check the latest version via the GitHub Releases API once a day.</string>
     <string name="settings_about_update_available">Version %1$s is available</string>
     <string name="settings_about_update_open">Open release page</string>
     <string name="settings_update_status">Update %1$s</string>

@@ -314,10 +314,13 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                     state.recentHostIds.mapNotNull { liveHosts.find(it) }.take(state.recentLimit)
                 }
                 if (state.showRecent && recent.isNotEmpty()) {
+                    // Divider belongs to the section: hidden together with it when RECENT is off/empty.
+                    HLine(modifier = Modifier.padding(top = 8.dp))
                     RecentSectionHeader()
                     recent.forEach { host -> key(host.id) { RecentHostRow(host, mono) } }
                 }
             } else {
+                HLine(modifier = Modifier.padding(top = 8.dp))
                 RecentSectionHeader()
                 Row(
                     Modifier.padding(start = 16.dp).padding(horizontal = 8.dp, vertical = 5.dp),

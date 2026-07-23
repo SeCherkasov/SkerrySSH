@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.host.Host
 import app.skerry.ui.i18n.UiLanguage
+import app.skerry.ui.settings.SETTINGS_NAV
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.session.SessionView
@@ -238,7 +239,7 @@ class DesktopDesignState(
 
     /** Whether the "Link a device" dialog is open (quick-pairing code/QR — Settings → Account). */
     var pairingOpen: Boolean by mutableStateOf(false); private set
-    var settingsTab: SettingsTab by mutableStateOf(SettingsTab.AI); private set
+    var settingsTab: SettingsTab by mutableStateOf(SETTINGS_NAV.first().tab); private set
     var split: Boolean by mutableStateOf(false); private set
     /** Whether the terminal's left host sidebar is hidden (toggled from the icon rail). */
     var sidebarHidden: Boolean by mutableStateOf(false); private set
@@ -425,7 +426,9 @@ class DesktopDesignState(
     fun closeCommandPalette() { commandPaletteOpen = false }
     fun openBroadcast() { broadcastOpen = true }
     fun closeBroadcast() { broadcastOpen = false }
-    fun openSettings() { settingsOpen = true }
+    // Reset to the first nav tab on every open: settings always start from the top item,
+    // not whatever tab was left selected last time.
+    fun openSettings() { settingsTab = SETTINGS_NAV.first().tab; settingsOpen = true }
     fun closeSettings() { settingsOpen = false }
     fun openSyncSetup() { syncSetupOpen = true }
     fun closeSyncSetup() { syncSetupOpen = false }

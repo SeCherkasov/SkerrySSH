@@ -24,6 +24,7 @@ import app.skerry.ui.design.Badge
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.DropdownField
+import app.skerry.ui.design.HLine
 import app.skerry.ui.design.NumberStepper
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.appearance_badge_active
@@ -38,7 +39,6 @@ import app.skerry.ui.generated.resources.appearance_language
 import app.skerry.ui.generated.resources.appearance_recent_count
 import app.skerry.ui.generated.resources.appearance_recent_show
 import app.skerry.ui.generated.resources.appearance_recent_show_desc
-import app.skerry.ui.generated.resources.appearance_subtitle
 import app.skerry.ui.generated.resources.appearance_section_theme
 import app.skerry.ui.generated.resources.theme_blackwater
 import app.skerry.ui.generated.resources.theme_catppuccin_mocha
@@ -61,10 +61,10 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun AppearanceSection(state: DesktopDesignState) {
-    SectionSubtitle(stringResource(Res.string.appearance_subtitle))
-    SettingRow(label = stringResource(Res.string.appearance_language)) {
+    SettingRow(label = stringResource(Res.string.appearance_language), modifier = Modifier) {
         Box(Modifier.width(180.dp)) { LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage) }
     }
+    HLine(modifier = Modifier.padding(top = 12.dp))
     // RECENT section in the sidebar: whether to show it and how many hosts. The count is a
     // sub-setting of the toggle (indented, attached right below) so it reads as one block.
     SettingToggleRow(
@@ -92,6 +92,7 @@ internal fun AppearanceSection(state: DesktopDesignState) {
             )
         }
     }
+    HLine(modifier = Modifier.padding(top = 12.dp))
     // App theme cards in a 2×N grid, like the terminal theme cards: each renders a mini chrome
     // mock in its own palette. The OS flag resolves the SYSTEM card's preview (and keeps it live).
     SectionLabel(stringResource(Res.string.appearance_section_theme))
@@ -111,7 +112,7 @@ internal fun AppearanceSection(state: DesktopDesignState) {
             if (rowModes.size == 1) Box(Modifier.weight(1f))
         }
     }
-    Box(Modifier.height(10.dp))
+    HLine(modifier = Modifier.padding(top = 14.dp))
     // Unified theming: the terminal follows the app theme's twin unless this opt-in is set, which
     // reveals the separate terminal-theme cards (moved here from the Terminal section).
     SettingToggleRow(

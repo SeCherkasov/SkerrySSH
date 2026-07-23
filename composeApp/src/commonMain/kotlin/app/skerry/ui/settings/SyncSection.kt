@@ -30,6 +30,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalSync
 import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.GhostButton
+import app.skerry.ui.design.HLine
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -53,7 +54,6 @@ import app.skerry.ui.generated.resources.settings_sync_connected
 import app.skerry.ui.generated.resources.settings_sync_error
 import app.skerry.ui.generated.resources.settings_sync_now
 import app.skerry.ui.generated.resources.settings_sync_pushed_pulled
-import app.skerry.ui.generated.resources.settings_sync_subtitle
 import app.skerry.ui.generated.resources.settings_sync_syncing
 import app.skerry.ui.generated.resources.settings_sync_syncing_desc
 import app.skerry.ui.generated.resources.settings_this_device
@@ -73,7 +73,6 @@ import app.skerry.ui.theme.Skerry
 
 @Composable
 internal fun SyncSection(state: DesktopDesignState) {
-    SectionSubtitle(stringResource(Res.string.settings_sync_subtitle))
     // Mock path and live path are separate composables (not a conditional remember/collectAsState in
     // one body): remember/collectAsState must be called unconditionally within their composable
     // (Compose slot table rule). LocalSync.current is stable (staticCompositionLocalOf), but the
@@ -85,6 +84,7 @@ internal fun SyncSection(state: DesktopDesignState) {
         WhatSyncsHeader()
         SettingToggleRow(stringResource(Res.string.settings_hosts_groups), "", on = true, onToggle = {})
         SettingToggleRow(stringResource(Res.string.settings_snippets), "", on = true, onToggle = {})
+        HLine()
     } else {
         LiveSyncSection(sync, state)
     }
@@ -146,11 +146,13 @@ private fun WhatSyncsToggles(sync: app.skerry.ui.sync.SyncCoordinator) {
         val current = sync.syncSettings.value
         sync.setSyncSettings(current.copy(syncSnippets = !current.syncSnippets))
     })
+    HLine()
 }
 
 @Composable
 private fun WhatSyncsHeader() {
-    Txt(stringResource(Res.string.settings_what_syncs), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
+    HLine(modifier = Modifier.padding(top = 16.dp))
+    SectionLabel(stringResource(Res.string.settings_what_syncs), top = 18.dp, bottom = 6.dp)
 }
 
 /**
@@ -168,7 +170,7 @@ private fun AccountCard(model: AccountCardModel, sync: app.skerry.ui.sync.SyncCo
             Txt(model.initials, color = Skerry.colors.ink, size = 14.sp, weight = FontWeight.SemiBold)
         }
         Column(Modifier.weight(1f)) {
-            Txt(model.title, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+            Txt(model.title, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
             Txt(model.subtitle, color = Skerry.colors.faint, size = 11.5.sp)
         }
         when {
@@ -215,7 +217,7 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -
         }
     }
 
-    Txt(stringResource(Res.string.settings_linked_devices), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 10.dp))
+    SectionLabel(stringResource(Res.string.settings_linked_devices), top = 18.dp, bottom = 10.dp)
     when {
         loading -> Txt(stringResource(Res.string.settings_loading_devices), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(vertical = 4.dp))
         // An active session always returns at least the current device; an empty list means

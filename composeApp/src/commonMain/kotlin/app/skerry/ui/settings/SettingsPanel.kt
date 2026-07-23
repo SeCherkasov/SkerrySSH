@@ -45,7 +45,13 @@ import app.skerry.ui.design.VLine
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.appearance_subtitle
+import app.skerry.ui.generated.resources.settings_ai_live_subtitle
+import app.skerry.ui.generated.resources.settings_keyboard_subtitle
 import app.skerry.ui.generated.resources.settings_nav_header
+import app.skerry.ui.generated.resources.settings_security_subtitle
+import app.skerry.ui.generated.resources.settings_sync_subtitle
+import app.skerry.ui.generated.resources.settings_terminal_subtitle
 import app.skerry.ui.generated.resources.shtail_nav_about
 import app.skerry.ui.generated.resources.shtail_nav_ai
 import app.skerry.ui.generated.resources.shtail_nav_appearance
@@ -113,7 +119,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 26.dp)
-                        .padding(top = if (hasHeader) SETTINGS_HEADER_HEIGHT else 22.dp, bottom = 22.dp),
+                        .padding(top = if (hasHeader) SETTINGS_HEADER_HEIGHT + 14.dp else 22.dp, bottom = 22.dp),
                 ) {
                     when (effectiveTab) {
                         SettingsTab.AI -> AiSection(state)
@@ -133,17 +139,18 @@ fun SettingsPanel(state: DesktopDesignState) {
                         SettingsTab.About -> AboutSection()
                     }
                 }
-                // Static header: the section title over an opaque band (card background) the scrolled
-                // content hides behind, capped by the divider line under the close button. Declared
-                // after the scroll content so it draws on top; the close button (card-level TopEnd
-                // overlay) stays above both. The title reuses the nav label (same string per tab).
+                // Static header: the section description over an opaque band (card background) the
+                // scrolled content hides behind, capped by the divider line under the close button.
+                // Declared after the scroll content so it draws on top; the close button (card-level
+                // TopEnd overlay) stays above both. The band holds the subtitle, not the section
+                // title — the title already lives in the nav and would be a duplicate here.
                 if (hasHeader) {
                     Column(Modifier.align(Alignment.TopStart).fillMaxWidth()) {
                         Box(
-                            Modifier.fillMaxWidth().height(SETTINGS_HEADER_HEIGHT - 1.dp).background(Skerry.colors.surfaceDeep).padding(horizontal = 26.dp),
+                            Modifier.fillMaxWidth().height(SETTINGS_HEADER_HEIGHT - 1.dp).background(Skerry.colors.surfaceDeep).padding(horizontal = 26.dp).padding(end = 20.dp),
                             contentAlignment = Alignment.CenterStart,
                         ) {
-                            Txt(effectiveTab.navLabel(), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold)
+                            Txt(effectiveTab.headerSubtitle(), color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium, maxLines = 1)
                         }
                         HLine()
                     }
@@ -210,6 +217,18 @@ private fun NavRow(item: SettingsNavItem, active: Boolean, onClick: () -> Unit) 
         Sym(item.icon, size = 16.sp, color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim)
         Txt(item.tab.navLabel(), color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim, size = 12.5.sp)
     }
+}
+
+/** Localized header-band description for a tab (the nav label holds the section title). */
+@Composable
+private fun SettingsTab.headerSubtitle(): String = when (this) {
+    SettingsTab.AI -> stringResource(Res.string.settings_ai_live_subtitle)
+    SettingsTab.Sync -> stringResource(Res.string.settings_sync_subtitle)
+    SettingsTab.Security -> stringResource(Res.string.settings_security_subtitle)
+    SettingsTab.Appearance -> stringResource(Res.string.appearance_subtitle)
+    SettingsTab.Terminal -> stringResource(Res.string.settings_terminal_subtitle)
+    SettingsTab.Keyboard -> stringResource(Res.string.settings_keyboard_subtitle)
+    SettingsTab.About -> "" // About opts out of the header band
 }
 
 /** Localized label for a settings navigation item. */

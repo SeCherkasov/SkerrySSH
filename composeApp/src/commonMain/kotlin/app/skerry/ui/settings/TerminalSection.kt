@@ -49,7 +49,6 @@ import app.skerry.ui.generated.resources.settings_terminal_section_behavior
 import app.skerry.ui.generated.resources.settings_terminal_section_font
 import app.skerry.ui.generated.resources.settings_terminal_show_title
 import app.skerry.ui.generated.resources.settings_terminal_show_title_desc
-import app.skerry.ui.generated.resources.settings_terminal_subtitle
 import app.skerry.ui.generated.resources.settings_terminal_host_connect
 import app.skerry.ui.generated.resources.settings_terminal_host_connect_single
 import app.skerry.ui.generated.resources.settings_terminal_host_connect_double
@@ -71,11 +70,10 @@ import app.skerry.ui.theme.Skerry
 
 @Composable
 internal fun TerminalSection(state: DesktopDesignState) {
-    SectionSubtitle(stringResource(Res.string.settings_terminal_subtitle))
     // One setting per full-width row: label + default-value hint (with quick reset) on the left,
     // control on the right. Size/line-height/spacing are sub-settings of the font row (indented,
     // tighter spacing) — one block; they use a numeric stepper for precise input.
-    SectionLabel(stringResource(Res.string.settings_terminal_section_font))
+    SectionLabel(stringResource(Res.string.settings_terminal_section_font), top = 0.dp)
     SettingRow(label = stringResource(Res.string.appearance_font)) {
         Box(Modifier.width(180.dp)) { FontPicker(state.terminalFont, onPick = state::chooseTerminalFont) }
     }
@@ -131,6 +129,7 @@ internal fun TerminalSection(state: DesktopDesignState) {
             fieldWidth = 52.dp,
         )
     }
+    HLine(modifier = Modifier.padding(top = 12.dp))
     SectionLabel(stringResource(Res.string.settings_terminal_section_behavior))
     // Scrollback depth for new sessions (preset picker to the right of the label).
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {

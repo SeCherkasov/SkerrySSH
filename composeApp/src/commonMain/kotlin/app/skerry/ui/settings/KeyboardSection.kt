@@ -58,7 +58,6 @@ import app.skerry.ui.generated.resources.settings_kb_select_tab_number
 import app.skerry.ui.generated.resources.settings_kb_snippet_palette
 import app.skerry.ui.generated.resources.settings_kb_split_terminal
 import app.skerry.ui.generated.resources.settings_kb_terminal_group
-import app.skerry.ui.generated.resources.settings_keyboard_subtitle
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 
@@ -66,7 +65,6 @@ import app.skerry.ui.theme.Skerry
 
 @Composable
 internal fun KeyboardSection() {
-    SectionSubtitle(stringResource(Res.string.settings_keyboard_subtitle))
     // Platform-specific labels: ⌘/⌥ on macOS, Ctrl+Shift/Alt on Linux/Windows — matching what
     // matchDesktopShortcut recognizes. The Ctrl path requires Shift, so plain Ctrl+letter (Ctrl+L
     // clear, Ctrl+D EOF, Ctrl+C signal) stays reserved for the terminal.
@@ -132,7 +130,7 @@ internal fun KeyboardSection() {
     )
 
     val mono = LocalFonts.current.mono
-    KeyboardGroupLabel(stringResource(Res.string.settings_kb_global), top = 4.dp)
+    KeyboardGroupLabel(stringResource(Res.string.settings_kb_global), top = 0.dp)
     global.forEach { KeyboardRow(it, mono) }
     KeyboardGroupLabel(stringResource(Res.string.settings_kb_terminal_group), top = 18.dp)
     terminal.forEach { KeyboardRow(it, mono) }
@@ -144,14 +142,14 @@ internal fun KeyboardSection() {
 
 @Composable
 private fun KeyboardGroupLabel(text: String, top: Dp) {
-    Txt(text, color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = top, bottom = 8.dp))
+    SectionLabel(text, top = top, bottom = 8.dp)
 }
 
 @Composable
 private fun KeyboardRow(b: KeyboardBinding, mono: FontFamily) {
     Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Txt(b.label, color = if (b.live) Skerry.colors.textBright else Skerry.colors.dim, size = 12.5.sp)
+            Txt(b.label, color = if (b.live) Skerry.colors.text else Skerry.colors.dim, size = 13.sp, weight = FontWeight.Medium)
             // Command palette isn't implemented yet; mark the binding SOON instead of showing a
             // dead shortcut next to working ones.
             if (!b.live) Badge(stringResource(Res.string.settings_badge_soon), bg = Skerry.colors.amber.copy(alpha = 0.10f), fg = Skerry.colors.amber, radius = 3, size = 9.sp)

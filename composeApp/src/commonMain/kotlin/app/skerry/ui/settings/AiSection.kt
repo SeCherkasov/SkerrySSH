@@ -41,8 +41,6 @@ import app.skerry.ui.generated.resources.settings_ai_field_api_key
 import app.skerry.ui.generated.resources.settings_ai_field_endpoint
 import app.skerry.ui.generated.resources.settings_ai_field_model
 import app.skerry.ui.generated.resources.settings_ai_key_saved
-import app.skerry.ui.generated.resources.settings_ai_live_subtitle
-import app.skerry.ui.generated.resources.settings_ai_mock_subtitle
 import app.skerry.ui.generated.resources.settings_ai_not_configured
 import app.skerry.ui.generated.resources.settings_ai_off_note
 import app.skerry.ui.generated.resources.settings_ai_placeholder_api_key
@@ -95,8 +93,6 @@ private fun SectionDivider() {
  */
 @Composable
 private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
-    SectionSubtitle(stringResource(Res.string.settings_ai_live_subtitle))
-
     AiProviderCards(ai, byokContent = { DesktopByokFields(ai) })
 
     // AI disabled: hide quick chat; config is preserved and returns with the provider.
@@ -176,7 +172,6 @@ private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
 
 @Composable
 private fun AiSectionMock(state: DesktopDesignState) {
-    SectionSubtitle(stringResource(Res.string.settings_ai_mock_subtitle))
     Txt(stringResource(Res.string.settings_ai_default_provider), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
     Txt(stringResource(Res.string.settings_ai_default_provider_desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp, bottom = 12.dp))
     ProviderCard("lock", stringResource(Res.string.settings_ai_provider_device), stringResource(Res.string.settings_ai_provider_device_desc), selected = true, badge = stringResource(Res.string.settings_ai_badge_private))
@@ -188,6 +183,8 @@ private fun AiSectionMock(state: DesktopDesignState) {
     HLine()
     Spacer(Modifier.height(6.dp))
     SettingToggleRow(stringResource(Res.string.settings_ai_sanitize), stringResource(Res.string.settings_ai_sanitize_desc), state.sanitize, state::toggleSanitize)
+    HLine()
     SettingToggleRow(stringResource(Res.string.settings_ai_preview), stringResource(Res.string.settings_ai_preview_desc), state.preview, state::togglePreview)
+    HLine()
     SettingToggleRow(stringResource(Res.string.settings_ai_confirm), stringResource(Res.string.settings_ai_confirm_desc), state.confirm, state::toggleConfirm)
 }
