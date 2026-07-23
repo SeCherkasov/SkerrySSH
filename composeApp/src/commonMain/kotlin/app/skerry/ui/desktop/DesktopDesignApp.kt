@@ -1057,7 +1057,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                         split = s.splitOpen,
                         active = s.id == sessions.activeId,
                         onClick = { sessions.activate(s.id) },
-                        onClose = { tabDrag.clearBounds(s.id); sessions.close(s.id) },
+                        onClose = { tabDrag.tabClosed(s.id); sessions.close(s.id) },
                         dragging = tabDrag.draggingTabId == s.id,
                         modifier = Modifier
                             .tabBoundsAnchor(tabDrag, s.id)
@@ -1174,14 +1174,25 @@ internal fun SessionTabChip(
                 },
             )
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
-            // Middle-click closes the tab (browser-tab convention), active or not. Raw PRESS
+            // Middle-click closes the tab (browser-tab convention), active or not: armed on the
+            // tertiary press, committed on its release while still over the chip — moving off
+            // before releasing aborts an accidental wheel-button bump, like browsers do. Raw event
             // observation like HostsSidebar's double-click: clickable only reacts to the primary
             // button, so the tertiary press is never consumed by it or by the ✕ IconBtn below.
             .pointerInput(Unit) {
                 awaitPointerEventScope {
+                    var armed = false
                     while (true) {
                         val e = awaitPointerEvent()
-                        if (e.type == PointerEventType.Press && e.buttons.isTertiaryPressed) close.value()
+                        when {
+                            e.type == PointerEventType.Press && e.buttons.isTertiaryPressed -> armed = true
+                            e.type == PointerEventType.Release && armed && !e.buttons.isTertiaryPressed -> {
+                                armed = false
+                                val p = e.changes.first().position
+                                val inside = p.x >= 0f && p.y >= 0f && p.x < size.width && p.y < size.height
+                                if (inside) close.value()
+                            }
+                        }
                     }
                 }
             }
