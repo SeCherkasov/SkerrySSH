@@ -23,9 +23,13 @@ import kotlin.coroutines.resume
  * (one subprocess at startup) so the first frame already matches the OS with no dark→light flash.
  */
 @Composable
-actual fun systemInDarkTheme(): Boolean {
-    val initial = remember { detectSystemDark() ?: true }
-    val dark by produceState(initial) {
+actual fun systemInDarkTheme(enabled: Boolean): Boolean {
+    // Keyed on [enabled]: while disabled the placeholder avoids the synchronous subprocess read;
+    // flipping to SYSTEM re-runs both the initial detect and the watcher (the old coroutine is
+    // cancelled, which destroys the gdbus process). Slot count is the same in both states.
+    val initial = remember(enabled) { if (enabled) detectSystemDark() ?: true else true }
+    val dark by produceState(initial, enabled) {
+        if (!enabled) return@produceState
         val os = System.getProperty("os.name", "").lowercase()
         val linux = !(os.contains("win") || os.contains("mac") || os.contains("darwin"))
         if (linux) watchLinuxColorScheme { value = it } else pollColorScheme { value = it }

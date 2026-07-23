@@ -57,12 +57,18 @@ enum class ThemeMode(val id: String) {
 
 /** Resolves a [ThemeMode] to its palette and dark flag, consulting the OS for [ThemeMode.SYSTEM]. */
 @Composable
-fun ThemeMode.resolveColors(): Pair<SkerryColors, Boolean> = when (this) {
-    ThemeMode.LIGHT -> daybreakColors() to false
-    ThemeMode.DARK -> nightSeaColors() to true
-    ThemeMode.BLACKWATER -> blackwaterColors() to true
-    // SYSTEM maps to the default pair only — named themes are an explicit choice.
-    ThemeMode.SYSTEM -> if (systemInDarkTheme()) nightSeaColors() to true else daybreakColors() to false
+fun ThemeMode.resolveColors(): Pair<SkerryColors, Boolean> {
+    // Composed unconditionally so the slot structure is identical for every mode: a composable
+    // call living inside one `when` branch shifts sibling slots when the mode changes (stale-slot
+    // ClassCastException under hot reload). The OS watcher itself only runs for SYSTEM.
+    val systemDark = systemInDarkTheme(enabled = this == ThemeMode.SYSTEM)
+    return when (this) {
+        ThemeMode.LIGHT -> daybreakColors() to false
+        ThemeMode.DARK -> nightSeaColors() to true
+        ThemeMode.BLACKWATER -> blackwaterColors() to true
+        // SYSTEM maps to the default pair only — named themes are an explicit choice.
+        ThemeMode.SYSTEM -> if (systemDark) nightSeaColors() to true else daybreakColors() to false
+    }
 }
 
 /**
