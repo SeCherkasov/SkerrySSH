@@ -22,6 +22,17 @@
         </ansi>
     </terminal>
 
+    <!-- Blackwater — near-black indigo with a green prompt; companion of the blackwater chrome. -->
+    <terminal id="blackwater" name="Blackwater" symbol="Blackwater">
+        <background>#141527</background>
+        <foreground>#D6DAE6</foreground>
+        <cursor>#20B668</cursor>
+        <ansi>
+            #22263A #C14146 #20B668 #CFA243 #1E86CC #C13282 #10A17D #B8BECF
+            #5D6071 #E5606A #2ED07E #E3BC5F #4EA6E0 #DB58A4 #27C69C #E9EAF1
+        </ansi>
+    </terminal>
+
     <!-- Tokyo Night — dark blue palette. -->
     <terminal id="tokyo-night" name="Tokyo Night" symbol="TokyoNight">
         <background>#1A1B26</background>

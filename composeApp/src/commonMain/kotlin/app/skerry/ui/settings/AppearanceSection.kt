@@ -16,6 +16,7 @@ import app.skerry.ui.generated.resources.appearance_recent_show
 import app.skerry.ui.generated.resources.appearance_recent_show_desc
 import app.skerry.ui.generated.resources.appearance_subtitle
 import app.skerry.ui.generated.resources.appearance_theme
+import app.skerry.ui.generated.resources.theme_blackwater
 import app.skerry.ui.generated.resources.theme_dark
 import app.skerry.ui.generated.resources.theme_light
 import app.skerry.ui.generated.resources.theme_system
@@ -85,5 +86,6 @@ private fun ThemeMode.label(): String = stringResource(
         ThemeMode.SYSTEM -> Res.string.theme_system
         ThemeMode.LIGHT -> Res.string.theme_light
         ThemeMode.DARK -> Res.string.theme_dark
+        ThemeMode.BLACKWATER -> Res.string.theme_blackwater
     }
 )

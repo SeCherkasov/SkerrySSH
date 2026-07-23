@@ -46,7 +46,8 @@ fun SkerryColors.toMaterialColorScheme(dark: Boolean): ColorScheme {
 enum class ThemeMode(val id: String) {
     SYSTEM("system"),
     LIGHT("light"),
-    DARK("dark");
+    DARK("dark"),
+    BLACKWATER("blackwater");
 
     companion object {
         val DEFAULT = DARK
@@ -56,13 +57,12 @@ enum class ThemeMode(val id: String) {
 
 /** Resolves a [ThemeMode] to its palette and dark flag, consulting the OS for [ThemeMode.SYSTEM]. */
 @Composable
-fun ThemeMode.resolveColors(): Pair<SkerryColors, Boolean> {
-    val dark = when (this) {
-        ThemeMode.DARK -> true
-        ThemeMode.LIGHT -> false
-        ThemeMode.SYSTEM -> systemInDarkTheme()
-    }
-    return (if (dark) nightSeaColors() else daybreakColors()) to dark
+fun ThemeMode.resolveColors(): Pair<SkerryColors, Boolean> = when (this) {
+    ThemeMode.LIGHT -> daybreakColors() to false
+    ThemeMode.DARK -> nightSeaColors() to true
+    ThemeMode.BLACKWATER -> blackwaterColors() to true
+    // SYSTEM maps to the default pair only — named themes are an explicit choice.
+    ThemeMode.SYSTEM -> if (systemInDarkTheme()) nightSeaColors() to true else daybreakColors() to false
 }
 
 /**

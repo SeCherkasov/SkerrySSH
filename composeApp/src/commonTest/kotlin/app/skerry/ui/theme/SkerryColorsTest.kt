@@ -187,6 +187,55 @@ class SkerryColorsTest {
         assertEquals(c.sunset.copy(alpha = 0.16f), c.strictBg)
     }
 
+    /**
+     * Pins the blackwater palette: a second dark chrome — near-black indigo surfaces with a green
+     * accent (the `cyan` token carries the accent ROLE, not the hue). Borders are a neutral white
+     * tint, not the accent tint night-sea uses — a green line grid would tint the whole chrome.
+     */
+    @Test
+    fun `blackwater is a green-accent dark palette`() {
+        val c = blackwaterColors()
+        // Surfaces — indigo-black ladder
+        assertEquals(Color(0xFF0E101D), c.bg)
+        assertEquals(Color(0xFF0C0E1B), c.railBg)
+        assertEquals(Color(0xFF151829), c.titleTop)
+        assertEquals(Color(0xFF101221), c.titleBottom)
+        assertEquals(Color(0xFF151728), c.surface)
+        assertEquals(Color(0xFF181A2B), c.surface2)
+        assertEquals(Color(0xFF22263A), c.surfaceDeep)
+        assertEquals(Color(0xFF0E111E), c.panel)
+        assertEquals(Color(0xFF141527), c.terminalBg)
+        // Text
+        assertEquals(Color(0xFFE9EAF1), c.text)
+        assertEquals(Color(0xFFC9CDDB), c.textBright)
+        assertEquals(Color(0xFFABAFC2), c.textMid)
+        assertEquals(Color(0xFF8D91A5), c.dim)
+        assertEquals(Color(0xFF5D6071), c.faint)
+        // Accent role is green
+        assertEquals(Color(0xFF20B668), c.cyan)
+        assertEquals(Color(0xFF2ED07E), c.cyanBright)
+        assertEquals(Color(0xFF35C97F), c.moss)
+        assertEquals(Color(0xFFD55B4C), c.sunset)
+        assertEquals(Color(0xFFD9A23F), c.amber)
+        // Brand teal is unchanged (the logo keeps its identity across themes)
+        assertEquals(nightSeaColors().teal, c.teal)
+        assertEquals(nightSeaColors().tealLight, c.tealLight)
+        assertEquals(nightSeaColors().tealDeep, c.tealDeep)
+        // Borders — neutral white tint, not the accent tint
+        assertEquals(c.white.copy(alpha = 0.06f), c.line)
+        assertEquals(c.white.copy(alpha = 0.14f), c.lineStrong)
+        // Ink on the green accent buttons is a deep green-black
+        assertEquals(Color(0xFF071A12), c.ink)
+        // It's a dark palette
+        assertTrue(c.bg.red < c.text.red)
+    }
+
+    @Test
+    fun `blackwater mode resolves by id and stays a distinct entry`() {
+        assertEquals(ThemeMode.BLACKWATER, ThemeMode.fromId("blackwater"))
+        assertEquals("blackwater", ThemeMode.BLACKWATER.id)
+    }
+
     @Test
     fun `light color scheme maps tokens to material roles`() {
         val c = daybreakColors()

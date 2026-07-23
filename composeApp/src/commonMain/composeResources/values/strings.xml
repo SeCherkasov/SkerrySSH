@@ -6,6 +6,7 @@
     <string name="theme_system">System</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <string name="theme_blackwater">Blackwater</string>
     <string name="appearance_badge_active">ACTIVE</string>
     <string name="appearance_section_terminal">TERMINAL</string>
     <string name="appearance_section_interface">INTERFACE</string>
