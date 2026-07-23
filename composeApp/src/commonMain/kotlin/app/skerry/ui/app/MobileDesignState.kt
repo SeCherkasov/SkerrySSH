@@ -93,7 +93,7 @@ class MobileDesignState(
     initialTerminalLetterSpacing: Float = DEFAULT_TERMINAL_LETTER_SPACING,
     private val onTerminalLetterSpacingChange: (Float) -> Unit = {},
     // Terminal color theme (More -> Appearance -> theme cards). Threaded to the terminal via
-    // [app.skerry.ui.terminal.LocalTerminalTheme]; not yet persisted on mobile (in-memory only).
+    // [app.skerry.ui.terminal.LocalTerminalTheme]; persisted per device (`terminal_theme`).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
     // Unified theming: by default the terminal follows the app theme's twin; this flag opts into

@@ -4,8 +4,11 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import app.skerry.shared.ai.local.IsolatedLlmRuntime
@@ -58,6 +61,7 @@ import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
 import app.skerry.ui.theme.SkerryTheme
 import app.skerry.ui.theme.ThemeMode
+import app.skerry.ui.theme.isDark
 import app.skerry.ui.tunnel.TunnelManager
 import app.skerry.ui.tunnel.resolveTunnelHost
 import app.skerry.ui.vault.AutoLockDuration
@@ -173,6 +177,16 @@ class MainActivity : FragmentActivity() {
                     initialThemeMode = readThemeMode(dir),
                     onThemeModeChange = { writeThemeMode(dir, it) },
                 )
+            }
+            // System-bar icon contrast follows the APP theme, not the OS: edge-to-edge draws the
+            // app's background behind the bars, so a light app theme needs dark icons even when
+            // the OS itself is in dark mode (enableEdgeToEdge alone keys off the OS uiMode).
+            val appDark = designState.themeMode.isDark(isSystemInDarkTheme())
+            LaunchedEffect(appDark) {
+                WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !appDark
+                    isAppearanceLightNavigationBars = !appDark
+                }
             }
             AppLocaleProvider(currentUiLanguage.value) {
                 // App theme at the root: reads designState.themeMode, so a change from the theme picker

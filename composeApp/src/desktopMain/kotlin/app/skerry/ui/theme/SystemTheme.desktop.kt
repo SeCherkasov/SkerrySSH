@@ -6,6 +6,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -25,16 +26,26 @@ import kotlin.coroutines.resume
 @Composable
 actual fun systemInDarkTheme(enabled: Boolean): Boolean {
     // Keyed on [enabled]: while disabled the placeholder avoids the synchronous subprocess read;
-    // flipping to SYSTEM re-runs both the initial detect and the watcher (the old coroutine is
-    // cancelled, which destroys the gdbus process). Slot count is the same in both states.
-    val initial = remember(enabled) { if (enabled) detectSystemDark() ?: true else true }
+    // flipping to SYSTEM re-reads the state and (re)subscribes. All call sites share ONE watcher
+    // via [SystemDarkMonitor] — unsubscribing here only stops it when no one else is listening.
+    // Slot count is the same in both states.
+    val initial = remember(enabled) { if (enabled) SystemDarkMonitor.INSTANCE.current() else true }
     val dark by produceState(initial, enabled) {
         if (!enabled) return@produceState
-        val os = System.getProperty("os.name", "").lowercase()
-        val linux = !(os.contains("win") || os.contains("mac") || os.contains("darwin"))
-        if (linux) watchLinuxColorScheme { value = it } else pollColorScheme { value = it }
+        val subscription = SystemDarkMonitor.INSTANCE.subscribe { value = it }
+        awaitDispose { subscription.close() }
     }
     return dark
+}
+
+/**
+ * Runs the OS color-scheme watcher until cancelled, pushing each observed state into [onDark]:
+ * Linux gets the XDG-portal signal watcher, other platforms the poll fallback.
+ */
+internal suspend fun watchSystemColorScheme(onDark: (Boolean) -> Unit) {
+    val os = System.getProperty("os.name", "").lowercase()
+    val linux = !(os.contains("win") || os.contains("mac") || os.contains("darwin"))
+    coroutineScope { if (linux) watchLinuxColorScheme(onDark) else pollColorScheme(onDark) }
 }
 
 private const val SYSTEM_THEME_POLL_MS = 1_500L
