@@ -146,7 +146,9 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                     onRenameCategory = { tag -> renamingTag = tag },
                 )
             }
-            Spacer(Modifier.height(96.dp))
+            // Clears the tab bar and the FAB above it (bottom 104dp + 56dp size), so the last
+            // snippet card can scroll out from under the "+" button.
+            Spacer(Modifier.height(176.dp))
         }
 
         // Add FAB (bottom-right, above the tab bar). Hidden while any sheet (edit/rename) is open.
