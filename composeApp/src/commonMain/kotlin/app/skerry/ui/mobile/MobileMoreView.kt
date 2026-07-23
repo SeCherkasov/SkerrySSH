@@ -120,11 +120,11 @@ import app.skerry.ui.generated.resources.settings_security_no_events
 import app.skerry.ui.generated.resources.settings_security_subtitle
 import app.skerry.ui.generated.resources.settings_security_title
 import app.skerry.ui.generated.resources.settings_update_status
-import app.skerry.ui.generated.resources.settings_security_touch_id
-import app.skerry.ui.generated.resources.settings_security_touch_id_desc
-import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
-import app.skerry.ui.generated.resources.settings_security_touch_id_unsupported
-import app.skerry.ui.generated.resources.settings_security_touch_id_weak_binding
+import app.skerry.ui.generated.resources.settings_security_biometric
+import app.skerry.ui.generated.resources.settings_security_biometric_desc
+import app.skerry.ui.generated.resources.settings_security_biometric_recheck
+import app.skerry.ui.generated.resources.settings_security_biometric_unsupported
+import app.skerry.ui.generated.resources.settings_security_biometric_weak_binding
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -142,6 +142,7 @@ import app.skerry.ui.app.AppVersion
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalUpdates
 import app.skerry.ui.design.Dot
+import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalKnownHosts
 import app.skerry.ui.app.LocalSecurityLog
@@ -289,7 +290,7 @@ private fun MoreRow(
         if (!subtitle.isNullOrEmpty()) Txt(subtitle, color = subtitleColor, size = 11.sp)
         if (onClick != null && labelColor != Skerry.colors.sunset) Sym("chevron_right", size = 20.sp, color = Skerry.colors.faint)
     }
-    if (divider) Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
+    if (divider) HLine(modifier = Modifier.padding(horizontal = 12.dp))
 }
 
 // Security (More -> Security push screen).
@@ -360,7 +361,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                         },
                     )
                 }
-                MobileSecurityDivider()
+                HLine()
 
                 // Biometric unlock: row shows only when the factor is available (nothing to configure
                 // otherwise). A device whose enclave refuses to decrypt the vault (#23) gets the reason
@@ -368,18 +369,18 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 if (controller != null && controller.biometricUnsupported) {
                     Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Txt(stringResource(Res.string.settings_security_touch_id), color = Skerry.colors.faint, size = 14.5.sp)
-                            Txt(stringResource(Res.string.settings_security_touch_id_unsupported), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                            Txt(stringResource(Res.string.settings_security_biometric), color = Skerry.colors.faint, size = 14.5.sp)
+                            Txt(stringResource(Res.string.settings_security_biometric_unsupported), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                         }
                         Txt(
-                            stringResource(Res.string.settings_security_touch_id_recheck),
+                            stringResource(Res.string.settings_security_biometric_recheck),
                             color = Skerry.colors.cyanBright,
                             size = 13.sp,
                             weight = FontWeight.Medium,
                             modifier = Modifier.clickable { controller.recheckBiometricSupport(); reload++ },
                         )
                     }
-                    MobileSecurityDivider()
+                    HLine()
                 } else if (controller != null && controller.canEnableBiometric()) {
                     // Prompt strings resolved in composable scope (stringResource can't be called in the onToggle lambda).
                     val enablePrompt = BiometricPrompt(
@@ -394,10 +395,10 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     )
                     Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Column(Modifier.weight(1f)) {
-                            Txt(stringResource(Res.string.settings_security_touch_id), color = Skerry.colors.text, size = 14.5.sp)
+                            Txt(stringResource(Res.string.settings_security_biometric), color = Skerry.colors.text, size = 14.5.sp)
                             // Same subtitle slot admits a weaker key binding when the device took one.
-                            val desc = if (controller.biometricReducedBinding) Res.string.settings_security_touch_id_weak_binding
-                            else Res.string.settings_security_touch_id_desc
+                            val desc = if (controller.biometricReducedBinding) Res.string.settings_security_biometric_weak_binding
+                            else Res.string.settings_security_biometric_desc
                             Txt(stringResource(desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                         }
                         Toggle(
@@ -412,7 +413,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                             },
                         )
                     }
-                    MobileSecurityDivider()
+                    HLine()
                 }
 
                 // Auto-lock: real idle threshold, wired into the VaultGate idle timer via state.autoLock.
@@ -423,7 +424,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                     }
                     Box(Modifier.width(160.dp)) { MobileAutoLockPicker(state.autoLock, onPick = state::chooseAutoLock) }
                 }
-                MobileSecurityDivider()
+                HLine()
 
                 // Two-factor is not implemented yet: an honest SOON badge instead of a fake "enabled".
                 Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -477,12 +478,6 @@ fun MobileSecurityScreen(state: MobileDesignState) {
     }
 }
 
-/** Divider line between Security section rows (layout tone). */
-@Composable
-private fun MobileSecurityDivider() {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
-}
-
 /** Auto-lock threshold dropdown (mobile) — reuses the Appearance trigger/menu. */
 @Composable
 private fun MobileAutoLockPicker(current: AutoLockDuration, onPick: (AutoLockDuration) -> Unit) {
@@ -516,7 +511,7 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             FontSettingRow(stringResource(Res.string.appearance_font)) {
                 MobileFontPicker(state.terminalFont, onPick = state::chooseTerminalFont)
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
+            HLine()
             MobileStepperRow(
                 label = stringResource(Res.string.appearance_font_size),
                 isDefault = state.terminalFontSize == DEFAULT_TERMINAL_FONT_SIZE,
@@ -565,17 +560,17 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             }
             // Scrollback depth and default cursor style for new sessions (behaviour, desktop parity).
             // Both apply to new sessions at connect and are pushed live into already-open ones.
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
+            HLine()
             FontSettingRow(stringResource(Res.string.settings_terminal_scrollback)) {
                 MobileScrollbackPicker(state.terminalScrollback, onPick = state::chooseTerminalScrollback)
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
+            HLine()
             FontSettingRow(stringResource(Res.string.settings_terminal_cursor_style)) {
                 MobileCursorStylePicker(state.terminalCursorStyle, onPick = state::chooseTerminalCursorStyle)
             }
             // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host
             // from silently overwriting the system clipboard. Applies to new and already-open sessions.
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
+            HLine()
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 11.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -591,6 +586,7 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             FontSettingRow(stringResource(Res.string.appearance_language)) {
                 MobileLanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage)
             }
+            HLine()
             // App theme cards in a 2xN grid — the chrome counterpart of the terminal cards above.
             Txt(stringResource(Res.string.appearance_section_theme), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
             val systemDark = systemInDarkTheme(enabled = true)
@@ -610,6 +606,7 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             }
             // Unified theming: the terminal follows the app theme's twin unless this opt-in is
             // set, which reveals the separate terminal-theme cards.
+            HLine(modifier = Modifier.padding(top = 4.dp))
             Row(
                 Modifier.fillMaxWidth().padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,

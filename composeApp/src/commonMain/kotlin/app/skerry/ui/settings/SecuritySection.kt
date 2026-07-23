@@ -81,11 +81,11 @@ import app.skerry.ui.generated.resources.settings_security_no_events
 import app.skerry.ui.generated.resources.settings_security_pw_changed_days
 import app.skerry.ui.generated.resources.settings_security_pw_changed_today
 import app.skerry.ui.generated.resources.settings_security_pw_changed_yesterday
-import app.skerry.ui.generated.resources.settings_security_touch_id
-import app.skerry.ui.generated.resources.settings_security_touch_id_desc
-import app.skerry.ui.generated.resources.settings_security_touch_id_recheck
-import app.skerry.ui.generated.resources.settings_security_touch_id_unsupported
-import app.skerry.ui.generated.resources.settings_security_touch_id_weak_binding
+import app.skerry.ui.generated.resources.settings_security_biometric
+import app.skerry.ui.generated.resources.settings_security_biometric_desc
+import app.skerry.ui.generated.resources.settings_security_biometric_recheck
+import app.skerry.ui.generated.resources.settings_security_biometric_unsupported
+import app.skerry.ui.generated.resources.settings_security_biometric_weak_binding
 import app.skerry.ui.generated.resources.settings_time_days_ago
 import app.skerry.ui.generated.resources.settings_time_today
 import app.skerry.ui.generated.resources.settings_time_yesterday
@@ -172,16 +172,16 @@ internal fun SecuritySection(
     if (controller != null && controller.biometricUnsupported) {
         Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Txt(stringResource(Res.string.settings_security_touch_id), color = Skerry.colors.faint, size = 13.sp, weight = FontWeight.Medium)
+                Txt(stringResource(Res.string.settings_security_biometric), color = Skerry.colors.faint, size = 13.sp, weight = FontWeight.Medium)
                 Txt(
-                    stringResource(Res.string.settings_security_touch_id_unsupported),
+                    stringResource(Res.string.settings_security_biometric_unsupported),
                     color = Skerry.colors.dim,
                     size = 11.5.sp,
                     modifier = Modifier.padding(top = 3.dp),
                 )
             }
             GhostButton(
-                stringResource(Res.string.settings_security_touch_id_recheck),
+                stringResource(Res.string.settings_security_biometric_recheck),
                 onClick = { controller.recheckBiometricSupport() },
             )
         }
@@ -201,11 +201,11 @@ internal fun SecuritySection(
             subtitle = stringResource(Res.string.more_biometric_verify_subtitle),
         )
         SettingToggleRow(
-            stringResource(Res.string.settings_security_touch_id),
+            stringResource(Res.string.settings_security_biometric),
             // The subtitle doubles as the place to admit a weaker key binding when that's what the
             // device would take (see VaultGateController.biometricReducedBinding).
-            if (controller.biometricReducedBinding) stringResource(Res.string.settings_security_touch_id_weak_binding)
-            else stringResource(Res.string.settings_security_touch_id_desc),
+            if (controller.biometricReducedBinding) stringResource(Res.string.settings_security_biometric_weak_binding)
+            else stringResource(Res.string.settings_security_biometric_desc),
             on = controller.biometricEnabled,
             onToggle = {
                 if (controller.biometricInFlight) return@SettingToggleRow

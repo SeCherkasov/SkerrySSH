@@ -48,6 +48,7 @@ import app.skerry.ui.generated.resources.shell_edit_host
 import app.skerry.ui.generated.resources.shell_delete_host
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.LocalConnectHost
+import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalOpenSftp
@@ -189,7 +190,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                     )
                 }
                 if (i < rows.lastIndex) {
-                    Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan.copy(alpha = 0.05f)))
+                    HLine()
                 }
             }
         }
