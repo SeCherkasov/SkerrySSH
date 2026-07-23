@@ -1065,15 +1065,15 @@ fun TerminalScreen(
               Modifier
                   .align(Alignment.BottomStart)
                   .fillMaxWidth()
-                  .background(Color(0xF00A1620))
+                  .background(Skerry.colors.railBg.copy(alpha = 0.94f))
                   .padding(horizontal = 10.dp, vertical = 6.dp),
           ) {
               Text(
                   text = stringResource(Res.string.terminal_reverse_search_prompt, rsQuery),
-                  style = textStyle.copy(color = Color(0xFF8AA0AE)),
+                  style = textStyle.copy(color = Skerry.colors.dim),
               )
               if (shown.isEmpty()) {
-                  Text(stringResource(Res.string.terminal_reverse_search_no_matches), style = textStyle.copy(color = Color(0xFF5B6B77)))
+                  Text(stringResource(Res.string.terminal_reverse_search_no_matches), style = textStyle.copy(color = Skerry.colors.faint))
               } else {
                   shown.forEachIndexed { i, cmd ->
                       val selected = i == state.reverseSearchIndex.mod(matches.size.coerceAtLeast(1))
@@ -1081,7 +1081,7 @@ fun TerminalScreen(
                           text = cmd,
                           maxLines = 1,
                           style = textStyle.copy(
-                              color = if (selected) Skerry.colors.cyan else Color(0xFFB8C6D0),
+                              color = if (selected) Skerry.colors.cyan else Skerry.colors.textMid,
                               fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                           ),
                       )
@@ -1396,15 +1396,11 @@ private fun TermColor.toComposeColor(theme: TerminalTheme, palette: Palette): Co
 private fun xtermColor(index: Int, palette: Palette, theme: TerminalTheme): Color {
     palette[index]?.let { return Color(it.r, it.g, it.b) }
     if (index in 0..15) return theme.ansi[index]
-    return xtermDefaultColor(index)
+    return xtermCubeColor(index, fallback = theme.foreground)
 }
 
-/** The theme's default xterm palette (without OSC 4 overrides). */
-private fun xtermDefaultColor(index: Int): Color = when (index) {
-    0 -> Color(0xFF2A3540); 1 -> Color(0xFFE94B4B); 2 -> Color(0xFF5DCE9E); 3 -> Color(0xFFF2A65A)
-    4 -> Color(0xFF4A9EDB); 5 -> Color(0xFFC792EA); 6 -> Color(0xFF2BBDEE); 7 -> Color(0xFFC9D6DE)
-    8 -> Color(0xFF5A7080); 9 -> Color(0xFFFF6B6B); 10 -> Color(0xFF7FE9B8); 11 -> Color(0xFFFFC078)
-    12 -> Color(0xFF6FC3F5); 13 -> Color(0xFFE0A8FF); 14 -> Color(0xFF5FD1F4); 15 -> Color(0xFFFFFFFF)
+/** The standard xterm 6×6×6 cube (16..231) and grayscale ramp (232..255); theme-independent. */
+private fun xtermCubeColor(index: Int, fallback: Color): Color = when (index) {
     in 16..231 -> {
         val n = index - 16
         val r = n / 36; val g = (n / 6) % 6; val b = n % 6
@@ -1412,5 +1408,5 @@ private fun xtermDefaultColor(index: Int): Color = when (index) {
         Color(lvl(r), lvl(g), lvl(b))
     }
     in 232..255 -> { val v = 8 + (index - 232) * 10; Color(v, v, v) }
-    else -> Color(0xFFC9D6DE)
+    else -> fallback
 }

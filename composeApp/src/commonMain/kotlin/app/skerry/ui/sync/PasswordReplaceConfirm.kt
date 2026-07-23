@@ -82,7 +82,7 @@ fun dismissPasswordReplace(sync: SyncCoordinator, onDismiss: () -> Unit): () -> 
 @Composable
 fun PasswordReplaceConfirmDialog(sync: SyncCoordinator, accountId: String, onDismiss: () -> Unit) {
     val noop = remember { MutableInteractionSource() }
-    ModalScrim(onDismiss = dismissPasswordReplace(sync, onDismiss), scrimColor = Color(0xB3060E16)) {
+    ModalScrim(onDismiss = dismissPasswordReplace(sync, onDismiss), scrimColor = Skerry.colors.modalScrim) {
         Column(
             Modifier
                 .widthIn(max = 440.dp)

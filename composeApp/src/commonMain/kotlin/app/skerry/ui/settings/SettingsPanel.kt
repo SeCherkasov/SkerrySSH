@@ -78,7 +78,7 @@ fun SettingsPanel(state: DesktopDesignState) {
     var securityReload by remember { mutableStateOf(0) }
     var changePwOpen by remember { mutableStateOf(false) }
     var changeAccountPwOpen by remember { mutableStateOf(false) }
-    ModalScrim(onDismiss = state::closeSettings, scrimColor = Color(0xA6060E16)) {
+    ModalScrim(onDismiss = state::closeSettings, scrimColor = Skerry.colors.modalScrim) {
         Box(
             Modifier
                 .width(760.dp)

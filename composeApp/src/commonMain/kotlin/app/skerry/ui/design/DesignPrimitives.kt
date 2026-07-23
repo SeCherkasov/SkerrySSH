@@ -145,7 +145,7 @@ fun Chip(text: String, active: Boolean = false, modifier: Modifier = Modifier, o
     Box(
         modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (active) Skerry.colors.cyan.copy(alpha = 0.12f) else Color(0x0AFFFFFF))
+            .background(if (active) Skerry.colors.cyan.copy(alpha = 0.12f) else Skerry.colors.overlaySoft)
             .then(
                 if (onClick != null) {
                     Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
@@ -254,7 +254,7 @@ fun IconBtn(
     box: Int = 28,
     icon: TextUnit = 18.sp,
     tint: Color = Skerry.colors.dim,
-    hoverBg: Color = Color(0x1FFFFFFF),
+    hoverBg: Color = Skerry.colors.hover,
     hoverTint: Color? = null,
     tooltip: String? = null,
 ) {
@@ -313,7 +313,7 @@ fun MeterBar(fraction: Float, color: Color, modifier: Modifier = Modifier, track
             .fillMaxWidth()
             .height(trackHeight.dp)
             .clip(RoundedCornerShape(3.dp))
-            .background(Color(0x0FFFFFFF)),
+            .background(Skerry.colors.overlayMed),
     ) {
         Box(
             Modifier

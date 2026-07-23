@@ -509,7 +509,7 @@ private fun LiveSecretCard(
 @Composable
 internal fun SecretIcon(icon: String, tinted: Boolean, color: Color, size: Int = 38) {
     Box(
-        Modifier.size(size.dp).clip(RoundedCornerShape(9.dp)).background(if (tinted) color.copy(alpha = 0.12f) else Color(0x0DFFFFFF)),
+        Modifier.size(size.dp).clip(RoundedCornerShape(9.dp)).background(if (tinted) color.copy(alpha = 0.12f) else Skerry.colors.overlayMed),
         contentAlignment = Alignment.Center,
     ) {
         Sym(icon, size = (size * 0.52f).sp, color = if (tinted) color else Skerry.colors.dim)
@@ -796,7 +796,7 @@ internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: (
         Txt(detail, color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(bottom = 4.dp))
         Row(Modifier.fillMaxWidth().padding(top = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
             CancelButton(stringResource(Res.string.vault_cancel), onClick = onDismiss)
-            PrimaryButton(stringResource(Res.string.vault_delete), onClick = onConfirm, bg = Skerry.colors.sunset, fg = Color(0xFF1A0B07))
+            PrimaryButton(stringResource(Res.string.vault_delete), onClick = onConfirm, bg = Skerry.colors.sunset, fg = Skerry.colors.sunsetInk)
         }
     }
 }
@@ -809,7 +809,7 @@ private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () 
     Box(
         // The dialog centers in the visible area; it ends up above the keyboard on its own — on mobile the
         // root `safeDrawing` shrinks the area above the IME, and `Center` centers within what's left (no-op on desktop).
-        Modifier.fillMaxSize().background(Color(0xB3060E16)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
+        Modifier.fillMaxSize().background(Skerry.colors.modalScrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -960,7 +960,7 @@ private fun MockVaultView() {
                         trailing = { CopyButton() },
                     )
                     KeyCard(
-                        iconBg = Color(0x0DFFFFFF), iconColor = Skerry.colors.dim, icon = "key",
+                        iconBg = Skerry.colors.overlayMed, iconColor = Skerry.colors.dim, icon = "key",
                         name = "id_rsa_legacy", badges = listOf("RSA-4096" to null),
                         meta = "SHA256:2dE7b…Lm4xR · used by 2 hosts", mono = mono,
                         border = Skerry.colors.cyan08, bg = Color.Transparent,
@@ -1031,7 +1031,7 @@ private fun KeyCard(
                         rotateBadge -> Badge(text, bg = Skerry.colors.sunset.copy(alpha = 0.16f), fg = Skerry.colors.sunset, radius = 3, size = 9.5.sp)
                         default == true -> Badge(text, bg = Skerry.colors.cyan14, fg = Skerry.colors.cyanBright, radius = 3, size = 9.5.sp)
                         default == false -> Badge(text, bg = Skerry.colors.moss.copy(alpha = 0.16f), fg = Skerry.colors.moss, radius = 3, size = 9.5.sp)
-                        else -> Badge(text, bg = Color(0x0FFFFFFF), fg = Skerry.colors.dim, radius = 3, size = 9.5.sp)
+                        else -> Badge(text, bg = Skerry.colors.overlayMed, fg = Skerry.colors.dim, radius = 3, size = 9.5.sp)
                     }
                 }
             }
@@ -1093,7 +1093,7 @@ internal fun DetailLabel(text: String) {
 
 @Composable
 internal fun HostPill(name: String, mono: FontFamily, dim: Boolean = false) {
-    Box(Modifier.clip(RoundedCornerShape(20.dp)).background(Color(0x0AFFFFFF)).padding(horizontal = 9.dp, vertical = 3.dp)) {
+    Box(Modifier.clip(RoundedCornerShape(20.dp)).background(Skerry.colors.overlaySoft).padding(horizontal = 9.dp, vertical = 3.dp)) {
         Txt(name, color = if (dim) Skerry.colors.dim else Skerry.colors.textBright, size = 11.sp, font = mono)
     }
 }

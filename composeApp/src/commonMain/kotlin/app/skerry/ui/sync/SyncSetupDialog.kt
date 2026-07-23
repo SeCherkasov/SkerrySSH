@@ -120,7 +120,7 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     // (this dialog is composed as its sibling at the app root) doesn't reclaim focus and strip the
     // caret from these fields. Esc dismisses; a stray scrim click doesn't (a half-typed master
     // password must not be discarded) — Cancel is the explicit close.
-    ModalScrim(onDismiss = onDismiss, scrimColor = Color(0xB3060E16)) {
+    ModalScrim(onDismiss = onDismiss, scrimColor = Skerry.colors.modalScrim) {
         Column(
             Modifier
                 .widthIn(max = 440.dp)
@@ -198,7 +198,7 @@ private fun KeepConnectedRow(checked: Boolean, onChange: (Boolean) -> Unit) {
                 .border(1.dp, if (checked) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(5.dp)),
             contentAlignment = Alignment.Center,
         ) {
-            if (checked) Sym("check", size = 13.sp, color = Color(0xFF0A1A26))
+            if (checked) Sym("check", size = 13.sp, color = Skerry.colors.ink)
         }
         Column(Modifier.weight(1f)) {
             Txt(stringResource(Res.string.sync_keep_connected), color = Skerry.colors.text, size = 12.5.sp, weight = FontWeight.Medium)

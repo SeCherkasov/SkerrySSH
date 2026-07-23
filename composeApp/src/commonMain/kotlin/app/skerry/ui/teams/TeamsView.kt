@@ -453,7 +453,7 @@ private fun LiveMemberRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.size(32.dp).clip(CircleShape).background(if (isOwnerRow) Skerry.colors.cyan else Skerry.colors.moss), contentAlignment = Alignment.Center) {
-            Txt(initials, color = Color(0xFF0A1A26), size = 13.sp, weight = FontWeight.SemiBold)
+            Txt(initials, color = Skerry.colors.ink, size = 13.sp, weight = FontWeight.SemiBold)
         }
         Txt(m.accountId, color = Skerry.colors.text, size = 13.sp, font = mono, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
         if (invited) {

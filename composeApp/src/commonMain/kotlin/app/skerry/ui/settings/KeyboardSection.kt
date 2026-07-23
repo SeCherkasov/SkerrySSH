@@ -12,7 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -155,9 +154,9 @@ private fun KeyboardRow(b: KeyboardBinding, mono: FontFamily) {
             Txt(b.label, color = if (b.live) Skerry.colors.textBright else Skerry.colors.dim, size = 12.5.sp)
             // Command palette isn't implemented yet; mark the binding SOON instead of showing a
             // dead shortcut next to working ones.
-            if (!b.live) Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = Skerry.colors.amber, radius = 3, size = 9.sp)
+            if (!b.live) Badge(stringResource(Res.string.settings_badge_soon), bg = Skerry.colors.amber.copy(alpha = 0.10f), fg = Skerry.colors.amber, radius = 3, size = 9.sp)
         }
-        Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Color(0x0AFFFFFF)).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
+        Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Skerry.colors.overlaySoft).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(4.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
             Txt(b.binding, color = Skerry.colors.dim, size = 11.sp, font = mono)
         }
     }

@@ -418,7 +418,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             // weight(fill=false): the long label wraps on its own without shrinking the badge.
                             Txt(stringResource(Res.string.settings_security_2fa), color = Skerry.colors.dim, size = 14.5.sp, modifier = Modifier.weight(1f, fill = false))
-                            Badge(stringResource(Res.string.settings_badge_soon), bg = Color(0x1AF2A65A), fg = Skerry.colors.amber, radius = 3, size = 9.sp)
+                            Badge(stringResource(Res.string.settings_badge_soon), bg = Skerry.colors.amber.copy(alpha = 0.10f), fg = Skerry.colors.amber, radius = 3, size = 9.sp)
                         }
                         Txt(stringResource(Res.string.settings_security_2fa_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                     }

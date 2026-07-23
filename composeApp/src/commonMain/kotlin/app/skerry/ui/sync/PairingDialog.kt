@@ -64,7 +64,7 @@ import app.skerry.ui.theme.Skerry
 @Composable
 fun PairingShowDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
     val noop = remember { MutableInteractionSource() }
-    ModalScrim(onDismiss = onDismiss, scrimColor = Color(0xB3060E16)) {
+    ModalScrim(onDismiss = onDismiss, scrimColor = Skerry.colors.modalScrim) {
         Column(
             Modifier
                 .widthIn(max = 380.dp)

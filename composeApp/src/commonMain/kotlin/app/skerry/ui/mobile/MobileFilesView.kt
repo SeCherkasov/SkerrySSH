@@ -93,9 +93,6 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
 
-/** Transfer card background (`#0B1A26` = [Skerry.colors.surface2]); progress track is white at 7%. */
-private val TransferTrack = Color(0x12FFFFFF)
-
 /**
  * Root Files tab: single-pane browser of the active session's remote SFTP over a cached
  * [TransferCoordinator]. The local device pane is removed (Android scoped storage makes it
@@ -463,7 +460,7 @@ private fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDism
                     Txt("$percent%", color = Skerry.colors.dim, size = 11.sp)
                 }
                 Spacer(Modifier.height(8.dp))
-                Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(TransferTrack)) {
+                Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Skerry.colors.overlayStrong)) {
                     MeterBar(fraction, Skerry.colors.cyan, Modifier.fillMaxWidth())
                 }
             }
@@ -641,15 +638,15 @@ private fun ConnectingMobileFilesView(subtitle: String, onBack: (() -> Unit)? = 
 
 // Mock (preview/offscreen).
 
-private data class MockFileEntry(val icon: String, val iconColor: Color, val name: String, val meta: String, val trailing: String, val selected: Boolean = false)
+private data class MockFileEntry(val icon: String, val name: String, val meta: String, val trailing: String, val selected: Boolean = false)
 
 /** Static Remote pane data (preview/offscreen). */
 private val MOCK_REMOTE_FILES = listOf(
-    MockFileEntry("folder", Color(0xFF5FD1F4), "html", "drwxr-xr-x · 4 items", "chevron_right"),
-    MockFileEntry("folder", Color(0xFF5FD1F4), "releases", "drwxr-xr-x · 12 items", "chevron_right"),
-    MockFileEntry("description", Color(0xFF8FA3B0), "nginx.conf", "3.1 KB · Jun 20", "ios_share", selected = true),
-    MockFileEntry("terminal", Color(0xFF8FA3B0), "deploy.sh", "1.8 KB · Jun 18", "ios_share"),
-    MockFileEntry("description", Color(0xFF8FA3B0), "robots.txt", "112 B · May 30", "ios_share"),
+    MockFileEntry("folder", "html", "drwxr-xr-x · 4 items", "chevron_right"),
+    MockFileEntry("folder", "releases", "drwxr-xr-x · 12 items", "chevron_right"),
+    MockFileEntry("description", "nginx.conf", "3.1 KB · Jun 20", "ios_share", selected = true),
+    MockFileEntry("terminal", "deploy.sh", "1.8 KB · Jun 18", "ios_share"),
+    MockFileEntry("description", "robots.txt", "112 B · May 30", "ios_share"),
 )
 
 /** Static mock of the Files section (preview/offscreen, no backend). */
@@ -680,7 +677,7 @@ private fun MockFileRow(entry: MockFileEntry, mono: FontFamily) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
-        Sym(entry.icon, size = 23.sp, color = entry.iconColor)
+        Sym(entry.icon, size = 23.sp, color = if (entry.icon == "folder") Skerry.colors.cyanBright else Skerry.colors.dim)
         Column(Modifier.weight(1f)) {
             Txt(entry.name, color = Skerry.colors.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Txt(entry.meta, color = Skerry.colors.faint, size = 11.sp)
@@ -707,7 +704,7 @@ private fun MockTransferCard(mono: FontFamily) {
             Txt("64%", color = Skerry.colors.dim, size = 11.sp)
         }
         Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(TransferTrack)) {
+        Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Skerry.colors.overlayStrong)) {
             MeterBar(0.64f, Skerry.colors.cyan, Modifier.fillMaxWidth())
         }
     }

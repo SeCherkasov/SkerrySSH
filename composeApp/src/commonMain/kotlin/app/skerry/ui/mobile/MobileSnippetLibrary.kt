@@ -113,7 +113,7 @@ private fun MobileSnippetChips(chips: List<String>, active: String, onSelect: (S
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (on) Skerry.colors.cyan.copy(alpha = 0.14f) else Color(0x0DFFFFFF))
+                        .background(if (on) Skerry.colors.cyan14 else Skerry.colors.overlayMed)
                         .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
                         .padding(horizontal = 13.dp, vertical = 5.dp),
                 ) {

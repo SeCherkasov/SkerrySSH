@@ -98,6 +98,7 @@ import app.skerry.ui.host.HostGroup
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.host.MockHost
 import app.skerry.ui.host.UNGROUPED_LABEL
+import app.skerry.ui.host.color
 import app.skerry.ui.host.draggableFolderHeader
 import app.skerry.ui.host.draggableHostRow
 import app.skerry.ui.host.filterHosts

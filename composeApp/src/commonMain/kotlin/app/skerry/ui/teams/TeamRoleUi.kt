@@ -73,7 +73,7 @@ internal fun roleBadgeColors(role: TeamRole): Pair<Color, Color> = when (role) {
     TeamRole.OWNER -> Skerry.colors.amber to Skerry.colors.amber.copy(alpha = 0.14f)
     TeamRole.ADMIN -> Skerry.colors.cyanBright to Skerry.colors.cyan.copy(alpha = 0.12f)
     TeamRole.EDITOR -> Skerry.colors.moss to Skerry.colors.moss.copy(alpha = 0.14f)
-    TeamRole.VIEWER -> Skerry.colors.dim to Color(0x0DFFFFFF)
+    TeamRole.VIEWER -> Skerry.colors.dim to Skerry.colors.overlayMed
 }
 
 /** Localized audit event summary; an unknown code goes into a localized fallback as a detail. */

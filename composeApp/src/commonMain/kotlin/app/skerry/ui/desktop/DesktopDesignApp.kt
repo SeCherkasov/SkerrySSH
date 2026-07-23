@@ -155,6 +155,7 @@ import app.skerry.ui.vault.DesktopCorruptedScreen
 import app.skerry.ui.vault.DesktopCreateScreen
 import app.skerry.ui.host.DesktopDeleteHostDialog
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.SessionDot
 import app.skerry.ui.connection.DesktopPasswordDialog
 import app.skerry.ui.vault.DesktopResetScreen
 import app.skerry.ui.vault.DesktopUnlockScreen
@@ -1040,7 +1041,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                 if (tabDrag.insertLineIndex == sessions.sessions.size) TabInsertLine()
             } else {
                 state.tabs.forEachIndexed { i, tab ->
-                    SessionTabChip(tab.name, tab.dot, active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
+                    SessionTabChip(tab.name, tab.dot.tint(), active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
                 }
             }
             // "+" creates a BLANK tab with no session (live mode) and switches to its terminal
@@ -1088,6 +1089,14 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
  * on the active or hovered tab; others reserve the space with an empty box so text doesn't jump when the
  * cross appears.
  */
+/** Demo-tab status dot color from the active theme (the state layer stores only the semantic [SessionDot]). */
+@Composable
+private fun SessionDot.tint(): Color = when (this) {
+    SessionDot.On -> Skerry.colors.moss
+    SessionDot.Warn -> Skerry.colors.amber
+    SessionDot.Off -> Skerry.colors.faint
+}
+
 @Composable
 private fun SessionTabChip(
     name: String,
@@ -1120,7 +1129,7 @@ private fun SessionTabChip(
             .background(
                 when {
                     active -> accentBg
-                    hovered -> Color(0x1FFFFFFF)
+                    hovered -> Skerry.colors.hover
                     else -> Skerry.colors.card
                 },
             )

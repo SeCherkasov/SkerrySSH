@@ -1,16 +1,28 @@
 package app.skerry.ui.host
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.ui.theme.Skerry
 
 /**
  * Static demo hosts for the sidebar preview (until the live catalog is wired up).
  * Mocks only, the real host catalog lives in [HostManagerController].
  */
 
-enum class HostStatus(val color: Color, val glow: Boolean) {
-    On(Color(0xFF5DCE9E), true), Off(Color(0xFF5A7080), false), Warn(Color(0xFFE07A5F), false),
+enum class HostStatus(val glow: Boolean) {
+    On(true), Off(false), Warn(false),
 }
+
+/** Status dot tint from the active theme. */
+val HostStatus.color: Color
+    @Composable @ReadOnlyComposable
+    get() = when (this) {
+        HostStatus.On -> Skerry.colors.moss
+        HostStatus.Off -> Skerry.colors.faint
+        HostStatus.Warn -> Skerry.colors.sunset
+    }
 
 data class MockHost(
     val name: String,

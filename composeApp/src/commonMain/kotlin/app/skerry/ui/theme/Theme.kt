@@ -127,5 +127,12 @@ private fun animateSkerryColors(target: SkerryColors): SkerryColors {
         card = anim(target.card),
         scrim = anim(target.scrim),
         modalScrim = anim(target.modalScrim),
+        overlayFaint = anim(target.overlayFaint),
+        overlaySoft = anim(target.overlaySoft),
+        overlayMed = anim(target.overlayMed),
+        overlayStrong = anim(target.overlayStrong),
+        hover = anim(target.hover),
+        sunsetInk = anim(target.sunsetInk),
+        bannerScrim = anim(target.bannerScrim),
     )
 }

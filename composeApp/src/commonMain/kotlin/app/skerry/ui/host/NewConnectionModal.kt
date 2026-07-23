@@ -340,7 +340,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
             }
             HLine()
             Row(
-                Modifier.fillMaxWidth().background(Color(0x26000000)).padding(horizontal = 26.dp, vertical = 14.dp),
+                Modifier.fillMaxWidth().background(Skerry.colors.shade15).padding(horizontal = 26.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {

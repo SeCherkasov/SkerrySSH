@@ -43,6 +43,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.BrandMark
+import app.skerry.ui.design.BrandPlate
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -178,7 +179,7 @@ fun MobileCreateScreen(
         MobileWideButton(
             stringResource(Res.string.shell_create_vault),
             onClick = submit,
-            bg = if (canCreate) Skerry.colors.cyan else Color(0x14FFFFFF),
+            bg = if (canCreate) Skerry.colors.cyan else Skerry.colors.overlayStrong,
             fg = if (canCreate) Skerry.colors.ink else Skerry.colors.faint,
             enabled = canCreate,
         )
@@ -270,7 +271,7 @@ fun MobileResetScreen(onConfirm: (ResetScope) -> Unit, onCancel: () -> Unit) {
         MobileWideButton(
             stringResource(Res.string.shell_reset_permanently),
             onClick = { if (canConfirm) onConfirm(scope) },
-            bg = if (canConfirm) Skerry.colors.storm else Color(0x14FFFFFF),
+            bg = if (canConfirm) Skerry.colors.storm else Skerry.colors.overlayStrong,
             fg = if (canConfirm) Skerry.colors.ink else Skerry.colors.faint,
             enabled = canConfirm,
         )
@@ -333,15 +334,7 @@ private fun MobileLockScaffold(
             .padding(horizontal = 30.dp, vertical = 64.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            Modifier
-                .size(64.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Brush.radialGradient(listOf(Color(0xFF142634), Color(0xFF0A141B), Color(0xFF05090D)))),
-            contentAlignment = Alignment.Center,
-        ) {
-            BrandMark(size = 64.dp)
-        }
+        BrandPlate(size = 64.dp, corner = 16.dp)
         Spacer(Modifier.height(16.dp))
         Txt(title, color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))

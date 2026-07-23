@@ -341,7 +341,7 @@ private fun MobileCategoryPills(active: VaultCategoryKind, credentials: List<Cre
             val count = VaultPresentation.count(kind, credentials)
             Row(
                 Modifier.clip(RoundedCornerShape(20.dp))
-                    .background(if (on) Skerry.colors.cyan.copy(alpha = 0.12f) else Color(0x0AFFFFFF))
+                    .background(if (on) Skerry.colors.cyan.copy(alpha = 0.12f) else Skerry.colors.overlaySoft)
                     .border(1.dp, if (on) Skerry.colors.cyan.copy(alpha = 0.3f) else Color.Transparent, RoundedCornerShape(20.dp))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onSelect(kind) }
                     .padding(horizontal = 13.dp, vertical = 8.dp),

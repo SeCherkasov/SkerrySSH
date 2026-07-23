@@ -35,7 +35,7 @@ fun ChipButton(
     weight: FontWeight = FontWeight.Normal,
     verticalPadding: Dp = 6.dp,
 ) {
-    val background = if (filled) (if (enabled) color.copy(alpha = 0.16f) else Color(0x0AFFFFFF)) else Color.Transparent
+    val background = if (filled) (if (enabled) color.copy(alpha = 0.16f) else Skerry.colors.overlaySoft) else Color.Transparent
     val border = if (filled) (if (enabled) color.copy(alpha = 0.5f) else Skerry.colors.line) else Skerry.colors.cyan14
     Box(
         modifier

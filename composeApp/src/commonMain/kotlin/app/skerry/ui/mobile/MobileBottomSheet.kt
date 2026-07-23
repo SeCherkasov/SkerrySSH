@@ -16,15 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import app.skerry.ui.nav.PlatformBackHandler
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.skerry.ui.theme.Skerry
 
-/** Canonical mobile bottom-sheet tokens ("New connection"): panel and scrim. */
-private val SheetScrim = Color(0x8C04080C)
-
 /**
- * Shared mobile bottom-sheet chrome: full-screen scrim ([SheetScrim], tap outside to dismiss),
+ * Shared mobile bottom-sheet chrome: full-screen scrim (`Skerry.colors.scrim`, tap outside to dismiss),
  * bottom panel with 26dp corner rounding, grab handle, and drag-to-dismiss
  * ([rememberSheetDrag]/[SheetHandle]). The container owns ONLY the chrome — height, scrolling, and
  * padding are set by each sheet via [panelModifier], so forms/details/menus reuse one skeleton
@@ -54,7 +50,7 @@ fun MobileBottomSheet(
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(SheetScrim)
+            .background(Skerry.colors.scrim)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.BottomCenter,
     ) {
