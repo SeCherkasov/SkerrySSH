@@ -64,6 +64,19 @@ class CredentialStoreTest {
     }
 
     @Test
+    fun `all on a locked vault safely returns an empty list`() {
+        val vault = FakeVault()
+        val store = CredentialStore(vault)
+        store.put(Credential("a", "A", CredentialSecret.Password("x")))
+
+        vault.locked = true
+
+        // Sync-driven reloads (onSynced -> reloadManagers) may race a lock; reading must degrade to
+        // an empty list like the sibling vault stores, not throw from Vault.records().
+        assertEquals(emptyList(), store.all())
+    }
+
+    @Test
     fun `rename changes the label and keeps the id and secret`() {
         val store = CredentialStore(FakeVault())
         val secret = CredentialSecret.PrivateKey(privateKeyPem = "pem", passphrase = "pp")

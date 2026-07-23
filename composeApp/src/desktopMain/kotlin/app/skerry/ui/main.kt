@@ -302,6 +302,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         snippets.reload()
         tunnels.reload()
         knownHosts.refresh()
+        // Keychain secrets are CREDENTIAL records too: a key/password pulled by live sync must show
+        // up without a restart. Safe on a locked vault (all() degrades to an empty list).
+        credentials.reload()
         // AI BYOK settings (key/model) are also a SETTINGS vault record, so they're reread here too:
         // an edit that arrives via live sync from another device (onSynced calls reloadManagers)
         // reflects in the UI immediately instead of only after a re-login.
@@ -317,10 +320,6 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         // restore the session (the open vault means a dataKey to unseal the refresh token with).
         sync.resumeAfterUnlock()
     }
-    // External cleanup on an irreversible vault reset (forgotten password / corrupted file). The
-    // vault file is already erased by the controller (Vault.reset) and now locked, so
-    // credentials.reload() is NOT called here (it requires an open vault); the secret list rereads
-    // when a new vault is created.
     // Vault reset (forgotten password / corrupted file). Hosts/snippets/tunnels are vault records,
     // so Vault.reset() already erased them along with the secrets (zero-knowledge: they can't be
     // recovered without the master password — "keep profiles, wipe only secrets" is technically
@@ -362,6 +361,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         hosts.reload()
         snippets.reload()
         tunnels.reload()
+        // The vault is locked after reset, so this clears the in-memory secret list (all() is empty
+        // on a locked vault); the list rereads when a new vault is created and unlocked.
+        credentials.reload()
     }
     val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync, teams = teams, localAi = localAi)
     return DesktopGraph(

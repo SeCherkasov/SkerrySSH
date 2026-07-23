@@ -469,6 +469,9 @@ class MainActivity : FragmentActivity() {
             onSynced = {
                 lifecycleScope.launch(Dispatchers.Main) {
                     hosts.reload(); snippets.reload(); tunnels.reload(); knownHosts.refresh()
+                    // Keychain secrets are CREDENTIAL records too: without this a key pulled by live
+                    // sync shows up only after the next lock/unlock cycle re-enters MobileChrome.
+                    credentials.reload()
                 }
                 teamsForSync?.onAccountSynced()
             },
@@ -547,6 +550,9 @@ class MainActivity : FragmentActivity() {
             hosts.reload()
             snippets.reload()
             tunnels.reload()
+            // The vault is locked after reset, so this clears the in-memory secret list (all() is
+            // empty on a locked vault) — desktop parity; rereads on the next vault create + unlock.
+            credentials.reload()
         }
         // Local AI: GGUF models in the private filesDir/models (allowBackup=false so gigabyte-sized
         // weights don't break cloud backup); inference via Llamatik/llama.cpp arm64 in the ":llm"
