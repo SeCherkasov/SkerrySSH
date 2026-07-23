@@ -4,13 +4,14 @@ import app.skerry.shared.sync.SyncClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Poll period for the server health ping used by the reachability indicator: frequent enough for
@@ -39,6 +40,11 @@ internal class ServerHealthMonitor(
     private val pollMs: Long = HEALTH_POLL_MS,
 ) {
     private val target = MutableStateFlow(initialTarget)
+
+    // A [pingNow] nudge: the ping loop waits out the poll interval on it, so a send short-circuits
+    // the wait. CONFLATED keeps a nudge that arrives during an in-flight ping for the next wait
+    // instead of dropping it (that ping started before the nudge, so its result may be stale).
+    private val kick = Channel<Unit>(Channel.CONFLATED)
 
     private val _reachable = MutableStateFlow(ServerReachable.UNKNOWN)
     val reachable: StateFlow<ServerReachable> = _reachable.asStateFlow()
@@ -69,7 +75,7 @@ internal class ServerHealthMonitor(
                         }
                         _reachable.value =
                             if (ok) ServerReachable.REACHABLE else ServerReachable.UNREACHABLE
-                        delay(pollMs)
+                        withTimeoutOrNull(pollMs) { kick.receive() } // next tick early on a pingNow nudge
                     }
                 }
             } finally {
@@ -82,6 +88,14 @@ internal class ServerHealthMonitor(
     /** Changes the ping target (coordinator connect/disconnect); null stops the poller at UNKNOWN. */
     fun setTarget(serverUrl: String?) {
         target.value = serverUrl
+    }
+
+    /**
+     * Ping right now instead of waiting out the rest of the poll interval — the indicator may hold a
+     * value from before the device slept (app resume/unlock). No-op while no target is set.
+     */
+    fun pingNow() {
+        kick.trySend(Unit)
     }
 
     // suspend isn't superfluous: [SyncClient.close] is suspend, and closing the old client on URL
