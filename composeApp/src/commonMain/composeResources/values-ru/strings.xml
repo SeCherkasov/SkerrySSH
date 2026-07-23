@@ -44,7 +44,7 @@
     <string name="rail_snippets">Сниппеты</string>
     <string name="rail_vault">Хранилище</string>
     <string name="rail_hosts">Хосты</string>
-    <string name="rail_team">Команда</string>
+    <string name="rail_team">Команды</string>
 
     <!-- Нативные файловые диалоги SFTP (desktop). -->
     <string name="sftp_dialog_save_as">Сохранить как</string>

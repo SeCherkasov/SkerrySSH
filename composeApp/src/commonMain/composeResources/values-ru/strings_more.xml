@@ -2,10 +2,10 @@
     <string name="more_title">Ещё</string>
     <string name="more_port_forwarding">Проброс портов</string>
     <string name="more_known_hosts">Известные хосты</string>
-    <string name="more_team">Команда</string>
+    <string name="more_team">Команды</string>
     <string name="more_ai_privacy">ИИ-ассистент</string>
     <string name="more_ai_subtitle_byok">OpenAI · BYOK</string>
-    <string name="more_ai_subtitle_local">Локально</string>
+    <string name="more_ai_subtitle_local">Локальный</string>
     <string name="more_ai_subtitle_off">Выключен</string>
     <string name="more_sync">Синхронизация</string>
     <string name="more_lock">Заблокировать Skerry</string>
