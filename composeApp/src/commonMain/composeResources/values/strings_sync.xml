@@ -80,8 +80,6 @@
     <string name="sync_load_devices_failed">Couldn't load devices. Try Sync now.</string>
     <string name="sync_only_this_device">Only this device so far.</string>
     <string name="sync_this_device_badge">● this device</string>
-    <string name="sync_device_linked_current">linked · this device</string>
-    <string name="sync_device_linked">linked device</string>
     <string name="sync_confirm">Confirm</string>
     <string name="sync_cancel">Cancel</string>
     <string name="sync_revoke">Revoke</string>

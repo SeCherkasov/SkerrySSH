@@ -59,7 +59,6 @@ import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSync
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.teams.AutoPullTeamsOnOnline
-import app.skerry.ui.app.MobileTab
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.host.folderHeaderAnchor
@@ -81,7 +80,7 @@ internal val MOBILE_PREVIEW_HOSTS = listOf(
 )
 
 /**
- * Root screen of the Hosts tab: header with title and avatar (→ More), search field, tag
+ * Root screen of the Hosts tab: header with title and sync indicator, search field, tag
  * filter-chip row, host sections, and "new connection" FAB. Catalog is the live [LocalHosts]
  * (behind the vault gate) or [MOBILE_PREVIEW_HOSTS] on the preview path. Tapping a host opens
  * [MobileRoute.HostDetail].
@@ -105,7 +104,7 @@ fun MobileHostsScreen(state: MobileDesignState) {
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            HostsHeader(onAvatar = { state.select(MobileTab.More) })
+            HostsHeader()
             HostsSearch(query, onChange = { query = it })
             HostsChips(list.chips, active = chip, onSelect = { chip = it })
             Spacer(Modifier.height(2.dp))
@@ -125,7 +124,9 @@ fun MobileHostsScreen(state: MobileDesignState) {
             if (query.isBlank() && chip == ALL_HOSTS_CHIP) {
                 MobileTeamHostsSections(hosts)
             }
-            Spacer(Modifier.height(96.dp)) // room for the tab bar and FAB
+            // Room for the tab bar AND the FAB above it (bottom 104dp + 56dp size + 16dp margin): anything less
+            // leaves the last rows permanently stuck under the "+" button at full scroll.
+            Spacer(Modifier.height(176.dp))
         }
         MobileFabButton(
             onClick = state::openNewConn,
@@ -236,33 +237,25 @@ private fun MobileDropLine(horizontal: Dp = 18.dp) {
     )
 }
 
-/** Header: "Hosts" (28sp) + round account avatar on the right (opens the More tab). */
+/** Header: "Hosts" (28sp) + sync indicator on the right. */
 @Composable
-private fun HostsHeader(onAvatar: () -> Unit) {
+private fun HostsHeader() {
     Row(
         Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         MobileScreenTitle(stringResource(Res.string.shell_hosts))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Sync indicator driven by session status (see syncIndicator), not just server
-            // reachability: shows "paused/error" without a working session instead of a false green online.
-            val syncC = LocalSync.current
-            val ind = syncC?.let { syncIndicatorLocalized(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
-            if (ind != null) {
-                Sym(ind.icon, size = 19.sp, color = when (ind.level) {
-                    SyncIndicatorLevel.OK -> Skerry.colors.moss
-                    SyncIndicatorLevel.WARN -> Skerry.colors.amber
-                    SyncIndicatorLevel.ERROR -> Skerry.colors.sunset
-                })
-            }
-            Box(
-                Modifier.size(34.dp).clip(CircleShape).background(Skerry.colors.cyan).clickable(onClick = onAvatar),
-                contentAlignment = Alignment.Center,
-            ) {
-                Sym("person", size = 19.sp, color = Skerry.colors.ink)
-            }
+        // Sync indicator driven by session status (see syncIndicator), not just server
+        // reachability: shows "paused/error" without a working session instead of a false green online.
+        val syncC = LocalSync.current
+        val ind = syncC?.let { syncIndicatorLocalized(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
+        if (ind != null) {
+            Sym(ind.icon, size = 19.sp, color = when (ind.level) {
+                SyncIndicatorLevel.OK -> Skerry.colors.moss
+                SyncIndicatorLevel.WARN -> Skerry.colors.amber
+                SyncIndicatorLevel.ERROR -> Skerry.colors.sunset
+            })
         }
     }
 }

@@ -81,7 +81,7 @@
     <string name="shell_search_hosts">Поиск хостов, тегов…</string>
 
     <!-- Mobile route placeholder (MobileDesignApp.kt) -->
-    <string name="shell_route_team">Команда</string>
+    <string name="shell_route_team">Команды</string>
 
     <!-- Desktop chrome: confirm dialogs, title bar, status bar (DesktopDesignApp.kt) -->
     <string name="shell_this_session">эта сессия</string>

@@ -1,6 +1,7 @@
 package app.skerry.ui.host
 
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -10,7 +11,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import app.skerry.ui.host.FolderBounds
@@ -142,10 +149,76 @@ fun Modifier.folderHeaderAnchor(state: HostDragState, name: String): Modifier =
     onGloballyPositioned { state.setFolderHeader(name, it.boundsInWindow()) }
 
 /**
+ * Minimum pointer travel before a mouse press turns into a row/folder drag. Compose's built-in
+ * drag slop for a MOUSE pointer is ~0.125dp — sub-pixel — so the 1–2px of jitter inside a normal
+ * click would start a "drag" that consumes the move and cancels the row's tap/double-tap, making
+ * clicks connect only intermittently (how often depended on how still the hand/mouse was).
+ */
+private val MOUSE_DRAG_DEAD_ZONE = 6.dp
+
+/**
+ * Like detectDragGestures, but the drag claims the pointer only after [MOUSE_DRAG_DEAD_ZONE]
+ * (mouse) or the standard touch slop. Nothing is consumed before that, so click jitter reaches the
+ * row's click handlers untouched; a genuine drag replays the accumulated offset on start, so the
+ * dragged row doesn't jump. [onEnd]/[onCancel] fire only if the drag actually started.
+ */
+private suspend fun PointerInputScope.detectDeadZoneDragGestures(
+    onStart: (Offset) -> Unit,
+    onMove: (PointerInputChange, Offset) -> Unit,
+    onEnd: () -> Unit,
+    onCancel: () -> Unit,
+) = awaitEachGesture {
+    val down = awaitFirstDown(requireUnconsumed = false)
+    val threshold =
+        if (down.type == PointerType.Mouse) MOUSE_DRAG_DEAD_ZONE.toPx() else viewConfiguration.touchSlop
+    var dragging = false
+    var accumulated = Offset.Zero
+    try {
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == down.id }
+            if (change == null || (change.isConsumed && !change.changedToUpIgnoreConsumed())) {
+                // Pointer stream broken, or a deeper handler claimed a non-up change.
+                if (dragging) onCancel()
+                break
+            }
+            if (change.changedToUpIgnoreConsumed()) {
+                if (dragging) onEnd()
+                break
+            }
+            val delta = change.positionChange()
+            if (dragging) {
+                // Only genuine movement is consumed (and surfaced), like foundation's drag():
+                // a wheel Scroll change mid-drag has a zero positionChange, and consuming it
+                // would block the sidebar's verticalScroll while a drag is active.
+                if (delta != Offset.Zero) {
+                    change.consume()
+                    onMove(change, delta)
+                }
+            } else {
+                accumulated += delta
+                if (accumulated.getDistance() >= threshold) {
+                    dragging = true
+                    change.consume()
+                    onStart(down.position)
+                    onMove(change, accumulated)
+                }
+            }
+        }
+    } catch (e: CancellationException) {
+        // The row can leave composition mid-drag (host deleted/filtered out by a sync apply);
+        // without this the drop highlight would stay stuck until an unrelated drag resets it.
+        if (dragging) onCancel()
+        throw e
+    }
+}
+
+/**
  * Makes a host row draggable. [folders] is read lazily (a fresh list at gesture time), [onDrop]
  * receives the target folder and index and moves the host via the controller. [longPress] selects
- * the gesture start: on desktop, immediately on drag (mouse); on touch (mobile), after a long
- * press, otherwise drag would hijack the list's vertical scroll.
+ * the gesture start: on desktop, on drag past a small dead zone (mouse, see
+ * [detectDeadZoneDragGestures]); on touch (mobile), after a long press, otherwise drag would
+ * hijack the list's vertical scroll.
  */
 fun Modifier.draggableHostRow(
     state: HostDragState,
@@ -175,7 +248,7 @@ fun Modifier.draggableHostRow(
     if (longPress) {
         detectDragGesturesAfterLongPress(onDragStart = onStart, onDrag = onMove, onDragEnd = onEnd, onDragCancel = onCancel)
     } else {
-        detectDragGestures(onDragStart = onStart, onDrag = onMove, onDragEnd = onEnd, onDragCancel = onCancel)
+        detectDeadZoneDragGestures(onStart, onMove, onEnd, onCancel)
     }
 }
 
@@ -211,6 +284,6 @@ fun Modifier.draggableFolderHeader(
     if (longPress) {
         detectDragGesturesAfterLongPress(onDragStart = onStart, onDrag = onMove, onDragEnd = onEnd, onDragCancel = onCancel)
     } else {
-        detectDragGestures(onDragStart = onStart, onDrag = onMove, onDragEnd = onEnd, onDragCancel = onCancel)
+        detectDeadZoneDragGestures(onStart, onMove, onEnd, onCancel)
     }
 }

@@ -70,8 +70,6 @@ import app.skerry.ui.generated.resources.sync_loading_devices
 import app.skerry.ui.generated.resources.sync_load_devices_failed
 import app.skerry.ui.generated.resources.sync_only_this_device
 import app.skerry.ui.generated.resources.sync_this_device_badge
-import app.skerry.ui.generated.resources.sync_device_linked_current
-import app.skerry.ui.generated.resources.sync_device_linked
 import app.skerry.ui.generated.resources.sync_confirm
 import app.skerry.ui.generated.resources.sync_cancel
 import app.skerry.ui.generated.resources.sync_revoke
@@ -80,6 +78,7 @@ import app.skerry.ui.generated.resources.stail_reenroll_prompt_cancel
 import app.skerry.ui.generated.resources.stail_reenroll_prompt_subtitle
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.GhostButton
+import app.skerry.ui.design.HLine
 import app.skerry.ui.app.LocalSync
 import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
@@ -203,13 +202,9 @@ private fun SyncBody(sync: SyncCoordinator) {
             // Account+Sync into one screen, so this block lives here (desktop has a separate Account tab).
             AccountIdentityBlock(s.accountId, Modifier.padding(top = 12.dp))
             // Same style as desktop (ghost, not filled primary) for platform parity.
-            // Mobile merges the desktop Account+Sync tabs into one screen, so Sync now and
-            // Disconnect sit next to each other (separated by tabs on desktop).
-            Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                GhostButton(stringResource(Res.string.sync_sync_now), onClick = { sync.syncNow() })
-                GhostButton(stringResource(Res.string.sync_disconnect), onClick = { sync.disconnect() }, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.4f))
-            }
-            MobileLinkDeviceSection(sync)
+            // Mobile merges the desktop Account+Sync tabs into one screen, so Sync now,
+            // Disconnect and Link a device sit together (separated by tabs on desktop).
+            MobileAccountActions(sync)
             MobileWhatSyncs(sync)
             MobileLinkedDevices(sync)
         }
@@ -250,7 +245,9 @@ private fun SyncBody(sync: SyncCoordinator) {
 private fun MobileWhatSyncs(sync: SyncCoordinator) {
     val settings = sync.syncSettings.collectAsState().value
     LaunchedEffect(Unit) { sync.refreshSyncSettings() }
-    Txt(stringResource(Res.string.sync_what_syncs), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 4.dp))
+    // Section framed by lines above the header and below the toggles, matching desktop WhatSyncsHeader.
+    HLine(modifier = Modifier.padding(top = 20.dp))
+    Txt(stringResource(Res.string.sync_what_syncs), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp))
     // onToggle reads the current value from the flow, not a composition snapshot (stale-closure write-write).
     MobileSyncToggleRow(stringResource(Res.string.sync_what_hosts), null, on = settings.syncHosts) {
         val current = sync.syncSettings.value
@@ -260,17 +257,24 @@ private fun MobileWhatSyncs(sync: SyncCoordinator) {
         val current = sync.syncSettings.value
         sync.setSyncSettings(current.copy(syncSnippets = !current.syncSnippets))
     }
+    HLine()
 }
 
 /**
- * Mobile "Link a device" section: the button expands an inline card with the pairing QR/code (shared
- * [PairingOfferContent]). Inline rather than a dialog — the mobile idiom of the Sync screen.
+ * Connected-account actions stretched to the full screen width so the edges line up: Sync now and
+ * Disconnect split the first row in half, Link a device takes the whole second row (content-hugging
+ * buttons left the block ragged). "Link a device" expands an inline card with the pairing QR/code
+ * (shared [PairingOfferContent]) — inline rather than a dialog, the mobile idiom of the Sync screen.
  */
 @Composable
-private fun MobileLinkDeviceSection(sync: SyncCoordinator) {
+private fun MobileAccountActions(sync: SyncCoordinator) {
     var show by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        GhostButton(stringResource(Res.string.sync_sync_now), onClick = { sync.syncNow() }, modifier = Modifier.weight(1f))
+        GhostButton(stringResource(Res.string.sync_disconnect), onClick = { sync.disconnect() }, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.4f), modifier = Modifier.weight(1f))
+    }
     if (!show) {
-        GhostButton(stringResource(Res.string.sync_link_device), onClick = { show = true }, icon = "qr_code", modifier = Modifier.padding(top = 12.dp))
+        GhostButton(stringResource(Res.string.sync_link_device), onClick = { show = true }, icon = "qr_code", modifier = Modifier.fillMaxWidth().padding(top = 10.dp))
         return
     }
     Spacer(Modifier.height(16.dp))
@@ -345,17 +349,14 @@ private fun MobileDeviceRow(device: RemoteDevice, onRevoke: (() -> Unit)?) {
     // Revoke is irreversible from the UI (the device reconnects with the master password) — confirm on a second click.
     var confirming by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 9.dp),
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Sym("devices", size = 20.sp, color = Skerry.colors.dim)
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Txt(device.name, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
-                if (device.current) Txt(stringResource(Res.string.sync_this_device_badge), color = Skerry.colors.moss, size = 10.sp)
-            }
-            Txt(if (device.current) stringResource(Res.string.sync_device_linked_current) else stringResource(Res.string.sync_device_linked), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Txt(device.name, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+            if (device.current) Txt(stringResource(Res.string.sync_this_device_badge), color = Skerry.colors.moss, size = 10.sp)
         }
         if (onRevoke != null) {
             if (confirming) {

@@ -62,18 +62,28 @@ fun AccountIdentityBlock(accountId: String, modifier: Modifier = Modifier) {
     ) {
         IdentityRow(stringResource(Res.string.sync_account_id_label), accountId, mono, copied == accountId) { copied = accountId }
         if (fingerprint != null) {
-            IdentityRow(stringResource(Res.string.sync_sharing_fingerprint_label), fingerprint, mono, copied == fingerprint) { copied = fingerprint }
+            IdentityRow(stringResource(Res.string.sync_sharing_fingerprint_label), fingerprint, mono, copied == fingerprint, display = elideFingerprint(fingerprint)) { copied = fingerprint }
         }
         Txt(stringResource(Res.string.sync_identity_hint), color = Skerry.colors.faint, size = 11.sp, lineHeight = 15.sp)
     }
 }
 
+/**
+ * All 8 dash-separated groups don't fit a phone-width row; show head and tail only. The copy
+ * button still copies the full value, and invite dialogs keep showing it whole for verification.
+ */
+internal fun elideFingerprint(value: String): String {
+    val groups = value.split('-')
+    if (groups.size < 5) return value
+    return groups.take(2).joinToString("-") + "-…-" + groups.takeLast(2).joinToString("-")
+}
+
 @Composable
-private fun IdentityRow(label: String, value: String, mono: FontFamily, copied: Boolean, onCopied: () -> Unit) {
+private fun IdentityRow(label: String, value: String, mono: FontFamily, copied: Boolean, display: String = value, onCopied: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Column(Modifier.weight(1f)) {
             Txt(label.uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
-            Txt(value, color = Skerry.colors.cyanBright, size = 13.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
+            Txt(display, color = Skerry.colors.cyanBright, size = 13.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
         }
         if (copied) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

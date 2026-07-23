@@ -53,6 +53,17 @@ class TabDragState {
     /** Forget geometry for a closed tab, so bounds don't accumulate for stale ids. */
     fun clearBounds(id: String) { bounds.remove(id) }
 
+    /**
+     * Forget a closed tab entirely. Besides dropping its bounds, aborts the drag if the closed tab
+     * is the one being dragged — possible via middle-click, which is independent of the primary
+     * button holding the drag. The chip's removal cancels the drag coroutine without onDragEnd/
+     * onDragCancel, so without this the insert line would linger at a stale index.
+     */
+    fun tabClosed(id: String) {
+        clearBounds(id)
+        if (draggingTabId == id) end()
+    }
+
     fun start(id: String, localOffsetX: Float) {
         draggingTabId = id
         pointerX = (bounds[id]?.left ?: 0f) + localOffsetX

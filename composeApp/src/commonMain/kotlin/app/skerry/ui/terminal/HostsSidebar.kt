@@ -4,7 +4,6 @@ import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
@@ -37,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -45,6 +45,9 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -122,12 +125,23 @@ import app.skerry.ui.theme.Skerry
 // preview), a RECENT section, and the "New connection" button.
 
 /**
+ * Double-click window for host rows, between two PRESS events (like [app.skerry.ui.sftp]'s file
+ * rows). Compose's own onDoubleClick rides the desktop ViewConfiguration's 300ms up→down window —
+ * tighter than OS double-click conventions (GNOME 400ms, Windows 500ms press-to-press) — so
+ * relaxed double clicks missed it and the row connected "every other time".
+ */
+private const val HOST_DOUBLE_CLICK_MS = 400L
+
+/** [HOST_DOUBLE_CLICK_MS] press-tracking reset: far enough in the past that no press pairs with it. */
+private const val NO_PRESS = Long.MIN_VALUE / 2
+
+/**
  * Host-row connect click behavior from Settings → Terminal → Behavior: single click connects
  * directly, double click requires a second click. Desktop-only (mobile always connects on tap).
  *
  * Double-click mode keeps two affordances:
  * - A single mouse click still *does* something: [onSingleClick] runs when provided (live catalog
- *   rows use it for selection highlight); otherwise combinedClickable's press feedback shows the
+ *   rows use it for selection highlight); otherwise clickable's press feedback shows the
  *   row isn't inert.
  * - Keyboard activation (Enter/Space) connects directly — the double-click requirement applies to
  *   the mouse only, so keyboard-only users can always connect.
@@ -140,25 +154,22 @@ private fun Modifier.hostConnectClick(
     when (LocalHostClickConnectMode.current) {
         HostClickConnectMode.SingleClick -> clickable(onClick = onClick)
         HostClickConnectMode.DoubleClick -> {
-            // Selection fires on the press *Release*, not on combinedClickable's onClick: when
-            // onDoubleClick is set, onClick is held back by the double-tap timeout (~300 ms) to
-            // disambiguate a single tap from a double one, so routing selection through onClick makes
-            // the highlight lag noticeably. Release fires on pointer-up of a genuine click, well
-            // before that timeout — so the highlight still feels immediate, but a press that turns
-            // into a drag-reorder or a drag-scroll emits Cancel (not Release) and no longer
-            // spuriously selects the row under the pointer.
+            // Selection fires on the press *Release*, not on clickable's onClick, keeping the
+            // highlight immediate while a press that turns into a drag-reorder or a drag-scroll
+            // emits Cancel (not Release) and doesn't spuriously select the row under the pointer.
             val interaction = remember { MutableInteractionSource() }
             val select = rememberUpdatedState(onSingleClick)
             LaunchedEffect(interaction) {
                 interaction.interactions.collect { if (it is PressInteraction.Release) select.value?.invoke() }
             }
+            val connect = rememberUpdatedState(onClick)
             // Chain onto `this` (not a fresh Modifier): the receiver already carries the row's
             // fillMaxWidth/padding/clip, and starting over would drop them — the row would lose its
             // left indent and stop filling the width, so it shifts when the mode changes.
-            // onPreviewKeyEvent must sit *outer* to combinedClickable: key events travel
-            // root→focused on the preview pass, and combinedClickable consumes Enter/Space itself,
-            // so a descendant onKeyEvent never fires. The preview handler intercepts first, making
-            // Enter/Space connect while the mouse still requires a double click (same pattern as
+            // onPreviewKeyEvent must sit *outer* to clickable: key events travel root→focused on
+            // the preview pass, and clickable consumes Enter/Space itself, so a descendant
+            // onKeyEvent never fires. The preview handler intercepts first, making Enter/Space
+            // connect while the mouse still requires a double click (same pattern as
             // TerminalScreen/CommandPalette).
             this
                 .onPreviewKeyEvent { event ->
@@ -171,12 +182,40 @@ private fun Modifier.hostConnectClick(
                         false
                     }
                 }
-                .combinedClickable(
+                .clickable(
                     interactionSource = interaction,
                     indication = LocalIndication.current,
                     onClick = {},
-                    onDoubleClick = onClick,
                 )
+                // The double click itself: raw PRESS counting in one loop, like SftpView's
+                // LiveFileRow — immune to Compose's 300ms up→down window (see HOST_DOUBLE_CLICK_MS)
+                // and to other gestures consuming the tap. Time comes from the event itself
+                // (uptimeMillis) — deterministic. Sits after clickable in the chain so it observes
+                // the Main pass before it; a press that arrives already consumed belongs to a
+                // descendant (the row's "⋮" menu button) and must not count toward a row
+                // double-click. Only primary-button presses count: middle/right have no row action
+                // (and middle is its own gesture on session tabs), so a left+middle chord or two
+                // middle clicks must not connect.
+                .pointerInput(Unit) {
+                    var lastDownMs = NO_PRESS
+                    awaitPointerEventScope {
+                        while (true) {
+                            val e = awaitPointerEvent()
+                            if (e.type != PointerEventType.Press || !e.buttons.isPrimaryPressed ||
+                                e.buttons.isSecondaryPressed || e.buttons.isTertiaryPressed
+                            ) continue
+                            val change = e.changes.first()
+                            if (change.isConsumed) continue
+                            val t = change.uptimeMillis
+                            if (t - lastDownMs <= HOST_DOUBLE_CLICK_MS) {
+                                connect.value()
+                                lastDownMs = NO_PRESS // a triple click doesn't connect twice
+                            } else {
+                                lastDownMs = t
+                            }
+                        }
+                    }
+                }
         }
     }
 
@@ -725,7 +764,7 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
  * [LocalRunSnippetOnHost].
  */
 @Composable
-private fun HostEntryRow(
+internal fun HostEntryRow(
     label: String,
     selected: Boolean,
     dot: Color,
@@ -776,7 +815,14 @@ private fun HostEntryRow(
         }
         if (hasMenu) {
             Box {
-                IconBtn("more_vert", onClick = { menuOpen = !menuOpen }, box = 22, icon = 16.sp, tint = Skerry.colors.faint)
+                // Mouse-only: keeping the menu out of Tab traversal makes one Tab = one host row
+                // (otherwise every row costs two presses); keyboard users get Enter/Space to connect.
+                IconBtn(
+                    "more_vert",
+                    onClick = { menuOpen = !menuOpen },
+                    modifier = Modifier.focusProperties { canFocus = false },
+                    box = 22, icon = 16.sp, tint = Skerry.colors.faint,
+                )
                 if (menuOpen) {
                     Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
                         Column(

@@ -45,6 +45,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -1055,7 +1057,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                         split = s.splitOpen,
                         active = s.id == sessions.activeId,
                         onClick = { sessions.activate(s.id) },
-                        onClose = { tabDrag.clearBounds(s.id); sessions.close(s.id) },
+                        onClose = { tabDrag.tabClosed(s.id); sessions.close(s.id) },
                         dragging = tabDrag.draggingTabId == s.id,
                         modifier = Modifier
                             .tabBoundsAnchor(tabDrag, s.id)
@@ -1123,7 +1125,7 @@ private fun SessionDot.tint(): Color = when (this) {
 }
 
 @Composable
-private fun SessionTabChip(
+internal fun SessionTabChip(
     name: String,
     dot: Color,
     active: Boolean,
@@ -1141,6 +1143,9 @@ private fun SessionTabChip(
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val showClose = active || hovered
+    // pointerInput(Unit) below outlives recompositions; read the fresh onClose through state so a
+    // reordered tab list doesn't close via a stale lambda.
+    val close = rememberUpdatedState(onClose)
     // Accent tints: the same 10%/20% steps the cyan tokens use, so a non-default accent keeps the
     // chip's weight instead of turning into a solid block.
     val accentBg = accent.copy(alpha = 0.10f)
@@ -1169,6 +1174,28 @@ private fun SessionTabChip(
                 },
             )
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            // Middle-click closes the tab (browser-tab convention), active or not: armed on the
+            // tertiary press, committed on its release while still over the chip — moving off
+            // before releasing aborts an accidental wheel-button bump, like browsers do. Raw event
+            // observation like HostsSidebar's double-click: clickable only reacts to the primary
+            // button, so the tertiary press is never consumed by it or by the ✕ IconBtn below.
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    var armed = false
+                    while (true) {
+                        val e = awaitPointerEvent()
+                        when {
+                            e.type == PointerEventType.Press && e.buttons.isTertiaryPressed -> armed = true
+                            e.type == PointerEventType.Release && armed && !e.buttons.isTertiaryPressed -> {
+                                armed = false
+                                val p = e.changes.first().position
+                                val inside = p.x >= 0f && p.y >= 0f && p.x < size.width && p.y < size.height
+                                if (inside) close.value()
+                            }
+                        }
+                    }
+                }
+            }
             .padding(start = 11.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
