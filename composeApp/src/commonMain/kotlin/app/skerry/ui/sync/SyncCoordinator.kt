@@ -327,9 +327,11 @@ class SyncCoordinator(
     @Volatile
     private var pushJob: Job? = null
 
-    // Backoff retry after a sync that failed with NETWORK (see [scheduleNetworkRetry]). Not cancelled
-    // by pause/disconnect: every tick rechecks lockPaused/session/status and the loop exits by itself
-    // when the failure is gone or nothing is left to sync. Scheduled only under [syncMutex].
+    // Backoff retry after a sync that failed with NETWORK (see [scheduleNetworkRetry]). Every tick
+    // rechecks lockPaused/session/status, so the loop also exits by itself when the failure is gone
+    // or nothing is left to sync; session turnover (activateSession/stopSubscriptions/dead refresh)
+    // additionally cancels it (no join needed) so a sleeping loop with an escalated backoff can't
+    // outlive its session and slow-roll the first retry of the next one. Scheduled only under [syncMutex].
     @Volatile
     private var retryJob: Job? = null
 
@@ -606,6 +608,9 @@ class SyncCoordinator(
             superseded = client?.takeIf { it !== syncClient }
             client = syncClient
             session = newSession
+            // A retry loop armed for the previous session must not carry its escalated backoff into
+            // this one — the fresh session's first network failure re-arms from the minimum.
+            retryJob?.cancel()
         }
         // Reactivation reconcile: drop the local records BEFORE resetting the cursor and running the first
         // sync, so the following full re-pull rebuilds them from the server snapshot and the subsequent
@@ -1075,6 +1080,14 @@ class SyncCoordinator(
 
     // Body of one sync cycle; called only with [syncMutex] already held (runSync/syncNow).
     private suspend fun runSyncLocked(c: SyncClient, s: SyncSession) {
+        // The vault may have locked while this cycle waited for [syncMutex]: the retry loop and the
+        // reachability trigger aren't part of [pauseForLock]'s cancel+join ordering (watch/push are),
+        // so their runSync can win the mutex after the pause parked Configured. Don't run a cycle
+        // that's guaranteed to throw inside the locked vault.
+        if (lockPaused) {
+            parkOnConfigured()
+            return
+        }
         try {
             runSyncAttempt(c, s)
         } catch (e: CancellationException) {
@@ -1128,9 +1141,24 @@ class SyncCoordinator(
             // SupervisorJob and the status stuck on Busy (eternal spinner). syncNow/restoreSession call this.
             _status.value = SyncStatus.Failed(SyncFailureReason.SyncFailed, e.message)
         }
+        // The vault locked while this cycle was in flight (pauseForLock joins only watch/push, so an
+        // untracked cycle — retry tick, syncNow, reachability trigger — can still be running when it
+        // parks Configured): whatever this cycle just wrote is stale. Restore Configured instead of
+        // leaving a Failed that nothing behind the lock screen would ever correct. Mirrors the
+        // lockPaused branch of the 401 recovery above, which covers only the UNAUTHORIZED path.
+        if (lockPaused) {
+            parkOnConfigured()
+            return
+        }
         // A network failure is transient by nature — retry with backoff instead of leaving the status
         // parked on "Sync error" until a manual sync. One central hook: every sync cycle ends here.
         if ((_status.value as? SyncStatus.Failed)?.reason == SyncFailureReason.Network) scheduleNetworkRetry()
+    }
+
+    /** Park the status on Configured (the vault-locked resting state); Disabled without a link. */
+    private fun parkOnConfigured() {
+        _status.value = configStore.load()?.let { SyncStatus.Configured(it.serverUrl, it.accountId) }
+            ?: SyncStatus.Disabled
     }
 
     /**
@@ -1142,6 +1170,12 @@ class SyncCoordinator(
      * session, and the status, so lock/disconnect/success all end it without an explicit cancel; a
      * successful retry sets Online inside [runSync] itself. Scheduled under [syncMutex] (the caller
      * holds it), so the single-instance check doesn't race.
+     *
+     * Single instance is deliberate: a failure that lands while a loop is already sleeping inherits
+     * its current backoff rather than resetting to the minimum — it's the same server, and the
+     * reachability trigger reacts to a real recovery instantly regardless of where the backoff is.
+     * Session turnover does reset it: activateSession/stopSubscriptions cancel the loop, so a fresh
+     * session's first failure re-arms at [SYNC_RETRY_MIN_MS].
      */
     private fun scheduleNetworkRetry() {
         if (retryJob?.isActive == true) return
@@ -1213,6 +1247,7 @@ class SyncCoordinator(
                 session = null
                 watchJob?.cancel() // cancel only — join/replace stay under opMutex (activateSession/disconnect)
                 pushJob?.cancel()
+                retryJob?.cancel() // the session is dead — nothing left for the retry loop to heal
                 runCatching { c.close() }
                 client = null
                 val cfg = configStore.load()
@@ -1467,10 +1502,14 @@ class SyncCoordinator(
     private suspend fun stopSubscriptions() {
         watchJob?.cancel()
         pushJob?.cancel()
+        // Cancel-only, no join: the retry loop takes only syncMutex and self-checks every tick — the
+        // cancel just frees the slot so the next failure arms a fresh loop at the minimum backoff.
+        retryJob?.cancel()
         watchJob?.join()
         pushJob?.join()
         watchJob = null
         pushJob = null
+        retryJob = null
     }
 
     /**
@@ -1481,13 +1520,18 @@ class SyncCoordinator(
      * erased, user reconnects by password). Already connected → no-op.
      */
     fun restoreSession() {
-        val cfg = configStore.load() ?: return
-        if (!cfg.keepConnected || cfg.sealedRefreshToken == null || session != null) return
+        // Cheap pre-check only — the authoritative copy is re-loaded under the lock below.
+        val quick = configStore.load() ?: return
+        if (!quick.keepConnected || quick.sealedRefreshToken == null || session != null) return
         scope.launch {
             opMutex.withLock {
-                // Recheck under the lock: a parallel connect/claim may have activated the session while
-                // we waited for opMutex — then there's nothing to restore.
-                if (session != null) return@withLock
+                // Re-load and re-check under the lock: while this coroutine waited for opMutex, a
+                // parallel connect/claim may have activated a session (nothing to restore), or a
+                // disconnect may have erased the link — restoring from the stale pre-check copy would
+                // silently re-link a device the user just disconnected (the refresh token is still
+                // valid server-side; disconnect doesn't revoke it).
+                val cfg = configStore.load() ?: return@withLock
+                if (!cfg.keepConnected || cfg.sealedRefreshToken == null || session != null) return@withLock
                 val dataKey = vault.exportDataKey() ?: return@withLock
                 _status.value = SyncStatus.Busy
                 try {

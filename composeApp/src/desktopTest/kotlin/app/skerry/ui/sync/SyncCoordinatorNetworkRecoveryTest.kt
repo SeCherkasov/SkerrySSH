@@ -15,6 +15,7 @@ import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.initializeVaultCrypto
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -45,14 +46,22 @@ class SyncCoordinatorNetworkRecoveryTest {
     private val account = "maya"
     private val password = "vault-A"
 
-    /** Client with a switchable server: [up] = false makes ping fail and refresh throw NETWORK. */
-    private class SwitchableServerClient : SyncClient {
+    /**
+     * Client with a switchable server: [up] = false makes ping fail and refresh throw NETWORK.
+     * [registerGate], when given, holds `register` open so a connect can be parked on [opMutex]
+     * mid-flight ([registering] completes once it is there).
+     */
+    private class SwitchableServerClient(private val registerGate: CompletableDeferred<Unit>? = null) : SyncClient {
         @Volatile var up = true
+        val registering = CompletableDeferred<Unit>()
 
         override suspend fun ping(): Boolean = up
 
-        override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession =
-            SyncSession(accountId, accessToken = "access", refreshToken = "refresh")
+        override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession {
+            registering.complete(Unit)
+            registerGate?.await()
+            return SyncSession(accountId, accessToken = "access", refreshToken = "refresh")
+        }
 
         override suspend fun refresh(session: SyncSession): SyncSession {
             if (!up) throw SyncException(SyncException.Kind.NETWORK, "server down")
@@ -160,6 +169,100 @@ class SyncCoordinatorNetworkRecoveryTest {
             }
             engineBroken.set(false)
             withTimeout(15_000) { sut.status.first { it is SyncStatus.Online } }
+        } finally {
+            sut.close()
+        }
+    }
+
+    @Test
+    fun `a sync finishing after a vault lock must not overwrite the parked Configured status`() = runBlocking<Unit> {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = SwitchableServerClient()
+        val engineBlocked = java.util.concurrent.atomic.AtomicBoolean(false)
+        val engineGate = CompletableDeferred<Unit>()
+        val sut = SyncCoordinator(
+            clientFactory = { client },
+            crypto = crypto,
+            vault = vault,
+            engineFactory = { _ ->
+                SyncRunner { _ ->
+                    if (engineBlocked.get()) {
+                        engineGate.await()
+                        // What a cycle inside a locked vault really does: throws from decrypt/merge.
+                        throw IllegalStateException("vault is locked")
+                    }
+                    SyncOutcome(pulled = 0, pushed = 0, cursor = 0L)
+                }
+            },
+            healthPollMs = 200,
+        )
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+
+            // A sync is in flight (parked inside the engine) when the vault locks: pauseForLock joins
+            // only watch/push, so it parks Configured while this cycle is still running.
+            engineBlocked.set(true)
+            sut.syncNow()
+            withTimeout(5_000) { sut.status.first { it == SyncStatus.Busy } }
+            vault.lock()
+            sut.pauseForLock()
+            withTimeout(5_000) { sut.status.first { it is SyncStatus.Configured } }
+
+            // The in-flight cycle now fails inside the locked vault. Its failure must not overwrite
+            // the Configured the pause just parked — that would show "Sync error" behind a lock screen
+            // with nothing left to correct it until the next unlock.
+            engineGate.complete(Unit)
+            delay(500)
+            assertTrue(
+                sut.status.value is SyncStatus.Configured,
+                "expected Configured after the lock, got ${sut.status.value}",
+            )
+        } finally {
+            sut.close()
+        }
+    }
+
+    @Test
+    fun `a queued restore must not resurrect a link the user disconnected`() = runBlocking<Unit> {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val configStore = InMemorySyncConfigStore()
+        // Seed a keep-connected link (token sealed under the live vault dataKey) so restoreSession applies.
+        val dk = vault.exportDataKey()!!
+        try {
+            configStore.save(
+                SyncConfig(
+                    serverUrl, account, deviceId = "dev-1", keepConnected = true,
+                    sealedRefreshToken = SealedTokenCodec(crypto).seal(dk, "refresh"),
+                ),
+            )
+        } finally {
+            dk.zeroize()
+        }
+        val gate = CompletableDeferred<Unit>()
+        val client = SwitchableServerClient(registerGate = gate)
+        val sut = coordinator(vault, client, configStore)
+        try {
+            // A connect parks on opMutex inside the gated register; disconnect and restore queue behind
+            // it in FIFO order (kotlinx Mutex is fair). The restore passes its pre-checks NOW — config
+            // present, no session yet — but by the time it gets the mutex the disconnect has erased the
+            // link. Restoring from the stale copy would silently re-link the device.
+            sut.connect(serverUrl, account, password.toCharArray())
+            withTimeout(30_000) { client.registering.await() }
+            sut.disconnect()
+            delay(100) // keep the queue order deterministic: disconnect enters the mutex queue first
+            sut.restoreSession()
+            gate.complete(Unit)
+
+            withTimeout(10_000) { sut.status.first { it == SyncStatus.Disabled } }
+            delay(700) // give the stale restore its chance to (wrongly) bring the link back
+            assertTrue(
+                sut.status.value == SyncStatus.Disabled,
+                "expected Disabled to stick after disconnect, got ${sut.status.value}",
+            )
+            assertTrue(configStore.load() == null, "disconnect erased the link; restore must not re-save it")
         } finally {
             sut.close()
         }
