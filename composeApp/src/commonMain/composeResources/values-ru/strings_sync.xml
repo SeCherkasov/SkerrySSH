@@ -80,8 +80,6 @@
     <string name="sync_load_devices_failed">Не удалось загрузить устройства. Нажмите «Синхронизировать».</string>
     <string name="sync_only_this_device">Пока только это устройство.</string>
     <string name="sync_this_device_badge">● это устройство</string>
-    <string name="sync_device_linked_current">привязано · это устройство</string>
-    <string name="sync_device_linked">привязанное устройство</string>
     <string name="sync_confirm">Подтвердить</string>
     <string name="sync_cancel">Отмена</string>
     <string name="sync_revoke">Отозвать</string>

@@ -80,8 +80,6 @@
     <string name="sync_load_devices_failed">无法加载设备。请尝试\"立即同步\"。</string>
     <string name="sync_only_this_device">目前只有此设备。</string>
     <string name="sync_this_device_badge">● 此设备</string>
-    <string name="sync_device_linked_current">已关联 · 此设备</string>
-    <string name="sync_device_linked">已关联设备</string>
     <string name="sync_confirm">确认</string>
     <string name="sync_cancel">取消</string>
     <string name="sync_revoke">撤销</string>
