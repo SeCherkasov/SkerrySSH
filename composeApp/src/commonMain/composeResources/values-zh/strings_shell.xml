@@ -74,6 +74,7 @@
     <string name="shell_quick_snippets">片段</string>
     <string name="shell_details">详情</string>
     <string name="shell_edit_host">编辑主机</string>
+    <string name="shell_duplicate_host">创建主机副本</string>
     <string name="shell_delete_host">删除主机</string>
 
     <!-- 移动端主机列表 (MobileHostsView.kt) -->

@@ -339,6 +339,9 @@ class DesktopDesignState(
     /** Host open in the modal for editing (null means the modal is in "New connection" mode). */
     var editingHost: Host? by mutableStateOf(null); private set
 
+    /** Host the modal is prefilled from as a copy ("Duplicate"); saving creates a new profile. */
+    var duplicatingHost: Host? by mutableStateOf(null); private set
+
     /** Host for which the delete-confirmation dialog is shown (null means no dialog). */
     var pendingDeleteHost: Host? by mutableStateOf(null); private set
 
@@ -402,9 +405,10 @@ class DesktopDesignState(
 
     fun lock() { locked = true; hostSearchQuery = "" }
     fun unlock() { locked = false }
-    fun openModal() { editingHost = null; modalOpen = true }
-    fun openEditModal(host: Host) { editingHost = host; modalOpen = true }
-    fun closeModal() { modalOpen = false; editingHost = null }
+    fun openModal() { editingHost = null; duplicatingHost = null; modalOpen = true }
+    fun openEditModal(host: Host) { editingHost = host; duplicatingHost = null; modalOpen = true }
+    fun openDuplicateModal(host: Host) { editingHost = null; duplicatingHost = host; modalOpen = true }
+    fun closeModal() { modalOpen = false; editingHost = null; duplicatingHost = null }
     fun requestDeleteHost(host: Host) { pendingDeleteHost = host }
     fun dismissDeleteHost() { pendingDeleteHost = null }
     fun requestCloseSession(id: String) { pendingClose = PendingClose.Session(id) }

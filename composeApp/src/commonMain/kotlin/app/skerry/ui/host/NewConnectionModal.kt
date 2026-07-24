@@ -85,6 +85,7 @@ import app.skerry.ui.generated.resources.conn_auth_private_key
 import app.skerry.ui.generated.resources.conn_auth_select_credential
 import app.skerry.ui.generated.resources.conn_cancel
 import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_duplicate_name
 import app.skerry.ui.generated.resources.conn_field_ai_policy
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
@@ -153,21 +154,33 @@ import app.skerry.ui.theme.Skerry
  * it (mock/preview), Save just closes the modal. In edit mode the form is prefilled from
  * [editHost] ([NewConnectionFormState.fromHost]), and saving keeps its [Host.id]. Tags are editable
  * (pills plus inline input, wired to [NewConnectionFormState]).
+ *
+ * [duplicateOf] opens the modal in "New connection" mode prefilled as a copy of that host
+ * ([NewConnectionFormState.duplicateOf]): same profile and shared secret under a "… Copy" name;
+ * saving creates a new record (id = null).
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
+fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplicateOf: Host? = null) {
     val hosts = LocalHosts.current
     // Already-created hosts, the suggestion source for the Group/Tags pickers (empty in mock/preview).
     val allHosts = hosts?.hosts ?: emptyList()
     val credentials = LocalCredentials.current
-    // Keyed by editHost: opening the modal for editing (or switching target) rebuilds the form from the profile.
-    val form = remember(editHost) { editHost?.let { NewConnectionFormState.fromHost(it) } ?: NewConnectionFormState() }
+    val copyName = duplicateOf?.let { stringResource(Res.string.conn_duplicate_name, it.label) }
+    // Keyed by editHost/duplicateOf: opening the modal for editing or duplicating (or switching target)
+    // rebuilds the form from the profile.
+    val form = remember(editHost, duplicateOf) {
+        when {
+            editHost != null -> NewConnectionFormState.fromHost(editHost)
+            duplicateOf != null -> NewConnectionFormState.duplicateOf(duplicateOf, copyName.orEmpty())
+            else -> NewConnectionFormState()
+        }
+    }
     // Guards repeated Save (Enter/double click) until the modal closes, otherwise a duplicate secret+host in the vault.
     // Keyed by editHost along with form: switching target resets the guard instead of sticking to the old one.
-    var submitting by remember(editHost) { mutableStateOf(false) }
+    var submitting by remember(editHost, duplicateOf) { mutableStateOf(false) }
     // Uncommitted tag input (pill not created yet). Hoisted here so Save can commit it.
-    var tagDraft by remember(editHost) { mutableStateOf("") }
+    var tagDraft by remember(editHost, duplicateOf) { mutableStateOf("") }
     // "Test connection": a one-off connect without opening a session. Only with a live transport
     // (behind the vault gate); in mock/preview tester == null and the button is disabled.
     val transport = LocalTestTransport.current
@@ -288,7 +301,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null) {
                 Spacer14()
                 Field(stringResource(Res.string.conn_field_tags)) {
                     // Suggestions = other hosts' tags not yet added here, narrowed by the typed draft.
-                    var tagFocused by remember(editHost) { mutableStateOf(false) }
+                    var tagFocused by remember(editHost, duplicateOf) { mutableStateOf(false) }
                     val tagFocus = remember { FocusRequester() }
                     val tagSugs = remember(allHosts, form.tags, tagDraft) { tagSuggestions(allHosts, form.tags, tagDraft) }
                     AnchoredDropdown(

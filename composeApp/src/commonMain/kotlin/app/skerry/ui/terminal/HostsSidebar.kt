@@ -87,6 +87,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_hosts_section
 import app.skerry.ui.generated.resources.term_menu_delete
+import app.skerry.ui.generated.resources.term_menu_duplicate
 import app.skerry.ui.generated.resources.term_menu_edit
 import app.skerry.ui.generated.resources.term_menu_run_snippet
 import app.skerry.ui.generated.resources.term_new_connection
@@ -695,6 +696,7 @@ private fun HostRow(
     val onClick = remember(host, connect) { { connect(host) } }
     val onSelect = remember(host) { { onSelectHost(host.id) } }
     val onEdit = remember(host, state) { { state.openEditModal(host) } }
+    val onDuplicate = remember(host, state) { { state.openDuplicateModal(host) } }
     val onDelete = remember(host, state) { { state.requestDeleteHost(host) } }
     // Forgets the row's geometry once the host leaves the list (deleted/filtered out).
     DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
@@ -719,8 +721,9 @@ private fun HostRow(
             icon = host.connectionType.icon,
             // Host object, for the "Run snippet..." menu item (runs a snippet on this host).
             host = host,
-            // Edit/delete the profile via the context menu (right-click/long-press).
+            // Edit/duplicate/delete the profile via the context menu (right-click/long-press).
             onEdit = onEdit,
+            onDuplicate = onDuplicate,
             onDelete = onDelete,
         )
     }
@@ -757,10 +760,10 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
  * optional badge. [icon] is the profile's [app.skerry.ui.host.icon] and stays [Skerry.colors.faint] — the two
  * markers read as separate axes, colour for session status and shape for protocol. Clicking the row
  * connects ([onClick]). When
- * [onEdit]/[onDelete] are provided (live catalog) or a snippet can be run on the host ([host] !=
- * null and [LocalSnippets] is present), a trailing "⋮" button opens a menu (Run snippet.../Edit/
- * Delete); its click is intercepted before [onClick], so opening the menu doesn't trigger a
- * connection. "Run snippet..." opens the snippet picker and runs it on [host] via
+ * [onEdit]/[onDuplicate]/[onDelete] are provided (live catalog) or a snippet can be run on the host
+ * ([host] != null and [LocalSnippets] is present), a trailing "⋮" button opens a menu (Run
+ * snippet.../Edit/Duplicate/Delete); its click is intercepted before [onClick], so opening the menu
+ * doesn't trigger a connection. "Run snippet..." opens the snippet picker and runs it on [host] via
  * [LocalRunSnippetOnHost].
  */
 @Composable
@@ -775,12 +778,13 @@ internal fun HostEntryRow(
     host: Host? = null,
     onSelect: (() -> Unit)? = null,
     onEdit: (() -> Unit)? = null,
+    onDuplicate: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
     val snippets = LocalSnippets.current
     val runSnippetOnHost = LocalRunSnippetOnHost.current
     val canRunSnippet = host != null && snippets != null
-    val hasMenu = onEdit != null || onDelete != null || canRunSnippet
+    val hasMenu = onEdit != null || onDuplicate != null || onDelete != null || canRunSnippet
     var menuOpen by remember { mutableStateOf(false) }
     var snippetPickerOpen by remember { mutableStateOf(false) }
     Row(
@@ -833,6 +837,9 @@ internal fun HostEntryRow(
                             }
                             onEdit?.let { edit ->
                                 HostMenuItem(stringResource(Res.string.term_menu_edit), Skerry.colors.text) { menuOpen = false; edit() }
+                            }
+                            onDuplicate?.let { duplicate ->
+                                HostMenuItem(stringResource(Res.string.term_menu_duplicate), Skerry.colors.text) { menuOpen = false; duplicate() }
                             }
                             onDelete?.let { delete ->
                                 HostMenuItem(stringResource(Res.string.term_menu_delete), Skerry.colors.sunset) { menuOpen = false; delete() }

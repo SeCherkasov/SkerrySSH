@@ -45,6 +45,7 @@ import app.skerry.ui.generated.resources.shell_quick_tunnels
 import app.skerry.ui.generated.resources.shell_quick_snippets
 import app.skerry.ui.generated.resources.shell_details
 import app.skerry.ui.generated.resources.shell_edit_host
+import app.skerry.ui.generated.resources.shell_duplicate_host
 import app.skerry.ui.generated.resources.shell_delete_host
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.LocalConnectHost
@@ -196,7 +197,8 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
         }
 
         // Edit host: opens the New connection sheet in edit mode for this profile (unavailable
-        // outside the gate, nothing to save to). Delete: removes the profile from the live catalog and pops back.
+        // outside the gate, nothing to save to). Duplicate: the same sheet prefilled as a copy.
+        // Delete: removes the profile from the live catalog and pops back.
         Column(
             Modifier.padding(start = 22.dp, end = 22.dp, top = 20.dp, bottom = 30.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -216,6 +218,21 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                     contentAlignment = Alignment.Center,
                 ) {
                     Txt(stringResource(Res.string.shell_edit_host), color = Skerry.colors.cyanBright, size = 14.sp, weight = FontWeight.Medium)
+                }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(13.dp))
+                        .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.4f), RoundedCornerShape(13.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { state.openDuplicateConn(host) },
+                        )
+                        .padding(13.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Txt(stringResource(Res.string.shell_duplicate_host), color = Skerry.colors.cyanBright, size = 14.sp, weight = FontWeight.Medium)
                 }
             }
             val onDelete = controller?.let { ctrl -> { ctrl.delete(host.id); state.pop() } }

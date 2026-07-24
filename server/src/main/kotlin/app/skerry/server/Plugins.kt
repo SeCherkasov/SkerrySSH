@@ -163,7 +163,7 @@ fun Application.configureServer(services: Services) {
     // SKERRY_CORS_HOSTS.
     if (services.config.corsHosts.isNotEmpty()) {
         install(CORS) {
-            services.config.corsHosts.forEach { allowHost(it, schemes = listOf("http", "https")) }
+            services.config.corsHosts.forEach { allowHost(it.host, schemes = it.schemes) }
             allowHeader(io.ktor.http.HttpHeaders.Authorization)
             allowHeader(io.ktor.http.HttpHeaders.ContentType)
             allowMethod(io.ktor.http.HttpMethod.Put)

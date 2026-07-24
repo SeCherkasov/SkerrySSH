@@ -301,6 +301,44 @@ class NewConnectionFormStateTest {
         assertNull(f.resolveCredentialId { error("ask must not save a credential") })
     }
 
+    // Duplicating a host: same profile under a new name, saved as a new record
+
+    @Test
+    fun duplicateOf_prefills_a_copy_that_saves_as_a_new_host() {
+        val host = Host(
+            id = "h1", label = "prod-web-01", address = "10.0.0.5", port = 2222,
+            username = "root", group = "Production", credentialId = "cred-9",
+            tags = listOf("prod"), jumpHostId = "bastion-1", keepAliveSeconds = 120,
+        )
+        val f = NewConnectionFormState.duplicateOf(host, name = "prod-web-01 Copy")
+        assertEquals("prod-web-01 Copy", f.name)
+        assertEquals(host.connectionType, f.connectionType)
+        assertEquals(host.aiPolicy, f.aiPolicy)
+        assertTrue(f.canSave)
+        // The copy shares the original's secret — nothing is re-saved to the vault.
+        val credentialId = f.resolveCredentialId { error("duplicate must not create a new credential") }
+        val draft = f.toDraft(id = null, credentialId = credentialId)
+        assertNull(draft.id) // a new profile, not an in-place edit of the source
+        assertEquals("cred-9", draft.credentialId)
+        assertEquals("10.0.0.5", draft.address)
+        assertEquals(2222, draft.port)
+        assertEquals("root", draft.username)
+        assertEquals("Production", draft.group)
+        assertEquals(listOf("prod"), draft.tags)
+        assertEquals("bastion-1", draft.jumpHostId)
+        assertEquals(120, draft.keepAliveSeconds)
+    }
+
+    @Test
+    fun duplicateOf_credential_less_host_stays_in_ask_mode() {
+        val host = Host(id = "h2", label = "box", address = "a", port = 22, username = "u")
+        val f = NewConnectionFormState.duplicateOf(host, name = "box Copy")
+        assertEquals(AuthMode.ASK, f.authMode)
+        val draft = f.toDraft(id = null, credentialId = f.resolveCredentialId { error("ask must not save a credential") })
+        assertNull(draft.id)
+        assertNull(draft.credentialId)
+    }
+
     // Tags (single-tag canonicalization is in app.skerry.shared.host.HostTagsTest)
 
     @Test
