@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -53,6 +55,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_ai_ask_placeholder
 import app.skerry.ui.generated.resources.term_ai_confirm_run
 import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_ai_explain_reading
 import app.skerry.ui.generated.resources.term_ai_not_a_command
 import app.skerry.ui.generated.resources.term_ai_run
 import app.skerry.ui.generated.resources.term_ai_run_anyway
@@ -119,6 +122,7 @@ internal fun AiBarInput(
         }
     }
     val pending = controller.pending
+    val explanation = controller.explanation
     val risk = controller.pendingRisk?.risk ?: CommandRisk.None
     val danger = risk == CommandRisk.Danger
     // Any destructive command (delete/overwrite) is colored red, even at Warn level.
@@ -136,8 +140,12 @@ internal fun AiBarInput(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             val leadColor = if (pending != null) accent else Skerry.colors.amber
-            // A destructive command shows a block icon instead of the terminal icon.
-            val leadIcon = if (pending != null) (if (severe) "block" else "terminal") else "auto_awesome"
+            // A destructive command shows a block icon; an explanation shows a summarize icon.
+            val leadIcon = when {
+                pending != null -> if (severe) "block" else "terminal"
+                explanation != null -> "summarize"
+                else -> "auto_awesome"
+            }
             Box(Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(leadColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
                 Sym(leadIcon, size = 16.sp, color = leadColor)
             }
@@ -159,6 +167,16 @@ internal fun AiBarInput(
                             if (info != null) Txt(info, color = infoColor, size = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }
+                    explanation != null ->
+                        // Free prose (may be several lines): scrolls within a bounded height rather than
+                        // growing the bar without limit. Empty while the request is starting.
+                        if (explanation.isEmpty()) {
+                            Txt(stringResource(Res.string.term_ai_explain_reading), color = Skerry.colors.dim, size = 13.sp)
+                        } else {
+                            Column(Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
+                                Txt(explanation, color = Skerry.colors.text, size = 12.5.sp, lineHeight = 18.sp)
+                            }
+                        }
                     controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = Skerry.colors.dim, size = 13.sp)
                     controller.notice != null -> when (val notice = controller.notice!!) {
                         is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = Skerry.colors.amber, size = 12.5.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -194,9 +212,26 @@ internal fun AiBarInput(
                     )
                     AiActionChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint, onClick = { controller.dismiss() })
                 }
+                explanation != null ->
+                    AiActionChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint, onClick = { controller.dismiss() })
                 controller.notice != null ->
                     AiActionChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint, onClick = { controller.dismiss() })
                 else -> {
+                    // Explain the current selection, or the visible screen when nothing is selected.
+                    if (terminal != null) {
+                        Box(
+                            Modifier.size(28.dp).clip(RoundedCornerShape(6.dp))
+                                .background(Skerry.colors.overlaySoft)
+                                .border(1.dp, Skerry.colors.line, RoundedCornerShape(6.dp))
+                                .clickable(enabled = !controller.busy) {
+                                    // Selection wins; else the last command's output; else the whole screen.
+                                    controller.explain(terminal.selectedText() ?: terminal.lastOutput() ?: terminal.output)
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Sym("summarize", size = 16.sp, color = Skerry.colors.amber)
+                        }
+                    }
                     AiBarTag("verified_user", labelUppercase(controller.policy.shortLabel()), mono)
                     Box(
                         Modifier.size(28.dp).clip(RoundedCornerShape(6.dp)).background(Skerry.colors.cyan)

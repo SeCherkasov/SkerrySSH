@@ -24,11 +24,13 @@ private class CapturingProvider(
     private val failWith: AiException? = null,
 ) : AiProvider {
     var lastUserContent: String? = null
+    var lastSystemContent: String? = null
     var lastTemperature: Double? = null
     var built = false
     override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
         built = true
         lastUserContent = request.messages.last().content
+        lastSystemContent = request.messages.first().content
         lastTemperature = request.temperature
         failWith?.let { throw it }
         deltas.forEach { emit(AiDelta(it)) }
@@ -380,5 +382,123 @@ class TerminalAiControllerTest {
         assertEquals(AiFailure.UNAUTHORIZED, assertIs<AiNotice.Error>(c.notice).failure)
         assertNull(c.pending)
         assertFalse(c.busy)
+    }
+
+    // --- Explain output ---
+
+    @Test
+    fun `explain surfaces the reply as prose, never a runnable command`() = runTest {
+        val p = CapturingProvider(deltas = listOf("This lists ", "files; nothing failed."))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.explain("$ ls -la\ntotal 4\ndrwxr-xr-x 2 root root")
+        advanceUntilIdle()
+
+        assertEquals("This lists files; nothing failed.", c.explanation)
+        assertNull(c.pending, "an explanation is prose, never offered for execution")
+        assertNull(c.notice)
+        assertFalse(c.busy)
+        // The output being explained is sent as the user message; the system prompt asks for an explanation.
+        assertTrue(p.lastSystemContent!!.contains("explain", ignoreCase = true))
+        assertTrue(p.lastUserContent!!.contains("total 4"))
+    }
+
+    @Test
+    fun `explain mandates the UI language up front and repeats it`() = runTest {
+        // Regression: with a single trailing "reply in X" the model mirrored the (English) output's
+        // language instead of the UI's. The mandate must lead the prompt and be repeated.
+        val p = CapturingProvider(deltas = listOf("Команда uptime показывает аптайм."))
+        val c = TerminalAiController(
+            AiPolicy.Balanced, settings = { AiSettings(apiKey = "sk-x") },
+            providerFactory = { p }, scope = this, responseLanguage = { "Russian" },
+        )
+
+        c.explain("12:21:14 up 129 days, load average: 0.36, 0.20, 0.10")
+        advanceUntilIdle()
+
+        val system = p.lastSystemContent!!
+        assertTrue(system.take(60).contains("Russian"), "the language mandate must lead the prompt")
+        assertTrue("Russian".toRegex().findAll(system).count() >= 2, "language must be repeated for emphasis")
+    }
+
+    @Test
+    fun `explain is a no-op on blank output`() = runTest {
+        val p = CapturingProvider(deltas = listOf("anything"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.explain("   \n  ")
+        advanceUntilIdle()
+
+        assertFalse(p.built)
+        assertNull(c.explanation)
+        assertFalse(c.busy)
+    }
+
+    @Test
+    fun `explain respects strict policy and never sends output to the cloud`() = runTest {
+        val p = CapturingProvider(deltas = listOf("some prose"))
+        val c = controller(AiPolicy.Strict, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.explain("secret log output")
+        advanceUntilIdle()
+
+        assertEquals(AiNotice.Blocked(app.skerry.shared.ai.AiRoute.Reason.STRICT_NEEDS_DEVICE), c.notice)
+        assertFalse(p.built, "Strict must not build a cloud provider for output that may be sensitive")
+        assertNull(c.explanation)
+    }
+
+    @Test
+    fun `explain sanitizes secrets in the output for balanced policy`() = runTest {
+        val p = CapturingProvider(deltas = listOf("ok"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.explain("db connect password=hunter2 established")
+        advanceUntilIdle()
+
+        assertNotNull(p.lastUserContent)
+        assertFalse(p.lastUserContent!!.contains("hunter2"), "secrets in the output must be scrubbed for Balanced")
+    }
+
+    @Test
+    fun `explain clamps long output to a bounded tail`() = runTest {
+        val p = CapturingProvider(deltas = listOf("ok"))
+        val c = controller(AiPolicy.Permissive, AiSettings(apiKey = "sk-x"), p, this)
+
+        val long = "z".repeat(TerminalAiController.EXPLAIN_CONTEXT_LIMIT + 500)
+        c.explain(long)
+        advanceUntilIdle()
+
+        val sent = p.lastUserContent!!
+        assertEquals(TerminalAiController.EXPLAIN_CONTEXT_LIMIT + 1, sent.length, "kept tail plus one ellipsis marker")
+        assertTrue(sent.startsWith("…"), "the truncated head is marked with an ellipsis")
+    }
+
+    @Test
+    fun `starting an explanation clears a previous command suggestion`() = runTest {
+        val p = CapturingProvider(deltas = listOf("uptime"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.ask("show uptime")
+        advanceUntilIdle()
+        assertEquals("uptime", c.pending)
+
+        c.explain("$ uptime\n load average: 0.0")
+        advanceUntilIdle()
+
+        assertEquals("uptime", c.explanation, "the explain surface replaces the pending command")
+        assertNull(c.pending)
+    }
+
+    @Test
+    fun `dismiss clears an explanation`() = runTest {
+        val p = CapturingProvider(deltas = listOf("some prose"))
+        val c = controller(AiPolicy.Balanced, AiSettings(apiKey = "sk-x"), p, this)
+
+        c.explain("$ ls")
+        advanceUntilIdle()
+        assertEquals("some prose", c.explanation)
+
+        c.dismiss()
+        assertNull(c.explanation)
     }
 }

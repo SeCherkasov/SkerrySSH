@@ -103,6 +103,71 @@ class TerminalScreenStateTest {
         scope.cancel()
     }
 
+    // --- lastOutput / lastCommandBlock (for "explain this output") ---
+
+    @Test
+    fun `lastCommandBlock returns the last command and its output, not the login banner`() {
+        // Regression: with nothing selected, explaining sent the whole screen, so a long MOTD banner
+        // drowned out the actual last command (uptime). The block must be just that command + output.
+        val screen = listOf(
+            "Welcome to Ubuntu 22.04.5 LTS",
+            "",
+            " * Documentation:  https://help.ubuntu.com",
+            "This system has been minimized by removing packages.",
+            "Last login: Fri Jul 24 11:51:03 2026 from 178.205.96.77",
+            "root@140722:~# uptime",
+            " 12:21:14 up 129 days, 18:42,  1 user,  load average: 0.48, 0.14, 0.05",
+            "root@140722:~#",
+        ).joinToString("\n")
+
+        val block = lastCommandBlock(screen)
+
+        assertEquals(
+            "root@140722:~# uptime\n 12:21:14 up 129 days, 18:42,  1 user,  load average: 0.48, 0.14, 0.05",
+            block,
+        )
+        // The banner and unrelated history are excluded.
+        assertEquals(false, block!!.contains("Documentation"))
+        assertEquals(false, block.contains("Last login"))
+    }
+
+    @Test
+    fun `lastCommandBlock returns null when the prompt does not repeat`() {
+        // Only one prompt on screen: no earlier command line to bound the block, so fall back to the
+        // whole screen at the call site rather than mis-slicing.
+        assertEquals(null, lastCommandBlock("some free-form output\nwith no repeated prompt\nroot@140722:~#"))
+    }
+
+    @Test
+    fun `lastCommandBlock ignores a too-short prompt that would match everything`() {
+        // A bare "$" prompt would start-with-match unrelated lines; reject it.
+        assertEquals(null, lastCommandBlock("total output here\n$ ls\n$"))
+    }
+
+    @Test
+    fun `lastCommandBlock keeps a command that produced no output`() {
+        assertEquals("root@140722:~# cd /var/log", lastCommandBlock("root@140722:~# cd /var/log\nroot@140722:~#"))
+    }
+
+    @Test
+    fun `lastOutput reads the last command block from the live screen`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit(
+            ("Last login: Fri Jul 24 11:51:03 2026 from 178.205.96.77\r\n" +
+                "root@140722:~# uptime\r\n" +
+                " 12:21:14 up 129 days, 18:42,  1 user,  load average: 0.48, 0.14, 0.05\r\n" +
+                "root@140722:~#").encodeToByteArray(),
+        )
+
+        val last = state.lastOutput()
+        assertEquals(true, last != null && last.contains("uptime") && last.contains("load average"))
+        assertEquals(false, last!!.contains("Last login"))
+        scope.cancel()
+    }
+
     @Test
     fun `preloaded history feeds autosuggestion`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))

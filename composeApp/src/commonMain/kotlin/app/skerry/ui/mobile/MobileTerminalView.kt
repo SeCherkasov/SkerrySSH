@@ -17,12 +17,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -85,6 +87,7 @@ import app.skerry.ui.generated.resources.term_ai_run
 import app.skerry.ui.generated.resources.term_ai_run_anyway
 import app.skerry.ui.generated.resources.term_ai_confirm
 import app.skerry.ui.generated.resources.term_ai_dismiss
+import app.skerry.ui.generated.resources.term_ai_explain_reading
 import app.skerry.ui.generated.resources.term_ai_not_a_command
 import app.skerry.ui.generated.resources.term_password_label
 import app.skerry.ui.generated.resources.term_connect
@@ -414,6 +417,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
         if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
     }
     val pending = controller.pending
+    val explanation = controller.explanation
     val risk = controller.pendingRisk?.risk ?: CommandRisk.None
     val danger = risk == CommandRisk.Danger
     // Red for any destructive command (delete/overwrite), even Warn.
@@ -427,7 +431,11 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Sym(
-                if (pending != null) (if (severe) "block" else "terminal") else "auto_awesome",
+                when {
+                    pending != null -> if (severe) "block" else "terminal"
+                    explanation != null -> "summarize"
+                    else -> "auto_awesome"
+                },
                 size = 16.sp, color = if (pending != null) accent else Skerry.colors.amber,
             )
             Box(Modifier.weight(1f)) {
@@ -445,6 +453,14 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                             if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
                         }
                     }
+                    explanation != null ->
+                        if (explanation.isEmpty()) {
+                            Txt(stringResource(Res.string.term_ai_explain_reading), color = Skerry.colors.dim, size = 13.sp)
+                        } else {
+                            Column(Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
+                                Txt(explanation, color = Skerry.colors.text, size = 12.sp, lineHeight = 17.sp)
+                            }
+                        }
                     controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = Skerry.colors.dim, size = 13.sp)
                     controller.notice != null -> when (val notice = controller.notice!!) {
                         is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -475,9 +491,24 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                     }
                     MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
                 }
+                explanation != null ->
+                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
                 controller.notice != null ->
                     MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
                 else -> {
+                    // Explain the current selection, or the visible screen when nothing is selected.
+                    Box(
+                        Modifier.size(30.dp).clip(RoundedCornerShape(7.dp))
+                            .background(Skerry.colors.overlaySoft)
+                            .border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp))
+                            .clickable(enabled = !controller.busy) {
+                                // Selection wins; else the last command's output; else the whole screen.
+                                controller.explain(terminal.selectedText() ?: terminal.lastOutput() ?: terminal.output)
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Sym("summarize", size = 16.sp, color = Skerry.colors.amber)
+                    }
                     Txt(labelUppercase(controller.policy.shortLabel()), color = Skerry.colors.faint, size = 10.sp, font = mono)
                     Box(
                         Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.cyan)
