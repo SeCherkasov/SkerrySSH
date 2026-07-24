@@ -85,6 +85,13 @@ class TerminalAiController(
     var busy by mutableStateOf(false); private set
 
     /**
+     * Free-prose explanation of terminal output (from [explain]); the partial reply while streaming,
+     * the final text on completion, and `null` when not explaining. Distinct from [pending], which is
+     * a command — an explanation is only ever displayed, never offered for execution.
+     */
+    var explanation by mutableStateOf<String?>(null); private set
+
+    /**
      * The non-command outcome shown in the bar, at most one at a time; cleared by [dismiss] and by
      * the next [ask]. A sealed type instead of parallel flags, so a new kind of notice cannot be
      * left showing alongside another.
@@ -105,6 +112,7 @@ class TerminalAiController(
         pending = null
         pendingRisk = null
         pendingInfo = null
+        explanation = null
         val current = settings()
         val device = LocalModelCatalog.resolve(current.localModelId)
         val route = AiRouter.route(decision, current, device, localInstalled(device))
@@ -131,6 +139,71 @@ class TerminalAiController(
                 }
             },
         )
+    }
+
+    /**
+     * Ask the model to explain a chunk of terminal [output] — the current selection, or the visible
+     * screen. No-op if busy, empty, or AI is disabled.
+     *
+     * Routing is identical to [ask], so the per-host policy is honoured: under [AiPolicy.Strict] the
+     * output stays on the on-device model and is never sent to the cloud — terminal output can carry
+     * secrets, so this must not be weaker than command generation. Balanced still redacts secrets
+     * ([SecretRedactor]) before sending. Unlike [ask], the reply is free prose surfaced in
+     * [explanation]; it is never parsed as a command or offered for execution.
+     */
+    fun explain(output: String) {
+        val context = clampContext(output)
+        if (busy || context.isEmpty() || !decision.aiEnabled) return
+        notice = null
+        pending = null
+        pendingRisk = null
+        pendingInfo = null
+        explanation = null
+        val current = settings()
+        val device = LocalModelCatalog.resolve(current.localModelId)
+        val route = AiRouter.route(decision, current, device, localInstalled(device))
+        if (route !is AiRoute.Use) {
+            notice = AiNotice.Blocked((route as AiRoute.Blocked).reason)
+            return
+        }
+        val outbound = if (decision.sanitizeSecrets) SecretRedactor.redact(context) else context
+        busy = true
+        // Non-null (empty) marks the explain surface active so the bar shows it immediately, before
+        // the first delta, instead of the generic "Thinking…" line.
+        explanation = ""
+        val gen = ++generation
+        val messages = listOf(AiMessage(AiRole.SYSTEM, explainPrompt(responseLanguage())), AiMessage(AiRole.USER, outbound))
+        job = runner.launch(
+            temperature = EXPLAIN_TEMPERATURE,
+            endpoint = route.endpoint,
+            messages = messages,
+            onDelta = { explanation = it },
+            onComplete = { reply ->
+                val trimmed = reply.trim()
+                // A model that returns nothing usable falls back to the same fixed notice as a command
+                // reply with no content, rather than leaving an empty panel open.
+                if (trimmed.isEmpty()) {
+                    explanation = null
+                    notice = AiNotice.Rejected
+                } else {
+                    explanation = trimmed
+                }
+            },
+            onError = {
+                explanation = null
+                notice = AiNotice.Error(it)
+            },
+            onFinally = {
+                if (gen == generation) busy = false
+            },
+        )
+    }
+
+    /** Keep the tail of long output within [EXPLAIN_CONTEXT_LIMIT]; the most recent lines matter most. */
+    private fun clampContext(output: String): String {
+        val trimmed = output.trim()
+        if (trimmed.length <= EXPLAIN_CONTEXT_LIMIT) return trimmed
+        return "…" + trimmed.substring(trimmed.length - EXPLAIN_CONTEXT_LIMIT)
     }
 
     /**
@@ -168,11 +241,13 @@ class TerminalAiController(
         pendingInfo = info
     }
 
-    /** Dismiss the proposal and clear messages. */
+    /** Dismiss the proposal, explanation, or notice; cancels an in-flight explanation. */
     fun dismiss() {
+        if (busy) cancel()
         pending = null
         pendingRisk = null
         pendingInfo = null
+        explanation = null
         notice = null
     }
 
@@ -182,11 +257,40 @@ class TerminalAiController(
         job?.cancel()
         busy = false
         streaming = null
+        explanation = null
     }
 
     companion object {
         /** Command-generation temperature: near-deterministic; small local models are unreliable at higher values. */
         const val COMMAND_TEMPERATURE = 0.2
+
+        /** Explanation temperature: a touch higher than commands for readable prose, still low for small local models. */
+        const val EXPLAIN_TEMPERATURE = 0.3
+
+        /**
+         * Max characters of terminal output sent for an explanation. The tail is kept (recent output
+         * is what the user is asking about), bounding request size for both cloud and small local models.
+         */
+        const val EXPLAIN_CONTEXT_LIMIT = 6000
+
+        /**
+         * Prompt that turns a chunk of terminal output into a plain-language explanation. [language]
+         * is the English name of the UI language the explanation must be written in (see [ask]). Plain
+         * prose only — the AI bar renders text, not markdown — and grounded strictly in the given output.
+         */
+        fun explainPrompt(language: String): String =
+            // The language mandate is front-loaded AND repeated at the end: the command output is
+            // usually English, and a single trailing instruction was ignored — the model mirrored the
+            // output's language instead of the UI's.
+            "Write your entire reply in " + language + ". This is mandatory: even though the command " +
+                "output below is in another language, the explanation must be in " + language + ".\n" +
+                "You explain terminal output for a user connected to a remote server over SSH. " +
+                "The user's message is raw output from a command that ran on that server. Explain " +
+                "concisely what it means: what happened, what any errors or warnings indicate, and — if " +
+                "something failed — the likely cause and a safe next step. Base the explanation only on " +
+                "the given output; never invent files, hosts, or values that are not shown.\n" +
+                "Write plain prose (short paragraphs or a short bullet list), no markdown headings and no " +
+                "code fences. Remember: the entire explanation must be written in " + language + "."
 
         /**
          * Prompt that turns a request into a command. [language] is the English name of the UI

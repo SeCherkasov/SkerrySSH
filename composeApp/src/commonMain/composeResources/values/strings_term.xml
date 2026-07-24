@@ -77,6 +77,8 @@
     <string name="term_status_no_session">no session</string>
     <string name="term_ai_ask_short">Ask Skerry…</string>
     <string name="term_ai_confirm">Confirm</string>
+    <string name="term_ai_explain">Explain output</string>
+    <string name="term_ai_explain_reading">Reading output…</string>
     <string name="term_password_label">PASSWORD</string>
     <string name="term_connect">Connect</string>
     <string name="term_disconnect">Disconnect</string>
