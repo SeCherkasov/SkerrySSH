@@ -49,6 +49,9 @@ import androidx.compose.ui.window.Popup
 import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.ui.app.AiPolicy
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.LocalConnectHost
+import app.skerry.ui.design.GhostButton
+import app.skerry.ui.host.localTerminalHost
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalConnectSplit
@@ -72,6 +75,8 @@ import app.skerry.ui.generated.resources.term_connecting
 import app.skerry.ui.generated.resources.term_connection_failed
 import app.skerry.ui.generated.resources.term_connection_lost
 import app.skerry.ui.generated.resources.term_no_active_session
+import app.skerry.ui.generated.resources.term_launch_local_shell
+import app.skerry.ui.generated.resources.local_shell_name
 import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.generated.resources.term_no_host_selected
 import app.skerry.ui.generated.resources.term_no_hosts_in_catalog
@@ -304,22 +309,34 @@ private fun SessionToolbar(state: DesktopDesignState) {
 @Composable
 private fun TerminalPane(state: DesktopDesignState, modifier: Modifier = Modifier) {
     val sessions = LocalSessions.current
-    if (sessions != null) LiveTerminalPane(sessions, modifier) else MockTerminalPane(state, modifier)
+    if (sessions != null) LiveTerminalPane(sessions, state, modifier) else MockTerminalPane(state, modifier)
 }
 
 /** Live terminal of the active tab: renders based on its [ConnectionUiState]. */
 @Composable
-private fun LiveTerminalPane(sessions: SessionsController, modifier: Modifier = Modifier) {
+private fun LiveTerminalPane(sessions: SessionsController, state: DesktopDesignState, modifier: Modifier = Modifier) {
     val active = sessions.active
     val st = active?.controller?.uiState
     // A live or frozen screen sits on the terminal's own background; every notice (no session /
     // connecting / error) sits on the app background, so the empty terminal matches other sections.
     val onScreen = st is ConnectionUiState.Connected || st is ConnectionUiState.Disconnected
+    // "Launch local shell": on an empty terminal, open a local-shell session on this machine (its
+    // shell path comes from Settings → Terminal → Local shell). LOCAL needs no auth, so the connect
+    // reuses the current blank tab in place (SessionsController.connect).
+    val connect = LocalConnectHost.current
+    val localName = stringResource(Res.string.local_shell_name)
+    val launchLocalShell: (@Composable () -> Unit) = {
+        GhostButton(
+            stringResource(Res.string.term_launch_local_shell),
+            onClick = { connect(localTerminalHost(state.localShellPath, localName)) },
+            icon = "terminal",
+        )
+    }
     Box(modifier.fillMaxHeight().fillMaxWidth().background(if (onScreen) Skerry.colors.terminalBg else Skerry.colors.bg)) {
         when (st) {
-            null -> TerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_notice_pick_host_to_connect))
+            null -> TerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_notice_pick_host_to_connect), action = launchLocalShell)
             // Form state on the active tab means an empty ("+") tab: connection not yet started.
-            ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new))
+            ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new), action = launchLocalShell)
             ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), active.subtitle)
             is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
             is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = Skerry.colors.sunset)
@@ -364,8 +381,8 @@ private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: 
  * the glyph (red for errors).
  */
 @Composable
-private fun TerminalNotice(icon: String, title: String, subtitle: String, color: Color = Skerry.colors.dim) {
-    EmptyState(icon = icon, title = title, subtitle = subtitle, tint = color)
+private fun TerminalNotice(icon: String, title: String, subtitle: String, color: Color = Skerry.colors.dim, action: (@Composable () -> Unit)? = null) {
+    EmptyState(icon = icon, title = title, subtitle = subtitle, tint = color, action = action)
 }
 
 // Split pane.

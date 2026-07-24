@@ -460,6 +460,8 @@ fun main(args: Array<String>) {
                     onCustomTerminalThemeChange = { prefs.set("custom_terminal_theme", it) },
                     initialThemeMode = currentThemeMode.value,
                     onThemeModeChange = { prefs.set("app_theme", it.id); currentThemeMode.value = it },
+                    initialLocalShellPath = prefs.id("local_shell_path", "") { it },
+                    onLocalShellPathChange = { prefs.set("local_shell_path", it) },
                     initialUiLanguage = currentUiLanguage.value,
                     onUiLanguageChange = { currentUiLanguage.value = it; prefs.set("ui_language", it.id) },
                     initialTerminalScrollback = readTerminalScrollback(prefs),

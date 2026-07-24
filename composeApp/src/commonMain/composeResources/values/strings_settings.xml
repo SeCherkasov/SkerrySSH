@@ -206,4 +206,6 @@
     <string name="settings_about_update_available">Version %1$s is available</string>
     <string name="settings_about_update_open">Open release page</string>
     <string name="settings_update_status">Update %1$s</string>
+    <string name="settings_terminal_section_local_shell">Local shell</string>
+    <string name="settings_local_shell_desc">Shell run for local terminal sessions. Leave blank to use your default shell.</string>
 </resources>

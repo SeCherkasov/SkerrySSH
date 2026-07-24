@@ -182,6 +182,11 @@ class DesktopDesignState(
     // App theme (Settings → Appearance). Default (night-sea dark, no-op) preserves the prior look.
     initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
     private val onThemeModeChange: (ThemeMode) -> Unit = {},
+    // Shell binary for the pinned local terminal (blank = the system default shell). Device-local
+    // (a local shell is machine-specific, not synced); read from persistence, written back via the
+    // callback. Default (blank) is correct for mock/preview/tests.
+    initialLocalShellPath: String = "",
+    private val onLocalShellPathChange: (String) -> Unit = {},
     // Idle auto-lock threshold (Settings → Security). Read from persistence, written back via the
     // callback; threaded into [app.skerry.ui.vault.VaultGate] as the timer's idleMs.
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
@@ -330,6 +335,16 @@ class DesktopDesignState(
     /** Open group management dialog (create/edit), or `null`. */
     var groupDialog: GroupDialog? by mutableStateOf(null); private set
     var selectedHost: String by mutableStateOf("prod-web-01"); private set
+
+    /** Shell binary for the local shell (blank = system default). Edited in Settings → Terminal → Local shell. */
+    var localShellPath: String by mutableStateOf(initialLocalShellPath); private set
+
+    fun chooseLocalShellPath(path: String) {
+        val normalized = path.trim()
+        if (normalized == localShellPath) return
+        localShellPath = normalized
+        onLocalShellPathChange(normalized)
+    }
 
     /** Host sidebar search text (by name/address/user/group/tags). Empty means no filter. */
     var hostSearchQuery: String by mutableStateOf(""); private set

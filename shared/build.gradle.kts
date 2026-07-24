@@ -108,6 +108,10 @@ kotlin {
                 // Native access to serial ports (SerialSystem actual). Desktop only —
                 // on Android, serial will go over USB-OTG as a separate implementation.
                 implementation(libs.jserialcomm)
+                // Real PTY for the local-shell transport (LocalShell actual): job control, window
+                // size, raw mode on Linux/macOS/Windows. Bundles its own natives + JNA (compatible
+                // with the JNA already on the classpath). Desktop only — Android uses a native helper.
+                implementation(libs.pty4j)
             }
         }
         androidMain.dependencies {
