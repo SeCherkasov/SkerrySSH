@@ -907,7 +907,9 @@ private fun LivePaneList(
     // (small window, 50/50 split) they'd push past the pane edge while the weighted name shrinks
     // to nothing. Below these widths the optional columns yield — permissions first, then the date.
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val showPermissions = prefs.showPermissions && maxWidth >= 460.dp
+        // The permissions slot also needs data to exist for this pane at all (the local okio
+        // source reports no mode bits) — otherwise it would be a dead 76dp on every local row.
+        val showPermissions = prefs.showPermissions && maxWidth >= 460.dp && entries.any { it.permissions != null }
         val showModified = prefs.showModified && maxWidth >= 360.dp
         LazyColumn(Modifier.fillMaxSize().padding(6.dp), state = listState) {
             if (pane.path != "/") {
@@ -939,10 +941,18 @@ private fun LivePaneList(
                     icon = fileItemIcon(entry.type),
                     iconColor = if (entry.type == FileItemType.Directory) Skerry.colors.cyanBright else Skerry.colors.dim,
                     name = entry.name,
+                    // An enabled column always occupies its fixed-width slot — an empty value
+                    // renders as a blank slot, otherwise rows with a missing value (a directory's
+                    // size, an unreported mtime) would let the remaining columns drift right and
+                    // break the vertical alignment.
                     columns = FileRowColumns(
-                        permissions = if (showPermissions) permissionsText(entry.type, entry.permissions) else null,
-                        modified = if (showModified) fileDateText(entry.modifiedEpochSeconds).ifEmpty { null } else null,
-                        size = if (entry.type == FileItemType.File) humanSize(entry.size) else null,
+                        permissions = if (showPermissions) permissionsText(entry.type, entry.permissions).orEmpty() else null,
+                        modified = if (showModified) fileDateText(entry.modifiedEpochSeconds) else null,
+                        size = when {
+                            entry.type == FileItemType.File -> humanSize(entry.size)
+                            showPermissions || showModified -> ""
+                            else -> null
+                        },
                     ),
                     selected = entry.path in pane.selection,
                     cursored = entry.path == pane.cursor,
