@@ -62,14 +62,14 @@
     <string name="sftp_overwrite_many">%1$d items already exist in the destination and will be overwritten.</string>
     <string name="sftp_overwrite">Overwrite</string>
 
-    <!-- Колонки списка (дата изменения / права) и быстрый фильтр по имени -->
+    <!-- Listing columns (modified date / permissions) and the quick name filter -->
     <string name="sftp_columns">Columns</string>
     <string name="sftp_col_modified">Modified</string>
     <string name="sftp_col_permissions">Permissions</string>
     <string name="sftp_filter_hint">Filter (name or *.mask)</string>
     <string name="sftp_meta_joined">%1$s · %2$s</string>
-    <!-- Дата в колонке Modified: recent — текущий год (месяц, день, ЧЧ:ММ), day — без времени,
-         old — прошлые годы (месяц, день, год); порядок компонентов свой в каждой локали -->
+    <!-- Modified column date: recent — current year (month, day, HH:mm), day — without time,
+         old — past years (month, day, year); component order is per-locale -->
     <string name="sftp_date_recent">%1$s %2$d %3$s</string>
     <string name="sftp_date_day">%1$s %2$d</string>
     <string name="sftp_date_old">%1$s %2$d %3$d</string>

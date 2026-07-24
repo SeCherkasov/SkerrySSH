@@ -24,4 +24,12 @@ class FileTimeTest {
     fun the_zone_shifts_the_local_time() {
         assertEquals(LocalFileTime(1970, 1, 1, 3, 0), localFileTime(0, zoneId = "GMT+3"))
     }
+
+    @Test
+    fun extreme_epoch_values_clamp_instead_of_throwing() {
+        // mtime is server-supplied: an out-of-range value must degrade, not raise DateTimeException
+        // mid-render. (sshj currently confines mtime to 32 bits, but that's its quirk, not a contract.)
+        localFileTime(Long.MAX_VALUE, zoneId = "UTC")
+        localFileTime(Long.MIN_VALUE, zoneId = "UTC")
+    }
 }

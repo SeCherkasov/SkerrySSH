@@ -13,14 +13,28 @@ fun matchesNameFilter(name: String, filter: String): Boolean {
     return globToRegex(f).matches(name)
 }
 
-/** Glob → [Regex]: escape everything, then turn `*`/`?` into their regex forms. */
+/**
+ * Glob → [Regex]: escape literals, turn `*`/`?` into their regex forms. A run of adjacent
+ * wildcards is normalized to all its `?`s plus at most one `*` (`**` ≡ `*`, `*?*` ≡ `?*`) — the
+ * match is equivalent, and it keeps a typed filter like `"****a"` from compiling to `.*.*.*.*a`,
+ * whose backtracking blows up exponentially on non-matching names (the field filters a
+ * server-supplied listing on every keystroke, on the UI thread).
+ */
 private fun globToRegex(glob: String): Regex {
     val pattern = buildString {
-        for (ch in glob) {
-            when (ch) {
-                '*' -> append(".*")
-                '?' -> append('.')
-                else -> append(Regex.escape(ch.toString()))
+        var i = 0
+        while (i < glob.length) {
+            val ch = glob[i]
+            if (ch == '*' || ch == '?') {
+                var star = false
+                while (i < glob.length && (glob[i] == '*' || glob[i] == '?')) {
+                    if (glob[i] == '*') star = true else append('.')
+                    i++
+                }
+                if (star) append(".*")
+            } else {
+                append(Regex.escape(ch.toString()))
+                i++
             }
         }
     }

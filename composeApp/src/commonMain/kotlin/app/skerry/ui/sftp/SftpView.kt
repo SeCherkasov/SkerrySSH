@@ -7,6 +7,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -902,49 +903,56 @@ private fun LivePaneList(
     onActivate: () -> Unit,
 ) {
     val prefs = LocalSftpPrefs.current
-    LazyColumn(Modifier.fillMaxSize().padding(6.dp), state = listState) {
-        if (pane.path != "/") {
-            item(key = "..") {
+    // The optional columns are fixed-width and the row has no horizontal scroll: on a narrow pane
+    // (small window, 50/50 split) they'd push past the pane edge while the weighted name shrinks
+    // to nothing. Below these widths the optional columns yield — permissions first, then the date.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val showPermissions = prefs.showPermissions && maxWidth >= 460.dp
+        val showModified = prefs.showModified && maxWidth >= 360.dp
+        LazyColumn(Modifier.fillMaxSize().padding(6.dp), state = listState) {
+            if (pane.path != "/") {
+                item(key = "..") {
+                    LiveFileRow(
+                        "arrow_upward", Skerry.colors.faint, "..",
+                        columns = FileRowColumns(),
+                        selected = false, cursored = pane.cursorOnParent, active = active, mono = mono,
+                        // A single click only puts the cursor on ".."; going up is a double click (like entering a directory).
+                        onPress = { onActivate(); pane.setCursorOnParent() },
+                        onDoubleClick = { onActivate(); pane.goUp() },
+                        rubberBand = null, // the ".." row can't be marked — no rubber-band needed on it
+                    )
+                }
+            }
+            items(entries, key = { it.path }) { entry ->
+                // Single click (on press): activate the pane and place the cursor — doesn't mark or enter.
+                // Entering a directory is a double click (open; no-op for a file). Selection — RMB/Space/Insert.
+                val onPress = {
+                    onActivate()
+                    pane.setCursor(entry)
+                }
+                val onDoubleClick = {
+                    onActivate()
+                    pane.setCursor(entry)
+                    pane.open(entry)
+                }
                 LiveFileRow(
-                    "arrow_upward", Skerry.colors.faint, "..",
-                    columns = FileRowColumns(),
-                    selected = false, cursored = pane.cursorOnParent, active = active, mono = mono,
-                    // A single click only puts the cursor on ".."; going up is a double click (like entering a directory).
-                    onPress = { onActivate(); pane.setCursorOnParent() },
-                    onDoubleClick = { onActivate(); pane.goUp() },
-                    rubberBand = null, // the ".." row can't be marked — no rubber-band needed on it
+                    icon = fileItemIcon(entry.type),
+                    iconColor = if (entry.type == FileItemType.Directory) Skerry.colors.cyanBright else Skerry.colors.dim,
+                    name = entry.name,
+                    columns = FileRowColumns(
+                        permissions = if (showPermissions) permissionsText(entry.type, entry.permissions) else null,
+                        modified = if (showModified) fileDateText(entry.modifiedEpochSeconds).ifEmpty { null } else null,
+                        size = if (entry.type == FileItemType.File) humanSize(entry.size) else null,
+                    ),
+                    selected = entry.path in pane.selection,
+                    cursored = entry.path == pane.cursor,
+                    active = active,
+                    mono = mono,
+                    onPress = onPress,
+                    onDoubleClick = onDoubleClick,
+                    rubberBand = RowRubberBand(entry, pane, listState, entries, onActivate),
                 )
             }
-        }
-        items(entries, key = { it.path }) { entry ->
-            // Single click (on press): activate the pane and place the cursor — doesn't mark or enter.
-            // Entering a directory is a double click (open; no-op for a file). Selection — RMB/Space/Insert.
-            val onPress = {
-                onActivate()
-                pane.setCursor(entry)
-            }
-            val onDoubleClick = {
-                onActivate()
-                pane.setCursor(entry)
-                pane.open(entry)
-            }
-            LiveFileRow(
-                icon = fileItemIcon(entry.type),
-                iconColor = if (entry.type == FileItemType.Directory) Skerry.colors.cyanBright else Skerry.colors.dim,
-                name = entry.name,
-                columns = FileRowColumns(
-                    permissions = if (prefs.showPermissions) permissionsText(entry.type, entry.permissions) else null,
-                    modified = if (prefs.showModified) fileDateText(entry.modifiedEpochSeconds).ifEmpty { null } else null,
-                    size = if (entry.type == FileItemType.File) humanSize(entry.size) else null,
-                ),
-                selected = entry.path in pane.selection,
-                cursored = entry.path == pane.cursor,
-                active = active,
-                mono = mono,
-                onPress = onPress,
-                onDoubleClick = onDoubleClick,
-                rubberBand = RowRubberBand(entry, pane, listState, entries, onActivate),
-            )
         }
     }
 }
