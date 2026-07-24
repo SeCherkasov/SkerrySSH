@@ -235,5 +235,13 @@ class NewConnectionFormState {
                 existingCredentialId = host.credentialId
             }
         }
+
+        /**
+         * Prefill for "Duplicate host": the same profile under the given copy [name], sharing the
+         * original's keychain secret (EXISTING binding, nothing re-saved). Unlike edit mode the
+         * caller saves with `toDraft(id = null)`, creating a new record.
+         */
+        fun duplicateOf(host: Host, name: String): NewConnectionFormState =
+            fromHost(host).apply { this.name = name }
     }
 }

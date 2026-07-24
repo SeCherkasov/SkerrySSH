@@ -74,6 +74,7 @@
     <string name="shell_quick_snippets">Сниппеты</string>
     <string name="shell_details">Детали</string>
     <string name="shell_edit_host">Изменить хост</string>
+    <string name="shell_duplicate_host">Дублировать хост</string>
     <string name="shell_delete_host">Удалить хост</string>
 
     <!-- Mobile hosts list (MobileHostsView.kt) -->

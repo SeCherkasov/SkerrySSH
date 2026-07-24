@@ -4,6 +4,7 @@
     <string name="conn_subtitle_new">Add a host. Credentials are encrypted with your master password.</string>
     <string name="conn_subtitle_edit">Edit this host. Credentials are encrypted with your master password.</string>
     <string name="conn_subtitle_mobile">Encrypted with your master password. Stays on this device.</string>
+    <string name="conn_duplicate_name">%1$s Copy</string>
 
     <string name="conn_field_name">Name</string>
     <string name="conn_field_protocol">Protocol</string>

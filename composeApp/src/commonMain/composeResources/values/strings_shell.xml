@@ -74,6 +74,7 @@
     <string name="shell_quick_snippets">Snippets</string>
     <string name="shell_details">Details</string>
     <string name="shell_edit_host">Edit host</string>
+    <string name="shell_duplicate_host">Duplicate host</string>
     <string name="shell_delete_host">Delete host</string>
 
     <!-- Mobile hosts list (MobileHostsView.kt) -->
