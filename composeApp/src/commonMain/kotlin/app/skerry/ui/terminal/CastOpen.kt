@@ -2,9 +2,12 @@ package app.skerry.ui.terminal
 
 import app.skerry.shared.terminal.Asciicast
 import app.skerry.shared.terminal.parseAsciicast
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.term_player_open
 import app.skerry.ui.vault.importTextFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.getString
 
 /** What came back from "Play a recording": a recording, nothing (cancelled), or an unusable file. */
 sealed interface CastOpenResult {
@@ -22,7 +25,7 @@ sealed interface CastOpenResult {
  * recording is megabytes of JSON lines, and the picker returns on the UI dispatcher.
  */
 suspend fun openCastFile(): CastOpenResult {
-    val file = importTextFile() ?: return CastOpenResult.Cancelled
+    val file = importTextFile(getString(Res.string.term_player_open)) ?: return CastOpenResult.Cancelled
     val cast = withContext(Dispatchers.Default) { parseAsciicast(file.text) } ?: return CastOpenResult.Invalid
     return CastOpenResult.Loaded(cast, file.name)
 }

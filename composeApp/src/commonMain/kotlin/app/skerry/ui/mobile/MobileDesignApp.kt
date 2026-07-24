@@ -431,7 +431,7 @@ private fun MobileChrome(
         // → intercept first per the dispatcher's LIFO), so while an overlay is open the navigation
         // intercept is kept disabled to avoid firing afterward. Registered before the content, making
         // it the lowest-priority handler in the back stack.
-        val overlayOpen = pending != null || state.sheetNewConn || state.renamingGroup != null || state.modalOpen
+        val overlayOpen = pending != null || state.sheetNewConn || state.renamingGroup != null || state.modalOpen || state.sshImport != null
         val backAction = if (overlayOpen) null else mobileBackAction(state.route, state.tab)
         PlatformBackHandler(enabled = backAction != null) {
             when (backAction) {
@@ -465,6 +465,7 @@ private fun MobileChrome(
             if (state.sheetNewConn) {
                 MobileNewConnectionSheet(state)
             }
+            state.sshImport?.let { MobileSshImportSheet(state, it) }
             // Confirmation for a snippet with ${{…}} variables — every launch path (terminal
             // palette, Snippets tab) parks such a run in SnippetManager.pendingRun. Desktop parity.
             LocalSnippets.current?.let { SnippetRunDialog(it) }

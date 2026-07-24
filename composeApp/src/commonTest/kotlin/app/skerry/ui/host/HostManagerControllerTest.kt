@@ -2,6 +2,7 @@ package app.skerry.ui.host
 
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
+import app.skerry.shared.ssh.SshConfigHost
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -113,6 +114,45 @@ class HostManagerControllerTest {
         )
 
         assertEquals(listOf("prod", "db"), controller.hosts.single().tags)
+    }
+
+    @Test
+    fun `importHosts persists a batch and keeps existing hosts`() {
+        val store = FakeHostStore(Host("1", "a", "a.local", 22, "u"))
+        val controller = HostManagerController(store) { error("ids are pre-assigned") }
+
+        controller.importHosts(
+            listOf(
+                Host("i1", "web", "10.0.0.1", 22, "deploy"),
+                Host("i2", "db", "10.0.0.2", 22, "deploy", jumpHostId = "i1"),
+            ),
+        )
+
+        assertEquals(listOf("1", "i1", "i2"), controller.hosts.map { it.id })
+        assertEquals("i1", controller.find("i2")?.jumpHostId)
+        assertEquals(controller.hosts, store.all())
+    }
+
+    @Test
+    fun `importSshConfig plans and persists selected hosts with resolved jump`() {
+        val store = FakeHostStore()
+        var n = 0
+        val controller = HostManagerController(store) { "gen-${++n}" }
+        val parsed = listOf(
+            SshConfigHost("web", "10.0.0.1", 22, user = null, proxyJump = "bastion", identityFile = null),
+            SshConfigHost("bastion", "10.0.0.2", 22, user = "root", proxyJump = null, identityFile = null),
+            SshConfigHost("skip", "10.0.0.3", 22, user = null, proxyJump = null, identityFile = null),
+        )
+
+        val count = controller.importSshConfig(parsed, selected = setOf("web", "bastion"), defaultUser = "me")
+
+        assertEquals(2, count)
+        assertEquals(setOf("web", "bastion"), controller.hosts.map { it.label }.toSet())
+        val web = controller.hosts.single { it.label == "web" }
+        val bastion = controller.hosts.single { it.label == "bastion" }
+        assertEquals("me", web.username) // default user filled where config omitted User
+        assertEquals("root", bastion.username)
+        assertEquals(bastion.id, web.jumpHostId)
     }
 
     @Test

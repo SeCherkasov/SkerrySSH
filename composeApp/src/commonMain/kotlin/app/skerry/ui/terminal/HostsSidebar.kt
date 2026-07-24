@@ -77,6 +77,8 @@ import app.skerry.ui.design.Chip
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.host.pickAndParseSshConfig
+import app.skerry.ui.generated.resources.conn_import_action
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SIDEBAR_WIDTH
@@ -374,8 +376,21 @@ internal fun HostsSidebar(state: DesktopDesignState) {
         }
         HLine()
         // Fixed to the AI bar's idle height so both bottom strips share one top line.
+        val importScope = rememberCoroutineScope()
         Box(Modifier.height(BOTTOM_BAR_HEIGHT).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-            PrimaryButton(stringResource(Res.string.term_new_connection), onClick = state::openModal, icon = "add_link", modifier = Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                PrimaryButton(stringResource(Res.string.term_new_connection), onClick = state::openModal, icon = "add_link", modifier = Modifier.weight(1f))
+                // Import hosts from an OpenSSH ~/.ssh/config: pick + parse off the main thread, then the
+                // preview modal (rendered at the app root) handles selection and persistence. Shown only
+                // on the live path — importing needs a host store to write to (mock/preview has none).
+                if (liveHosts != null) {
+                    IconBtn(
+                        "download",
+                        onClick = { importScope.launch { pickAndParseSshConfig()?.let(state::beginSshImport) } },
+                        tooltip = stringResource(Res.string.conn_import_action),
+                    )
+                }
+            }
         }
     }
 }

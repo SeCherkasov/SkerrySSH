@@ -13,5 +13,9 @@ data class ImportedFile(val name: String, val text: String)
 /**
  * Reads a text file chosen by the user in the native picker, as UTF-8. Returns `null` on cancel, on
  * a read failure, or when the file is larger than [maxBytes] — nothing is imported silently.
+ *
+ * [title] labels the picker window so each caller (play a recording, import ssh_config, …) reads
+ * correctly. Desktop's [java.awt.FileDialog] shows it; Android's Storage Access Framework has no
+ * custom-title hook, so it's ignored there.
  */
-expect suspend fun importTextFile(maxBytes: Int = MAX_IMPORT_BYTES): ImportedFile?
+expect suspend fun importTextFile(title: String, maxBytes: Int = MAX_IMPORT_BYTES): ImportedFile?
