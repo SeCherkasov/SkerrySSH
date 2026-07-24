@@ -48,6 +48,16 @@ class NameFilterTest {
     }
 
     @Test
+    fun adjacent_wildcards_collapse_to_an_equivalent_pattern() {
+        // A run of wildcards keeps its `?`s and at most one `*` — same matches, but a typed
+        // "****a" can't become the exponentially backtracking `.*.*.*.*a`.
+        assertTrue(matchesNameFilter("xa", "**a"))
+        assertTrue(matchesNameFilter("nginx.conf", "**??*conf"))
+        assertFalse(matchesNameFilter("bc", "*?*?*a"))
+        assertFalse(matchesNameFilter("a".repeat(40) + "b", "****************c"))
+    }
+
+    @Test
     fun filter_is_trimmed_before_matching() {
         assertTrue(matchesNameFilter("nginx.conf", "  ngi  "))
         assertTrue(matchesNameFilter("nginx.conf", " *.conf "))

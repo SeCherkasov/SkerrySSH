@@ -136,6 +136,9 @@ class FilePaneController(
         val created = childPath(name)
         browser.mkdir(created)
         reload()
+        // An active name filter can hide the just-created directory — creating something the user
+        // can't see reads as a silent failure, so drop the filter to reveal it.
+        if (nameFilter.isNotEmpty() && loadedEntries().none { it.path == created }) setNameFilter("")
         loadedEntries().firstOrNull { it.path == created }?.let { setCursor(it) }
     }
 
@@ -323,9 +326,13 @@ class FilePaneController(
     fun selectedItems(): List<FileItem> =
         (state as? FilePaneState.Loaded)?.entries?.filter { it.path in selection } ?: emptyList()
 
-    /** Names of entries in the current directory, for overwrite-conflict checks before transfer. */
+    /**
+     * Names of ALL entries in the current directory (from the unfiltered [rawEntries], not the
+     * visible listing), for overwrite/name-conflict checks before transfer/mkdir/rename — an entry
+     * hidden by [showHidden] or [nameFilter] still occupies its name on the source.
+     */
     fun currentEntryNames(): Set<String> =
-        (state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet()
+        if (state is FilePaneState.Loaded) rawEntries.mapTo(mutableSetOf()) { it.name } else emptySet()
 
     /**
      * Navigates to [target] atomically: loads its listing first, then updates
@@ -345,9 +352,14 @@ class FilePaneController(
         path = target
         // The filter narrows one directory's view; a new directory starts unfiltered. [next] was
         // built while the old filter was still active, so a successful listing is re-derived from
-        // the fresh [rawEntries] (a failed navigation keeps the filter along with the old listing).
-        filterText = ""
-        state = if (next is FilePaneState.Loaded) FilePaneState.Loaded(visible(rawEntries)) else next
+        // the fresh [rawEntries]. A failed navigation keeps the filter: it still describes the
+        // last listing that was on screen, and going back up restores that view.
+        state = if (next is FilePaneState.Loaded) {
+            filterText = ""
+            FilePaneState.Loaded(visible(rawEntries))
+        } else {
+            next
+        }
         resetSelection() // New directory: selection is empty already, nothing to prune.
         cursor = (next as? FilePaneState.Loaded)?.entries?.firstOrNull()?.path
         cursorOnParent = cursor == null && hasParent

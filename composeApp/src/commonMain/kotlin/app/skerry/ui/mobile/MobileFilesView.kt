@@ -31,6 +31,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -213,7 +215,16 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                         pane.label.ifBlank { stringResource(Res.string.ftail_local_label) },
                         pane.path,
                         mono, onGoToPath = pane::goToPath,
-                        onToggleFilter = { filterOpen = !filterOpen },
+                        // The funnel both opens and closes: closing while filter text is present
+                        // also clears it, so the icon is never a visible no-op.
+                        onToggleFilter = {
+                            if (filterOpen || pane.nameFilter.isNotEmpty()) {
+                                pane.setNameFilter("")
+                                filterOpen = false
+                            } else {
+                                filterOpen = true
+                            }
+                        },
                         filterActive = filterOpen || pane.nameFilter.isNotEmpty(),
                     )
                     if (filterOpen || pane.nameFilter.isNotEmpty()) {
@@ -631,6 +642,9 @@ private fun MobileFilesBreadcrumbRow(
 @Composable
 private fun MobileFilterRow(pane: FilePaneController, mono: FontFamily, onClose: () -> Unit) {
     var text by remember(pane, pane.path) { mutableStateOf(pane.nameFilter) }
+    // Focus the field the moment the row appears (funnel tap), so typing starts immediately.
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { fieldFocus.requestFocus() }
     Row(
         Modifier.fillMaxWidth().padding(start = 22.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -645,7 +659,7 @@ private fun MobileFilterRow(pane: FilePaneController, mono: FontFamily, onClose:
             singleLine = true,
             textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = mono),
             cursorBrush = SolidColor(Skerry.colors.cyan),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).focusRequester(fieldFocus),
             decorationBox = { inner ->
                 Box(
                     Modifier
