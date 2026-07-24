@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.conn_type_local
 import app.skerry.ui.generated.resources.conn_type_mosh
 import app.skerry.ui.generated.resources.conn_type_serial
 import app.skerry.ui.generated.resources.conn_type_ssh
@@ -61,5 +62,6 @@ fun connectionTypeLabel(type: ConnectionType): String = stringResource(
         ConnectionType.TELNET -> Res.string.conn_type_telnet
         ConnectionType.SERIAL -> Res.string.conn_type_serial
         ConnectionType.VNC -> Res.string.conn_type_vnc
+        ConnectionType.LOCAL -> Res.string.conn_type_local
     },
 )

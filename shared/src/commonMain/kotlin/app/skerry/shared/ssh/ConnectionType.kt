@@ -11,7 +11,10 @@ import kotlinx.serialization.Serializable
  * profile `address` holds the device name and `port` holds the baud rate. [VNC] — remote desktop
  * over the RFB protocol (framebuffer + input, not a byte stream): `address`/`port` name the RFB
  * server (default 5900), `credentialId` holds the optional VNC password (no username); it does not
- * flow through the shell/terminal stack (see [app.skerry.shared.vnc.VncTransport]).
+ * flow through the shell/terminal stack (see [app.skerry.shared.vnc.VncTransport]). [LOCAL] — a
+ * local shell over a pseudo-terminal on this machine (no network): `address` optionally holds the
+ * path to the shell binary to run (blank → the system default shell), `port`/`username`/`credentialId`/jump/
+ * keep-alive are unused and there is no authentication (see [app.skerry.shared.local.LocalShellTransport]).
  *
  * Lives in package `ssh` as a transport tag: [SshTarget.connectionType] feeds it to the transport
  * router ([RoutingTransport]), [app.skerry.shared.host.Host.connectionType] to the profile.
@@ -19,7 +22,7 @@ import kotlinx.serialization.Serializable
  * compatibility; a missing field in old files defaults to [SSH].
  */
 @Serializable
-enum class ConnectionType { SSH, MOSH, TELNET, SERIAL, VNC }
+enum class ConnectionType { SSH, MOSH, TELNET, SERIAL, VNC, LOCAL }
 
 /**
  * Whether the profile authenticates over SSH: username/credentials/jump host apply. True for

@@ -32,6 +32,10 @@ jserialcomm = "2.11.4"
 # usb-serial-for-android: access to USB-serial adapters (CDC/FTDI/CP210x/CH34x) via the USB Host API.
 # androidMain only — desktop uses jSerialComm.
 usbSerial = "3.11.0"
+# pty4j: real pseudo-terminal for the local-shell transport (LocalShell desktop actual). Bundles
+# native helpers for Linux/macOS/Windows and depends on JNA (compatible with jna 5.19.1 above).
+# desktopMain only — Android uses a native PTY helper.
+pty4j = "0.13.12"
 # full BouncyCastle: an sshj transitive (as implementation, not visible on the compile classpath),
 # added explicitly — on Android the system "BC" is stripped down and SshjTransport.ensureCryptoProvider replaces it
 bouncycastle = "1.85"
@@ -123,6 +127,7 @@ slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 sshj = { module = "com.hierynomus:sshj", version.ref = "sshj" }
 jserialcomm = { module = "com.fazecast:jSerialComm", version.ref = "jserialcomm" }
 usbserial = { module = "com.github.mik3y:usb-serial-for-android", version.ref = "usbSerial" }
+pty4j = { module = "org.jetbrains.pty4j:pty4j", version.ref = "pty4j" }
 bouncycastle-prov = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bouncycastle" }
 sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "sshd" }

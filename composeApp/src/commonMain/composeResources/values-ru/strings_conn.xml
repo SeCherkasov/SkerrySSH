@@ -10,6 +10,7 @@
     <string name="conn_field_protocol">Протокол</string>
     <string name="conn_field_host_address">Адрес хоста</string>
     <string name="conn_field_device">Устройство</string>
+    <string name="conn_field_shell_placeholder">/bin/bash — пусто для системной оболочки</string>
     <string name="conn_field_port">Порт</string>
     <string name="conn_field_baud">Скорость</string>
     <string name="conn_field_username">Пользователь</string>
@@ -39,6 +40,7 @@
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">Serial</string>
     <string name="conn_protocol_vnc">VNC</string>
+    <string name="conn_protocol_local">Локальный</string>
     <string name="conn_telnet_plaintext_warning">Telnet не шифруется — учётные данные и содержимое сессии идут открытым текстом. Используйте SSH вне доверенной сети.</string>
     <string name="conn_vnc_plaintext_warning">VNC (RFB) не шифруется — экран и ввод идут открытым текстом. Используйте доверенную сеть или SSH-туннель.</string>
 
@@ -105,6 +107,7 @@
     <string name="conn_type_telnet">Telnet</string>
     <string name="conn_type_serial">Serial</string>
     <string name="conn_type_vnc">VNC</string>
+    <string name="conn_type_local">Локальная оболочка</string>
 
     <string name="conn_import_action">Импорт из ssh_config</string>
     <string name="conn_import_title">Импорт из ssh_config</string>

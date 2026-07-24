@@ -363,6 +363,8 @@ private fun MobileProtocolPicker(form: NewConnectionFormState) {
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_telnet), form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_serial), form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_vnc), form.connectionType == ConnectionType.VNC, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.VNC) }
+        // LOCAL is intentionally absent — the local shell isn't a user-created profile; it's launched
+        // from the empty-tab placeholder and configured in Settings, not created here.
     }
 }
 

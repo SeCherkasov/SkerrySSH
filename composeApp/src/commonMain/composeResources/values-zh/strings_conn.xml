@@ -10,6 +10,7 @@
     <string name="conn_field_protocol">协议</string>
     <string name="conn_field_host_address">主机地址</string>
     <string name="conn_field_device">设备</string>
+    <string name="conn_field_shell_placeholder">/bin/bash — 留空使用默认 Shell</string>
     <string name="conn_field_port">端口</string>
     <string name="conn_field_baud">波特率</string>
     <string name="conn_field_username">用户名</string>
@@ -39,6 +40,7 @@
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">串口</string>
     <string name="conn_protocol_vnc">VNC</string>
+    <string name="conn_protocol_local">本地</string>
     <string name="conn_telnet_plaintext_warning">Telnet 未加密 — 凭据和会话数据以明文传输。非可信网络请使用 SSH。</string>
     <string name="conn_vnc_plaintext_warning">VNC (RFB) 未加密 — 屏幕和输入以明文传输。请使用可信网络或 SSH 隧道。</string>
 
@@ -105,6 +107,7 @@
     <string name="conn_type_telnet">Telnet</string>
     <string name="conn_type_serial">串口</string>
     <string name="conn_type_vnc">VNC</string>
+    <string name="conn_type_local">本地 Shell</string>
 
     <string name="conn_import_action">从 ssh_config 导入</string>
     <string name="conn_import_title">从 ssh_config 导入</string>

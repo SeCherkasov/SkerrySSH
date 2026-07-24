@@ -206,4 +206,6 @@
     <string name="settings_about_update_available">Доступна версия %1$s</string>
     <string name="settings_about_update_open">Открыть страницу релиза</string>
     <string name="settings_update_status">Обновление %1$s</string>
+    <string name="settings_terminal_section_local_shell">Локальная оболочка</string>
+    <string name="settings_local_shell_desc">Оболочка для сессий локального терминала. Пусто — системная оболочка по умолчанию.</string>
 </resources>

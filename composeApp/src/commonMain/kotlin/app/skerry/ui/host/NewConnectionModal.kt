@@ -104,6 +104,7 @@ import app.skerry.ui.generated.resources.conn_group_new
 import app.skerry.ui.generated.resources.conn_group_new_title
 import app.skerry.ui.generated.resources.conn_group_none
 import app.skerry.ui.generated.resources.conn_jump_none
+import app.skerry.ui.generated.resources.conn_protocol_local
 import app.skerry.ui.generated.resources.conn_protocol_serial
 import app.skerry.ui.generated.resources.conn_protocol_mosh
 import app.skerry.ui.generated.resources.conn_protocol_ssh
@@ -539,7 +540,9 @@ private fun ProtocolPicker(form: NewConnectionFormState) {
     ) {
         // Driven off ConnectionType.entries: a new protocol gets its segment for free, and the
         // exhaustive `when`s behind labelRes/icon fail the build until it's given a label and an icon.
-        ConnectionType.entries.forEach { type ->
+        // LOCAL is excluded: the local shell isn't a user-created profile — it's launched from the
+        // empty-tab placeholder and configured in Settings → Terminal → Local shell, not here.
+        ConnectionType.entries.filter { it != ConnectionType.LOCAL }.forEach { type ->
             ProtocolSegment(stringResource(type.labelRes), type.icon, form.connectionType == type, Modifier.weight(1f)) {
                 form.chooseConnectionType(type)
             }
@@ -555,6 +558,7 @@ private val ConnectionType.labelRes: StringResource
         ConnectionType.TELNET -> Res.string.conn_protocol_telnet
         ConnectionType.SERIAL -> Res.string.conn_protocol_serial
         ConnectionType.VNC -> Res.string.conn_protocol_vnc
+        ConnectionType.LOCAL -> Res.string.conn_protocol_local
     }
 
 /** One pill of the segmented protocol picker: the active one sits on a cyan backing. */

@@ -206,4 +206,6 @@
     <string name="settings_about_update_available">版本 %1$s 可用</string>
     <string name="settings_about_update_open">打开发布页面</string>
     <string name="settings_update_status">更新 %1$s</string>
+    <string name="settings_terminal_section_local_shell">本地 Shell</string>
+    <string name="settings_local_shell_desc">运行本地终端会话所用的 Shell。留空则使用默认 Shell。</string>
 </resources>

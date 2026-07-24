@@ -154,6 +154,8 @@ class NewConnectionFormState {
                 // VNC authenticates with an optional password (no username): base + a valid auth
                 // choice (Ask / a stored password), same secret resolution as SSH minus the username.
                 ConnectionType.VNC -> base && authValid
+                // Local shell: no address (blank = default shell), no port, no auth — only a name.
+                ConnectionType.LOCAL -> name.isNotBlank()
             }
         }
 
@@ -210,6 +212,7 @@ class NewConnectionFormState {
             ConnectionType.TELNET -> 23
             ConnectionType.SERIAL -> 9600
             ConnectionType.VNC -> 5900
+            ConnectionType.LOCAL -> 0 // no port — a local shell isn't networked
         }
 
         /**
