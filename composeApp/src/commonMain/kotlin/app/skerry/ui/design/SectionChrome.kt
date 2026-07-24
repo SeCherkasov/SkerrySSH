@@ -76,6 +76,7 @@ fun EmptyState(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     tint: Color = Skerry.colors.faint,
+    action: (@Composable () -> Unit)? = null,
 ) {
     Column(
         modifier.fillMaxSize().padding(horizontal = 32.dp),
@@ -97,6 +98,11 @@ fun EmptyState(
                 lineHeight = 19.sp,
                 align = TextAlign.Center,
             )
+        }
+        // Optional call-to-action (e.g. "Launch local shell" on the empty terminal), below the copy.
+        if (action != null) {
+            Spacer(Modifier.height(18.dp))
+            action()
         }
     }
 }

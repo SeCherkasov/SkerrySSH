@@ -12,10 +12,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -27,8 +31,12 @@ import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.NumberStepper
+import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.conn_field_shell_placeholder
+import app.skerry.ui.generated.resources.settings_local_shell_desc
+import app.skerry.ui.generated.resources.settings_terminal_section_local_shell
 import app.skerry.ui.generated.resources.appearance_badge_active
 import app.skerry.ui.generated.resources.appearance_font
 import app.skerry.ui.generated.resources.appearance_font_size
@@ -171,6 +179,47 @@ internal fun TerminalSection(state: DesktopDesignState) {
         stringResource(Res.string.settings_terminal_clipboard_write_desc),
         on = state.allowServerClipboardWrite,
         onToggle = state::toggleAllowServerClipboardWrite,
+    )
+    HLine(modifier = Modifier.padding(top = 12.dp))
+    // Local shell: the shell binary run for local-terminal sessions (launched from the empty-tab
+    // placeholder). Blank uses the system default shell. Device-local, not synced with hosts.
+    SectionLabel(stringResource(Res.string.settings_terminal_section_local_shell))
+    Txt(
+        stringResource(Res.string.settings_local_shell_desc),
+        color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp,
+        modifier = Modifier.padding(bottom = 8.dp),
+    )
+    LocalShellField(state.localShellPath, onChange = state::chooseLocalShellPath)
+}
+
+/** Single-line path field for the local shell binary (Terminal → Local shell). Blank = default shell. */
+@Composable
+private fun LocalShellField(value: String, onChange: (String) -> Unit) {
+    val fonts = LocalFonts.current
+    val textColor = Skerry.colors.text
+    val textStyle = remember(fonts.ui, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = fonts.ui) }
+    val placeholder = stringResource(Res.string.conn_field_shell_placeholder)
+    BasicTextField(
+        value = value,
+        onValueChange = onChange,
+        singleLine = true,
+        textStyle = textStyle,
+        cursorBrush = SolidColor(Skerry.colors.cyan),
+        modifier = Modifier.fillMaxWidth(),
+        decorationBox = { inner ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Sym("terminal", size = 16.sp, color = Skerry.colors.faint)
+                Box(Modifier.weight(1f)) {
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp)
+                    inner()
+                }
+            }
+        },
     )
 }
 
