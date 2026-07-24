@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +32,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,7 +66,9 @@ import app.skerry.ui.generated.resources.sftp_delete
 import app.skerry.ui.generated.resources.sftp_download_to_device
 import app.skerry.ui.generated.resources.sftp_error
 import app.skerry.ui.generated.resources.sftp_files_title
+import app.skerry.ui.generated.resources.sftp_filter_hint
 import app.skerry.ui.generated.resources.sftp_loading
+import app.skerry.ui.generated.resources.sftp_meta_joined
 import app.skerry.ui.generated.resources.sftp_new_folder
 import app.skerry.ui.generated.resources.sftp_overwrite
 import app.skerry.ui.generated.resources.sftp_overwrite_many
@@ -76,6 +81,8 @@ import app.skerry.ui.generated.resources.sftp_transfer_error
 import app.skerry.ui.generated.resources.sftp_unavailable
 import app.skerry.ui.generated.resources.sftp_upload_file
 import app.skerry.ui.sftp.TransferDirection
+import app.skerry.ui.sftp.fileDateText
+import app.skerry.ui.sftp.permissionsText
 import app.skerry.ui.sftp.sizeText
 import app.skerry.ui.sftp.pickDownloadTarget
 import app.skerry.ui.sftp.pickUploadSource
@@ -137,6 +144,8 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     var openError by remember(controller) { mutableStateOf<String?>(null) }
     var creatingFolder by remember(controller) { mutableStateOf(false) }
     var fabOpen by remember(controller) { mutableStateOf(false) }
+    // Quick name filter row under the breadcrumb (the funnel icon toggles it).
+    var filterOpen by remember(controller) { mutableStateOf(false) }
     // Built-in viewer/editor over the cursored file (long-press menu). The controller comes from the
     // coordinator (session scope), so closing the modal never cancels a save in flight.
     var editor by remember(controller) { mutableStateOf<FileEditController?>(null) }
@@ -203,7 +212,13 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                     MobileFilesBreadcrumbRow(
                         pane.label.ifBlank { stringResource(Res.string.ftail_local_label) },
                         pane.path,
-                        mono, onGoToPath = pane::goToPath)
+                        mono, onGoToPath = pane::goToPath,
+                        onToggleFilter = { filterOpen = !filterOpen },
+                        filterActive = filterOpen || pane.nameFilter.isNotEmpty(),
+                    )
+                    if (filterOpen || pane.nameFilter.isNotEmpty()) {
+                        MobileFilterRow(pane, mono, onClose = { filterOpen = false })
+                    }
                     // View/Edit a remote file in place (parity with desktop F3/F4).
                     val openEditor = remember(c) {
                         { item: FileItem, readOnly: Boolean ->
@@ -389,7 +404,7 @@ private fun MobileFileRow(
         Sym(mobileFileIcon(entry), size = 23.sp, color = if (isDir) Skerry.colors.cyanBright else Skerry.colors.dim)
         Column(Modifier.weight(1f)) {
             Txt(entry.name, color = Skerry.colors.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            mobileFileRowMeta(entry)?.let { Txt(sizeText(it), color = Skerry.colors.faint, size = 11.sp) }
+            mobileFileMetaText(entry)?.let { Txt(it, color = Skerry.colors.faint, size = 11.sp) }
         }
         Sym(mobileFileTrailingIcon(entry.type), size = 20.sp, color = Skerry.colors.faint)
     }
@@ -410,6 +425,19 @@ private fun MobileFileRow(
             onDismiss = { menuOpen = false },
         )
     }
+}
+
+/**
+ * Row subtitle: a file shows "size · date" (date omitted when unreported, like the layout's
+ * "3.1 KB · Jun 20"); a directory/symlink shows its permissions (`ls -l` style) when the source
+ * reports mode bits — the remote SFTP pane does, matching the layout's "drwxr-xr-x".
+ */
+@Composable
+private fun mobileFileMetaText(entry: FileItem): String? {
+    val parts = mobileFileRowMeta(entry) ?: return permissionsText(entry.type, entry.permissions)
+    val size = sizeText(parts)
+    val date = fileDateText(entry.modifiedEpochSeconds, withTime = false)
+    return if (date.isEmpty()) size else stringResource(Res.string.sftp_meta_joined, size, date)
 }
 
 /** Row that navigates up to the parent directory (".."). */
@@ -530,10 +558,13 @@ private fun MobileFilesBreadcrumbRow(
     path: String,
     mono: FontFamily,
     onGoToPath: ((String) -> Unit)? = null,
+    // Live mode: the trailing funnel icon toggles the quick-filter row; [filterActive] tints it.
+    onToggleFilter: (() -> Unit)? = null,
+    filterActive: Boolean = false,
 ) {
     var editing by remember(path) { mutableStateOf(false) }
     Row(
-        Modifier.padding(start = 22.dp, end = 22.dp, top = 4.dp, bottom = 2.dp),
+        Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 4.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -564,16 +595,82 @@ private fun MobileFilesBreadcrumbRow(
                 font = mono,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = if (onGoToPath != null) {
-                    Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { editing = true }
-                } else {
-                    Modifier
-                },
+                modifier = Modifier.weight(1f).then(
+                    if (onGoToPath != null) {
+                        Modifier.clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { editing = true }
+                    } else {
+                        Modifier
+                    },
+                ),
             )
         }
+        if (onToggleFilter != null && !editing) {
+            Sym(
+                "filter_alt",
+                size = 18.sp,
+                color = if (filterActive) Skerry.colors.cyanBright else Skerry.colors.faint,
+                modifier = Modifier.clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onToggleFilter,
+                ),
+            )
+        }
+    }
+}
+
+/**
+ * Quick name filter row under the breadcrumb: live filtering as you type
+ * ([FilePaneController.setNameFilter] — substring or `*`/`?` glob). The close icon clears the
+ * filter and hides the row. The local text state is re-keyed on the pane's path: navigation
+ * clears the controller's filter, so the field follows.
+ */
+@Composable
+private fun MobileFilterRow(pane: FilePaneController, mono: FontFamily, onClose: () -> Unit) {
+    var text by remember(pane, pane.path) { mutableStateOf(pane.nameFilter) }
+    Row(
+        Modifier.fillMaxWidth().padding(start = 22.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        BasicTextField(
+            value = text,
+            onValueChange = {
+                text = it
+                pane.setNameFilter(it)
+            },
+            singleLine = true,
+            textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = mono),
+            cursorBrush = SolidColor(Skerry.colors.cyan),
+            modifier = Modifier.weight(1f),
+            decorationBox = { inner ->
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Skerry.colors.bg)
+                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                ) {
+                    if (text.isEmpty()) {
+                        Txt(stringResource(Res.string.sftp_filter_hint), color = Skerry.colors.dim, size = 13.sp, font = mono)
+                    }
+                    inner()
+                }
+            },
+        )
+        IconBtn(
+            "close",
+            onClick = {
+                pane.setNameFilter("")
+                onClose()
+            },
+            box = 26,
+            icon = 16.sp,
+        )
     }
 }
 

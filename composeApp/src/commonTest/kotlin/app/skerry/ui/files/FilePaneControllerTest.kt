@@ -569,6 +569,80 @@ class FilePaneControllerTest {
         assertEquals(setOf("$HOME/keep.txt"), c.selection)
     }
 
+    // Name filter over the cached listing (no source query), like the mc/Total Commander quick filter.
+
+    @Test
+    fun `setNameFilter narrows the listing and clearing brings it back`() = runTest {
+        val c = started()
+
+        c.setNameFilter("read")
+        assertEquals(listOf("readme.txt"), c.loaded().entries.map { it.name })
+
+        c.setNameFilter("")
+        assertEquals(listOf("alpha", "zeta", "build.log", "readme.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `name filter accepts a glob mask`() = runTest {
+        val c = started()
+
+        c.setNameFilter("*.log")
+
+        assertEquals(listOf("build.log"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `name filter combines with the hidden toggle`() = runTest {
+        val fake = FakeSftpClient(startDir = HOME).apply {
+            seedFile("$HOME/.notes.txt")
+            seedFile("$HOME/notes.txt")
+            seedFile("$HOME/build.log")
+        }
+        val c = started(SftpFileBrowser(fake, label = "h"))
+
+        c.setShowHidden(false)
+        c.setNameFilter("notes")
+
+        assertEquals(listOf("notes.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `filtering moves the cursor off a filtered-out entry and prunes selection`() = runTest {
+        val c = started()
+        c.setCursor(c.entry("zeta"))
+        c.selectOnly(c.entry("zeta"))
+
+        c.setNameFilter("read")
+
+        assertEquals("$HOME/readme.txt", c.cursor)
+        assertEquals(emptySet(), c.selection)
+    }
+
+    @Test
+    fun `navigation clears the name filter`() = runTest {
+        val c = started(seededBrowserWithNested())
+        val alpha = c.entry("alpha")
+        c.setNameFilter("*.log")
+
+        c.open(alpha)
+        advanceUntilIdle()
+
+        assertEquals("", c.nameFilter)
+        assertEquals(listOf("inside.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `refresh keeps the name filter applied`() = runTest {
+        val c = started()
+        c.setNameFilter("*.log")
+
+        c.refresh()
+        advanceUntilIdle()
+
+        assertEquals("*.log", c.nameFilter)
+        assertEquals(listOf("build.log"), c.loaded().entries.map { it.name })
+    }
+
     @Test
     fun `rubberBandTo is a no-op when an endpoint is not in the listing`() = runTest {
         val c = started()
