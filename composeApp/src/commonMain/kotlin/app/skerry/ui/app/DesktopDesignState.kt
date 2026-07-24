@@ -342,6 +342,15 @@ class DesktopDesignState(
     /** Host the modal is prefilled from as a copy ("Duplicate"); saving creates a new profile. */
     var duplicatingHost: Host? by mutableStateOf(null); private set
 
+    /**
+     * ssh_config import: hosts parsed from a picked file, awaiting the user's selection in the import
+     * modal; `null` means the modal is closed. Held on the state (not local Compose state) so the
+     * sidebar coroutine that picks and parses the file can hand the result to the modal rendered at
+     * the app root.
+     */
+    var sshImport: app.skerry.shared.ssh.SshConfigParseResult? by mutableStateOf(null); private set
+    val sshImportOpen: Boolean get() = sshImport != null
+
     /** Host for which the delete-confirmation dialog is shown (null means no dialog). */
     var pendingDeleteHost: Host? by mutableStateOf(null); private set
 
@@ -409,6 +418,8 @@ class DesktopDesignState(
     fun openEditModal(host: Host) { editingHost = host; duplicatingHost = null; modalOpen = true }
     fun openDuplicateModal(host: Host) { editingHost = null; duplicatingHost = host; modalOpen = true }
     fun closeModal() { modalOpen = false; editingHost = null; duplicatingHost = null }
+    fun beginSshImport(result: app.skerry.shared.ssh.SshConfigParseResult) { sshImport = result }
+    fun closeSshImport() { sshImport = null }
     fun requestDeleteHost(host: Host) { pendingDeleteHost = host }
     fun dismissDeleteHost() { pendingDeleteHost = null }
     fun requestCloseSession(id: String) { pendingClose = PendingClose.Session(id) }

@@ -8,6 +8,8 @@ import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.SshConfigHost
+import app.skerry.shared.ssh.SshConfigImport
 
 /**
  * Editable profile fields without [Host.id]: the create/edit form operates on a draft, and
@@ -83,6 +85,27 @@ class HostManagerController(
         )
         hosts = store.all()
         return id
+    }
+
+    /**
+     * Persist a batch of already-built profiles (e.g. from an `ssh_config` import) and reread once.
+     * Ids are pre-assigned by the caller so intra-batch references (ProxyJump → [Host.jumpHostId])
+     * are already resolved; existing hosts are left untouched.
+     */
+    fun importHosts(imported: List<Host>) {
+        for (host in imported) store.put(host)
+        hosts = store.all()
+    }
+
+    /**
+     * Import hosts parsed from an `ssh_config` file: plans the [selected] aliases into profiles
+     * (resolving ProxyJump within the batch, filling [defaultUser] where the config omits `User`)
+     * using this controller's id generator, persists them, and returns how many were created.
+     */
+    fun importSshConfig(parsed: List<SshConfigHost>, selected: Set<String>, defaultUser: String?): Int {
+        val planned = SshConfigImport.plan(parsed, selected, defaultUser, newId)
+        importHosts(planned)
+        return planned.size
     }
 
     /** Persist the VNC "Resize to window" toggle changed from a live session (unknown id: no-op). */

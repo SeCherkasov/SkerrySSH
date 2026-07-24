@@ -197,6 +197,7 @@ import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.vault.LockScreen
 import app.skerry.ui.host.NewConnectionModal
+import app.skerry.ui.host.SshConfigImportModal
 import app.skerry.ui.sync.PairingShowDialog
 import app.skerry.ui.app.PendingClose
 import app.skerry.ui.settings.SettingsPanel
@@ -692,6 +693,7 @@ private fun DesktopChrome(
                 if (event.type != KeyEventType.KeyDown) false
                 else if (
                     state.appOverlay != null || state.modalOpen || state.settingsOpen ||
+                    state.sshImportOpen ||
                     state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null ||
                     // The snippet-variable confirmation dialog is modal too: a hotkey firing over it
                     // would type into the terminal under the dialog or race the pending run.
@@ -757,6 +759,7 @@ private fun DesktopChrome(
                 )
             }
             if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost, duplicateOf = state.duplicatingHost)
+            state.sshImport?.let { SshConfigImportModal(state, it) }
             if (state.settingsOpen) SettingsPanel(state)
             // Sync onboarding modal over settings: appears via "Set up sync", closes itself on a
             // successful connect. Only when the coordinator is supplied (the mock path with no backend has none).

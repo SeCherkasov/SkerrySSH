@@ -105,4 +105,12 @@
     <string name="conn_type_telnet">Telnet</string>
     <string name="conn_type_serial">Serial</string>
     <string name="conn_type_vnc">VNC</string>
+
+    <string name="conn_import_action">Импорт из ssh_config</string>
+    <string name="conn_import_title">Импорт из ssh_config</string>
+    <string name="conn_import_subtitle">Выберите хосты для добавления. Ключи не импортируются — аутентификацию укажете при подключении.</string>
+    <string name="conn_import_select_all">Выбрать все</string>
+    <string name="conn_import_empty">В этом файле не найдено хостов.</string>
+    <string name="conn_import_button">Импортировать (%1$d)</string>
+    <string name="conn_import_skipped">Некоторые строки были пропущены при импорте.</string>
 </resources>
