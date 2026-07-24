@@ -429,6 +429,14 @@ class TerminalScreenState(
         ?.takeIf { it.isNotEmpty() }
 
     /**
+     * Best-effort text of the last command and its output — for "explain this output" when nothing is
+     * selected, so the AI sees the recent result rather than the whole screen (a long login banner
+     * would otherwise drown it out). `null` when the command boundary can't be found; the caller then
+     * falls back to the whole visible screen. See [lastCommandBlock] for the heuristic.
+     */
+    fun lastOutput(): String? = lastCommandBlock(output)
+
+    /**
      * In-app PRIMARY buffer: text of the last mouse selection. Used for middle-click paste where
      * the system PRIMARY selection is unavailable (Wayland: AWT `getSystemSelection()`==null) —
      * paste then falls back to this instead of CLIPBOARD.
@@ -756,3 +764,28 @@ private sealed interface TerminalCommand {
 private val PASSWORD_PROMPT_HINTS = listOf(
     "password", "passphrase", "passcode", "verification code", "pin",
 )
+
+/**
+ * Extract the last command and its output from flat screen [text] (rows joined by '\n', trailing
+ * blanks trimmed — see [TerminalScreenState.output]). The bottom line is the current shell prompt;
+ * the nearest line above it that starts with that same prompt string is where the last command was
+ * entered, so everything from there down to (but not including) the current prompt is that command
+ * plus its output. Returns `null` when no such boundary exists.
+ *
+ * Heuristic only — no shell cooperation (OSC 133) is assumed, and prompts vary. A very short prompt
+ * (e.g. a bare "$") is rejected, since it would match unrelated lines and mis-slice the screen.
+ */
+internal fun lastCommandBlock(text: String): String? {
+    val lines = text.split("\n")
+    if (lines.size < 2) return null
+    val prompt = lines.last()
+    if (prompt.length < 3) return null
+    for (i in lines.size - 2 downTo 0) {
+        val line = lines[i]
+        // A command line repeats the prompt and has something typed after it.
+        if (line.length > prompt.length && line.startsWith(prompt)) {
+            return lines.subList(i, lines.size - 1).joinToString("\n").trim().ifBlank { null }
+        }
+    }
+    return null
+}

@@ -77,6 +77,8 @@
     <string name="term_status_no_session">无会话</string>
     <string name="term_ai_ask_short">向 Skerry 提问…</string>
     <string name="term_ai_confirm">确认</string>
+    <string name="term_ai_explain">解释输出</string>
+    <string name="term_ai_explain_reading">正在读取输出…</string>
     <string name="term_password_label">密码</string>
     <string name="term_connect">连接</string>
     <string name="term_disconnect">断开连接</string>

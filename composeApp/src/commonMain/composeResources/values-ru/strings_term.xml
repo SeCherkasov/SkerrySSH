@@ -77,6 +77,8 @@
     <string name="term_status_no_session">нет сессии</string>
     <string name="term_ai_ask_short">Спросите Skerry…</string>
     <string name="term_ai_confirm">Подтвердить</string>
+    <string name="term_ai_explain">Объяснить вывод</string>
+    <string name="term_ai_explain_reading">Читаю вывод…</string>
     <string name="term_password_label">ПАРОЛЬ</string>
     <string name="term_connect">Подключиться</string>
     <string name="term_disconnect">Отключиться</string>
