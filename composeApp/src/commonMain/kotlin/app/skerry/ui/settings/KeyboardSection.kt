@@ -40,6 +40,7 @@ import app.skerry.ui.generated.resources.settings_kb_editor_group
 import app.skerry.ui.generated.resources.settings_kb_command_palette
 import app.skerry.ui.generated.resources.settings_kb_copy_selection
 import app.skerry.ui.generated.resources.settings_kb_cycle_suggestions
+import app.skerry.ui.generated.resources.settings_kb_files_filter
 import app.skerry.ui.generated.resources.settings_kb_files_group
 import app.skerry.ui.generated.resources.settings_kb_files_hidden
 import app.skerry.ui.generated.resources.settings_kb_files_save
@@ -116,6 +117,7 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.ftail_fkey_quit), "F10", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_files_switch_pane), "Tab", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_files_hidden), ctrl("H"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_files_filter), ctrl("F"), live = true),
     )
     // The built-in viewer/editor (F3/F4) opens inside the file panel and redefines the same bar of
     // function keys while it is there, so its keys are listed as their own group.

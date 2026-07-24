@@ -248,6 +248,11 @@ fun DesktopDesignApp(
     // Show hidden files in SFTP (Ctrl+H) — persisted externally (desktop main): starting value + write callback.
     initialSftpShowHidden: Boolean = true,
     onSftpShowHiddenChange: (Boolean) -> Unit = {},
+    // SFTP listing columns (the header's Columns popup) — persisted the same way.
+    initialSftpShowModified: Boolean = true,
+    onSftpShowModifiedChange: (Boolean) -> Unit = {},
+    initialSftpShowPermissions: Boolean = false,
+    onSftpShowPermissionsChange: (Boolean) -> Unit = {},
     // Terminal font and its size (Appearance → Font / Font size) — persisted externally (desktop main).
     initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
     onTerminalFontChange: (TerminalFont) -> Unit = {},
@@ -369,12 +374,29 @@ fun DesktopDesignApp(
     // force a full rebuild of the consumer subtree. The persist callback goes through
     // rememberUpdatedState so the lambda inside remember always calls the fresh onSftpShowHiddenChange.
     var sftpShowHidden by remember { mutableStateOf(initialSftpShowHidden) }
+    var sftpShowModified by remember { mutableStateOf(initialSftpShowModified) }
+    var sftpShowPermissions by remember { mutableStateOf(initialSftpShowPermissions) }
     val sftpShowHiddenWriter = rememberUpdatedState(onSftpShowHiddenChange)
-    val sftpPrefs = remember(sftpShowHidden) {
-        SftpPrefs(sftpShowHidden) { value ->
-            sftpShowHidden = value
-            sftpShowHiddenWriter.value(value)
-        }
+    val sftpShowModifiedWriter = rememberUpdatedState(onSftpShowModifiedChange)
+    val sftpShowPermissionsWriter = rememberUpdatedState(onSftpShowPermissionsChange)
+    val sftpPrefs = remember(sftpShowHidden, sftpShowModified, sftpShowPermissions) {
+        SftpPrefs(
+            showHidden = sftpShowHidden,
+            setShowHidden = { value ->
+                sftpShowHidden = value
+                sftpShowHiddenWriter.value(value)
+            },
+            showModified = sftpShowModified,
+            setShowModified = { value ->
+                sftpShowModified = value
+                sftpShowModifiedWriter.value(value)
+            },
+            showPermissions = sftpShowPermissions,
+            setShowPermissions = { value ->
+                sftpShowPermissions = value
+                sftpShowPermissionsWriter.value(value)
+            },
+        )
     }
     // Session manager: either supplied from outside (offscreen render with a fake transport), or
     // built from the live transport — one shell per tab, like in [app.skerry.ui.mobile.MobileApp].

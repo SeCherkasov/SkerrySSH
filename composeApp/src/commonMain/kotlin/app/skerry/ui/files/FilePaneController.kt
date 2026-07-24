@@ -72,6 +72,15 @@ class FilePaneController(
     val showHidden: Boolean get() = hiddenShown
 
     /**
+     * Quick name filter over the current listing ([matchesNameFilter]: substring or `*`/`?` glob).
+     * Read-only externally; change via [setNameFilter]. Cleared on navigation — the filter narrows
+     * the directory being viewed, it is not a persistent mode. Backing field is separate (like
+     * [hiddenShown]) to avoid a JVM signature clash between the property setter and [setNameFilter].
+     */
+    private var filterText: String by mutableStateOf("")
+    val nameFilter: String get() = filterText
+
+    /**
      * Full sorted listing of the current directory before the visibility filter, so [showHidden]
      * can toggle without re-querying the source.
      */
@@ -127,6 +136,9 @@ class FilePaneController(
         val created = childPath(name)
         browser.mkdir(created)
         reload()
+        // An active name filter can hide the just-created directory — creating something the user
+        // can't see reads as a silent failure, so drop the filter to reveal it.
+        if (nameFilter.isNotEmpty() && loadedEntries().none { it.path == created }) setNameFilter("")
         loadedEntries().firstOrNull { it.path == created }?.let { setCursor(it) }
     }
 
@@ -238,6 +250,21 @@ class FilePaneController(
         }
     }
 
+    /**
+     * Applies name filter [value] by refiltering the cached [rawEntries], without a source query
+     * (same mechanism as [setShowHidden]). Entries that leave view are pruned from selection and
+     * the cursor.
+     */
+    fun setNameFilter(value: String) {
+        if (filterText == value) return
+        filterText = value
+        if (state is FilePaneState.Loaded) {
+            state = FilePaneState.Loaded(visible(rawEntries))
+            pruneSelection()
+            clampCursor()
+        }
+    }
+
     /** Moves the cursor by [delta] rows, clamped at the edges. Navigation space includes "..". */
     fun moveCursor(delta: Int) {
         if (combinedCount() == 0) {
@@ -299,9 +326,13 @@ class FilePaneController(
     fun selectedItems(): List<FileItem> =
         (state as? FilePaneState.Loaded)?.entries?.filter { it.path in selection } ?: emptyList()
 
-    /** Names of entries in the current directory, for overwrite-conflict checks before transfer. */
+    /**
+     * Names of ALL entries in the current directory (from the unfiltered [rawEntries], not the
+     * visible listing), for overwrite/name-conflict checks before transfer/mkdir/rename — an entry
+     * hidden by [showHidden] or [nameFilter] still occupies its name on the source.
+     */
     fun currentEntryNames(): Set<String> =
-        (state as? FilePaneState.Loaded)?.entries?.mapTo(mutableSetOf()) { it.name } ?: emptySet()
+        if (state is FilePaneState.Loaded) rawEntries.mapTo(mutableSetOf()) { it.name } else emptySet()
 
     /**
      * Navigates to [target] atomically: loads its listing first, then updates
@@ -319,7 +350,16 @@ class FilePaneController(
      */
     private fun commit(target: String, next: FilePaneState) {
         path = target
-        state = next
+        // The filter narrows one directory's view; a new directory starts unfiltered. [next] was
+        // built while the old filter was still active, so a successful listing is re-derived from
+        // the fresh [rawEntries]. A failed navigation keeps the filter: it still describes the
+        // last listing that was on screen, and going back up restores that view.
+        state = if (next is FilePaneState.Loaded) {
+            filterText = ""
+            FilePaneState.Loaded(visible(rawEntries))
+        } else {
+            next
+        }
         resetSelection() // New directory: selection is empty already, nothing to prune.
         cursor = (next as? FilePaneState.Loaded)?.entries?.firstOrNull()?.path
         cursorOnParent = cursor == null && hasParent
@@ -398,9 +438,11 @@ class FilePaneController(
             FilePaneState.Error(e.failure)
         }
 
-    /** Filters the listing by [showHidden]; hidden entries start with a dot. */
+    /** Filters the listing by [showHidden] (hidden entries start with a dot) and [nameFilter]. */
     private fun visible(entries: List<FileItem>): List<FileItem> =
-        if (showHidden) entries else entries.filterNot { it.name.startsWith(".") }
+        entries
+            .let { if (showHidden) it else it.filterNot { e -> e.name.startsWith(".") } }
+            .let { if (nameFilter.isBlank()) it else it.filter { e -> matchesNameFilter(e.name, nameFilter) } }
 
     /** Removes paths no longer present in the current listing from selection/anchor. */
     private fun pruneSelection() {

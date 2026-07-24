@@ -190,6 +190,7 @@
     <string name="settings_kb_editor_group">FILE VIEWER / EDITOR</string>
     <string name="settings_kb_files_switch_pane">Switch pane</string>
     <string name="settings_kb_files_hidden">Show hidden files</string>
+    <string name="settings_kb_files_filter">Filter listing</string>
     <string name="settings_kb_files_save">Save the file being edited</string>
     <string name="settings_badge_soon">SOON</string>
 

@@ -91,7 +91,14 @@ class SftpFileBrowser(
 }
 
 private fun SftpEntry.toFileItem(): FileItem =
-    FileItem(name = name, path = path, type = type.toItemType(), size = size, modifiedEpochSeconds = modifiedEpochSeconds)
+    FileItem(
+        name = name,
+        path = path,
+        type = type.toItemType(),
+        size = size,
+        modifiedEpochSeconds = modifiedEpochSeconds,
+        permissions = permissions,
+    )
 
 private fun SftpEntryType.toItemType(): FileItemType = when (this) {
     SftpEntryType.File -> FileItemType.File

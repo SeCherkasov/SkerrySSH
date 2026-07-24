@@ -6,8 +6,9 @@ enum class FileItemType { File, Directory, Symlink, Other }
 /**
  * File panel object metadata, source-neutral (local filesystem or remote SFTP) so the same UI list
  * and controller serve both panes of the dual-pane view. [path] is an absolute path in the source's
- * own namespace; [size] in bytes; [modifiedEpochSeconds] is mtime (Unix seconds, `0` if unreported).
- * For a symlink, attributes describe the link itself.
+ * own namespace; [size] in bytes; [modifiedEpochSeconds] is mtime (Unix seconds, `0` if unreported);
+ * [permissions] are POSIX mode bits (`st_mode & 0o7777`), or `null` when the source doesn't report
+ * them (the local okio browser). For a symlink, attributes describe the link itself.
  */
 data class FileItem(
     val name: String,
@@ -15,6 +16,7 @@ data class FileItem(
     val type: FileItemType,
     val size: Long,
     val modifiedEpochSeconds: Long,
+    val permissions: Int? = null,
 )
 
 /**

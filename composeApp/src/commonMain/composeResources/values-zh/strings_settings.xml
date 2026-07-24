@@ -190,6 +190,7 @@
     <string name="settings_kb_editor_group">文件查看与编辑</string>
     <string name="settings_kb_files_switch_pane">切换面板</string>
     <string name="settings_kb_files_hidden">显示隐藏文件</string>
+    <string name="settings_kb_files_filter">筛选列表</string>
     <string name="settings_kb_files_save">保存正在编辑的文件</string>
     <string name="settings_badge_soon">即将推出</string>
 

@@ -7,6 +7,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -90,6 +91,10 @@ import app.skerry.ui.generated.resources.ftail_transfer_counter
 import app.skerry.ui.generated.resources.ftail_transfer_progress
 import app.skerry.ui.generated.resources.sftp_already_exists
 import app.skerry.ui.generated.resources.sftp_cancel
+import app.skerry.ui.generated.resources.sftp_col_modified
+import app.skerry.ui.generated.resources.sftp_col_permissions
+import app.skerry.ui.generated.resources.sftp_columns
+import app.skerry.ui.generated.resources.sftp_filter_hint
 import app.skerry.ui.generated.resources.sftp_copy
 import app.skerry.ui.generated.resources.sftp_copy_to_q
 import app.skerry.ui.generated.resources.sftp_create
@@ -126,20 +131,27 @@ import app.skerry.ui.generated.resources.sftp_upload
 import app.skerry.ui.generated.resources.sftp_what_single
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.sftp.TransferDirection
+import app.skerry.ui.sftp.fileDateText
 import app.skerry.ui.sftp.humanSize
+import app.skerry.ui.sftp.permissionsText
 import app.skerry.ui.sftp.pickUploadSource
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.text.style.TextAlign
+import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSftpPrefs
+import app.skerry.ui.app.SftpPrefs
 import app.skerry.ui.design.MeterBar
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
@@ -247,6 +259,12 @@ private fun LiveSftpView(
     // A pane's path bar is being edited (type-to-jump). While true the Column's key handler steps aside
     // (preview events fire parent-first) so arrows/Enter reach the focused path field, not the listing.
     var editingPath by remember(controller) { mutableStateOf(false) }
+    // Same standdown while a pane's quick filter field is focused (Ctrl+F).
+    var editingFilter by remember(controller) { mutableStateOf(false) }
+    // Per-pane quick-filter focus ticks: 0 — the filter row is closed; each Ctrl+F increments the
+    // active pane's tick, which both shows the row and (re)focuses its field.
+    var localFilterTick by remember(controller) { mutableStateOf(0) }
+    var remoteFilterTick by remember(controller) { mutableStateOf(0) }
     val localList = rememberLazyListState()
     val remoteList = rememberLazyListState()
     // Persistent show-hidden setting (Ctrl+H) — single source of truth for both panes.
@@ -324,14 +342,19 @@ private fun LiveSftpView(
             .focusRequester(focus)
             .onPreviewKeyEvent { event ->
                 if (c == null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                // Path bar has focus (type-to-jump): let its own handler take arrows/Enter/Esc.
-                if (editingPath) return@onPreviewKeyEvent false
+                // Path bar or filter field has focus: let its own handler take arrows/Enter/Esc.
+                if (editingPath || editingFilter) return@onPreviewKeyEvent false
                 // The editor is open: it owns every key, including the F-keys it redefines.
                 if (editor != null) return@onPreviewKeyEvent false
                 // Ctrl+H — show/hide hidden entries (dotfiles); toggle the persistent setting, and the
                 // LaunchedEffect below applies it to both panes (single source of truth).
                 if (event.isCtrlPressed && event.key == Key.H) {
                     sftpPrefs.setShowHidden(!sftpPrefs.showHidden)
+                    return@onPreviewKeyEvent true
+                }
+                // Ctrl+F — quick name filter for the active pane (open the row and focus its field).
+                if (event.isCtrlPressed && event.key == Key.F) {
+                    if (active == ActivePane.Local) localFilterTick++ else remoteFilterTick++
                     return@onPreviewKeyEvent true
                 }
                 val pane = if (active == ActivePane.Local) c.local else c.remote
@@ -410,6 +433,9 @@ private fun LiveSftpView(
                         active = active == ActivePane.Local,
                         onActivate = { active = ActivePane.Local; focus.requestFocus() },
                         onEditingPath = { editingPath = it },
+                        onEditingFilter = { editingFilter = it },
+                        filterTick = localFilterTick,
+                        onFilterClose = { localFilterTick = 0 },
                         restoreFocus = { focus.requestFocus() },
                         modifier = Modifier.weight(1f),
                     )
@@ -420,6 +446,9 @@ private fun LiveSftpView(
                         active = active == ActivePane.Remote,
                         onActivate = { active = ActivePane.Remote; focus.requestFocus() },
                         onEditingPath = { editingPath = it },
+                        onEditingFilter = { editingFilter = it },
+                        filterTick = remoteFilterTick,
+                        onFilterClose = { remoteFilterTick = 0 },
                         restoreFocus = { focus.requestFocus() },
                         modifier = Modifier.weight(1f),
                     )
@@ -557,10 +586,57 @@ private fun LivePaneHeader(
             Txt(stringResource(Res.string.sftp_title), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.SemiBold)
             Txt(stringResource(Res.string.sftp_subtitle_host, subtitle), color = Skerry.colors.faint, size = 11.5.sp, font = mono)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             GhostButton(stringResource(Res.string.sftp_upload), onClick = onUpload, icon = "upload")
             GhostButton(stringResource(Res.string.sftp_new_folder), onClick = onNewFolder, icon = "create_new_folder")
+            ColumnsMenu(LocalSftpPrefs.current)
         }
+    }
+}
+
+/**
+ * Listing column visibility popup ("view_column" in the header): toggles for the modified-date and
+ * permissions columns. One setting for both panes (like show-hidden), persisted via [SftpPrefs].
+ */
+@Composable
+private fun ColumnsMenu(prefs: SftpPrefs) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { IconBtn("view_column", onClick = { open = !open }, box = 26, icon = 16.sp) },
+    ) { _ ->
+        Column(
+            Modifier
+                .width(220.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Skerry.colors.surface2)
+                .border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(8.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Txt(
+                labelUppercase(stringResource(Res.string.sftp_columns)),
+                color = Skerry.colors.faint,
+                size = 10.sp,
+                weight = FontWeight.SemiBold,
+                letterSpacing = 0.5.sp,
+            )
+            ColumnToggleRow(stringResource(Res.string.sftp_col_modified), prefs.showModified) { prefs.setShowModified(it) }
+            ColumnToggleRow(stringResource(Res.string.sftp_col_permissions), prefs.showPermissions) { prefs.setShowPermissions(it) }
+        }
+    }
+}
+
+@Composable
+private fun ColumnToggleRow(label: String, on: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Txt(label, color = Skerry.colors.text, size = 12.5.sp)
+        Toggle(on = on, onToggle = { onToggle(!on) })
     }
 }
 
@@ -601,6 +677,9 @@ private fun LivePane(
     active: Boolean,
     onActivate: () -> Unit,
     onEditingPath: (Boolean) -> Unit,
+    onEditingFilter: (Boolean) -> Unit,
+    filterTick: Int,
+    onFilterClose: () -> Unit,
     restoreFocus: () -> Unit,
     modifier: Modifier,
 ) {
@@ -651,6 +730,19 @@ private fun LivePane(
             )
         }
         HLine()
+        // Quick filter row (Ctrl+F): visible while opened or while a filter is applied, so the
+        // active narrowing is never invisible state.
+        if (filterTick > 0 || pane.nameFilter.isNotEmpty()) {
+            PaneFilterField(
+                pane = pane,
+                mono = mono,
+                focusTick = filterTick,
+                onClose = onFilterClose,
+                onEditing = onEditingFilter,
+                restoreFocus = restoreFocus,
+            )
+            HLine()
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val st = pane.state) {
                 FilePaneState.Loading -> PaneNotice("sync", stringResource(Res.string.sftp_loading), null, Skerry.colors.faint)
@@ -666,6 +758,79 @@ private fun LivePane(
                 )
             }
         }
+    }
+}
+
+/**
+ * Quick name filter row below a pane's header (Ctrl+F): live filtering as you type
+ * ([FilePaneController.setNameFilter] — substring or `*`/`?` glob). Esc clears the filter and
+ * closes the row; Enter keeps the filter and returns the keyboard to the listing. While the field
+ * is focused, [onEditing] tells the screen to stand its key handler down. The local text state is
+ * re-keyed on the pane's path: navigation clears the controller's filter, so the field follows.
+ */
+@Composable
+private fun PaneFilterField(
+    pane: FilePaneController,
+    mono: FontFamily,
+    focusTick: Int,
+    onClose: () -> Unit,
+    onEditing: (Boolean) -> Unit,
+    restoreFocus: () -> Unit,
+) {
+    var text by remember(pane, pane.path) { mutableStateOf(pane.nameFilter) }
+    val fieldFocus = remember { FocusRequester() }
+    val clearAndClose = {
+        pane.setNameFilter("")
+        onClose()
+        restoreFocus()
+    }
+    // Each Ctrl+F press (tick increment) refocuses the field, including when the row is already open.
+    LaunchedEffect(focusTick) { if (focusTick > 0) fieldFocus.requestFocus() }
+    // The row can leave composition while focused (Esc path, listing reload) — release the standdown.
+    DisposableEffect(Unit) { onDispose { onEditing(false) } }
+    Row(
+        Modifier.fillMaxWidth().background(Skerry.colors.panel).padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Sym("filter_alt", size = 14.sp, color = Skerry.colors.faint)
+        BasicTextField(
+            value = text,
+            onValueChange = {
+                text = it
+                pane.setNameFilter(it)
+            },
+            singleLine = true,
+            textStyle = TextStyle(color = Skerry.colors.textBright, fontSize = 11.5.sp, fontFamily = mono),
+            cursorBrush = SolidColor(Skerry.colors.cyan),
+            modifier = Modifier
+                .weight(1f)
+                .focusRequester(fieldFocus)
+                .onFocusChanged { onEditing(it.isFocused) }
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Escape -> {
+                            clearAndClose()
+                            true
+                        }
+                        Key.Enter, Key.NumPadEnter -> {
+                            restoreFocus()
+                            true
+                        }
+                        else -> false
+                    }
+                },
+            decorationBox = { inner ->
+                Box {
+                    if (text.isEmpty()) {
+                        Txt(stringResource(Res.string.sftp_filter_hint), color = Skerry.colors.dim, size = 11.5.sp, font = mono)
+                    }
+                    inner()
+                }
+            },
+        )
+        IconBtn("close", onClick = clearAndClose, box = 20, icon = 13.sp)
     }
 }
 
@@ -737,43 +902,67 @@ private fun LivePaneList(
     active: Boolean,
     onActivate: () -> Unit,
 ) {
-    LazyColumn(Modifier.fillMaxSize().padding(6.dp), state = listState) {
-        if (pane.path != "/") {
-            item(key = "..") {
+    val prefs = LocalSftpPrefs.current
+    // The optional columns are fixed-width and the row has no horizontal scroll: on a narrow pane
+    // (small window, 50/50 split) they'd push past the pane edge while the weighted name shrinks
+    // to nothing. Below these widths the optional columns yield — permissions first, then the date.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // The permissions slot also needs data to exist for this pane at all (the local okio
+        // source reports no mode bits) — otherwise it would be a dead 76dp on every local row.
+        val showPermissions = prefs.showPermissions && maxWidth >= 460.dp && entries.any { it.permissions != null }
+        val showModified = prefs.showModified && maxWidth >= 360.dp
+        LazyColumn(Modifier.fillMaxSize().padding(6.dp), state = listState) {
+            if (pane.path != "/") {
+                item(key = "..") {
+                    LiveFileRow(
+                        "arrow_upward", Skerry.colors.faint, "..",
+                        columns = FileRowColumns(),
+                        selected = false, cursored = pane.cursorOnParent, active = active, mono = mono,
+                        // A single click only puts the cursor on ".."; going up is a double click (like entering a directory).
+                        onPress = { onActivate(); pane.setCursorOnParent() },
+                        onDoubleClick = { onActivate(); pane.goUp() },
+                        rubberBand = null, // the ".." row can't be marked — no rubber-band needed on it
+                    )
+                }
+            }
+            items(entries, key = { it.path }) { entry ->
+                // Single click (on press): activate the pane and place the cursor — doesn't mark or enter.
+                // Entering a directory is a double click (open; no-op for a file). Selection — RMB/Space/Insert.
+                val onPress = {
+                    onActivate()
+                    pane.setCursor(entry)
+                }
+                val onDoubleClick = {
+                    onActivate()
+                    pane.setCursor(entry)
+                    pane.open(entry)
+                }
                 LiveFileRow(
-                    "arrow_upward", Skerry.colors.faint, "..", "", selected = false, cursored = pane.cursorOnParent, active = active, mono,
-                    // A single click only puts the cursor on ".."; going up is a double click (like entering a directory).
-                    onPress = { onActivate(); pane.setCursorOnParent() },
-                    onDoubleClick = { onActivate(); pane.goUp() },
-                    rubberBand = null, // the ".." row can't be marked — no rubber-band needed on it
+                    icon = fileItemIcon(entry.type),
+                    iconColor = if (entry.type == FileItemType.Directory) Skerry.colors.cyanBright else Skerry.colors.dim,
+                    name = entry.name,
+                    // An enabled column always occupies its fixed-width slot — an empty value
+                    // renders as a blank slot, otherwise rows with a missing value (a directory's
+                    // size, an unreported mtime) would let the remaining columns drift right and
+                    // break the vertical alignment.
+                    columns = FileRowColumns(
+                        permissions = if (showPermissions) permissionsText(entry.type, entry.permissions).orEmpty() else null,
+                        modified = if (showModified) fileDateText(entry.modifiedEpochSeconds) else null,
+                        size = when {
+                            entry.type == FileItemType.File -> humanSize(entry.size)
+                            showPermissions || showModified -> ""
+                            else -> null
+                        },
+                    ),
+                    selected = entry.path in pane.selection,
+                    cursored = entry.path == pane.cursor,
+                    active = active,
+                    mono = mono,
+                    onPress = onPress,
+                    onDoubleClick = onDoubleClick,
+                    rubberBand = RowRubberBand(entry, pane, listState, entries, onActivate),
                 )
             }
-        }
-        items(entries, key = { it.path }) { entry ->
-            // Single click (on press): activate the pane and place the cursor — doesn't mark or enter.
-            // Entering a directory is a double click (open; no-op for a file). Selection — RMB/Space/Insert.
-            val onPress = {
-                onActivate()
-                pane.setCursor(entry)
-            }
-            val onDoubleClick = {
-                onActivate()
-                pane.setCursor(entry)
-                pane.open(entry)
-            }
-            LiveFileRow(
-                icon = fileItemIcon(entry.type),
-                iconColor = if (entry.type == FileItemType.Directory) Skerry.colors.cyanBright else Skerry.colors.dim,
-                name = entry.name,
-                meta = if (entry.type == FileItemType.File) humanSize(entry.size) else "",
-                selected = entry.path in pane.selection,
-                cursored = entry.path == pane.cursor,
-                active = active,
-                mono = mono,
-                onPress = onPress,
-                onDoubleClick = onDoubleClick,
-                rubberBand = RowRubberBand(entry, pane, listState, entries, onActivate),
-            )
         }
     }
 }
@@ -826,12 +1015,27 @@ private enum class ActivePane { Local, Remote }
 /** Double-click threshold for a row (ms between two LMB presses → enter directory). */
 private const val DOUBLE_CLICK_MS = 350L
 
+/**
+ * Right-side row columns, each `null` when hidden/empty for this row: [permissions] (`ls -l`
+ * style, remote pane only — the local okio source doesn't report mode bits), [modified] (mtime),
+ * [size] (files only). Fixed widths keep the columns aligned across rows.
+ */
+private data class FileRowColumns(
+    val permissions: String? = null,
+    val modified: String? = null,
+    val size: String? = null,
+)
+
+private val PERMISSIONS_COLUMN_WIDTH = 76.dp
+private val MODIFIED_COLUMN_WIDTH = 96.dp
+private val SIZE_COLUMN_WIDTH = 62.dp
+
 @Composable
 private fun LiveFileRow(
     icon: String,
     iconColor: Color,
     name: String,
-    meta: String,
+    columns: FileRowColumns,
     selected: Boolean,
     cursored: Boolean,
     active: Boolean,
@@ -920,7 +1124,9 @@ private fun LiveFileRow(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        if (meta.isNotEmpty()) Txt(meta, color = Skerry.colors.faint, size = 11.sp)
+        columns.permissions?.let { Txt(it, color = Skerry.colors.faint, size = 11.sp, font = mono, maxLines = 1, modifier = Modifier.width(PERMISSIONS_COLUMN_WIDTH)) }
+        columns.modified?.let { Txt(it, color = Skerry.colors.faint, size = 11.sp, font = mono, maxLines = 1, align = TextAlign.End, modifier = Modifier.width(MODIFIED_COLUMN_WIDTH)) }
+        columns.size?.let { Txt(it, color = Skerry.colors.faint, size = 11.sp, maxLines = 1, align = TextAlign.End, modifier = Modifier.width(SIZE_COLUMN_WIDTH)) }
     }
 }
 

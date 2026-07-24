@@ -190,6 +190,7 @@
     <string name="settings_kb_editor_group">ПРОСМОТР И ПРАВКА ФАЙЛА</string>
     <string name="settings_kb_files_switch_pane">Переключить панель</string>
     <string name="settings_kb_files_hidden">Показывать скрытые файлы</string>
+    <string name="settings_kb_files_filter">Фильтр списка</string>
     <string name="settings_kb_files_save">Сохранить редактируемый файл</string>
     <string name="settings_badge_soon">СКОРО</string>
 

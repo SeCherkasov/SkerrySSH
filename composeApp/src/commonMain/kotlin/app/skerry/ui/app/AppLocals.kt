@@ -39,13 +39,18 @@ val LocalFeatures: ProvidableCompositionLocal<FeatureFlags> = staticCompositionL
 
 /**
  * Dual-pane SFTP settings that persist across restarts. [showHidden] toggles dotfiles, like mc;
- * [setShowHidden] updates the value and persists it. Supplied by [DesktopDesignApp] from platform
- * storage; default shows hidden files without persisting (mock/preview).
+ * [showModified]/[showPermissions] toggle the listing's modified-date and permissions columns
+ * (the header's Columns popup). Each setter updates the value and persists it. Supplied by
+ * [DesktopDesignApp] from platform storage; defaults don't persist (mock/preview).
  */
 @Immutable
 data class SftpPrefs(
     val showHidden: Boolean = true,
     val setShowHidden: (Boolean) -> Unit = {},
+    val showModified: Boolean = true,
+    val setShowModified: (Boolean) -> Unit = {},
+    val showPermissions: Boolean = false,
+    val setShowPermissions: (Boolean) -> Unit = {},
 )
 
 /** Current SFTP settings; default shows hidden files and does not persist changes (mock path/preview). */
