@@ -290,6 +290,8 @@ fun DesktopDesignApp(
     // App theme (Settings → Appearance) — persisted externally (desktop main).
     initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
     onThemeModeChange: (ThemeMode) -> Unit = {},
+    initialLocalShellPath: String = "",
+    onLocalShellPathChange: (String) -> Unit = {},
     // Idle auto-lock threshold (Settings → Security) — persisted externally (desktop main).
     initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
     onAutoLockChange: (AutoLockDuration) -> Unit = {},
@@ -313,6 +315,7 @@ fun DesktopDesignApp(
             initialTerminalTheme, onTerminalThemeChange,
             initialCustomTerminalTheme, onCustomTerminalThemeChange,
             initialThemeMode, onThemeModeChange,
+            initialLocalShellPath, onLocalShellPathChange,
             initialAutoLock, onAutoLockChange,
             initialShowRecent, onShowRecentChange,
             initialRecentLimit, onRecentLimitChange,

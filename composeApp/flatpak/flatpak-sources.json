@@ -2773,6 +2773,20 @@
   },
   {
     "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.14.0/jna-platform-5.14.0.jar",
+    "sha512": "6d6e5292b50c53c6b42bcf293cd28ccf32f8580e6818329604af4277e916d375e436b4f3858586f5e07a93405a930e04d88d6384bc9f1ac2d58de4bb7180faeb",
+    "dest": "offline-repository/net/java/dev/jna/jna-platform/5.14.0",
+    "dest-filename": "jna-platform-5.14.0.jar"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.14.0/jna-platform-5.14.0.pom",
+    "sha512": "ea83c9446d027d7b04bdb0f1786a6facb0109830fd882c21cddd333016622f072aae4b4b07016b87661d345d8770034c24c8e47873307003ef6134ffa908744c",
+    "dest": "offline-repository/net/java/dev/jna/jna-platform/5.14.0",
+    "dest-filename": "jna-platform-5.14.0.pom"
+  },
+  {
+    "type": "file",
     "url": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna-platform/5.19.1/jna-platform-5.19.1.jar",
     "sha512": "a8cdc1a080f0a11905014c125697d54815d5102f50a42380bc6b1230f229d84e44d1a0a501f12b49da90e191437259b4fa7b7e2a43bfc3b5485e8cb253c0c490",
     "dest": "offline-repository/net/java/dev/jna/jna-platform/5.19.1",
@@ -3596,6 +3610,20 @@
     "sha512": "ae58d75b40e44cb0d8e3bb701c7afefa8cbf96066ae52fc3d57c69b7a7e819fd9b3b01971376da6ea94ee010b9ee59ba05a331b93a65e94c047b095131efd6c0",
     "dest": "offline-repository/org/jetbrains/annotations/23.0.0",
     "dest-filename": "annotations-23.0.0.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/annotations/24.0.1/annotations-24.0.1.jar",
+    "sha512": "ac5879c0170b80106962881ed2d9a3d5f4b4ef0f6908806ab19c8418fab3b59e2dd7b5f03eb434544119c92c559bcab52a50dcac036b01ff4436c34411f80682",
+    "dest": "offline-repository/org/jetbrains/annotations/24.0.1",
+    "dest-filename": "annotations-24.0.1.jar"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/annotations/24.0.1/annotations-24.0.1.pom",
+    "sha512": "1bdef3b7d9575590cbd176311b770f0f138199dc4b62b67c6bdd0d5bad7ecc3d71386255edea945d5a3b68e2446452b6104804ae88ed39a91af8573ed5491f66",
+    "dest": "offline-repository/org/jetbrains/annotations/24.0.1",
+    "dest-filename": "annotations-24.0.1.pom"
   },
   {
     "type": "file",
@@ -6571,6 +6599,27 @@
     "sha512": "d9198a2a9196d38e200ae8dabbcf3fb5dfe1be15a7da3dee2a62a528906d92fa16874f4bc17eaef983c9c50db6a6adb3814f4081b68e090948799fa41c70f0a4",
     "dest": "offline-repository/org/jetbrains/kotlinx/kotlinx-serialization-protobuf/1.7.3",
     "dest-filename": "kotlinx-serialization-protobuf-1.7.3.pom"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/pty4j/pty4j/0.13.12/pty4j-0.13.12.jar",
+    "sha512": "eac4224ed0e941d308f23653402355cc1022247d0b2ad2edf3b0a3c5f5f9bcdd4009aa5a0b90068cf4b94686fb9b876aa53d860d0324b46c3a6e71c9c685f18f",
+    "dest": "offline-repository/org/jetbrains/pty4j/pty4j/0.13.12",
+    "dest-filename": "pty4j-0.13.12.jar"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/pty4j/pty4j/0.13.12/pty4j-0.13.12.module",
+    "sha512": "70f4b3d81a29adb9daf0d23437e47f0c8dbf970dabb4caa190f6f6cd0c4105ab10138f75d94bce35e33551931df36e57cd85c40802ebe60b95402257fbb4871a",
+    "dest": "offline-repository/org/jetbrains/pty4j/pty4j/0.13.12",
+    "dest-filename": "pty4j-0.13.12.module"
+  },
+  {
+    "type": "file",
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/pty4j/pty4j/0.13.12/pty4j-0.13.12.pom",
+    "sha512": "0e00580d5f8ceff2d42d9fc4b9ddf712a7474819dd2a43b31579200e244814f24d6fd14277706ed5402d9d766a5b9d871630184a15b677eab494cbc9a1d5d9df",
+    "dest": "offline-repository/org/jetbrains/pty4j/pty4j/0.13.12",
+    "dest-filename": "pty4j-0.13.12.pom"
   },
   {
     "type": "file",
