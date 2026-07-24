@@ -135,6 +135,9 @@ import app.skerry.ui.design.Badge
 import app.skerry.ui.settings.ChangeAccountPasswordDialog
 import app.skerry.ui.settings.ChangeMasterPasswordDialog
 import app.skerry.ui.generated.resources.term_player_open
+import app.skerry.ui.generated.resources.conn_import_action
+import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.host.pickAndParseSshConfig
 import app.skerry.ui.terminal.openCastFile
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -216,6 +219,17 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             MoreRow(
                 "play_circle", Skerry.colors.cyanBright, stringResource(Res.string.term_player_open), null, Skerry.colors.dim,
                 onClick = { playerScope.launch { state.showCast(openCastFile()) } },
+            )
+            // Import hosts from an OpenSSH ssh_config file (desktop parity). Live path only: importing
+            // needs a host store to write to. Picks + parses the file, then hands off to the sheet.
+            val hostsForImport = LocalHosts.current
+            MoreRow(
+                "download", Skerry.colors.cyanBright, stringResource(Res.string.conn_import_action), null, Skerry.colors.dim,
+                onClick = if (hostsForImport != null) {
+                    { playerScope.launch { pickAndParseSshConfig()?.let(state::beginSshImport) } }
+                } else {
+                    null
+                },
             )
             // About: subtitle is the current version, or an amber "Update x.y.z" when a newer
             // release is known (the passive mobile counterpart of the desktop status-bar notice).
