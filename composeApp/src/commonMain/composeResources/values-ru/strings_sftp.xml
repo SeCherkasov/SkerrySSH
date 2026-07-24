@@ -63,6 +63,30 @@
     <string name="sftp_overwrite">Перезаписать</string>
 
     <!-- Встроенный просмотрщик/редактор (F3/F4) -->
+    <!-- Колонки списка (дата изменения / права) и быстрый фильтр по имени -->
+    <string name="sftp_columns">Колонки</string>
+    <string name="sftp_col_modified">Дата изменения</string>
+    <string name="sftp_col_permissions">Права</string>
+    <string name="sftp_filter_hint">Фильтр (имя или маска *.conf)</string>
+    <string name="sftp_meta_joined">%1$s · %2$s</string>
+    <string name="sftp_date_recent">%2$d %1$s %3$s</string>
+    <string name="sftp_date_day">%2$d %1$s</string>
+    <string name="sftp_date_old">%2$d %1$s %3$d</string>
+    <string-array name="sftp_months">
+        <item>янв</item>
+        <item>фев</item>
+        <item>мар</item>
+        <item>апр</item>
+        <item>май</item>
+        <item>июн</item>
+        <item>июл</item>
+        <item>авг</item>
+        <item>сен</item>
+        <item>окт</item>
+        <item>ноя</item>
+        <item>дек</item>
+    </string-array>
+
     <string name="sftp_edit_title">Правка</string>
     <string name="sftp_edit_title_view">Просмотр</string>
     <string name="sftp_edit_readonly">только чтение</string>

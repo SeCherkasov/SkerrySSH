@@ -63,6 +63,30 @@
     <string name="sftp_overwrite">覆盖</string>
 
     <!-- 内置查看器/编辑器（F3/F4） -->
+    <!-- Listing columns (modified date / permissions) and the quick name filter -->
+    <string name="sftp_columns">显示列</string>
+    <string name="sftp_col_modified">修改时间</string>
+    <string name="sftp_col_permissions">权限</string>
+    <string name="sftp_filter_hint">筛选（名称或 *.掩码）</string>
+    <string name="sftp_meta_joined">%1$s · %2$s</string>
+    <string name="sftp_date_recent">%1$s%2$d日 %3$s</string>
+    <string name="sftp_date_day">%1$s%2$d日</string>
+    <string name="sftp_date_old">%3$d年%1$s%2$d日</string>
+    <string-array name="sftp_months">
+        <item>1月</item>
+        <item>2月</item>
+        <item>3月</item>
+        <item>4月</item>
+        <item>5月</item>
+        <item>6月</item>
+        <item>7月</item>
+        <item>8月</item>
+        <item>9月</item>
+        <item>10月</item>
+        <item>11月</item>
+        <item>12月</item>
+    </string-array>
+
     <string name="sftp_edit_title">编辑</string>
     <string name="sftp_edit_title_view">查看</string>
     <string name="sftp_edit_readonly">只读</string>

@@ -569,6 +569,136 @@ class FilePaneControllerTest {
         assertEquals(setOf("$HOME/keep.txt"), c.selection)
     }
 
+    // Name filter over the cached listing (no source query), like the mc/Total Commander quick filter.
+
+    @Test
+    fun `setNameFilter narrows the listing and clearing brings it back`() = runTest {
+        val c = started()
+
+        c.setNameFilter("read")
+        assertEquals(listOf("readme.txt"), c.loaded().entries.map { it.name })
+
+        c.setNameFilter("")
+        assertEquals(listOf("alpha", "zeta", "build.log", "readme.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `name filter accepts a glob mask`() = runTest {
+        val c = started()
+
+        c.setNameFilter("*.log")
+
+        assertEquals(listOf("build.log"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `name filter combines with the hidden toggle`() = runTest {
+        val fake = FakeSftpClient(startDir = HOME).apply {
+            seedFile("$HOME/.notes.txt")
+            seedFile("$HOME/notes.txt")
+            seedFile("$HOME/build.log")
+        }
+        val c = started(SftpFileBrowser(fake, label = "h"))
+
+        c.setShowHidden(false)
+        c.setNameFilter("notes")
+
+        assertEquals(listOf("notes.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `filtering moves the cursor off a filtered-out entry and prunes selection`() = runTest {
+        val c = started()
+        c.setCursor(c.entry("zeta"))
+        c.selectOnly(c.entry("zeta"))
+
+        c.setNameFilter("read")
+
+        assertEquals("$HOME/readme.txt", c.cursor)
+        assertEquals(emptySet(), c.selection)
+    }
+
+    @Test
+    fun `navigation clears the name filter`() = runTest {
+        val c = started(seededBrowserWithNested())
+        val alpha = c.entry("alpha")
+        c.setNameFilter("*.log")
+
+        c.open(alpha)
+        advanceUntilIdle()
+
+        assertEquals("", c.nameFilter)
+        assertEquals(listOf("inside.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `refresh keeps the name filter applied`() = runTest {
+        val c = started()
+        c.setNameFilter("*.log")
+
+        c.refresh()
+        advanceUntilIdle()
+
+        assertEquals("*.log", c.nameFilter)
+        assertEquals(listOf("build.log"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `currentEntryNames sees entries hidden by the filter and the hidden toggle`() = runTest {
+        // Name-conflict and overwrite checks must see the FULL directory: an entry hidden from
+        // view still occupies its name on the source (mkdir/rename would fail, transfer would
+        // silently overwrite).
+        val fake = FakeSftpClient(startDir = HOME).apply {
+            seedFile("$HOME/.secret")
+            seedFile("$HOME/readme.txt")
+            seedFile("$HOME/build.log")
+        }
+        val c = started(SftpFileBrowser(fake, label = "h"))
+
+        c.setShowHidden(false)
+        c.setNameFilter("*.log")
+
+        assertEquals(setOf(".secret", "readme.txt", "build.log"), c.currentEntryNames())
+    }
+
+    @Test
+    fun `failed navigation keeps the name filter`() = runTest {
+        val base = seededBrowserWithNested()
+        val failing = object : FileBrowser {
+            override val label: String get() = base.label
+            override suspend fun realpath(path: String): String = base.realpath(path)
+            override suspend fun list(path: String): List<FileItem> {
+                if (path == "$HOME/alpha") throw FileBrowserException(FileBrowserFailure.Sftp)
+                return base.list(path)
+            }
+            override suspend fun mkdir(path: String) = base.mkdir(path)
+            override suspend fun delete(item: FileItem) = base.delete(item)
+            override suspend fun rename(from: String, to: String) = base.rename(from, to)
+        }
+        val c = FilePaneController(failing, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+        c.start(); advanceUntilIdle()
+        val alpha = c.entry("alpha")
+        c.setNameFilter("read")
+
+        c.open(alpha)
+        advanceUntilIdle()
+
+        assertIs<FilePaneState.Error>(c.state)
+        assertEquals("read", c.nameFilter)
+    }
+
+    @Test
+    fun `mkdir drops a filter that would hide the new directory`() = runTest {
+        val c = started()
+        c.setNameFilter("*.log")
+
+        c.mkdir("reports")
+        advanceUntilIdle()
+
+        assertEquals("", c.nameFilter)
+        assertEquals("$HOME/reports", c.cursor)
+    }
+
     @Test
     fun `rubberBandTo is a no-op when an endpoint is not in the listing`() = runTest {
         val c = started()

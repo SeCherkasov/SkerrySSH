@@ -62,6 +62,32 @@
     <string name="sftp_overwrite_many">%1$d items already exist in the destination and will be overwritten.</string>
     <string name="sftp_overwrite">Overwrite</string>
 
+    <!-- Listing columns (modified date / permissions) and the quick name filter -->
+    <string name="sftp_columns">Columns</string>
+    <string name="sftp_col_modified">Modified</string>
+    <string name="sftp_col_permissions">Permissions</string>
+    <string name="sftp_filter_hint">Filter (name or *.mask)</string>
+    <string name="sftp_meta_joined">%1$s · %2$s</string>
+    <!-- Modified column date: recent — current year (month, day, HH:mm), day — without time,
+         old — past years (month, day, year); component order is per-locale -->
+    <string name="sftp_date_recent">%1$s %2$d %3$s</string>
+    <string name="sftp_date_day">%1$s %2$d</string>
+    <string name="sftp_date_old">%1$s %2$d %3$d</string>
+    <string-array name="sftp_months">
+        <item>Jan</item>
+        <item>Feb</item>
+        <item>Mar</item>
+        <item>Apr</item>
+        <item>May</item>
+        <item>Jun</item>
+        <item>Jul</item>
+        <item>Aug</item>
+        <item>Sep</item>
+        <item>Oct</item>
+        <item>Nov</item>
+        <item>Dec</item>
+    </string-array>
+
     <!-- Built-in viewer/editor (F3/F4) -->
     <string name="sftp_edit_title">Edit</string>
     <string name="sftp_edit_title_view">View</string>

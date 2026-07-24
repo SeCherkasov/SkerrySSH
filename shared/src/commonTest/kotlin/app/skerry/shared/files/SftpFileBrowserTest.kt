@@ -37,20 +37,22 @@ class SftpFileBrowserTest {
     @Test
     fun `list maps sftp entries to file items`() = runTest {
         client.listResult = listOf(
-            SftpEntry("sub", "/d/sub", SftpEntryType.Directory, 0, 100, 0),
-            SftpEntry("a.txt", "/d/a.txt", SftpEntryType.File, 42, 200, 0),
+            SftpEntry("sub", "/d/sub", SftpEntryType.Directory, 0, 100, 0b111_101_101),
+            SftpEntry("a.txt", "/d/a.txt", SftpEntryType.File, 42, 200, 0b110_100_100),
         )
 
         val items = browser().list("/d")
 
         assertEquals(2, items.size)
         assertEquals(FileItemType.Directory, items[0].type)
+        assertEquals(0b111_101_101, items[0].permissions)
         val file = items[1]
         assertEquals("a.txt", file.name)
         assertEquals("/d/a.txt", file.path)
         assertEquals(FileItemType.File, file.type)
         assertEquals(42, file.size)
         assertEquals(200, file.modifiedEpochSeconds)
+        assertEquals(0b110_100_100, file.permissions)
     }
 
     @Test
@@ -116,13 +118,14 @@ class SftpFileBrowserTest {
 
     @Test
     fun `stat maps an entry and reports a missing path as null`() = runTest {
-        client.stats["/d/a.txt"] = SftpEntry("a.txt", "/d/a.txt", SftpEntryType.File, 42, 200, 0)
+        client.stats["/d/a.txt"] = SftpEntry("a.txt", "/d/a.txt", SftpEntryType.File, 42, 200, 0b110_100_100)
 
         val item = browser().stat("/d/a.txt")
 
         assertEquals("a.txt", item?.name)
         assertEquals(42, item?.size)
         assertEquals(200, item?.modifiedEpochSeconds)
+        assertEquals(0b110_100_100, item?.permissions)
         assertEquals(FileItemType.File, item?.type)
         assertNull(browser().stat("/d/missing"))
     }
