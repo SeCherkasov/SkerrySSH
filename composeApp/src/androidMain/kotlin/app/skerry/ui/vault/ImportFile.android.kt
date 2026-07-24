@@ -14,7 +14,8 @@ import kotlinx.coroutines.withContext
  * `content://` provider can report anything (or nothing), so the limit is enforced while reading and
  * an oversized file yields `null` instead of an out-of-memory crash.
  */
-actual suspend fun importTextFile(maxBytes: Int): ImportedFile? {
+actual suspend fun importTextFile(title: String, maxBytes: Int): ImportedFile? {
+    // title is unused: the Storage Access Framework picker has no custom-title hook.
     val ctx = SafBridge.context() ?: return null
     val uri = SafBridge.openDocument() ?: return null
     return withContext(Dispatchers.IO) {

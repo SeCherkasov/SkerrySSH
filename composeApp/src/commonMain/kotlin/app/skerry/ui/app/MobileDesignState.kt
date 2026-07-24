@@ -148,6 +148,13 @@ class MobileDesignState(
     var selectedHostId: String? by mutableStateOf(null); private set
 
     /**
+     * ssh_config import: hosts parsed from a picked file, awaiting the user's selection in the import
+     * sheet; `null` means it's closed. Parity with the desktop [DesktopDesignState.sshImport] flow —
+     * the More-tab row picks/parses the file, then hands the result here for the sheet to render.
+     */
+    var sshImport: app.skerry.shared.ssh.SshConfigParseResult? by mutableStateOf(null); private set
+
+    /**
      * Whether a tab's modal overlay is open (e.g. a vault Generate/Import dialog) — hides the tab
      * bar, otherwise it floats over the dialog and covers input fields above the keyboard. Mutated
      * only via [modalOverlay] (encapsulation, like the other fields).
@@ -270,6 +277,9 @@ class MobileDesignState(
     fun openDuplicateConn(host: Host) { editingHost = null; duplicatingHost = host; sheetNewConn = true }
 
     fun closeSheet() { sheetNewConn = false; editingHost = null; duplicatingHost = null }
+
+    fun beginSshImport(result: app.skerry.shared.ssh.SshConfigParseResult) { sshImport = result }
+    fun closeSshImport() { sshImport = null }
 
     /** Selected terminal font (More -> Appearance -> Font). Threaded to the terminal via [app.skerry.ui.terminal.LocalTerminalAppearance]. */
     var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set
