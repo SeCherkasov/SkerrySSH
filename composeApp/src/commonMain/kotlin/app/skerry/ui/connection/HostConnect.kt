@@ -1,6 +1,7 @@
 package app.skerry.ui.connection
 
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.ssh.SshTarget
@@ -26,8 +27,13 @@ fun Host.toTarget(jump: SshJump? = null): SshTarget =
         jump = jump, keepAliveSeconds = keepAliveSeconds,
     )
 
-/** `user@addr:port` string — the session's tab/title label. */
-fun Host.connectionSubtitle(): String = "$username@$address:$port"
+/**
+ * Session tab/title subtitle. `user@addr:port` for networked profiles; a local shell has no
+ * host/user, so it shows the shell/command (blank → "local shell").
+ */
+fun Host.connectionSubtitle(): String =
+    if (connectionType == ConnectionType.LOCAL) address.ifBlank { "local shell" }
+    else "$username@$address:$port"
 
 /**
  * Keychain secret from the vault → SSH auth method. Password/key/certificate map one-to-one;

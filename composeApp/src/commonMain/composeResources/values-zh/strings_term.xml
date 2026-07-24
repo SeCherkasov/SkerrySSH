@@ -115,4 +115,6 @@
     <string name="term_broadcast_none">没有已连接的会话</string>
     <string name="term_broadcast_selected">已选 %1$s / %2$s</string>
     <string name="term_broadcast_sent">已发送到 %1$s</string>
+    <string name="local_shell_name">本地 Shell</string>
+    <string name="term_launch_local_shell">启动本地 Shell</string>
 </resources>
