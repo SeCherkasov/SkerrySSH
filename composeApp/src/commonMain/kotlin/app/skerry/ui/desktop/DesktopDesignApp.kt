@@ -734,7 +734,7 @@ private fun DesktopChrome(
                     onDismiss = state::closeCommandPalette,
                 )
             }
-            if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost)
+            if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost, duplicateOf = state.duplicatingHost)
             if (state.settingsOpen) SettingsPanel(state)
             // Sync onboarding modal over settings: appears via "Set up sync", closes itself on a
             // successful connect. Only when the coordinator is supplied (the mock path with no backend has none).

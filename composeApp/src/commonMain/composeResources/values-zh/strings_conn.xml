@@ -4,6 +4,7 @@
     <string name="conn_subtitle_new">添加主机。凭据使用主密码加密。</string>
     <string name="conn_subtitle_edit">编辑此主机。凭据使用主密码加密。</string>
     <string name="conn_subtitle_mobile">使用主密码加密，仅保存在此设备。</string>
+    <string name="conn_duplicate_name">%1$s 副本</string>
 
     <string name="conn_field_name">名称</string>
     <string name="conn_field_protocol">协议</string>

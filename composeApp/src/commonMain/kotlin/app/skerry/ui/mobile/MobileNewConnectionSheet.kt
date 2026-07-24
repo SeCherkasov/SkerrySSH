@@ -95,6 +95,7 @@ import app.skerry.ui.generated.resources.conn_save_changes
 import app.skerry.ui.generated.resources.conn_save_connection
 import app.skerry.ui.generated.resources.conn_subtitle_mobile
 import app.skerry.ui.generated.resources.conn_tag_add_placeholder
+import app.skerry.ui.generated.resources.conn_duplicate_name
 import app.skerry.ui.generated.resources.conn_title_edit
 import app.skerry.ui.generated.resources.conn_title_new
 import org.jetbrains.compose.resources.stringResource
@@ -143,17 +144,27 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
     val credentials = LocalCredentials.current
     // Edit mode: the sheet is prefilled from the profile and keeps its id (parity with desktop NewConnectionModal).
     val editHost = state.editingHost
-    // Keyed on editHost: opening the sheet to edit (or switching target) rebuilds the form from the profile.
-    val form = remember(editHost) { editHost?.let { NewConnectionFormState.fromHost(it) } ?: NewConnectionFormState() }
+    // Duplicate mode: prefilled as a copy of the profile, saved as a new record (parity with desktop).
+    val duplicateOf = state.duplicatingHost
+    val copyName = duplicateOf?.let { stringResource(Res.string.conn_duplicate_name, it.label) }
+    // Keyed on editHost/duplicateOf: opening the sheet to edit or duplicate (or switching target)
+    // rebuilds the form from the profile.
+    val form = remember(editHost, duplicateOf) {
+        when {
+            editHost != null -> NewConnectionFormState.fromHost(editHost)
+            duplicateOf != null -> NewConnectionFormState.duplicateOf(duplicateOf, copyName.orEmpty())
+            else -> NewConnectionFormState()
+        }
+    }
     val canSave = hosts == null || form.canSave
     // Guards a repeated Save (double tap) before the sheet closes — otherwise a duplicate secret+host in
     // the vault (same as desktop). Keyed on editHost together with form: switching target resets the guard.
-    var submitting by remember(editHost) { mutableStateOf(false) }
+    var submitting by remember(editHost, duplicateOf) { mutableStateOf(false) }
     // Uncommitted tag input (pill not yet created); Save flushes it so it isn't lost.
-    var tagDraft by remember(editHost) { mutableStateOf("") }
+    var tagDraft by remember(editHost, duplicateOf) { mutableStateOf("") }
     // Whether the "New group" dialog is open — kept at the sheet level so the overlay renders at
     // the root (not inside the form's scroll) and rises correctly above the keyboard.
-    var createGroupOpen by remember(editHost) { mutableStateOf(false) }
+    var createGroupOpen by remember(editHost, duplicateOf) { mutableStateOf(false) }
     val onSave = {
         if (submitting) {
             // Repeated tap before close — ignored.

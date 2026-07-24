@@ -6,6 +6,7 @@
     <string name="term_search_hosts_placeholder">搜索主机、标签、IP…</string>
     <string name="term_menu_run_snippet">运行片段…</string>
     <string name="term_menu_edit">编辑</string>
+    <string name="term_menu_duplicate">创建副本</string>
     <string name="term_menu_delete">删除</string>
     <string name="term_no_active_session">无活动会话</string>
     <string name="term_run_snippet_placeholder">运行片段…</string>

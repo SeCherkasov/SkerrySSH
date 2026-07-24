@@ -4,6 +4,7 @@
     <string name="conn_subtitle_new">Добавьте хост. Учётные данные шифруются мастер-паролем.</string>
     <string name="conn_subtitle_edit">Измените хост. Учётные данные шифруются мастер-паролем.</string>
     <string name="conn_subtitle_mobile">Шифруется мастер-паролем. Остаётся на этом устройстве.</string>
+    <string name="conn_duplicate_name">%1$s — копия</string>
 
     <string name="conn_field_name">Имя</string>
     <string name="conn_field_protocol">Протокол</string>

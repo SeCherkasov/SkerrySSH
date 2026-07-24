@@ -6,6 +6,7 @@
     <string name="term_search_hosts_placeholder">Поиск хостов, тегов, IP…</string>
     <string name="term_menu_run_snippet">Запустить сниппет…</string>
     <string name="term_menu_edit">Изменить</string>
+    <string name="term_menu_duplicate">Дублировать</string>
     <string name="term_menu_delete">Удалить</string>
     <string name="term_no_active_session">Нет активной сессии</string>
     <string name="term_run_snippet_placeholder">Запустить сниппет…</string>

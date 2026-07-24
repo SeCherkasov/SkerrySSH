@@ -138,6 +138,12 @@ class MobileDesignState(
      */
     var editingHost: Host? by mutableStateOf(null); private set
 
+    /**
+     * Host the New connection sheet is prefilled from as a copy ("Duplicate" from the detail
+     * screen); saving creates a new profile (parity with the desktop modal's `duplicateOf`).
+     */
+    var duplicatingHost: Host? by mutableStateOf(null); private set
+
     /** Id of the host open on [MobileRoute.HostDetail] — the screen reads it from the store by id. */
     var selectedHostId: String? by mutableStateOf(null); private set
 
@@ -255,12 +261,15 @@ class MobileDesignState(
     }
 
     /** Open the sheet in create-new-host mode (empty form). */
-    fun openNewConn() { editingHost = null; sheetNewConn = true }
+    fun openNewConn() { editingHost = null; duplicatingHost = null; sheetNewConn = true }
 
     /** Open the sheet in edit mode for [host] (form prefilled, save keeps its id). */
-    fun openEditConn(host: Host) { editingHost = host; sheetNewConn = true }
+    fun openEditConn(host: Host) { editingHost = host; duplicatingHost = null; sheetNewConn = true }
 
-    fun closeSheet() { sheetNewConn = false; editingHost = null }
+    /** Open the sheet prefilled as a copy of [host] (save creates a new profile). */
+    fun openDuplicateConn(host: Host) { editingHost = null; duplicatingHost = host; sheetNewConn = true }
+
+    fun closeSheet() { sheetNewConn = false; editingHost = null; duplicatingHost = null }
 
     /** Selected terminal font (More -> Appearance -> Font). Threaded to the terminal via [app.skerry.ui.terminal.LocalTerminalAppearance]. */
     var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set

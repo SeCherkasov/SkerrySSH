@@ -6,6 +6,7 @@
     <string name="term_search_hosts_placeholder">Search hosts, tags, IPs…</string>
     <string name="term_menu_run_snippet">Run snippet…</string>
     <string name="term_menu_edit">Edit</string>
+    <string name="term_menu_duplicate">Duplicate</string>
     <string name="term_menu_delete">Delete</string>
     <string name="term_no_active_session">No active session</string>
     <string name="term_run_snippet_placeholder">Run a snippet…</string>
