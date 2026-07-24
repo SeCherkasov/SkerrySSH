@@ -115,4 +115,6 @@
     <string name="term_broadcast_none">No connected sessions</string>
     <string name="term_broadcast_selected">%1$s of %2$s selected</string>
     <string name="term_broadcast_sent">Sent to %1$s</string>
+    <string name="local_shell_name">Local shell</string>
+    <string name="term_launch_local_shell">Launch local shell</string>
 </resources>

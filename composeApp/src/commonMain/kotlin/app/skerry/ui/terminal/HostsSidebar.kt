@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -59,6 +60,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.host.Host
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.HostClickConnectMode
