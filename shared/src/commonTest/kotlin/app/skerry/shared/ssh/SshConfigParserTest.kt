@@ -263,4 +263,25 @@ class SshConfigParserTest {
         val result = parse("Host $stars\n    User u\n\nHost $alias\n    HostName 10.0.0.1")
         assertEquals("10.0.0.1", result.hosts.single { it.alias == alias }.hostName)
     }
+
+    @Test
+    fun `a single Host line with a huge alias list stays bounded`() {
+        // MAX_BLOCKS caps the number of `Host` *lines*, not the patterns on one line. A single line
+        // packing tens of thousands of aliases would otherwise drive an O(aliases^2) resolution on
+        // the import thread. The parser must cap the total pattern count and return promptly.
+        val aliases = (0 until 50_000).joinToString(" ") { "h$it" }
+        val result = parse("Host $aliases\n    User u")
+        assertTrue(result.hosts.size <= 8_000, "host count must be capped, was ${result.hosts.size}")
+        assertTrue(result.warnings.any { it.contains("too many", ignoreCase = true) })
+    }
+
+    @Test
+    fun `an absurdly long host pattern is skipped`() {
+        // A multi-kilobyte "hostname" is not a real host; skipping it bounds the glob matcher's input
+        // length (the two-pointer matcher is O(pattern x value) in its worst case).
+        val huge = "a".repeat(5_000)
+        val result = parse("Host real $huge\n    HostName 10.0.0.2")
+        assertEquals(listOf("real"), result.hosts.map { it.alias })
+        assertEquals("10.0.0.2", result.hosts.single().hostName)
+    }
 }

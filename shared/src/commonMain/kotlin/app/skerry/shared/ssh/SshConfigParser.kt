@@ -43,20 +43,37 @@ object SshConfigParser {
 
     /**
      * Upper bound on parsed `Host`/`Match` blocks. Far above any real `~/.ssh/config` (hundreds of
-     * hosts at most), it caps the cost of resolving each alias against every block — an untrusted
-     * file can't force an O(blocks × aliases) blow-up on the import thread.
+     * hosts at most).
      */
     private const val MAX_BLOCKS = 4000
+
+    /**
+     * Upper bound on total `Host` patterns across the whole file. [MAX_BLOCKS] caps the number of
+     * `Host` *lines*, but a single line (`Host a b c … zN`) can carry any number of aliases, so the
+     * block count alone does not bound resolution cost. Since every alias is resolved against every
+     * block, this cap is what keeps an untrusted file from forcing an O(aliases × patterns) blow-up.
+     */
+    private const val MAX_PATTERNS = 8000
+
+    /** A real host alias/pattern is short; anything longer is dropped so it can't inflate the
+     *  glob matcher's per-call cost (the two-pointer matcher is O(pattern × value) worst-case). */
+    private const val MAX_PATTERN_LEN = 256
+
+    /** Hard ceiling on pattern comparisons during resolution — a deterministic backstop so no crafted
+     *  combination of blocks and aliases can peg the import thread regardless of the caps above. */
+    private const val MAX_RESOLVE_STEPS = 10_000_000L
 
     private class Block(val patterns: List<String>) {
         // First value wins per keyword (OpenSSH semantics); keys are lowercased.
         val options = LinkedHashMap<String, String>()
 
-        fun matches(alias: String): Boolean {
-            val positive = patterns.filter { !it.startsWith("!") }
-            val negative = patterns.filter { it.startsWith("!") }.map { it.substring(1) }
-            return positive.any { globMatches(it, alias) } && negative.none { globMatches(it, alias) }
-        }
+        // Precomputed once per block: re-filtering these on every matches() call was both O(patterns)
+        // per call and a large temporary allocation (an OOM risk on a crafted many-pattern line).
+        private val positive = patterns.filter { !it.startsWith("!") }
+        private val negative = patterns.filter { it.startsWith("!") }.map { it.substring(1) }
+
+        fun matches(alias: String): Boolean =
+            positive.any { globMatches(it, alias) } && negative.none { globMatches(it, alias) }
     }
 
     fun parse(text: String): SshConfigParseResult {
@@ -64,9 +81,10 @@ object SshConfigParser {
         val warnings = LinkedHashSet<String>()
         var current: Block? = null
         var ignoringMatch = false
+        var totalPatterns = 0
 
         for (rawLine in text.lineSequence()) {
-            if (blocks.size >= MAX_BLOCKS) {
+            if (blocks.size >= MAX_BLOCKS || totalPatterns >= MAX_PATTERNS) {
                 warnings.add("Too many entries — not all lines were parsed")
                 break
             }
@@ -76,11 +94,16 @@ object SshConfigParser {
             when (keyword.lowercase()) {
                 "host" -> {
                     ignoringMatch = false
-                    val patterns = tokenize(args)
-                    if (patterns.isEmpty()) {
+                    val tokens = tokenize(args)
+                    val patterns = tokens.filter { it.length <= MAX_PATTERN_LEN }
+                    if (patterns.size < tokens.size) warnings.add("Some host patterns were too long and skipped")
+                    val capped = patterns.take(MAX_PATTERNS - totalPatterns)
+                    if (capped.size < patterns.size) warnings.add("Too many entries — not all lines were parsed")
+                    if (capped.isEmpty()) {
                         current = null
                     } else {
-                        current = Block(patterns).also { blocks.add(it) }
+                        totalPatterns += capped.size
+                        current = Block(capped).also { blocks.add(it) }
                     }
                 }
                 "match" -> {
@@ -93,7 +116,7 @@ object SshConfigParser {
                     if (ignoringMatch) continue
                     val value = tokenize(args).firstOrNull() ?: continue
                     // Options before the first Host apply globally (OpenSSH) — model as a `*` block.
-                    val block = current ?: Block(listOf("*")).also { blocks.add(it); current = it }
+                    val block = current ?: Block(listOf("*")).also { blocks.add(it); current = it; totalPatterns++ }
                     block.options.putIfAbsent(keyword.lowercase(), value)
                 }
             }
@@ -108,20 +131,29 @@ object SshConfigParser {
             }
         }
 
-        val hosts = aliases.map { alias ->
+        var steps = 0L
+        val hosts = mutableListOf<SshConfigHost>()
+        for (alias in aliases) {
+            if (steps > MAX_RESOLVE_STEPS) {
+                warnings.add("Too many entries — not all hosts were imported")
+                break
+            }
             fun resolve(key: String): String? {
                 for (block in blocks) {
+                    steps += block.patterns.size
                     if (block.matches(alias)) block.options[key]?.let { return it }
                 }
                 return null
             }
-            SshConfigHost(
-                alias = alias,
-                hostName = resolve("hostname") ?: alias,
-                port = resolve("port")?.toIntOrNull()?.takeIf { it in 1..65535 } ?: 22,
-                user = resolve("user"),
-                proxyJump = resolve("proxyjump")?.let { firstJumpHop(it) },
-                identityFile = resolve("identityfile"),
+            hosts.add(
+                SshConfigHost(
+                    alias = alias,
+                    hostName = resolve("hostname") ?: alias,
+                    port = resolve("port")?.toIntOrNull()?.takeIf { it in 1..65535 } ?: 22,
+                    user = resolve("user"),
+                    proxyJump = resolve("proxyjump")?.let { firstJumpHop(it) },
+                    identityFile = resolve("identityfile"),
+                )
             )
         }
 
@@ -185,10 +217,12 @@ object SshConfigParser {
 
     /**
      * OpenSSH glob: `*` matches any run (including empty), `?` matches exactly one character;
-     * everything else is literal. Deliberately a linear two-pointer matcher rather than a translated
-     * regex: patterns come from an untrusted file, and a regex built from many `*` (`.*.*.*…`) is the
-     * classic catastrophic-backtracking (ReDoS) shape on the JVM engine. This algorithm backtracks
-     * only the last `*`, so a pattern packed with wildcards can't blow up.
+     * everything else is literal. Deliberately a two-pointer matcher rather than a translated regex:
+     * patterns come from an untrusted file, and a regex built from many `*` (`.*.*.*…`) is the classic
+     * catastrophic-backtracking (ReDoS) shape on the JVM engine. This algorithm backtracks only the
+     * last `*`, so many wildcards can't blow up; its remaining worst case (a `*` followed by a long
+     * literal that keeps failing) is O(pattern × value), which is why callers cap the pattern length
+     * (MAX_PATTERN_LEN) and the total resolution steps (MAX_RESOLVE_STEPS).
      */
     private fun globMatches(pattern: String, value: String): Boolean {
         var p = 0
