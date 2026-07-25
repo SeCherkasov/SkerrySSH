@@ -15,6 +15,10 @@ internal class VaultRecordCodec<T>(
     private val vault: Vault,
     private val type: RecordType,
     private val serializer: KSerializer<T>,
+    /** Trash to snapshot deletions into; `null` deletes outright (infrastructure records, team vaults). */
+    private val trash: TrashStore? = null,
+    /** Human-readable name of a value, shown in the trash list. Unused without [trash]. */
+    private val label: (T) -> String = { "" },
 ) {
 
     /** All live records of the type (tombstones and other types dropped); corrupt payload skipped. */
@@ -36,9 +40,17 @@ internal class VaultRecordCodec<T>(
         vault.put(id, type, encode(value))
     }
 
-    /** Soft-delete a record (tombstone) — delegates to [Vault.remove]. */
+    /**
+     * Soft-delete a record (tombstone) — delegates to [Vault.remove]. With a [trash] configured the
+     * value is snapshotted first, in the same transaction: a merge landing between the snapshot and
+     * the tombstone would otherwise let the trash hold a payload the deletion never applied to.
+     */
     fun remove(id: String) {
-        vault.remove(id)
+        val bin = trash ?: return vault.remove(id)
+        vault.transaction {
+            get(id)?.let { bin.capture(id, type, label(it)) }
+            vault.remove(id)
+        }
     }
 
     fun encode(value: T): ByteArray = json.encodeToString(serializer, value).encodeToByteArray()

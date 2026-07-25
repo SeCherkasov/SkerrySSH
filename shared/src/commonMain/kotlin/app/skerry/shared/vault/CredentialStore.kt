@@ -11,9 +11,13 @@ package app.skerry.shared.vault
  * decrypt or parse (corruption/incompatible migration) are silently skipped — one broken record
  * must not break the whole list.
  */
-class CredentialStore(private val vault: Vault) {
+class CredentialStore(
+    private val vault: Vault,
+    /** Trash to snapshot deletions into; opt-in — see [app.skerry.shared.host.VaultHostStore]. */
+    trash: TrashStore? = null,
+) {
 
-    private val codec = VaultRecordCodec(vault, RecordType.CREDENTIAL, Credential.serializer())
+    private val codec = VaultRecordCodec(vault, RecordType.CREDENTIAL, Credential.serializer(), trash) { it.label }
 
     /** All live secrets (tombstones and other record types excluded); empty on a locked vault. */
     fun all(): List<Credential> {

@@ -12,5 +12,6 @@ val SETTINGS_NAV = listOf(
     SettingsNavItem(SettingsTab.Terminal, "terminal"),
     SettingsNavItem(SettingsTab.Keyboard, "keyboard"),
     SettingsNavItem(SettingsTab.AI, "auto_awesome"),
+    SettingsNavItem(SettingsTab.Trash, "delete"),
     SettingsNavItem(SettingsTab.About, "info"),
 )

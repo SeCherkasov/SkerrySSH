@@ -1,6 +1,7 @@
 package app.skerry.shared.host
 
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.TrashStore
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecordCodec
 import app.skerry.shared.vault.WorkspaceLayoutStore
@@ -20,9 +21,16 @@ import app.skerry.shared.vault.WorkspaceLayoutStore
 class VaultHostStore(
     private val vault: Vault,
     private val layout: WorkspaceLayoutStore = WorkspaceLayoutStore(vault),
+    /**
+     * Trash to snapshot deletions into. Opt-in on purpose: the default deletes outright, so a store
+     * built over a TEAM vault (which has no trash screen) can't silently keep a decrypted snapshot
+     * of an un-shared secret readable by every member holding the teamKey. The platform entry points
+     * pass a [TrashStore] for the personal vault.
+     */
+    trash: TrashStore? = null,
 ) : HostStore {
 
-    private val codec = VaultRecordCodec(vault, RecordType.HOST, Host.serializer())
+    private val codec = VaultRecordCodec(vault, RecordType.HOST, Host.serializer(), trash) { it.label }
 
     override fun all(): List<Host> {
         if (!vault.isUnlocked) return emptyList()

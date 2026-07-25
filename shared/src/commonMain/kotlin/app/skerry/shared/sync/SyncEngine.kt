@@ -65,15 +65,28 @@ class SyncEngine(
         // (shouldSync), otherwise a disable would never reach other devices. Push-all by type is
         // simple and correct at current vault sizes; fine-grained dirty tracking is a future optimization.
         val filter = settings()
-        val local = vault.records().filter { filter.shouldSync(it.type) }.map { it.toRemote() }
-        if (local.isNotEmpty()) client.push(session, local)
+        val local = vault.records().filter { filter.shouldSync(it.type, it.id) }
+        // Trash snapshots ([RecordType.TRASH]) go in a batch of their own: a self-hosted server
+        // older than the trash feature rejects a whole push batch on an unknown type, and losing
+        // hosts/keys/settings sync because a deleted record can't be mirrored would be a far worse
+        // trade. Their rejection is swallowed — the trash then stays device-local until the server
+        // is updated, and the next cycle retries (push-all sends them again anyway).
+        val (trash, records) = local.partition { it.type == RecordType.TRASH }
+        var pushed = 0
+        if (records.isNotEmpty()) {
+            client.push(session, records.map { it.toRemote() })
+            pushed += records.size
+        }
+        if (trash.isNotEmpty() && runCatching { client.push(session, trash.map { it.toRemote() }) }.isSuccess) {
+            pushed += trash.size
+        }
 
         // Pull again: picks up our own just-pushed records (merge is idempotent) and any remote
         // changes with a serverSeq between the first pull and the push, so the cursor doesn't skip them.
         cursor = drainPull(session, cursor, onMerged)
 
         state.setCursor(session.accountId, cursor)
-        return SyncOutcome(pulled = pulled, pushed = local.size, cursor = cursor, rejected = rejected)
+        return SyncOutcome(pulled = pulled, pushed = pushed, cursor = cursor, rejected = rejected)
     }
 
     /** Pulls delta pages until exhausted (for future pagination), merging each page into the vault. */
@@ -97,7 +110,7 @@ class SyncEngine(
                     onMerged(vault.mergeRemote(settingsRecords))
                     filter = settings()
                 }
-                val rest = incoming.filter { it.type != RecordType.SETTINGS && filter.shouldSync(it.type) }
+                val rest = incoming.filter { it.type != RecordType.SETTINGS && filter.shouldSync(it.type, it.id) }
                 if (rest.isNotEmpty()) onMerged(vault.mergeRemote(rest))
             }
             // Compact after merge: otherwise a tombstone just merged from this same page would

@@ -47,9 +47,11 @@ internal class FakeVault : Vault {
     override fun openPayload(id: String): ByteArray? =
         entries[id]?.takeIf { !it.record.deleted }?.payload
 
-    override fun put(id: String, type: RecordType, payload: ByteArray) {
+    override fun put(id: String, type: RecordType, payload: ByteArray) = putAtLeast(id, type, payload, minVersion = 0L)
+
+    override fun putAtLeast(id: String, type: RecordType, payload: ByteArray, minVersion: Long) {
         lastPutInTransaction = transactionDepth > 0
-        val version = (entries[id]?.record?.version ?: 0L) + 1
+        val version = maxOf((entries[id]?.record?.version ?: 0L) + 1, minVersion)
         entries[id] = Entry(
             VaultRecord(id, type, version, "2026-06-12T00:00:00Z", "test-device", deleted = false, blob = SEALED),
             payload,
@@ -61,6 +63,11 @@ internal class FakeVault : Vault {
         entries[id] = existing.copy(
             record = existing.record.copy(version = existing.record.version + 1, deleted = true),
         )
+    }
+
+    /** Like [FileVault.compact]: physically forgets tombstones, leaving live records alone. */
+    override fun compact(ids: List<String>) {
+        ids.forEach { id -> if (entries[id]?.record?.deleted == true) entries.remove(id) }
     }
 
     override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = true

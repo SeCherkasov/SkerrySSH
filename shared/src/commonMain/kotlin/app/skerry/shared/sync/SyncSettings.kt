@@ -3,6 +3,7 @@ package app.skerry.shared.sync
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultSingletonStore
+import app.skerry.shared.vault.trashOriginType
 import kotlinx.serialization.Serializable
 
 /**
@@ -25,8 +26,15 @@ data class SyncSettings(
     val syncHosts: Boolean = true,
     val syncSnippets: Boolean = true,
 ) {
-    /** Whether [type] syncs under the current flags. [RecordType.SETTINGS] always does. */
-    fun shouldSync(type: RecordType): Boolean = when (type) {
+    /**
+     * Whether [type] syncs under the current flags. [RecordType.SETTINGS] always does.
+     *
+     * [id] matters only for [RecordType.TRASH]: a trash snapshot follows the toggle of the type it
+     * holds (encoded in its id — the payload is ciphertext to this check), so disabling snippets
+     * keeps deleted snippets on the device too. A snapshot whose origin type can't be read syncs
+     * only when nothing is gated.
+     */
+    fun shouldSync(type: RecordType, id: String = ""): Boolean = when (type) {
         RecordType.SETTINGS -> true
         // Team keys and the identity pair carry access to Teams: always synced between a user's
         // devices, otherwise a team wouldn't open on a second device.
@@ -38,6 +46,7 @@ data class SyncSettings(
         RecordType.CREDENTIAL,
         RecordType.KNOWN_HOST,
         RecordType.TUNNEL -> syncHosts
+        RecordType.TRASH -> trashOriginType(id)?.let { shouldSync(it) } ?: (syncHosts && syncSnippets)
         // Terminal command history is local (per-host, encrypted in the vault) but never synced:
         // large, sensitive, and device-specific. Deliberately excluded from WHAT SYNCS.
         RecordType.TERMINAL_HISTORY -> false

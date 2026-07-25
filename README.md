@@ -108,7 +108,8 @@ Building it yourself is also easy — see [Building from source](#building-from-
 - **Themes** — dark and light app themes with a card-based catalog; the terminal follows
   the app theme, and the System mode tracks the OS live.
 - **Vault** — always-on encryption (Argon2id + XChaCha20-Poly1305) for keys, passwords,
-  identities, and certificates; biometric unlock on Android.
+  identities, and certificates; biometric unlock on Android. Deleted hosts, keys, snippets,
+  and tunnels stay restorable in the trash for 30 days, on every synced device.
 - **Sync** — optional and self-hosted, zero-knowledge, live push over WebSocket, device
   pairing via QR. See [Sync server](#sync-server).
 - **Teams** — end-to-end encrypted sharing of hosts and snippets within a team.
