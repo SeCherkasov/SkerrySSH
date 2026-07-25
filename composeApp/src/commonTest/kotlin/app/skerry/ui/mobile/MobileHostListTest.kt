@@ -23,7 +23,8 @@ class MobileHostListTest {
     @Test
     fun empty_hosts_yield_only_all_chip_and_no_sections() {
         val view = buildMobileHostList(emptyList())
-        assertEquals(listOf(ALL_HOSTS_CHIP), view.chips)
+        // `prod` is always offered, even with an empty catalog (it arms the production guard).
+        assertEquals(listOf(ALL_HOSTS_CHIP, "prod"), view.chips)
         assertEquals(emptyList(), view.sections)
     }
 

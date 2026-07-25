@@ -115,6 +115,10 @@ import app.skerry.shared.terminal.castFileName
 import app.skerry.shared.terminal.recordingStamp
 import app.skerry.ui.vault.exportTextFile
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.host.isProdHostId
+import app.skerry.ui.host.prodOutline
+import app.skerry.ui.host.rememberProductionLookup
+import app.skerry.ui.ai.commandRiskReasonText
 
 /** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
 private const val ESC = "\u001b"
@@ -210,7 +214,9 @@ fun MobileTerminalScreen(state: MobileDesignState) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Skerry.colors.terminalBg)) {
+    // Red frame around a production session (desktop parity): the phone has no tab row to carry the
+    // marker, so the screen edge is the only always-visible place for it.
+    Box(Modifier.fillMaxSize().background(Skerry.colors.terminalBg).prodOutline(isProdHostId(active?.hostId))) {
         // imePadding here, not at the app root: this screen opts out of the root safeDrawing padding
         // to run edge to edge, so lifting the content above the soft keyboard is its own job now.
         Column(Modifier.fillMaxSize().imePadding()) {
@@ -290,7 +296,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
         if (paletteOpen && snippets != null && activeTerminal != null) {
             MobileSnippetRunSheet(
                 manager = snippets,
-                onRun = { entry -> snippets.run(entry.id, recording = activeTerminal.recording) { text -> activeTerminal.sendUserInput(text) }; paletteOpen = false },
+                onRun = { entry -> snippets.run(entry.id, recording = activeTerminal.recording) { text -> activeTerminal.sendUserInputGuarded(text) }; paletteOpen = false },
                 onDismiss = { paletteOpen = false },
             )
         }
@@ -308,7 +314,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
         if (broadcastOpen) {
             MobileBroadcastSheet(
                 controller = state.broadcast,
-                targets = broadcastTargets(sessions),
+                targets = broadcastTargets(sessions, rememberProductionLookup()),
                 onDismiss = { broadcastOpen = false },
             )
         }
@@ -444,7 +450,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                         val infoColor = if (severe) Skerry.colors.sunset else if (risk == CommandRisk.Warn) Skerry.colors.amber else Skerry.colors.dim
                         val info = when (risk) {
                             CommandRisk.None -> controller.pendingInfo
-                            else -> controller.pendingRisk?.reason
+                            else -> controller.pendingRisk?.reason?.let { commandRiskReasonText(it) }
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             // The command wraps (up to 6 lines), not truncated: the user sees in full what
@@ -487,7 +493,7 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                 pending != null -> {
                     MobileAiChip(when { !danger -> stringResource(Res.string.term_ai_run); !armed -> stringResource(Res.string.term_ai_run_anyway); else -> stringResource(Res.string.term_ai_confirm) }, accent) {
                         if (danger && !armed) armed = true
-                        else controller.confirm()?.let { terminal.sendUserInput(it + "\r") }
+                        else controller.confirm()?.let { terminal.sendUserInputGuarded(it + "\r") }
                     }
                     MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
                 }

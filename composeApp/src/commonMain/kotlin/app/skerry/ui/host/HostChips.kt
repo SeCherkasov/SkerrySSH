@@ -2,6 +2,7 @@ package app.skerry.ui.host
 
 import androidx.compose.runtime.Composable
 import app.skerry.shared.host.Host
+import app.skerry.shared.tag.PROD_TAG
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shtail_chip_all
 import org.jetbrains.compose.resources.stringResource
@@ -18,14 +19,19 @@ const val ALL_HOSTS_CHIP = "All"
 fun allHostsChipLabel(): String = stringResource(Res.string.shtail_chip_all)
 
 /**
- * Filter chips: `All` plus unique host tags in order of first appearance (canonical form, no `#`).
- * List folders are built separately by [Host.group] ([app.skerry.ui.host.groupHostsByFolder]) —
- * group is the folder section, tag is the filter chip, two independent axes. Pure function, shared
- * by desktop and mobile lists.
+ * Filter chips: `All`, then [PROD_TAG], then the remaining unique host tags in order of first
+ * appearance (canonical form, no `#`). List folders are built separately by [Host.group]
+ * ([app.skerry.ui.host.groupHostsByFolder]) — group is the folder section, tag is the filter chip,
+ * two independent axes. Pure function, shared by desktop and mobile lists.
+ *
+ * `prod` is always present, even with no production host yet: it is the one tag that carries
+ * behavior ([app.skerry.shared.guard.ProductionGuard]), and a user who never sees it never learns
+ * the guard exists. Picking it on a catalog without production hosts simply shows an empty list.
  */
 fun hostTagChips(hosts: List<Host>): List<String> = buildList {
     add(ALL_HOSTS_CHIP)
-    val seen = LinkedHashSet<String>()
+    add(PROD_TAG)
+    val seen = hashSetOf(PROD_TAG)
     for (host in hosts) for (tag in host.tags) if (seen.add(tag)) add(tag)
 }
 

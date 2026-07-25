@@ -1,0 +1,13 @@
+<resources>
+    <string name="guard_prod_connect_title">连接到生产环境？</string>
+    <string name="guard_prod_connect_message">主机 %1$s 带有 #prod 标签。在该会话中，高风险命令执行前会要求确认。</string>
+    <string name="guard_prod_connect_confirm">连接</string>
+    <string name="guard_prod_command_title">在生产环境执行该命令？</string>
+    <string name="guard_prod_command_host">主机 %1$s 带有 #prod 标签。</string>
+    <string name="guard_prod_command_confirm">执行</string>
+    <string name="guard_prod_broadcast_title">向生产环境群发？</string>
+    <string name="guard_prod_broadcast_message">所选会话中有 %1$d 个位于生产环境主机。命令将同时发送到全部会话。</string>
+    <string name="guard_prod_broadcast_confirm">发送</string>
+    <string name="guard_prod_snippet_title">在生产环境运行该片段？</string>
+    <string name="guard_prod_snippet_message">主机 %1$s 带有 #prod 标签。片段会在连接建立后立即执行。</string>
+</resources>

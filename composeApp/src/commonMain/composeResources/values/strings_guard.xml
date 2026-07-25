@@ -1,0 +1,13 @@
+<resources>
+    <string name="guard_prod_connect_title">Connect to production?</string>
+    <string name="guard_prod_connect_message">%1$s is tagged #prod. In this session risky commands ask for confirmation before they run.</string>
+    <string name="guard_prod_connect_confirm">Connect</string>
+    <string name="guard_prod_command_title">Run this on production?</string>
+    <string name="guard_prod_command_host">%1$s is tagged #prod.</string>
+    <string name="guard_prod_command_confirm">Run</string>
+    <string name="guard_prod_broadcast_title">Broadcast to production?</string>
+    <string name="guard_prod_broadcast_message">%1$d of the selected sessions run on production hosts. The command goes to every session at once.</string>
+    <string name="guard_prod_broadcast_confirm">Send</string>
+    <string name="guard_prod_snippet_title">Run the snippet on production?</string>
+    <string name="guard_prod_snippet_message">%1$s is tagged #prod. The snippet runs as soon as the session opens.</string>
+</resources>

@@ -290,7 +290,8 @@ class SnippetManagerTest {
         manager.renameTag("db", "database")
 
         assertEquals(listOf("database"), manager.find(a)!!.snippet.tags)
-        assertEquals(listOf("database", "prod"), manager.find(b)!!.snippet.tags)
+        // `prod` is hoisted to the front by normalizeTags — the rename keeps the rest in place.
+        assertEquals(listOf("prod", "database"), manager.find(b)!!.snippet.tags)
         assertEquals(listOf("prod"), manager.find(c)!!.snippet.tags) // untouched
         // Persisted to the store too.
         assertEquals(listOf("database"), store.all().first { it.id == a }.tags)
@@ -317,8 +318,8 @@ class SnippetManagerTest {
 
         manager.renameTag("db", "db")
 
-        assertEquals(listOf("db", "prod"), manager.find(id)!!.snippet.tags)
-        assertEquals(listOf("db", "prod"), store.all().single().tags)
+        assertEquals(listOf("prod", "db"), manager.find(id)!!.snippet.tags)
+        assertEquals(listOf("prod", "db"), store.all().single().tags)
     }
 
     @Test

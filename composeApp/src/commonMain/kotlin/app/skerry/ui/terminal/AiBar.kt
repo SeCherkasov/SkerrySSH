@@ -65,6 +65,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.ai.commandRiskReasonText
 
 // Terminal AI bar: live input under per-host policy, or a decorative mock preview.
 
@@ -156,7 +157,7 @@ internal fun AiBarInput(
                         val infoColor = if (severe) Skerry.colors.sunset else if (risk == CommandRisk.Warn) Skerry.colors.amber else Skerry.colors.dim
                         val info = when (risk) {
                             CommandRisk.None -> controller.pendingInfo
-                            else -> controller.pendingRisk?.reason
+                            else -> controller.pendingRisk?.reason?.let { commandRiskReasonText(it) }
                         }
                         // Command and explanation share a baseline so differing font sizes don't drift.
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -207,7 +208,7 @@ internal fun AiBarInput(
                         enabled = terminal != null,
                         onClick = {
                             if (danger && !armed) armed = true
-                            else controller.confirm()?.let { terminal?.sendUserInput(it + "\r") }
+                            else controller.confirm()?.let { terminal?.sendUserInputGuarded(it + "\r") }
                         },
                     )
                     AiActionChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint, onClick = { controller.dismiss() })

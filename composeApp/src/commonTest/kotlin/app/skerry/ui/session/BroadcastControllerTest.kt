@@ -23,6 +23,25 @@ class BroadcastControllerTest {
     }
 
     @Test
+    fun production_targets_are_counted_only_while_selected() {
+        val c = BroadcastController()
+        val all = listOf(
+            BroadcastTarget("prod-1", "web-prod", production = true, send = { true }),
+            BroadcastTarget("prod-2", "db-prod", production = true, send = { true }),
+            BroadcastTarget("stage", "web-stage", send = { true }),
+        )
+
+        assertEquals(0, c.selectedProductionCount(all))
+        c.toggle("stage")
+        assertEquals(0, c.selectedProductionCount(all))
+        c.toggle("prod-1")
+        c.toggle("prod-2")
+        assertEquals(2, c.selectedProductionCount(all))
+        // A session closed after being selected drops out of the count with the rest of the list.
+        assertEquals(1, c.selectedProductionCount(all.filter { it.id != "prod-2" }))
+    }
+
+    @Test
     fun nothing_is_selected_initially() {
         val c = BroadcastController()
         val (all, _) = targets("a", "b")

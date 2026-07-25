@@ -47,6 +47,17 @@ class ConnectionFormSuggestionsTest {
     }
 
     @Test
+    fun prod_is_suggested_first_even_when_no_host_carries_it() {
+        val hosts = listOf(host("1", tags = listOf("web", "db")))
+        assertEquals(listOf("prod", "web", "db"), tagSuggestions(hosts, selected = emptyList()))
+        assertEquals(listOf("prod"), tagSuggestions(emptyList(), selected = emptyList()))
+        // already on this host: not offered again
+        assertEquals(listOf("web", "db"), tagSuggestions(hosts, selected = listOf("prod")))
+        // and it obeys the query like any other tag
+        assertEquals(listOf("web"), tagSuggestions(hosts, selected = emptyList(), query = "we"))
+    }
+
+    @Test
     fun tag_suggestions_filtered_by_canonicalized_query() {
         val hosts = listOf(host("1", tags = listOf("prod", "web", "docker")))
         // input is canonicalized as a tag: "#DOC" -> "doc" -> substring of "docker"

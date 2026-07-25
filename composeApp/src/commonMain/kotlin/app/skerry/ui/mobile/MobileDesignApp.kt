@@ -98,6 +98,12 @@ import app.skerry.ui.theme.Skerry
 import app.skerry.ui.theme.ThemeMode
 import app.skerry.ui.theme.systemInDarkTheme
 import app.skerry.ui.theme.terminalThemeId
+import app.skerry.ui.host.ProdConnectDialog
+import app.skerry.ui.host.ProdConnectRequest
+import app.skerry.ui.host.prodConnectGate
+import app.skerry.ui.host.ProdCommandGate
+import app.skerry.ui.host.ProdGuardSync
+import app.skerry.ui.host.isProdHost
 
 /**
  * Root of the mobile layout. Supplies fonts via [LocalFonts] and live backends via
@@ -358,6 +364,9 @@ private fun MobileChrome(
     var pending by remember { mutableStateOf<PendingConnect?>(null) }
     // VNC "ask every time": a host with no stored password prompts before opening the framebuffer screen.
     var pendingVnc by remember { mutableStateOf<Host?>(null) }
+    // Production guard: a session about to open on a #prod host waits here for confirmation
+    // (desktop parity — the gate wraps every connect path, terminal / files / VNC).
+    var prodConnect by remember { mutableStateOf<ProdConnectRequest?>(null) }
 
     // ProxyJump chain resolution failed for the tapped host — show a notice instead of connecting
     // (never silently direct). Desktop parity ([JumpErrorDialog]).
@@ -371,50 +380,62 @@ private fun MobileChrome(
     // including the password prompt, diverging only in the final navigation [navigateAfterConnect]).
     val connect = remember(sessions, credentials, hostManager, state) {
         { host: Host, dest: MobileConnectDest ->
-            if (host.connectionType.isVnc) {
-                // VNC opens a framebuffer screen (not a terminal). A stored password is used directly;
-                // "ask every time" (no bound secret) prompts for one first.
-                val cred = credentials?.find(host.credentialId)
-                if (cred != null) {
-                    sessions?.openVnc(
-                        host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
-                        remoteResize = host.vncResizeToWindow,
-                        onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
-                    )
-                    if (sessions != null) state.push(MobileRoute.Vnc)
-                } else {
-                    pendingVnc = host
-                }
-            } else {
-                val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
-                when (mobileConnectAction(existing?.controller?.uiState)) {
-                    MobileConnectAction.Resume -> {
-                        existing?.let { sessions.activate(it.id) }
-                        navigateAfterConnect(state, dest)
+            // Production guard: opening a session on a #prod host confirms first. Returning to a
+            // session that is already live is NOT gated — the confirmation belongs to opening the
+            // connection, and asking on every tab switch would train the user to tap through it.
+            val live = sessions?.sessions?.lastOrNull { it.hostId == host.id }
+            val confirmProd = mobileProdConfirmNeeded(
+                production = isProdHost(host),
+                isVnc = host.connectionType.isVnc,
+                action = mobileConnectAction(live?.controller?.uiState),
+            )
+            val open = {
+                if (host.connectionType.isVnc) {
+                    // VNC opens a framebuffer screen (not a terminal). A stored password is used directly;
+                    // "ask every time" (no bound secret) prompts for one first.
+                    val cred = credentials?.find(host.credentialId)
+                    if (cred != null) {
+                        sessions?.openVnc(
+                            host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
+                            remoteResize = host.vncResizeToWindow,
+                            onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                        )
+                        if (sessions != null) state.push(MobileRoute.Vnc)
+                    } else {
+                        pendingVnc = host
                     }
-                    MobileConnectAction.OpenFresh -> {
-                        existing?.let { sessions.close(it.id) }
-                        // ProxyJump chain first — resolved before the password prompt so a broken
-                        // chain surfaces immediately, not after the user typed a password.
-                        when (val chain = resolveJumpChain(host, { id -> hostManager?.find(id) }, { id -> credentials?.find(id) })) {
-                            is JumpChainResolution.Unavailable -> jumpProblem = chain.problem
-                            is JumpChainResolution.Resolved -> {
-                                // Single-level resolve: host → keychain secret by credentialId → SshAuth; no binding → password.
-                                val credential = credentials?.find(host.credentialId)
-                                when {
-                                    // Telnet/Serial have no auth — connect immediately, no password
-                                    // prompt. SSH and Mosh resolve a credential or ask for a password.
-                                    !host.connectionType.usesSshAuth ->
-                                        openMobileSession(sessions, state, host, SshAuth.Password(""), chain.jump, dest)
-                                    credential != null ->
-                                        openMobileSession(sessions, state, host, credential.toSshAuth(), chain.jump, dest)
-                                    else -> pending = PendingConnect(host, dest, chain.jump)
+                } else {
+                    val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
+                    when (mobileConnectAction(existing?.controller?.uiState)) {
+                        MobileConnectAction.Resume -> {
+                            existing?.let { sessions.activate(it.id) }
+                            navigateAfterConnect(state, dest)
+                        }
+                        MobileConnectAction.OpenFresh -> {
+                            existing?.let { sessions.close(it.id) }
+                            // ProxyJump chain first — resolved before the password prompt so a broken
+                            // chain surfaces immediately, not after the user typed a password.
+                            when (val chain = resolveJumpChain(host, { id -> hostManager?.find(id) }, { id -> credentials?.find(id) })) {
+                                is JumpChainResolution.Unavailable -> jumpProblem = chain.problem
+                                is JumpChainResolution.Resolved -> {
+                                    // Single-level resolve: host → keychain secret by credentialId → SshAuth; no binding → password.
+                                    val credential = credentials?.find(host.credentialId)
+                                    when {
+                                        // Telnet/Serial have no auth — connect immediately, no password
+                                        // prompt. SSH and Mosh resolve a credential or ask for a password.
+                                        !host.connectionType.usesSshAuth ->
+                                            openMobileSession(sessions, state, host, SshAuth.Password(""), chain.jump, dest)
+                                        credential != null ->
+                                            openMobileSession(sessions, state, host, credential.toSshAuth(), chain.jump, dest)
+                                        else -> pending = PendingConnect(host, dest, chain.jump)
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+            if (confirmProd) prodConnect = ProdConnectRequest(host, proceed = open) else open()
         }
     }
     // Derived stable lambdas for the two entry points: Connect (→ terminal) and SFTP (→ Files push screen).
@@ -526,6 +547,14 @@ private fun MobileChrome(
                     },
                 )
             }
+            // Production guard: confirm before a #prod session opens (ahead of the password sheet —
+            // the question is whether to touch production at all).
+            prodConnect?.let { request ->
+                ProdConnectDialog(request, onDismiss = { prodConnect = null })
+            }
+            // Inside a session: keep it armed from the host tags and confirm the commands it holds.
+            ProdGuardSync(sessions)
+            ProdCommandGate(sessions?.active)
             // Broken ProxyJump chain for the tapped host: explain instead of connecting.
             jumpProblem?.let { problem ->
                 JumpErrorDialog(problem, onDismiss = { jumpProblem = null })

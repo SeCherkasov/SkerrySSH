@@ -13,6 +13,8 @@ import androidx.compose.runtime.setValue
 data class BroadcastTarget(
     val id: String,
     val label: String,
+    /** Whether this session runs on a production host — the panel confirms before reaching one. */
+    val production: Boolean = false,
     val send: (String) -> Boolean,
 )
 
@@ -46,6 +48,14 @@ class BroadcastController {
 
     /** How many of the still-live [targets] are selected (stale ids don't count). */
     fun selectedCount(targets: List<BroadcastTarget>): Int = targets.count { it.id in selectedIds }
+
+    /**
+     * How many selected targets sit on production hosts. A broadcast is the one path where a single
+     * keystroke reaches several shells at once, so the panel asks once for the whole fan-out
+     * instead of holding the command per session (see [BroadcastTarget.production]).
+     */
+    fun selectedProductionCount(targets: List<BroadcastTarget>): Int =
+        targets.count { it.id in selectedIds && it.production }
 
     /**
      * Send [command] plus a newline to every selected live target; returns how many actually

@@ -1,0 +1,13 @@
+<resources>
+    <string name="guard_prod_connect_title">Подключиться к продуктовой среде?</string>
+    <string name="guard_prod_connect_message">У хоста %1$s стоит тег #prod. В этой сессии рискованные команды будут спрашивать подтверждение.</string>
+    <string name="guard_prod_connect_confirm">Подключиться</string>
+    <string name="guard_prod_command_title">Выполнить это на продуктовой среде?</string>
+    <string name="guard_prod_command_host">У хоста %1$s стоит тег #prod.</string>
+    <string name="guard_prod_command_confirm">Выполнить</string>
+    <string name="guard_prod_broadcast_title">Разослать на продуктовую среду?</string>
+    <string name="guard_prod_broadcast_message">Среди выбранных сессий %1$d приходится на хосты продуктовой среды. Команда уйдёт во все сессии сразу.</string>
+    <string name="guard_prod_broadcast_confirm">Отправить</string>
+    <string name="guard_prod_snippet_title">Запустить сниппет на продуктовой среде?</string>
+    <string name="guard_prod_snippet_message">У хоста %1$s стоит тег #prod. Сниппет выполнится сразу после подключения.</string>
+</resources>

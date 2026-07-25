@@ -43,6 +43,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import app.skerry.shared.guard.GuardedCommand
+import app.skerry.shared.guard.ProductionGuard
 
 /**
  * Terminal screen state over [TerminalSession]. Raw PTY bytes go through [TerminalEmulator]
@@ -485,23 +487,142 @@ class TerminalScreenState(
      * to the PTY. Separate from [send]/[sendBytes], used for mouse/focus reports, paste, and
      * snippet output, which must not reach the engine or the tracked line would be corrupted.
      */
-    fun typeInput(text: String) {
+    fun typeInput(text: String, guarded: Boolean = true) {
         inputVersion++
         // Server not echoing input (password entry / line-mode signaled by the transport): do not
         // track the line or write it to history, so a secret does not persist and surface as a
         // suggestion. SSH echo status is unavailable (always false), so a password prompt is also
         // detected heuristically from the current screen line ([atPasswordPrompt]).
+        // The production guard is skipped here for the same reason: what is being typed is a secret,
+        // and parking it in a confirmation dialog would put it on screen in clear text.
         if (session.echoSuppressed || atPasswordPrompt()) {
             autocomplete.reset()
             if (suggestionTail != null) suggestionTail = null
             send(text)
             return
         }
+        // guarded=false: the caller already asked (broadcast confirms once for the whole fan-out,
+        // where a per-session hold would strand commands in tabs nobody is looking at).
+        if (guarded && holdForProductionGuard(text)) return
+        deliverTypedInput(text)
+    }
+
+    private fun deliverTypedInput(text: String) {
         val committed = autocomplete.onUserInput(text.encodeToByteArray())
         refreshSuggestion()
         send(text)
         // Command was committed with Enter (and was echoed): persist the history snapshot for this host.
         if (committed != null) onHistoryChanged?.invoke(autocomplete.commandHistory.commands)
+    }
+
+    // --- Production guard ---
+    // On a host tagged #prod a risky command is confirmed before it reaches the PTY. Enabled by the
+    // UI from the session's host profile (see [app.skerry.ui.host.isProdHostId]) and kept live, so
+    // adding or removing the tag arms/disarms an open session.
+
+    /** Whether this session runs on a production host and holds risky commands for confirmation. */
+    var guardProduction: Boolean by mutableStateOf(false)
+
+    /** Command held by the guard, awaiting the user's confirmation; `null` when nothing is pending. */
+    var pendingGuarded: GuardedCommand? by mutableStateOf(null)
+        private set
+
+    /** The exact input block that was held, replayed verbatim on confirmation. */
+    private var heldInput: String? = null
+
+    /** Where the held input came from — it is replayed exactly the way that path would send it. */
+    private enum class HeldInput { Typed, Command, Paste }
+
+    private var heldFrom: HeldInput = HeldInput.Typed
+
+    /**
+     * Holds [text] when it would run a risky command on a production session; `true` means nothing
+     * was sent and [pendingGuarded] now carries what to confirm.
+     *
+     * Only an input block containing Enter can run something, so that is the only thing held —
+     * typing itself stays live (a half-typed line the user is still editing must keep echoing).
+     * Alt-screen is exempt: inside vim/htop there is no shell line, and Enter is not "run this".
+     *
+     * The command is guessed from two sources, because the client never truly knows it: the locally
+     * tracked line (what was typed here) and the screen line up to the cursor (which also covers a
+     * command recalled with arrow-up, where nothing was typed at all).
+     */
+    private fun holdForProductionGuard(text: String): Boolean {
+        if (!guardProduction || altScreen) return false
+        val enter = text.indexOfFirst { it == '\r' || it == '\n' }
+        if (enter < 0) return false
+        // The first line continues whatever is already on the shell line; the rest of the block
+        // stands on its own. A soft-keyboard delta or an IME clipboard insert arrives whole, so a
+        // risky command can sit on any line of it, not just the first.
+        val lines = text.split('\n', '\r')
+        val typed = listOf(autocomplete.currentLine + lines.first()) + lines.drop(1)
+        val guarded = ProductionGuard.inspect(
+            ProductionGuard.promptCandidates(screenLineToCursor()) + typed,
+        ) ?: return false
+        // One command is held at a time. A second risky one arriving while the dialog is still up
+        // is dropped, not sent: confirming a dialog that shows command A must never run command B.
+        if (pendingGuarded != null) return true
+        pendingGuarded = guarded
+        heldInput = text
+        heldFrom = HeldInput.Typed
+        return true
+    }
+
+    /**
+     * Runs a ready-made command (snippet, palette, any caller that already has the full line) with
+     * the guard in front of it. Unlike [typeInput] the command is known verbatim, so it is
+     * classified as-is — nothing is guessed off the screen. Falls back to [sendUserInput] when the
+     * session is not production or the command is harmless.
+     */
+    fun sendUserInputGuarded(text: String) {
+        if (guardProduction) {
+            val guarded = ProductionGuard.inspect(text.split('\n', '\r'))
+            if (guarded != null) {
+                // Same one-at-a-time rule as [holdForProductionGuard]: a command arriving while a
+                // confirmation is up is dropped rather than slipped past the open dialog.
+                if (pendingGuarded != null) return
+                pendingGuarded = guarded
+                heldInput = text
+                heldFrom = HeldInput.Command
+                return
+            }
+        }
+        sendUserInput(text)
+    }
+
+    /** Run the held command: replays the original input exactly as the path it came from would. */
+    fun confirmGuardedCommand() {
+        val text = heldInput ?: return
+        val from = heldFrom
+        pendingGuarded = null
+        heldInput = null
+        when (from) {
+            HeldInput.Typed -> deliverTypedInput(text)
+            HeldInput.Command -> sendUserInput(text)
+            HeldInput.Paste -> deliverPaste(text)
+        }
+    }
+
+    /**
+     * Drop the held command. A typed one leaves its line in the shell (the characters were echoed
+     * as they were typed) ready to be edited; a pasted or ready-made command never reached the
+     * host, so dismissing discards it outright.
+     */
+    fun dismissGuardedCommand() {
+        pendingGuarded = null
+        heldInput = null
+    }
+
+    /**
+     * Visible cursor row up to the cursor column — the shell line as the user sees it, prompt
+     * included ([ProductionGuard.promptCandidates] strips it). Reads the published [screen]
+     * snapshot, like [atPasswordPrompt].
+     */
+    private fun screenLineToCursor(): String {
+        val grid = screen
+        if (grid.isEmpty() || rows <= 0) return ""
+        val line = grid.getOrNull(grid.size - rows + cursorRow) ?: return ""
+        return line.take(cursorCol.coerceIn(0, line.size)).joinToString("") { it.text }
     }
 
     /**
@@ -929,7 +1050,31 @@ class TerminalScreenState(
     /** Paste clipboard text: wraps it in markers when bracketed paste is enabled (DEC 2004). */
     fun paste(text: String) {
         if (text.isEmpty()) return
+        // A paste carrying a newline runs the moment it lands — on a production session it goes
+        // through the same confirmation as a typed command. A paste without one only fills the
+        // shell line, and the Enter that would run it is guarded separately ([typeInput]).
+        if (guardProduction && pendingGuarded == null && text.any { it == '\n' || it == '\r' }) {
+            val guarded = ProductionGuard.inspect(text.split('\n', '\r'))
+            if (guarded != null) {
+                pendingGuarded = guarded
+                heldInput = text
+                heldFrom = HeldInput.Paste
+                return
+            }
+        }
+        deliverPaste(text)
+    }
+
+    private fun deliverPaste(text: String) {
         inputVersion++
+        // A paste is tracked like typing: without this the Enter after a no-newline paste has
+        // nothing to classify (the tracked line is empty and the host's echo may not have arrived
+        // yet), and the guard would miss a pasted command. The engine also records the lines a
+        // multi-line paste commits, same as if they had been typed.
+        if (!session.echoSuppressed && !atPasswordPrompt()) {
+            autocomplete.onUserInput(text.encodeToByteArray())
+            refreshSuggestion()
+        }
         send(bracketedPasteWrap(text, bracketedPaste))
     }
 

@@ -63,6 +63,15 @@ fun mobileConnectAction(existing: ConnectionUiState?): MobileConnectAction =
         MobileConnectAction.OpenFresh
     }
 
+/**
+ * Whether tapping Connect on a production host must confirm first ([app.skerry.shared.guard.ProductionGuard]).
+ * Returning to a session that is already live is not a new connection, so it doesn't ask — a
+ * confirmation on every tab switch would be trained away within a day. A VNC tap always opens a
+ * fresh framebuffer screen, so it always asks.
+ */
+fun mobileProdConfirmNeeded(production: Boolean, isVnc: Boolean, action: MobileConnectAction): Boolean =
+    production && (isVnc || action != MobileConnectAction.Resume)
+
 /** Where to go from the host screen after opening/resuming a session: Connect → terminal, SFTP → files. */
 enum class MobileConnectDest { Terminal, Files }
 
