@@ -445,6 +445,75 @@ class SyncCoordinatorPasswordReplaceTest {
         }
     }
 
+    /** Delegates everything but the rotation, which the server turns away with [kind]. */
+    private class RotationRejectingClient(
+        inner: SyncClient,
+        private val kind: SyncException.Kind,
+    ) : SyncClient by inner {
+        override suspend fun changePassword(
+            accountId: String,
+            currentAuthKey: ByteArray,
+            newAuthKey: ByteArray,
+            newWrappedDataKey: ByteArray,
+            device: DeviceInfo,
+        ): SyncSession = throw SyncException(kind, "rejected")
+    }
+
+    /**
+     * The rate limiter turns the rotation away before the route runs, so nothing rotated: the
+     * keep-connected token must survive. Clearing it (the treatment ambiguous failures get) would
+     * cost the user their auto-restore for a failure that changed nothing on the server — and 429
+     * is the one a user hits by simply retrying a mistyped password a few times.
+     */
+    @Test
+    fun `a throttled rotation keeps the auto-restore token and is named as throttling`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val store = InMemorySyncConfigStore().apply {
+            save(SyncConfig(serverUrl, account, deviceId = "dev-local", keepConnected = true, sealedRefreshToken = "sealed-old"))
+        }
+        val sut = coordinator(vault, RotationRejectingClient(client, SyncException.Kind.TOO_MANY_REQUESTS), store)
+        try {
+            val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
+            assertEquals(
+                SyncFailureReason.TooManyRequests,
+                (result as? AccountPasswordChange.Failed)?.reason,
+                "a throttled rotation must be named as throttling, was $result",
+            )
+            assertEquals("sealed-old", store.load()?.sealedRefreshToken, "nothing rotated — the auto-restore token stays")
+            assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "the local vault is untouched")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * A 5xx is ambiguous — the server may have committed the rotation before dying — so it keeps the
+     * conservative treatment (token cleared), but it must still be named as a server failure.
+     */
+    @Test
+    fun `a rotation against a broken server is named as a server failure`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val store = InMemorySyncConfigStore().apply {
+            save(SyncConfig(serverUrl, account, deviceId = "dev-local", keepConnected = true, sealedRefreshToken = "sealed-old"))
+        }
+        val sut = coordinator(vault, RotationRejectingClient(client, SyncException.Kind.SERVER_ERROR), store)
+        try {
+            val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
+            assertEquals(
+                SyncFailureReason.ServerError,
+                (result as? AccountPasswordChange.Failed)?.reason,
+                "was $result",
+            )
+            assertEquals(null, store.load()?.sealedRefreshToken, "an ambiguous failure still clears the auto-restore token")
+        } finally {
+            sut.close()
+        }
+    }
+
     /**
      * The current password passes the local check but the SERVER rejects the SRP proof (e.g. another
      * device already rotated the account): the coordinator surfaces it as a failure, unchanged locally.

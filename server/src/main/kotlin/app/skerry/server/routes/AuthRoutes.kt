@@ -131,6 +131,11 @@ fun Route.authRoutes(services: Services) {
         }
     }
 
+    // The limiter gates the route, so a 429 is always emitted before rotatePassword below ever runs.
+    // The client relies on that: SyncCoordinator.changeAccountPassword treats 429 as "rejected before
+    // any write" and keeps the device's auto-restore token. Don't move this check past receive()/
+    // verify()/rotatePassword() — a 429 after a committed rotation would leave that device holding a
+    // live token for a password the account no longer uses.
     rateLimit(RateLimits.CHANGE_PASSWORD) {
         post("/auth/change-password") {
             val req = call.receive<ChangePasswordRequest>()

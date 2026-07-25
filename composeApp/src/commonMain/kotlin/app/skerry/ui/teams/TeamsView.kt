@@ -72,6 +72,8 @@ import app.skerry.ui.generated.resources.lib_teams_err_no_recipient_key
 import app.skerry.ui.generated.resources.lib_teams_err_no_such_account
 import app.skerry.ui.generated.resources.lib_teams_err_not_connected
 import app.skerry.ui.generated.resources.lib_teams_err_protocol
+import app.skerry.ui.generated.resources.lib_teams_err_server_error
+import app.skerry.ui.generated.resources.lib_teams_err_too_many_requests
 import app.skerry.ui.generated.resources.lib_teams_err_vault_locked
 import app.skerry.ui.generated.resources.lib_teams_err_vault_unreadable
 import app.skerry.ui.generated.resources.lib_teams_history
@@ -500,6 +502,8 @@ internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.Protocol -> stringResource(Res.string.lib_teams_err_protocol)
     TeamsFailure.Forbidden -> stringResource(Res.string.lib_teams_err_forbidden)
     TeamsFailure.VaultUnreadable -> stringResource(Res.string.lib_teams_err_vault_unreadable)
+    TeamsFailure.TooManyRequests -> stringResource(Res.string.lib_teams_err_too_many_requests)
+    TeamsFailure.ServerError -> stringResource(Res.string.lib_teams_err_server_error)
 }
 
 /** launch from click handlers: a param-less suspend block, shorter than a lambda with CoroutineScope. */
