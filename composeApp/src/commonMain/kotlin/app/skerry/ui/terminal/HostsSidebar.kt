@@ -829,7 +829,8 @@ internal fun HostEntryRow(
     // would still collect the row's 8dp item spacing and shift the label sideways on hover.
     Box(Modifier.fillMaxWidth()) {
         val note = host?.notes
-        if (noteVisible && !note.isNullOrBlank() && !menuOpen) HoverTooltip(note)
+        // Suppressed while the row's own popups are up, so the note doesn't land on top of them.
+        if (noteVisible && !note.isNullOrBlank() && !menuOpen && !snippetPickerOpen) HoverTooltip(note)
         Row(
             Modifier
                 .fillMaxWidth()
