@@ -45,6 +45,13 @@ import kotlinx.serialization.Serializable
  *
  * [vncResizeToWindow] remembers the VNC session's "Resize to window" toggle across restarts.
  * VNC-only; toggled from the live session's graphics menu, not the edit form (which preserves it).
+ *
+ * [notes] is an optional free-form remark about the profile (maintenance window, who owns the box),
+ * shown as a hover tooltip in the desktop sidebar and in the mobile host details. Stored normalized
+ * ([normalizeNotes]): trimmed, ≤ [MAX_NOTES_LENGTH], blank collapsed to `null`. Note: a client
+ * predating this field silently drops it when it re-saves the profile (unknown keys are ignored on
+ * read, the record is rebuilt without them and LWW propagates that), same as an unknown
+ * `connectionType`.
  */
 @Serializable
 data class Host(
@@ -61,4 +68,5 @@ data class Host(
     val jumpHostId: String? = null,
     val keepAliveSeconds: Int = 30,
     val vncResizeToWindow: Boolean = false,
+    val notes: String? = null,
 )

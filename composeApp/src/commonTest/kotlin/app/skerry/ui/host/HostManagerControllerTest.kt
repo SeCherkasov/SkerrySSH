@@ -105,6 +105,30 @@ class HostManagerControllerTest {
     }
 
     @Test
+    fun `save carries notes through to the stored host`() {
+        val store = FakeHostStore()
+        val controller = HostManagerController(store) { "gen-id" }
+
+        controller.save(
+            HostDraft(label = "prod", address = "10.0.0.5", port = 22, username = "deploy", notes = "ask ops before reboot"),
+        )
+
+        assertEquals("ask ops before reboot", controller.hosts.single().notes)
+        assertEquals("ask ops before reboot", store.all().single().notes)
+    }
+
+    @Test
+    fun `save without notes clears them on the stored host`() {
+        // Emptying the field in the edit form must actually drop the note, not keep the old one.
+        val store = FakeHostStore(Host("1", "a", "a.local", 22, "u", notes = "stale"))
+        val controller = HostManagerController(store) { error("must not be called") }
+
+        controller.save(HostDraft(id = "1", label = "a", address = "a.local", port = 22, username = "u"))
+
+        assertNull(controller.find("1")?.notes)
+    }
+
+    @Test
     fun `save carries tags through to the stored host`() {
         val store = FakeHostStore()
         val controller = HostManagerController(store) { "gen-id" }

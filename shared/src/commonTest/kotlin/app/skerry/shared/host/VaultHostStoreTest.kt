@@ -111,6 +111,16 @@ class VaultHostStoreTest {
     }
 
     @Test
+    fun `notes survive persist and reload with a null default`() {
+        val vault = FakeVault()
+        VaultHostStore(vault).put(host("web").copy(notes = "reboot window: Sun 03:00\nask ops first"))
+        assertEquals("reboot window: Sun 03:00\nask ops first", VaultHostStore(vault).all().single().notes)
+        // Absent in records written before the field existed -> null (backward compatible default).
+        VaultHostStore(vault).put(host("plain"))
+        assertNull(VaultHostStore(vault).all().first { it.id == "plain" }.notes)
+    }
+
+    @Test
     fun `all on a locked vault is empty rather than throwing`() {
         val store = VaultHostStore(LockedVault)
         assertTrue(store.all().isEmpty())

@@ -5,7 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -78,6 +80,7 @@ import app.skerry.ui.design.Badge
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.host.pickAndParseSshConfig
 import app.skerry.ui.generated.resources.conn_import_action
@@ -122,6 +125,7 @@ import app.skerry.ui.host.hostTagChips
 import app.skerry.ui.host.icon
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.sessionDotColor
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
@@ -772,6 +776,9 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
     )
 }
 
+/** How long the pointer must rest on a host row before its note pops up. */
+private const val NOTE_TOOLTIP_DELAY_MS = 450L
+
 /**
  * Shared host row for the sidebar (mock and live catalog): status dot + protocol icon + name +
  * optional badge. [icon] is the profile's [app.skerry.ui.host.icon] and stays [Skerry.colors.faint] — the two
@@ -781,7 +788,7 @@ private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily)
  * ([host] != null and [LocalSnippets] is present), a trailing "⋮" button opens a menu (Run
  * snippet.../Edit/Duplicate/Delete); its click is intercepted before [onClick], so opening the menu
  * doesn't trigger a connection. "Run snippet..." opens the snippet picker and runs it on [host] via
- * [LocalRunSnippetOnHost].
+ * [LocalRunSnippetOnHost]. A profile carrying [Host.notes] shows them as a hover tooltip.
  */
 @Composable
 internal fun HostEntryRow(
@@ -804,79 +811,100 @@ internal fun HostEntryRow(
     val hasMenu = onEdit != null || onDuplicate != null || onDelete != null || canRunSnippet
     var menuOpen by remember { mutableStateOf(false) }
     var snippetPickerOpen by remember { mutableStateOf(false) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(5.dp))
-            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-            .hostConnectClick(
-                onClick = {
-                    // Connecting also marks the row selected (single-click mode too — it reads as
-                    // "the host you just opened"), then opens the session.
-                    onSelect?.invoke()
-                    onClick()
-                },
-                onSingleClick = onSelect,
-            )
-            .padding(start = 8.dp, end = 2.dp, top = 5.dp, bottom = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Dot(dot)
-        Sym(icon, size = 13.sp, color = Skerry.colors.faint)
-        Txt(
-            label,
-            color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim, size = 11.5.sp, font = mono,
-            maxLines = 1, overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        if (badge != null) {
-            val strict = badge == "STRICT"
-            Badge(badge, bg = if (strict) Skerry.colors.strictBg else Skerry.colors.devBg, fg = if (strict) Skerry.colors.strictFg else Skerry.colors.moss)
+    // The profile's note is shown on hover — mouse-only by nature; on Android the same code simply
+    // never reports a hover (the note lives in the host detail screen there).
+    val hoverInteraction = remember { MutableInteractionSource() }
+    val hovered by hoverInteraction.collectIsHoveredAsState()
+    // Dwell before the note pops up, so sweeping the pointer down the list doesn't flash a tooltip
+    // over every row on the way.
+    var noteVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(hovered) {
+        noteVisible = false
+        if (hovered) {
+            delay(NOTE_TOOLTIP_DELAY_MS)
+            noteVisible = true
         }
-        if (hasMenu) {
-            Box {
-                // Mouse-only: keeping the menu out of Tab traversal makes one Tab = one host row
-                // (otherwise every row costs two presses); keyboard users get Enter/Space to connect.
-                IconBtn(
-                    "more_vert",
-                    onClick = { menuOpen = !menuOpen },
-                    modifier = Modifier.focusProperties { canFocus = false },
-                    box = 22, icon = 16.sp, tint = Skerry.colors.faint,
+    }
+    // The tooltip is a sibling of the row, not a child: inside the row its (zero-sized) popup node
+    // would still collect the row's 8dp item spacing and shift the label sideways on hover.
+    Box(Modifier.fillMaxWidth()) {
+        val note = host?.notes
+        if (noteVisible && !note.isNullOrBlank() && !menuOpen) HoverTooltip(note)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(5.dp))
+                .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
+                .hoverable(hoverInteraction)
+                .hostConnectClick(
+                    onClick = {
+                        // Connecting also marks the row selected (single-click mode too — it reads as
+                        // "the host you just opened"), then opens the session.
+                        onSelect?.invoke()
+                        onClick()
+                    },
+                    onSingleClick = onSelect,
                 )
-                if (menuOpen) {
-                    Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
-                        Column(
-                            Modifier.clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
-                        ) {
-                            if (canRunSnippet) {
-                                HostMenuItem(stringResource(Res.string.term_menu_run_snippet), Skerry.colors.text) { menuOpen = false; snippetPickerOpen = true }
-                            }
-                            onEdit?.let { edit ->
-                                HostMenuItem(stringResource(Res.string.term_menu_edit), Skerry.colors.text) { menuOpen = false; edit() }
-                            }
-                            onDuplicate?.let { duplicate ->
-                                HostMenuItem(stringResource(Res.string.term_menu_duplicate), Skerry.colors.text) { menuOpen = false; duplicate() }
-                            }
-                            onDelete?.let { delete ->
-                                HostMenuItem(stringResource(Res.string.term_menu_delete), Skerry.colors.sunset) { menuOpen = false; delete() }
+                .padding(start = 8.dp, end = 2.dp, top = 5.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Dot(dot)
+            Sym(icon, size = 13.sp, color = Skerry.colors.faint)
+            Txt(
+                label,
+                color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim, size = 11.5.sp, font = mono,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (badge != null) {
+                val strict = badge == "STRICT"
+                Badge(badge, bg = if (strict) Skerry.colors.strictBg else Skerry.colors.devBg, fg = if (strict) Skerry.colors.strictFg else Skerry.colors.moss)
+            }
+            if (hasMenu) {
+                Box {
+                    // Mouse-only: keeping the menu out of Tab traversal makes one Tab = one host row
+                    // (otherwise every row costs two presses); keyboard users get Enter/Space to connect.
+                    IconBtn(
+                        "more_vert",
+                        onClick = { menuOpen = !menuOpen },
+                        modifier = Modifier.focusProperties { canFocus = false },
+                        box = 22, icon = 16.sp, tint = Skerry.colors.faint,
+                    )
+                    if (menuOpen) {
+                        Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
+                            Column(
+                                Modifier.clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
+                            ) {
+                                if (canRunSnippet) {
+                                    HostMenuItem(stringResource(Res.string.term_menu_run_snippet), Skerry.colors.text) { menuOpen = false; snippetPickerOpen = true }
+                                }
+                                onEdit?.let { edit ->
+                                    HostMenuItem(stringResource(Res.string.term_menu_edit), Skerry.colors.text) { menuOpen = false; edit() }
+                                }
+                                onDuplicate?.let { duplicate ->
+                                    HostMenuItem(stringResource(Res.string.term_menu_duplicate), Skerry.colors.text) { menuOpen = false; duplicate() }
+                                }
+                                onDelete?.let { delete ->
+                                    HostMenuItem(stringResource(Res.string.term_menu_delete), Skerry.colors.sunset) { menuOpen = false; delete() }
+                                }
                             }
                         }
                     }
-                }
-                // Snippet picker: runs on this host (opens/reuses a session and runs the command after
-                // connecting). An empty library shows "No snippets yet".
-                if (snippetPickerOpen && host != null && snippets != null) {
-                    Popup(
-                        alignment = Alignment.TopEnd,
-                        onDismissRequest = { snippetPickerOpen = false },
-                        properties = PopupProperties(focusable = true),
-                    ) {
-                        SnippetPalette(snippets) { entry ->
-                            // Through the manager: a snippet with ${{…}} variables opens the confirm
-                            // dialog first; the resolved line (newline included) lands here after.
-                            snippets.run(entry.id) { line -> runSnippetOnHost(host, line) }
-                            snippetPickerOpen = false
+                    // Snippet picker: runs on this host (opens/reuses a session and runs the command after
+                    // connecting). An empty library shows "No snippets yet".
+                    if (snippetPickerOpen && host != null && snippets != null) {
+                        Popup(
+                            alignment = Alignment.TopEnd,
+                            onDismissRequest = { snippetPickerOpen = false },
+                            properties = PopupProperties(focusable = true),
+                        ) {
+                            SnippetPalette(snippets) { entry ->
+                                // Through the manager: a snippet with ${{…}} variables opens the confirm
+                                // dialog first; the resolved line (newline included) lands here after.
+                                snippets.run(entry.id) { line -> runSnippetOnHost(host, line) }
+                                snippetPickerOpen = false
+                            }
                         }
                     }
                 }

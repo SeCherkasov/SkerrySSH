@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.normalizeNotes
 import app.skerry.shared.tag.MAX_TAGS_PER_RECORD
 import app.skerry.shared.tag.normalizeTag
 import app.skerry.shared.ssh.ConnectionType
@@ -45,6 +46,12 @@ class NewConnectionFormState {
     var port: String by mutableStateOf("22")
     var username: String by mutableStateOf("")
     var group: String by mutableStateOf("")
+
+    /**
+     * Free-form remark about the profile, raw as typed; normalized on the way into the draft
+     * ([app.skerry.shared.host.normalizeNotes]) so the cap and trimming apply once, at the store's edge.
+     */
+    var notes: String by mutableStateOf("")
 
     /**
      * Profile transport. Changing it via [chooseConnectionType] substitutes the default port/speed
@@ -203,6 +210,7 @@ class NewConnectionFormState {
         connectionType = connectionType,
         jumpHostId = jumpHostId,
         keepAliveSeconds = keepAliveSeconds,
+        notes = normalizeNotes(notes),
     )
 
     companion object {
@@ -229,6 +237,7 @@ class NewConnectionFormState {
             port = host.port.toString()
             username = host.username
             group = host.group ?: ""
+            notes = host.notes ?: ""
             tags = host.tags
             aiPolicy = host.aiPolicy
             jumpHostId = host.jumpHostId

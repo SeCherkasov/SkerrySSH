@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
@@ -33,6 +34,7 @@ import app.skerry.ui.generated.resources.shtail_host_ask_on_connect
 import app.skerry.ui.generated.resources.shtail_host_auth
 import app.skerry.ui.generated.resources.shtail_host_group
 import app.skerry.ui.generated.resources.shtail_host_jump
+import app.skerry.ui.generated.resources.shtail_host_notes
 import app.skerry.ui.generated.resources.shtail_host_port
 import app.skerry.ui.generated.resources.shtail_host_saved_credential
 import app.skerry.ui.connection.jumpRouteLabel
@@ -66,9 +68,10 @@ data class HostDetailRow(val label: String, val value: String, val mono: Boolean
 
 /**
  * Reduces a [Host] profile to Details card rows: Address, Port, Auth, jump route (only when the
- * profile has one — [jumpRouteLabel] over [findHost]), Group. Auth reflects whether a keychain
- * secret is bound (`Saved credential` / `Ask on connect`); Group falls back to "Ungrouped". AI
- * policy and online status are not in the model.
+ * profile has one — [jumpRouteLabel] over [findHost]), Group, Notes (only when the profile carries
+ * one — the desktop shows the same text as a sidebar hover tooltip, which a phone has no equivalent
+ * of). Auth reflects whether a keychain secret is bound (`Saved credential` / `Ask on connect`);
+ * Group falls back to "Ungrouped". AI policy and online status are not in the model.
  */
 @Composable
 fun mobileHostDetailRows(host: Host, findHost: (String) -> Host? = { null }): List<HostDetailRow> = listOfNotNull(
@@ -81,6 +84,7 @@ fun mobileHostDetailRows(host: Host, findHost: (String) -> Host? = { null }): Li
     ),
     jumpRouteLabel(host, findHost)?.let { HostDetailRow(stringResource(Res.string.shtail_host_jump), it, mono = false) },
     HostDetailRow(stringResource(Res.string.shtail_host_group), host.group?.takeIf { it.isNotBlank() } ?: ungroupedLabel(), mono = false),
+    host.notes?.takeIf { it.isNotBlank() }?.let { HostDetailRow(stringResource(Res.string.shtail_host_notes), it, mono = false) },
 )
 
 /**
@@ -179,7 +183,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             rows.forEachIndexed { i, row ->
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Txt(row.label, color = Skerry.colors.dim, size = 13.sp)
@@ -187,7 +191,12 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                         row.value,
                         color = Skerry.colors.text,
                         size = 13.sp,
+                        lineHeight = 18.sp,
                         font = if (row.mono) LocalFonts.current.mono else null,
+                        // A note runs long: let the value wrap and stay right-aligned instead of
+                        // squeezing the label off the row.
+                        align = TextAlign.End,
+                        modifier = Modifier.weight(1f),
                     )
                 }
                 if (i < rows.lastIndex) {

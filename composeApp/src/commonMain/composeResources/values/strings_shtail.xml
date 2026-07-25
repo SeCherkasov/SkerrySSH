@@ -16,6 +16,7 @@
     <string name="shtail_host_ask_on_connect">Ask on connect</string>
     <string name="shtail_host_group">Group</string>
     <string name="shtail_host_jump">Jump host</string>
+    <string name="shtail_host_notes">Notes</string>
 
     <!-- Host grouping: synthetic bucket for hosts without a group (display only) -->
     <string name="shtail_ungrouped">Ungrouped</string>
