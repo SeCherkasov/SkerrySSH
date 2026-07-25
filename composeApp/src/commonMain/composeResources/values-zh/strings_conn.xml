@@ -17,6 +17,8 @@
     <string name="conn_field_authentication">认证方式</string>
     <string name="conn_field_group">分组</string>
     <string name="conn_field_tags">标签</string>
+    <string name="conn_field_notes">备注</string>
+    <string name="conn_notes_placeholder">维护窗口、负责人，以及任何值得记住的信息</string>
     <string name="conn_field_jump_host">跳板主机</string>
     <string name="conn_field_keep_alive">保活</string>
     <string name="conn_field_ai_policy">此连接的 AI 策略</string>

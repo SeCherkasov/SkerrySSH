@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.MAX_NOTES_LENGTH
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
@@ -95,6 +96,7 @@ import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_jump_host
 import app.skerry.ui.generated.resources.conn_field_keep_alive
 import app.skerry.ui.generated.resources.conn_field_name
+import app.skerry.ui.generated.resources.conn_field_notes
 import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_protocol
 import app.skerry.ui.generated.resources.conn_field_tags
@@ -104,6 +106,7 @@ import app.skerry.ui.generated.resources.conn_group_new
 import app.skerry.ui.generated.resources.conn_group_new_title
 import app.skerry.ui.generated.resources.conn_group_none
 import app.skerry.ui.generated.resources.conn_jump_none
+import app.skerry.ui.generated.resources.conn_notes_placeholder
 import app.skerry.ui.generated.resources.conn_protocol_local
 import app.skerry.ui.generated.resources.conn_protocol_serial
 import app.skerry.ui.generated.resources.conn_protocol_mosh
@@ -336,6 +339,17 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                                 tagSugs.forEach { tag -> key(tag) { SuggestionRow("#$tag") { form.addTag(tag); tagDraft = "" } } }
                             }
                         },
+                    )
+                }
+                Spacer14()
+                // Free-form remark about the profile; shown as a hover tooltip on the sidebar row.
+                Field(stringResource(Res.string.conn_field_notes)) {
+                    ModalTextField(
+                        form.notes,
+                        { form.notes = it.take(MAX_NOTES_LENGTH) },
+                        stringResource(Res.string.conn_notes_placeholder),
+                        singleLine = false,
+                        minHeightDp = 64,
                     )
                 }
                 // AI policy selection is visible when AI is actually available (live controller or feature flag).

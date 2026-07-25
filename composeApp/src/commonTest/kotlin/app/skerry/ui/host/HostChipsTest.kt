@@ -17,7 +17,8 @@ class HostChipsTest {
         username: String = "root",
         group: String? = null,
         tags: List<String> = emptyList(),
-    ) = Host(id = id, label = label, address = address, username = username, group = group, tags = tags)
+        notes: String? = null,
+    ) = Host(id = id, label = label, address = address, username = username, group = group, tags = tags, notes = notes)
 
     @Test
     fun chips_are_all_plus_distinct_tags_in_first_appearance_order() {
@@ -65,6 +66,17 @@ class HostChipsTest {
         assertEquals(listOf("db-master"), filterHosts(hosts, query = "1.50").map { it.label })
         assertEquals(listOf("prod-web-01"), filterHosts(hosts, query = "EDGE").map { it.label }) // matched by tag
         assertEquals(listOf("db-master"), filterHosts(hosts, query = "postgres").map { it.label })
+    }
+
+    @Test
+    fun query_matches_notes() {
+        val hosts = listOf(
+            host("1", label = "prod-web-01", notes = "Reboot window: Sunday 03:00 MSK"),
+            host("2", label = "db-master"),
+        )
+        assertEquals(listOf("prod-web-01"), filterHosts(hosts, query = "sunday").map { it.label })
+        // A host without notes must not match a notes-only needle.
+        assertEquals(emptyList(), filterHosts(hosts, query = "msk").map { it.label } - "prod-web-01")
     }
 
     @Test
