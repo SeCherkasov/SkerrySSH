@@ -100,7 +100,8 @@ Building it yourself is also easy — see [Building from source](#building-from-
 - **Connections** — SSH with jump hosts (ProxyJump) and SSH certificates; Mosh; SFTP
   (dual-pane commander with a built-in file viewer/editor); port forwarding: local, remote,
   dynamic/SOCKS, plus discovery of listening services with one-tap forwarding; VNC remote
-  desktop; Telnet; serial (desktop and Android USB-OTG).
+  desktop; Docker and Kubernetes exec (pick a container/pod on the host and drop into its
+  shell); Telnet; serial (desktop and Android USB-OTG).
 - **Terminal** — custom grid emulation, session tabs with split view, SSH auto-reconnect,
   scrollback search, live host metrics, a command palette over the history, broadcast input
   to several sessions, and session recording (asciinema v2) with in-app playback.

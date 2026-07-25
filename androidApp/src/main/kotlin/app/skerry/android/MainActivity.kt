@@ -425,14 +425,14 @@ class MainActivity : FragmentActivity() {
                 deviceId(dir),
             ),
         )
-        // Global tunnels: saved forwards. Activated via a separate probe transport (read-only verifier)
-        // so only an already-trusted host can be enabled, no silent TOFU here. Host/secret resolution
-        // goes through the graph (hosts + credentials).
-        val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
+        // Probe transport (read-only verifier, no silent TOFU): activating a saved tunnel and
+        // listing a host's containers from the connection form both ride it, so neither can
+        // establish trust in a host key on their own.
+        val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { tunnelScope = it }
         val tunnels = TunnelManager(
             store = VaultTunnelStore(vault),
-            transport = tunnelTransport,
+            transport = probeTransport,
             resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::find) },
             scope = scope,
         ) { UUID.randomUUID().toString() }
@@ -566,6 +566,7 @@ class MainActivity : FragmentActivity() {
         )
         return AppDependencies(
             transport = transport,
+            probeTransport = probeTransport,
             vncTransport = app.skerry.shared.vnc.VncTcpTransport(),
             hosts = hosts,
             vault = vault,
