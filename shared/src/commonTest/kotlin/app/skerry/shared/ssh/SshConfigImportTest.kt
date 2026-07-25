@@ -36,6 +36,9 @@ class SshConfigImportTest {
         assertEquals(ConnectionType.SSH, h.connectionType)
         assertNull(h.credentialId)
         assertNull(h.jumpHostId)
+        // An ssh_config carries no free-form remark for us to import — the note starts out empty
+        // rather than picking up an alias/comment.
+        assertNull(h.notes)
         assertEquals("id-1", h.id)
     }
 
