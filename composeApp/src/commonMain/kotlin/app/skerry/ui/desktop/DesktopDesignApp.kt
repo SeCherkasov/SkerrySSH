@@ -289,6 +289,9 @@ fun DesktopDesignApp(
     // OSC 52 server clipboard-write gate (Settings → Terminal) — persisted externally (desktop main).
     initialAllowServerClipboardWrite: Boolean = false,
     onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    // Production guard: confirm Warn-level commands too (Settings → Terminal) — persisted externally.
+    initialConfirmProductionWarnings: Boolean = false,
+    onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
     // Terminal color theme (Appearance → theme cards) — persisted externally (desktop main).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     onTerminalThemeChange: (TerminalTheme) -> Unit = {},
@@ -320,6 +323,7 @@ fun DesktopDesignApp(
             initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
             initialHostClickConnectMode, onHostClickConnectModeChange,
             initialAllowServerClipboardWrite, onAllowServerClipboardWriteChange,
+            initialConfirmProductionWarnings, onConfirmProductionWarningsChange,
             initialTerminalTheme, onTerminalThemeChange,
             initialCustomTerminalTheme, onCustomTerminalThemeChange,
             initialThemeMode, onThemeModeChange,
@@ -829,7 +833,7 @@ private fun DesktopChrome(
             }
             // …and, once inside, keep every open session armed and confirm the risky commands it
             // holds. At the root, so the confirmation is never covered by the terminal's own chrome.
-            ProdGuardSync(sessions)
+            ProdGuardSync(sessions, state.confirmProductionWarnings)
             ProdCommandGate(sessions?.active)
             // Broken ProxyJump chain for the clicked host: explain instead of connecting (never
             // silently direct). Set by openResolved for all three connect paths.

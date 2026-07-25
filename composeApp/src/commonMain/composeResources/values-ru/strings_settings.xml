@@ -225,4 +225,6 @@
     <string name="settings_trash_kind_snippet">Сниппет</string>
     <string name="settings_trash_kind_tunnel">Туннель</string>
     <string name="settings_trash_locked">Разблокируйте хранилище, чтобы увидеть корзину</string>
+    <string name="settings_terminal_prod_warnings">Подтверждать предупреждения на проде</string>
+    <string name="settings_terminal_prod_warnings_desc">На хостах с тегом #prod спрашивать не только на опасных командах, но и на предупреждениях (sudo, kill, остановка сервиса). В сессиях под root разрушительные команды подтверждаются всегда.</string>
 </resources>

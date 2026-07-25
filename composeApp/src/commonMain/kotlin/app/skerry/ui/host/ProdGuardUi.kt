@@ -46,6 +46,8 @@ import androidx.compose.runtime.key
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.ai.commandRiskReasonText
+import app.skerry.shared.guard.ProductionGuardPolicy
+import app.skerry.ui.app.LocalHosts
 
 /**
  * A connection to a production host waiting for confirmation: [host] names it in the dialog,
@@ -74,24 +76,34 @@ fun prodConnectGate(host: Host, snippet: Boolean = false, action: () -> Unit): P
  * so tagging a host `#prod` arms the sessions that are already open (and untagging disarms them).
  */
 @Composable
-fun ProdGuardSync(sessions: SessionsController?) {
+fun ProdGuardSync(sessions: SessionsController?, confirmWarnings: Boolean) {
     val open = sessions?.sessions ?: return
     for (session in open) {
         key(session.id) {
-            BindProdGuard(session)
-            session.splitSession?.let { split -> key(split.id) { BindProdGuard(split) } }
+            BindProdGuard(session, confirmWarnings)
+            session.splitSession?.let { split -> key(split.id) { BindProdGuard(split, confirmWarnings) } }
         }
     }
 }
 
 @Composable
-private fun BindProdGuard(session: Session) {
-    val prod = isProdHostId(session.hostId)
+private fun BindProdGuard(session: Session, confirmWarnings: Boolean) {
+    val host = session.hostId?.let { LocalHosts.current?.find(it) }
+    val policy = ProductionGuardPolicy(
+        production = isProdHost(host),
+        confirmWarnings = confirmWarnings,
+        // The login the profile connects with. `sudo` on a root session says nothing, while a
+        // destructive command has nothing in front of it — see [ProductionGuardPolicy].
+        rootLogin = host?.username?.trim().equals(ROOT_LOGIN, ignoreCase = true),
+    )
     val terminal = session.liveTerminal
     // SideEffect, not LaunchedEffect: this is a plain state write with nothing to suspend on, and it
     // must be applied on every successful composition, not on a coroutine that may run a frame later.
-    SideEffect { terminal?.guardProduction = prod }
+    SideEffect { terminal?.guardPolicy = policy }
 }
+
+/** Login that means "no sudo step in front of anything" for the guard. */
+private const val ROOT_LOGIN = "root"
 
 /**
  * Shows the confirmation for a command held by the guard in [session] (or in its focused split

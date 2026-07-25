@@ -553,7 +553,7 @@ private fun MobileChrome(
                 ProdConnectDialog(request, onDismiss = { prodConnect = null })
             }
             // Inside a session: keep it armed from the host tags and confirm the commands it holds.
-            ProdGuardSync(sessions)
+            ProdGuardSync(sessions, state.confirmProductionWarnings)
             ProdCommandGate(sessions?.active)
             // Broken ProxyJump chain for the tapped host: explain instead of connecting.
             jumpProblem?.let { problem ->

@@ -73,6 +73,8 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.generated.resources.settings_terminal_prod_warnings
+import app.skerry.ui.generated.resources.settings_terminal_prod_warnings_desc
 
 // Terminal section: themes, font/metrics, scrollback, cursor style, live OSC title on tabs.
 
@@ -171,6 +173,15 @@ internal fun TerminalSection(state: DesktopDesignState) {
         // the longest localized option ("Двойной клик (клик выделяет)") on a single line.
         Box(Modifier.width(232.dp)) { HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode) }
     }
+    HLine()
+    // Production guard threshold: Danger is always confirmed, warnings only if asked for (sudo is a
+    // warning and would otherwise fire on half the commands typed on a production box).
+    SettingToggleRow(
+        stringResource(Res.string.settings_terminal_prod_warnings),
+        stringResource(Res.string.settings_terminal_prod_warnings_desc),
+        on = state.confirmProductionWarnings,
+        onToggle = state::toggleConfirmProductionWarnings,
+    )
     HLine()
     // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host from
     // silently overwriting the system clipboard. Applies to new and already-open sessions.

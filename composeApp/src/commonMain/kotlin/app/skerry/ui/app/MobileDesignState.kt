@@ -109,6 +109,9 @@ class MobileDesignState(
     // and pushed live into open ones. Persisted on Android; no-op default for previews/tests.
     initialAllowServerClipboardWrite: Boolean = false,
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    // Production guard: also confirm Warn-level commands (Settings → Terminal). Off by default.
+    initialConfirmProductionWarnings: Boolean = false,
+    private val onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
     // UI language (More -> Appearance -> Language). Initial value is read from persistence at
     // startup, the callback writes it back — the choice survives restart. Defaults (System, no-op)
     // auto-detect from the OS locale for previews/tests.
@@ -308,6 +311,12 @@ class MobileDesignState(
      */
     var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
 
+    /**
+     * Whether the production guard also confirms Warn-level commands (More → Terminal). Off by
+     * default — desktop parity, see [app.skerry.ui.app.DesktopDesignState.confirmProductionWarnings].
+     */
+    var confirmProductionWarnings: Boolean by mutableStateOf(initialConfirmProductionWarnings); private set
+
     /** UI language (More -> Appearance -> Language). Threaded to the root via [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
 
@@ -352,6 +361,12 @@ class MobileDesignState(
         if (mode == themeMode) return
         themeMode = mode
         onThemeModeChange(mode)
+    }
+
+    /** Toggle confirming Warn-level commands on production hosts and report outward (for persistence). */
+    fun toggleConfirmProductionWarnings() {
+        confirmProductionWarnings = !confirmProductionWarnings
+        onConfirmProductionWarningsChange(confirmProductionWarnings)
     }
 
     /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */

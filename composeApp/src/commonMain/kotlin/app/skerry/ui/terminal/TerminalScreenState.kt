@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import app.skerry.shared.guard.GuardedCommand
 import app.skerry.shared.guard.ProductionGuard
+import app.skerry.shared.guard.ProductionGuardPolicy
 
 /**
  * Terminal screen state over [TerminalSession]. Raw PTY bytes go through [TerminalEmulator]
@@ -520,8 +521,11 @@ class TerminalScreenState(
     // UI from the session's host profile (see [app.skerry.ui.host.isProdHostId]) and kept live, so
     // adding or removing the tag arms/disarms an open session.
 
-    /** Whether this session runs on a production host and holds risky commands for confirmation. */
-    var guardProduction: Boolean by mutableStateOf(false)
+    /**
+     * What the production guard asks about in this session (host tag, root login, the
+     * confirm-warnings setting). [ProductionGuardPolicy.Off] — no guard at all.
+     */
+    var guardPolicy: ProductionGuardPolicy by mutableStateOf(ProductionGuardPolicy.Off)
 
     /** Command held by the guard, awaiting the user's confirmation; `null` when nothing is pending. */
     var pendingGuarded: GuardedCommand? by mutableStateOf(null)
@@ -548,7 +552,7 @@ class TerminalScreenState(
      * command recalled with arrow-up, where nothing was typed at all).
      */
     private fun holdForProductionGuard(text: String): Boolean {
-        if (!guardProduction || altScreen) return false
+        if (!guardPolicy.production || altScreen) return false
         val enter = text.indexOfFirst { it == '\r' || it == '\n' }
         if (enter < 0) return false
         // The first line continues whatever is already on the shell line; the rest of the block
@@ -558,6 +562,7 @@ class TerminalScreenState(
         val typed = listOf(autocomplete.currentLine + lines.first()) + lines.drop(1)
         val guarded = ProductionGuard.inspect(
             ProductionGuard.promptCandidates(screenLineToCursor()) + typed,
+            guardPolicy,
         ) ?: return false
         // One command is held at a time. A second risky one arriving while the dialog is still up
         // is dropped, not sent: confirming a dialog that shows command A must never run command B.
@@ -575,8 +580,8 @@ class TerminalScreenState(
      * session is not production or the command is harmless.
      */
     fun sendUserInputGuarded(text: String) {
-        if (guardProduction) {
-            val guarded = ProductionGuard.inspect(text.split('\n', '\r'))
+        if (guardPolicy.production) {
+            val guarded = ProductionGuard.inspect(text.split('\n', '\r'), guardPolicy)
             if (guarded != null) {
                 // Same one-at-a-time rule as [holdForProductionGuard]: a command arriving while a
                 // confirmation is up is dropped rather than slipped past the open dialog.
@@ -1053,8 +1058,8 @@ class TerminalScreenState(
         // A paste carrying a newline runs the moment it lands — on a production session it goes
         // through the same confirmation as a typed command. A paste without one only fills the
         // shell line, and the Enter that would run it is guarded separately ([typeInput]).
-        if (guardProduction && pendingGuarded == null && text.any { it == '\n' || it == '\r' }) {
-            val guarded = ProductionGuard.inspect(text.split('\n', '\r'))
+        if (guardPolicy.production && pendingGuarded == null && text.any { it == '\n' || it == '\r' }) {
+            val guarded = ProductionGuard.inspect(text.split('\n', '\r'), guardPolicy)
             if (guarded != null) {
                 pendingGuarded = guarded
                 heldInput = text

@@ -225,4 +225,6 @@
     <string name="settings_trash_kind_snippet">代码片段</string>
     <string name="settings_trash_kind_tunnel">隧道</string>
     <string name="settings_trash_locked">解锁保险库以查看回收站</string>
+    <string name="settings_terminal_prod_warnings">在生产环境确认警告级命令</string>
+    <string name="settings_terminal_prod_warnings_desc">在带 #prod 标签的主机上，除危险命令外也确认警告级命令（sudo、kill、停止服务）。root 会话始终确认破坏性命令。</string>
 </resources>

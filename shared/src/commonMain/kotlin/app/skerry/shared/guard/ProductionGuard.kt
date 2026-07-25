@@ -3,6 +3,7 @@ package app.skerry.shared.guard
 import app.skerry.shared.ai.CommandAssessment
 import app.skerry.shared.ai.CommandRisk
 import app.skerry.shared.ai.CommandRiskClassifier
+import app.skerry.shared.ai.CommandRiskReason
 import app.skerry.shared.tag.PROD_TAG
 
 /**
@@ -21,6 +22,30 @@ const val MAX_GUARDED_CANDIDATES = 200
 
 /** A command that needs confirmation on a production host, with the reason to show the user. */
 data class GuardedCommand(val command: String, val assessment: CommandAssessment)
+
+/**
+ * What the guard asks about in one session.
+ *
+ * [production] — the host carries [PROD_TAG]; everything else is off without it.
+ * [confirmWarnings] — the user opted into confirming [CommandRisk.Warn] as well (Settings →
+ * Terminal). Off by default: `sudo` is a Warn, and on a production box it is half the commands
+ * typed — a dialog that frequent gets clicked through without reading, which is worse than no
+ * dialog at all.
+ * [rootLogin] — the session logs in as root. That flips two things: `sudo` stops meaning anything
+ * (nobody types it, so the rule is pure noise), while a destructive Warn — `rm`, `git reset
+ * --hard`, `find -delete` — has no sudo step in front of it any more, so it is confirmed even
+ * when [confirmWarnings] is off.
+ */
+data class ProductionGuardPolicy(
+    val production: Boolean = false,
+    val confirmWarnings: Boolean = false,
+    val rootLogin: Boolean = false,
+) {
+    companion object {
+        /** No guard at all — a non-production session. */
+        val Off = ProductionGuardPolicy()
+    }
+}
 
 /**
  * Production guard: on a host tagged [PROD_TAG] a risky command is confirmed before it reaches the
@@ -55,13 +80,14 @@ object ProductionGuard {
      * Ties go to the shortest candidate: the same command shows up with and without its prompt
      * prefix, and the dialog should quote what was run, not `root@host:~# …`.
      */
-    fun inspect(candidates: List<String>): GuardedCommand? {
+    fun inspect(candidates: List<String>, policy: ProductionGuardPolicy): GuardedCommand? {
+        if (!policy.production) return null
         var worst: GuardedCommand? = null
         for (candidate in candidates.take(MAX_GUARDED_CANDIDATES)) {
             val command = candidate.trim().take(MAX_GUARDED_COMMAND_LENGTH)
             if (command.isEmpty()) continue
             val assessment = CommandRiskClassifier.assess(command)
-            if (assessment.risk == CommandRisk.None) continue
+            if (!needsConfirmation(assessment, policy)) continue
             val current = worst
             val better = current == null ||
                 assessment.risk.ordinal > current.assessment.risk.ordinal ||
@@ -72,7 +98,25 @@ object ProductionGuard {
     }
 
     /** Single-candidate form: broadcast lines and snippets are known verbatim. */
-    fun inspect(command: String): GuardedCommand? = inspect(listOf(command))
+    fun inspect(command: String, policy: ProductionGuardPolicy): GuardedCommand? =
+        inspect(listOf(command), policy)
+
+    /**
+     * Whether [assessment] crosses the bar set by [policy]. Danger always does. Warn does when the
+     * user asked for it, or when the session is root and the command destroys data — see
+     * [ProductionGuardPolicy] for why root changes the answer. `sudo` under root is dropped
+     * entirely: it says nothing about a session that is already root.
+     */
+    private fun needsConfirmation(assessment: CommandAssessment, policy: ProductionGuardPolicy): Boolean =
+        when (assessment.risk) {
+            CommandRisk.None -> false
+            CommandRisk.Danger -> true
+            CommandRisk.Warn -> when {
+                policy.rootLogin && assessment.reason == CommandRiskReason.Elevated -> false
+                policy.confirmWarnings -> true
+                else -> policy.rootLogin && assessment.destructive
+            }
+        }
 
     /**
      * Command candidates from a raw screen line: the line itself plus, when it looks like a prompt,

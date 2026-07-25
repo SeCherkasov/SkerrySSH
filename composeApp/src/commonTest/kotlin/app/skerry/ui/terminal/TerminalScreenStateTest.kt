@@ -1,5 +1,6 @@
 package app.skerry.ui.terminal
 
+import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
@@ -1049,7 +1050,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf /var/lib".forEach { state.typeInput(it.toString()) }
         state.typeInput("\r")
@@ -1065,7 +1066,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.typeInput("rm -rf /var/lib\r")
         assertEquals(0, session.sent.size)
@@ -1081,7 +1082,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.typeInput("shutdown now\r")
         state.dismissGuardedCommand()
@@ -1097,11 +1098,11 @@ class TerminalScreenStateTest {
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
 
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         state.typeInput("ls -la\r")
         assertEquals(null, state.pendingGuarded)
 
-        state.guardProduction = false
+        state.guardPolicy = ProductionGuardPolicy.Off
         state.typeInput("rm -rf /\r")
         assertEquals(null, state.pendingGuarded)
         assertEquals(2, session.sent.size)
@@ -1113,7 +1114,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Nothing was typed locally (arrow-up recall) — the command exists only on the screen.
         session.emit("root@prod:~# rm -rf /srv/data".encodeToByteArray())
@@ -1128,7 +1129,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // The soft keyboard delivers a whole IME delta in one call — a clipboard insert can carry
         // several lines, and the risky one is not necessarily the first.
@@ -1144,7 +1145,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Paste, then Enter before the host echoed anything back: the screen line is still empty,
         // so the guard has to remember what was pasted into the line.
@@ -1160,7 +1161,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInputGuarded("rm -rf /var/lib\n")
         state.sendUserInputGuarded("shutdown now\n") // e.g. a snippet hotkey over the open dialog
@@ -1176,7 +1177,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInputGuarded("systemctl stop nginx\n")
         assertEquals("systemctl stop nginx", state.pendingGuarded?.command)
@@ -1192,7 +1193,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInputGuarded("uptime\n")
 
@@ -1206,7 +1207,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.typeInput("rm -rf /var/lib\r")
         val first = state.pendingGuarded
@@ -1226,7 +1227,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Paste carrying a newline runs on arrival — the classic "copied it off a wiki page" case.
         state.paste("systemctl stop postgres\n")
@@ -1243,7 +1244,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Lands on the shell line for the user to read and edit; Enter is still guarded separately.
         state.paste("rm -rf /var/lib")
@@ -1258,7 +1259,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // At a password prompt the typed text is a secret, not a command: it must not be parked in
         // a dialog for everyone to read, whatever it happens to look like.
@@ -1275,7 +1276,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
-        state.guardProduction = true
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // vim/htop: there is no shell line to classify, and Enter there is not "run a command".
         val esc = 27.toChar().toString()

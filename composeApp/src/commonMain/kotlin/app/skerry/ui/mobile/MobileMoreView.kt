@@ -170,6 +170,8 @@ import app.skerry.ui.theme.Skerry
 import app.skerry.ui.theme.palette
 import app.skerry.ui.theme.systemInDarkTheme
 import app.skerry.ui.theme.ThemeMode
+import app.skerry.ui.generated.resources.settings_terminal_prod_warnings
+import app.skerry.ui.generated.resources.settings_terminal_prod_warnings_desc
 
 /**
  * Root More tab: title + profile card + list of section links. Navigation hub to the
@@ -599,6 +601,20 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
                     Txt(stringResource(Res.string.settings_terminal_clipboard_write_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
                 }
                 Toggle(on = state.allowServerClipboardWrite, onToggle = state::toggleAllowServerClipboardWrite)
+            }
+            // Production guard threshold (desktop parity): dangerous commands always confirm, the
+            // warnings on top of them are opt-in.
+            HLine()
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Txt(stringResource(Res.string.settings_terminal_prod_warnings), color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+                    Txt(stringResource(Res.string.settings_terminal_prod_warnings_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+                Toggle(on = state.confirmProductionWarnings, onToggle = state::toggleConfirmProductionWarnings)
             }
             Txt(stringResource(Res.string.appearance_section_interface), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
             FontSettingRow(stringResource(Res.string.appearance_language)) {
