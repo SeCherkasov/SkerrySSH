@@ -39,7 +39,7 @@ fun hostTagChipLabel(tag: String): String = "#$tag"
 
 /**
  * Narrow [hosts] by the active chip ([activeChip] = tag, `All` = no filter) and [query] (AND).
- * Case-insensitive search across name/address/username/group/tags.
+ * Case-insensitive search across name/address/username/group/tags/notes.
  */
 fun filterHosts(hosts: List<Host>, activeChip: String = ALL_HOSTS_CHIP, query: String = ""): List<Host> {
     val needle = query.trim().lowercase()
@@ -56,4 +56,5 @@ private fun Host.matchesQuery(needle: String): Boolean =
         address.lowercase().contains(needle) ||
         username.lowercase().contains(needle) ||
         group?.lowercase()?.contains(needle) == true ||
+        notes?.lowercase()?.contains(needle) == true ||
         tags.any { it.contains(needle) }

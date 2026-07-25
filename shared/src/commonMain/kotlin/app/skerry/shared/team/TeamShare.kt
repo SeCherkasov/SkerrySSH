@@ -11,6 +11,9 @@ private val json = Json { ignoreUnknownKeys = true }
  * Host payload fields that lose meaning in team scope: `group` is a personal folder structure;
  * `credentialId` references a record in the owner's PERSONAL vault (secrets aren't shared —
  * members' references would dangle; each member connects with their own secret).
+ *
+ * `notes` is deliberately NOT stripped: a host note describes the box (maintenance window, owner),
+ * which is exactly what a team sharing the profile needs.
  */
 val HOST_SHARE_STRIP: Set<String> = setOf("group", "credentialId")
 

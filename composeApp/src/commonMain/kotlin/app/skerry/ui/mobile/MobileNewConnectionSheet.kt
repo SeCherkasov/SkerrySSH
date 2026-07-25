@@ -42,6 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.capNotes
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
@@ -77,7 +78,9 @@ import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_name
 import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_protocol
+import app.skerry.ui.generated.resources.conn_field_notes
 import app.skerry.ui.generated.resources.conn_field_tags
+import app.skerry.ui.generated.resources.conn_notes_placeholder
 import app.skerry.ui.generated.resources.conn_field_username
 import app.skerry.ui.generated.resources.conn_group_delete
 import app.skerry.ui.generated.resources.conn_group_new
@@ -286,6 +289,19 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     placeholder = stringResource(Res.string.conn_tag_add_placeholder),
                     onPick = { tag -> form.addTag(tag); tagDraft = "" },
                     menuBackground = Skerry.colors.surface2,
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
+            // Free-form remark about the profile; surfaced in the host details screen (parity with
+            // the desktop sidebar's hover tooltip, which a phone has no equivalent of).
+            MobileFormField(stringResource(Res.string.conn_field_notes)) {
+                MobileFormInput(
+                    form.notes,
+                    { form.notes = capNotes(it) },
+                    stringResource(Res.string.conn_notes_placeholder),
+                    singleLine = false,
+                    minHeightDp = 80,
                 )
             }
 

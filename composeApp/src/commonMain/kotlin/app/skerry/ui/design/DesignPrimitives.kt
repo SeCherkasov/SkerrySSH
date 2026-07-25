@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -271,13 +272,18 @@ fun IconBtn(
         contentAlignment = Alignment.Center,
     ) {
         Sym(name, size = icon, color = if (hovered && hoverTint != null) hoverTint else tint)
-        if (tooltip != null && hovered) IconTooltip(tooltip)
+        if (tooltip != null && hovered) HoverTooltip(tooltip)
     }
 }
 
-/** Hover tooltip shown centered just below its icon button (toolbar icons carry no visible label). */
+/**
+ * Hover tooltip shown centered just below its anchor (toolbar icons carry no visible label; host
+ * rows in the sidebar show their note this way). The caller decides when it's visible — render it
+ * inside the hovered element's [Box]. Long text wraps at [maxWidth] and is cut off after
+ * [maxLines]: a tooltip is a peek, not a reader.
+ */
 @Composable
-private fun IconTooltip(text: String) {
+fun HoverTooltip(text: String, maxWidth: Dp = 260.dp, maxLines: Int = 8) {
     val gap = with(LocalDensity.current) { 6.dp.roundToPx() }
     val position = remember(gap) {
         object : PopupPositionProvider {
@@ -295,12 +301,17 @@ private fun IconTooltip(text: String) {
     Popup(popupPositionProvider = position, properties = PopupProperties(focusable = false)) {
         Box(
             Modifier
+                .widthIn(max = maxWidth)
                 .clip(RoundedCornerShape(6.dp))
                 .background(Skerry.colors.railBg)
                 .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
                 .padding(horizontal = 10.dp, vertical = 5.dp),
         ) {
-            Txt(text, color = Skerry.colors.textBright, size = 11.sp, weight = FontWeight.Medium)
+            Txt(
+                text,
+                color = Skerry.colors.textBright, size = 11.sp, weight = FontWeight.Medium, lineHeight = 15.sp,
+                maxLines = maxLines, overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

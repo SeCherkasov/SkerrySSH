@@ -16,6 +16,7 @@
     <string name="shtail_host_ask_on_connect">Спрашивать при подключении</string>
     <string name="shtail_host_group">Группа</string>
     <string name="shtail_host_jump">Прыжковый хост</string>
+    <string name="shtail_host_notes">Заметки</string>
 
     <!-- Host grouping: synthetic bucket for hosts without a group (display only) -->
     <string name="shtail_ungrouped">Без группы</string>
