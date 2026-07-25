@@ -685,7 +685,11 @@ private fun MobileKeybar(
             terminal.sendUserInput(controlByte(c[0]))
             onCtrlArmedChange(false)
         } else {
-            terminal.sendUserInput(c)
+            // typeInput, not sendUserInput: a character from the panel is typing, and it has to reach
+            // the tracked line like any other. Sending it raw left `/`, `|`, `~` out of the line the
+            // production guard classifies (the panel has no Enter key, so nothing ran unguarded —
+            // but the guard was reading a line that was missing characters).
+            terminal.typeInput(c)
         }
     }
     val arrow = { key: ArrowKey -> plain(arrowSequence(key, terminal.applicationCursorKeys)) }

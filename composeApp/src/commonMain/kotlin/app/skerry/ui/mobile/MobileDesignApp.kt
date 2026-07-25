@@ -384,10 +384,14 @@ private fun MobileChrome(
             // session that is already live is NOT gated — the confirmation belongs to opening the
             // connection, and asking on every tab switch would train the user to tap through it.
             val live = sessions?.sessions?.lastOrNull { it.hostId == host.id }
+            // Decided here, before the question is asked, and carried into [open] — re-reading the
+            // session list on OK would connect against a state the user was never shown.
+            val planned = mobileConnectAction(live?.controller?.uiState)
+            val liveId = live?.id
             val confirmProd = mobileProdConfirmNeeded(
                 production = isProdHost(host),
                 isVnc = host.connectionType.isVnc,
-                action = mobileConnectAction(live?.controller?.uiState),
+                action = planned,
             )
             val open = {
                 if (host.connectionType.isVnc) {
@@ -405,8 +409,11 @@ private fun MobileChrome(
                         pendingVnc = host
                     }
                 } else {
-                    val existing = sessions?.sessions?.lastOrNull { it.hostId == host.id }
-                    when (mobileConnectAction(existing?.controller?.uiState)) {
+                    // The session the decision was made about, looked up by the id captured with it.
+                    // Only its survival is re-checked ([mobileResolvedAction]) — a session that died
+                    // behind the confirmation has nothing to resume onto.
+                    val existing = liveId?.let { id -> sessions?.sessions?.firstOrNull { it.id == id } }
+                    when (mobileResolvedAction(planned, stillLive = existing != null)) {
                         MobileConnectAction.Resume -> {
                             existing?.let { sessions.activate(it.id) }
                             navigateAfterConnect(state, dest)

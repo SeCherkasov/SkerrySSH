@@ -58,6 +58,15 @@ class BroadcastController {
         targets.count { it.id in selectedIds && it.production }
 
     /**
+     * Whether sending [command] now has to be confirmed first. The panels (desktop and mobile) both
+     * ask this rather than deciding for themselves: [BroadcastTarget.send] hands the command to each
+     * session with the per-session guard turned off, so a platform that forgets to ask has no second
+     * line of defence.
+     */
+    fun needsProductionConfirmation(command: String, targets: List<BroadcastTarget>): Boolean =
+        command.isNotBlank() && selectedProductionCount(targets) > 0
+
+    /**
      * Send [command] plus a newline to every selected live target; returns how many actually
      * received it. A blank command is a no-op. One target failing (its channel died between the
      * picker rendering and the send) must not swallow the rest of the broadcast — that would be the

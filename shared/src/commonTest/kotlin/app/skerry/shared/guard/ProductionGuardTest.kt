@@ -103,4 +103,27 @@ class ProductionGuardTest {
         val long = "x".repeat(MAX_GUARDED_COMMAND_LENGTH + 500)
         assertTrue(ProductionGuard.promptCandidates(long).all { it.length <= MAX_GUARDED_COMMAND_LENGTH })
     }
+
+    @Test
+    fun splitting_an_input_block_caps_the_work_before_the_list_exists() {
+        // A paste can be a whole log file. Splitting it eagerly would allocate a String per line
+        // before the cap in inspect() ever applies — the cap has to happen while splitting.
+        val text = (0 until MAX_GUARDED_CANDIDATES + 500).joinToString("\n") { "echo line $it" }
+        assertEquals(MAX_GUARDED_CANDIDATES, ProductionGuard.candidatesOf(text).size)
+        val longLine = "x".repeat(MAX_GUARDED_COMMAND_LENGTH + 500)
+        assertTrue(ProductionGuard.candidatesOf(longLine).all { it.length <= MAX_GUARDED_COMMAND_LENGTH })
+    }
+
+    @Test
+    fun splitting_handles_every_line_ending() {
+        assertEquals(listOf("a", "b", "c"), ProductionGuard.candidatesOf("a\nb\rc"))
+        assertEquals(listOf("a", "b"), ProductionGuard.candidatesOf("a\r\nb"))
+    }
+
+    @Test
+    fun a_command_split_out_of_a_block_is_still_classified() {
+        // The risky line can sit anywhere in a pasted block, not only on the first line.
+        val guarded = ProductionGuard.inspect(ProductionGuard.candidatesOf("cd /srv\nrm -rf /srv/data\n"), GUARDING)
+        assertEquals("rm -rf /srv/data", guarded?.command)
+    }
 }

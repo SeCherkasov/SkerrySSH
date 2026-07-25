@@ -46,29 +46,45 @@ import androidx.compose.runtime.key
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.ai.commandRiskReasonText
+import app.skerry.shared.ai.CommandRiskReason
+import app.skerry.shared.guard.ProductionGuard
 import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.generated.resources.guard_prod_broadcast_confirm
+import app.skerry.ui.generated.resources.guard_prod_broadcast_message
+import app.skerry.ui.generated.resources.guard_prod_broadcast_title
 
 /**
  * A connection to a production host waiting for confirmation: [host] names it in the dialog,
- * [proceed] is the connect that was held back, [snippet] marks the "run a snippet on this host"
- * path (it opens a session AND runs a command, so it says so).
+ * [proceed] is the connect that was held back, [snippetLine] carries the command of the "run a
+ * snippet on this host" path (it opens a session AND runs a command, so the dialog quotes it).
  */
 @Immutable
-class ProdConnectRequest(val host: Host, val snippet: Boolean = false, val proceed: () -> Unit)
+class ProdConnectRequest(val host: Host, val snippetLine: String? = null, val proceed: () -> Unit)
 
 /**
  * Gate in front of every connect path: a production host confirms first, anything else goes
  * straight through. Returns the pending request to show ([ProdConnectDialog]) or `null` when
  * [action] already ran.
  */
-fun prodConnectGate(host: Host, snippet: Boolean = false, action: () -> Unit): ProdConnectRequest? {
+fun prodConnectGate(host: Host, snippetLine: String? = null, action: () -> Unit): ProdConnectRequest? {
     if (!isProdHost(host)) {
         action()
         return null
     }
-    return ProdConnectRequest(host, snippet, action)
+    return ProdConnectRequest(host, snippetLine, action)
 }
+
+/**
+ * Risk of a command that runs outside a session's own guard — a snippet fired at connect time, a
+ * broadcast line fanned out to several hosts. Both are known verbatim and classified for display
+ * only, so the threshold is the widest one: the dialog is already being shown, and the reason is
+ * what makes it worth reading.
+ */
+fun prodDisplayRisk(command: String): GuardedCommand? =
+    ProductionGuard.inspect(command, DISPLAY_POLICY)
+
+private val DISPLAY_POLICY = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
 /**
  * Keeps every open session's terminal guard ([TerminalScreenState.guardProduction]) in step with
@@ -89,21 +105,41 @@ fun ProdGuardSync(sessions: SessionsController?, confirmWarnings: Boolean) {
 @Composable
 private fun BindProdGuard(session: Session, confirmWarnings: Boolean) {
     val host = session.hostId?.let { LocalHosts.current?.find(it) }
-    val policy = ProductionGuardPolicy(
-        production = isProdHost(host),
-        confirmWarnings = confirmWarnings,
-        // The login the profile connects with. `sudo` on a root session says nothing, while a
-        // destructive command has nothing in front of it — see [ProductionGuardPolicy].
-        rootLogin = host?.username?.trim().equals(ROOT_LOGIN, ignoreCase = true),
-    )
+    // Keyed on what the policy is made of: this runs for every open session (splits included) on
+    // every recomposition of the app root, and the tags/username only change when the profile is
+    // edited.
+    val policy = remember(host?.tags, host?.username, confirmWarnings) { prodGuardPolicy(host, confirmWarnings) }
     val terminal = session.liveTerminal
     // SideEffect, not LaunchedEffect: this is a plain state write with nothing to suspend on, and it
     // must be applied on every successful composition, not on a coroutine that may run a frame later.
     SideEffect { terminal?.guardPolicy = policy }
 }
 
+/** The guard policy a session on [host] runs under. Pure — [BindProdGuard] only applies it. */
+fun prodGuardPolicy(host: Host?, confirmWarnings: Boolean): ProductionGuardPolicy =
+    ProductionGuardPolicy(
+        production = isProdHost(host),
+        confirmWarnings = confirmWarnings,
+        // The login the profile connects with. `sudo` on a root session says nothing, while a
+        // destructive command has nothing in front of it — see [ProductionGuardPolicy].
+        rootLogin = isRootLogin(host),
+    )
+
+/** Whether the profile logs in as root. Trimmed and case-insensitive: it is free-typed in the form. */
+fun isRootLogin(host: Host?): Boolean = host?.username?.trim().equals(ROOT_LOGIN, ignoreCase = true)
+
 /** Login that means "no sudo step in front of anything" for the guard. */
 private const val ROOT_LOGIN = "root"
+
+/**
+ * Whether a guard confirmation is on screen for [session] (its split pane included).
+ *
+ * The window-level hotkey handler asks before acting: it sits on the root's preview pass, above the
+ * focus the dialog's scrim takes, so without this a snippet chord or a shell shortcut would fire
+ * over an open confirmation.
+ */
+fun prodGuardDialogOpen(session: Session?): Boolean =
+    session != null && listOfNotNull(session, session.splitSession).any { it.liveTerminal?.pendingGuarded != null }
 
 /**
  * Shows the confirmation for a command held by the guard in [session] (or in its focused split
@@ -114,7 +150,8 @@ private const val ROOT_LOGIN = "root"
 fun ProdCommandGate(session: Session?) {
     if (session == null) return
     // The split pane is checked first: it is the pane that has focus while it is being typed into.
-    val held = listOfNotNull(session.splitSession, session).firstOrNull { it.liveTerminal?.pendingGuarded != null }
+    val held = listOfNotNull(session.splitSession, session)
+        .firstOrNull { it.liveTerminal?.pendingGuarded != null }
     val terminal = held?.liveTerminal ?: return
     val guarded = terminal.pendingGuarded ?: return
     ProdCommandDialog(
@@ -125,14 +162,30 @@ fun ProdCommandGate(session: Session?) {
     )
 }
 
-/** "Connect to production?" confirmation. Cancel/Esc drops the pending connection. */
+/**
+ * "Connect to production?" confirmation. Cancel/Esc drops the pending connection.
+ *
+ * The snippet variant quotes the command: it runs by itself the moment the session opens, before
+ * the session's own guard can hold anything, so this dialog is the only place it can be read.
+ */
 @Composable
 fun ProdConnectDialog(request: ProdConnectRequest, onDismiss: () -> Unit) {
-    val title = if (request.snippet) Res.string.guard_prod_snippet_title else Res.string.guard_prod_connect_title
-    val message = if (request.snippet) Res.string.guard_prod_snippet_message else Res.string.guard_prod_connect_message
-    ConfirmActionDialog(
-        title = stringResource(title),
-        message = stringResource(message, request.host.label),
+    val line = request.snippetLine
+    if (line == null) {
+        ConfirmActionDialog(
+            title = stringResource(Res.string.guard_prod_connect_title),
+            message = stringResource(Res.string.guard_prod_connect_message, request.host.label),
+            confirmLabel = stringResource(Res.string.guard_prod_connect_confirm),
+            onConfirm = { onDismiss(); request.proceed() },
+            onDismiss = onDismiss,
+        )
+        return
+    }
+    ProdCommandSheet(
+        title = stringResource(Res.string.guard_prod_snippet_title),
+        subtitle = stringResource(Res.string.guard_prod_snippet_message, request.host.label),
+        command = line,
+        reason = remember(line) { prodDisplayRisk(line) }?.assessment?.reason,
         confirmLabel = stringResource(Res.string.guard_prod_connect_confirm),
         onConfirm = { onDismiss(); request.proceed() },
         onDismiss = onDismiss,
@@ -140,15 +193,61 @@ fun ProdConnectDialog(request: ProdConnectRequest, onDismiss: () -> Unit) {
 }
 
 /**
- * "Run this on production?" confirmation for a command held back on its way to the shell. Unlike
- * [ConfirmActionDialog] it shows the command verbatim in a monospace block: the whole point is to
- * let the user read what they are about to run — the classifier's [GuardedCommand.assessment]
- * reason alone doesn't say WHICH command tripped it.
+ * "Run this on production?" confirmation for a command held back on its way to the shell.
  */
 @Composable
 fun ProdCommandDialog(
     hostLabel: String,
     guarded: GuardedCommand,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ProdCommandSheet(
+        title = stringResource(Res.string.guard_prod_command_title),
+        subtitle = stringResource(Res.string.guard_prod_command_host, hostLabel),
+        command = guarded.command,
+        reason = guarded.assessment.reason,
+        confirmLabel = stringResource(Res.string.guard_prod_command_confirm),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * "Broadcast to production?" confirmation: one question for the whole fan-out. Quotes the command
+ * for the same reason the single-session dialog does — this is the widest blast radius in the app,
+ * and a count of production sessions says nothing about what is about to run on them.
+ */
+@Composable
+fun ProdBroadcastDialog(
+    command: String,
+    productionCount: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ProdCommandSheet(
+        title = stringResource(Res.string.guard_prod_broadcast_title),
+        subtitle = stringResource(Res.string.guard_prod_broadcast_message, productionCount),
+        command = command,
+        reason = remember(command) { prodDisplayRisk(command) }?.assessment?.reason,
+        confirmLabel = stringResource(Res.string.guard_prod_broadcast_confirm),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+    )
+}
+
+/**
+ * Shared body of the guard confirmations. Unlike [ConfirmActionDialog] it shows the command
+ * verbatim in a monospace block: the whole point is to let the user read what they are about to
+ * run — a reason alone doesn't say WHICH command tripped it.
+ */
+@Composable
+private fun ProdCommandSheet(
+    title: String,
+    subtitle: String,
+    command: String,
+    reason: CommandRiskReason?,
+    confirmLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -165,11 +264,11 @@ fun ProdCommandDialog(
                 .padding(26.dp),
         ) {
             Txt(
-                stringResource(Res.string.guard_prod_command_title),
+                title,
                 color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
             )
             Txt(
-                stringResource(Res.string.guard_prod_command_host, hostLabel),
+                subtitle,
                 color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 10.dp),
             )
@@ -184,11 +283,11 @@ fun ProdCommandDialog(
                     .padding(horizontal = 12.dp, vertical = 10.dp)
                     .horizontalScroll(rememberScrollState()),
             ) {
-                Txt(guarded.command, color = Skerry.colors.text, size = 12.sp, font = LocalFonts.current.mono, maxLines = 1)
+                Txt(command, color = Skerry.colors.text, size = 12.sp, font = LocalFonts.current.mono, maxLines = 1)
             }
-            guarded.assessment.reason?.let { reason ->
+            reason?.let {
                 Txt(
-                    commandRiskReasonText(reason),
+                    commandRiskReasonText(it),
                     color = Skerry.colors.sunset, size = 12.sp, lineHeight = 17.sp,
                     modifier = Modifier.padding(top = 10.dp),
                 )
@@ -200,7 +299,7 @@ fun ProdCommandDialog(
             ) {
                 CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
                 PrimaryButton(
-                    stringResource(Res.string.guard_prod_command_confirm),
+                    confirmLabel,
                     onClick = onConfirm,
                     bg = Skerry.colors.sunset,
                     fg = Skerry.colors.sunsetInk,

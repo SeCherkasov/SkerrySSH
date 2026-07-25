@@ -226,5 +226,5 @@
     <string name="settings_trash_kind_tunnel">Tunnel</string>
     <string name="settings_trash_locked">Unlock the vault to see the trash</string>
     <string name="settings_terminal_prod_warnings">Confirm warnings on production</string>
-    <string name="settings_terminal_prod_warnings_desc">On hosts tagged #prod also confirm warnings (sudo, kill, stopping a service), not only dangerous commands. Root sessions always confirm destructive ones.</string>
+    <string name="settings_terminal_prod_warnings_desc">On hosts tagged #prod also confirm warnings (kill, stopping a service, uninstalling a package), not only dangerous commands. A root session drops the sudo rule — it says nothing there — and confirms destructive warnings either way.</string>
 </resources>

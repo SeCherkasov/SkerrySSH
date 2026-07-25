@@ -58,6 +58,21 @@ class MobileDesignStateTest {
     }
 
     @Test
+    fun toggleConfirmProductionWarnings_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = MobileDesignState(onConfirmProductionWarningsChange = { seen += it })
+        // Off by default: sudo is a warning and half of what gets typed on a production box.
+        assertEquals(false, s.confirmProductionWarnings)
+        s.toggleConfirmProductionWarnings()
+        assertEquals(true, s.confirmProductionWarnings)
+        s.toggleConfirmProductionWarnings()
+        assertEquals(false, s.confirmProductionWarnings)
+        // Reported outward on every flip, or the setting would not survive a restart.
+        assertEquals(listOf(true, false), seen)
+        assertTrue(MobileDesignState(initialConfirmProductionWarnings = true).confirmProductionWarnings)
+    }
+
+    @Test
     fun chooseTerminalFont_updates_and_reports_once_skipping_repeat() {
         val seen = mutableListOf<TerminalFont>()
         val s = MobileDesignState(onTerminalFontChange = { seen += it })

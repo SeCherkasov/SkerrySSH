@@ -42,6 +42,24 @@ class BroadcastControllerTest {
     }
 
     @Test
+    fun a_fan_out_reaching_production_is_confirmed_first() {
+        val c = BroadcastController()
+        val all = listOf(
+            BroadcastTarget("prod", "web-prod", production = true, send = { true }),
+            BroadcastTarget("stage", "web-stage", send = { true }),
+        )
+
+        c.toggle("stage")
+        assertFalse(c.needsProductionConfirmation("uptime", all))
+        c.toggle("prod")
+        assertTrue(c.needsProductionConfirmation("uptime", all))
+        // Nothing to confirm for a command that send() would refuse anyway.
+        assertFalse(c.needsProductionConfirmation("   ", all))
+        // The production session closed since it was picked: the fan-out no longer reaches one.
+        assertFalse(c.needsProductionConfirmation("uptime", all.filter { it.id == "stage" }))
+    }
+
+    @Test
     fun nothing_is_selected_initially() {
         val c = BroadcastController()
         val (all, _) = targets("a", "b")

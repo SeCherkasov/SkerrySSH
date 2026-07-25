@@ -61,11 +61,8 @@ import app.skerry.ui.generated.resources.term_broadcast_subtitle
 import app.skerry.ui.generated.resources.term_broadcast_title
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
-import app.skerry.ui.design.ConfirmActionDialog
 import app.skerry.ui.host.ProdBadge
-import app.skerry.ui.generated.resources.guard_prod_broadcast_confirm
-import app.skerry.ui.generated.resources.guard_prod_broadcast_message
-import app.skerry.ui.generated.resources.guard_prod_broadcast_title
+import app.skerry.ui.host.ProdBroadcastDialog
 
 /**
  * Every connected terminal a broadcast can reach: top-level tabs and their split panes, VNC tabs
@@ -131,7 +128,7 @@ internal fun BroadcastPanel(
             command = ""
         }
     }
-    val submit = { if (productionSelected > 0 && command.isNotBlank()) confirmProduction = true else deliver() }
+    val submit = { if (controller.needsProductionConfirmation(command, targets)) confirmProduction = true else deliver() }
 
     ModalScrim(onDismiss = onDismiss, contentAlignment = Alignment.TopCenter) {
         Column(
@@ -179,10 +176,9 @@ internal fun BroadcastPanel(
         }
     }
     if (confirmProduction) {
-        ConfirmActionDialog(
-            title = stringResource(Res.string.guard_prod_broadcast_title),
-            message = stringResource(Res.string.guard_prod_broadcast_message, productionSelected),
-            confirmLabel = stringResource(Res.string.guard_prod_broadcast_confirm),
+        ProdBroadcastDialog(
+            command = command,
+            productionCount = productionSelected,
             onConfirm = { confirmProduction = false; deliver() },
             onDismiss = { confirmProduction = false },
         )

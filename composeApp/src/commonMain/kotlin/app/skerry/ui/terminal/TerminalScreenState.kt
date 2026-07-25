@@ -521,27 +521,24 @@ class TerminalScreenState(
     // UI from the session's host profile (see [app.skerry.ui.host.isProdHostId]) and kept live, so
     // adding or removing the tag arms/disarms an open session.
 
+    // The hold/confirm/dismiss rules live in [ProductionGuardHold]; what belongs here is only what
+    // is terminal-specific — which candidates a path offers, and how a held block is replayed.
+    private val guard = ProductionGuardHold()
+
     /**
      * What the production guard asks about in this session (host tag, root login, the
      * confirm-warnings setting). [ProductionGuardPolicy.Off] — no guard at all.
      */
-    var guardPolicy: ProductionGuardPolicy by mutableStateOf(ProductionGuardPolicy.Off)
+    var guardPolicy: ProductionGuardPolicy
+        get() = guard.policy
+        set(value) { guard.policy = value }
 
     /** Command held by the guard, awaiting the user's confirmation; `null` when nothing is pending. */
-    var pendingGuarded: GuardedCommand? by mutableStateOf(null)
-        private set
-
-    /** The exact input block that was held, replayed verbatim on confirmation. */
-    private var heldInput: String? = null
-
-    /** Where the held input came from — it is replayed exactly the way that path would send it. */
-    private enum class HeldInput { Typed, Command, Paste }
-
-    private var heldFrom: HeldInput = HeldInput.Typed
+    val pendingGuarded: GuardedCommand? get() = guard.pending
 
     /**
      * Holds [text] when it would run a risky command on a production session; `true` means nothing
-     * was sent and [pendingGuarded] now carries what to confirm.
+     * was sent (see [ProductionGuardHold.hold] for when a held block is dropped instead).
      *
      * Only an input block containing Enter can run something, so that is the only thing held —
      * typing itself stays live (a half-typed line the user is still editing must keep echoing).
@@ -552,25 +549,16 @@ class TerminalScreenState(
      * command recalled with arrow-up, where nothing was typed at all).
      */
     private fun holdForProductionGuard(text: String): Boolean {
-        if (!guardPolicy.production || altScreen) return false
-        val enter = text.indexOfFirst { it == '\r' || it == '\n' }
-        if (enter < 0) return false
-        // The first line continues whatever is already on the shell line; the rest of the block
-        // stands on its own. A soft-keyboard delta or an IME clipboard insert arrives whole, so a
-        // risky command can sit on any line of it, not just the first.
-        val lines = text.split('\n', '\r')
-        val typed = listOf(autocomplete.currentLine + lines.first()) + lines.drop(1)
-        val guarded = ProductionGuard.inspect(
-            ProductionGuard.promptCandidates(screenLineToCursor()) + typed,
-            guardPolicy,
-        ) ?: return false
-        // One command is held at a time. A second risky one arriving while the dialog is still up
-        // is dropped, not sent: confirming a dialog that shows command A must never run command B.
-        if (pendingGuarded != null) return true
-        pendingGuarded = guarded
-        heldInput = text
-        heldFrom = HeldInput.Typed
-        return true
+        if (altScreen) return false
+        if (text.none { it == '\r' || it == '\n' }) return false
+        return guard.hold(text, HeldInputSource.Typed) {
+            // The first line continues whatever is already on the shell line; the rest of the block
+            // stands on its own. A soft-keyboard delta or an IME clipboard insert arrives whole, so
+            // a risky command can sit on any line of it, not just the first.
+            val lines = ProductionGuard.candidatesOf(text)
+            val typed = listOf(autocomplete.currentLine + lines.first()) + lines.drop(1)
+            ProductionGuard.promptCandidates(screenLineToCursor()) + typed
+        }
     }
 
     /**
@@ -580,31 +568,17 @@ class TerminalScreenState(
      * session is not production or the command is harmless.
      */
     fun sendUserInputGuarded(text: String) {
-        if (guardPolicy.production) {
-            val guarded = ProductionGuard.inspect(text.split('\n', '\r'), guardPolicy)
-            if (guarded != null) {
-                // Same one-at-a-time rule as [holdForProductionGuard]: a command arriving while a
-                // confirmation is up is dropped rather than slipped past the open dialog.
-                if (pendingGuarded != null) return
-                pendingGuarded = guarded
-                heldInput = text
-                heldFrom = HeldInput.Command
-                return
-            }
-        }
+        if (guard.hold(text, HeldInputSource.Command) { ProductionGuard.candidatesOf(text) }) return
         sendUserInput(text)
     }
 
     /** Run the held command: replays the original input exactly as the path it came from would. */
     fun confirmGuardedCommand() {
-        val text = heldInput ?: return
-        val from = heldFrom
-        pendingGuarded = null
-        heldInput = null
-        when (from) {
-            HeldInput.Typed -> deliverTypedInput(text)
-            HeldInput.Command -> sendUserInput(text)
-            HeldInput.Paste -> deliverPaste(text)
+        val held = guard.take() ?: return
+        when (held.from) {
+            HeldInputSource.Typed -> deliverTypedInput(held.text)
+            HeldInputSource.Command -> sendUserInput(held.text)
+            HeldInputSource.Paste -> deliverPaste(held.text)
         }
     }
 
@@ -613,10 +587,7 @@ class TerminalScreenState(
      * as they were typed) ready to be edited; a pasted or ready-made command never reached the
      * host, so dismissing discards it outright.
      */
-    fun dismissGuardedCommand() {
-        pendingGuarded = null
-        heldInput = null
-    }
+    fun dismissGuardedCommand() = guard.dismiss()
 
     /**
      * Visible cursor row up to the cursor column — the shell line as the user sees it, prompt
@@ -1058,14 +1029,14 @@ class TerminalScreenState(
         // A paste carrying a newline runs the moment it lands — on a production session it goes
         // through the same confirmation as a typed command. A paste without one only fills the
         // shell line, and the Enter that would run it is guarded separately ([typeInput]).
-        if (guardPolicy.production && pendingGuarded == null && text.any { it == '\n' || it == '\r' }) {
-            val guarded = ProductionGuard.inspect(text.split('\n', '\r'), guardPolicy)
-            if (guarded != null) {
-                pendingGuarded = guarded
-                heldInput = text
-                heldFrom = HeldInput.Paste
-                return
-            }
+        // The password-prompt exemption is [typeInput]'s, for the same reason: a manager pastes the
+        // secret with a trailing newline, and holding it would print it in the dialog.
+        // A middle-click paste arrives through a raw pointer handler the modal scrim never sees, so
+        // this is the only place that can stop one while a confirmation is open.
+        if (guardPolicy.production && !session.echoSuppressed && !atPasswordPrompt() &&
+            text.any { it == '\n' || it == '\r' }
+        ) {
+            if (guard.hold(text, HeldInputSource.Paste) { ProductionGuard.candidatesOf(text) }) return
         }
         deliverPaste(text)
     }

@@ -225,6 +225,7 @@ import app.skerry.ui.host.ProdConnectDialog
 import app.skerry.ui.host.ProdConnectRequest
 import app.skerry.ui.host.prodConnectGate
 import app.skerry.ui.host.ProdCommandGate
+import app.skerry.ui.host.prodGuardDialogOpen
 import app.skerry.ui.host.ProdGuardSync
 import app.skerry.ui.host.rememberProductionLookup
 
@@ -664,8 +665,9 @@ private fun DesktopChrome(
     // SnippetManager.run parks them in the dialog and only then hands the line over.
     val runSnippetOnHost = remember(sessions, credentials, hostManager, state) {
         { host: Host, line: String ->
-            // snippet = true: the confirmation says the command runs the moment the session opens.
-            prodConnect = prodConnectGate(host, snippet = true) { connectOrAsk(PendingAuth.Snippet(host, line)) }
+            // The line goes into the confirmation: it runs the moment the session opens, before the
+            // session's own guard is bound to it, so this dialog is where it has to be read.
+            prodConnect = prodConnectGate(host, snippetLine = line) { connectOrAsk(PendingAuth.Snippet(host, line)) }
         }
     }
 
@@ -727,7 +729,11 @@ private fun DesktopChrome(
                     state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null ||
                     // The snippet-variable confirmation dialog is modal too: a hotkey firing over it
                     // would type into the terminal under the dialog or race the pending run.
-                    snippets?.pendingRun != null
+                    snippets?.pendingRun != null ||
+                    // Same for both production-guard dialogs. This handler runs on the root's
+                    // preview pass, above the focus their scrim takes, so a snippet chord would
+                    // otherwise reach the production shell while the user is reading the question.
+                    prodConnect != null || prodGuardDialogOpen(sessions?.active)
                 ) false
                 else {
                     val shortcut = matchDesktopShortcut(

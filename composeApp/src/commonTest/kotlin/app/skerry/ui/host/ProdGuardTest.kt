@@ -5,6 +5,7 @@ import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.mobile.MobileConnectAction
 import app.skerry.ui.mobile.mobileConnectAction
 import app.skerry.ui.mobile.mobileProdConfirmNeeded
+import app.skerry.ui.mobile.mobileResolvedAction
 import app.skerry.shared.ssh.ConnectionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -42,16 +43,42 @@ class ProdGuardTest {
         assertFalse(connected) // nothing happens until the user confirms
         assertNotNull(request)
         assertEquals("web-01", request.host.label)
-        assertFalse(request.snippet)
+        assertNull(request.snippetLine)
 
         request.proceed()
         assertTrue(connected)
     }
 
     @Test
-    fun the_snippet_path_is_marked_so_the_dialog_can_say_the_command_runs_on_connect() {
-        val request = prodConnectGate(host("prod"), snippet = true) {}
-        assertEquals(true, request?.snippet)
+    fun the_snippet_path_carries_its_command_into_the_dialog() {
+        // It runs the moment the session opens, before the session's own guard is bound to it, so
+        // the connect confirmation is the only place the command can be read.
+        val request = prodConnectGate(host("prod"), snippetLine = "systemctl stop nginx\n") {}
+        assertEquals("systemctl stop nginx\n", request?.snippetLine)
+        assertNotNull(prodDisplayRisk("systemctl stop nginx\n")?.assessment?.reason)
+        assertNull(prodDisplayRisk("uptime\n"))
+    }
+
+    @Test
+    fun the_root_login_rule_reads_the_profile_username() {
+        assertTrue(isRootLogin(host("prod")))
+        assertTrue(isRootLogin(host("prod").copy(username = " Root ")))
+        assertFalse(isRootLogin(host("prod").copy(username = "deploy")))
+        assertFalse(isRootLogin(null))
+    }
+
+    @Test
+    fun the_policy_of_a_session_follows_its_host_profile() {
+        val prod = prodGuardPolicy(host("prod"), confirmWarnings = true)
+        assertTrue(prod.production)
+        assertTrue(prod.confirmWarnings)
+        assertTrue(prod.rootLogin)
+
+        val staging = prodGuardPolicy(host("staging").copy(username = "deploy"), confirmWarnings = false)
+        assertFalse(staging.production)
+        assertFalse(staging.rootLogin)
+        // An ad-hoc session with no saved profile is never guarded.
+        assertFalse(prodGuardPolicy(null, confirmWarnings = true).production)
     }
 
     @Test
@@ -78,6 +105,26 @@ class ProdGuardTest {
         // A dead session is reopened, not resumed — that IS a new connection and asks again.
         val dead = mobileConnectAction(ConnectionUiState.Form)
         assertTrue(mobileProdConfirmNeeded(production = true, isVnc = false, action = dead))
+    }
+
+    @Test
+    fun mobile_carries_the_decision_from_the_question_to_the_answer() {
+        // Whatever was decided when the dialog opened is what runs on OK — the session list is not
+        // re-read to decide again, or the connect would act on a state the user never saw.
+        assertEquals(
+            MobileConnectAction.OpenFresh,
+            mobileResolvedAction(MobileConnectAction.OpenFresh, stillLive = true),
+        )
+        assertEquals(
+            MobileConnectAction.Resume,
+            mobileResolvedAction(MobileConnectAction.Resume, stillLive = true),
+        )
+        // The single exception: the session died while the confirmation was up, so there is nothing
+        // left to resume onto.
+        assertEquals(
+            MobileConnectAction.OpenFresh,
+            mobileResolvedAction(MobileConnectAction.Resume, stillLive = false),
+        )
     }
 
     @Test

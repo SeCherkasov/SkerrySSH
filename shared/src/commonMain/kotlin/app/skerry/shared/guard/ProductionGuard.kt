@@ -102,6 +102,17 @@ object ProductionGuard {
         inspect(listOf(command), policy)
 
     /**
+     * Candidates from one input block (a paste, an IME commit, a ready-made command). Both caps are
+     * applied while splitting, not after: a multi-megabyte paste would otherwise materialize a
+     * String per line before [inspect] ever gets to drop them.
+     */
+    fun candidatesOf(text: String): List<String> =
+        text.lineSequence()
+            .take(MAX_GUARDED_CANDIDATES)
+            .map { it.take(MAX_GUARDED_COMMAND_LENGTH) }
+            .toList()
+
+    /**
      * Whether [assessment] crosses the bar set by [policy]. Danger always does. Warn does when the
      * user asked for it, or when the session is root and the command destroys data — see
      * [ProductionGuardPolicy] for why root changes the answer. `sudo` under root is dropped

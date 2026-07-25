@@ -1290,6 +1290,92 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `a paste is dropped while a confirmation is open`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.typeInput("rm -rf /var/lib\r")
+        // Middle-click paste lands on the terminal surface through a raw pointer handler, which the
+        // modal scrim does not consume — it must not slip past the open dialog.
+        state.paste("shutdown now\n")
+
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        assertEquals(emptyList(), session.sent.toList())
+        state.confirmGuardedCommand()
+        assertContentEquals("rm -rf /var/lib\r".encodeToByteArray(), session.sent.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a harmless paste is dropped while a confirmation is open too`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.typeInput("rm -rf /var/lib\r")
+        state.paste("uptime\n")
+
+        // Harmless or not, it would run on the production shell under a dialog asking about
+        // something else entirely.
+        assertEquals(emptyList(), session.sent.toList())
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a pasted password is never held or shown by the guard`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // Same rule as typing one: a password manager pastes the secret with a trailing newline, and
+        // a passphrase can look like anything — parking it in the dialog would print it on screen.
+        session.emit("sudo password for root: ".encodeToByteArray())
+        state.paste("sudo rm -rf everything\n")
+
+        assertEquals(null, state.pendingGuarded)
+        assertEquals(1, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a harmless typed command is not sent while a confirmation is open`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.typeInput("rm -rf /var/lib\r")
+        state.typeInput("uptime\r")
+
+        // Nothing runs on a production shell while the user is answering a question about a
+        // different command — the dialog is not a queue.
+        assertEquals(emptyList(), session.sent.toList())
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a harmless ready-made command is dropped while a confirmation is open`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.sendUserInputGuarded("rm -rf /var/lib\n")
+        // A snippet hotkey fires from the window root, above the modal scrim's focus.
+        state.sendUserInputGuarded("uptime\n")
+
+        assertEquals(emptyList(), session.sent.toList())
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    @Test
     fun `empty selection produces no copyable text`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
