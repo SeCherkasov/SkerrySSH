@@ -31,4 +31,5 @@
 
     <!-- 会话标签：空白标签的默认标题 (SessionsController.openBlank caller) -->
     <string name="shtail_new_tab">新标签页</string>
+    <string name="shtail_nav_trash">回收站</string>
 </resources>

@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.emptyFlow
  * In-memory server stub for [SyncEngine] tests: pull returns [serverRecords] once (cursor 0->1),
  * push accumulates into [pushed]. Auth/pairing methods are unused by the engine and throw.
  */
-internal class FakeSyncClient(var serverRecords: List<RemoteRecord> = emptyList()) : SyncClient {
+internal open class FakeSyncClient(var serverRecords: List<RemoteRecord> = emptyList()) : SyncClient {
     val pushed = mutableListOf<RemoteRecord>()
     override suspend fun pull(session: SyncSession, since: Long): RecordPage =
         if (since < 1) RecordPage(serverRecords, 1) else RecordPage(emptyList(), 1)

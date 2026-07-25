@@ -1,6 +1,7 @@
 package app.skerry.shared.tunnel
 
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.TrashStore
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecordCodec
 
@@ -12,9 +13,13 @@ import app.skerry.shared.vault.VaultRecordCodec
  * Tunnels have no order (the interface has set semantics); returned in [Vault.records] order.
  * Reading a locked vault yields an empty list; a corrupt payload is silently skipped.
  */
-class VaultTunnelStore(private val vault: Vault) : TunnelStore {
+class VaultTunnelStore(
+    private val vault: Vault,
+    /** Trash to snapshot deletions into; opt-in — see [app.skerry.shared.host.VaultHostStore]. */
+    trash: TrashStore? = null,
+) : TunnelStore {
 
-    private val codec = VaultRecordCodec(vault, RecordType.TUNNEL, Tunnel.serializer())
+    private val codec = VaultRecordCodec(vault, RecordType.TUNNEL, Tunnel.serializer(), trash) { it.label }
 
     override fun all(): List<Tunnel> {
         if (!vault.isUnlocked) return emptyList()

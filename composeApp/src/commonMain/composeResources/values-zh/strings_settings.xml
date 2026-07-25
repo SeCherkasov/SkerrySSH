@@ -209,4 +209,20 @@
     <string name="settings_update_status">更新 %1$s</string>
     <string name="settings_terminal_section_local_shell">本地 Shell</string>
     <string name="settings_local_shell_desc">运行本地终端会话所用的 Shell。留空则使用默认 Shell。</string>
+    <string name="settings_trash_subtitle">已删除的主机、密钥、代码片段和隧道。</string>
+    <string name="settings_trash_title">回收站</string>
+    <string name="settings_trash_empty">回收站为空</string>
+    <string name="settings_trash_empty_hint">删除的主机、密钥、代码片段和隧道会保留在这里，30 天后彻底清除。</string>
+    <string name="settings_trash_restore">恢复</string>
+    <string name="settings_trash_forget">永久删除</string>
+    <string name="settings_trash_empty_all">清空回收站</string>
+    <string name="settings_trash_days_left">剩余 %1$d 天</string>
+    <string name="settings_trash_gone">该条目已不在回收站中</string>
+    <string name="settings_trash_confirm_forget">永久删除“%1$s”？此操作无法撤销。</string>
+    <string name="settings_trash_confirm_empty">清空回收站？其中的内容将被永久删除。</string>
+    <string name="settings_trash_kind_host">主机</string>
+    <string name="settings_trash_kind_credential">密钥</string>
+    <string name="settings_trash_kind_snippet">代码片段</string>
+    <string name="settings_trash_kind_tunnel">隧道</string>
+    <string name="settings_trash_locked">解锁保险库以查看回收站</string>
 </resources>

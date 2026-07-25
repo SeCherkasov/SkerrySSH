@@ -1,6 +1,7 @@
 package app.skerry.shared.sync
 
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.trashRecordId
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -42,5 +43,25 @@ class SyncSettingsTest {
             .forEach { assertFalse(s.shouldSync(it), "$it must be gated by syncHosts") }
         assertTrue(s.shouldSync(RecordType.SETTINGS), "settings record always syncs")
         assertTrue(s.shouldSync(RecordType.SNIPPET), "snippet independent of syncHosts")
+    }
+
+    @Test
+    fun `a trash snapshot follows the toggle of the type it holds`() {
+        val noSnippets = SyncSettings(syncSnippets = false)
+        assertFalse(noSnippets.shouldSync(RecordType.TRASH, trashRecordId(RecordType.SNIPPET, "s-1")))
+        assertTrue(noSnippets.shouldSync(RecordType.TRASH, trashRecordId(RecordType.HOST, "h-1")))
+
+        val noHosts = SyncSettings(syncHosts = false)
+        assertFalse(noHosts.shouldSync(RecordType.TRASH, trashRecordId(RecordType.HOST, "h-1")))
+        assertTrue(noHosts.shouldSync(RecordType.TRASH, trashRecordId(RecordType.SNIPPET, "s-1")))
+    }
+
+    @Test
+    fun `a trash id we cannot read syncs only when everything syncs`() {
+        // Conservative: a snapshot whose origin type is unknown (older/newer format) leaves the
+        // device only if no category is gated, so a disabled toggle can't leak through the trash.
+        assertTrue(SyncSettings().shouldSync(RecordType.TRASH, "garbage"))
+        assertFalse(SyncSettings(syncSnippets = false).shouldSync(RecordType.TRASH, "garbage"))
+        assertFalse(SyncSettings(syncHosts = false).shouldSync(RecordType.TRASH, "garbage"))
     }
 }

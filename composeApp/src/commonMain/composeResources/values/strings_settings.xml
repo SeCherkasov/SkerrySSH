@@ -209,4 +209,20 @@
     <string name="settings_update_status">Update %1$s</string>
     <string name="settings_terminal_section_local_shell">Local shell</string>
     <string name="settings_local_shell_desc">Shell run for local terminal sessions. Leave blank to use your default shell.</string>
+    <string name="settings_trash_subtitle">Deleted hosts, keys, snippets and tunnels.</string>
+    <string name="settings_trash_title">Trash</string>
+    <string name="settings_trash_empty">The trash is empty</string>
+    <string name="settings_trash_empty_hint">Deleted hosts, keys, snippets and tunnels land here and are removed for good after 30 days.</string>
+    <string name="settings_trash_restore">Restore</string>
+    <string name="settings_trash_forget">Delete forever</string>
+    <string name="settings_trash_empty_all">Empty trash</string>
+    <string name="settings_trash_days_left">%1$d d left</string>
+    <string name="settings_trash_gone">This item is no longer in the trash</string>
+    <string name="settings_trash_confirm_forget">Delete “%1$s” for good? This can’t be undone.</string>
+    <string name="settings_trash_confirm_empty">Empty the trash? Everything in it is deleted for good.</string>
+    <string name="settings_trash_kind_host">Host</string>
+    <string name="settings_trash_kind_credential">Key</string>
+    <string name="settings_trash_kind_snippet">Snippet</string>
+    <string name="settings_trash_kind_tunnel">Tunnel</string>
+    <string name="settings_trash_locked">Unlock the vault to see the trash</string>
 </resources>

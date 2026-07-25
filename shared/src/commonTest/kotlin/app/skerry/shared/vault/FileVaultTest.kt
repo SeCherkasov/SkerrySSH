@@ -260,6 +260,38 @@ class FileVaultTest {
     }
 
     @Test
+    fun `putAtLeast lifts the version above a tombstone this device already compacted`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("host-1", RecordType.HOST, "v1".encodeToByteArray())
+        }
+        v.remove("host-1") // tombstone version 2 — other devices may still hold it
+        v.compact(listOf("host-1")) // locally forgotten, so a plain put would restart at version 1
+
+        v.putAtLeast("host-1", RecordType.HOST, "restored".encodeToByteArray(), minVersion = 3)
+
+        val record = v.records().first { it.id == "host-1" }
+        assertEquals(3L, record.version)
+        assertFalse(record.deleted)
+        // The blob must authenticate against the lifted version (AAD binds it), or the record
+        // would be unreadable here and rejected by every other device on merge.
+        assertContentEquals("restored".encodeToByteArray(), v.openPayload("host-1"))
+    }
+
+    @Test
+    fun `putAtLeast keeps the normal increment when the record is already newer`() = vaultTest {
+        val v = vault().apply {
+            create("master".toCharArray())
+            put("host-1", RecordType.HOST, "v1".encodeToByteArray())
+            put("host-1", RecordType.HOST, "v2".encodeToByteArray())
+        }
+
+        v.putAtLeast("host-1", RecordType.HOST, "v3".encodeToByteArray(), minVersion = 2)
+
+        assertEquals(3L, v.records().first { it.id == "host-1" }.version)
+    }
+
+    @Test
     fun `changePassword throws while the vault is locked`() = vaultTest {
         val v = vault().apply { create("master".toCharArray()); lock() }
 

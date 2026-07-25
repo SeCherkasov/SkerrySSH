@@ -191,6 +191,19 @@ interface Vault {
     fun put(id: String, type: RecordType, payload: ByteArray)
 
     /**
+     * [put] with a version floor: the stored record gets `max(current + 1, minVersion)`. Used to
+     * restore a record from the trash ([TrashStore.restore]) — the tombstone that deleted it may
+     * still exist on devices that haven't compacted it, and a plain [put] on a device that already
+     * did would restart at version 1 and lose LWW against them, deleting the record again.
+     *
+     * The default just delegates to [put] (fakes/vaults without versioned restore); file vaults
+     * override it.
+     */
+    fun putAtLeast(id: String, type: RecordType, payload: ByteArray, minVersion: Long) {
+        put(id, type, payload)
+    }
+
+    /**
      * Soft-deletes a record (tombstone): `deleted=true`, `version++`. The tombstone blob is
      * re-sealed with an **empty** payload so its bumped version and `deleted=true` are covered by
      * the AEAD tag (other devices authenticate the deletion) and the deleted secret doesn't linger

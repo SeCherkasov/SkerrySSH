@@ -20,4 +20,5 @@
     <string name="more_biometric_verify_title">Проверка разблокировки</string>
     <string name="more_biometric_verify_subtitle">Ещё одно касание — проверяем разблокировку.</string>
     <string name="more_about">О приложении</string>
+    <string name="more_trash">Корзина</string>
 </resources>
