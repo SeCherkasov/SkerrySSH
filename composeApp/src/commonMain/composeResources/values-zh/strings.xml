@@ -57,6 +57,19 @@
     <!-- 复制到剪贴板提示 -->
     <string name="terminal_copied">已复制</string>
 
+    <!-- 终端输出搜索面板 -->
+    <string name="terminal_search_placeholder">在输出中查找</string>
+    <string name="terminal_search_counter">%1$d/%2$d</string>
+    <string name="terminal_search_counter_capped">%1$d/%2$d+</string>
+    <string name="terminal_search_no_matches">无匹配</string>
+    <string name="terminal_search_invalid_pattern">表达式无效</string>
+    <string name="terminal_search_too_complex">表达式过于复杂</string>
+    <string name="terminal_search_match_case">区分大小写</string>
+    <string name="terminal_search_regex">正则表达式</string>
+    <string name="terminal_search_next">下一个匹配</string>
+    <string name="terminal_search_prev">上一个匹配</string>
+    <string name="terminal_search_close">关闭搜索</string>
+
     <!-- 扫码配对（移动端） -->
     <string name="qr_scan_hint">将摄像头对准另一设备上显示的二维码。</string>
     <string name="qr_permission_needed">需要相机权限才能扫描配对码。</string>

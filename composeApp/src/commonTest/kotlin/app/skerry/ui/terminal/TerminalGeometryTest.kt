@@ -15,6 +15,52 @@ class TerminalGeometryTest {
     // space (after verticalScroll and padding in the modifier chain), so mapping is a plain division.
     private val metrics = TerminalMetrics(cellWidth = 8f, cellHeight = 18f)
 
+    // --- visibleRowWindow: which rows the draw pass (and the search highlight) covers ---
+
+    @Test
+    fun `the visible window keeps a row of slack on each side`() {
+        // Rows 10..19 sit in a 180px viewport scrolled to 180px; the window has to include the
+        // partially visible rows above and below, which the draw pass also paints.
+        assertEquals(9..21, visibleRowWindow(scrollPx = 180f, viewportPx = 180f, cellHeight = 18f, rowCount = 100))
+    }
+
+    @Test
+    fun `the visible window is clamped to the buffer`() {
+        assertEquals(0..11, visibleRowWindow(scrollPx = 0f, viewportPx = 180f, cellHeight = 18f, rowCount = 100))
+        assertEquals(0..4, visibleRowWindow(scrollPx = 0f, viewportPx = 180f, cellHeight = 18f, rowCount = 5))
+        assertTrue(visibleRowWindow(scrollPx = 0f, viewportPx = 180f, cellHeight = 18f, rowCount = 0).isEmpty())
+    }
+
+    // --- scrollToRow: bringing a search hit into view ---
+
+    @Test
+    fun `a row already in view needs no scrolling`() {
+        // Viewport 180px = 10 rows starting at row 5 (scroll 90): row 8 is on screen.
+        assertNull(scrollToRow(row = 8, currentScroll = 90, viewportPx = 180f, maxScroll = 1000, cellHeight = 18f))
+    }
+
+    @Test
+    fun `a row above the viewport is centered`() {
+        // Row 2 (top 36px) with a 180px viewport: centered means 36 - (180-18)/2 = -45 → clamped to 0.
+        assertEquals(0, scrollToRow(row = 2, currentScroll = 400, viewportPx = 180f, maxScroll = 1000, cellHeight = 18f))
+        // Row 30 (top 540px): 540 - 81 = 459.
+        assertEquals(459, scrollToRow(row = 30, currentScroll = 900, viewportPx = 180f, maxScroll = 1000, cellHeight = 18f))
+    }
+
+    @Test
+    fun `a row below the viewport is centered and clamped to the scroll range`() {
+        assertEquals(459, scrollToRow(row = 30, currentScroll = 0, viewportPx = 180f, maxScroll = 1000, cellHeight = 18f))
+        // Deep at the bottom of the buffer: never past maxScroll.
+        assertEquals(1000, scrollToRow(row = 200, currentScroll = 0, viewportPx = 180f, maxScroll = 1000, cellHeight = 18f))
+    }
+
+    @Test
+    fun `a partially visible row at the bottom edge is scrolled into full view`() {
+        // Viewport [0,180): row 9 spans 162..180 exactly — visible; row 10 (180..198) is not.
+        assertNull(scrollToRow(row = 9, currentScroll = 0, viewportPx = 180f, maxScroll = 1000, cellHeight = 18f))
+        assertEquals(99, scrollToRow(row = 10, currentScroll = 0, viewportPx = 180f, maxScroll = 1000, cellHeight = 18f))
+    }
+
     @Test
     fun `fit scale grows the font when the pane is wider than the recording`() {
         // 80 cols x 24 rows at 8x18 px = 640x432; a 1280x864 pane (no padding) fits it twice over.

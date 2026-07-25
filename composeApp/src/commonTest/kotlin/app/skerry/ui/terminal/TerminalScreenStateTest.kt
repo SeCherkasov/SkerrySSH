@@ -6,6 +6,7 @@ import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TerminalPos
+import app.skerry.shared.terminal.TerminalSearchError
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import kotlinx.coroutines.CancellationException
@@ -237,6 +238,323 @@ class TerminalScreenStateTest {
         state.reverseSearchDeleteSelected()
         assertEquals(emptyList(), state.reverseSearchResults) // "gti" is no longer found
         assertEquals(listOf("git status"), snapshots.last()) // persisted without the typo
+        scope.cancel()
+    }
+
+    // --- Scrollback search (find in output) ---
+
+    @Test
+    fun `search finds matches in the buffer and selects one`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("alpha\r\nbeta\r\nalpha again\r\n".encodeToByteArray())
+        state.openSearch()
+        state.updateSearchQuery("alpha")
+
+        assertEquals(2, state.searchMatches.size)
+        assertEquals(true, state.currentMatch != null)
+        scope.cancel()
+    }
+
+    @Test
+    fun `search selects the last match at or above the anchor row`() = runTest {
+        // Opening search mid-history should land on the newest match the user can see, not on the
+        // oldest one at the top of the scrollback.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hit\r\nfiller\r\nhit\r\nfiller\r\nhit\r\n".encodeToByteArray())
+        state.openSearch(anchorRow = 2) // viewport bottom sits on the second "hit"
+        state.updateSearchQuery("hit")
+
+        assertEquals(1, state.searchIndex)
+        assertEquals(2, state.currentMatch?.row)
+        scope.cancel()
+    }
+
+    @Test
+    fun `next and previous cycle through matches`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hit\r\nhit\r\nhit\r\n".encodeToByteArray())
+        state.openSearch(anchorRow = 0)
+        state.updateSearchQuery("hit")
+
+        assertEquals(0, state.searchIndex)
+        state.searchNext()
+        assertEquals(1, state.searchIndex)
+        state.searchPrev()
+        assertEquals(0, state.searchIndex)
+        state.searchPrev() // wraps to the last match
+        assertEquals(2, state.searchIndex)
+        state.searchNext() // wraps back to the first
+        assertEquals(0, state.searchIndex)
+        scope.cancel()
+    }
+
+    @Test
+    fun `case sensitivity and regex toggles re-run the search`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("Error 404\r\nerror 500\r\n".encodeToByteArray())
+        state.openSearch()
+        state.updateSearchQuery("error")
+        assertEquals(2, state.searchMatches.size)
+
+        state.applySearchCase(true)
+        assertEquals(1, state.searchMatches.size)
+
+        state.applySearchCase(false)
+        state.updateSearchQuery("\\d{3}")
+        assertEquals(0, state.searchMatches.size) // still a literal search
+        state.applySearchRegex(true)
+        assertEquals(2, state.searchMatches.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `an invalid regex is reported without matches`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("anything\r\n".encodeToByteArray())
+        state.openSearch()
+        state.applySearchRegex(true)
+        state.updateSearchQuery("a(")
+
+        assertEquals(TerminalSearchError.InvalidPattern, state.searchError)
+        assertEquals(emptyList(), state.searchMatches)
+        assertEquals(null, state.currentMatch)
+        scope.cancel()
+    }
+
+    @Test
+    fun `new output refreshes matches while search is open`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var now = 0L
+        val state = TerminalScreenState(session, scope, nowMillis = { now })
+
+        session.emit("hit one\r\n".encodeToByteArray())
+        state.openSearch()
+        state.updateSearchQuery("hit")
+        assertEquals(1, state.searchMatches.size)
+
+        now += SEARCH_REFRESH_INTERVAL_MS + 1 // past the refresh throttle window
+        session.emit("hit two\r\n".encodeToByteArray())
+        assertEquals(2, state.searchMatches.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the selected match survives new output arriving`() = runTest {
+        // Output streaming in while the user is reading a hit must not silently jump the selection
+        // to another match (the viewport follows the selection).
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var now = 0L
+        val state = TerminalScreenState(session, scope, nowMillis = { now })
+
+        session.emit("hit one\r\nhit two\r\n".encodeToByteArray())
+        state.openSearch()
+        state.updateSearchQuery("hit")
+        state.searchPrev() // select the first (older) hit
+        val selected = state.currentMatch
+
+        now += SEARCH_REFRESH_INTERVAL_MS + 1
+        session.emit("hit three\r\n".encodeToByteArray())
+
+        assertEquals(selected, state.currentMatch)
+        assertEquals(3, state.searchMatches.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the match list refresh is throttled while output streams`() = runTest {
+        // A full pass over a deep scrollback costs tens of milliseconds and runs on the coroutine
+        // that feeds the emulator: rebuilding the list on every published snapshot would stall the
+        // terminal under streaming output. The visible highlight is computed by the render layer
+        // per frame, so a slightly stale list only shows up in the counter.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var now = 0L
+        val state = TerminalScreenState(session, scope, nowMillis = { now })
+
+        session.emit("hit one\r\n".encodeToByteArray())
+        state.openSearch()
+        state.updateSearchQuery("hit")
+        assertEquals(1, state.searchMatches.size)
+
+        session.emit("hit two\r\n".encodeToByteArray()) // same instant — throttled away
+        assertEquals(1, state.searchMatches.size)
+
+        now += SEARCH_REFRESH_INTERVAL_MS + 1
+        session.emit("hit three\r\n".encodeToByteArray())
+        assertEquals(3, state.searchMatches.size) // catches up on the next snapshot after the window
+        scope.cancel()
+    }
+
+    @Test
+    fun `stepping through matches refreshes the list first`() = runTest {
+        // Navigation must not walk a stale list: the user asked for the next hit, so the pass is
+        // worth running even mid-stream.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = { 0L }) // clock frozen: always throttled
+
+        session.emit("hit one\r\n".encodeToByteArray())
+        state.openSearch()
+        state.updateSearchQuery("hit")
+        session.emit("hit two\r\n".encodeToByteArray())
+        assertEquals(1, state.searchMatches.size)
+
+        state.searchNext()
+
+        assertEquals(2, state.searchMatches.size)
+        assertEquals(1, state.searchIndex) // moved onto the newly found hit
+        scope.cancel()
+    }
+
+    @Test
+    fun `the two search overlays never stay open together`() = runTest {
+        // Both are driven by keys, but only one owns the keyboard: the find bar's field takes focus,
+        // which strands the reverse-search overlay's key handling on the (now unfocused) terminal
+        // node — a visible panel that no longer reacts to anything.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, initialHistory = listOf("uptime"))
+
+        session.emit("hit\r\n".encodeToByteArray())
+        state.openReverseSearch()
+        state.openSearch()
+        assertEquals(null, state.reverseSearchQuery)
+
+        state.openReverseSearch()
+        assertEquals(null, state.searchQuery)
+        scope.cancel()
+    }
+
+    @Test
+    fun `an oversized query is capped`() = runTest {
+        // A stray paste (a whole log line, a file) is not a search term; an unbounded pattern also
+        // hands the regex compiler unbounded work.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val state = TerminalScreenState(FakeTerminalSession(), scope)
+
+        state.openSearch()
+        state.updateSearchQuery("x".repeat(MAX_SEARCH_QUERY_LENGTH + 500))
+
+        assertEquals(MAX_SEARCH_QUERY_LENGTH, state.searchQuery?.length)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the viewport anchor comes from the render layer`() = runTest {
+        // The scroll position lives in the composable, so it reports the row at the viewport bottom;
+        // an incremental search re-selects around that, not around the live cursor.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hit\r\nfiller\r\nhit\r\nfiller\r\nhit\r\n".encodeToByteArray())
+        state.setSearchAnchorRow(2) // user scrolled up: second "hit" is the last visible row
+        state.openSearch()
+        state.updateSearchQuery("hit")
+
+        assertEquals(2, state.currentMatch?.row)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing search drops the query and matches`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hit\r\n".encodeToByteArray())
+        state.openSearch()
+        state.updateSearchQuery("hit")
+        state.closeSearch()
+
+        assertEquals(null, state.searchQuery)
+        assertEquals(emptyList(), state.searchMatches)
+        assertEquals(null, state.currentMatch)
+        scope.cancel()
+    }
+
+    @Test
+    fun `output is not searched while the panel is closed`() = runTest {
+        // The buffer is walked on every published snapshot, so a closed panel must cost nothing.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        state.openSearch()
+        state.updateSearchQuery("hit")
+        state.closeSearch()
+        session.emit("hit\r\n".encodeToByteArray())
+
+        assertEquals(emptyList(), state.searchMatches)
+        scope.cancel()
+    }
+
+    @Test
+    fun `reopening search keeps the previous query`() = runTest {
+        // Reopening with the last query is how editors behave; the match list is rebuilt for the
+        // buffer as it is now.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hit\r\n".encodeToByteArray())
+        state.openSearch()
+        state.updateSearchQuery("hit")
+        state.closeSearch()
+        state.openSearch()
+
+        assertEquals("hit", state.searchQuery)
+        assertEquals(1, state.searchMatches.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `an empty query clears matches without erroring`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.emit("hit\r\n".encodeToByteArray())
+        state.openSearch()
+        state.updateSearchQuery("hit")
+        state.updateSearchQuery("")
+
+        assertEquals(emptyList(), state.searchMatches)
+        assertEquals(null, state.searchError)
+        assertEquals(-1, state.searchIndex)
+        scope.cancel()
+    }
+
+    @Test
+    fun `next and previous are no-ops without matches`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        state.openSearch()
+        state.updateSearchQuery("nothing here")
+        state.searchNext()
+        state.searchPrev()
+
+        assertEquals(-1, state.searchIndex)
+        assertEquals(null, state.currentMatch)
         scope.cancel()
     }
 
