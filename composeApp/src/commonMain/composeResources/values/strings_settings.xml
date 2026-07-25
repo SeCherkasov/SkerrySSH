@@ -182,6 +182,7 @@
     <string name="settings_kb_accept_autocomplete">Accept autocomplete suggestion</string>
     <string name="settings_kb_cycle_suggestions">Cycle suggestions</string>
     <string name="settings_kb_search_history">Search command history</string>
+    <string name="settings_kb_search_output">Find in output</string>
     <string name="settings_kb_copy_selection">Copy selection</string>
     <string name="settings_kb_paste">Paste</string>
     <string name="settings_kb_global">GLOBAL</string>

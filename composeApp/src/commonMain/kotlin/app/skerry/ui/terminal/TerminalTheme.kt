@@ -33,6 +33,16 @@ data class TerminalTheme(
 
     /** Glyph color under a block cursor (contrast against [cursor]). */
     val cursorText: Color get() = background
+
+    /**
+     * Wash over every search hit, drawn below glyphs like [selection]. Built from the theme's own
+     * yellow (ANSI 3) rather than a fixed color, so hits read as highlighter marks on dark and
+     * light themes alike and never collide with the cyan selection.
+     */
+    val searchMatch: Color get() = ansi[3].copy(alpha = 0.28f)
+
+    /** Wash over the selected hit — the same hue, strong enough to pick it out among the others. */
+    val searchCurrentMatch: Color get() = ansi[11].copy(alpha = 0.55f)
 }
 
 // The TerminalThemes catalog (NightSea, TokyoNight, … plus all/DEFAULT/fromId) is generated from
