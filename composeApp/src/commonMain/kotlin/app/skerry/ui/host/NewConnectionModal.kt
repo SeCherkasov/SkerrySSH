@@ -52,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import app.skerry.shared.container.ContainerEntry
+import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.capNotes
 import app.skerry.shared.ssh.ConnectionType
@@ -60,6 +62,10 @@ import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.ui.connection.ContainerBrowseController
+import app.skerry.ui.connection.ContainerBrowseProblem
+import app.skerry.ui.connection.ContainerBrowseStatus
+import app.skerry.ui.connection.containerBrowseFailureText
 import app.skerry.ui.connection.ConnectionTestController
 import app.skerry.ui.connection.ConnectionTestProblem
 import app.skerry.ui.connection.ConnectionTestStatus
@@ -71,6 +77,7 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
+import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.conn_auth_ask
 import app.skerry.ui.generated.resources.conn_auth_ask_desc
@@ -85,20 +92,30 @@ import app.skerry.ui.generated.resources.conn_auth_password_placeholder
 import app.skerry.ui.generated.resources.conn_auth_private_key
 import app.skerry.ui.generated.resources.conn_auth_select_credential
 import app.skerry.ui.generated.resources.conn_cancel
+import app.skerry.ui.generated.resources.conn_container_browse
+import app.skerry.ui.generated.resources.conn_container_empty
+import app.skerry.ui.generated.resources.conn_container_hint
+import app.skerry.ui.generated.resources.conn_container_loading
 import app.skerry.ui.generated.resources.conn_create
 import app.skerry.ui.generated.resources.conn_duplicate_name
 import app.skerry.ui.generated.resources.conn_field_ai_policy
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
+import app.skerry.ui.generated.resources.conn_field_container
+import app.skerry.ui.generated.resources.conn_field_container_shell
 import app.skerry.ui.generated.resources.conn_field_group
 import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_jump_host
 import app.skerry.ui.generated.resources.conn_field_keep_alive
 import app.skerry.ui.generated.resources.conn_field_name
+import app.skerry.ui.generated.resources.conn_field_namespace
+import app.skerry.ui.generated.resources.conn_field_pod
+import app.skerry.ui.generated.resources.conn_field_pod_container
 import app.skerry.ui.generated.resources.conn_field_notes
 import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_protocol
+import app.skerry.ui.generated.resources.conn_field_runtime
 import app.skerry.ui.generated.resources.conn_field_tags
 import app.skerry.ui.generated.resources.conn_field_username
 import app.skerry.ui.generated.resources.conn_footer_encrypted
@@ -107,10 +124,13 @@ import app.skerry.ui.generated.resources.conn_group_new_title
 import app.skerry.ui.generated.resources.conn_group_none
 import app.skerry.ui.generated.resources.conn_jump_none
 import app.skerry.ui.generated.resources.conn_notes_placeholder
+import app.skerry.ui.generated.resources.conn_protocol_container
 import app.skerry.ui.generated.resources.conn_protocol_local
 import app.skerry.ui.generated.resources.conn_protocol_serial
 import app.skerry.ui.generated.resources.conn_protocol_mosh
 import app.skerry.ui.generated.resources.conn_protocol_ssh
+import app.skerry.ui.generated.resources.conn_runtime_docker
+import app.skerry.ui.generated.resources.conn_runtime_kubernetes
 import app.skerry.ui.generated.resources.conn_protocol_telnet
 import app.skerry.ui.generated.resources.conn_protocol_vnc
 import app.skerry.ui.generated.resources.conn_telnet_plaintext_warning
@@ -193,6 +213,9 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
     // On transport change (new tester) or modal close, cancel the old tester's in-flight check,
     // otherwise an orphaned connection probe would keep the network busy until its own timeout.
     DisposableEffect(tester) { onDispose { tester?.reset() } }
+    // "Browse containers" rides the same probe transport as the test (read-only host-key verifier).
+    val browser = remember(transport, testScope) { transport?.let { ContainerBrowseController(it, testScope) } }
+    DisposableEffect(browser) { onDispose { browser?.reset() } }
     // Whether auth is ready for testing, WITHOUT materializing the secret (that's only assembled in
     // onClick, so the password/key copy lives just for the connect, not the whole time the modal is open).
     val hasTestSecret = when (form.authMode) {
@@ -206,9 +229,12 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
     val canTest = tester != null && form.connectionType.usesSshAuth && hasTestSecret &&
         form.address.isNotBlank() && form.username.isNotBlank() && form.portOrNull != null
     // Editing connection/auth fields invalidates the previous test result, it's no longer relevant.
+    // A listing belongs to one host/runtime/namespace too — the same edits make it stale.
     LaunchedEffect(form.address, form.username, form.port, form.authMode, form.existingCredentialId, form.password, form.privateKeyPem, form.passphrase, form.jumpHostId) {
         tester?.reset()
+        browser?.reset()
     }
+    LaunchedEffect(form.containerRuntime, form.containerNamespace) { browser?.reset() }
     // ProxyJump chain for "Test connection" — the probe must ride the same route as a real session,
     // so a broken chain fails the test with the same localized message as the connect dialogs.
     val testJump = resolveJumpChain(
@@ -288,6 +314,31 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                 if (form.connectionType.isVnc) {
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form, allowKey = false) }
+                }
+                // Container profiles: which container/pod on that host to enter. Sits after auth
+                // because "Browse" dials the host with exactly these credentials.
+                if (form.connectionType == ConnectionType.CONTAINER) {
+                    ContainerSection(
+                        form = form,
+                        browser = browser,
+                        onBrowse = {
+                            val auth = formSshAuth(form, credentials)
+                            val jump = (testJump as? JumpChainResolution.Resolved)?.jump
+                            when {
+                                auth == null || form.address.isBlank() || form.username.isBlank() || form.portOrNull == null ->
+                                    browser?.fail(ContainerBrowseProblem.INCOMPLETE_FORM)
+                                // An unresolvable jump chain can't be probed through; the precise
+                                // reason is what "Test connection" is for.
+                                testJump is JumpChainResolution.Unavailable ->
+                                    browser?.fail(ContainerBrowseProblem.CONNECTION_FAILED)
+                                else -> browser?.load(
+                                    SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim(), jump = jump),
+                                    auth,
+                                    form.containerSpec(),
+                                )
+                            }
+                        },
+                    )
                 }
                 Spacer14()
                 Field(stringResource(Res.string.conn_field_group)) { GroupPicker(form, allHosts) }
@@ -387,12 +438,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                     stringResource(Res.string.conn_test),
                     onClick = {
                         // Secret is materialized here (only for the connect's duration), target from form fields.
-                        val auth = when (form.authMode) {
-                            AuthMode.NEW_PASSWORD -> form.password.takeIf { it.isNotEmpty() }?.let { SshAuth.Password(it) }
-                            AuthMode.NEW_KEY -> form.privateKeyPem.takeIf { it.isNotBlank() }?.let { SshAuth.PublicKey(it, form.passphrase.ifBlank { null }) }
-                            AuthMode.EXISTING -> credentials?.credentials?.firstOrNull { it.id == form.existingCredentialId }?.toSshAuth()
-                            AuthMode.ASK -> null
-                        }
+                        val auth = formSshAuth(form, credentials)
                         if (canTest && auth != null) {
                             when (testJump) {
                                 is JumpChainResolution.Unavailable -> tester.fail(ConnectionTestProblem.Jump(testJump.problem))
@@ -546,6 +592,133 @@ private fun SerialPortPicker(form: NewConnectionFormState) {
     }
 }
 
+/**
+ * Auth for a form-side probe (test connection / container listing) — materialized at click time so
+ * the password/key copy lives only for the probe's duration, not for as long as the modal is open.
+ * `null` means "Ask every time" or an incomplete entry: nothing to dial with.
+ */
+private fun formSshAuth(form: NewConnectionFormState, credentials: CredentialManagerController?): SshAuth? =
+    when (form.authMode) {
+        AuthMode.NEW_PASSWORD -> form.password.takeIf { it.isNotEmpty() }?.let { SshAuth.Password(it) }
+        AuthMode.NEW_KEY -> form.privateKeyPem.takeIf { it.isNotBlank() }
+            ?.let { SshAuth.PublicKey(it, form.passphrase.ifBlank { null }) }
+        AuthMode.EXISTING -> credentials?.credentials?.firstOrNull { it.id == form.existingCredentialId }?.toSshAuth()
+        AuthMode.ASK -> null
+    }
+
+/**
+ * Container profile fields: runtime, what to enter (with "Browse" listing the host's containers),
+ * Kubernetes namespace/container, and the shell to run. [browser] is `null` on the mock/preview path
+ * (no live transport) — the field stays typeable, only listing is unavailable.
+ */
+@Composable
+private fun ContainerSection(
+    form: NewConnectionFormState,
+    browser: ContainerBrowseController?,
+    onBrowse: () -> Unit,
+) {
+    val kubernetes = form.containerRuntime == ContainerRuntime.KUBERNETES
+    Spacer14()
+    Field(stringResource(Res.string.conn_field_runtime)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            ProtocolSegment(stringResource(Res.string.conn_runtime_docker), "deployed_code", !kubernetes, Modifier.weight(1f)) {
+                form.containerRuntime = ContainerRuntime.DOCKER
+            }
+            ProtocolSegment(stringResource(Res.string.conn_runtime_kubernetes), "hub", kubernetes, Modifier.weight(1f)) {
+                form.containerRuntime = ContainerRuntime.KUBERNETES
+            }
+        }
+    }
+    Spacer14()
+    Field(if (kubernetes) stringResource(Res.string.conn_field_pod) else stringResource(Res.string.conn_field_container)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) {
+                ModalTextField(
+                    form.containerTarget, { form.containerTarget = it },
+                    if (kubernetes) "api-0" else "web or 9c1a2b3c4d5e",
+                    icon = "deployed_code",
+                )
+            }
+            GhostButton(stringResource(Res.string.conn_container_browse), onClick = onBrowse)
+        }
+    }
+    ContainerBrowseResults(browser) { entry ->
+        form.containerTarget = entry.name
+        // A single-container pod has no ambiguity to resolve; a multi-container one keeps the
+        // field empty (kubectl then picks the pod's first container) for the user to narrow down.
+        if (kubernetes) form.containerPodContainer = entry.containers.singleOrNull().orEmpty()
+        browser?.reset()
+    }
+    if (kubernetes) {
+        Spacer14()
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Field(stringResource(Res.string.conn_field_namespace), Modifier.weight(1f)) {
+                ModalTextField(form.containerNamespace, { form.containerNamespace = it }, "default")
+            }
+            Field(stringResource(Res.string.conn_field_pod_container), Modifier.weight(1f)) {
+                ModalTextField(form.containerPodContainer, { form.containerPodContainer = it }, "first container")
+            }
+        }
+    }
+    Spacer14()
+    Field(stringResource(Res.string.conn_field_container_shell)) {
+        ModalTextField(form.containerShell, { form.containerShell = it }, "sh", icon = "terminal")
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Sym("info", size = 14.sp, color = Skerry.colors.faint)
+        Txt(stringResource(Res.string.conn_container_hint), color = Skerry.colors.faint, size = 11.5.sp, lineHeight = 15.sp)
+    }
+}
+
+/** Result of "Browse": progress, the host's containers (click to pick), or a localized reason. */
+@Composable
+private fun ContainerBrowseResults(browser: ContainerBrowseController?, onPick: (ContainerEntry) -> Unit) {
+    when (val status = browser?.status ?: ContainerBrowseStatus.Idle) {
+        ContainerBrowseStatus.Idle -> {}
+        ContainerBrowseStatus.Loading -> BrowseNote("progress_activity", stringResource(Res.string.conn_container_loading), Skerry.colors.dim)
+        is ContainerBrowseStatus.Failure ->
+            BrowseNote("error", containerBrowseFailureText(status.problem), Skerry.colors.storm)
+        is ContainerBrowseStatus.Loaded ->
+            if (status.entries.isEmpty()) {
+                BrowseNote("info", stringResource(Res.string.conn_container_empty), Skerry.colors.dim)
+            } else {
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(7.dp))
+                        .background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
+                        .heightIn(max = 180.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                ) {
+                    status.entries.forEach { entry ->
+                        key(entry.name) {
+                            Row(
+                                Modifier.fillMaxWidth().clickable { onPick(entry) }.padding(horizontal = 11.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Txt(entry.name, color = Skerry.colors.text, size = 12.5.sp, modifier = Modifier.weight(1f))
+                                val detail = listOf(entry.image, entry.status, entry.containers.joinToString(","))
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" · ")
+                                if (detail.isNotEmpty()) Txt(detail, color = Skerry.colors.faint, size = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+    }
+}
+
+@Composable
+private fun BrowseNote(icon: String, text: String, color: Color) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Sym(icon, size = 14.sp, color = color)
+        Txt(text, color = color, size = 11.5.sp, lineHeight = 15.sp)
+    }
+}
+
 @Composable
 private fun ProtocolPicker(form: NewConnectionFormState) {
     Row(
@@ -573,6 +746,7 @@ private val ConnectionType.labelRes: StringResource
         ConnectionType.SERIAL -> Res.string.conn_protocol_serial
         ConnectionType.VNC -> Res.string.conn_protocol_vnc
         ConnectionType.LOCAL -> Res.string.conn_protocol_local
+        ConnectionType.CONTAINER -> Res.string.conn_protocol_container
     }
 
 /** One pill of the segmented protocol picker: the active one sits on a cyan backing. */

@@ -1,6 +1,9 @@
 package app.skerry.ui.connection
 
+import app.skerry.shared.container.ContainerRuntime
+import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.vault.Credential
@@ -39,6 +42,41 @@ class HostConnectTest {
     @Test
     fun subtitle_is_user_at_address_colon_port() {
         assertEquals("deploy@example.com:2222", host(address = "example.com", port = 2222, username = "deploy").connectionSubtitle())
+    }
+
+    @Test
+    fun container_target_carries_the_spec_and_the_host_fields() {
+        val profile = host().copy(
+            connectionType = ConnectionType.CONTAINER,
+            container = ContainerSpec(runtime = ContainerRuntime.DOCKER, target = "web"),
+        )
+        val target = profile.toTarget()
+        assertEquals(ConnectionType.CONTAINER, target.connectionType)
+        // The SSH fields still describe the host running the container CLI.
+        assertEquals("10.0.0.1", target.host)
+        assertEquals("root", target.username)
+        assertEquals(ContainerSpec(runtime = ContainerRuntime.DOCKER, target = "web"), target.container)
+    }
+
+    @Test
+    fun container_subtitle_names_the_container_and_its_host() {
+        val docker = host().copy(
+            connectionType = ConnectionType.CONTAINER,
+            container = ContainerSpec(runtime = ContainerRuntime.DOCKER, target = "web"),
+        )
+        assertEquals("web · root@10.0.0.1", docker.connectionSubtitle())
+
+        val pod = host().copy(
+            connectionType = ConnectionType.CONTAINER,
+            container = ContainerSpec(runtime = ContainerRuntime.KUBERNETES, target = "api-0", namespace = "prod"),
+        )
+        assertEquals("prod/api-0 · root@10.0.0.1", pod.connectionSubtitle())
+    }
+
+    @Test
+    fun container_subtitle_without_a_spec_falls_back_to_the_host() {
+        val broken = host().copy(connectionType = ConnectionType.CONTAINER)
+        assertEquals("root@10.0.0.1:22", broken.connectionSubtitle())
     }
 
     @Test

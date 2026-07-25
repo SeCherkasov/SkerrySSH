@@ -100,7 +100,8 @@ macOS)** и **Android**, паритет фич между платформами
 - **Подключения** — SSH с jump-хостами (ProxyJump) и SSH-сертификатами; Mosh; SFTP
   (двухпанельный commander со встроенным просмотром/редактированием файлов); port
   forwarding: local, remote, dynamic/SOCKS, плюс обнаружение слушающих сервисов с пробросом
-  в один тап; удалённый рабочий стол VNC; Telnet; serial (desktop и Android USB-OTG).
+  в один тап; удалённый рабочий стол VNC; exec в Docker и Kubernetes (выбор контейнера или
+  пода на хосте и вход в его shell); Telnet; serial (desktop и Android USB-OTG).
 - **Терминал** — своя grid-эмуляция, вкладки со split view, авто-реконнект SSH, поиск по
   scrollback, живые метрики хоста, палитра команд по истории, трансляция ввода в несколько
   сессий и запись сессий (asciinema v2) со встроенным проигрывателем.

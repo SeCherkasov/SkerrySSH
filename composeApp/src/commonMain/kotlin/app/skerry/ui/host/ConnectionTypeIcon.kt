@@ -15,4 +15,5 @@ val ConnectionType.icon: String
         ConnectionType.SERIAL -> "cable"
         ConnectionType.VNC -> "desktop_windows"
         ConnectionType.LOCAL -> "keyboard_command_key"
+        ConnectionType.CONTAINER -> "deployed_code"
     }

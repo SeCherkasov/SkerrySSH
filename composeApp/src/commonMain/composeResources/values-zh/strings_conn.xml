@@ -118,4 +118,25 @@
     <string name="conn_import_empty">此文件中未找到主机。</string>
     <string name="conn_import_button">导入 (%1$d)</string>
     <string name="conn_import_skipped">导入时跳过了部分行。</string>
+
+    <!-- Container profiles (Docker / Kubernetes exec) -->
+    <string name="conn_protocol_container">容器</string>
+    <string name="conn_type_container">容器</string>
+    <string name="conn_runtime_docker">Docker</string>
+    <string name="conn_runtime_kubernetes">Kubernetes</string>
+    <string name="conn_field_runtime">容器运行时</string>
+    <string name="conn_field_container">容器</string>
+    <string name="conn_field_pod">Pod</string>
+    <string name="conn_field_namespace">命名空间</string>
+    <string name="conn_field_pod_container">Pod 内的容器</string>
+    <string name="conn_field_container_shell">Shell</string>
+    <string name="conn_container_hint">上面的地址是通过 SSH 运行 docker/kubectl 的主机。</string>
+    <string name="conn_container_browse">浏览</string>
+    <string name="conn_container_loading">正在获取列表…</string>
+    <string name="conn_container_empty">该主机上没有运行中的容器</string>
+    <string name="conn_container_err_auth">身份验证失败</string>
+    <string name="conn_container_err_host_key">主机密钥被拒绝</string>
+    <string name="conn_container_err_connection">连接失败</string>
+    <string name="conn_container_incomplete">请先输入主机、用户名和凭据</string>
+    <string name="conn_container_err_command">主机无法列出容器</string>
 </resources>

@@ -118,4 +118,25 @@
     <string name="conn_import_empty">No hosts found in this file.</string>
     <string name="conn_import_button">Import (%1$d)</string>
     <string name="conn_import_skipped">Some lines were skipped during import.</string>
+
+    <!-- Container profiles (Docker / Kubernetes exec) -->
+    <string name="conn_protocol_container">Container</string>
+    <string name="conn_type_container">Container</string>
+    <string name="conn_runtime_docker">Docker</string>
+    <string name="conn_runtime_kubernetes">Kubernetes</string>
+    <string name="conn_field_runtime">Container runtime</string>
+    <string name="conn_field_container">Container</string>
+    <string name="conn_field_pod">Pod</string>
+    <string name="conn_field_namespace">Namespace</string>
+    <string name="conn_field_pod_container">Container in pod</string>
+    <string name="conn_field_container_shell">Shell</string>
+    <string name="conn_container_hint">The address above is the host that runs docker/kubectl over SSH.</string>
+    <string name="conn_container_browse">Browse</string>
+    <string name="conn_container_loading">Listing…</string>
+    <string name="conn_container_empty">Nothing is running on this host</string>
+    <string name="conn_container_err_auth">Authentication failed</string>
+    <string name="conn_container_err_host_key">Host key rejected</string>
+    <string name="conn_container_err_connection">Connection failed</string>
+    <string name="conn_container_incomplete">Enter host, username and credentials first</string>
+    <string name="conn_container_err_command">The host could not list containers</string>
 </resources>

@@ -213,6 +213,69 @@ class NewConnectionFormStateTest {
         assertTrue(f.canSave)
     }
 
+    // Container profiles (Docker / Kubernetes exec over the host's SSH)
+
+    @Test
+    fun container_needs_ssh_fields_plus_a_container_name() {
+        val f = NewConnectionFormState().apply { name = "web on prod"; address = "10.0.0.5" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.CONTAINER)
+        assertEquals("22", f.port) // the CLI rides the host's SSH port
+        assertFalse(f.canSave) // username missing
+        f.username = "ops"
+        assertFalse(f.canSave) // nothing to exec into yet
+        f.containerTarget = "web"
+        assertTrue(f.canSave)
+    }
+
+    @Test
+    fun container_draft_carries_a_normalized_spec() {
+        val f = NewConnectionFormState().apply { name = "api"; address = "10.0.0.5"; username = "ops" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.CONTAINER)
+        f.containerRuntime = app.skerry.shared.container.ContainerRuntime.KUBERNETES
+        f.containerTarget = "  api-0 "
+        f.containerNamespace = " prod "
+        f.containerPodContainer = "  "
+        f.containerShell = " bash "
+        assertEquals(
+            app.skerry.shared.container.ContainerSpec(
+                runtime = app.skerry.shared.container.ContainerRuntime.KUBERNETES,
+                target = "api-0",
+                namespace = "prod",
+                podContainer = "",
+                shell = "bash",
+            ),
+            f.toDraft().container,
+        )
+    }
+
+    @Test
+    fun non_container_profiles_store_no_spec() {
+        val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.CONTAINER)
+        f.containerTarget = "web"
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.SSH)
+        assertNull(f.toDraft().container)
+    }
+
+    @Test
+    fun fromHost_prefills_the_container_spec() {
+        val spec = app.skerry.shared.container.ContainerSpec(
+            runtime = app.skerry.shared.container.ContainerRuntime.KUBERNETES,
+            target = "api-0", namespace = "prod", podContainer = "app", shell = "bash",
+        )
+        val host = Host(
+            id = "h1", label = "api", address = "10.0.0.5", username = "ops",
+            connectionType = app.skerry.shared.ssh.ConnectionType.CONTAINER, container = spec,
+        )
+        val f = NewConnectionFormState.fromHost(host)
+        assertEquals(app.skerry.shared.container.ContainerRuntime.KUBERNETES, f.containerRuntime)
+        assertEquals("api-0", f.containerTarget)
+        assertEquals("prod", f.containerNamespace)
+        assertEquals("app", f.containerPodContainer)
+        assertEquals("bash", f.containerShell)
+        assertEquals(spec, f.toDraft(id = host.id).container)
+    }
+
     // Authentication
 
     private fun validBase() = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
