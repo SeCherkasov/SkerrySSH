@@ -43,7 +43,7 @@ enum class MobileTab(val icon: String) {
  * Full-screen push screens over the tab navigation (tab bar hidden): terminal and host detail open
  * from Hosts, SFTP (Files) via the host card's SFTP button, and Ports/Known/Team from the More tab.
  */
-enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Ports, Known, Team, Appearance, Sync, Ai, Security, About }
+enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Ports, Known, Team, Appearance, Sync, Ai, Security, Trash, About }
 
 /** What the system back gesture should do in the mobile shell. */
 enum class MobileBackAction {
