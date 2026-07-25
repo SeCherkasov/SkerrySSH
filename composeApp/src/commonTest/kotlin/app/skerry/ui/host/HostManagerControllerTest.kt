@@ -129,6 +129,22 @@ class HostManagerControllerTest {
     }
 
     @Test
+    fun `duplicating a host carries its note onto the new record`() {
+        // Duplicate goes form -> draft -> controller with a fresh id; the note must ride along.
+        val original = Host("1", "prod-web", "10.0.0.5", 22, "deploy", notes = "ask ops before reboot")
+        val store = FakeHostStore(original)
+        val controller = HostManagerController(store) { "gen-id" }
+
+        val copyId = controller.save(
+            NewConnectionFormState.duplicateOf(original, "prod-web (copy)").toDraft(id = null),
+        )
+
+        assertEquals("gen-id", copyId)
+        assertEquals("ask ops before reboot", controller.find("gen-id")?.notes)
+        assertEquals("ask ops before reboot", controller.find("1")?.notes) // original untouched
+    }
+
+    @Test
     fun `save carries tags through to the stored host`() {
         val store = FakeHostStore()
         val controller = HostManagerController(store) { "gen-id" }
