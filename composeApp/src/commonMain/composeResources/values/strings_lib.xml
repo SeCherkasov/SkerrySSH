@@ -140,6 +140,8 @@
     <string name="lib_teams_err_key_missing">Team key is unavailable on this device</string>
     <string name="lib_teams_err_network">Network error — check the connection to the sync server</string>
     <string name="lib_teams_err_protocol">Unexpected server response</string>
+    <string name="lib_teams_err_too_many_requests">The server is throttling requests — wait a moment and try again</string>
+    <string name="lib_teams_err_server_error">The server isn't responding correctly — try again later</string>
     <string name="lib_teams_err_forbidden">Not allowed for your role in this team</string>
     <string name="lib_teams_err_vault_unreadable">The local team vault file is unreadable — it was kept, not deleted</string>
 </resources>

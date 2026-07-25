@@ -40,6 +40,23 @@ import app.skerry.shared.team.stripShareFields
 enum class TeamsFailure {
     NotConnected, VaultLocked, NoRecipientKey, AlreadyInvited, NoSuchAccount,
     KeyMissing, Network, Protocol, Forbidden, VaultUnreadable,
+    TooManyRequests, ServerError,
+}
+
+/**
+ * Sync-client error → team-level failure. Same server as sync, so its rate limiter and its 5xx are
+ * named here too instead of landing in the generic protocol bucket. A null kind (any non-sync
+ * exception) is a protocol failure.
+ */
+internal fun SyncException.Kind?.toTeamsFailure(): TeamsFailure = when (this) {
+    SyncException.Kind.NETWORK -> TeamsFailure.Network
+    SyncException.Kind.UNAUTHORIZED -> TeamsFailure.Forbidden
+    SyncException.Kind.NOT_FOUND -> TeamsFailure.NoSuchAccount
+    SyncException.Kind.CONFLICT -> TeamsFailure.AlreadyInvited
+    SyncException.Kind.TOO_MANY_REQUESTS -> TeamsFailure.TooManyRequests
+    SyncException.Kind.SERVER_ERROR -> TeamsFailure.ServerError
+    // GONE is a pairing-code state with no team-level meaning; PROTOCOL and null stay generic.
+    SyncException.Kind.GONE, SyncException.Kind.PROTOCOL, null -> TeamsFailure.Protocol
 }
 
 /** A team as the UI sees it: server metadata + local key (the name lives in its vault / envelope). */
@@ -649,13 +666,7 @@ class TeamsCoordinator(
         _lastError.value = reason
     }
 
-    private fun Exception.toFailure(): TeamsFailure = when ((this as? SyncException)?.kind) {
-        SyncException.Kind.NETWORK -> TeamsFailure.Network
-        SyncException.Kind.UNAUTHORIZED -> TeamsFailure.Forbidden
-        SyncException.Kind.NOT_FOUND -> TeamsFailure.NoSuchAccount
-        SyncException.Kind.CONFLICT -> TeamsFailure.AlreadyInvited
-        else -> TeamsFailure.Protocol
-    }
+    private fun Exception.toFailure(): TeamsFailure = (this as? SyncException)?.kind.toTeamsFailure()
 
     private companion object {
         /** Bounded retries when a rotation loses the epoch race to a concurrent rotation. */
