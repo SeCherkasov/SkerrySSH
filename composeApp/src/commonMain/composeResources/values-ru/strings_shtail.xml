@@ -31,4 +31,5 @@
 
     <!-- Session tabs: default title for a blank tab (SessionsController.openBlank caller) -->
     <string name="shtail_new_tab">Новая вкладка</string>
+    <string name="shtail_nav_trash">Корзина</string>
 </resources>

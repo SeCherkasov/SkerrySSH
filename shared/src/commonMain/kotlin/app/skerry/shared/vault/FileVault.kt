@@ -304,11 +304,16 @@ class FileVault(
         openRecord(key, record)
     }
 
-    override fun put(id: String, type: RecordType, payload: ByteArray): Unit = synchronized(lock) {
+    override fun put(id: String, type: RecordType, payload: ByteArray): Unit = store(id, type, payload, minVersion = 0L)
+
+    override fun putAtLeast(id: String, type: RecordType, payload: ByteArray, minVersion: Long): Unit =
+        store(id, type, payload, minVersion)
+
+    private fun store(id: String, type: RecordType, payload: ByteArray, minVersion: Long): Unit = synchronized(lock) {
         val key = requireUnlocked()
         val currentMeta = session()
         val index = records.indexOfFirst { it.id == id }
-        val version = if (index >= 0) records[index].version + 1 else 1L
+        val version = maxOf(if (index >= 0) records[index].version + 1 else 1L, minVersion)
         val at = now()
         val blob = crypto.seal(key, payload, recordAad(id, type, version, deviceId, deleted = false, updatedAt = at))
         val record = VaultRecord(id, type, version, at, deviceId, deleted = false, blob = blob)

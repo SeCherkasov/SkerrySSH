@@ -105,6 +105,15 @@ import app.skerry.ui.mobile.MobileHostMonitorSheet
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.app.MobileTab
+import app.skerry.shared.host.VaultHostStore
+import app.skerry.shared.snippet.Snippet
+import app.skerry.shared.snippet.VaultSnippetStore
+import app.skerry.shared.vault.Credential
+import app.skerry.shared.vault.CredentialSecret
+import app.skerry.shared.vault.TrashStore
+import app.skerry.ui.theme.Skerry
+import app.skerry.ui.vault.TrashController
+import app.skerry.ui.vault.TrashList
 import app.skerry.ui.app.SettingsTab
 import app.skerry.ui.design.rememberMaterialSymbols
 import app.skerry.ui.design.rememberMono
@@ -196,6 +205,9 @@ fun main() {
         // The F4 editor is a modal opened by a key press, which an offscreen render can't send, and
         // a Dialog has no platform layer here — so its card ([FileEditorPanel]) is rendered directly.
         "editor" -> { { GateScreenPreview { EditorPreview() } } }
+        // Trash section with a seeded trash: the settings overlay can't show it (the mock graph has
+        // no vault), so the list is rendered standalone against an in-memory vault.
+        "trash" -> { { GateScreenPreview { TrashPreview() } } }
         else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, ai = ai, updates = updates, windowChrome = windowChrome) } }
     }
 
@@ -352,6 +364,38 @@ private class PreviewFileSource(private val item: FileItem, private val text: St
     override suspend fun stat(path: String): FileItem = item
     override suspend fun readFile(path: String, maxBytes: Long): ByteArray = text.encodeToByteArray()
     override suspend fun writeFile(path: String, data: ByteArray) = Unit
+}
+
+/**
+ * Standalone render of the Trash list ([TrashList]) over an in-memory vault with a few deletions,
+ * for visual review of Settings -> Trash (and the identical Android screen). The clock is fixed so
+ * the "days left" column is stable between runs.
+ */
+@Composable
+private fun TrashPreview() {
+    val controller = remember {
+        val vault = InMemoryVault()
+        var clock = 1_800_000_000_000L
+        val trash = TrashStore(vault, now = { clock })
+        VaultHostStore(vault, trash = trash).apply {
+            put(Host(id = "h-1", label = "staging-web", address = "10.0.0.14", port = 22, username = "deploy"))
+            remove("h-1")
+        }
+        clock -= 9L * 24 * 60 * 60 * 1000
+        CredentialStore(vault, trash).apply {
+            put(Credential("c-1", "db-admin", CredentialSecret.Password("hunter2")))
+            remove("c-1")
+        }
+        clock -= 17L * 24 * 60 * 60 * 1000
+        VaultSnippetStore(vault, trash).apply {
+            put(Snippet("s-1", "tail syslog", "tail -f /var/log/syslog"))
+            remove("s-1")
+        }
+        TrashController(trash, now = { 1_800_000_000_000L })
+    }
+    Box(Modifier.fillMaxSize().background(Skerry.colors.surfaceDeep).padding(32.dp)) {
+        TrashList(controller)
+    }
 }
 
 @Composable

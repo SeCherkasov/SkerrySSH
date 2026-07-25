@@ -1,6 +1,7 @@
 package app.skerry.shared.snippet
 
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.TrashStore
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecordCodec
 
@@ -13,9 +14,13 @@ import app.skerry.shared.vault.VaultRecordCodec
  * is needed; entries come back in [Vault.records] order. Reading a locked vault returns an empty
  * list; a corrupt payload is silently skipped.
  */
-class VaultSnippetStore(private val vault: Vault) : SnippetStore {
+class VaultSnippetStore(
+    private val vault: Vault,
+    /** Trash to snapshot deletions into; opt-in — see [app.skerry.shared.host.VaultHostStore]. */
+    trash: TrashStore? = null,
+) : SnippetStore {
 
-    private val codec = VaultRecordCodec(vault, RecordType.SNIPPET, Snippet.serializer())
+    private val codec = VaultRecordCodec(vault, RecordType.SNIPPET, Snippet.serializer(), trash) { it.label }
 
     override fun all(): List<Snippet> {
         if (!vault.isUnlocked) return emptyList()

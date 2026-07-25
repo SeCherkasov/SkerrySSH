@@ -35,6 +35,7 @@ import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
+import app.skerry.shared.vault.TrashStore
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
@@ -390,7 +391,11 @@ class MainActivity : FragmentActivity() {
             // File(...).toPath() (API 26) instead of Path.of (needs API 34) — compatible with minSdk 26.
             harden = { app.skerry.shared.io.PrivateConfig.harden(java.io.File(it.toString()).toPath()) },
         ) { Instant.now().toString() }
-        val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
+        // Trash for the personal vault: deletions made through these stores keep a restorable
+        // snapshot (More -> Trash). Passed explicitly — the stores default to deleting outright so a
+        // team vault never grows a trash of its own.
+        val trash = TrashStore(vault)
+        val credentials = CredentialManagerController(CredentialStore(vault, trash)) { UUID.randomUUID().toString() }
         // SSH transport (sshj, shared JVM source set). TOFU: a host's first key is remembered in the
         // vault (RecordType.KNOWN_HOST, synced across devices); a key change is rejected and logged to
         // the local (non-synced) known_hosts_mismatches so the known-hosts manager can warn and let the
@@ -407,7 +412,7 @@ class MainActivity : FragmentActivity() {
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
         // Host profiles are HOST records in the vault; tree order lives in a layout record. The vault
         // is locked at startup (list is empty); the controller reloads on unlock via reload().
-        val hostStore = VaultHostStore(vault)
+        val hostStore = VaultHostStore(vault, trash = trash)
         val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
         // Biometrics: key in AndroidKeyStore, prompt hosted by this Activity. Weak reference so the
         // store doesn't hold the Activity and returns null instead of a destroyed instance after recreate.
@@ -431,14 +436,14 @@ class MainActivity : FragmentActivity() {
         val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { tunnelScope = it }
         val tunnels = TunnelManager(
-            store = VaultTunnelStore(vault),
+            store = VaultTunnelStore(vault, trash),
             transport = probeTransport,
             resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::find) },
             scope = scope,
         ) { UUID.randomUUID().toString() }
         // Saved command snippets: SNIPPET records in the vault (commands may contain inline
         // credentials, hence shared encryption and E2E sync). Run into the terminal.
-        val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
+        val snippets = SnippetManager(VaultSnippetStore(vault, trash)) { UUID.randomUUID().toString() }
         // Self-hosted sync: coordinator ties together the network client (Ktor+SRP), crypto, and vault.
         // Server binding is persisted in sync.json (non-secret: URL/accountId/deviceId); tokens and
         // password are not stored (re-auth via master password). deviceId is stable across records.
@@ -512,6 +517,9 @@ class MainActivity : FragmentActivity() {
             snippets.reload()
             tunnels.reload()
             knownHosts.refresh()
+            // Trash retention is applied on unlock too (desktop parity): waiting for the user to
+            // open the Trash screen would keep an expired secret in the vault indefinitely.
+            trash.purgeExpired()
             sync.resumeAfterUnlock()
         }
         // Clears data outside the vault on reset. The vault file is already wiped and locked, so

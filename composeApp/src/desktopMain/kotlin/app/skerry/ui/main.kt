@@ -29,6 +29,7 @@ import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.CredentialStore
+import app.skerry.shared.vault.TrashStore
 import app.skerry.shared.vault.WorkspaceLayoutStore
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
@@ -189,14 +190,18 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // Host manager: profiles are HOST records in the vault, tree order lives in the layout record
     // ([VaultHostStore]/[WorkspaceLayout]). The vault starts locked (empty list); the controller
     // reloads via reload() after unlock. id is a random UUID.
-    val hostStore = VaultHostStore(vault)
+    // Trash for the personal vault: deletions made through these stores keep a restorable snapshot
+    // (Settings -> Trash). Passed explicitly — the stores default to deleting outright so a team
+    // vault never grows a trash of its own.
+    val trash = TrashStore(vault)
+    val hostStore = VaultHostStore(vault, trash = trash)
     val hosts = HostManagerController(hostStore) { UUID.randomUUID().toString() }
     // Workspace layout in the vault: empty folders (and tree order) sync as a single record. Read
     // after unlock (vault starts locked) and written on change.
     val workspaceLayout = WorkspaceLayoutStore(vault)
     // Flat vault model: keychain secrets are CREDENTIAL records; a host references a secret
     // directly via credentialId.
-    val credentials = CredentialManagerController(CredentialStore(vault)) { UUID.randomUUID().toString() }
+    val credentials = CredentialManagerController(CredentialStore(vault, trash)) { UUID.randomUUID().toString() }
     // Self-hosted sync: coordinator ties together the network client (Ktor+SRP), crypto, and the
     // local vault. The server binding persists to sync.json (0600): non-secret data
     // (URL/accountId/deviceId) plus an optional refresh token sealed under dataKey (keep-connected).
@@ -258,14 +263,14 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
     val tunnelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val tunnels = TunnelManager(
-        store = VaultTunnelStore(vault),
+        store = VaultTunnelStore(vault, trash),
         transport = tunnelTransport,
         resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::find) },
         scope = tunnelScope,
     ) { UUID.randomUUID().toString() }
     // Saved snippets: the command library is SNIPPET records in the vault (commands may contain
     // inline credentials, so they share encryption and E2E sync). Run targets the active terminal.
-    val snippets = SnippetManager(VaultSnippetStore(vault)) { UUID.randomUUID().toString() }
+    val snippets = SnippetManager(VaultSnippetStore(vault, trash)) { UUID.randomUUID().toString() }
     // AI assistant: settings (provider/BYOK/local model) are an encrypted SETTINGS record in the
     // vault; a request routes to the cloud or to the local runtime (Llamatik/llama.cpp). Local AI:
     // GGUF models under ~/.local/share/skerry/models (XDG), downloaded with resume and sha256
@@ -316,6 +321,10 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val onVaultUnlocked: () -> Unit = {
         // Vault opened, so reload managers (including AI BYOK settings) from decrypted records.
         reloadManagers()
+        // Apply the trash retention window here, not only when its screen is opened: otherwise a
+        // deleted secret a user never goes looking for would sit in the vault (and keep being
+        // pushed to the server) long past the 30 days the UI promises.
+        trash.purgeExpired()
         // Resume the live sync paused by the lock, or — on a cold start with keep-connected — silently
         // restore the session (the open vault means a dataKey to unseal the refresh token with).
         sync.resumeAfterUnlock()

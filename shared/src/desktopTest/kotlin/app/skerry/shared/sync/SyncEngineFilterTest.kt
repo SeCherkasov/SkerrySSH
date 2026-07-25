@@ -5,6 +5,7 @@ import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.VaultRecord
 import app.skerry.shared.vault.initializeVaultCrypto
+import app.skerry.shared.vault.trashRecordId
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -90,5 +91,30 @@ class SyncEngineFilterTest {
 
         assertTrue(receiver.records().any { it.id == SyncSettingsStore.SETTINGS_ID }, "SETTINGS must be applied")
         assertFalse(receiver.records().any { it.id == "s1" }, "snippet gated by just-applied OFF setting must not merge")
+    }
+
+    @Test
+    fun `a server that rejects trash snapshots still receives everything else`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = newVault("devC")
+        vault.create(password.toCharArray())
+        vault.put("h1", RecordType.HOST, "host".encodeToByteArray())
+        vault.put(trashRecordId(RecordType.HOST, "h0"), RecordType.TRASH, "snapshot".encodeToByteArray())
+
+        // A self-hosted server older than the trash feature rejects the whole batch on an unknown
+        // type, so the snapshots must travel in their own batch and their rejection must not take
+        // the rest of the cycle down with them.
+        val client = object : FakeSyncClient() {
+            override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage {
+                if (records.any { it.type == RecordType.TRASH.name }) error("unknown record type: TRASH")
+                return super.push(session, records)
+            }
+        }
+        val outcome = SyncEngine(client, vault, InMemorySyncStateStore()).sync(session)
+
+        val pushedTypes = client.pushed.map { it.type }.toSet()
+        assertTrue(RecordType.HOST.name in pushedTypes, "host must reach a server that can't take the trash")
+        assertFalse(RecordType.TRASH.name in pushedTypes)
+        assertTrue(outcome.pushed > 0, "the cycle must report the records it did push")
     }
 }

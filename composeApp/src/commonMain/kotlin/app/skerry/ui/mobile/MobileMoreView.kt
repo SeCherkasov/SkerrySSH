@@ -87,6 +87,7 @@ import app.skerry.ui.generated.resources.more_sync_local_only
 import app.skerry.ui.generated.resources.more_sync_synced
 import app.skerry.ui.generated.resources.more_sync_syncing
 import app.skerry.ui.generated.resources.more_team
+import app.skerry.ui.generated.resources.more_trash
 import app.skerry.ui.generated.resources.more_title
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.i18n.label
@@ -213,6 +214,9 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             // "Security" section: master password, biometrics, auto-lock, event log. Live path is
             // behind the gate (vault present); in preview the row is inert (nothing to configure without a vault).
             MoreRow("shield_lock", Skerry.colors.cyanBright, stringResource(Res.string.settings_security_title), null, Skerry.colors.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
+            // Trash: records deleted on any device of the account, restorable within the retention
+            // window. Live path only — without a vault there is nothing to list.
+            MoreRow("delete", Skerry.colors.cyanBright, stringResource(Res.string.more_trash), null, Skerry.colors.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Trash) })
             // Recording player: opens a .cast picker. Lives here because watching a recording needs no
             // session — the terminal menu would hide it behind a live connection.
             val playerScope = rememberCoroutineScope()

@@ -51,6 +51,7 @@ import app.skerry.ui.generated.resources.settings_keyboard_subtitle
 import app.skerry.ui.generated.resources.settings_nav_header
 import app.skerry.ui.generated.resources.settings_security_subtitle
 import app.skerry.ui.generated.resources.settings_sync_subtitle
+import app.skerry.ui.generated.resources.settings_trash_subtitle
 import app.skerry.ui.generated.resources.settings_terminal_subtitle
 import app.skerry.ui.generated.resources.shtail_nav_about
 import app.skerry.ui.generated.resources.shtail_nav_ai
@@ -59,6 +60,7 @@ import app.skerry.ui.generated.resources.shtail_nav_keyboard
 import app.skerry.ui.generated.resources.shtail_nav_security
 import app.skerry.ui.generated.resources.shtail_nav_sync
 import app.skerry.ui.generated.resources.shtail_nav_terminal
+import app.skerry.ui.generated.resources.shtail_nav_trash
 import app.skerry.ui.vault.VaultGateController
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
@@ -135,6 +137,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                             onChangeAccountPassword = { changeAccountPwOpen = true },
                             onBiometricToggled = { securityReload++ },
                         )
+                        SettingsTab.Trash -> TrashSection()
                         SettingsTab.Keyboard -> KeyboardSection()
                         SettingsTab.About -> AboutSection()
                     }
@@ -225,6 +228,7 @@ private fun SettingsTab.headerSubtitle(): String = when (this) {
     SettingsTab.AI -> stringResource(Res.string.settings_ai_live_subtitle)
     SettingsTab.Sync -> stringResource(Res.string.settings_sync_subtitle)
     SettingsTab.Security -> stringResource(Res.string.settings_security_subtitle)
+    SettingsTab.Trash -> stringResource(Res.string.settings_trash_subtitle)
     SettingsTab.Appearance -> stringResource(Res.string.appearance_subtitle)
     SettingsTab.Terminal -> stringResource(Res.string.settings_terminal_subtitle)
     SettingsTab.Keyboard -> stringResource(Res.string.settings_keyboard_subtitle)
@@ -237,6 +241,7 @@ private fun SettingsTab.navLabel(): String = when (this) {
     SettingsTab.AI -> stringResource(Res.string.shtail_nav_ai)
     SettingsTab.Sync -> stringResource(Res.string.shtail_nav_sync)
     SettingsTab.Security -> stringResource(Res.string.shtail_nav_security)
+    SettingsTab.Trash -> stringResource(Res.string.shtail_nav_trash)
     SettingsTab.Appearance -> stringResource(Res.string.shtail_nav_appearance)
     SettingsTab.Terminal -> stringResource(Res.string.shtail_nav_terminal)
     SettingsTab.Keyboard -> stringResource(Res.string.shtail_nav_keyboard)

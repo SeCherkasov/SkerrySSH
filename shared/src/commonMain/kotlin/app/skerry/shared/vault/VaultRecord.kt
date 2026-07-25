@@ -16,6 +16,13 @@ enum class RecordType {
 
     /** Account X25519 pair for receiving Teams invites (singleton; public half is on the server). */
     TEAM_IDENTITY,
+
+    /**
+     * Snapshot of a deleted record kept for the trash window (see [app.skerry.shared.vault.TrashStore]).
+     * A separate type, not a fatter tombstone: tombstones stay empty, and clients that don't know
+     * this type keep the record verbatim without ever showing it.
+     */
+    TRASH,
 }
 
 /**
