@@ -41,6 +41,8 @@ import app.skerry.ui.generated.resources.term_broadcast_send
 import app.skerry.ui.generated.resources.term_broadcast_sent
 import app.skerry.ui.generated.resources.term_broadcast_subtitle
 import app.skerry.ui.generated.resources.term_broadcast_title
+import app.skerry.ui.host.ProdBadge
+import app.skerry.ui.host.ProdBroadcastDialog
 import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.session.BroadcastTarget
 import org.jetbrains.compose.resources.stringResource
@@ -61,6 +63,19 @@ internal fun MobileBroadcastSheet(
     var command by remember { mutableStateOf("") }
     var lastSentTo by remember { mutableStateOf<Int?>(null) }
     val selected = controller.selectedCount(targets)
+
+    // Production guard, same as the desktop panel: the fan-out is confirmed once for the whole
+    // group. It has to be asked here — the targets take the command with their own per-session
+    // guard turned off, so nothing downstream would stop it.
+    var confirmProduction by remember { mutableStateOf(false) }
+
+    val deliver = {
+        val delivered = controller.send(command, targets)
+        if (delivered > 0) {
+            lastSentTo = delivered
+            command = ""
+        }
+    }
 
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.8f) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -106,6 +121,7 @@ internal fun MobileBroadcastSheet(
                                 Sym(if (on) "check_box" else "check_box_outline_blank", size = 18.sp, color = if (on) Skerry.colors.cyanBright else Skerry.colors.faint)
                             }
                             Txt(target.label, color = if (on) Skerry.colors.text else Skerry.colors.dim, size = 13.sp, font = mono)
+                            if (target.production) ProdBadge()
                         }
                     }
                 }
@@ -114,11 +130,7 @@ internal fun MobileBroadcastSheet(
                 MobileSheetButton(
                     label = stringResource(Res.string.term_broadcast_send),
                     onClick = {
-                        val delivered = controller.send(command, targets)
-                        if (delivered > 0) {
-                            lastSentTo = delivered
-                            command = ""
-                        }
+                        if (controller.needsProductionConfirmation(command, targets)) confirmProduction = true else deliver()
                     },
                     modifier = Modifier.fillMaxWidth(),
                     icon = "send",
@@ -127,5 +139,13 @@ internal fun MobileBroadcastSheet(
             }
             Spacer(Modifier.height(6.dp))
         }
+    }
+    if (confirmProduction) {
+        ProdBroadcastDialog(
+            command = command,
+            productionCount = controller.selectedProductionCount(targets),
+            onConfirm = { confirmProduction = false; deliver() },
+            onDismiss = { confirmProduction = false },
+        )
     }
 }

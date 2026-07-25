@@ -1,0 +1,22 @@
+<resources>
+    <string name="risk_fork_bomb">Fork 炸弹 —— 会耗尽系统资源。</string>
+    <string name="risk_recursive_force_delete">递归强制删除 —— 数据无法恢复。</string>
+    <string name="risk_recursive_broad_delete">对宽泛路径递归删除 —— 数据无法恢复。</string>
+    <string name="risk_disk_device_write">直接写入磁盘设备 —— 可能损毁文件系统。</string>
+    <string name="risk_download_to_shell">将下载的脚本直接管道给 shell —— 执行未经校验的远程代码。</string>
+    <string name="risk_pipe_to_interpreter">将输出管道给解释器 —— 执行拼接或远程的代码。</string>
+    <string name="risk_mirror_delete">镜像删除 —— 会清除目标端源端没有的文件。</string>
+    <string name="risk_power_off">关闭或重启机器。</string>
+    <string name="risk_recursive_permissions">递归修改系统路径的权限或属主。</string>
+    <string name="risk_security_file_overwrite">覆盖安全关键文件。</string>
+    <string name="risk_firewall_flush">清空防火墙规则 —— 可能切断远程访问。</string>
+    <string name="risk_deletes_files">删除文件。</string>
+    <string name="risk_kills_processes">终止正在运行的进程。</string>
+    <string name="risk_uninstalls_packages">卸载软件包。</string>
+    <string name="risk_git_destructive">丢弃本地修改或重写历史。</string>
+    <string name="risk_world_writable">授予所有用户写权限。</string>
+    <string name="risk_stops_service">停止或禁用服务。</string>
+    <string name="risk_bulk_delete">批量删除匹配到的文件。</string>
+    <string name="risk_truncates_content">清空文件内容。</string>
+    <string name="risk_elevated">以提升的权限运行。</string>
+</resources>

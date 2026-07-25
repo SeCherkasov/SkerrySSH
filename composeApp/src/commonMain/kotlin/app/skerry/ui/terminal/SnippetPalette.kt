@@ -83,7 +83,7 @@ internal fun SnippetPaletteButton(active: Session?, requests: SharedFlow<Unit>? 
                 properties = PopupProperties(focusable = true),
             ) {
                 SnippetPalette(manager) { entry ->
-                    manager.run(entry.id, recording = terminal.recording) { text -> terminal.send(text) }
+                    manager.run(entry.id, recording = terminal.recording) { text -> terminal.sendUserInputGuarded(text) }
                     open = false
                 }
             }

@@ -1,5 +1,6 @@
 package app.skerry.ui.terminal
 
+import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
@@ -1039,6 +1040,338 @@ class TerminalScreenStateTest {
         session.emit("$esc]52;c;d29ybGQ=$esc\\".encodeToByteArray()) // base64 "world"
         assertEquals(listOf("world"), copies)
         collector.cancel()
+        scope.cancel()
+    }
+
+    // --- production guard (risky commands on a #prod host) ---
+
+    @Test
+    fun `risky command is held before it reaches the pty on a production session`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "rm -rf /var/lib".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\r")
+
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        // Everything typed so far went through; only the Enter that would run it is held.
+        assertEquals(false, session.sent.any { it.contentEquals("\r".encodeToByteArray()) })
+        scope.cancel()
+    }
+
+    @Test
+    fun `confirming the held command sends it once`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.typeInput("rm -rf /var/lib\r")
+        assertEquals(0, session.sent.size)
+
+        state.confirmGuardedCommand()
+        assertContentEquals("rm -rf /var/lib\r".encodeToByteArray(), session.sent.single())
+        assertEquals(null, state.pendingGuarded)
+        scope.cancel()
+    }
+
+    @Test
+    fun `dismissing the held command sends nothing`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.typeInput("shutdown now\r")
+        state.dismissGuardedCommand()
+
+        assertEquals(emptyList(), session.sent.toList())
+        assertEquals(null, state.pendingGuarded)
+        scope.cancel()
+    }
+
+    @Test
+    fun `harmless commands and non-production sessions are not held`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        state.typeInput("ls -la\r")
+        assertEquals(null, state.pendingGuarded)
+
+        state.guardPolicy = ProductionGuardPolicy.Off
+        state.typeInput("rm -rf /\r")
+        assertEquals(null, state.pendingGuarded)
+        assertEquals(2, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a command recalled from history is caught off the screen line`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // Nothing was typed locally (arrow-up recall) — the command exists only on the screen.
+        session.emit("root@prod:~# rm -rf /srv/data".encodeToByteArray())
+        state.typeInput("\r")
+
+        assertEquals("rm -rf /srv/data", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a multi-line input block is judged by every line, not just the first`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // The soft keyboard delivers a whole IME delta in one call — a clipboard insert can carry
+        // several lines, and the risky one is not necessarily the first.
+        state.typeInput("ls\nrm -rf /var/lib\n")
+
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        assertEquals(emptyList(), session.sent.toList())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a command pasted without a newline is still caught on Enter`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // Paste, then Enter before the host echoed anything back: the screen line is still empty,
+        // so the guard has to remember what was pasted into the line.
+        state.paste("rm -rf /var/lib")
+        state.typeInput("\r")
+
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a ready-made command is dropped while another one is pending`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.sendUserInputGuarded("rm -rf /var/lib\n")
+        state.sendUserInputGuarded("shutdown now\n") // e.g. a snippet hotkey over the open dialog
+
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        state.confirmGuardedCommand()
+        assertContentEquals("rm -rf /var/lib\n".encodeToByteArray(), session.sent.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a snippet command is held and then sent without touching autocomplete`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.sendUserInputGuarded("systemctl stop nginx\n")
+        assertEquals("systemctl stop nginx", state.pendingGuarded?.command)
+        assertEquals(emptyList(), session.sent.toList())
+
+        state.confirmGuardedCommand()
+        assertContentEquals("systemctl stop nginx\n".encodeToByteArray(), session.sent.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a harmless snippet command goes straight through`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.sendUserInputGuarded("uptime\n")
+
+        assertEquals(null, state.pendingGuarded)
+        assertEquals(1, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a second risky command while one is pending does not replace it`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.typeInput("rm -rf /var/lib\r")
+        val first = state.pendingGuarded
+        // Impatient second Enter while the dialog is still up: the held command must stay the one
+        // the dialog is showing, or the user would confirm a different command than they read.
+        state.typeInput("shutdown now\r")
+
+        assertEquals(first?.command, state.pendingGuarded?.command)
+        state.confirmGuardedCommand()
+        // Only the command the dialog was showing runs; the second one was dropped, not queued.
+        assertContentEquals("rm -rf /var/lib\r".encodeToByteArray(), session.sent.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a pasted command that would run is held too`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // Paste carrying a newline runs on arrival — the classic "copied it off a wiki page" case.
+        state.paste("systemctl stop postgres\n")
+        assertEquals("systemctl stop postgres", state.pendingGuarded?.command)
+        assertEquals(emptyList(), session.sent.toList())
+
+        state.confirmGuardedCommand()
+        assertEquals(1, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a paste with no newline runs nothing and is not held`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // Lands on the shell line for the user to read and edit; Enter is still guarded separately.
+        state.paste("rm -rf /var/lib")
+
+        assertEquals(null, state.pendingGuarded)
+        assertEquals(1, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a password is never held or shown by the guard`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // At a password prompt the typed text is a secret, not a command: it must not be parked in
+        // a dialog for everyone to read, whatever it happens to look like.
+        session.emit("sudo password for root: ".encodeToByteArray())
+        state.typeInput("rm -rf /\r")
+
+        assertEquals(null, state.pendingGuarded)
+        assertEquals(1, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `full-screen apps are not guarded`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // vim/htop: there is no shell line to classify, and Enter there is not "run a command".
+        val esc = 27.toChar().toString()
+        session.emit("$esc[?1049h".encodeToByteArray())
+        session.emit(":%s/a/b/g sudo rm -rf".encodeToByteArray())
+        state.typeInput("\r")
+
+        assertEquals(null, state.pendingGuarded)
+        assertEquals(1, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a paste is dropped while a confirmation is open`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.typeInput("rm -rf /var/lib\r")
+        // Middle-click paste lands on the terminal surface through a raw pointer handler, which the
+        // modal scrim does not consume — it must not slip past the open dialog.
+        state.paste("shutdown now\n")
+
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        assertEquals(emptyList(), session.sent.toList())
+        state.confirmGuardedCommand()
+        assertContentEquals("rm -rf /var/lib\r".encodeToByteArray(), session.sent.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a harmless paste is dropped while a confirmation is open too`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.typeInput("rm -rf /var/lib\r")
+        state.paste("uptime\n")
+
+        // Harmless or not, it would run on the production shell under a dialog asking about
+        // something else entirely.
+        assertEquals(emptyList(), session.sent.toList())
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a pasted password is never held or shown by the guard`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // Same rule as typing one: a password manager pastes the secret with a trailing newline, and
+        // a passphrase can look like anything — parking it in the dialog would print it on screen.
+        session.emit("sudo password for root: ".encodeToByteArray())
+        state.paste("sudo rm -rf everything\n")
+
+        assertEquals(null, state.pendingGuarded)
+        assertEquals(1, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a harmless typed command is not sent while a confirmation is open`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.typeInput("rm -rf /var/lib\r")
+        state.typeInput("uptime\r")
+
+        // Nothing runs on a production shell while the user is answering a question about a
+        // different command — the dialog is not a queue.
+        assertEquals(emptyList(), session.sent.toList())
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a harmless ready-made command is dropped while a confirmation is open`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.sendUserInputGuarded("rm -rf /var/lib\n")
+        // A snippet hotkey fires from the window root, above the modal scrim's focus.
+        state.sendUserInputGuarded("uptime\n")
+
+        assertEquals(emptyList(), session.sent.toList())
+        assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
         scope.cancel()
     }
 

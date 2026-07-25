@@ -93,6 +93,8 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.sessionDotColor
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.host.isProdHostId
+import app.skerry.ui.host.prodOutline
 
 /**
  * Session action icons (split / SFTP / tunnels / snippets / info panel / disconnect). Pinned to the
@@ -332,7 +334,14 @@ private fun LiveTerminalPane(sessions: SessionsController, state: DesktopDesignS
             icon = "terminal",
         )
     }
-    Box(modifier.fillMaxHeight().fillMaxWidth().background(if (onScreen) Skerry.colors.terminalBg else Skerry.colors.bg)) {
+    // Production sessions get a red outline around the whole pane — the guard's resting state, so a
+    // command lands in the wrong window only after ignoring a full-height red frame.
+    val prod = isProdHostId(active?.hostId)
+    Box(
+        modifier.fillMaxHeight().fillMaxWidth()
+            .background(if (onScreen) Skerry.colors.terminalBg else Skerry.colors.bg)
+            .prodOutline(prod),
+    ) {
         when (st) {
             null -> TerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_notice_pick_host_to_connect), action = launchLocalShell)
             // Form state on the active tab means an empty ("+") tab: connection not yet started.
@@ -407,6 +416,7 @@ private fun LiveSplitPane(
     val split = parent.splitSession
     Column(
         modifier.fillMaxHeight().background(Skerry.colors.terminalBg)
+            .prodOutline(isProdHostId(split?.hostId))
             .focusPaneOnPress(sessions, parent.id, split = true),
     ) {
         Box(Modifier.fillMaxWidth().background(Skerry.colors.surface2)) {

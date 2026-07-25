@@ -109,6 +109,8 @@ import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.HostGroup
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.host.MockHost
+import app.skerry.ui.host.ProdBadge
+import app.skerry.ui.host.isProdHost
 import app.skerry.ui.host.UNGROUPED_LABEL
 import app.skerry.ui.host.color
 import app.skerry.ui.host.draggableFolderHeader
@@ -806,6 +808,9 @@ internal fun HostEntryRow(
     onDuplicate: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
+    // Production marker: shown before the row is ever clicked, so "wrong window" is visible in the
+    // list itself and not only once a session is open.
+    val prod = isProdHost(host)
     val snippets = LocalSnippets.current
     val runSnippetOnHost = LocalRunSnippetOnHost.current
     val canRunSnippet = host != null && snippets != null
@@ -859,6 +864,7 @@ internal fun HostEntryRow(
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+            if (prod) ProdBadge()
             if (badge != null) {
                 val strict = badge == "STRICT"
                 Badge(badge, bg = if (strict) Skerry.colors.strictBg else Skerry.colors.devBg, fg = if (strict) Skerry.colors.strictFg else Skerry.colors.moss)

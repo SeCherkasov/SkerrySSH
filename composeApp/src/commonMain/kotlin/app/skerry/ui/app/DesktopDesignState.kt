@@ -169,6 +169,9 @@ class DesktopDesignState(
     // [app.skerry.ui.terminal.TerminalSessionPrefs] and pushed live into open ones.
     initialAllowServerClipboardWrite: Boolean = false,
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    // Production guard: also confirm Warn-level commands (Settings → Terminal). Off by default.
+    initialConfirmProductionWarnings: Boolean = false,
+    private val onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
     // Terminal color theme (Appearance → theme cards). Read from persistence at startup, written back
     // via the callback. Threaded into the terminal via [app.skerry.ui.terminal.LocalTerminalTheme] and
     // applied to open sessions live. Default (Night Sea, no-op) preserves the prior look for
@@ -331,6 +334,14 @@ class DesktopDesignState(
      * write). Off by default; snapshotted into new sessions and pushed live into open ones.
      */
     var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
+
+    /**
+     * Whether the production guard also confirms [app.skerry.shared.ai.CommandRisk.Warn] commands
+     * (Terminal → Confirm warnings on production). Off by default: `sudo` is a warning and makes up
+     * half of what is typed on a production box, so asking every time turns the dialog into a
+     * reflex. Dangerous commands are confirmed regardless.
+     */
+    var confirmProductionWarnings: Boolean by mutableStateOf(initialConfirmProductionWarnings); private set
 
     /** Open group management dialog (create/edit), or `null`. */
     var groupDialog: GroupDialog? by mutableStateOf(null); private set
@@ -685,6 +696,12 @@ class DesktopDesignState(
         if (mode == hostClickConnectMode) return
         hostClickConnectMode = mode
         onHostClickConnectModeChange(mode)
+    }
+
+    /** Toggle confirming Warn-level commands on production hosts and report outward (for persistence). */
+    fun toggleConfirmProductionWarnings() {
+        confirmProductionWarnings = !confirmProductionWarnings
+        onConfirmProductionWarningsChange(confirmProductionWarnings)
     }
 
     /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */

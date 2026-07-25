@@ -220,6 +220,14 @@ import app.skerry.ui.session.tabBoundsAnchor
 import app.skerry.ui.app.asDesktopView
 import app.skerry.ui.session.draggableTab
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.host.isProdHostId
+import app.skerry.ui.host.ProdConnectDialog
+import app.skerry.ui.host.ProdConnectRequest
+import app.skerry.ui.host.prodConnectGate
+import app.skerry.ui.host.ProdCommandGate
+import app.skerry.ui.host.prodGuardDialogOpen
+import app.skerry.ui.host.ProdGuardSync
+import app.skerry.ui.host.rememberProductionLookup
 
 /**
  * Root of the desktop app. Supplies fonts
@@ -282,6 +290,9 @@ fun DesktopDesignApp(
     // OSC 52 server clipboard-write gate (Settings → Terminal) — persisted externally (desktop main).
     initialAllowServerClipboardWrite: Boolean = false,
     onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    // Production guard: confirm Warn-level commands too (Settings → Terminal) — persisted externally.
+    initialConfirmProductionWarnings: Boolean = false,
+    onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
     // Terminal color theme (Appearance → theme cards) — persisted externally (desktop main).
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
     onTerminalThemeChange: (TerminalTheme) -> Unit = {},
@@ -313,6 +324,7 @@ fun DesktopDesignApp(
             initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
             initialHostClickConnectMode, onHostClickConnectModeChange,
             initialAllowServerClipboardWrite, onAllowServerClipboardWriteChange,
+            initialConfirmProductionWarnings, onConfirmProductionWarningsChange,
             initialTerminalTheme, onTerminalThemeChange,
             initialCustomTerminalTheme, onCustomTerminalThemeChange,
             initialThemeMode, onThemeModeChange,
@@ -585,6 +597,11 @@ private fun DesktopChrome(
     // VNC "ask every time": a host with no stored password prompts before opening the framebuffer tab.
     var pendingVncHost by remember { mutableStateOf<Host?>(null) }
 
+    // Production guard: a connection to a #prod host is held here until confirmed. It wraps ALL
+    // connect paths (new tab / split / VNC / snippet), so the confirmation can't be walked around by
+    // taking another route to the same host.
+    var prodConnect by remember { mutableStateOf<ProdConnectRequest?>(null) }
+
     // ProxyJump chain resolution failed for the clicked host — connecting would either dial
     // forever or silently go direct, so a notice is shown instead ([JumpErrorDialog]).
     var jumpProblem by remember { mutableStateOf<JumpChainProblem?>(null) }
@@ -621,22 +638,24 @@ private fun DesktopChrome(
     // flowing into a staticCompositionLocalOf, would invalidate all consumers of [LocalConnectHost] etc.
     val connectHost = remember(sessions, credentials, hostManager, state) {
         { host: Host ->
-            if (host.connectionType.isVnc) {
-                // VNC opens a framebuffer tab (not a terminal). A stored password is used directly;
-                // "ask every time" (no bound secret) prompts for one first. No ProxyJump/host-key path.
-                val cred = credentials?.find(host.credentialId)
-                if (cred != null) {
-                    sessions?.openVnc(
-                        host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
-                        remoteResize = host.vncResizeToWindow,
-                        onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
-                    )
+            prodConnect = prodConnectGate(host) {
+                if (host.connectionType.isVnc) {
+                    // VNC opens a framebuffer tab (not a terminal). A stored password is used directly;
+                    // "ask every time" (no bound secret) prompts for one first. No ProxyJump/host-key path.
+                    val cred = credentials?.find(host.credentialId)
+                    if (cred != null) {
+                        sessions?.openVnc(
+                            host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
+                            remoteResize = host.vncResizeToWindow,
+                            onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                        )
+                    } else {
+                        pendingVncHost = host
+                    }
+                    Unit
                 } else {
-                    pendingVncHost = host
+                    connectOrAsk(PendingAuth.NewTab(host))
                 }
-                Unit
-            } else {
-                connectOrAsk(PendingAuth.NewTab(host))
             }
         }
     }
@@ -645,12 +664,18 @@ private fun DesktopChrome(
     // line (newline included) once connected. Dynamic variables were confirmed before this point —
     // SnippetManager.run parks them in the dialog and only then hands the line over.
     val runSnippetOnHost = remember(sessions, credentials, hostManager, state) {
-        { host: Host, line: String -> connectOrAsk(PendingAuth.Snippet(host, line)) }
+        { host: Host, line: String ->
+            // The line goes into the confirmation: it runs the moment the session opens, before the
+            // session's own guard is bound to it, so this dialog is where it has to be read.
+            prodConnect = prodConnectGate(host, snippetLine = line) { connectOrAsk(PendingAuth.Snippet(host, line)) }
+        }
     }
 
     // Same resolution, but into the active tab's split pane (a new independent secondary session).
     val connectSplitHost = remember(sessions, credentials, hostManager, state) {
-        { host: Host -> connectOrAsk(PendingAuth.Split(host, sessions?.activeId)) }
+        { host: Host ->
+            prodConnect = prodConnectGate(host) { connectOrAsk(PendingAuth.Split(host, sessions?.activeId)) }
+        }
     }
 
     // Pending password-prompt dialogs are dismissed on lock (don't leave password entry sitting under
@@ -663,6 +688,9 @@ private fun DesktopChrome(
     val onLockWithTunnels: (() -> Unit)? = if (onLock == null) null else remember(onLock, state) {
         {
             pendingAuth = null
+            // Same for a held-back production connect: after unlock it must be re-initiated, not
+            // waiting behind the lock screen with its "Connect" button armed.
+            prodConnect = null
             // Also dismiss any pending disconnect/close confirmation — after unlock an action needs a
             // fresh user intent (like pendingAuth), not to "resurface" on its own.
             state.dismissClose()
@@ -701,7 +729,11 @@ private fun DesktopChrome(
                     state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null ||
                     // The snippet-variable confirmation dialog is modal too: a hotkey firing over it
                     // would type into the terminal under the dialog or race the pending run.
-                    snippets?.pendingRun != null
+                    snippets?.pendingRun != null ||
+                    // Same for both production-guard dialogs. This handler runs on the root's
+                    // preview pass, above the focus their scrim takes, so a snippet chord would
+                    // otherwise reach the production shell while the user is reading the question.
+                    prodConnect != null || prodGuardDialogOpen(sessions?.active)
                 ) false
                 else {
                     val shortcut = matchDesktopShortcut(
@@ -746,7 +778,7 @@ private fun DesktopChrome(
             if (state.broadcastOpen) {
                 BroadcastPanel(
                     controller = state.broadcast,
-                    targets = broadcastTargets(sessions),
+                    targets = broadcastTargets(sessions, rememberProductionLookup()),
                     onDismiss = state::closeBroadcast,
                 )
             }
@@ -800,6 +832,15 @@ private fun DesktopChrome(
                     },
                 )
             }
+            // Production guard: confirm before a #prod session opens. Sits in front of the password
+            // prompt — the question is whether to touch production at all, not which secret to use.
+            prodConnect?.let { request ->
+                ProdConnectDialog(request, onDismiss = { prodConnect = null })
+            }
+            // …and, once inside, keep every open session armed and confirm the risky commands it
+            // holds. At the root, so the confirmation is never covered by the terminal's own chrome.
+            ProdGuardSync(sessions, state.confirmProductionWarnings)
+            ProdCommandGate(sessions?.active)
             // Broken ProxyJump chain for the clicked host: explain instead of connecting (never
             // silently direct). Set by openResolved for all three connect paths.
             jumpProblem?.let { problem ->
@@ -906,7 +947,7 @@ private fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, sessions
     ) ?: return false
     val entry = manager.forShortcut(combo) ?: return false
     val terminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
-    manager.run(entry.id, recording = terminal.recording) { terminal.sendUserInput(it) }
+    manager.run(entry.id, recording = terminal.recording) { terminal.sendUserInputGuarded(it) }
     return true
 }
 
@@ -1101,12 +1142,15 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                     // On a split, the chip shows the focused pane: the name changes when focus
                     // switches between the main and split panes.
                     val focused = if (s.splitOpen && s.focusedSplit) s.splitSession ?: s else s
+                    // A production session paints its chip sunset (strip/border/tint) — the tab row
+                    // is where a wrong-window mistake starts, so the marker sits there too.
+                    val prodTab = isProdHostId(focused.hostId)
                     SessionTabChip(
                         name = focused.tabTitle(state.showTerminalTitleOnTabs),
                         // A recording tab has no connection: its dot and accent are sunset, so it
                         // never reads as a live (or dead) session.
                         dot = if (s.isPlayer) Skerry.colors.sunset else sessionDotColor(focused.controller.uiState),
-                        accent = if (s.isPlayer) Skerry.colors.sunset else Skerry.colors.cyan,
+                        accent = if (s.isPlayer || prodTab) Skerry.colors.sunset else Skerry.colors.cyan,
                         split = s.splitOpen,
                         active = s.id == sessions.activeId,
                         onClick = { sessions.activate(s.id) },

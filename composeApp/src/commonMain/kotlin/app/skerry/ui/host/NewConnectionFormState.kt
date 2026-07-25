@@ -11,6 +11,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.host.normalizeNotes
 import app.skerry.shared.tag.MAX_TAGS_PER_RECORD
 import app.skerry.shared.tag.normalizeTag
+import app.skerry.shared.tag.orderTagsProdFirst
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.ssh.usesSshAuth
@@ -151,7 +152,10 @@ class NewConnectionFormState {
         val additions = raw.split(',').mapNotNull(::normalizeTag)
         if (additions.isEmpty()) return
         // Cap on tag count (guards against pasting thousands of labels): drop beyond [MAX_TAGS_PER_RECORD].
-        tags = LinkedHashSet(tags).apply { addAll(additions) }.take(MAX_TAGS_PER_RECORD)
+        // `prod` is hoisted before the cap — the pill that arms the production guard must never be
+        // the one that falls off the end (same rule as [normalizeTags]).
+        tags = orderTagsProdFirst(LinkedHashSet(tags).apply { addAll(additions) }.toList())
+            .take(MAX_TAGS_PER_RECORD)
     }
 
     /** Remove a tag (value is already canonical, the one rendered on the pill). */
@@ -276,7 +280,7 @@ class NewConnectionFormState {
             username = host.username
             group = host.group ?: ""
             notes = host.notes ?: ""
-            tags = host.tags
+            tags = orderTagsProdFirst(host.tags) // records saved before the rule keep their old order
             aiPolicy = host.aiPolicy
             jumpHostId = host.jumpHostId
             keepAliveSeconds = host.keepAliveSeconds
