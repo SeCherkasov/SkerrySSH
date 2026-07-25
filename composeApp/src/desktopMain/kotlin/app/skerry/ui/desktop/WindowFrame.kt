@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -27,10 +26,10 @@ import java.awt.Cursor
 import java.awt.MouseInfo
 
 /**
- * Custom chrome for the undecorated main window: dragging via [WindowDraggableArea] (with
- * double-click on empty titlebar space toggling maximize), minimize/maximize through
- * [WindowState], close via [exit]. A maximized window is not draggable (only double-click
- * restores it) — moving a maximized AWT window would desync placement from the real bounds.
+ * Custom chrome for the undecorated main window: dragging the empty titlebar space (with
+ * double-click on it toggling maximize), minimize/maximize through [WindowState], close via [exit].
+ * A maximized window is not draggable (only double-click restores it) — moving a maximized AWT
+ * window would desync placement from the real bounds.
  */
 @Composable
 fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit): WindowChrome {
@@ -41,8 +40,9 @@ fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit)
                 if (state.placement == WindowPlacement.Maximized) WindowPlacement.Floating
                 else WindowPlacement.Maximized
         }
+        val isFloating = { state.placement == WindowPlacement.Floating }
         // On X11 the WM moves the window itself (smooth, compositor-driven — see NativeWindowMove);
-        // elsewhere fall back to Compose's frame-by-frame WindowDraggableArea.
+        // elsewhere fall back to moving it frame by frame from the app thread.
         val useNativeMove = NativeWindowMove.isAvailable()
         WindowChrome(
             isMaximized = { state.placement == WindowPlacement.Maximized },
@@ -54,12 +54,42 @@ fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit)
                 when {
                     state.placement == WindowPlacement.Maximized -> Box(doubleClick) { content() }
                     useNativeMove -> Box(doubleClick.then(Modifier.nativeWindowDrag(awtWindow))) { content() }
-                    else -> WindowDraggableArea(doubleClick) { content() }
+                    else -> Box(doubleClick.then(Modifier.inAppWindowDrag(awtWindow, isFloating))) { content() }
                 }
             },
         )
     }
 }
+
+/**
+ * Moves the window frame by frame from the app thread, for platforms without [NativeWindowMove].
+ * Gated by [WindowDragGesture] (dead zone, floating only), and driven by absolute pointer positions
+ * ([MouseInfo]) because local ones shift together with the window and would feed back. [isFloating]
+ * is read per event, so a double-click that maximizes the window mid-gesture stops the drag instead
+ * of dragging the now screen-sized window back to the floating origin (issue #76). Only unconsumed
+ * presses arm it, so buttons/tabs that consume their own press are excluded.
+ */
+private fun Modifier.inAppWindowDrag(window: java.awt.Window, isFloating: () -> Boolean): Modifier =
+    pointerInput(window) {
+        val gesture = WindowDragGesture(viewConfiguration.touchSlop.toInt())
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = true)
+            gesture.press(MouseInfo.getPointerInfo()?.location ?: return@awaitEachGesture)
+            try {
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull() ?: break
+                    if (!change.pressed) break
+                    val pointer = MouseInfo.getPointerInfo()?.location ?: continue
+                    val target = gesture.drag(pointer, window.location, isFloating()) ?: continue
+                    change.consume()
+                    window.setLocation(target.x, target.y)
+                }
+            } finally {
+                gesture.release()
+            }
+        }
+    }
 
 /**
  * Starts a native WM drag ([NativeWindowMove]) once the pointer moves past touch-slop from the
