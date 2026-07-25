@@ -112,6 +112,8 @@
     <string name="sync_fail_save_settings">Couldn't save sync settings</string>
     <string name="sync_fail_sync">Sync failed</string>
     <string name="sync_fail_revoke">Couldn't revoke the device</string>
+    <string name="sync_fail_too_many_requests">The server is throttling requests — wait a moment and try again</string>
+    <string name="sync_fail_server_error">The server isn't responding correctly — try again later</string>
 
     <!-- issue #28: joining an existing account whose password differs re-keys this device to it -->
     <string name="sync_password_replace_title">Use your account password?</string>

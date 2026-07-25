@@ -455,7 +455,10 @@ class KtorSyncClient(
             HttpStatusCode.NotFound -> SyncException.Kind.NOT_FOUND
             HttpStatusCode.Conflict -> SyncException.Kind.CONFLICT
             HttpStatusCode.Gone -> SyncException.Kind.GONE
-            else -> SyncException.Kind.PROTOCOL
+            HttpStatusCode.TooManyRequests -> SyncException.Kind.TOO_MANY_REQUESTS
+            // Whole range, not just 500/502/503: a proxy can answer with codes the server never
+            // emits, and they all mean the same to the user — not your fault, retry later.
+            else -> if (status.value in 500..599) SyncException.Kind.SERVER_ERROR else SyncException.Kind.PROTOCOL
         }
         return SyncException(kind, "server responded ${status.value}")
     }
