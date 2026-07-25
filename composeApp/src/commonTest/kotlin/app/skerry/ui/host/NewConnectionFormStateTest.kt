@@ -432,6 +432,23 @@ class NewConnectionFormStateTest {
     }
 
     @Test
+    fun addTag_hoists_prod_pill_to_the_front() {
+        val f = NewConnectionFormState()
+        f.addTag("web")
+        f.addTag("db")
+        f.addTag("prod")
+        assertEquals(listOf("prod", "web", "db"), f.tags)
+    }
+
+    @Test
+    fun addTag_keeps_prod_when_the_cap_is_hit() {
+        val f = NewConnectionFormState()
+        f.addTag((1..app.skerry.shared.tag.MAX_TAGS_PER_RECORD + 5).joinToString(",") { "tag$it" })
+        f.addTag("prod")
+        assertEquals("prod", f.tags.first())
+    }
+
+    @Test
     fun addTag_splits_on_commas() {
         val f = NewConnectionFormState()
         f.addTag("prod, #docker ,, db")

@@ -21,8 +21,10 @@ import app.skerry.shared.vnc.VncQuality
 import app.skerry.shared.vnc.VncSession
 import app.skerry.shared.vnc.VncTransport
 import app.skerry.shared.vnc.VncUpdate
+import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.host.prodGuardDialogOpen
 import app.skerry.ui.vnc.VncSessionController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -254,6 +256,48 @@ class SessionsControllerTest {
         assertEquals(3, targets.size)
         assertEquals(listOf("alpha", "beta"), targets.map { it.label }.filter { it == "alpha" || it == "beta" })
         assertTrue(targets.map { it.id }.contains(sessions.active!!.splitSession!!.id))
+        scope.cancel()
+    }
+
+    @Test
+    fun `broadcastTargets marks production sessions and delivers past their own guard`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val prod = sessions.open(hostId = "host-prod")
+        sessions.open(hostId = "host-stage")
+
+        val targets = broadcastTargets(sessions, isProduction = { it == "host-prod" })
+
+        assertEquals(listOf(true, false), targets.map { it.production })
+        // The per-session guard is deliberately off for a broadcast: the panel confirms once for the
+        // whole fan-out, and holding here would park commands in tabs nobody is looking at. That is
+        // also why the panel MUST ask — nothing downstream will.
+        val terminal = sessions.sessions.first { it.id == prod }.liveTerminal!!
+        terminal.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        assertTrue(targets.first { it.production }.send("rm -rf /srv\n"))
+        assertNull(terminal.pendingGuarded)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a held confirmation is visible to the window-level hotkey gate from either pane`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        sessions.toggleSplit()
+        sessions.connectSplit(parentId = a, hostId = "host-b")
+        val session = sessions.active!!
+
+        assertFalse(prodGuardDialogOpen(session))
+        assertFalse(prodGuardDialogOpen(null))
+
+        // Held in the split pane — the one being typed into. The gate has to see it there too, or a
+        // snippet chord would fire over the open dialog.
+        val split = session.splitSession!!.liveTerminal!!
+        split.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        split.typeInput("shutdown now\r")
+        assertTrue(prodGuardDialogOpen(session))
+
+        split.dismissGuardedCommand()
+        assertFalse(prodGuardDialogOpen(session))
         scope.cancel()
     }
 

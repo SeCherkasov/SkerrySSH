@@ -365,6 +365,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
             prefs.set("terminal_cursor_style", TerminalCursorStyle.DEFAULT.id)
             prefs.set("terminal_show_title", false)
             prefs.set("terminal_clipboard_write", false)
+            prefs.set("terminal_prod_warnings", false)
             prefs.set("auto_lock", AutoLockDuration.DEFAULT.id)
         }
         hosts.reload()
@@ -483,6 +484,8 @@ fun main(args: Array<String>) {
                     onHostClickConnectModeChange = { prefs.set("host_click_connect", it.id) },
                     initialAllowServerClipboardWrite = prefs.bool("terminal_clipboard_write", false),
                     onAllowServerClipboardWriteChange = { prefs.set("terminal_clipboard_write", it) },
+                    initialConfirmProductionWarnings = prefs.bool("terminal_prod_warnings", false),
+                    onConfirmProductionWarningsChange = { prefs.set("terminal_prod_warnings", it) },
                     initialAutoLock = prefs.id("auto_lock", AutoLockDuration.DEFAULT, AutoLockDuration::fromId),
                     onAutoLockChange = { prefs.set("auto_lock", it.id) },
                     initialShowRecent = prefs.bool("recent_show", true),

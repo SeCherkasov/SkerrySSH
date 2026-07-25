@@ -61,6 +61,8 @@ import app.skerry.ui.generated.resources.term_broadcast_subtitle
 import app.skerry.ui.generated.resources.term_broadcast_title
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.host.ProdBadge
+import app.skerry.ui.host.ProdBroadcastDialog
 
 /**
  * Every connected terminal a broadcast can reach: top-level tabs and their split panes, VNC tabs
@@ -68,7 +70,11 @@ import app.skerry.ui.theme.Skerry
  * [app.skerry.ui.terminal.TerminalScreenState.typeInput] rather than a raw send, so a broadcast
  * lands in each host's own command history like anything else the user typed.
  */
-internal fun broadcastTargets(sessions: SessionsController?): List<BroadcastTarget> =
+internal fun broadcastTargets(
+    sessions: SessionsController?,
+    // Whether a session's host is production; the panel confirms once before a fan-out reaches one.
+    isProduction: (String?) -> Boolean = { false },
+): List<BroadcastTarget> =
     sessions?.sessions.orEmpty().flatMap { session ->
         listOfNotNull(session, session.splitSession).mapNotNull { candidate ->
             val terminal = (candidate.controller.uiState as? ConnectionUiState.Connected)?.terminal
@@ -76,12 +82,15 @@ internal fun broadcastTargets(sessions: SessionsController?): List<BroadcastTarg
                 BroadcastTarget(
                     id = candidate.id,
                     label = candidate.displayTitle.ifBlank { candidate.subtitle },
+                    production = isProduction(candidate.hostId),
                     send = { text ->
                         // Delivery is judged on the session's state, not on the write: typeInput
                         // hands bytes to an unbounded queue and never fails, so a host whose
                         // transport dropped a moment ago would still be counted as reached.
                         val live = it.state.value is TerminalState.Open
-                        if (live) it.typeInput(text)
+                        // guarded = false: the panel already confirmed the production targets as a
+                        // group. Holding here instead would park the command in background tabs.
+                        if (live) it.typeInput(text, guarded = false)
                         live
                     },
                 )
@@ -107,13 +116,19 @@ internal fun BroadcastPanel(
     LaunchedEffect(Unit) { inputFocus.requestFocus() }
     val selected = controller.selectedCount(targets)
 
-    val submit = {
+    // Production guard: how many selected sessions are on #prod hosts. Non-zero means the send is
+    // held until the extra confirmation below — one question for the whole fan-out.
+    val productionSelected = controller.selectedProductionCount(targets)
+    var confirmProduction by remember { mutableStateOf(false) }
+
+    val deliver = {
         val delivered = controller.send(command, targets)
         if (delivered > 0) {
             lastSentTo = delivered
             command = ""
         }
     }
+    val submit = { if (controller.needsProductionConfirmation(command, targets)) confirmProduction = true else deliver() }
 
     ModalScrim(onDismiss = onDismiss, contentAlignment = Alignment.TopCenter) {
         Column(
@@ -146,7 +161,7 @@ internal fun BroadcastPanel(
                 Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     targets.forEach { target ->
                         key(target.id) {
-                            TargetRow(target.label, controller.isSelected(target.id), mono) { controller.toggle(target.id) }
+                            TargetRow(target.label, controller.isSelected(target.id), target.production, mono) { controller.toggle(target.id) }
                         }
                     }
                 }
@@ -160,10 +175,18 @@ internal fun BroadcastPanel(
             }
         }
     }
+    if (confirmProduction) {
+        ProdBroadcastDialog(
+            command = command,
+            productionCount = productionSelected,
+            onConfirm = { confirmProduction = false; deliver() },
+            onDismiss = { confirmProduction = false },
+        )
+    }
 }
 
 @Composable
-private fun TargetRow(label: String, selected: Boolean, mono: FontFamily, onToggle: () -> Unit) {
+private fun TargetRow(label: String, selected: Boolean, production: Boolean, mono: FontFamily, onToggle: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -178,6 +201,7 @@ private fun TargetRow(label: String, selected: Boolean, mono: FontFamily, onTogg
             Sym(if (selected) "check_box" else "check_box_outline_blank", size = 16.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.faint)
         }
         Txt(label, color = if (selected) Skerry.colors.textBright else Skerry.colors.dim, size = 12.5.sp, font = mono)
+        if (production) ProdBadge()
     }
 }
 

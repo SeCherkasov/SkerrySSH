@@ -38,6 +38,21 @@ class DesktopDesignStateTest {
     }
 
     @Test
+    fun toggleConfirmProductionWarnings_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = DesktopDesignState(onConfirmProductionWarningsChange = { seen += it })
+        // Off by default: sudo is a warning and half of what gets typed on a production box.
+        assertFalse(s.confirmProductionWarnings)
+        s.toggleConfirmProductionWarnings()
+        assertTrue(s.confirmProductionWarnings)
+        s.toggleConfirmProductionWarnings()
+        assertFalse(s.confirmProductionWarnings)
+        // Reported outward on every flip, or the setting would not survive a restart.
+        assertEquals(listOf(true, false), seen)
+        assertTrue(DesktopDesignState(initialConfirmProductionWarnings = true).confirmProductionWarnings)
+    }
+
+    @Test
     fun open_settings_resets_to_the_first_nav_tab() {
         val s = DesktopDesignState()
         s.openSettings()

@@ -63,6 +63,26 @@ fun mobileConnectAction(existing: ConnectionUiState?): MobileConnectAction =
         MobileConnectAction.OpenFresh
     }
 
+/**
+ * The action to actually take when the connect runs, given the [planned] one decided when the
+ * production confirmation was put on screen and whether that session is [stillLive] now.
+ *
+ * The decision is made once, when the question is asked, and carried to the answer: re-deciding on
+ * OK would act on a state the user never saw. The one thing that must still be checked is whether
+ * the session survived the wait — resuming one that died in between would land on an empty screen.
+ */
+fun mobileResolvedAction(planned: MobileConnectAction, stillLive: Boolean): MobileConnectAction =
+    if (planned == MobileConnectAction.Resume && !stillLive) MobileConnectAction.OpenFresh else planned
+
+/**
+ * Whether tapping Connect on a production host must confirm first ([app.skerry.shared.guard.ProductionGuard]).
+ * Returning to a session that is already live is not a new connection, so it doesn't ask — a
+ * confirmation on every tab switch would be trained away within a day. A VNC tap always opens a
+ * fresh framebuffer screen, so it always asks.
+ */
+fun mobileProdConfirmNeeded(production: Boolean, isVnc: Boolean, action: MobileConnectAction): Boolean =
+    production && (isVnc || action != MobileConnectAction.Resume)
+
 /** Where to go from the host screen after opening/resuming a session: Connect → terminal, SFTP → files. */
 enum class MobileConnectDest { Terminal, Files }
 

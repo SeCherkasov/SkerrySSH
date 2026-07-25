@@ -152,4 +152,14 @@ class CommandRiskClassifierTest {
         assertNull(CommandRiskClassifier.assess("free -h").reason)
         assertNotNull(CommandRiskClassifier.assess("rm -rf /").reason)
     }
+
+    @Test
+    fun `reason names the rule that matched, for the UI to localize`() {
+        // The reason is an enum, not a sentence: the AI bar and the production guard render it
+        // through resources, so a wrong mapping here shows the user the wrong explanation.
+        assertEquals(CommandRiskReason.RecursiveForceDelete, CommandRiskClassifier.assess("rm -rf /var").reason)
+        assertEquals(CommandRiskReason.StopsService, CommandRiskClassifier.assess("systemctl stop nginx").reason)
+        assertEquals(CommandRiskReason.Elevated, CommandRiskClassifier.assess("sudo apt update").reason)
+        assertEquals(CommandRiskReason.PowerOff, CommandRiskClassifier.assess("reboot").reason)
+    }
 }

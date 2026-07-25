@@ -4,11 +4,44 @@ package app.skerry.shared.ai
 enum class CommandRisk { None, Warn, Danger }
 
 /**
- * Command assessment: level plus a human-readable reason ([reason] is `null` only for [CommandRisk.None]).
- * [destructive] marks commands that lose/overwrite data (delete, overwrite, format): the UI colors it
- * red even at [CommandRisk.Warn] (non-destructive warns like sudo/kill stay amber).
+ * Why a command was flagged. An enum, not a sentence: the reason is rendered in the terminal AI bar
+ * and in the production-guard confirmation, both of which are localized — a string baked in here
+ * would always come out English. The UI maps each value to a resource
+ * ([app.skerry.ui.ai.commandRiskReasonText]).
  */
-data class CommandAssessment(val risk: CommandRisk, val reason: String?, val destructive: Boolean = false) {
+enum class CommandRiskReason {
+    // Danger
+    ForkBomb,
+    RecursiveForceDelete,
+    RecursiveBroadDelete,
+    DiskDeviceWrite,
+    DownloadToShell,
+    PipeToInterpreter,
+    MirrorDelete,
+    PowerOff,
+    RecursivePermissions,
+    SecurityFileOverwrite,
+    FirewallFlush,
+
+    // Warn
+    DeletesFiles,
+    KillsProcesses,
+    UninstallsPackages,
+    GitDestructive,
+    WorldWritable,
+    StopsService,
+    BulkDelete,
+    TruncatesContent,
+    Elevated,
+}
+
+/**
+ * Command assessment: level plus the reason it was flagged ([reason] is `null` only for
+ * [CommandRisk.None]). [destructive] marks commands that lose/overwrite data (delete, overwrite,
+ * format): the UI colors it red even at [CommandRisk.Warn] (non-destructive warns like sudo/kill
+ * stay amber).
+ */
+data class CommandAssessment(val risk: CommandRisk, val reason: CommandRiskReason?, val destructive: Boolean = false) {
     companion object {
         val SAFE = CommandAssessment(CommandRisk.None, null)
     }
@@ -89,7 +122,7 @@ object CommandRiskClassifier {
             FORK_BOMB_ANON.containsMatchIn(cmd) ||
             FORK_BOMB_NAMED.containsMatchIn(cmd)
         ) {
-            return danger("Fork bomb — will exhaust system resources.")
+            return danger(CommandRiskReason.ForkBomb)
         }
 
         // rm: recursive + force, or recursive on a broad target (/, ~, $HOME, *)
@@ -97,8 +130,8 @@ object CommandRiskClassifier {
             val recursive = RM_RECURSIVE.containsMatchIn(lower)
             val force = RM_FORCE.containsMatchIn(lower)
             val broadTarget = RM_BROAD_TARGET.containsMatchIn(lower)
-            if (recursive && force) return danger("Recursive force delete — irreversible data loss.")
-            if (recursive && broadTarget) return danger("Recursive delete of a broad path — irreversible data loss.")
+            if (recursive && force) return danger(CommandRiskReason.RecursiveForceDelete)
+            if (recursive && broadTarget) return danger(CommandRiskReason.RecursiveBroadDelete)
         }
 
         // Direct write to a disk device / formatting
@@ -106,23 +139,23 @@ object CommandRiskClassifier {
             DISK_TOOLS.containsMatchIn(lower) ||
             REDIRECT_TO_DISK.containsMatchIn(lower)
         ) {
-            return danger("Writes directly to a disk device — can destroy the filesystem.")
+            return danger(CommandRiskReason.DiskDeviceWrite)
         }
 
         // Download and pipe straight into a shell (unverified remote code)
         if (DOWNLOAD_TO_SHELL.containsMatchIn(lower)) {
-            return danger("Pipes a downloaded script straight into a shell — runs unverified remote code.")
+            return danger(CommandRiskReason.DownloadToShell)
         }
 
         // Any pipe into an interpreter (shell or python/perl/ruby/node, e.g. base64 -d | python3) —
         // runs constructed/decoded code. Interpreter list matches curl|... above.
         if (PIPE_TO_INTERPRETER.containsMatchIn(lower)) {
-            return danger("Pipes output into an interpreter — runs constructed or remote code.")
+            return danger(CommandRiskReason.PipeToInterpreter)
         }
 
         // rsync --delete — mirror delete, wipes destination files absent from the source
         if (RSYNC_DELETE.containsMatchIn(lower)) {
-            return danger("Mirror delete — wipes files in the destination that are absent from the source.")
+            return danger(CommandRiskReason.MirrorDelete)
         }
 
         // Power off / reboot
@@ -130,58 +163,58 @@ object CommandRiskClassifier {
             INIT_0_6.containsMatchIn(lower) ||
             SYSTEMCTL_POWER.containsMatchIn(lower)
         ) {
-            return danger("Powers off or reboots the machine.")
+            return danger(CommandRiskReason.PowerOff)
         }
 
         // Recursive permission/ownership change on a system path
         if (CHMOD_CHOWN_RECURSIVE.containsMatchIn(lower) &&
             SYSTEM_PATH.containsMatchIn(lower)
         ) {
-            return danger("Recursive permission/ownership change on a system path.")
+            return danger(CommandRiskReason.RecursivePermissions)
         }
 
         // Overwrite of security-critical files (via > or tee)
         if (REDIRECT_TO_SECURITY_FILE.containsMatchIn(lower) ||
             TEE_TO_SECURITY_FILE.containsMatchIn(lower)
         ) {
-            return danger("Overwrites a security-critical file.")
+            return danger(CommandRiskReason.SecurityFileOverwrite)
         }
 
         // Firewall flush — can cut off own access
         if (FIREWALL_FLUSH.containsMatchIn(lower)) {
-            return danger("Flushes firewall rules — may cut off remote access.")
+            return danger(CommandRiskReason.FirewallFlush)
         }
 
         // ---------- WARN ----------
 
         if (RM_ANY.containsMatchIn(lower)) {
-            return warn("Deletes files.", destructive = true)
+            return warn(CommandRiskReason.DeletesFiles, destructive = true)
         }
         if (KILL_PROCESS.containsMatchIn(lower)) {
-            return warn("Terminates running processes.")
+            return warn(CommandRiskReason.KillsProcesses)
         }
         if (PKG_REMOVE.containsMatchIn(lower) ||
             PACMAN_REMOVE.containsMatchIn(lower)
         ) {
-            return warn("Uninstalls packages.")
+            return warn(CommandRiskReason.UninstallsPackages)
         }
         if (GIT_DESTRUCTIVE.containsMatchIn(lower)) {
-            return warn("Discards local changes or rewrites history.", destructive = true)
+            return warn(CommandRiskReason.GitDestructive, destructive = true)
         }
         if (CHMOD_777.containsMatchIn(lower)) {
-            return warn("Grants world-writable permissions.")
+            return warn(CommandRiskReason.WorldWritable)
         }
         if (SERVICE_STOP.containsMatchIn(lower)) {
-            return warn("Stops or disables a service.")
+            return warn(CommandRiskReason.StopsService)
         }
         if (FIND_DELETE.containsMatchIn(lower)) {
-            return warn("Bulk-deletes matched files.", destructive = true)
+            return warn(CommandRiskReason.BulkDelete, destructive = true)
         }
         if (TRUNCATE_CONTENT.containsMatchIn(lower)) {
-            return warn("Discards file contents.", destructive = true)
+            return warn(CommandRiskReason.TruncatesContent, destructive = true)
         }
         if (ELEVATED.containsMatchIn(lower)) {
-            return warn("Runs with elevated privileges.")
+            return warn(CommandRiskReason.Elevated)
         }
 
         return CommandAssessment.SAFE
@@ -205,6 +238,6 @@ object CommandRiskClassifier {
         return s.replace(WHITESPACE_RUN, " ").trim()
     }
 
-    private fun danger(reason: String) = CommandAssessment(CommandRisk.Danger, reason, destructive = true)
-    private fun warn(reason: String, destructive: Boolean = false) = CommandAssessment(CommandRisk.Warn, reason, destructive)
+    private fun danger(reason: CommandRiskReason) = CommandAssessment(CommandRisk.Danger, reason, destructive = true)
+    private fun warn(reason: CommandRiskReason, destructive: Boolean = false) = CommandAssessment(CommandRisk.Warn, reason, destructive)
 }

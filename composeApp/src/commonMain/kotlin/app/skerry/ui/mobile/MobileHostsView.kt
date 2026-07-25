@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.ProdBadge
+import app.skerry.ui.host.isProdHost
 import app.skerry.ui.host.UNGROUPED_LABEL
 import app.skerry.ui.host.ungroupedLabel
 import app.skerry.ui.generated.resources.Res
@@ -403,12 +405,13 @@ private fun MobileFolderHeader(
 @Composable
 private fun MobileHostRow(host: Host, onClick: () -> Unit) {
     val dotColor = sessionDotColor(LocalSessions.current?.statusFor(host.id))
+    val prod = isProdHost(host)
     Row(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(Skerry.colors.card)
-            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(14.dp))
+            .border(1.dp, if (prod) Skerry.colors.sunset else Skerry.colors.cyan08, RoundedCornerShape(14.dp))
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -425,7 +428,13 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
             Sym(host.connectionType.icon, size = 21.sp, color = Skerry.colors.cyanBright)
         }
         Column(Modifier.weight(1f)) {
-            Txt(host.label, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Txt(
+                    host.label, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold,
+                    maxLines = 1, modifier = Modifier.weight(1f, fill = false),
+                )
+                if (prod) ProdBadge()
+            }
             Spacer(Modifier.height(2.dp))
             Txt(
                 "${host.username}@${host.address}",

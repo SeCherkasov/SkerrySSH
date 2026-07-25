@@ -1,0 +1,22 @@
+<resources>
+    <string name="risk_fork_bomb">Форк-бомба — исчерпает ресурсы системы.</string>
+    <string name="risk_recursive_force_delete">Рекурсивное принудительное удаление — данные не восстановить.</string>
+    <string name="risk_recursive_broad_delete">Рекурсивное удаление по широкому пути — данные не восстановить.</string>
+    <string name="risk_disk_device_write">Пишет прямо на дисковое устройство — может уничтожить файловую систему.</string>
+    <string name="risk_download_to_shell">Передаёт скачанный скрипт прямо в шелл — выполняет непроверенный код.</string>
+    <string name="risk_pipe_to_interpreter">Передаёт вывод в интерпретатор — выполняет собранный или удалённый код.</string>
+    <string name="risk_mirror_delete">Зеркальное удаление — сотрёт в приёмнике файлы, которых нет в источнике.</string>
+    <string name="risk_power_off">Выключает или перезагружает машину.</string>
+    <string name="risk_recursive_permissions">Рекурсивно меняет права или владельца системного пути.</string>
+    <string name="risk_security_file_overwrite">Перезаписывает файл, критичный для безопасности.</string>
+    <string name="risk_firewall_flush">Сбрасывает правила фаервола — можно потерять удалённый доступ.</string>
+    <string name="risk_deletes_files">Удаляет файлы.</string>
+    <string name="risk_kills_processes">Завершает запущенные процессы.</string>
+    <string name="risk_uninstalls_packages">Удаляет пакеты.</string>
+    <string name="risk_git_destructive">Отбрасывает локальные изменения или переписывает историю.</string>
+    <string name="risk_world_writable">Даёт права на запись всем.</string>
+    <string name="risk_stops_service">Останавливает или отключает сервис.</string>
+    <string name="risk_bulk_delete">Массово удаляет найденные файлы.</string>
+    <string name="risk_truncates_content">Обнуляет содержимое файлов.</string>
+    <string name="risk_elevated">Выполняется с повышенными правами.</string>
+</resources>

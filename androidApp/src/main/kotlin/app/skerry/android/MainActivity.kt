@@ -163,6 +163,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
                     initialAllowServerClipboardWrite = readClipboardWrite(dir),
                     onAllowServerClipboardWriteChange = { writeClipboardWrite(dir, it) },
+                    initialConfirmProductionWarnings = readProdWarnings(dir),
+                    onConfirmProductionWarningsChange = { writeProdWarnings(dir, it) },
                     initialUiLanguage = currentUiLanguage.value,
                     onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
                     initialAutoLock = readAutoLock(dir),
@@ -264,6 +266,17 @@ class MainActivity : FragmentActivity() {
     private fun writeClipboardWrite(dir: File, enabled: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_clipboard_write").writeText(enabled.toString()) }
+        }
+    }
+
+    /** Production guard threshold: `terminal_prod_warnings`, default off (Danger only). */
+    private fun readProdWarnings(dir: File): Boolean = runCatching {
+        File(dir, "terminal_prod_warnings").readText().trim().toBoolean()
+    }.getOrDefault(false)
+
+    private fun writeProdWarnings(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_prod_warnings").writeText(enabled.toString()) }
         }
     }
 
@@ -552,6 +565,7 @@ class MainActivity : FragmentActivity() {
                 writeTerminalTheme(dir, TerminalThemes.DEFAULT)
                 writeThemeMode(dir, ThemeMode.DEFAULT)
                 writeClipboardWrite(dir, false)
+                writeProdWarnings(dir, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)
             }

@@ -1,0 +1,22 @@
+<resources>
+    <string name="risk_fork_bomb">Fork bomb — will exhaust system resources.</string>
+    <string name="risk_recursive_force_delete">Recursive force delete — irreversible data loss.</string>
+    <string name="risk_recursive_broad_delete">Recursive delete of a broad path — irreversible data loss.</string>
+    <string name="risk_disk_device_write">Writes directly to a disk device — can destroy the filesystem.</string>
+    <string name="risk_download_to_shell">Pipes a downloaded script straight into a shell — runs unverified remote code.</string>
+    <string name="risk_pipe_to_interpreter">Pipes output into an interpreter — runs constructed or remote code.</string>
+    <string name="risk_mirror_delete">Mirror delete — wipes files in the destination that are absent from the source.</string>
+    <string name="risk_power_off">Powers off or reboots the machine.</string>
+    <string name="risk_recursive_permissions">Recursive permission/ownership change on a system path.</string>
+    <string name="risk_security_file_overwrite">Overwrites a security-critical file.</string>
+    <string name="risk_firewall_flush">Flushes firewall rules — may cut off remote access.</string>
+    <string name="risk_deletes_files">Deletes files.</string>
+    <string name="risk_kills_processes">Terminates running processes.</string>
+    <string name="risk_uninstalls_packages">Uninstalls packages.</string>
+    <string name="risk_git_destructive">Discards local changes or rewrites history.</string>
+    <string name="risk_world_writable">Grants world-writable permissions.</string>
+    <string name="risk_stops_service">Stops or disables a service.</string>
+    <string name="risk_bulk_delete">Bulk-deletes matched files.</string>
+    <string name="risk_truncates_content">Discards file contents.</string>
+    <string name="risk_elevated">Runs with elevated privileges.</string>
+</resources>

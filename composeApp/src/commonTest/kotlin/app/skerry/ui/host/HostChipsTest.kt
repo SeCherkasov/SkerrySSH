@@ -1,6 +1,7 @@
 package app.skerry.ui.host
 
 import app.skerry.shared.host.Host
+import app.skerry.shared.tag.PROD_TAG
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -31,8 +32,16 @@ class HostChipsTest {
     }
 
     @Test
-    fun empty_hosts_yield_only_all_chip() {
-        assertEquals(listOf(ALL_HOSTS_CHIP), hostTagChips(emptyList()))
+    fun prod_chip_is_offered_even_with_no_production_hosts() {
+        val hosts = listOf(host("1", tags = listOf("web")))
+        assertEquals(listOf(ALL_HOSTS_CHIP, PROD_TAG, "web"), hostTagChips(hosts))
+        assertEquals(listOf(ALL_HOSTS_CHIP, PROD_TAG), hostTagChips(emptyList()))
+    }
+
+    @Test
+    fun prod_chip_comes_first_whatever_the_tag_order() {
+        val hosts = listOf(host("1", tags = listOf("web", "db")), host("2", tags = listOf("prod")))
+        assertEquals(listOf(ALL_HOSTS_CHIP, PROD_TAG, "web", "db"), hostTagChips(hosts))
     }
 
     @Test
