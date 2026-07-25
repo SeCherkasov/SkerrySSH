@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.rememberModalPresence
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -92,6 +93,9 @@ internal fun SnippetPaletteButton(active: Session?, requests: SharedFlow<Unit>? 
 
 @Composable
 internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> Unit) {
+    // Registered here rather than at each call site: the palette is only ever shown inside a
+    // focusable Popup (toolbar button, host row menu), and both must hand the keyboard back.
+    rememberModalPresence()
     val mono = LocalFonts.current.mono
     var query by remember { mutableStateOf("") }
     val all = manager.snippets

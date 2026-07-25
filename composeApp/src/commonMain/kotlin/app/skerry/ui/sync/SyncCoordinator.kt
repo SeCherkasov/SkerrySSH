@@ -153,6 +153,8 @@ enum class SyncFailureReason {
     SaveSettingsFailed,    // sync settings didn't save (detail: cause)
     SyncFailed,            // sync cycle failure (detail: cause)
     RevokeFailed,          // device revoke failed (detail: cause)
+    TooManyRequests,       // the server's rate limiter turned the request away — retrying later works
+    ServerError,           // the server (or the proxy in front of it) is broken or restarting
 }
 
 /**
@@ -801,11 +803,16 @@ class SyncCoordinator(
             val newSession = try {
                 syncClient.changePassword(cfg.accountId, cak, nak, newWrapped, device)
             } catch (e: SyncException) {
-                // UNAUTHORIZED/NOT_FOUND come from the SRP verify gate, before any DB write — nothing
-                // rotated, so it's safe to restore the auto-restore token (a wrong-password typo mustn't
-                // cost the user their "keep connected"). NETWORK/PROTOCOL are ambiguous (the server may
-                // have committed): leave it cleared and let the user reconnect with the new password.
-                if (hadAutoRestore && (e.kind == SyncException.Kind.UNAUTHORIZED || e.kind == SyncException.Kind.NOT_FOUND)) {
+                // UNAUTHORIZED/NOT_FOUND come from the SRP verify gate, and TOO_MANY_REQUESTS from the
+                // rate limiter ahead of the route — all three land before any DB write, so nothing
+                // rotated and it's safe to restore the auto-restore token (a wrong-password typo or a
+                // throttled retry mustn't cost the user their "keep connected"). NETWORK/PROTOCOL/5xx
+                // are ambiguous (the server may have committed): leave it cleared and let the user
+                // reconnect with the new password.
+                val rejectedBeforeAnyWrite = e.kind == SyncException.Kind.UNAUTHORIZED ||
+                    e.kind == SyncException.Kind.NOT_FOUND ||
+                    e.kind == SyncException.Kind.TOO_MANY_REQUESTS
+                if (hadAutoRestore && rejectedBeforeAnyWrite) {
                     configStore.save(cfg)
                 }
                 return when (e.kind) {
@@ -814,6 +821,8 @@ class SyncCoordinator(
                         AccountPasswordChange.Failed(SyncFailureReason.Unauthorized)
                     SyncException.Kind.NETWORK -> AccountPasswordChange.Failed(SyncFailureReason.Network, e.message)
                     SyncException.Kind.PROTOCOL -> AccountPasswordChange.Failed(SyncFailureReason.Protocol, e.message)
+                    SyncException.Kind.TOO_MANY_REQUESTS -> AccountPasswordChange.Failed(SyncFailureReason.TooManyRequests)
+                    SyncException.Kind.SERVER_ERROR -> AccountPasswordChange.Failed(SyncFailureReason.ServerError, e.message)
                     else -> AccountPasswordChange.Failed(SyncFailureReason.ConnectFailed, e.message)
                 }
             }
@@ -1576,6 +1585,8 @@ class SyncCoordinator(
         SyncException.Kind.GONE -> SyncStatus.Failed(SyncFailureReason.PairingCodeExpired)
         SyncException.Kind.NETWORK -> SyncStatus.Failed(SyncFailureReason.Network, e.message)
         SyncException.Kind.PROTOCOL -> SyncStatus.Failed(SyncFailureReason.Protocol, e.message)
+        SyncException.Kind.TOO_MANY_REQUESTS -> SyncStatus.Failed(SyncFailureReason.TooManyRequests)
+        SyncException.Kind.SERVER_ERROR -> SyncStatus.Failed(SyncFailureReason.ServerError, e.message)
     }
 }
 

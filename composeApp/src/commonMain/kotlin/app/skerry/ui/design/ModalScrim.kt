@@ -44,12 +44,7 @@ fun ModalScrim(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val noop = remember { MutableInteractionSource() }
-    var token by remember { mutableStateOf(-1) }
-    DisposableEffect(Unit) {
-        val t = ModalPresence.opened()
-        token = t
-        onDispose { ModalPresence.closed(t) }
-    }
+    val token = rememberModalPresence()
     // Esc handling: the scrim listens on key bubble-up (onKeyEvent), so a focused field or a
     // nested modal handles the event first. The scrim claims focus only while nothing inside the
     // modal holds it — otherwise it would steal focus from an auto-focused field.
@@ -85,6 +80,23 @@ fun ModalScrim(
         withFrameNanos {} // let an auto-focused field inside claim focus first
         if (!subtreeFocused) runCatching { escFocus.requestFocus() }
     }
+}
+
+/**
+ * Registers the calling composable with [ModalPresence] for as long as it stays in composition, and
+ * returns its token (for [ModalPresence.isTop]; -1 until the effect runs). Needed by every modal
+ * that takes the keyboard, not just [ModalScrim] ones: a focusable Popup owns focus while it is up
+ * and leaves it with no one when it goes, so without this the terminal never reclaims it.
+ */
+@Composable
+fun rememberModalPresence(): Int {
+    var token by remember { mutableStateOf(-1) }
+    DisposableEffect(Unit) {
+        val t = ModalPresence.opened()
+        token = t
+        onDispose { ModalPresence.closed(t) }
+    }
+    return token
 }
 
 /**

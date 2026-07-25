@@ -112,6 +112,8 @@
     <string name="sync_fail_save_settings">无法保存同步设置</string>
     <string name="sync_fail_sync">同步失败</string>
     <string name="sync_fail_revoke">无法撤销设备</string>
+    <string name="sync_fail_too_many_requests">服务器正在限制请求频率，请稍候重试</string>
+    <string name="sync_fail_server_error">服务器响应异常，请稍后重试</string>
 
     <!-- issue #28: 连接到使用其他密码的现有账户会将本设备改用该密码 -->
     <string name="sync_password_replace_title">使用账户密码？</string>

@@ -153,5 +153,16 @@ sealed interface SyncSignal {
 
 /** Sync client error: network, protocol, or expected (no account / wrong password). */
 class SyncException(val kind: Kind, message: String, cause: Throwable? = null) : Exception(message, cause) {
-    enum class Kind { NETWORK, UNAUTHORIZED, CONFLICT, NOT_FOUND, GONE, PROTOCOL }
+    enum class Kind {
+        NETWORK,
+        UNAUTHORIZED,
+        CONFLICT,
+        NOT_FOUND,
+        GONE,
+        PROTOCOL,
+        /** The server's own rate limiter (429) — register, SRP login and pairing claim are throttled. */
+        TOO_MANY_REQUESTS,
+        /** Any 5xx: the server is down, restarting, or a reverse proxy in front of it has nothing to talk to. */
+        SERVER_ERROR,
+    }
 }
