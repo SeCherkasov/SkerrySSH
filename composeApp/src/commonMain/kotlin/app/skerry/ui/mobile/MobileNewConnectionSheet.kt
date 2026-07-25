@@ -42,7 +42,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
-import app.skerry.shared.host.MAX_NOTES_LENGTH
+import app.skerry.shared.host.capNotes
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
@@ -298,7 +298,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             MobileFormField(stringResource(Res.string.conn_field_notes)) {
                 MobileFormInput(
                     form.notes,
-                    { form.notes = it.take(MAX_NOTES_LENGTH) },
+                    { form.notes = capNotes(it) },
                     stringResource(Res.string.conn_notes_placeholder),
                     singleLine = false,
                     minHeightDp = 80,

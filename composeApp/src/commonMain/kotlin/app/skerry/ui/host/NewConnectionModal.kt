@@ -53,7 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.host.Host
-import app.skerry.shared.host.MAX_NOTES_LENGTH
+import app.skerry.shared.host.capNotes
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
@@ -346,7 +346,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                 Field(stringResource(Res.string.conn_field_notes)) {
                     ModalTextField(
                         form.notes,
-                        { form.notes = it.take(MAX_NOTES_LENGTH) },
+                        { form.notes = capNotes(it) },
                         stringResource(Res.string.conn_notes_placeholder),
                         singleLine = false,
                         minHeightDp = 64,
