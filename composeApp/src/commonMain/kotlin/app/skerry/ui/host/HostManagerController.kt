@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ai.AiPolicy
+import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
 import app.skerry.shared.ssh.ConnectionType
@@ -30,6 +31,8 @@ data class HostDraft(
     val jumpHostId: String? = null,
     val keepAliveSeconds: Int = 30,
     val notes: String? = null,
+    /** Container/pod to exec into; only set for [ConnectionType.CONTAINER] profiles. */
+    val container: ContainerSpec? = null,
 )
 
 /**
@@ -81,6 +84,7 @@ class HostManagerController(
                 jumpHostId = draft.jumpHostId,
                 keepAliveSeconds = draft.keepAliveSeconds,
                 notes = draft.notes,
+                container = draft.container,
                 // Not a form field — toggled from the live VNC session; a form save must not reset it.
                 vncResizeToWindow = find(id)?.vncResizeToWindow ?: false,
             ),

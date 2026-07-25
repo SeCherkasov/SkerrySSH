@@ -70,6 +70,7 @@ import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalKnownHosts
+import app.skerry.ui.app.LocalTestTransport
 import app.skerry.ui.app.LocalOpenSftp
 import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
@@ -264,6 +265,8 @@ fun MobileDesignApp(
         LocalHosts provides deps.hosts,
         LocalSessions provides liveSessions,
         LocalKnownHosts provides deps.knownHosts,
+        // Read-only probe transport for form-side checks (container listing): never adds a host key.
+        LocalTestTransport provides deps.probeTransport,
         LocalFeatures provides features,
         // AI assistant (BYOK): More→AI settings tab, per-host policies, terminal AI bar.
         LocalAi provides ai,

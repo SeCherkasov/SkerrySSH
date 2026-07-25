@@ -26,6 +26,12 @@ import app.skerry.ui.tunnel.TunnelManager
  */
 data class AppDependencies(
     val transport: SshTransport? = null,
+    /**
+     * Read-only probe transport for form-side checks (test connection, container listing): its
+     * verifier does NOT add a new host key to known_hosts, so probing never establishes trust
+     * (only a real connect via TOFU does). `null` — preview/mock without probing.
+     */
+    val probeTransport: SshTransport? = null,
     /** VNC/RFB transport for remote-desktop tabs; `null` if VNC isn't wired up on this platform. */
     val vncTransport: VncTransport? = null,
     val hosts: HostManagerController? = null,

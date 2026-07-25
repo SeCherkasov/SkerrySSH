@@ -1,5 +1,6 @@
 package app.skerry.ui.connection
 
+import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
@@ -25,15 +26,29 @@ fun Host.toTarget(jump: SshJump? = null): SshTarget =
     SshTarget(
         host = address, port = port, username = username, connectionType = connectionType,
         jump = jump, keepAliveSeconds = keepAliveSeconds,
+        // Container profiles: what to exec into once the host's SSH leg is up (ignored by every
+        // other transport, see [ContainerTransport]).
+        container = container.takeIf { connectionType == ConnectionType.CONTAINER },
     )
 
 /**
  * Session tab/title subtitle. `user@addr:port` for networked profiles; a local shell has no
- * host/user, so it shows the shell/command (blank → "local shell").
+ * host/user, so it shows the shell/command (blank → "local shell"); a container profile leads with
+ * what it enters (`web · root@10.0.0.5`, namespaced pods as `ns/pod`) — the container is the point,
+ * the host is where it runs.
  */
-fun Host.connectionSubtitle(): String =
-    if (connectionType == ConnectionType.LOCAL) address.ifBlank { "local shell" }
-    else "$username@$address:$port"
+fun Host.connectionSubtitle(): String {
+    val spec = container?.takeIf { connectionType == ConnectionType.CONTAINER && it.isComplete }
+    return when {
+        connectionType == ConnectionType.LOCAL -> address.ifBlank { "local shell" }
+        spec != null -> "${containerLabel(spec)} · $username@$address"
+        else -> "$username@$address:$port"
+    }
+}
+
+/** Container/pod as shown in session chrome: `web`, or `ns/pod` when a namespace is set. */
+private fun containerLabel(spec: ContainerSpec): String =
+    if (spec.namespace.isNotBlank()) "${spec.namespace}/${spec.target}" else spec.target
 
 /**
  * Keychain secret from the vault → SSH auth method. Password/key/certificate map one-to-one;

@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ai.AiPolicy
+import app.skerry.shared.container.ContainerRuntime
+import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.normalizeNotes
 import app.skerry.shared.tag.MAX_TAGS_PER_RECORD
@@ -93,6 +95,34 @@ class NewConnectionFormState {
         passphrase = ""
     }
 
+    // Container profile ([ConnectionType.CONTAINER]): which container/pod on that host to enter.
+    // Kept as separate fields (not a [ContainerSpec]) so each input is its own snapshot state; they
+    // are assembled and normalized on the way into the draft.
+
+    /** Container runtime the host speaks: `docker` or `kubectl`. */
+    var containerRuntime: ContainerRuntime by mutableStateOf(ContainerRuntime.DOCKER)
+
+    /** Container name/id, or pod name for Kubernetes — the one required container field. */
+    var containerTarget: String by mutableStateOf("")
+
+    /** Kubernetes namespace; blank uses the host context's default. */
+    var containerNamespace: String by mutableStateOf("")
+
+    /** Container inside the pod (Kubernetes `-c`); blank uses the pod's first container. */
+    var containerPodContainer: String by mutableStateOf("")
+
+    /** Shell to run inside the container; blank → [app.skerry.shared.container.DEFAULT_CONTAINER_SHELL]. */
+    var containerShell: String by mutableStateOf("")
+
+    /** Container fields as a spec, normalized (trimmed); used for the draft and for browsing. */
+    fun containerSpec(): ContainerSpec = ContainerSpec(
+        runtime = containerRuntime,
+        target = containerTarget,
+        namespace = containerNamespace,
+        podContainer = containerPodContainer,
+        shell = containerShell,
+    ).normalized()
+
     /** Saved SSH profile to tunnel through (ProxyJump), `null` — connect directly. */
     var jumpHostId: String? by mutableStateOf(null)
 
@@ -158,6 +188,10 @@ class NewConnectionFormState {
             return when (connectionType) {
                 ConnectionType.SSH, ConnectionType.MOSH -> base && username.isNotBlank() && authValid
                 ConnectionType.TELNET, ConnectionType.SERIAL -> base
+                // Container: the SSH requirements of the host running the CLI, plus something to
+                // exec into (a profile without a container would connect to nothing).
+                ConnectionType.CONTAINER ->
+                    base && username.isNotBlank() && authValid && containerSpec().isComplete
                 // VNC authenticates with an optional password (no username): base + a valid auth
                 // choice (Ask / a stored password), same secret resolution as SSH minus the username.
                 ConnectionType.VNC -> base && authValid
@@ -211,12 +245,16 @@ class NewConnectionFormState {
         jumpHostId = jumpHostId,
         keepAliveSeconds = keepAliveSeconds,
         notes = normalizeNotes(notes),
+        // Only a container profile stores a spec: on another type the (possibly leftover) fields
+        // would be dead weight that a later edit could silently resurrect.
+        container = containerSpec().takeIf { connectionType == ConnectionType.CONTAINER },
     )
 
     companion object {
         /** Default port/speed by type: SSH/Mosh->22 (the SSH hop's port), Telnet->23, Serial->9600 (baud), VNC->5900 (RFB display :0). */
         fun defaultPortFor(type: ConnectionType): Int = when (type) {
-            ConnectionType.SSH, ConnectionType.MOSH -> 22
+            // Container profiles dial the host over SSH; the port is that hop's.
+            ConnectionType.SSH, ConnectionType.MOSH, ConnectionType.CONTAINER -> 22
             ConnectionType.TELNET -> 23
             ConnectionType.SERIAL -> 9600
             ConnectionType.VNC -> 5900
@@ -242,6 +280,13 @@ class NewConnectionFormState {
             aiPolicy = host.aiPolicy
             jumpHostId = host.jumpHostId
             keepAliveSeconds = host.keepAliveSeconds
+            host.container?.let { spec ->
+                containerRuntime = spec.runtime
+                containerTarget = spec.target
+                containerNamespace = spec.namespace
+                containerPodContainer = spec.podContainer
+                containerShell = spec.shell
+            }
             if (host.credentialId != null) {
                 authMode = AuthMode.EXISTING
                 existingCredentialId = host.credentialId
