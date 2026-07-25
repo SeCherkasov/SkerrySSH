@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -914,11 +915,15 @@ internal fun HostEntryRow(
     }
 }
 
-/** Context menu item for a host row. */
+/**
+ * Context menu item for a host row. The width floor keeps the card from collapsing onto its longest
+ * label — short verbs in some locales leave a sliver of a click target, and the same menu would
+ * change width from row to row depending on which actions that row offers.
+ */
 @Composable
 private fun HostMenuItem(label: String, color: Color, onClick: () -> Unit) {
     Box(
-        Modifier.clip(RoundedCornerShape(5.dp)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 7.dp),
+        Modifier.widthIn(min = 140.dp).clip(RoundedCornerShape(5.dp)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
         Txt(label, color = color, size = 12.sp)
     }
