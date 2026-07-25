@@ -310,6 +310,51 @@ class ConnectionControllerTest {
     }
 
     @Test
+    fun `container drop auto-reconnects like ssh`() = runTest {
+        val ch1 = FakeShellChannel()
+        val transport = ScriptedTransport(
+            listOf(Result.success(FakeSshConnection(ch1)), Result.success(FakeSshConnection(FakeShellChannel()))),
+        )
+        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
+        // A container session is carried by SSH, so a transport drop is the same kind of event as
+        // on SSH: reconnecting re-execs into the container (a fresh shell, like a new SSH shell).
+        val containerTarget = SshTarget(
+            host = "h", port = 22, username = "ops", connectionType = ConnectionType.CONTAINER,
+            container = app.skerry.shared.container.ContainerSpec(target = "web"),
+        )
+        controller.connect(containerTarget, SshAuth.Password("pw"))
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        ch1.close() // server-side drop
+        advanceUntilIdle()
+
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+        assertEquals(2, transport.connectCalls)
+        scope.cancel()
+    }
+
+    @Test
+    fun `container session keeps the profile's keep-alive cadence`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+
+        controller.connect(
+            target.copy(
+                connectionType = ConnectionType.CONTAINER,
+                container = app.skerry.shared.container.ContainerSpec(target = "web"),
+                keepAliveSeconds = 30,
+            ),
+            SshAuth.Password("pw"),
+        )
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        assertEquals(1, conn.roundTrips) // the SSH leg still needs keepalives behind a NAT
+        advanceTimeBy(65_000)
+        assertEquals(3, conn.roundTrips)
+        scope.cancel()
+    }
+
+    @Test
     fun `disconnect during reconnect cancels further attempts and returns to Form`() = runTest {
         val ch1 = FakeShellChannel()
         val transport = ScriptedTransport(

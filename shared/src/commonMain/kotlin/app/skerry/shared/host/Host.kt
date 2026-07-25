@@ -1,6 +1,7 @@
 package app.skerry.shared.host
 
 import app.skerry.shared.ai.AiPolicy
+import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.ssh.ConnectionType
 import kotlinx.serialization.Serializable
 
@@ -43,6 +44,10 @@ import kotlinx.serialization.Serializable
  * (OpenSSH's `ServerAliveInterval`). 0 disables it. SSH-only (Telnet/Serial ignore it). Default 30
  * also covers old saved files (field absent).
  *
+ * [container] is set for [ConnectionType.CONTAINER] profiles and says what to exec into (container
+ * or pod, namespace, shell); the SSH fields above then describe the host running the
+ * `docker`/`kubectl` CLI. `null` on every other type.
+ *
  * [vncResizeToWindow] remembers the VNC session's "Resize to window" toggle across restarts.
  * VNC-only; toggled from the live session's graphics menu, not the edit form (which preserves it).
  *
@@ -69,4 +74,5 @@ data class Host(
     val keepAliveSeconds: Int = 30,
     val vncResizeToWindow: Boolean = false,
     val notes: String? = null,
+    val container: ContainerSpec? = null,
 )

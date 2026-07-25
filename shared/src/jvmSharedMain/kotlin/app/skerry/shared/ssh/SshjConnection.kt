@@ -1,5 +1,6 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.container.shellCommandLine
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SshjSftpClient
 import java.io.ByteArrayOutputStream
@@ -28,6 +29,7 @@ internal class SshjConnection(
     override val cipher: String?,
     override val serverVersion: String?,
     private val upstream: List<SSHClient> = emptyList(),
+    private val shellCommand: List<String>? = null,
 ) : SshConnection {
 
     override val isConnected: Boolean
@@ -86,7 +88,7 @@ internal class SshjConnection(
     override suspend fun openShell(size: PtySize, term: String): ShellChannel =
         withContext(Dispatchers.IO) {
             try {
-                openShellChannel(client.startSession(), size, term)
+                openShellChannel(client.startSession(), size, term, shellCommand)
             } catch (e: IOException) {
                 throw SshConnectionException("Failed to open shell channel", e)
             }
@@ -195,13 +197,22 @@ internal fun bindForwardListener(
 }
 
 /**
- * Open the shell on an already-open [session] channel. On a failed PTY/shell request the channel is
- * closed before rethrowing — abandoned open channels accumulate on the connection until disconnect.
+ * Open the interactive channel on an already-open [session]: the account's login shell, or —
+ * with [command] — that argv run on the same PTY (container exec; quoted with
+ * [shellCommandLine], the server hands it to the login shell). On a failed PTY/shell request the
+ * channel is closed before rethrowing — abandoned open channels accumulate on the connection until
+ * disconnect.
  */
-internal fun openShellChannel(session: Session, size: PtySize, term: String): SshjShellChannel =
+internal fun openShellChannel(
+    session: Session,
+    size: PtySize,
+    term: String,
+    command: List<String>? = null,
+): SshjShellChannel =
     try {
         session.allocatePTY(term, size.cols, size.rows, size.widthPx, size.heightPx, emptyMap())
-        SshjShellChannel(session, session.startShell())
+        val line = command?.takeIf { it.isNotEmpty() }?.let(::shellCommandLine)
+        SshjShellChannel(session, if (line == null) session.startShell() else session.exec(line))
     } catch (e: Exception) {
         runCatching { session.close() }
         throw e

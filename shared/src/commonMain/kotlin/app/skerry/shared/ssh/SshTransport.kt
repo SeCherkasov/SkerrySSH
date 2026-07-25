@@ -1,5 +1,6 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.container.ContainerSpec
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -34,6 +35,15 @@ interface SshTransport {
  * [SshConnection.measureRoundTrip]). Carried inside the target (like [jump]) so auto-reconnect
  * keeps the cadence with no extra plumbing. Default 0 preserves prior call sites: ad-hoc/probe
  * targets spawn no background traffic unless asked to.
+ *
+ * [container] is what a [ConnectionType.CONTAINER] target execs into; the other fields describe the
+ * host running the container CLI. [app.skerry.shared.container.ContainerTransport] turns it into
+ * [shellCommand] and dials the host as plain SSH — no other transport reads it.
+ *
+ * [shellCommand] replaces the login shell on the interactive channel with this argv (quoted by the
+ * transport, see [app.skerry.shared.container.shellCommandLine]): the PTY is allocated as usual, but
+ * the server runs this command in it. `null` (the default) means the account's login shell, i.e.
+ * every plain SSH/Mosh/Telnet/Serial/local session.
  */
 data class SshTarget(
     val host: String,
@@ -42,6 +52,8 @@ data class SshTarget(
     val connectionType: ConnectionType = ConnectionType.SSH,
     val jump: SshJump? = null,
     val keepAliveSeconds: Int = 0,
+    val container: ContainerSpec? = null,
+    val shellCommand: List<String>? = null,
 )
 
 /**

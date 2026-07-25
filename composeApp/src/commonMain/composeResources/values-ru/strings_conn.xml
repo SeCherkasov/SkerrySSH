@@ -118,4 +118,25 @@
     <string name="conn_import_empty">В этом файле не найдено хостов.</string>
     <string name="conn_import_button">Импортировать (%1$d)</string>
     <string name="conn_import_skipped">Некоторые строки были пропущены при импорте.</string>
+
+    <!-- Container profiles (Docker / Kubernetes exec) -->
+    <string name="conn_protocol_container">Контейнер</string>
+    <string name="conn_type_container">Контейнер</string>
+    <string name="conn_runtime_docker">Docker</string>
+    <string name="conn_runtime_kubernetes">Kubernetes</string>
+    <string name="conn_field_runtime">Среда контейнеров</string>
+    <string name="conn_field_container">Контейнер</string>
+    <string name="conn_field_pod">Под</string>
+    <string name="conn_field_namespace">Пространство имён</string>
+    <string name="conn_field_pod_container">Контейнер в поде</string>
+    <string name="conn_field_container_shell">Оболочка</string>
+    <string name="conn_container_hint">Адрес выше — хост, на котором по SSH запускается docker/kubectl.</string>
+    <string name="conn_container_browse">Выбрать</string>
+    <string name="conn_container_loading">Получаем список…</string>
+    <string name="conn_container_empty">На этом хосте ничего не запущено</string>
+    <string name="conn_container_err_auth">Не удалось пройти аутентификацию</string>
+    <string name="conn_container_err_host_key">Ключ хоста отклонён</string>
+    <string name="conn_container_err_connection">Не удалось подключиться</string>
+    <string name="conn_container_incomplete">Сначала введите хост, логин и данные для входа</string>
+    <string name="conn_container_err_command">Хост не смог получить список контейнеров</string>
 </resources>

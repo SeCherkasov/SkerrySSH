@@ -62,7 +62,15 @@ class SshjTransport(
         // `SSH-2.0-` too — substring(8) is the same either way; cosmetic only.)
         val serverVersion = runCatching { client.transport.serverVersion }
             .getOrNull()?.takeIf { it.isNotBlank() }?.let { "SSH-2.0-$it" }
-        return SshjConnection(client, negotiatedCipher.get(), serverVersion, upstream = opened.dropLast(1))
+        return SshjConnection(
+            client,
+            negotiatedCipher.get(),
+            serverVersion,
+            upstream = opened.dropLast(1),
+            // Non-null for a container profile: the interactive channel runs that command on the
+            // PTY instead of the login shell (see [SshTarget.shellCommand]).
+            shellCommand = target.shellCommand,
+        )
     }
 
     /**

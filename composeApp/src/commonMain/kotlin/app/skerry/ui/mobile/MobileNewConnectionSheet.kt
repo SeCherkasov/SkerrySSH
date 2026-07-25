@@ -26,6 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -41,9 +44,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.container.ContainerEntry
+import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.capNotes
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.vault.CredentialSecret
@@ -65,17 +72,27 @@ import app.skerry.ui.generated.resources.conn_auth_password_placeholder
 import app.skerry.ui.generated.resources.conn_auth_private_key
 import app.skerry.ui.generated.resources.conn_auth_select_credential
 import app.skerry.ui.generated.resources.conn_cancel
+import app.skerry.ui.generated.resources.conn_container_browse
+import app.skerry.ui.generated.resources.conn_container_empty
+import app.skerry.ui.generated.resources.conn_container_hint
+import app.skerry.ui.generated.resources.conn_container_loading
 import app.skerry.ui.generated.resources.conn_create
 import app.skerry.ui.generated.resources.conn_field_ai_policy_short
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
+import app.skerry.ui.generated.resources.conn_field_container
+import app.skerry.ui.generated.resources.conn_field_container_shell
 import app.skerry.ui.generated.resources.conn_field_group
 import app.skerry.ui.generated.resources.conn_field_jump_host
 import app.skerry.ui.generated.resources.conn_field_keep_alive
 import app.skerry.ui.generated.resources.conn_jump_none
 import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_name
+import app.skerry.ui.generated.resources.conn_field_namespace
+import app.skerry.ui.generated.resources.conn_field_pod
+import app.skerry.ui.generated.resources.conn_field_pod_container
+import app.skerry.ui.generated.resources.conn_field_runtime
 import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_protocol
 import app.skerry.ui.generated.resources.conn_field_notes
@@ -90,7 +107,10 @@ import app.skerry.ui.generated.resources.conn_group_rename_hint
 import app.skerry.ui.generated.resources.conn_group_rename_title
 import app.skerry.ui.generated.resources.conn_protocol_serial
 import app.skerry.ui.generated.resources.conn_protocol_mosh
+import app.skerry.ui.generated.resources.conn_protocol_container
 import app.skerry.ui.generated.resources.conn_protocol_ssh
+import app.skerry.ui.generated.resources.conn_runtime_docker
+import app.skerry.ui.generated.resources.conn_runtime_kubernetes
 import app.skerry.ui.generated.resources.conn_protocol_telnet
 import app.skerry.ui.generated.resources.conn_protocol_vnc
 import app.skerry.ui.generated.resources.conn_save
@@ -111,10 +131,18 @@ import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.app.LocalTestTransport
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.connection.ContainerBrowseController
+import app.skerry.ui.connection.ContainerBrowseProblem
+import app.skerry.ui.connection.ContainerBrowseStatus
+import app.skerry.ui.connection.containerBrowseFailureText
+import app.skerry.ui.connection.JumpChainResolution
 import app.skerry.ui.connection.jumpHostCandidates
+import app.skerry.ui.connection.resolveJumpChain
+import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.host.KEEP_ALIVE_OPTIONS
 import app.skerry.ui.host.groupSuggestions
 import app.skerry.ui.host.keepAliveLabel
@@ -168,6 +196,23 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
     // Whether the "New group" dialog is open — kept at the sheet level so the overlay renders at
     // the root (not inside the form's scroll) and rises correctly above the keyboard.
     var createGroupOpen by remember(editHost, duplicateOf) { mutableStateOf(false) }
+    // "Browse containers": a one-off listing over the read-only probe transport (no TOFU), null on
+    // the preview path — the container name stays typeable either way.
+    val probeTransport = LocalTestTransport.current
+    val browseScope = rememberCoroutineScope()
+    val browser = remember(probeTransport, browseScope) {
+        probeTransport?.let { ContainerBrowseController(it, browseScope) }
+    }
+    // Closing the sheet (or changing the host/auth/runtime the listing belongs to) drops it: an
+    // in-flight probe would otherwise keep a connection open until its own timeout.
+    DisposableEffect(browser) { onDispose { browser?.reset() } }
+    LaunchedEffect(
+        form.address, form.username, form.port, form.authMode, form.existingCredentialId,
+        form.password, form.privateKeyPem, form.passphrase, form.jumpHostId,
+        form.containerRuntime, form.containerNamespace,
+    ) {
+        browser?.reset()
+    }
     val onSave = {
         if (submitting) {
             // Repeated tap before close — ignored.
@@ -271,6 +316,36 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 }
                 Spacer(Modifier.height(14.dp))
             }
+            // Container profiles: what to enter on that host (desktop parity, same fields and probe).
+            if (form.connectionType == ConnectionType.CONTAINER) {
+                MobileContainerSection(
+                    form = form,
+                    browser = browser,
+                    onBrowse = {
+                        val auth = mobileFormAuth(form, credentials)
+                        val jump = resolveJumpChain(
+                            form.jumpHostId, editHost?.id,
+                            findHost = { id -> hosts?.hosts?.firstOrNull { it.id == id } },
+                            findCredential = { id -> credentials?.find(id) },
+                        )
+                        when {
+                            auth == null || form.address.isBlank() || form.username.isBlank() || form.portOrNull == null ->
+                                browser?.fail(ContainerBrowseProblem.INCOMPLETE_FORM)
+                            jump is JumpChainResolution.Unavailable ->
+                                browser?.fail(ContainerBrowseProblem.CONNECTION_FAILED)
+                            else -> browser?.load(
+                                SshTarget(
+                                    form.address.trim(), form.portOrNull ?: 22, form.username.trim(),
+                                    jump = (jump as JumpChainResolution.Resolved).jump,
+                                ),
+                                auth,
+                                form.containerSpec(),
+                            )
+                        }
+                    },
+                )
+                Spacer(Modifier.height(14.dp))
+            }
             // Group suggestions come from already-created hosts (parity with desktop GroupPicker); empty in preview.
             MobileFormField(stringResource(Res.string.conn_field_group)) { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
             Spacer(Modifier.height(14.dp))
@@ -368,19 +443,148 @@ private fun MobileSerialPortPicker(form: NewConnectionFormState) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MobileProtocolPicker(form: NewConnectionFormState) {
-    Row(
+    // Six protocols don't fit one phone-width row, so they wrap three per row (a segment narrower
+    // than its label reads as a truncated mess).
+    FlowRow(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        maxItemsInEachRow = 3,
     ) {
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_ssh), form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_mosh), form.connectionType == ConnectionType.MOSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.MOSH) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_telnet), form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_serial), form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
         MobileProtocolSegment(stringResource(Res.string.conn_protocol_vnc), form.connectionType == ConnectionType.VNC, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.VNC) }
+        MobileProtocolSegment(stringResource(Res.string.conn_protocol_container), form.connectionType == ConnectionType.CONTAINER, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.CONTAINER) }
         // LOCAL is intentionally absent — the local shell isn't a user-created profile; it's launched
         // from the empty-tab placeholder and configured in Settings, not created here.
+    }
+}
+
+/**
+ * Auth for the container listing probe, materialized at tap time (like the desktop modal's) so the
+ * secret copy lives only for the probe. `null` — "Ask every time" or nothing entered yet.
+ */
+private fun mobileFormAuth(
+    form: NewConnectionFormState,
+    credentials: app.skerry.ui.identity.CredentialManagerController?,
+): SshAuth? = when (form.authMode) {
+    AuthMode.NEW_PASSWORD -> form.password.takeIf { it.isNotEmpty() }?.let { SshAuth.Password(it) }
+    AuthMode.NEW_KEY -> form.privateKeyPem.takeIf { it.isNotBlank() }
+        ?.let { SshAuth.PublicKey(it, form.passphrase.ifBlank { null }) }
+    AuthMode.EXISTING -> credentials?.credentials?.firstOrNull { it.id == form.existingCredentialId }?.toSshAuth()
+    AuthMode.ASK -> null
+}
+
+/** Container profile fields on the phone: runtime, target (with "Browse"), namespace/container, shell. */
+@Composable
+private fun MobileContainerSection(
+    form: NewConnectionFormState,
+    browser: ContainerBrowseController?,
+    onBrowse: () -> Unit,
+) {
+    val kubernetes = form.containerRuntime == ContainerRuntime.KUBERNETES
+    MobileFormField(stringResource(Res.string.conn_field_runtime)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            MobileProtocolSegment(stringResource(Res.string.conn_runtime_docker), !kubernetes, Modifier.weight(1f)) {
+                form.containerRuntime = ContainerRuntime.DOCKER
+            }
+            MobileProtocolSegment(stringResource(Res.string.conn_runtime_kubernetes), kubernetes, Modifier.weight(1f)) {
+                form.containerRuntime = ContainerRuntime.KUBERNETES
+            }
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    MobileFormField(if (kubernetes) stringResource(Res.string.conn_field_pod) else stringResource(Res.string.conn_field_container)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) {
+                MobileFormInput(form.containerTarget, { form.containerTarget = it }, if (kubernetes) "api-0" else "web")
+            }
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(11.dp))
+                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onBrowse)
+                    .padding(horizontal = 14.dp, vertical = 13.dp),
+            ) {
+                Txt(stringResource(Res.string.conn_container_browse), color = Skerry.colors.cyanBright, size = 14.sp)
+            }
+        }
+    }
+    MobileContainerBrowseResults(browser) { entry ->
+        form.containerTarget = entry.name
+        if (kubernetes) form.containerPodContainer = entry.containers.singleOrNull().orEmpty()
+        browser?.reset()
+    }
+    if (kubernetes) {
+        Spacer(Modifier.height(14.dp))
+        MobileFormField(stringResource(Res.string.conn_field_namespace)) {
+            MobileFormInput(form.containerNamespace, { form.containerNamespace = it }, "default")
+        }
+        Spacer(Modifier.height(14.dp))
+        MobileFormField(stringResource(Res.string.conn_field_pod_container)) {
+            MobileFormInput(form.containerPodContainer, { form.containerPodContainer = it }, "first container")
+        }
+    }
+    Spacer(Modifier.height(14.dp))
+    MobileFormField(stringResource(Res.string.conn_field_container_shell)) {
+        MobileFormInput(form.containerShell, { form.containerShell = it }, "sh")
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Sym("info", size = 14.sp, color = Skerry.colors.faint)
+        Txt(stringResource(Res.string.conn_container_hint), color = Skerry.colors.faint, size = 12.sp, lineHeight = 16.sp)
+    }
+}
+
+/** Listing state under the container field: progress, the host's containers, or a localized reason. */
+@Composable
+private fun MobileContainerBrowseResults(browser: ContainerBrowseController?, onPick: (ContainerEntry) -> Unit) {
+    when (val status = browser?.status ?: ContainerBrowseStatus.Idle) {
+        ContainerBrowseStatus.Idle -> {}
+        ContainerBrowseStatus.Loading -> MobileBrowseNote("progress_activity", stringResource(Res.string.conn_container_loading), Skerry.colors.dim)
+        is ContainerBrowseStatus.Failure -> MobileBrowseNote("error", containerBrowseFailureText(status.problem), Skerry.colors.storm)
+        is ContainerBrowseStatus.Loaded ->
+            if (status.entries.isEmpty()) {
+                MobileBrowseNote("info", stringResource(Res.string.conn_container_empty), Skerry.colors.dim)
+            } else {
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(11.dp))
+                        .background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
+                        .heightIn(max = 220.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                ) {
+                    status.entries.forEach { entry ->
+                        key(entry.name) {
+                            Column(
+                                Modifier.fillMaxWidth()
+                                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(entry) }
+                                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                            ) {
+                                Txt(entry.name, color = Skerry.colors.text, size = 14.sp)
+                                val detail = listOf(entry.image, entry.status, entry.containers.joinToString(","))
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(" · ")
+                                if (detail.isNotEmpty()) Txt(detail, color = Skerry.colors.faint, size = 11.5.sp)
+                            }
+                        }
+                    }
+                }
+            }
+    }
+}
+
+@Composable
+private fun MobileBrowseNote(icon: String, text: String, color: Color) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Sym(icon, size = 14.sp, color = color)
+        Txt(text, color = color, size = 12.sp, lineHeight = 16.sp)
     }
 }
 

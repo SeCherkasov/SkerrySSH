@@ -11,6 +11,7 @@ import app.skerry.shared.serial.SerialProblem
 import app.skerry.shared.serial.SerialUnavailableException
 import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.carriedBySsh
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
@@ -272,7 +273,8 @@ class ConnectionController(
             // the session exists — not lazily from the status bar — so an idle session behind a NAT
             // stays alive even with no UI polling it. Created BEFORE Connected (like shellChannel)
             // so the status bar's openPing() sees it on the transition. Doubles as the RTT source.
-            if (target.connectionType == ConnectionType.SSH && target.keepAliveSeconds > 0) {
+            // Container sessions ride an SSH connection, so they keep the profile's cadence too.
+            if (target.connectionType.carriedBySsh && target.keepAliveSeconds > 0) {
                 ping = PingController(
                     measure = { opened.measureRoundTrip() },
                     scope = scope,
@@ -497,7 +499,7 @@ class ConnectionController(
         // outages and roaming (that's its point), so its session never "drops" on network loss —
         // reaching here means the server shut down or the socket died, and a silent re-bootstrap
         // would open a brand-new remote session behind the user's back.
-        if (target.connectionType != ConnectionType.SSH) {
+        if (!target.connectionType.carriedBySsh) {
             lastAuth = null
             lastTarget = null
             uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
