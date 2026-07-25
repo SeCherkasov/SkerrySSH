@@ -43,10 +43,14 @@ class WindowDragGestureTest {
     @Test
     fun maximizingMidGestureEndsTheGestureForGood() {
         val gesture = gesture(Point(500, 20))
-        gesture.drag(Point(505, 25), origin, floating = false)
+        // A drag is already under way — past the dead zone, window following the pointer...
+        assertNull(gesture.drag(Point(530, 20), origin, floating = true))
+        assertEquals(Point(140, 215), gesture.drag(Point(570, 35), origin, floating = true))
+        // ...when the window stops floating (double-click, or the WM's own drag-to-top maximize).
+        assertNull(gesture.drag(Point(600, 80), origin, floating = false))
         // Placement flips back to floating (restore) without releasing the button: still no move,
-        // otherwise the window would jump to a stale origin captured before the maximize.
-        assertNull(gesture.drag(Point(600, 120), origin, floating = true))
+        // otherwise the window would jump to the stale grab captured before the maximize.
+        assertNull(gesture.drag(Point(650, 130), origin, floating = true))
         assertNull(gesture.drag(Point(700, 220), origin, floating = true))
     }
 
