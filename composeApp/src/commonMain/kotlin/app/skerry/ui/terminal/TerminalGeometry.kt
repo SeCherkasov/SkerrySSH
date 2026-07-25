@@ -5,6 +5,7 @@ import androidx.compose.ui.geometry.Rect
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
+import kotlin.math.roundToInt
 
 /**
  * Monospace terminal cell size in pixels. Measured once on the UI side (mono-char advance +
@@ -91,6 +92,33 @@ class TerminalAutoScroll(initialInputVersion: Int, private val slackPx: Int) {
         previousMax = max
         return typed || previous == null || shouldStickToBottom(value, previous, slackPx)
     }
+}
+
+/**
+ * Buffer rows that intersect the viewport, with one row of slack on each side (a row at the scroll
+ * boundary is partly visible and still drawn; clipping cuts the spill). Both the draw pass and the
+ * search highlight take their row range from here — computed apart, they drifted by the slack row
+ * and a match on it went unpainted. Empty when there is nothing in the buffer.
+ */
+fun visibleRowWindow(scrollPx: Float, viewportPx: Float, cellHeight: Float, rowCount: Int): IntRange {
+    if (rowCount <= 0 || cellHeight <= 0f) return IntRange.EMPTY
+    val first = ((scrollPx / cellHeight).toInt() - 1).coerceAtLeast(0)
+    val last = (((scrollPx + viewportPx) / cellHeight).toInt() + 1).coerceAtMost(rowCount - 1)
+    return first..last
+}
+
+/**
+ * Scroll offset that brings buffer row [row] into view, or `null` if the whole row is already
+ * visible (search navigation must not jog the viewport for a hit the user can already see).
+ * [viewportPx] is the content height (padding excluded), [currentScroll]/[maxScroll] the live
+ * scroll state. An off-screen row is centered vertically and clamped to the scroll range.
+ */
+fun scrollToRow(row: Int, currentScroll: Int, viewportPx: Float, maxScroll: Int, cellHeight: Float): Int? {
+    val top = row * cellHeight
+    val bottom = top + cellHeight
+    if (top >= currentScroll && bottom <= currentScroll + viewportPx) return null
+    val centered = top - (viewportPx - cellHeight) / 2f
+    return centered.roundToInt().coerceIn(0, maxScroll.coerceAtLeast(0))
 }
 
 /**

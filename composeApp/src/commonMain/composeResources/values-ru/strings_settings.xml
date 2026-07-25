@@ -182,6 +182,7 @@
     <string name="settings_kb_accept_autocomplete">Принять подсказку автодополнения</string>
     <string name="settings_kb_cycle_suggestions">Перебрать подсказки</string>
     <string name="settings_kb_search_history">Поиск по истории команд</string>
+    <string name="settings_kb_search_output">Поиск по выводу</string>
     <string name="settings_kb_copy_selection">Копировать выделение</string>
     <string name="settings_kb_paste">Вставить</string>
     <string name="settings_kb_global">ОБЩИЕ</string>

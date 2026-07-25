@@ -15,8 +15,11 @@ sealed interface DesktopShortcut {
     /** Split/collapse the active tab's terminal pane (⌘D / Ctrl+Shift+D). */
     data object SplitTerminal : DesktopShortcut
 
-    /** Open the active tab's SFTP (⌘F / Ctrl+Shift+F). */
+    /** Open the active tab's SFTP (⌘E / Ctrl+Shift+E). */
     data object OpenSftp : DesktopShortcut
+
+    /** Open search over the focused terminal's output (⌘F / Ctrl+Shift+F). */
+    data object FindInTerminal : DesktopShortcut
 
     /** Focus the AI bar's input field (⌘/ / Ctrl+Shift+/). */
     data object FocusAiBar : DesktopShortcut
@@ -79,7 +82,8 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
     return when (key) {
         Key.N -> DesktopShortcut.NewConnection
         Key.D -> DesktopShortcut.SplitTerminal
-        Key.F -> DesktopShortcut.OpenSftp
+        Key.F -> DesktopShortcut.FindInTerminal
+        Key.E -> DesktopShortcut.OpenSftp
         Key.L -> DesktopShortcut.Lock
         Key.K -> DesktopShortcut.CommandPalette
         Key.B -> DesktopShortcut.Broadcast
