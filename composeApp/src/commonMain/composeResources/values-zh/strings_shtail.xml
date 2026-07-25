@@ -16,6 +16,7 @@
     <string name="shtail_host_ask_on_connect">连接时询问</string>
     <string name="shtail_host_group">分组</string>
     <string name="shtail_host_jump">跳板主机</string>
+    <string name="shtail_host_notes">备注</string>
 
     <!-- 主机分组：无分组主机的合成桶（仅显示） -->
     <string name="shtail_ungrouped">未分组</string>

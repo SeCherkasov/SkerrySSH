@@ -1,6 +1,7 @@
 package app.skerry.ui.host
 
 import app.skerry.shared.host.Host
+import app.skerry.shared.host.MAX_NOTES_LENGTH
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import kotlin.test.Test
@@ -88,6 +89,23 @@ class NewConnectionFormStateTest {
 
         val host = Host(id = "h1", label = "Web", address = "web", username = "root", keepAliveSeconds = 120)
         assertEquals(120, NewConnectionFormState.fromHost(host).keepAliveSeconds)
+    }
+
+    @Test
+    fun notes_travel_the_draft_normalized_and_prefill_from_host() {
+        val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
+        assertEquals("", f.notes)
+        assertNull(f.toDraft().notes) // blank notes are stored as absent, like an empty group
+
+        f.notes = "  reboot window: Sun 03:00  "
+        assertEquals("reboot window: Sun 03:00", f.toDraft().notes)
+
+        f.notes = "x".repeat(MAX_NOTES_LENGTH + 40)
+        assertEquals(MAX_NOTES_LENGTH, f.toDraft().notes?.length)
+
+        val host = Host(id = "h1", label = "Web", address = "web", username = "root", notes = "ask ops before reboot")
+        assertEquals("ask ops before reboot", NewConnectionFormState.fromHost(host).notes)
+        assertEquals("", NewConnectionFormState.fromHost(host.copy(notes = null)).notes)
     }
 
     @Test
