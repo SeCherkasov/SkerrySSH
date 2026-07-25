@@ -55,6 +55,7 @@ import app.skerry.ui.generated.resources.settings_kb_paste
 import app.skerry.ui.generated.resources.settings_kb_play_recording
 import app.skerry.ui.generated.resources.settings_kb_record_session
 import app.skerry.ui.generated.resources.settings_kb_search_history
+import app.skerry.ui.generated.resources.settings_kb_search_output
 import app.skerry.ui.generated.resources.settings_kb_select_tab_number
 import app.skerry.ui.generated.resources.settings_kb_snippet_palette
 import app.skerry.ui.generated.resources.settings_kb_split_terminal
@@ -88,7 +89,7 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_next_prev_tab), "${ctrl("Tab")} / ${ctrlShift("Tab")}", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_select_tab_number), if (mac) "⌥1–9" else "Alt+1–9", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_focus_ai), mod("/"), live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_open_sftp), mod("F"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_open_sftp), mod("E"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_lock), mod("L"), live = true),
     )
     // Terminal-internal hotkeys (handled by TerminalScreen): fish-style autocomplete, history
@@ -97,6 +98,9 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_accept_autocomplete), "Tab", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_cycle_suggestions), shift("Tab"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_search_history), ctrl("R"), live = true),
+        // Find in the session's output: the panel's own keys (Enter / Shift+Enter / Esc) are listed
+        // with it, since they only exist while it is open.
+        KeyboardBinding(stringResource(Res.string.settings_kb_search_output), "${mod("F")} · Enter / ${shift("Enter")} · Esc", live = true),
         // Both conventions are live, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
         // Both conventions work, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
         KeyboardBinding(stringResource(Res.string.settings_kb_copy_selection), "${ctrlShift("C")} / ${ctrl("Insert")}", live = true),

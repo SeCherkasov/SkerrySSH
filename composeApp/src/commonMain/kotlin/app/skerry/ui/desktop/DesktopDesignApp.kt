@@ -121,6 +121,7 @@ import app.skerry.ui.terminal.LocalTerminalAppearance
 import app.skerry.ui.terminal.LocalTerminalTheme
 import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.terminal.TerminalCursorStyle
+import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.theme.ThemeMode
 import app.skerry.ui.theme.systemInDarkTheme
@@ -932,6 +933,19 @@ private fun runDesktopShortcut(
         } else {
             state.showView(DesktopView.Sftp)
         }
+        // Search over the buffer of the pane the user is looking at (the split, when it holds focus).
+        // With no terminal on screen there is nothing to search: fall through instead of no-oping,
+        // so the chord can still reach a snippet binding.
+        DesktopShortcut.FindInTerminal -> {
+            val session = sessions?.active ?: return false
+            val pane = if (session.focusedSplit) session.splitSession else session
+            val terminal = paneTerminal(pane?.controller?.uiState) ?: return false
+            // The panel lives inside the terminal view, so bring that view up first — pressed over
+            // SFTP or a recording, the chord would otherwise open a panel on a screen nobody sees.
+            state.clearOverlay()
+            sessions.setActiveView(SessionView.Terminal)
+            terminal.openSearch()
+        }
         DesktopShortcut.Lock -> onLock()
         DesktopShortcut.Broadcast -> state.openBroadcast()
         // These three live in toolbar buttons that own their state; the shortcut nudges them.
@@ -947,6 +961,17 @@ private fun runDesktopShortcut(
         DesktopShortcut.FocusAiBar -> state.requestAiBarFocus()
     }
     return true
+}
+
+/**
+ * The terminal of a pane's connection state, or `null` if it has none. A dropped session keeps its
+ * frozen screen ([ConnectionUiState.Disconnected]), and searching that output is exactly when it is
+ * wanted — "what did that command print before the link died".
+ */
+private fun paneTerminal(state: ConnectionUiState?): TerminalScreenState? = when (state) {
+    is ConnectionUiState.Connected -> state.terminal
+    is ConnectionUiState.Disconnected -> state.terminal
+    else -> null
 }
 
 /** Select a tab by 0-based index; `false` if no such tab exists (the key falls through). */

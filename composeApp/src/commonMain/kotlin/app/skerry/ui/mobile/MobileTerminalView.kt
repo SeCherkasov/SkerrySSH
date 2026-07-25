@@ -717,6 +717,9 @@ private fun MobileKeybar(
         }
         // Reverse history search (Ctrl-R): open the search overlay (query typed on the soft keyboard).
         KeyCapIcon("search") { terminal.openReverseSearch() }
+        // Find in output (desktop ⌘F parity): opens the search panel over the terminal, which takes
+        // the soft keyboard for its query field.
+        KeyCapIcon("find_in_page") { terminal.openSearch() }
         // ctrl — special panel key (always cyan); arming fills it solid cyan.
         KeyCap("ctrl", accent = true, active = ctrlArmed) { onCtrlArmedChange(!ctrlArmed) }
         KeyCap("/") { char("/") }

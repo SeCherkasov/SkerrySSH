@@ -25,6 +25,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -106,6 +107,7 @@ import app.skerry.shared.terminal.TermStyle
 import app.skerry.shared.terminal.UnderlineStyle
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
+import app.skerry.shared.terminal.searchTerminal
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.design.ModalPresence
 import kotlin.math.roundToInt
@@ -303,8 +305,13 @@ fun TerminalScreen(
     // Also re-keyed on the open-modal count: a modal scrim takes keyboard focus for Esc handling and
     // its disposal clears focus to no one, so the terminal re-claims it once every modal is closed —
     // otherwise typing goes dead until the user clicks the terminal.
+    // Also re-keyed on the search panel: while it is open its field owns the keyboard, and the
+    // terminal takes focus back when it closes (otherwise typing would go dead until a click).
     val modalsOpen = ModalPresence.openCount
-    LaunchedEffect(state, modalsOpen) { if (!closed && !imeInput && modalsOpen == 0) focusRequester.requestFocus() }
+    val searchOpen = state.searchQuery != null
+    LaunchedEffect(state, modalsOpen, searchOpen) {
+        if (!closed && !imeInput && modalsOpen == 0 && !searchOpen) focusRequester.requestFocus()
+    }
 
     // Autoscroll to bottom on new output — but only when the user was already at the bottom
     // (sticky bottom, like a real terminal): scrolling up to read history must survive streaming
@@ -320,7 +327,36 @@ fun TerminalScreen(
         val autoScroll = TerminalAutoScroll(state.inputVersion, slackPx = (2 * metrics.cellHeight).roundToInt())
         snapshotFlow { Triple(state.snapshotVersion, state.inputVersion, scroll.maxValue) }
             .collect { (_, input, max) ->
-                if (autoScroll.shouldSnap(scroll.value, max, input)) scroll.scrollTo(max)
+                val snap = autoScroll.shouldSnap(scroll.value, max, input)
+                // While a search hit is selected, the viewport belongs to the search: output
+                // streaming in must not yank the user away from the line they are reading.
+                // shouldSnap is still consulted (it tracks input/max) — only the scroll is skipped.
+                if (snap && state.currentMatch == null) scroll.scrollTo(max)
+            }
+    }
+
+    // Bring the selected search hit into view (only when it is off-screen — see scrollToRow), so
+    // stepping through matches moves the viewport the way a browser's find bar does. Keyed on the
+    // user's own navigation (searchNavVersion) plus the selected index, never on the match's row:
+    // while scrollback evicts rows under streaming output, that row shifts on its own, and
+    // following it would drag the viewport away from what the user is reading.
+    LaunchedEffect(state, metrics, paddingPx) {
+        var lastSelection: Pair<Int, Int>? = null
+        snapshotFlow { Triple(state.searchNavVersion, state.searchIndex, viewportSize.height) }
+            .collect { (navVersion, index, height) ->
+                val match = state.currentMatch
+                if (match == null || height == 0) return@collect
+                val selection = navVersion to index
+                if (selection == lastSelection) return@collect
+                lastSelection = selection
+                val target = scrollToRow(
+                    row = match.row,
+                    currentScroll = scroll.value,
+                    viewportPx = (height - 2 * paddingPx).coerceAtLeast(metrics.cellHeight),
+                    maxScroll = scroll.maxValue,
+                    cellHeight = metrics.cellHeight,
+                )
+                if (target != null) scroll.scrollTo(target)
             }
     }
 
@@ -573,6 +609,39 @@ fun TerminalScreen(
       if (sized && screen.isNotEmpty()) {
           val sel = state.selection
           val palette = state.palette // OSC 4/104 index overrides; empty — theme defaults
+          // Search hits are found for the visible rows only, not taken from the state's match list:
+          // that list is rebuilt on a throttle (a pass over a 50 000-row scrollback is expensive),
+          // so during streaming output it can lag by a snapshot — and a highlight painted from
+          // stale rows would sit on the wrong lines. Rescanning ~50 rows per change is cheap.
+          val currentHit = state.currentMatch
+          // The same window the draw loop below walks, so a hit on the partly visible slack row is
+          // highlighted too. derivedStateOf, not a plain read of scroll.value: this sits in
+          // composition, and the raw value changes every pixel of a drag — the window changes per row.
+          val searchWindow by remember(metrics, viewportSize, screen) {
+              derivedStateOf {
+                  visibleRowWindow(scroll.value.toFloat(), viewportSize.height.toFloat(), metrics.cellHeight, screen.size)
+              }
+          }
+          // The viewport bottom is what an incremental search re-selects around, and only the render
+          // layer knows the scroll position — so it keeps the state's anchor current.
+          LaunchedEffect(state, searchWindow) { state.setSearchAnchorRow(searchWindow.last) }
+          val hitsByRow = remember(
+              screen, state.searchQuery, state.searchCaseSensitive, state.searchRegex, searchWindow,
+          ) {
+              val query = state.searchQuery
+              if (query.isNullOrEmpty()) {
+                  emptyMap()
+              } else {
+                  searchTerminal(
+                      screen = screen,
+                      query = query,
+                      caseSensitive = state.searchCaseSensitive,
+                      regex = state.searchRegex,
+                      fromRow = searchWindow.first,
+                      toRow = searchWindow.last + 1,
+                  ).matches.groupBy { it.row }
+              }
+          }
           // clipToBounds after padding: the scrollback row at the scroll boundary is drawn at top=-chh and
           // would otherwise spill into the top padding zone (desktop has no default clip, unlike Android)
           // — after `clear` the command row would peek there. The clip cuts it at the content edge.
@@ -582,10 +651,9 @@ fun TerminalScreen(
               val chh = metrics.cellHeight
               // Only the rows intersecting the viewport (±1 row of slack; clipToBounds cuts the
               // spill): walking all of scrollback per repaint is O(history) of wasted work
-              // whenever output streams while the user sits scrolled up in history.
-              val firstRow = ((scrollPx / chh).toInt() - 1).coerceAtLeast(0)
-              val lastRow = (((scrollPx + size.height) / chh).toInt() + 1).coerceAtMost(screen.lastIndex)
-              for (r in firstRow..lastRow) {
+              // whenever output streams while the user sits scrolled up in history. The search
+              // highlight above derives its window from the same helper.
+              for (r in visibleRowWindow(scrollPx, size.height, chh, screen.size)) {
                   val top = r * chh - scrollPx
                   val row = screen[r]
                   // 1) Cell backgrounds — collapse same-color runs; stretch the trailing run to the viewport edge.
@@ -608,6 +676,16 @@ fun TerminalScreen(
                           while (k < row.size && sel.contains(r, k)) k++
                           drawRect(selectionBg, topLeft = Offset(s * cw, top), size = Size((k - s) * cw, chh))
                       }
+                  }
+                  // 2b) Search hits — over the background like the selection, under the glyphs. The
+                  // selected hit is washed stronger so it is findable among the others.
+                  hitsByRow[r]?.forEach { hit ->
+                      val left = hit.startCol * cw
+                      drawRect(
+                          if (hit == currentHit) termTheme.searchCurrentMatch else termTheme.searchMatch,
+                          topLeft = Offset(left, top),
+                          size = Size((hit.endCol - hit.startCol) * cw, chh),
+                      )
                   }
                   // 3) Glyphs — segment the row into runs (see glyphRuns): consecutive same-style ASCII
                   // cells are drawn with one drawText (the fast monospace case), while each non-ASCII glyph
@@ -1102,7 +1180,9 @@ fun TerminalScreen(
 
       // Touch input: an invisible field captures soft-keyboard characters. Diff against the anchor
       // ([imeDeltaToPty]) and reset immediately — the field is just a "funnel" into the PTY, holds no text.
-      if (imeInput && !closed) {
+      // Stood down while the search panel is open: two fields fighting over the soft keyboard would
+      // send the query into the PTY.
+      if (imeInput && !closed && !searchOpen) {
           BasicTextField(
               value = imeValue,
               onValueChange = { nv ->
@@ -1136,6 +1216,17 @@ fun TerminalScreen(
                   imeAction = ImeAction.None,
               ),
           )
+      }
+
+      // Find-in-output panel (⌘F / Ctrl+Shift+F, or the mobile keybar's magnifier). Pinned to the
+      // pane's top edge over the terminal: on a phone it spans the width (its controls would not
+      // fit otherwise), on desktop it hugs the right corner like a browser's find bar.
+      if (searchOpen && !closed) {
+          if (imeInput) {
+              TerminalSearchBar(state, expand = true, modifier = Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(6.dp))
+          } else {
+              TerminalSearchBar(state, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp))
+          }
       }
 
       // Transient "Copied" confirmation over the top of the terminal (right-click / Ctrl+Shift+C /

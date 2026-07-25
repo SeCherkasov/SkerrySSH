@@ -182,6 +182,7 @@
     <string name="settings_kb_accept_autocomplete">接受自动补全建议</string>
     <string name="settings_kb_cycle_suggestions">循环切换建议</string>
     <string name="settings_kb_search_history">搜索命令历史</string>
+    <string name="settings_kb_search_output">在输出中查找</string>
     <string name="settings_kb_copy_selection">复制选中内容</string>
     <string name="settings_kb_paste">粘贴</string>
     <string name="settings_kb_global">全局</string>
