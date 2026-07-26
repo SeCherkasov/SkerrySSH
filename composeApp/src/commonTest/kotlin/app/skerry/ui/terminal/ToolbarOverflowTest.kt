@@ -19,7 +19,7 @@ class ToolbarOverflowTest {
 
     @Test
     fun `a narrow pane drops the rarely-reached actions first`() {
-        val hidden = overflowedActions(available = 340.dp, syncShown = false)
+        val hidden = overflowedActions(available = 500.dp, syncShown = false)
         // The player and the recorder give way before the file panel does.
         assertTrue(ToolbarAction.Play in hidden)
         assertTrue(ToolbarAction.Record in hidden)
@@ -28,8 +28,8 @@ class ToolbarOverflowTest {
 
     @Test
     fun `the sync toggle costs one more slot, so it pushes one more action out`() {
-        val without = overflowedActions(available = 340.dp, syncShown = false)
-        val with = overflowedActions(available = 340.dp, syncShown = true)
+        val without = overflowedActions(available = 500.dp, syncShown = false)
+        val with = overflowedActions(available = 500.dp, syncShown = true)
         assertEquals(without.size + 1, with.size)
     }
 
@@ -44,8 +44,8 @@ class ToolbarOverflowTest {
     fun `hiding starts only when the row actually runs out of room`() {
         // Just wide enough for every icon plus the pane's own header: nothing is dropped, and one
         // step narrower something is — the threshold is real, not a constant "always overflow".
-        val roomy = overflowedActions(available = 500.dp, syncShown = false)
-        val tight = overflowedActions(available = 300.dp, syncShown = false)
+        val roomy = overflowedActions(available = 800.dp, syncShown = false)
+        val tight = overflowedActions(available = 400.dp, syncShown = false)
         assertTrue(roomy.isEmpty())
         assertTrue(tight.isNotEmpty())
     }

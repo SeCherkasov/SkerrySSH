@@ -134,8 +134,12 @@ internal enum class ToolbarAction { Play, Record, Runbook, Snippets, Tunnels, In
 /** Width one icon claims in the row: the button box plus the spacing in front of it. */
 private val ACTION_SLOT_WIDTH = 30.dp
 
-/** Room the pane under the row keeps for its own header (host label, dot, its controls). */
-private val PANE_HEADER_ROOM = 140.dp
+/**
+ * Room the pane under the row keeps for its own header. Enough for the host label, its address and
+ * the status dot — the row gives way into its overflow menu before a pane stops saying which host
+ * it is, since that is what the header is there for.
+ */
+private val PANE_HEADER_ROOM = 220.dp
 
 /**
  * Session action icons (sync / add pane / SFTP / tunnels / snippets / runbooks / recording / player
@@ -768,6 +772,8 @@ private fun PaneHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                // No chevron next to the label: the whole header is the picker, and on a narrow pane
+                // that glyph competed for the room the host's own name needs.
                 if (pane.isBlank && !primary) {
                     Txt(stringResource(Res.string.term_select_host_placeholder), color = Skerry.colors.faint, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
                 } else {
@@ -783,7 +789,6 @@ private fun PaneHeader(
                     Dot(sessionDotColor(pane.controller.uiState))
                     Spacer(Modifier.weight(1f))
                 }
-                if (!primary) Sym(if (pickerOpen) "expand_less" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
             }
             // Synchronized input is marked on every pane it reaches, not just in the toolbar: what
             // makes it dangerous is typing into a pane while forgetting the others are listening.
