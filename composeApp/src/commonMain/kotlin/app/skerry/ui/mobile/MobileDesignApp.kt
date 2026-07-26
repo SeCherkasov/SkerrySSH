@@ -182,13 +182,12 @@ fun MobileDesignApp(
     DisposableEffect(liveSessions) { onDispose { if (ownsSessions) liveSessions?.disconnectAll() } }
     // A cursor-style change applies to ALREADY open sessions live (new ones pick it up at connect via
     // terminalPrefs). Pushed into each session's terminal; the command goes through the emulator's
-    // queue, so no race. Mobile has no split pane, but push into it too for parity/safety.
+    // queue, so no race. Mobile has no panes of its own, but a tab's panes are pushed to as well.
     val cursorStyle = state.terminalCursorStyle
     LaunchedEffect(cursorStyle, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
         manager.sessions.forEach { s ->
-            s.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
-            s.splitSession?.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
+            s.allPanes.forEach { it.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink) }
         }
     }
     // A scrollback change likewise applies to ALREADY open sessions live: shrinking trims old history,
@@ -197,8 +196,7 @@ fun MobileDesignApp(
     LaunchedEffect(scrollbackLines, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
         manager.sessions.forEach { s ->
-            s.liveTerminal?.applyScrollback(scrollbackLines)
-            s.splitSession?.liveTerminal?.applyScrollback(scrollbackLines)
+            s.allPanes.forEach { it.liveTerminal?.applyScrollback(scrollbackLines) }
         }
     }
     // Desktop parity: the Teams session-report gate reads the live setting (see DesktopDesignApp).
@@ -209,8 +207,7 @@ fun MobileDesignApp(
     LaunchedEffect(allowClipboardWrite, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
         manager.sessions.forEach { s ->
-            s.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite)
-            s.splitSession?.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite)
+            s.allPanes.forEach { it.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite) }
         }
     }
     // Memoized: LocalTerminalAppearance is staticCompositionLocalOf (reference comparison); without

@@ -63,11 +63,12 @@ import app.skerry.ui.theme.Skerry
 @Composable
 internal fun InfoPanel() {
     val mono = LocalFonts.current.mono
-    // Live context of the active session (if any): host profile from the catalog + connection state.
+    // Live context of the focused pane (if any): host profile from the catalog + connection state.
     val sessions = LocalSessions.current
     val hosts = LocalHosts.current
     val credentials = LocalCredentials.current
-    val active = sessions?.activeTerminal
+    // The pane in focus, not the tab's first one: the panel describes the session being looked at.
+    val active = sessions?.activeTerminal?.focusedPane
     val host = active?.hostId?.let { id -> hosts?.find(id) }
     val live = sessions != null
     val connected = active?.controller?.uiState is ConnectionUiState.Connected

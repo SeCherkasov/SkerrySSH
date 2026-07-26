@@ -60,7 +60,8 @@ import app.skerry.ui.generated.resources.settings_kb_open_link_or_path
 import app.skerry.ui.generated.resources.settings_kb_mouse_click
 import app.skerry.ui.generated.resources.settings_kb_select_tab_number
 import app.skerry.ui.generated.resources.settings_kb_snippet_palette
-import app.skerry.ui.generated.resources.settings_kb_split_terminal
+import app.skerry.ui.generated.resources.settings_kb_add_pane
+import app.skerry.ui.generated.resources.settings_kb_sync_panes
 import app.skerry.ui.generated.resources.settings_kb_terminal_group
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
@@ -87,7 +88,8 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_broadcast), mod("B"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_record_session), mod("R"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_play_recording), mod("P"), live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_split_terminal), mod("D"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_add_pane), mod("D"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_sync_panes), mod("I"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_next_prev_tab), "${ctrl("Tab")} / ${ctrlShift("Tab")}", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_select_tab_number), if (mac) "⌥1–9" else "Alt+1–9", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_focus_ai), mod("/"), live = true),

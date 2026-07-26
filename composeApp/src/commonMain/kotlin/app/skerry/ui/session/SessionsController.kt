@@ -71,18 +71,36 @@ class Session(
         private set
 
     /**
-     * Split: a tab can hold a second, independent session alongside the first. [splitOpen] is
-     * whether the split pane is shown (toggled by the toolbar split button); [splitSession] is the
-     * secondary pane with its own [ConnectionController] (own connection/terminal/selection), `null`
-     * until a host is picked (the pane then shows the host picker). [focusedSplit] is which pane has
-     * focus (false = primary, true = split), which determines what host the tab chip shows.
+     * Panes: a tab can hold up to [MAX_PANES] independent sessions side by side. [panes] are the
+     * extra ones (this session is always the first pane), each with its own [ConnectionController]
+     * — own connection, terminal and selection. They are deliberately not in
+     * [SessionsController.sessions]: a pane is owned by its tab and torn down with it, and the tab
+     * bar lists tabs, not panes.
+     *
+     * [paneLayout] places them on the grid (see [PaneLayout]); [focusedPaneId] is the pane the user
+     * is working in, which decides what the tab chip shows and where a snippet or a runbook lands.
+     * [syncInput] mirrors typing into every connected pane of this tab (tmux `synchronize-panes`).
      */
-    var splitOpen: Boolean by mutableStateOf(false)
+    var panes: List<Session> by mutableStateOf(emptyList())
         private set
-    var splitSession: Session? by mutableStateOf(null)
+    var paneLayout: PaneLayout by mutableStateOf(PaneLayout.of(id))
         private set
-    var focusedSplit: Boolean by mutableStateOf(false)
+    var focusedPaneId: String by mutableStateOf(id)
         private set
+    var syncInput: Boolean by mutableStateOf(false)
+        private set
+
+    /** Every pane of this tab in creation order, starting with the tab's own (primary) session. */
+    val allPanes: List<Session> get() = listOf(this) + panes
+
+    /** Pane [paneId] of this tab (the tab itself included), or `null` if it holds no such pane. */
+    fun pane(paneId: String): Session? = allPanes.firstOrNull { it.id == paneId }
+
+    /** The pane the user is working in; falls back to the primary one if the focused pane is gone. */
+    val focusedPane: Session get() = pane(focusedPaneId) ?: this
+
+    /** Whether this tab is split at all — i.e. holds more than its primary pane. */
+    val hasPanes: Boolean get() = panes.isNotEmpty()
 
     /**
      * A blank tab with no session: no host selected and no connection started yet (controller in
@@ -94,9 +112,10 @@ class Session(
 
     internal fun setView(v: SessionView) { view = v }
 
-    internal fun setSplitOpen(open: Boolean) { splitOpen = open }
-    internal fun setSplitSession(session: Session?) { splitSession = session }
-    internal fun setFocusedSplit(focused: Boolean) { focusedSplit = focused }
+    internal fun setPanes(list: List<Session>) { panes = list }
+    internal fun setPaneLayout(layout: PaneLayout) { paneLayout = layout }
+    internal fun setFocusedPane(paneId: String) { focusedPaneId = paneId }
+    internal fun setSyncInput(on: Boolean) { syncInput = on }
 
     /**
      * Fill a blank tab with a profile before its first connection (see [SessionsController.connect]).
@@ -139,6 +158,18 @@ class Session(
             is ConnectionUiState.Disconnected -> s.terminal
             else -> null
         }
+
+    /**
+     * Live terminals that synchronized input typed in [originPaneId] must also reach: every other
+     * connected pane of this tab, and only while [syncInput] is on. A pane that is still connecting,
+     * failed, or lost its session is skipped — mirrored keys would land in a screen that cannot
+     * take them.
+     */
+    fun syncTargetsFrom(originPaneId: String): List<TerminalScreenState> {
+        if (!syncInput) return emptyList()
+        return allPanes.filter { it.id != originPaneId }
+            .mapNotNull { (it.controller.uiState as? ConnectionUiState.Connected)?.terminal }
+    }
 
     /**
      * Tab title honoring the "show terminal title on tabs" setting (Settings → Terminal). Off:
@@ -337,28 +368,89 @@ class SessionsController(
     }
 
     /**
-     * Toggle the split pane of tab [id] (active tab by default): no split open -> open an empty one
-     * (shows the host picker); open -> close it via [closeSplit] (tearing down the secondary connection).
+     * Add an empty pane to tab [id] (active tab by default) and focus it; the pane shows the host
+     * picker until something is connected into it ([connectPane]). [slot] places it explicitly (a
+     * drop from the pane grid); without one it goes where [PaneLayout.defaultSlot] puts it.
+     *
+     * Returns the new pane's id, or `null` when the tab is already at [MAX_PANES], holds a remote
+     * desktop or a recording (neither has a shell beside it), or does not exist.
      */
-    fun toggleSplit(id: String? = activeId) {
-        val tab = sessions.firstOrNull { it.id == id } ?: return
-        if (tab.splitOpen) closeSplit(tab.id) else tab.setSplitOpen(true)
+    fun addPane(id: String? = activeId, slot: PaneSlot? = null): String? {
+        val tab = sessions.firstOrNull { it.id == id } ?: return null
+        if (tab.isVnc || tab.isPlayer || tab.paneLayout.isFull) return null
+        val pane = Session(newId(), hostId = null, title = "", subtitle = "", controllerFactory())
+        tab.setPanes(tab.panes + pane)
+        tab.setPaneLayout(tab.paneLayout.add(pane.id, slot ?: tab.paneLayout.defaultSlot()))
+        tab.setFocusedPane(pane.id)
+        return pane.id
     }
 
     /**
-     * Connect a new, independent secondary session into the split pane of tab [parentId]: its own
-     * [ConnectionController] (own connection/terminal), stored in [Session.splitSession] and given
-     * focus. The secondary session is not added to [sessions] — it's owned by the parent tab.
+     * Connect [target] into pane [paneId] of tab [tabId] and focus it. An empty pane is filled in
+     * place; a pane that already holds a session has it disconnected and replaced by a fresh one in
+     * the same slot (pointing a pane at another host is how it is re-used). Panes are not in
+     * [sessions] — they belong to the tab.
+     *
+     * The tab's own (primary) pane goes through [connect] instead, so [paneId] naming it is refused.
      */
-    fun connectSplit(parentId: String, hostId: String?, title: String, subtitle: String, target: SshTarget, auth: SshAuth) {
-        val parent = sessions.firstOrNull { it.id == parentId } ?: return
-        parent.splitSession?.controller?.disconnect() // replace the previous secondary session, if any
-        val secondary = Session(newId(), hostId, title, subtitle, controllerFactory())
-        parent.setSplitOpen(true)
-        parent.setSplitSession(secondary)
-        parent.setFocusedSplit(true)
+    fun connectPane(
+        tabId: String,
+        paneId: String,
+        hostId: String?,
+        title: String,
+        subtitle: String,
+        target: SshTarget,
+        auth: SshAuth,
+    ) {
+        val tab = sessions.firstOrNull { it.id == tabId } ?: return
+        if (paneId == tab.id) return
+        val existing = tab.panes.firstOrNull { it.id == paneId } ?: return
         reportHostSession(hostId)
-        secondary.controller.connect(target, auth)
+        if (existing.isBlank) {
+            existing.bind(hostId, title, subtitle)
+            tab.setFocusedPane(existing.id)
+            existing.controller.connect(target, auth)
+            return
+        }
+        // A pane that already ran a session is replaced wholesale: the controller keeps the state of
+        // the connection it opened, so re-using it for another host would carry that history over.
+        existing.controller.disconnect()
+        val replacement = Session(newId(), hostId, title, subtitle, controllerFactory())
+        tab.setPanes(tab.panes.map { if (it.id == paneId) replacement else it })
+        tab.setPaneLayout(tab.paneLayout.replace(paneId, replacement.id))
+        tab.setFocusedPane(replacement.id)
+        replacement.controller.connect(target, auth)
+    }
+
+    /**
+     * Move pane [paneId] of tab [tabId] to [slot] — the drop of a pane drag. Panes only move within
+     * their own tab; the tab's primary pane moves like any other (only closing it is special).
+     */
+    fun movePane(tabId: String, paneId: String, slot: PaneSlot) {
+        val tab = sessions.firstOrNull { it.id == tabId } ?: return
+        tab.setPaneLayout(tab.paneLayout.move(paneId, slot))
+    }
+
+    /** Drag the divider under row [boundary] of tab [tabId] by [delta] (share of the tab's height). */
+    fun resizePaneRows(tabId: String, boundary: Int, delta: Float) {
+        val tab = sessions.firstOrNull { it.id == tabId } ?: return
+        tab.setPaneLayout(tab.paneLayout.resizeRows(boundary, delta))
+    }
+
+    /** Drag the divider after pane [boundary] of row [row] by [delta] (share of the row's width). */
+    fun resizePaneCells(tabId: String, row: Int, boundary: Int, delta: Float) {
+        val tab = sessions.firstOrNull { it.id == tabId } ?: return
+        tab.setPaneLayout(tab.paneLayout.resizeCells(row, boundary, delta))
+    }
+
+    /**
+     * Toggle synchronized input on tab [tabId] (active tab by default): while on, what is typed in
+     * one pane is mirrored into every other connected pane of the tab. Turning it on with a single
+     * pane is allowed — it stays armed for the panes added next.
+     */
+    fun toggleSyncInput(tabId: String? = activeId) {
+        val tab = sessions.firstOrNull { it.id == tabId } ?: return
+        tab.setSyncInput(!tab.syncInput)
     }
 
     /**
@@ -369,28 +461,35 @@ class SessionsController(
         if (hostId != null) onHostSessionOpened(hostId)
     }
 
-    /** Close the split pane of tab [id]: tear down the secondary connection and reset split flags. */
-    fun closeSplit(id: String) {
-        val tab = sessions.firstOrNull { it.id == id } ?: return
-        tab.splitSession?.controller?.disconnect()
-        tab.setSplitSession(null)
-        tab.setSplitOpen(false)
-        tab.setFocusedSplit(false)
+    /**
+     * Close pane [paneId] of tab [tabId]: tear down its connection and take it off the grid; focus
+     * falls back to the tab's primary pane. Closing the primary pane is refused — it is the tab's
+     * own session, so closing that one means closing the tab ([close]).
+     */
+    fun closePane(tabId: String, paneId: String) {
+        val tab = sessions.firstOrNull { it.id == tabId } ?: return
+        if (paneId == tab.id) return
+        val pane = tab.panes.firstOrNull { it.id == paneId } ?: return
+        pane.controller.disconnect()
+        tab.setPanes(tab.panes - pane)
+        tab.setPaneLayout(tab.paneLayout.remove(paneId))
+        if (tab.focusedPaneId == paneId) tab.setFocusedPane(tab.id)
     }
 
-    /** Focus a pane of tab [id]: false = primary, true = split. Determines the tab chip's title. */
-    fun focusPane(id: String, split: Boolean) {
-        sessions.firstOrNull { it.id == id }?.setFocusedSplit(split)
+    /** Focus pane [paneId] of tab [tabId]; a pane this tab doesn't hold is ignored. */
+    fun focusPane(tabId: String, paneId: String) {
+        val tab = sessions.firstOrNull { it.id == tabId } ?: return
+        if (tab.pane(paneId) != null) tab.setFocusedPane(paneId)
     }
 
-    /** Close session [id]: disconnect it (and its split), remove the tab, select a neighbor. */
+    /** Close session [id]: disconnect it (and its panes), remove the tab, select a neighbor. */
     fun close(id: String) {
         val index = sessions.indexOfFirst { it.id == id }
         if (index < 0) return
         sessions[index].controller.disconnect()
         sessions[index].vncController?.disconnect()
         sessions[index].playback?.stop()
-        sessions[index].splitSession?.controller?.disconnect()
+        sessions[index].panes.forEach { it.controller.disconnect() }
         val remaining = sessions.toMutableList().apply { removeAt(index) }
         if (activeId == id) {
             // The right neighbor shifted into the freed index; else take the left one, else none.
@@ -403,13 +502,13 @@ class SessionsController(
     fun statusFor(hostId: String): ConnectionUiState? =
         sessions.lastOrNull { it.hostId == hostId }?.controller?.uiState
 
-    /** Close all sessions (and their splits) — call on screen teardown to avoid leaking sockets. */
+    /** Close all sessions (and their panes) — call on screen teardown to avoid leaking sockets. */
     fun disconnectAll() {
-        sessions.forEach {
-            it.controller.disconnect()
-            it.vncController?.disconnect()
-            it.playback?.stop()
-            it.splitSession?.controller?.disconnect()
+        sessions.forEach { session ->
+            session.controller.disconnect()
+            session.vncController?.disconnect()
+            session.playback?.stop()
+            session.panes.forEach { it.controller.disconnect() }
         }
         sessions = emptyList()
         activeId = null

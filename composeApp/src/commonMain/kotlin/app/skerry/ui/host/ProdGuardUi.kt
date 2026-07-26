@@ -87,33 +87,44 @@ fun prodDisplayRisk(command: String): GuardedCommand? =
 private val DISPLAY_POLICY = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
 /**
- * Keeps every open session's terminal guard ([TerminalScreenState.guardProduction]) in step with
- * its host profile, splits included. Driven from the composition rather than set once at connect,
+ * Keeps every open session's terminal guard ([TerminalScreenState.guardPolicy]) in step with its
+ * host profile, every pane included. Driven from the composition rather than set once at connect,
  * so tagging a host `#prod` arms the sessions that are already open (and untagging disarms them).
  */
 @Composable
 fun ProdGuardSync(sessions: SessionsController?, confirmWarnings: Boolean) {
     val open = sessions?.sessions ?: return
+    val hosts = LocalHosts.current
     for (session in open) {
         key(session.id) {
-            BindProdGuard(session, confirmWarnings)
-            session.splitSession?.let { split -> key(split.id) { BindProdGuard(split, confirmWarnings) } }
+            val panes = session.allPanes
+            val policies = panes.map { pane -> prodGuardPolicy(pane.hostId?.let { hosts?.find(it) }, confirmWarnings) }
+            // With synchronized input any pane carries what is typed into all the others, so the
+            // whole tab runs under the strictest policy of the group: one confirmation then covers
+            // the fan-out, and a production pane can't be reached from a non-production one unasked.
+            val group = if (session.syncInput && policies.size > 1) policies.reduce(::strictestOf) else null
+            panes.forEachIndexed { index, pane ->
+                key(pane.id) { BindProdGuard(pane, group ?: policies[index]) }
+            }
         }
     }
 }
 
 @Composable
-private fun BindProdGuard(session: Session, confirmWarnings: Boolean) {
-    val host = session.hostId?.let { LocalHosts.current?.find(it) }
-    // Keyed on what the policy is made of: this runs for every open session (splits included) on
-    // every recomposition of the app root, and the tags/username only change when the profile is
-    // edited.
-    val policy = remember(host?.tags, host?.username, confirmWarnings) { prodGuardPolicy(host, confirmWarnings) }
+private fun BindProdGuard(session: Session, policy: ProductionGuardPolicy) {
     val terminal = session.liveTerminal
     // SideEffect, not LaunchedEffect: this is a plain state write with nothing to suspend on, and it
     // must be applied on every successful composition, not on a coroutine that may run a frame later.
     SideEffect { terminal?.guardPolicy = policy }
 }
+
+/** The stricter of two policies on every axis — what a group of synchronized panes runs under. */
+internal fun strictestOf(a: ProductionGuardPolicy, b: ProductionGuardPolicy): ProductionGuardPolicy =
+    ProductionGuardPolicy(
+        production = a.production || b.production,
+        confirmWarnings = a.confirmWarnings || b.confirmWarnings,
+        rootLogin = a.rootLogin || b.rootLogin,
+    )
 
 /** The guard policy a session on [host] runs under. Pure — [BindProdGuard] only applies it. */
 fun prodGuardPolicy(host: Host?, confirmWarnings: Boolean): ProductionGuardPolicy =
@@ -132,25 +143,26 @@ fun isRootLogin(host: Host?): Boolean = host?.username?.trim().equals(ROOT_LOGIN
 private const val ROOT_LOGIN = "root"
 
 /**
- * Whether a guard confirmation is on screen for [session] (its split pane included).
+ * Whether a guard confirmation is on screen for [session] (any of its panes).
  *
  * The window-level hotkey handler asks before acting: it sits on the root's preview pass, above the
  * focus the dialog's scrim takes, so without this a snippet chord or a shell shortcut would fire
  * over an open confirmation.
  */
 fun prodGuardDialogOpen(session: Session?): Boolean =
-    session != null && listOfNotNull(session, session.splitSession).any { it.liveTerminal?.pendingGuarded != null }
+    session != null && session.allPanes.any { it.liveTerminal?.pendingGuarded != null }
 
 /**
- * Shows the confirmation for a command held by the guard in [session] (or in its focused split
- * pane). Rendered at the app root, not inside the terminal pane, so the scrim covers the window
- * and the confirmation can't be left behind an overlay.
+ * Shows the confirmation for a command held by the guard in one of [session]'s panes. Rendered at
+ * the app root, not inside the terminal pane, so the scrim covers the window and the confirmation
+ * can't be left behind an overlay.
  */
 @Composable
 fun ProdCommandGate(session: Session?) {
     if (session == null) return
-    // The split pane is checked first: it is the pane that has focus while it is being typed into.
-    val held = listOfNotNull(session.splitSession, session)
+    // The focused pane is checked first: it is the one being typed into, so with several holds
+    // pending its confirmation is the one the user is waiting on.
+    val held = (listOf(session.focusedPane) + session.allPanes)
         .firstOrNull { it.liveTerminal?.pendingGuarded != null }
     val terminal = held?.liveTerminal ?: return
     val guarded = terminal.pendingGuarded ?: return

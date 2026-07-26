@@ -24,6 +24,7 @@ import app.skerry.shared.vnc.VncUpdate
 import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.terminal.MirroredInput
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.desktop.RAIL
@@ -49,6 +50,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -202,69 +204,335 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
-    // Split: independent secondary session within a tab
+    // Panes: independent sessions tiled inside one tab
 
-    private fun SessionsController.connectSplit(parentId: String, hostId: String?) =
-        connectSplit(parentId = parentId, hostId = hostId, title = hostId ?: "", subtitle = "u@h:22", target = target, auth = auth)
+    private fun SessionsController.connectPane(tabId: String, paneId: String, hostId: String?) =
+        connectPane(
+            tabId = tabId, paneId = paneId, hostId = hostId, title = hostId ?: "",
+            subtitle = "u@h:22", target = target, auth = auth,
+        )
+
+    // Grid shape as it reads on screen: rows separated by "|", panes within a row by ",".
+    private fun shapeOf(tab: Session): String = tab.paneLayout.rows.joinToString("|") { row ->
+        row.cells.joinToString(",") { cell -> tab.pane(cell.paneId)?.let { it.hostId ?: "empty" } ?: "?" }
+    }
 
     @Test
-    fun `a fresh session has no split open and no secondary`() = runTest {
+    fun `a fresh session is a single pane, focused, with sync off`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
-        sessions.open(hostId = "host-a")
-        assertFalse(sessions.active!!.splitOpen)
-        assertNull(sessions.active!!.splitSession)
-        assertFalse(sessions.active!!.focusedSplit)
+        val id = sessions.open(hostId = "host-a")
+        val tab = sessions.active!!
+        assertFalse(tab.hasPanes)
+        assertEquals(listOf(id), tab.paneLayout.paneIds)
+        assertEquals(id, tab.focusedPaneId)
+        assertFalse(tab.syncInput)
         scope.cancel()
     }
 
     @Test
-    fun `toggleSplit opens then closes the split area on the active session`() = runTest {
-        val (sessions, scope) = sessionsWith(FakeTransport())
-        sessions.open(hostId = "host-a")
-
-        sessions.toggleSplit()
-        assertTrue(sessions.active!!.splitOpen)
-        assertNull(sessions.active!!.splitSession) // empty: shows the picker
-
-        sessions.toggleSplit()
-        assertFalse(sessions.active!!.splitOpen)
-        scope.cancel()
-    }
-
-    @Test
-    fun `connectSplit attaches an independent secondary session and focuses it`() = runTest {
+    fun `addPane puts an empty pane beside the primary one and focuses it`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")
-        sessions.toggleSplit()
 
-        sessions.connectSplit(parentId = a, hostId = "host-b")
+        val pane = sessions.addPane()!!
 
-        val parent = sessions.active!!
-        assertTrue(parent.splitOpen)
-        val secondary = parent.splitSession!!
-        assertTrue(parent.focusedSplit)
-        assertEquals("host-b", secondary.hostId)
-        // independent controller, separate from the main session
-        assertTrue(secondary.controller !== parent.controller)
-        assertIs<ConnectionUiState.Connected>(secondary.controller.uiState)
+        val tab = sessions.active!!
+        assertEquals("host-a,empty", shapeOf(tab)) // side by side, like the split it replaces
+        assertEquals(pane, tab.focusedPaneId)
+        assertTrue(tab.pane(pane)!!.isBlank) // shows the host picker until something is connected
         scope.cancel()
     }
 
     @Test
-    fun `broadcastTargets covers connected tabs and their split panes`() = runTest {
+    fun `addPane fills a two by two grid and refuses a fifth pane`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        sessions.open(hostId = "host-a")
+
+        repeat(MAX_PANES - 1) { assertNotNull(sessions.addPane()) }
+
+        val tab = sessions.active!!
+        assertEquals("host-a,empty|empty,empty", shapeOf(tab))
+        assertNull(sessions.addPane())
+        assertEquals(MAX_PANES - 1, tab.panes.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `addPane lands where the drop asked`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        sessions.open(hostId = "host-a")
+
+        sessions.addPane(slot = PaneSlot.NewRow(0))
+
+        assertEquals("empty|host-a", shapeOf(sessions.active!!))
+        scope.cancel()
+    }
+
+    @Test
+    fun `addPane is refused on a remote-desktop tab`() = runTest {
+        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
+        sessions.openVnc(hostId = "host-a")
+
+        assertNull(sessions.addPane())
+        scope.cancel()
+    }
+
+    @Test
+    fun `connectPane fills an empty pane in place and keeps its slot`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+
+        val tab = sessions.active!!
+        assertEquals("host-a,host-b", shapeOf(tab))
+        assertEquals(pane, tab.panes.single().id) // filled in place: same pane, same slot
+        assertEquals(pane, tab.focusedPaneId)
+        assertTrue(tab.panes.single().controller !== tab.controller) // its own connection
+        assertIs<ConnectionUiState.Connected>(tab.panes.single().controller.uiState)
+        scope.cancel()
+    }
+
+    @Test
+    fun `connectPane on a live pane replaces its session in the same slot`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+        val firstConnection = transport.connections[1]
+
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-c")
+
+        val tab = sessions.active!!
+        assertTrue(firstConnection.disconnected) // the replaced session is torn down, not leaked
+        assertEquals("host-a,host-c", shapeOf(tab))
+        assertEquals(1, tab.panes.size)
+        assertEquals(tab.panes.single().id, tab.focusedPaneId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `connectPane does not add the pane to the tab list`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+
+        assertEquals(listOf(a), sessions.sessions.map { it.id }) // panes are not tabs
+        scope.cancel()
+    }
+
+    @Test
+    fun `closePane disconnects the pane and takes it off the grid`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+        val paneConnection = transport.connections[1]
+
+        sessions.closePane(a, pane)
+
+        val tab = sessions.active!!
+        assertFalse(tab.hasPanes)
+        assertEquals("host-a", shapeOf(tab))
+        assertEquals(a, tab.focusedPaneId) // focus falls back to the primary pane
+        assertTrue(paneConnection.disconnected)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closePane refuses the tab's own pane`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        sessions.addPane()
+
+        sessions.closePane(a, a) // closing the primary pane means closing the tab
+
+        assertEquals("host-a,empty", shapeOf(sessions.active!!))
+        assertIs<ConnectionUiState.Connected>(sessions.active!!.controller.uiState)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing a tab disconnects every pane`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+
+        sessions.close(a)
+
+        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(transport.connections.all { it.disconnected })
+        scope.cancel()
+    }
+
+    @Test
+    fun `disconnectAll disconnects panes too`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+
+        sessions.disconnectAll()
+
+        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(transport.connections.all { it.disconnected })
+        scope.cancel()
+    }
+
+    @Test
+    fun `focusPane switches panes and ignores one from another tab`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val b = sessions.open(hostId = "host-b")
+        sessions.activate(a)
+        val pane = sessions.addPane()!!
+
+        sessions.focusPane(a, pane)
+        assertEquals(pane, sessions.active!!.focusedPaneId)
+
+        sessions.focusPane(a, a)
+        assertEquals(a, sessions.active!!.focusedPaneId)
+
+        sessions.focusPane(a, b) // another tab's session is not a pane of this one
+        assertEquals(a, sessions.active!!.focusedPaneId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `movePane rearranges the grid`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+        assertEquals("host-a,empty", shapeOf(sessions.active!!))
+
+        sessions.movePane(a, pane, PaneSlot.NewRow(0)) // dragged above the primary pane
+
+        assertEquals("empty|host-a", shapeOf(sessions.active!!))
+        scope.cancel()
+    }
+
+    @Test
+    fun `dividers move the panes' shares`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        sessions.addPane() // side by side
+        sessions.addPane() // second row
+
+        sessions.resizePaneCells(a, row = 0, boundary = 0, delta = 0.1f)
+        sessions.resizePaneRows(a, boundary = 0, delta = -0.2f)
+
+        val layout = sessions.active!!.paneLayout
+        assertEquals(0.6f, layout.rows[0].cells[0].weight, 1e-4f)
+        assertEquals(0.3f, layout.rows[0].weight, 1e-4f)
+        scope.cancel()
+    }
+
+    @Test
+    fun `synchronized input is off until the tab's toggle is on`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+        val tab = sessions.active!!
+
+        assertTrue(tab.syncTargetsFrom(a).isEmpty())
+
+        sessions.toggleSyncInput(a)
+        assertTrue(tab.syncInput)
+        assertEquals(1, tab.syncTargetsFrom(a).size)
+
+        sessions.toggleSyncInput(a)
+        assertTrue(tab.syncTargetsFrom(a).isEmpty())
+        scope.cancel()
+    }
+
+    @Test
+    fun `synchronized input reaches the other connected panes only`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val connected = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = connected, hostId = "host-b")
+        sessions.addPane() // left empty: nothing to type into
+        sessions.open(hostId = "host-other") // another tab is not part of this tab's sync
+        sessions.activate(a)
+        val tab = sessions.active!!
+        sessions.toggleSyncInput(a)
+
+        // From the primary pane: only the connected sibling, never the origin itself.
+        val fromPrimary = tab.syncTargetsFrom(a)
+        assertEquals(listOf(tab.pane(connected)!!.liveTerminal), fromPrimary)
+        // And the other way round.
+        assertEquals(listOf(tab.liveTerminal), tab.syncTargetsFrom(connected))
+        scope.cancel()
+    }
+
+    @Test
+    fun `mirrored input is delivered to the tab's other panes and stops there`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val paneId = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = paneId, hostId = "host-b")
+        val tab = sessions.active!!
+        val pane = tab.pane(paneId)!!
+        sessions.toggleSyncInput(a)
+        val before = pane.liveTerminal!!.inputVersion
+
+        mirrorPaneInput(tab, originPaneId = a, text = "uptime\n", kind = MirroredInput.Typed)
+
+        // The sibling pane took the keystroke...
+        assertTrue(pane.liveTerminal!!.inputVersion > before)
+        // ...and did not hand it back: a mirror on the receiving side would have bounced it.
+        assertNull(pane.liveTerminal!!.inputMirror)
+        scope.cancel()
+    }
+
+    @Test
+    fun `broadcastTargets covers connected tabs and their panes`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a", title = "alpha")
         sessions.open(hostId = "host-b", title = "beta")
         sessions.activate(a)
-        sessions.toggleSplit()
-        sessions.connectSplit(parentId = a, hostId = "host-c")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-c")
 
         val targets = broadcastTargets(sessions)
 
-        // Each pane is its own shell, so the split is a target in its own right.
+        // Each pane is its own shell, so it is a target in its own right.
         assertEquals(3, targets.size)
         assertEquals(listOf("alpha", "beta"), targets.map { it.label }.filter { it == "alpha" || it == "beta" })
-        assertTrue(targets.map { it.id }.contains(sessions.active!!.splitSession!!.id))
+        assertTrue(targets.map { it.id }.contains(sessions.active!!.panes.single().id))
+        scope.cancel()
+    }
+
+    @Test
+    fun `a broadcast reaches only what the panel selected, not synchronized siblings`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val paneId = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = paneId, hostId = "host-b")
+        val tab = sessions.active!!
+        sessions.toggleSyncInput(a)
+        val sibling = tab.pane(paneId)!!.liveTerminal!!
+        val before = sibling.inputVersion
+        // Wire the mirror exactly as PaneSyncBinder does in composition — without this the test
+        // would pass no matter what, since nothing would be listening to fan out in the first place.
+        tab.liveTerminal!!.inputMirror = { text, kind -> mirrorPaneInput(tab, a, text, kind) }
+
+        // The panel's checkboxes are the target list: a send to the primary pane alone must not
+        // fan out through the tab's sync, which would reach a pane left unchecked on purpose —
+        // past the production confirmation, which counted only the selected ones.
+        val targets = broadcastTargets(sessions)
+        targets.first { it.id == a }.send("uptime\n")
+
+        assertEquals(before, sibling.inputVersion)
         scope.cancel()
     }
 
@@ -291,21 +559,21 @@ class SessionsControllerTest {
     fun `a held confirmation is visible to the window-level hotkey gate from either pane`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")
-        sessions.toggleSplit()
-        sessions.connectSplit(parentId = a, hostId = "host-b")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
         val session = sessions.active!!
 
         assertFalse(prodGuardDialogOpen(session))
         assertFalse(prodGuardDialogOpen(null))
 
-        // Held in the split pane — the one being typed into. The gate has to see it there too, or a
+        // Held in the second pane — the one being typed into. The gate has to see it there too, or a
         // snippet chord would fire over the open dialog.
-        val split = session.splitSession!!.liveTerminal!!
-        split.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
-        split.typeInput("shutdown now\r")
+        val secondary = session.panes.single().liveTerminal!!
+        secondary.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        secondary.typeInput("shutdown now\r")
         assertTrue(prodGuardDialogOpen(session))
 
-        split.dismissGuardedCommand()
+        secondary.dismissGuardedCommand()
         assertFalse(prodGuardDialogOpen(session))
         scope.cancel()
     }
@@ -314,7 +582,7 @@ class SessionsControllerTest {
     fun `broadcastTargets skips a session that is not connected`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")
-        sessions.toggleSplit() // split area open but nothing connected into it
+        sessions.addPane() // pane open but nothing connected into it
 
         assertEquals(listOf(a), broadcastTargets(sessions).map { it.id })
         scope.cancel()
@@ -328,83 +596,6 @@ class SessionsControllerTest {
 
         assertTrue(broadcastTargets(sessions).isEmpty())
         assertTrue(broadcastTargets(null).isEmpty())
-        scope.cancel()
-    }
-
-    @Test
-    fun `connectSplit does not add the secondary session to the tab list`() = runTest {
-        val (sessions, scope) = sessionsWith(FakeTransport())
-        val a = sessions.open(hostId = "host-a")
-        sessions.toggleSplit()
-
-        sessions.connectSplit(parentId = a, hostId = "host-b")
-
-        assertEquals(listOf(a), sessions.sessions.map { it.id }) // secondary is not in the tab bar
-        scope.cancel()
-    }
-
-    @Test
-    fun `closeSplit disconnects the secondary and resets split flags`() = runTest {
-        val transport = FakeTransport()
-        val (sessions, scope) = sessionsWith(transport)
-        val a = sessions.open(hostId = "host-a")
-        sessions.toggleSplit()
-        sessions.connectSplit(parentId = a, hostId = "host-b")
-        val secondaryConn = transport.connections[1]
-
-        sessions.closeSplit(a)
-
-        val parent = sessions.active!!
-        assertFalse(parent.splitOpen)
-        assertNull(parent.splitSession)
-        assertFalse(parent.focusedSplit)
-        assertTrue(secondaryConn.disconnected)
-        scope.cancel()
-    }
-
-    @Test
-    fun `closing a tab disconnects its split session`() = runTest {
-        val transport = FakeTransport()
-        val (sessions, scope) = sessionsWith(transport)
-        val a = sessions.open(hostId = "host-a")
-        sessions.toggleSplit()
-        sessions.connectSplit(parentId = a, hostId = "host-b")
-        val secondaryConn = transport.connections[1]
-
-        sessions.close(a)
-
-        assertTrue(sessions.sessions.isEmpty())
-        assertTrue(secondaryConn.disconnected)
-        scope.cancel()
-    }
-
-    @Test
-    fun `disconnectAll disconnects split sessions too`() = runTest {
-        val transport = FakeTransport()
-        val (sessions, scope) = sessionsWith(transport)
-        val a = sessions.open(hostId = "host-a")
-        sessions.toggleSplit()
-        sessions.connectSplit(parentId = a, hostId = "host-b")
-
-        sessions.disconnectAll()
-
-        assertTrue(sessions.sessions.isEmpty())
-        assertTrue(transport.connections.all { it.disconnected }) // both main and secondary
-        scope.cancel()
-    }
-
-    @Test
-    fun `focusPane switches the focused pane`() = runTest {
-        val (sessions, scope) = sessionsWith(FakeTransport())
-        val a = sessions.open(hostId = "host-a")
-        sessions.toggleSplit()
-        sessions.connectSplit(parentId = a, hostId = "host-b")
-
-        sessions.focusPane(a, split = false)
-        assertFalse(sessions.active!!.focusedSplit)
-
-        sessions.focusPane(a, split = true)
-        assertTrue(sessions.active!!.focusedSplit)
         scope.cancel()
     }
 
@@ -512,7 +703,8 @@ class SessionsControllerTest {
         sessions.connect(hostId = "host-a", title = "a", subtitle = "u@h:22", target = target, auth = auth)
         sessions.connect(hostId = "host-b", title = "b", subtitle = "u@h:22", target = target, auth = auth)
         sessions.open(hostId = "host-c")
-        sessions.connectSplit(parentId = blank, hostId = "host-d", title = "d", subtitle = "u@h:22", target = target, auth = auth)
+        val pane = sessions.addPane(blank)!!
+        sessions.connectPane(tabId = blank, paneId = pane, hostId = "host-d", title = "d", subtitle = "u@h:22", target = target, auth = auth)
         sessions.openVnc(hostId = "host-e")
         sessions.openPlayer("recording", Asciicast(80, 24, "cast", emptyList()))
         // An ad-hoc connection typed into the form belongs to no catalog host: nothing to report.

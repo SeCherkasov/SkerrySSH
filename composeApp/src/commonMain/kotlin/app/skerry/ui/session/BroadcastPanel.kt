@@ -76,7 +76,7 @@ internal fun broadcastTargets(
     isProduction: (String?) -> Boolean = { false },
 ): List<BroadcastTarget> =
     sessions?.sessions.orEmpty().flatMap { session ->
-        listOfNotNull(session, session.splitSession).mapNotNull { candidate ->
+        session.allPanes.mapNotNull { candidate ->
             val terminal = (candidate.controller.uiState as? ConnectionUiState.Connected)?.terminal
             terminal?.let {
                 BroadcastTarget(
@@ -90,7 +90,12 @@ internal fun broadcastTargets(
                         val live = it.state.value is TerminalState.Open
                         // guarded = false: the panel already confirmed the production targets as a
                         // group. Holding here instead would park the command in background tabs.
-                        if (live) it.typeInput(text, guarded = false)
+                        // mirror = false: the panel's checkboxes ARE the target list. Letting a
+                        // delivery fan out again through a tab's synchronized panes would double up
+                        // on the panes that are selected and — worse — reach the ones deliberately
+                        // left unchecked, past the production confirmation that counted only the
+                        // selected ones.
+                        if (live) it.typeInput(text, guarded = false, mirror = false)
                         live
                     },
                 )

@@ -132,11 +132,12 @@ val LocalHostClickConnectMode: ProvidableCompositionLocal<HostClickConnectMode> 
     staticCompositionLocalOf { HostClickConnectMode.DEFAULT }
 
 /**
- * "Open host in the active tab's split pane" action: same secret resolution as [LocalConnectHost], but
- * opens a new independent secondary session alongside, rather than a new tab. Supplied by
- * [DesktopDesignApp]; default is a no-op (mock path/preview).
+ * "Open host in this pane" action: same secret resolution as [LocalConnectHost], but the session
+ * lands in the named pane of the active tab instead of a new tab. Takes the pane's id, since a tab
+ * can hold several and the picker belongs to one of them. Supplied by [DesktopDesignApp]; default is
+ * a no-op (mock path/preview).
  */
-val LocalConnectSplit: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
+val LocalConnectPane: ProvidableCompositionLocal<(Host, String) -> Unit> = staticCompositionLocalOf { { _, _ -> } }
 
 /**
  * SSH transport for one-off "Test connection" checks from the form (connect without opening a

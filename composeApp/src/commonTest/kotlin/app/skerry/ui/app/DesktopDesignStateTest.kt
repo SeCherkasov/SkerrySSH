@@ -122,8 +122,8 @@ class DesktopDesignStateTest {
     @Test
     fun request_close_split_confirmation() {
         val s = DesktopDesignState()
-        s.requestCloseSplit("sess-2")
-        assertEquals(PendingClose.Split("sess-2"), s.pendingClose)
+        s.requestClosePane("sess-2", "pane-9")
+        assertEquals(PendingClose.Pane("sess-2", "pane-9"), s.pendingClose)
         s.dismissClose()
         assertNull(s.pendingClose)
     }

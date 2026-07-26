@@ -12,8 +12,11 @@ sealed interface DesktopShortcut {
     /** Open the "New connection" modal (⌘N / Ctrl+Shift+N). */
     data object NewConnection : DesktopShortcut
 
-    /** Split/collapse the active tab's terminal pane (⌘D / Ctrl+Shift+D). */
-    data object SplitTerminal : DesktopShortcut
+    /** Add a pane to the active tab's grid (⌘D / Ctrl+Shift+D). */
+    data object AddPane : DesktopShortcut
+
+    /** Type into every pane of the active tab at once (⌘I / Ctrl+Shift+I). */
+    data object SyncPanes : DesktopShortcut
 
     /** Open the active tab's SFTP (⌘E / Ctrl+Shift+E). */
     data object OpenSftp : DesktopShortcut
@@ -81,7 +84,8 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
     if (!appMod) return null
     return when (key) {
         Key.N -> DesktopShortcut.NewConnection
-        Key.D -> DesktopShortcut.SplitTerminal
+        Key.D -> DesktopShortcut.AddPane
+        Key.I -> DesktopShortcut.SyncPanes
         Key.F -> DesktopShortcut.FindInTerminal
         Key.E -> DesktopShortcut.OpenSftp
         Key.L -> DesktopShortcut.Lock

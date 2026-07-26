@@ -39,8 +39,7 @@ fun tearDownForLock(
 ) {
     tunnels?.closeAll()
     sessions?.sessions?.forEach { session ->
-        session.controller.clearReconnectCredentials()
-        session.splitSession?.controller?.clearReconnectCredentials()
+        session.allPanes.forEach { it.controller.clearReconnectCredentials() }
     }
     sync?.pauseForLock()
     snippets?.dismissRun()

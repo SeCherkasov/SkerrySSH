@@ -84,14 +84,14 @@ typealias AiPolicy = app.skerry.shared.ai.AiPolicy
 
 /**
  * A destructive session action awaiting confirmation ([ConfirmActionDialog]). The action itself
- * (close/closeSplit) is performed by [DesktopChrome], which has access to the session manager.
+ * (close/closePane) is performed by [DesktopChrome], which has access to the session manager.
  */
 sealed interface PendingClose {
     /** Closing an entire session tab (power button in the toolbar). */
     data class Session(val id: String) : PendingClose
 
-    /** Closing the split pane of tab [parentId] (close icon in the split header). */
-    data class Split(val parentId: String) : PendingClose
+    /** Closing pane [paneId] of tab [tabId] (close icon in the pane's header). */
+    data class Pane(val tabId: String, val paneId: String) : PendingClose
 }
 
 /**
@@ -510,7 +510,7 @@ class DesktopDesignState(
     fun requestDeleteHost(host: Host) { pendingDeleteHost = host }
     fun dismissDeleteHost() { pendingDeleteHost = null }
     fun requestCloseSession(id: String) { pendingClose = PendingClose.Session(id) }
-    fun requestCloseSplit(parentId: String) { pendingClose = PendingClose.Split(parentId) }
+    fun requestClosePane(tabId: String, paneId: String) { pendingClose = PendingClose.Pane(tabId, paneId) }
     fun dismissClose() { pendingClose = null }
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
     fun showRecordingNotice(outcome: RecordingOutcome) { recordingNotice = outcome.takeIf { it.worthReporting } }

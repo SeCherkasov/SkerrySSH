@@ -82,7 +82,8 @@ class DesktopShortcutsTest {
     @Test
     fun `app modifier on macOS is Cmd alone`() {
         assertEquals(DesktopShortcut.NewConnection, match(meta = true, key = Key.N))
-        assertEquals(DesktopShortcut.SplitTerminal, match(meta = true, key = Key.D))
+        assertEquals(DesktopShortcut.AddPane, match(meta = true, key = Key.D))
+        assertEquals(DesktopShortcut.SyncPanes, match(meta = true, key = Key.I))
         assertEquals(DesktopShortcut.OpenSftp, match(meta = true, key = Key.E))
         assertEquals(DesktopShortcut.Lock, match(meta = true, key = Key.L))
         assertEquals(DesktopShortcut.FocusAiBar, match(meta = true, key = Key.Slash))
@@ -91,7 +92,8 @@ class DesktopShortcutsTest {
     @Test
     fun `app modifier off macOS is Ctrl plus Shift`() {
         assertEquals(DesktopShortcut.NewConnection, match(ctrl = true, shift = true, key = Key.N))
-        assertEquals(DesktopShortcut.SplitTerminal, match(ctrl = true, shift = true, key = Key.D))
+        assertEquals(DesktopShortcut.AddPane, match(ctrl = true, shift = true, key = Key.D))
+        assertEquals(DesktopShortcut.SyncPanes, match(ctrl = true, shift = true, key = Key.I))
         assertEquals(DesktopShortcut.OpenSftp, match(ctrl = true, shift = true, key = Key.E))
         assertEquals(DesktopShortcut.Lock, match(ctrl = true, shift = true, key = Key.L))
         assertEquals(DesktopShortcut.FocusAiBar, match(ctrl = true, shift = true, key = Key.Slash))
