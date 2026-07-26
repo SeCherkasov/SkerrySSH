@@ -11,6 +11,9 @@ import kotlinx.serialization.Serializable
 enum class RecordType {
     HOST, GROUP, IDENTITY, CREDENTIAL, KNOWN_HOST, SNIPPET, TUNNEL, SETTINGS, TERMINAL_HISTORY,
 
+    /** An ordered checklist of commands run step by step (see [app.skerry.shared.runbook.Runbook]). */
+    RUNBOOK,
+
     /** Key and metadata of one team (teamKey + name + role) — in the member's own vault. */
     TEAM,
 

@@ -16,6 +16,8 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.runbook.RunbookManager
+import app.skerry.ui.runbook.RunbookRunner
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.tunnel.TunnelManager
@@ -168,6 +170,19 @@ val LocalTunnels: ProvidableCompositionLocal<TunnelManager?> = staticComposition
  * Supplied by [DesktopDesignApp] (snippets are plain config, not vault-gated).
  */
 val LocalSnippets: ProvidableCompositionLocal<SnippetManager?> = staticCompositionLocalOf { null }
+
+/**
+ * Library of saved runbooks (ordered checklists of commands). `null` — mock path/preview without a
+ * backend, where [app.skerry.ui.runbook.RunbooksView] renders nothing. Supplied by the app shells
+ * behind the vault gate: runbook steps can carry inline credentials, like snippets.
+ */
+val LocalRunbooks: ProvidableCompositionLocal<RunbookManager?> = staticCompositionLocalOf { null }
+
+/**
+ * The one in-flight runbook run, app-wide: it outlives the panel showing it, so switching tabs
+ * doesn't abandon a half-finished procedure. `null` on the mock path.
+ */
+val LocalRunbookRunner: ProvidableCompositionLocal<RunbookRunner?> = staticCompositionLocalOf { null }
 
 /**
  * Per-host terminal command history over the encrypted vault: the sessions graph writes it for

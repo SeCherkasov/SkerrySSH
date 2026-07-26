@@ -118,6 +118,8 @@ Building it yourself is also easy — see [Building from source](#building-from-
   at run time behind a confirmation preview; AI assistant with
   per-host policies — bring your own OpenAI key or run a local model.
   See [AI and privacy](#ai-and-privacy).
+- **Runbooks** — saved procedures run one step at a time in a live session: each step can pause
+  for your go-ahead, and a step that exits non-zero stops the run instead of carrying on.
 - **Localization** — English, Russian, and Simplified Chinese UI; the assistant replies in
   the UI language.
 

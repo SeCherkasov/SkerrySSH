@@ -9,6 +9,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rail_desktops
 import app.skerry.ui.generated.resources.rail_hosts
 import app.skerry.ui.generated.resources.rail_snippets
+import app.skerry.ui.generated.resources.runbook_section
 import app.skerry.ui.generated.resources.rail_team
 import app.skerry.ui.generated.resources.rail_terminal
 import app.skerry.ui.generated.resources.rail_tunnels
@@ -37,6 +38,7 @@ val RAIL = listOf(
     RailItem(RailTarget.Section(HostSection.RemoteDesktops), "desktop_windows", Res.string.rail_desktops),
     RailItem(RailTarget.View(DesktopView.Ports), "lan", Res.string.rail_tunnels),
     RailItem(RailTarget.View(DesktopView.Snippets), "code_blocks", Res.string.rail_snippets),
+    RailItem(RailTarget.View(DesktopView.Runbooks), "checklist", Res.string.runbook_section),
     RailItem(RailTarget.View(DesktopView.Vault), "vpn_key", Res.string.rail_vault),
     RailItem(RailTarget.View(DesktopView.Known), "fingerprint", Res.string.rail_hosts),
     RailItem(RailTarget.View(DesktopView.Teams), "groups", Res.string.rail_team),

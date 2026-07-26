@@ -19,7 +19,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
@@ -74,7 +76,11 @@ import app.skerry.ui.app.LocalTestTransport
 import app.skerry.ui.app.LocalOpenSftp
 import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
+import app.skerry.ui.app.LocalRunbookRunner
+import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.runbook.RunbookRunPanel
+import app.skerry.ui.runbook.RunbookStartDialog
 import app.skerry.ui.snippet.SnippetRunDialog
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSshCertificateInspector
@@ -289,6 +295,8 @@ fun MobileDesignApp(
         LocalTunnels provides deps.tunnels,
         // Saved snippets — Snippets tab (command library + run into the active terminal).
         LocalSnippets provides deps.snippets,
+        LocalRunbooks provides deps.runbooks,
+        LocalRunbookRunner provides deps.runbookRunner,
         LocalTerminalHistory provides termHistory,
         // Vault + biometrics — for the More screen's "unlock with biometrics" toggle (enable/reconfigure).
         LocalVault provides deps.vault,
@@ -311,7 +319,7 @@ fun MobileDesignApp(
                     autoLockIdleMs = state.autoLock.idleMs,
                     // Runs on EVERY lock, including the two automatic ones that bypass the lock
                     // action — Android had no teardown at all before (only onVaultReset did).
-                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets) },
+                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets, deps.runbookRunner) },
                     onReset = onVaultReset,
                     // onPairingComplete != null (sync present) — the create screen offers "I have a code":
                     // the coordinator creates the vault under the chosen password and accepts the account key.
@@ -505,6 +513,20 @@ private fun MobileChrome(
             // Confirmation for a snippet with ${{…}} variables — every launch path (terminal
             // palette, Snippets tab) parks such a run in SnippetManager.pendingRun. Desktop parity.
             LocalSnippets.current?.let { SnippetRunDialog(it) }
+            // Runbooks: the live progress panel (bottom of the terminal screen, non-modal so the
+            // output stays readable) and the start confirmation above it. Desktop parity.
+            LocalRunbookRunner.current?.let { runner ->
+                // Not gated on the terminal route: a run paused on a confirmation would otherwise
+                // lose its only Run/Skip/Stop buttons the moment the user opened another screen,
+                // and nothing would say a procedure is half-finished.
+                if (runner.sessionId != null && runner.sessionId == LocalSessions.current?.activeTerminal?.id) {
+                    RunbookRunPanel(
+                        runner,
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp),
+                    )
+                }
+                RunbookStartDialog(runner)
+            }
             // Recording player: an overlay over whatever screen is up, so a recording can be watched
             // from More without an open session (desktop toolbar parity).
             state.castRecording?.let { cast -> CastPlayerOverlay(cast, onDismiss = state::closeCast) }
@@ -627,6 +649,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Vnc -> MobileVncScreen(state)
         MobileRoute.Files -> MobileFilesScreen(onBack = state::pop)
         MobileRoute.Snippets -> MobileSnippetsScreen(state)
+        MobileRoute.Runbooks -> MobileRunbooksScreen(state)
         MobileRoute.Ports -> MobilePortsScreen(state)
         MobileRoute.Known -> MobileKnownScreen(state)
         MobileRoute.Team -> MobileTeamsScreen(state)

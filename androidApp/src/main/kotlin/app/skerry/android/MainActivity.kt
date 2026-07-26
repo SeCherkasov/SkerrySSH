@@ -483,6 +483,15 @@ class MainActivity : FragmentActivity() {
         // Saved command snippets: SNIPPET records in the vault (commands may contain inline
         // credentials, hence shared encryption and E2E sync). Run into the terminal.
         val snippets = SnippetManager(VaultSnippetStore(vault, trash)) { UUID.randomUUID().toString() }
+        // Runbooks: RUNBOOK records in the same vault. The runner is app-scoped so a procedure
+        // survives leaving the terminal screen; the vault gate ends any run on lock.
+        val runbooks = app.skerry.ui.runbook.RunbookManager(
+            app.skerry.shared.runbook.VaultRunbookStore(vault, trash),
+        ) { UUID.randomUUID().toString() }
+        val runbookRunner = app.skerry.ui.runbook.RunbookRunner(
+            scope = scope,
+            newId = { UUID.randomUUID().toString() },
+        )
         // Self-hosted sync: coordinator ties together the network client (Ktor+SRP), crypto, and vault.
         // Server binding is persisted in sync.json (non-secret: URL/accountId/deviceId); tokens and
         // password are not stored (re-auth via master password). deviceId is stable across records.
@@ -512,7 +521,7 @@ class MainActivity : FragmentActivity() {
             // synced data appears without requiring a re-visit.
             onSynced = {
                 lifecycleScope.launch(Dispatchers.Main) {
-                    hosts.reload(); snippets.reload(); tunnels.reload(); knownHosts.refresh()
+                    hosts.reload(); snippets.reload(); runbooks.reload(); tunnels.reload(); knownHosts.refresh()
                     // Keychain secrets are CREDENTIAL records too: without this a key pulled by live
                     // sync shows up only after the next lock/unlock cycle re-enters MobileChrome.
                     credentials.reload()
@@ -541,7 +550,7 @@ class MainActivity : FragmentActivity() {
             newId = { UUID.randomUUID().toString() },
             onTeamsChanged = {
                 lifecycleScope.launch(Dispatchers.Main) {
-                    hosts.reload(); snippets.reload(); tunnels.reload()
+                    hosts.reload(); snippets.reload(); runbooks.reload(); tunnels.reload()
                 }
             },
         )
@@ -554,6 +563,7 @@ class MainActivity : FragmentActivity() {
         onVaultUnlocked = {
             hosts.reload()
             snippets.reload()
+            runbooks.reload()
             tunnels.reload()
             knownHosts.refresh()
             // Trash retention is applied on unlock too (desktop parity): waiting for the user to
@@ -598,6 +608,7 @@ class MainActivity : FragmentActivity() {
             }
             hosts.reload()
             snippets.reload()
+            runbooks.reload()
             tunnels.reload()
             // The vault is locked after reset, so this clears the in-memory secret list (all() is
             // empty on a locked vault) — desktop parity; rereads on the next vault create + unlock.
@@ -628,6 +639,8 @@ class MainActivity : FragmentActivity() {
             biometrics = biometrics,
             tunnels = tunnels,
             snippets = snippets,
+            runbooks = runbooks,
+            runbookRunner = runbookRunner,
             sync = sync,
             teams = teams,
             securityLog = securityLog,

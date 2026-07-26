@@ -50,7 +50,7 @@ enum class MobileTab(val icon: String) {
  * from Hosts, the framebuffer from Desktops, SFTP (Files) via the host card's SFTP button, and
  * Snippets/Ports/Known/Team from the More tab.
  */
-enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Snippets, Ports, Known, Team, Appearance, Sync, Ai, Security, Trash, About }
+enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Snippets, Runbooks, Ports, Known, Team, Appearance, Sync, Ai, Security, Trash, About }
 
 /** What the system back gesture should do in the mobile shell. */
 enum class MobileBackAction {
