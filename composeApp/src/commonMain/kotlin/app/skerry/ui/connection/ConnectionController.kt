@@ -162,6 +162,33 @@ class ConnectionController(
     var historyKey: String? by mutableStateOf(null)
         private set
 
+    /**
+     * Path this session's file view should reveal when it opens — set by a click on a file path in
+     * terminal output, consumed once by the view ([takeRevealRequest]). A request, not a direct
+     * call: the click happens while the file view isn't composed and its transfer coordinator may
+     * not even be open yet, so the path waits here instead of racing the view's own setup.
+     * Snapshot state so an already-open view picks it up on the next recomposition.
+     */
+    var pendingRevealPath: String? by mutableStateOf(null)
+        private set
+
+    /**
+     * Whether this session can open an SFTP channel at all. Only plain SSH can: Mosh, Telnet,
+     * serial, the local shell and container exec all run over [app.skerry.shared.ssh.StreamOnlyConnection],
+     * whose `openSftp` throws. Snapshot state, set at connect from the target's connection type, so
+     * the UI can hide file affordances instead of offering a panel that could only show an error.
+     */
+    var supportsSftp: Boolean by mutableStateOf(false)
+        private set
+
+    /** Asks the file view to reveal [path]; a newer request replaces one still waiting. */
+    fun requestReveal(path: String) {
+        pendingRevealPath = path
+    }
+
+    /** Takes the pending reveal request, clearing it — a request is acted on exactly once. */
+    fun takeRevealRequest(): String? = pendingRevealPath?.also { pendingRevealPath = null }
+
     private var connectJob: Job? = null
     // Target/auth of the last connect — used by auto-reconnect after a drop (reconnects to the same target).
     private var lastTarget: SshTarget? = null
@@ -193,6 +220,7 @@ class ConnectionController(
         // Only starts from the form: while a connect is in progress or a session is open, a repeat
         // connect is ignored — otherwise a scope/connection could leak.
         if (uiState !is ConnectionUiState.Form) return
+        supportsSftp = target.connectionType == ConnectionType.SSH
         lastTarget = target
         lastAuth = auth
         pendingOnConnected = onConnected

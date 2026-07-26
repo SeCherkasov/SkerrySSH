@@ -169,6 +169,11 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
     }
 
     val c = coord
+    // A path opened from terminal output ("Open in Files" on a selection): reveal it in the remote
+    // pane once the coordinator is up. Keyed on the request so a repeat click is honoured too.
+    LaunchedEffect(c, controller.pendingRevealPath) {
+        if (c != null) controller.takeRevealRequest()?.let { c.remote.revealPath(it) }
+    }
     val openEditor = editor
     // Built-in viewer/editor (long-press → View/Edit): takes over the screen instead of opening a
     // dialog, so it gets the full height and the same chrome as the file list.

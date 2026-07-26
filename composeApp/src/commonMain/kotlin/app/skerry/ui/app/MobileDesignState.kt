@@ -109,6 +109,10 @@ class MobileDesignState(
     // and pushed live into open ones. Persisted on Android; no-op default for previews/tests.
     initialAllowServerClipboardWrite: Boolean = false,
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    // Whether a file path selected in terminal output offers "Open in Files" (More → Terminal).
+    // Desktop parity (Ctrl+click there). On by default; persisted on Android.
+    initialOpenFilePathsInSftp: Boolean = true,
+    private val onOpenFilePathsInSftpChange: (Boolean) -> Unit = {},
     // Production guard: also confirm Warn-level commands (Settings → Terminal). Off by default.
     initialConfirmProductionWarnings: Boolean = false,
     private val onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
@@ -312,6 +316,12 @@ class MobileDesignState(
     var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
 
     /**
+     * Whether a file path selected in terminal output offers "Open in Files" (More → Terminal).
+     * On by default; desktop parity, see [app.skerry.ui.app.DesktopDesignState.openFilePathsInSftp].
+     */
+    var openFilePathsInSftp: Boolean by mutableStateOf(initialOpenFilePathsInSftp); private set
+
+    /**
      * Whether the production guard also confirms Warn-level commands (More → Terminal). Off by
      * default — desktop parity, see [app.skerry.ui.app.DesktopDesignState.confirmProductionWarnings].
      */
@@ -367,6 +377,12 @@ class MobileDesignState(
     fun toggleConfirmProductionWarnings() {
         confirmProductionWarnings = !confirmProductionWarnings
         onConfirmProductionWarningsChange(confirmProductionWarnings)
+    }
+
+    /** Toggle offering "Open in Files" for a selected file path and report outward (for persistence). */
+    fun toggleOpenFilePathsInSftp() {
+        openFilePathsInSftp = !openFilePathsInSftp
+        onOpenFilePathsInSftpChange(openFilePathsInSftp)
     }
 
     /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */

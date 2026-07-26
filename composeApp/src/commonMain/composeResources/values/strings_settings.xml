@@ -85,6 +85,9 @@
     <string name="settings_terminal_show_title">Show terminal title on tabs</string>
     <string name="settings_terminal_show_title_desc">The shell may rename the tab (OSC title). Off: tabs show the host name.</string>
     <string name="settings_terminal_clipboard_write">Allow server clipboard writes (OSC 52)</string>
+    <string name="settings_terminal_open_paths">Open file paths in SFTP</string>
+    <string name="settings_terminal_open_paths_desc">Ctrl+click a file path in the output to reveal it in the file panel.</string>
+    <string name="settings_terminal_open_paths_desc_mobile">Long-press a file path in the output, then tap "Open in Files".</string>
     <string name="settings_terminal_host_connect">Connect to host on</string>
     <string name="settings_terminal_host_connect_single">Single click</string>
     <string name="settings_terminal_host_connect_double">Double click (click selects)</string>
@@ -182,6 +185,8 @@
     <string name="settings_kb_accept_autocomplete">Accept autocomplete suggestion</string>
     <string name="settings_kb_cycle_suggestions">Cycle suggestions</string>
     <string name="settings_kb_search_history">Search command history</string>
+    <string name="settings_kb_open_link_or_path">Open a link or file path</string>
+    <string name="settings_kb_mouse_click">Ctrl+click</string>
     <string name="settings_kb_search_output">Find in output</string>
     <string name="settings_kb_copy_selection">Copy selection</string>
     <string name="settings_kb_paste">Paste</string>

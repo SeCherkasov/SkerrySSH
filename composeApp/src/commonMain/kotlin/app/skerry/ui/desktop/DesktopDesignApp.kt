@@ -290,6 +290,9 @@ fun DesktopDesignApp(
     // OSC 52 server clipboard-write gate (Settings → Terminal) — persisted externally (desktop main).
     initialAllowServerClipboardWrite: Boolean = false,
     onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    // Clickable file paths in terminal output (Settings → Terminal) — persisted externally (desktop main).
+    initialOpenFilePathsInSftp: Boolean = true,
+    onOpenFilePathsInSftpChange: (Boolean) -> Unit = {},
     // Production guard: confirm Warn-level commands too (Settings → Terminal) — persisted externally.
     initialConfirmProductionWarnings: Boolean = false,
     onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
@@ -324,6 +327,7 @@ fun DesktopDesignApp(
             initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
             initialHostClickConnectMode, onHostClickConnectModeChange,
             initialAllowServerClipboardWrite, onAllowServerClipboardWriteChange,
+            initialOpenFilePathsInSftp, onOpenFilePathsInSftpChange,
             initialConfirmProductionWarnings, onConfirmProductionWarningsChange,
             initialTerminalTheme, onTerminalThemeChange,
             initialCustomTerminalTheme, onCustomTerminalThemeChange,

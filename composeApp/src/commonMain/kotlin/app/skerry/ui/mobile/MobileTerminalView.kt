@@ -30,6 +30,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +73,7 @@ import app.skerry.ui.terminal.RecordingOutcome
 import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
+import app.skerry.ui.generated.resources.term_open_path_in_files
 import app.skerry.ui.generated.resources.term_broadcast_title
 import app.skerry.ui.generated.resources.term_monitor_title
 import app.skerry.ui.generated.resources.term_record_start
@@ -104,9 +106,11 @@ import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.MobileDesignState
+import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.terminal.arrowSequence
+import app.skerry.ui.terminal.filePathFromSelection
 import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.delay
@@ -245,6 +249,25 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             imeInput = true,
                             imeTransform = imeTransform,
                         )
+                    }
+                    // Desktop opens a path on Ctrl+click; touch has no such chord, so the affordance is
+                    // a chip: long-press picks the path (word selection stops at whitespace, so a path
+                    // comes out whole), the chip reveals it in Files. derivedStateOf keeps streaming
+                    // output from recomposing the row while the selection hasn't changed.
+                    // Gated on supportsSftp for the same reason as desktop: a Mosh/Telnet/serial/
+                    // local/container session has no SFTP channel to reveal anything in.
+                    val selectedPath by remember(st.terminal, active.controller) {
+                        derivedStateOf {
+                            if (!state.openFilePathsInSftp || !active.controller.supportsSftp) null
+                            else filePathFromSelection(st.terminal.selectedText())
+                        }
+                    }
+                    selectedPath?.let { path ->
+                        MobileOpenPathBar(path) {
+                            active.controller.requestReveal(path)
+                            st.terminal.clearSelection()
+                            state.push(MobileRoute.Files)
+                        }
                     }
                     // Raised by the sparkle key; a pending suggestion forces it open so a command the
                     // model proposed can never be waiting behind a collapsed bar.
@@ -526,6 +549,33 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                 }
             }
         }
+    }
+}
+
+/**
+ * "Open in Files" row over the key panel, shown while the selection is exactly one file path. Full
+ * width and tappable as a whole (a phone-sized target), with the path itself in mono so it reads as
+ * the thing being opened; a long path ellipsizes at the start, keeping the file name visible.
+ */
+@Composable
+private fun MobileOpenPathBar(path: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().background(Skerry.colors.surface2).clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Sym("drive_file_move", size = 16.sp, color = Skerry.colors.cyanBright)
+        Txt(stringResource(Res.string.term_open_path_in_files), color = Skerry.colors.text, size = 12.sp, weight = FontWeight.Medium)
+        Txt(
+            path,
+            color = Skerry.colors.dim,
+            size = 11.5.sp,
+            font = LocalFonts.current.mono,
+            maxLines = 1,
+            overflow = TextOverflow.StartEllipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 

@@ -62,6 +62,8 @@ import app.skerry.ui.generated.resources.appearance_section_theme
 import app.skerry.ui.generated.resources.appearance_custom_term_theme
 import app.skerry.ui.generated.resources.appearance_custom_term_theme_desc
 import app.skerry.ui.generated.resources.appearance_section_terminal
+import app.skerry.ui.generated.resources.settings_terminal_open_paths
+import app.skerry.ui.generated.resources.settings_terminal_open_paths_desc_mobile
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
 import app.skerry.ui.generated.resources.settings_terminal_cursor_style
@@ -587,6 +589,20 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             HLine()
             FontSettingRow(stringResource(Res.string.settings_terminal_cursor_style)) {
                 MobileCursorStylePicker(state.terminalCursorStyle, onPick = state::chooseTerminalCursorStyle)
+            }
+            // Clickable file paths in output (desktop parity): here the affordance is a chip over a
+            // selected path rather than Ctrl+click, and this switch governs both.
+            HLine()
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Txt(stringResource(Res.string.settings_terminal_open_paths), color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+                    Txt(stringResource(Res.string.settings_terminal_open_paths_desc_mobile), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+                Toggle(on = state.openFilePathsInSftp, onToggle = state::toggleOpenFilePathsInSftp)
             }
             // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host
             // from silently overwriting the system clipboard. Applies to new and already-open sessions.

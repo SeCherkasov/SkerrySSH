@@ -56,6 +56,8 @@ import app.skerry.ui.generated.resources.settings_kb_play_recording
 import app.skerry.ui.generated.resources.settings_kb_record_session
 import app.skerry.ui.generated.resources.settings_kb_search_history
 import app.skerry.ui.generated.resources.settings_kb_search_output
+import app.skerry.ui.generated.resources.settings_kb_open_link_or_path
+import app.skerry.ui.generated.resources.settings_kb_mouse_click
 import app.skerry.ui.generated.resources.settings_kb_select_tab_number
 import app.skerry.ui.generated.resources.settings_kb_snippet_palette
 import app.skerry.ui.generated.resources.settings_kb_split_terminal
@@ -105,6 +107,9 @@ internal fun KeyboardSection() {
         // Both conventions work, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
         KeyboardBinding(stringResource(Res.string.settings_kb_copy_selection), "${ctrlShift("C")} / ${ctrl("Insert")}", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_paste), "${ctrlShift("V")} / ${shift("Insert")}", live = true),
+        // Mouse chord rather than a key, but it lives in the terminal and users look for it here:
+        // Ctrl+click opens an OSC 8/plain URL, or a file path in the file panel.
+        KeyboardBinding(stringResource(Res.string.settings_kb_open_link_or_path), stringResource(Res.string.settings_kb_mouse_click), live = true),
     )
 
     // File panel (SFTP view) F-keys, mc/Total Commander style — the same labels the bottom bar uses.

@@ -46,6 +46,18 @@ class MobileDesignStateTest {
     }
 
     @Test
+    fun toggleOpenFilePathsInSftp_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = MobileDesignState(onOpenFilePathsInSftpChange = { seen += it })
+        assertEquals(true, s.openFilePathsInSftp) // on by default
+        s.toggleOpenFilePathsInSftp()
+        assertEquals(false, s.openFilePathsInSftp)
+        s.toggleOpenFilePathsInSftp()
+        assertEquals(true, s.openFilePathsInSftp)
+        assertEquals(listOf(false, true), seen)
+    }
+
+    @Test
     fun toggleAllowServerClipboardWrite_flips_and_reports() {
         val seen = mutableListOf<Boolean>()
         val s = MobileDesignState(onAllowServerClipboardWriteChange = { seen += it })

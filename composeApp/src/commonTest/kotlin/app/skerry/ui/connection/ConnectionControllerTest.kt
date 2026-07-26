@@ -687,6 +687,45 @@ class ConnectionControllerTest {
         scope.cancel()
     }
 
+    @Test
+    fun `only an ssh session reports sftp support`() = runTest {
+        val (ssh, sshScope) = controllerWith(ScriptedTransport(listOf(Result.success(FakeSshConnection(FakeShellChannel())))))
+        assertFalse(ssh.supportsSftp) // nothing connected yet
+        ssh.connect(target, SshAuth.Password("pw"))
+        assertTrue(ssh.supportsSftp)
+        sshScope.cancel()
+
+        val (local, localScope) = controllerWith(ScriptedTransport(listOf(Result.success(FakeSshConnection(FakeShellChannel())))))
+        // Local shell / Mosh / Telnet / serial / container are stream-only: openSftp would throw.
+        local.connect(target.copy(connectionType = ConnectionType.LOCAL), SshAuth.Password(""))
+        assertFalse(local.supportsSftp)
+        localScope.cancel()
+    }
+
+    @Test
+    fun `a reveal request is delivered once`() = runTest {
+        val (controller, scope) = controllerWith(ScriptedTransport(listOf(Result.success(FakeSshConnection(FakeShellChannel())))))
+
+        assertNull(controller.takeRevealRequest())
+        controller.requestReveal("/var/log/syslog")
+        assertEquals("/var/log/syslog", controller.pendingRevealPath)
+        assertEquals("/var/log/syslog", controller.takeRevealRequest())
+        // Taken means gone: reopening the file view must not jump back to an old path.
+        assertNull(controller.takeRevealRequest())
+        assertNull(controller.pendingRevealPath)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a newer reveal request replaces a pending one`() = runTest {
+        val (controller, scope) = controllerWith(ScriptedTransport(listOf(Result.success(FakeSshConnection(FakeShellChannel())))))
+
+        controller.requestReveal("/etc/hosts")
+        controller.requestReveal("/var/log/syslog")
+        assertEquals("/var/log/syslog", controller.takeRevealRequest())
+        scope.cancel()
+    }
+
 }
 
 /**

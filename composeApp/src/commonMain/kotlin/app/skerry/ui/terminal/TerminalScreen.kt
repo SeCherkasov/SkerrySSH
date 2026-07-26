@@ -191,6 +191,9 @@ private fun terminalMetrics(measurer: TextMeasurer, style: TextStyle, density: D
     )
 }
 
+/** A file path under the pointer while Ctrl is held: [row] in the grid, [span] in columns. */
+private data class HoveredPath(val row: Int, val span: TextLinkSpan)
+
 @Composable
 fun TerminalScreen(
     state: TerminalScreenState,
@@ -198,6 +201,10 @@ fun TerminalScreen(
     imeInput: Boolean = false,
     imeTransform: ((String) -> String)? = null,
     fixedGrid: PtySize? = null,
+    // Ctrl+click on a file path in the output hands it here (the caller reveals it in its session's
+    // file panel). `null` — no path affordance at all: the setting is off, or this pane has no file
+    // panel of its own (split pane, recording playback, preview).
+    onOpenPath: ((String) -> Unit)? = null,
 ) {
     // Terminal font/size from Appearance settings ([LocalTerminalAppearance]); defaults to Hack 13px
     // where no provider is set (mobile target/preview/connection screen). Ligatures always disabled
@@ -281,6 +288,9 @@ fun TerminalScreen(
     // recomputed both on pointer move and on Ctrl press/release so the cursor toggles without moving.
     var hoverPos by remember { mutableStateOf<TerminalPos?>(null) }
     var linkHover by remember { mutableStateOf(false) }
+    // File paths get no underline at rest — a directory listing would turn into a wall of lines —
+    // so the affordance appears only under the pointer while Ctrl is held, like an editor's go-to.
+    var hoveredPath by remember { mutableStateOf<HoveredPath?>(null) }
 
     // Mouse click counting for double (word) / triple (line) selection: tracks time and position of
     // the previous click; a repeat in the same cell within the threshold increments the count.
@@ -494,6 +504,23 @@ fun TerminalScreen(
         val row = state.screen.getOrNull(pos.row) ?: return false
         val uri = row.getOrNull(pos.col)?.hyperlink ?: linkAt(row, pos.col)
         return uri != null && isSafeLinkUri(uri)
+    }
+
+    // The file-path span under this cell, or null. Only consulted after [linkUnderPos] says no: a
+    // URL always wins, so a path is never offered where a link would open instead.
+    fun filePathUnderPos(pos: TerminalPos): TextLinkSpan? {
+        if (onOpenPath == null) return null
+        val row = state.screen.getOrNull(pos.row) ?: return null
+        return rowFilePathSpans(row).firstOrNull { pos.col >= it.start && pos.col < it.endExclusive }
+    }
+
+    // Recomputes both Ctrl+hover affordances (hand cursor, path underline) for [pos]. Called on
+    // pointer move and on Ctrl press/release, so the cursor toggles without moving the mouse.
+    fun updateHoverAffordance(pos: TerminalPos, ctrl: Boolean) {
+        val onLink = ctrl && linkUnderPos(pos)
+        val path = if (ctrl && !onLink) filePathUnderPos(pos) else null
+        hoveredPath = path?.let { HoveredPath(pos.row, it) }
+        linkHover = onLink || path != null
     }
 
     // Mouse report to the application by pointer coordinates. Pixels come from the same content
@@ -730,6 +757,18 @@ fun TerminalScreen(
                           drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette, underlineEffects, termTheme)
                       }
                   }
+                  // 6) The file path under Ctrl+hover — underlined only while pointed at (unlike URLs,
+                  // which are always underlined): every second line of a listing holds a path, and
+                  // marking them all would read as noise rather than as an affordance.
+                  hoveredPath?.takeIf { it.row == r }?.let { hover ->
+                      var k = hover.span.start
+                      while (k < hover.span.endExclusive && k < row.size) {
+                          if (row[k].style.underline) { k++; continue }
+                          val runStart = k
+                          while (k < hover.span.endExclusive && k < row.size && !row[k].style.underline) k++
+                          drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette, underlineEffects, termTheme)
+                      }
+                  }
               }
           }
       }
@@ -751,7 +790,7 @@ fun TerminalScreen(
             .onPreviewKeyEvent { event ->
                 // Toggle the link (hand) cursor as Ctrl is pressed/released without moving the mouse.
                 // Runs before the KeyDown guard so a Ctrl KeyUp also clears it. Never consumes the event.
-                hoverPos?.let { linkHover = event.isCtrlPressed && linkUnderPos(it) }
+                hoverPos?.let { updateHoverAffordance(it, event.isCtrlPressed) }
                 if (event.type != KeyEventType.KeyDown || closed) return@onPreviewKeyEvent false
                 if (isImeOwnedPrintable(imeInput, event.isCtrlPressed, event.isAltPressed, event.utf16CodePoint) &&
                     isSoftKeyboardEvent(event)
@@ -888,13 +927,13 @@ fun TerminalScreen(
                     while (true) {
                         val event = awaitPointerEvent()
                         when (event.type) {
-                            PointerEventType.Exit -> { hoverPos = null; linkHover = false }
+                            PointerEventType.Exit -> { hoverPos = null; linkHover = false; hoveredPath = null }
                             PointerEventType.Move, PointerEventType.Enter -> {
-                                if (event.buttons.areAnyPressed) { linkHover = false; continue }
+                                if (event.buttons.areAnyPressed) { linkHover = false; hoveredPath = null; continue }
                                 val change = event.changes.firstOrNull() ?: continue
                                 val pos = posAt(change.position.x, change.position.y)
                                 hoverPos = pos
-                                linkHover = event.keyboardModifiers.isCtrlPressed && linkUnderPos(pos)
+                                updateHoverAffordance(pos, event.keyboardModifiers.isCtrlPressed)
                             }
                             else -> {}
                         }
@@ -1017,6 +1056,15 @@ fun TerminalScreen(
                                 ?: cellRow?.let { linkAt(it, pos.col) }
                             if (uri != null && isSafeLinkUri(uri)) {
                                 runCatching { uriHandler.openUri(uri) }
+                                down.consume()
+                                return@awaitEachGesture
+                            }
+                            // No URL here: a bare file path opens in this session's file panel. The
+                            // path is server-controlled text, so it goes to the SFTP pane (which
+                            // only ever lists it), never to the platform URI handler.
+                            val path = filePathUnderPos(pos)
+                            if (path != null && onOpenPath != null) {
+                                onOpenPath(path.uri)
                                 down.consume()
                                 return@awaitEachGesture
                             }

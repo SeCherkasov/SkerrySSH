@@ -85,6 +85,9 @@
     <string name="settings_terminal_show_title">Показывать заголовок терминала на вкладках</string>
     <string name="settings_terminal_show_title_desc">Шелл может переименовывать вкладку (OSC-заголовок). Выкл — показывается имя хоста.</string>
     <string name="settings_terminal_clipboard_write">Разрешить серверу писать в буфер обмена (OSC 52)</string>
+    <string name="settings_terminal_open_paths">Открытие файловых путей в SFTP</string>
+    <string name="settings_terminal_open_paths_desc">Ctrl+клик по пути в выводе открывает его в файловой панели.</string>
+    <string name="settings_terminal_open_paths_desc_mobile">Долгое нажатие на путь в выводе, затем «Открыть в Файлах».</string>
     <string name="settings_terminal_host_connect">Подключение к хосту</string>
     <string name="settings_terminal_host_connect_single">Одинарный клик</string>
     <string name="settings_terminal_host_connect_double">Двойной клик (клик выделяет)</string>
@@ -182,6 +185,8 @@
     <string name="settings_kb_accept_autocomplete">Принять подсказку автодополнения</string>
     <string name="settings_kb_cycle_suggestions">Перебрать подсказки</string>
     <string name="settings_kb_search_history">Поиск по истории команд</string>
+    <string name="settings_kb_open_link_or_path">Открыть ссылку или файловый путь</string>
+    <string name="settings_kb_mouse_click">Ctrl+клик</string>
     <string name="settings_kb_search_output">Поиск по выводу</string>
     <string name="settings_kb_copy_selection">Копировать выделение</string>
     <string name="settings_kb_paste">Вставить</string>
