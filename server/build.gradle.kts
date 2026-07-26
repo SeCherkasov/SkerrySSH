@@ -7,8 +7,26 @@ plugins {
 group = "app.skerry"
 version = "0.1.4"
 
+// Second launcher in the same distribution: `bin/skerry-admin` (the administration CLI) ships next
+// to `bin/server`, so the Docker image gets it for free — the Dockerfile copies the whole install
+// directory. One jar, one classpath, no separate module.
+val adminCliScripts = tasks.register<CreateStartScripts>("adminCliStartScripts") {
+    mainClass.set("app.skerry.server.cli.AdminCliRunnerKt")
+    applicationName = "skerry-admin"
+    // Outside build/scripts on purpose: the `application` plugin copies that whole directory into
+    // bin/, so a subdirectory of it would land in the distribution twice.
+    outputDir = layout.buildDirectory.dir("adminCliScripts").get().asFile
+    classpath = tasks.startScripts.get().classpath
+}
+
 application {
     mainClass.set("app.skerry.server.ApplicationKt")
+    // filePermissions: files added through `from` don't inherit the executable bit that
+    // CreateStartScripts sets, and a non-executable launcher is a silent "command not found".
+    applicationDistribution.from(adminCliScripts) {
+        into("bin")
+        filePermissions { unix("755") }
+    }
 }
 
 kotlin {
@@ -31,7 +49,16 @@ dependencies {
     // Security hardening: rate-limit (anti-flood per IP) and security headers (DefaultHeaders).
     implementation(libs.ktor.server.rate.limit)
     implementation(libs.ktor.server.default.headers)
+    // Observability: Prometheus exposition on /metrics. The Micrometer registry also brings JVM,
+    // process and HikariCP instrumentation under their standard names, so off-the-shelf Grafana
+    // dashboards work — that is the reason for the dependency over a hand-rolled exposition writer.
+    implementation(libs.ktor.server.metrics.micrometer)
+    implementation(libs.micrometer.registry.prometheus)
     implementation(libs.logback.classic)
+    // HTTP client for the `skerry-admin` CLI (second launcher in this module): it drives the same
+    // /admin endpoints as the console instead of reaching into the database behind the server's back.
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
     // Coroutines: Exposed suspend transactions (newSuspendedTransaction) take DB work off the request thread.
     implementation(libs.kotlinx.coroutines.core)
 
@@ -50,6 +77,8 @@ dependencies {
     testImplementation(libs.ktor.client.content.negotiation)
     // WS client for /sync tests: Close-frame handling and revoke are verified with a real handshake.
     testImplementation(libs.ktor.client.websockets)
+    // MockEngine: lets the CLI tests drive responses a real server can't produce (a malformed body).
+    testImplementation(libs.ktor.client.mock)
     testImplementation(kotlin("test"))
 }
 

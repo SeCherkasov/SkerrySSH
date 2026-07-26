@@ -101,5 +101,25 @@ data class StatsResponse(
 @Serializable
 data class HealthResponse(val status: String, val version: String)
 
+/**
+ * `GET /admin/observability`: is monitoring actually wired up on this instance? The console has no
+ * other way to tell — /metrics may be disabled, and a stale inventory looks fine from the outside.
+ * [inventoryAgeSeconds] is null when nothing has been collected yet: 0 would read as "just now".
+ */
+@Serializable
+data class AdminObservabilityDto(
+    val metrics: String,
+    val ready: Boolean,
+    val inventoryIntervalSeconds: Long,
+    val inventoryAgeSeconds: Long?,
+)
+
+/**
+ * `GET /readyz`: whether this instance can serve sync requests right now. Separate from
+ * [HealthResponse] because liveness must not depend on the database — see the route comment.
+ */
+@Serializable
+data class ReadyResponse(val status: String, val db: String)
+
 @Serializable
 data class ErrorResponse(val error: String)

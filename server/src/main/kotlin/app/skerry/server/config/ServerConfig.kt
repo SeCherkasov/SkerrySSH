@@ -8,6 +8,29 @@ package app.skerry.server.config
 data class CorsHost(val host: String, val schemes: List<String>)
 
 /**
+ * Who may scrape `GET /metrics`. Closed by default: the exposition is metadata about the instance
+ * (how many accounts, how much ciphertext, how often logins fail), and metadata is the whole attack
+ * surface of a zero-knowledge server.
+ */
+enum class MetricsExposure {
+    /** No endpoint at all — the route answers 404, so it doesn't even announce itself. */
+    OFF,
+
+    /** Requires `Authorization: Bearer <SKERRY_METRICS_TOKEN>` (Prometheus `authorization`). */
+    TOKEN,
+
+    /** Open. Only for a metrics port that is unreachable from outside the host. */
+    OPEN,
+    ;
+
+    companion object {
+        /** Anything unrecognized means OFF: a typo must not open the endpoint. */
+        fun parse(raw: String): MetricsExposure =
+            entries.firstOrNull { it.name.equals(raw.trim(), ignoreCase = true) } ?: OFF
+    }
+}
+
+/**
  * Server config from environment variables (single-.env model). All values have sane defaults for local runs; production only requires a stable [jwtSecret]
  * — otherwise a restart invalidates every issued token.
  *
@@ -45,10 +68,26 @@ data class ServerConfig(
     val registrationOpen: Boolean,
     /** Hard cap on total accounts (backstop for an instance left open). 0 ⇒ unlimited. */
     val maxAccounts: Int,
+    /** Who may scrape `/metrics`. Default [MetricsExposure.OFF]. */
+    val metrics: MetricsExposure,
+    /** Bearer token for [MetricsExposure.TOKEN]. Deliberately separate from [adminToken]. */
+    val metricsToken: String,
+    /**
+     * How often the inventory gauges (accounts, records, ciphertext size) are refreshed in the
+     * background. Never computed during a scrape: on SQLite the pool is a single connection, so a
+     * `SUM(LENGTH(blob))` per scrape would compete with every push and pull. 0 ⇒ no inventory.
+     */
+    val metricsInventoryIntervalSeconds: Long,
 ) {
     val isPostgres: Boolean get() = databaseUrl.startsWith("jdbc:postgresql")
 
     val usesDefaultJwtSecret: Boolean get() = jwtSecret == DEFAULT_JWT_SECRET
+
+    /**
+     * `SKERRY_METRICS=token` with no token set: the guard in `Application.module` refuses to start,
+     * because the alternative is a typo quietly publishing the exposition to anyone who asks.
+     */
+    val metricsTokenMissing: Boolean get() = metrics == MetricsExposure.TOKEN && metricsToken.isBlank()
 
     companion object {
         /** Known-unsafe default; production must override it (see the guard in Application.module). */
@@ -82,6 +121,12 @@ data class ServerConfig(
                 // Default open for backward compatibility; anything other than "open" (case-insensitive) closes it.
                 registrationOpen = str("SKERRY_REGISTRATION", "open").equals("open", ignoreCase = true),
                 maxAccounts = int("SKERRY_MAX_ACCOUNTS", 0).coerceAtLeast(0),
+                metrics = MetricsExposure.parse(str("SKERRY_METRICS", "off")),
+                metricsToken = str("SKERRY_METRICS_TOKEN", ""),
+                // Floor of 15s: below that the collector scans `records` more often than the numbers
+                // change. 0 disables it entirely (counters and JVM metrics still work).
+                metricsInventoryIntervalSeconds = long("SKERRY_METRICS_INVENTORY_SECONDS", 60)
+                    .let { if (it <= 0) 0 else it.coerceAtLeast(15) },
             )
         }
 

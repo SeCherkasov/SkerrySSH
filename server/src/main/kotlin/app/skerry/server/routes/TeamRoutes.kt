@@ -1,6 +1,8 @@
 package app.skerry.server.routes
 
 import app.skerry.server.Services
+import app.skerry.server.metrics.SyncScope
+import app.skerry.server.metrics.TeamDenial
 import app.skerry.server.accountId
 import app.skerry.server.db.ActivityEvent
 import app.skerry.server.db.AppliedTeamRecord
@@ -277,6 +279,7 @@ fun Route.teamRoutes(services: Services) {
         if (!call.requireScopeAccess(services, teamId, scopeId, principal.accountId)) return@get
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
         val delta = services.teamRecords.delta(teamId, scopeId, since)
+        services.metrics.recordsPulled(SyncScope.TEAM, delta.records.size)
         // Team scope has no compactedIds: tombstones are cleaned up by age, redelivery is idempotent.
         call.respond(RecordsResponse(delta.records.map { it.toDto() }, delta.cursor, emptyList()))
     }
@@ -294,7 +297,9 @@ fun Route.teamRoutes(services: Services) {
         val unknown = req.records.firstOrNull { it.type !in TEAM_ALLOWED_TYPES }
         if (unknown != null) throw BadRequestException("unknown record type: ${unknown.type}")
 
-        val result = services.teamRecords.upsert(teamId, scopeId, req.records.map { it.toIncoming() })
+        val incoming = req.records.map { it.toIncoming() }
+        services.metrics.recordsReceived(SyncScope.TEAM, incoming.size, incoming.sumOf { it.blob.size.toLong() })
+        val result = services.teamRecords.upsert(teamId, scopeId, incoming)
         // The records are committed; the audit trail is written after them and must not undo that.
         // A failure here is logged and swallowed on purpose: answering 500 would have the client
         // retry a push that LWW now treats as a no-op, so `applied` would come back empty and the
@@ -457,14 +462,17 @@ internal suspend fun ApplicationCall.requireActiveMember(
 ): TeamMemberRow? {
     val membership = services.teams.membership(teamId, accountId)
     if (membership == null) {
+        services.metrics.teamAuthzDenied(TeamDenial.NOT_MEMBER)
         respond(HttpStatusCode.NotFound, ErrorResponse("no such team"))
         return null
     }
     if (membership.status != TeamMemberStatus.ACTIVE) {
+        services.metrics.teamAuthzDenied(TeamDenial.NOT_ACCEPTED)
         respond(HttpStatusCode.Forbidden, ErrorResponse("invite not accepted"))
         return null
     }
     if (capability != null && !capability(membership.role)) {
+        services.metrics.teamAuthzDenied(TeamDenial.ROLE)
         respond(HttpStatusCode.Forbidden, ErrorResponse(forbidMessage))
         return null
     }
@@ -495,6 +503,7 @@ private suspend fun ApplicationCall.requireScopeAccess(
 ): Boolean {
     if (scopeId.isEmpty()) return true
     if (services.teamScopes.hasGrant(teamId, scopeId, accountId)) return true
+    services.metrics.teamAuthzDenied(TeamDenial.SCOPE)
     respond(HttpStatusCode.NotFound, ErrorResponse("no such scope"))
     return false
 }

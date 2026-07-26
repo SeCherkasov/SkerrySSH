@@ -4,6 +4,7 @@ import app.skerry.server.Services
 import app.skerry.server.accountId
 import app.skerry.server.deviceId
 import app.skerry.server.jwtPrincipal
+import app.skerry.server.metrics.RevokedBy
 import app.skerry.sync.wire.DeviceDto
 import app.skerry.sync.wire.DevicesResponse
 import app.skerry.server.model.ErrorResponse
@@ -35,6 +36,7 @@ fun Route.deviceRoutes(services: Services) {
         val revoked = services.devices.revoke(principal.accountId, target)
         if (revoked) {
             services.activity.record(principal.accountId, "device.revoked", "revoked $target", deviceId = principal.deviceId)
+            services.metrics.deviceRevoked(RevokedBy.USER)
         }
         call.respond(if (revoked) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
     }

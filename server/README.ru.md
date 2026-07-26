@@ -53,7 +53,8 @@ docker compose up -d --build
 postgres-переменные в `docker-compose.yml`.
 
 Контейнер работает от непривилегированного пользователя, отдаёт healthcheck `/healthz`,
-а образ собирается с `-PserverOnly` — Android SDK не нужен.
+а образ собирается с `-PserverOnly` — Android SDK не нужен. Рядом лежит
+административный CLI: `docker exec skerry-sync skerry-admin --help`.
 
 ### Локально (Gradle)
 
@@ -83,6 +84,9 @@ SKERRY_JWT_SECRET=dev-secret SKERRY_ADMIN_TOKEN=admin ./gradlew :server:run -Pse
 | `SKERRY_CORS_HOSTS` | *(пусто)* | Разрешённые CORS-источники через запятую. Пусто — CORS выключен (нативных клиентов он не касается). |
 | `SKERRY_MAX_BODY_BYTES` | `4194304` (4 MiB) | Лимит тела запроса (защита от OOM/абьюза); сверх лимита — `413`. |
 | `SKERRY_DEV` | *(не задана)* | `1` разрешает дефолтный JWT-секрет — только для локальной разработки. |
+| `SKERRY_METRICS` | `off` | Prometheus `/metrics`: `off` (404), `token` (bearer), `open` (без токена). |
+| `SKERRY_METRICS_TOKEN` | *(пусто)* | Bearer-токен для `SKERRY_METRICS=token`. С режимом `token` и пустым токеном сервер не стартует. |
+| `SKERRY_METRICS_INVENTORY_SECONDS` | `60` | Интервал обновления инвентарных gauge (минимум 15, `0` отключает их). |
 
 ## Как работает синхронизация
 
@@ -109,7 +113,9 @@ SKERRY_JWT_SECRET=dev-secret SKERRY_ADMIN_TOKEN=admin ./gradlew :server:run -Pse
 
 | Метод | Путь | Назначение |
 |---|---|---|
-| `GET` | `/healthz` | Liveness (открыт; используется healthcheck'ом контейнера). |
+| `GET` | `/healthz` | Liveness (открыт; используется healthcheck'ом контейнера). БД не трогает. |
+| `GET` | `/readyz` | Readiness: `200` + `{"status":"ready","db":"up"}` либо `503`, если проба БД упала три раза подряд. |
+| `GET` | `/metrics` | Prometheus-экспозиция. По умолчанию выключена — см. `SKERRY_METRICS`. |
 | `POST` | `/auth/register` | Регистрация: SRP-соль/верификатор + обёрнутый dataKey → токены. |
 | `POST` | `/auth/srp/challenge` → `/auth/srp/verify` | Вход по SRP-6a без передачи пароля. |
 | `POST` | `/auth/refresh` | Ротация access/refresh токенов. |
@@ -171,6 +177,92 @@ Zero-knowledge сохраняется: консоль видит только м
 > событий). Для single-user self-host оператор и есть субъект данных — приемлемо. Admin-токен
 > ходит в заголовке `X-Admin-Token` открытым текстом: обязательно поставьте TLS-терминатор
 > (ниже), иначе токен виден в сети.
+
+## Админ-CLI
+
+`skerry-admin` лежит в том же образе, что и сервер (`/app/bin/skerry-admin`), и работает через те же
+эндпоинты `/admin`, что и консоль — одна реализация и один гейт авторизации на каждую операцию.
+Нужен `SKERRY_ADMIN_TOKEN` и доступный сервер; напрямую в БД CLI не лазит.
+
+```bash
+docker exec -e SKERRY_ADMIN_TOKEN=… skerry-sync skerry-admin stats
+docker exec -e SKERRY_ADMIN_TOKEN=… skerry-sync skerry-admin devices list --account alice@example.com
+docker exec -e SKERRY_ADMIN_TOKEN=… skerry-sync skerry-admin devices revoke devA --account alice@example.com
+docker exec -e SKERRY_ADMIN_TOKEN=… skerry-sync skerry-admin accounts delete alice@example.com --yes
+```
+
+| Команда | Назначение |
+|---|---|
+| `health` | Живость и версия (токен не нужен). |
+| `stats` | Итоги по инстансу: аккаунты, активные устройства, записи, объём. |
+| `accounts list` / `accounts records <id>` | Аккаунты с агрегатами; метаданные записей одного аккаунта. |
+| `accounts purge-tombstones <id>` | Убрать маркеры удаления, которые все устройства уже синхронизировали. |
+| `accounts delete <id> --yes` | Удалить аккаунт со всеми данными (необратимо — потому и флаг). |
+| `devices list [--account id]` | Активные устройства, свежие сверху. |
+| `devices revoke <id> --account <id>` | Отозвать устройство (позже оно может заново аутентифицироваться). |
+| `activity` | Последние события аудит-лога. |
+| `metrics` | Сырая Prometheus-экспозиция (берёт `SKERRY_METRICS_TOKEN`). |
+
+Общие опции: `--url` (по умолчанию `SKERRY_ADMIN_URL`, иначе `http://127.0.0.1:$SKERRY_PORT`),
+`--token` / `--token-file` (флаг видно в `ps` — лучше переменная окружения или файл-секрет),
+`--limit`, `--json` (печатает JSON сервера как есть, под `jq`), `--help`.
+
+Коды выхода рассчитаны на скрипты: `0` ок, `1` ошибка, `2` неверный вызов, `3` не авторизован,
+`4` не найдено, `5` сервер недоступен. Против удалённого инстанса — `--url https://sync.example.com`;
+URL должен указывать на корень сервера (путь-префикс за реверс-прокси не поддерживается).
+
+## Метрики и мониторинг
+
+`/metrics` отдаёт Prometheus-экспозицию — по умолчанию выключено: на zero-knowledge сервере
+метаданные и есть поверхность атаки. Включение с токеном:
+
+```bash
+-e SKERRY_METRICS=token -e SKERRY_METRICS_TOKEN="$(openssl rand -hex 24)"
+```
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: skerry-sync
+    static_configs: [{ targets: ["sync.example.com:8080"] }]
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/skerry-metrics-token
+```
+
+Что есть помимо штатных семейств `jvm_*`, `process_*` и `hikaricp_*`:
+
+| Семейство | На какой вопрос отвечает |
+|---|---|
+| `skerry_http_server_requests_seconds` | Латентность и объём по `method`, `route` (**шаблон**, никогда не id), `status`. |
+| `skerry_http_rejected_requests_total`, `skerry_http_unhandled_exceptions_total` | Запросы, отбитые до маршрутизации (411/413); ошибки на стороне сервера. |
+| `skerry_auth_attempts_total{kind,outcome}`, `skerry_auth_tokens_issued_total` | Исходы логина/регистрации/refresh — сигнал брутфорса. |
+| `skerry_admin_auth_failures_total`, `skerry_metrics_auth_failures_total` | Неверные статические токены, т.е. кто-то щупает консоль или скрейп-эндпоинт. |
+| `skerry_auth_jwt_rejected_total{reason}`, `skerry_team_authz_denied_total{reason}` | Отбитые токены устройств; отказы доступа к команде/области. |
+| `skerry_sync_records_received_total` / `_pulled_total` / `skerry_sync_push_bytes_total` | Объём синхронизации по областям (`account`, `team`). |
+| `skerry_sync_ws_sessions`, `…_opened_total`, `…_closed_total{reason}`, `…_session_duration_seconds` | Сокеты live-push: сколько открыто, почему закрываются, сколько живут. |
+| `skerry_accounts`, `skerry_devices{state}`, `skerry_records{state}`, `skerry_storage_bytes{scope}`, `skerry_db_file_bytes`, `skerry_teams`, `skerry_pairing_sessions{state}` | Инвентарь, обновляется в фоне (см. `SKERRY_METRICS_INVENTORY_SECONDS`). |
+| `skerry_inventory_last_success_time_seconds`, `skerry_inventory_errors_total` | Не устарел ли инвентарь выше. |
+| `skerry_db_up`, `skerry_db_probe_duration_seconds` | Проба БД, стоящая за `/readyz`. |
+| `skerry_build_info{version}`, `skerry_server_start_time_seconds` | Запущенная версия; детект рестартов. |
+
+**Ни в одном лейбле нет accountId, deviceId, recordId, teamId, scopeId или IP-адреса.** Это значения,
+которые выбирает клиент: как лейблы они позволили бы пользователю раздувать реестр до падения
+процесса и опубликовали бы ровно те метаданные, которые архитектура держит вне доступа сервера.
+Цифры по конкретным аккаунтам живут за админ-токеном, в `/admin/accounts`.
+
+Набор алертов для начала:
+
+```promql
+skerry_db_up == 0                                                    # БД недоступна
+time() - skerry_inventory_last_success_time_seconds > 300            # инвентарные gauge устарели
+changes(skerry_server_start_time_seconds[15m]) > 2                   # рестарт-цикл
+rate(skerry_admin_auth_failures_total[10m]) > 0                      # подбирают админ-токен
+sum(rate(skerry_auth_attempts_total{outcome="denied"}[10m])) > 0.2   # брутфорс логина
+hikaricp_connections_pending > 0                                     # конкуренция за единственный коннект SQLite
+predict_linear(skerry_db_file_bytes[6h], 7*24*3600) > 20e9           # том забьётся на этой неделе
+skerry_records{state="tombstone"} / skerry_records{state="live"} > 0.5  # чистка тумбстоунов не работает
+```
 
 ## Безопасность в проде
 

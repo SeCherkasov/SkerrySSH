@@ -1,10 +1,16 @@
 package app.skerry.server
 
 import app.skerry.server.auth.TokenService
+import app.skerry.server.config.MetricsExposure
+import app.skerry.server.metrics.HTTP_REQUESTS_METRIC
+import app.skerry.server.metrics.JwtRejection
+import app.skerry.server.metrics.RejectReason
 import app.skerry.server.model.ErrorResponse
+import app.skerry.server.model.ReadyResponse
 import app.skerry.server.routes.adminRoutes
 import app.skerry.server.routes.authRoutes
 import app.skerry.server.routes.deviceRoutes
+import app.skerry.server.routes.metricsRoutes
 import app.skerry.server.routes.pairingClaimRoute
 import app.skerry.server.routes.pairingStartRoute
 import app.skerry.server.routes.syncWebSocket
@@ -29,6 +35,7 @@ import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
+import io.ktor.server.metrics.micrometer.MicrometerMetrics
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.ratelimit.RateLimit
@@ -39,6 +46,8 @@ import io.ktor.server.http.content.staticResources
 import io.ktor.server.request.contentLength
 import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
+import io.ktor.server.request.path
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
@@ -48,6 +57,9 @@ import io.ktor.server.websocket.WebSockets
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
+
+/** Paths excluded from [CallLogging]: machine polling, one line per call, nothing to learn from it. */
+private val UNLOGGED_PATHS = setOf("/healthz", "/readyz", "/metrics")
 
 /** Rate-limit bucket names (keyed by remote IP). Declared here, used by the routes. */
 object RateLimits {
@@ -59,6 +71,7 @@ object RateLimits {
     val CHANGE_PASSWORD = RateLimitName("auth-change-password")
     val ADMIN = RateLimitName("admin")
     val TEAM_SESSION_EVENTS = RateLimitName("team-session-events")
+    val METRICS = RateLimitName("metrics")
 }
 
 /**
@@ -96,7 +109,33 @@ fun Application.configureServer(services: Services) {
         timeoutMillis = 15_000
         maxFrameSize = 4096
     }
-    install(CallLogging) { level = Level.INFO }
+    // A 15s scrape plus the container healthcheck plus every client's ping() would be thousands of
+    // INFO lines a day about nothing. Neither endpoint carries anything worth logging per call.
+    install(CallLogging) {
+        level = Level.INFO
+        filter { call -> call.request.path() !in UNLOGGED_PATHS }
+    }
+    // HTTP metrics. `distinctNotRegisteredRoutes = false` collapses every unmatched request into one
+    // series: without it an unauthenticated GET /<random> loop would add a series per request and grow
+    // the registry until the process dies.
+    if (services.config.metrics != MetricsExposure.OFF) {
+        install(MicrometerMetrics) {
+            // The plugin's config constructor already built a LoggingMeterRegistry as its default,
+            // and that registry starts a publishing thread — left alone it keeps dumping every meter
+            // into the log once a minute. Close it as we swap ours in.
+            val unusedDefault = registry
+            registry = services.metrics.registry
+            unusedDefault.close()
+            metricName = HTTP_REQUESTS_METRIC
+            distinctNotRegisteredRoutes = false
+            // Our own MeterFilter defines the buckets (see ServerMetrics); letting the plugin register
+            // its distribution config would add a filter after meters already exist, which Micrometer
+            // warns about — and would fight over the same timer.
+            registerDistributionStatisticConfig = false
+            // ServerMetrics owns the JVM/process binders so it can close the GC listener on shutdown.
+            meterBinders = emptyList()
+        }
+    }
     // Security headers on every response. CSP is locked to 'self' (API returns JSON, admin
     // console is same-origin with no external resources); inline style/script are allowed
     // because the console uses them and is embedded in the same page.
@@ -140,6 +179,9 @@ fun Application.configureServer(services: Services) {
         // The admin console uses a constant-time static token compare, which doesn't stop brute
         // forcing the token itself, hence a rate limit on /admin/*.
         perIp(RateLimits.ADMIN, limit = 30)
+        // Same reasoning as the admin bucket: /metrics is guarded by a static token, and a static
+        // token can be brute forced. A 15s scrape is 4 requests a minute, so this leaves 7x headroom.
+        perIp(RateLimits.METRICS, limit = 30)
         // Session reports are a member-driven write into an audit log with a bounded retention
         // window, so they get a budget of their own — keyed by **account**, not by IP: an attacker
         // can't buy more of it by changing address, and members behind one NAT don't share one.
@@ -167,10 +209,12 @@ fun Application.configureServer(services: Services) {
         val carriesBody = method == HttpMethod.Post || method == HttpMethod.Put || method == HttpMethod.Patch
         val len = call.request.contentLength()
         if (carriesBody && len == null) {
+            services.metrics.requestRejected(RejectReason.LENGTH_REQUIRED)
             call.respond(HttpStatusCode.LengthRequired, ErrorResponse("Content-Length required"))
             return@intercept finish()
         }
         if (len != null && len > maxBody) {
+            services.metrics.requestRejected(RejectReason.BODY_TOO_LARGE)
             call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("request body too large"))
             return@intercept finish()
         }
@@ -192,6 +236,7 @@ fun Application.configureServer(services: Services) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(cause.message ?: "bad request"))
         }
         exception<Throwable> { call, cause ->
+            services.metrics.unhandledException()
             call.application.environment.log.error("Unhandled error", cause)
             call.respond(HttpStatusCode.InternalServerError, ErrorResponse("internal error"))
         }
@@ -205,12 +250,20 @@ fun Application.configureServer(services: Services) {
                 val account = credential.payload.subject
                 val did = credential.payload.getClaim(TokenService.CLAIM_DEVICE).asString()
                 // Valid only if this is an access token and the device (within the account) isn't revoked.
-                if (type == TokenService.TYPE_ACCESS && account != null && did != null &&
-                    !services.devices.isRevoked(account, did)
-                ) {
-                    JWTPrincipal(credential.payload)
-                } else {
-                    null
+                when {
+                    account == null || did == null -> {
+                        services.metrics.jwtRejected(JwtRejection.MISSING_CLAIMS)
+                        null
+                    }
+                    type != TokenService.TYPE_ACCESS -> {
+                        services.metrics.jwtRejected(JwtRejection.WRONG_TYPE)
+                        null
+                    }
+                    services.devices.isRevoked(account, did) -> {
+                        services.metrics.jwtRejected(JwtRejection.DEVICE_REVOKED)
+                        null
+                    }
+                    else -> JWTPrincipal(credential.payload)
                 }
             }
         }
@@ -218,6 +271,22 @@ fun Application.configureServer(services: Services) {
 
     routing {
         get("/healthz") { call.respondText("ok") }
+
+        // Readiness is a separate endpoint on purpose: /healthz is wired to the container healthcheck
+        // and to every client's availability ping, so making it depend on the database would turn a
+        // slow transaction into a restart loop and a client-wide "unreachable" storm.
+        get("/readyz") {
+            val ready = services.dbProbe.ready
+            call.response.header(HttpHeaders.CacheControl, "no-store")
+            call.respond(
+                if (ready) HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable,
+                ReadyResponse(if (ready) "ready" else "not_ready", if (ready) "up" else "down"),
+            )
+        }
+
+        rateLimit(RateLimits.METRICS) {
+            metricsRoutes(services)
+        }
 
         // Root redirects to the admin console so opening the server in a browser isn't a 404.
         get("/") { call.respondRedirect("/console/") }

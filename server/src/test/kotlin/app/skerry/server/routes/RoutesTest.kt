@@ -385,6 +385,18 @@ class RoutesTest {
         assertEquals(1L, d.syncVersion)
         assertEquals(false, d.revoked)
 
+        // an account filter narrows both the page and the total (the CLI's `devices list --account`)
+        client.registerAccount("bob@example.com", password, deviceId = "devB", deviceName = "Laptop B")
+        val filtered: AdminDevicesResponse = client.get("/admin/devices?accountId=$accountId") {
+            header("X-Admin-Token", "s3cret")
+        }.body()
+        assertEquals(listOf("devA"), filtered.devices.map { it.id })
+        assertEquals(1, filtered.total)
+        val unfiltered: AdminDevicesResponse = client.get("/admin/devices") {
+            header("X-Admin-Token", "s3cret")
+        }.body()
+        assertEquals(2, unfiltered.total)
+
         // revoke is also token-gated
         assertEquals(
             HttpStatusCode.Unauthorized,
@@ -397,7 +409,7 @@ class RoutesTest {
 
         // after revoke the device is hidden from the admin list (revoked devices are inert, so the
         // list — and the "N of M" total — count only active devices)
-        val after: AdminDevicesResponse = client.get("/admin/devices") {
+        val after: AdminDevicesResponse = client.get("/admin/devices?accountId=$accountId") {
             header("X-Admin-Token", "s3cret")
         }.body()
         assertTrue(after.devices.isEmpty())

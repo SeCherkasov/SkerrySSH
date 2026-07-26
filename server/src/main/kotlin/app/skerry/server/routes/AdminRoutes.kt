@@ -2,12 +2,14 @@ package app.skerry.server.routes
 
 import app.skerry.server.SERVER_VERSION
 import app.skerry.server.Services
+import app.skerry.server.metrics.RevokedBy
 import app.skerry.server.model.AdminAccountDto
 import app.skerry.server.model.AdminAccountsResponse
 import app.skerry.server.model.AdminActivityDto
 import app.skerry.server.model.AdminActivityResponse
 import app.skerry.server.model.AdminDeviceDto
 import app.skerry.server.model.AdminDevicesResponse
+import app.skerry.server.model.AdminObservabilityDto
 import app.skerry.server.model.AdminPurgeResponse
 import app.skerry.server.model.AdminRecordDto
 import app.skerry.server.model.AdminRecordsResponse
@@ -29,7 +31,6 @@ import io.ktor.server.routing.RoutingResolveContext
 import io.ktor.server.routing.delete
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
-import java.security.MessageDigest
 
 /**
  * Admin endpoints for the self-hosted console. `/admin/health` is open (liveness); the rest of
@@ -49,7 +50,10 @@ fun Route.adminRoutes(services: Services) {
     val guarded = route("/admin") {}.createChild(AdminGuardSelector())
     // Single route-scoped admin-token check for the whole subtree: on failure the plugin
     // responds 401 itself and aborts the pipeline before any route handler runs.
-    guarded.install(AdminAuth) { token = services.config.adminToken }
+    guarded.install(AdminAuth) {
+        token = services.config.adminToken
+        onFailure = { services.metrics.adminAuthFailure() }
+    }
 
     with(guarded) {
         get("/stats") {
@@ -57,10 +61,25 @@ fun Route.adminRoutes(services: Services) {
             call.respond(StatsResponse(c.accounts, c.devices, c.records, c.pairingSessions, c.storageBytes))
         }
 
+        get("/observability") {
+            val lastSuccess = services.metrics.inventoryLastSuccessSecondsOrNull
+            call.respond(
+                AdminObservabilityDto(
+                    metrics = services.config.metrics.name.lowercase(),
+                    ready = services.dbProbe.ready,
+                    inventoryIntervalSeconds = services.config.metricsInventoryIntervalSeconds,
+                    inventoryAgeSeconds = lastSuccess?.let { (System.currentTimeMillis() / 1000 - it).coerceAtLeast(0) },
+                ),
+            )
+        }
+
         get("/devices") {
             val limit = call.limitParam(default = 200, max = 500)
-            val total = services.devices.count()
-            val devices = services.devices.listAll(limit).map {
+            // Optional account filter (`skerry-admin devices list --account`); the total follows it so
+            // the "N of M" line can't disagree with the page.
+            val accountFilter = call.request.queryParameters["accountId"]?.takeIf { it.isNotBlank() }
+            val total = services.devices.count(accountFilter)
+            val devices = services.devices.listAll(limit, accountFilter).map {
                 AdminDeviceDto(
                     accountId = it.accountId,
                     id = it.id,
@@ -94,6 +113,7 @@ fun Route.adminRoutes(services: Services) {
             val revoked = services.devices.revoke(accountId, deviceId)
             if (revoked) {
                 services.activity.record(accountId, "device.revoked", "admin-revoked $deviceId")
+                services.metrics.deviceRevoked(RevokedBy.ADMIN)
             }
             call.respond(if (revoked) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
         }
@@ -166,6 +186,8 @@ private class AdminGuardSelector : RouteSelector() {
 
 private class AdminAuthConfig {
     var token: String = ""
+    /** Called on a rejected request: the counter is the brute-force signal for a static token. */
+    var onFailure: () -> Unit = {}
 }
 
 /**
@@ -183,7 +205,8 @@ private object AdminAuthHook : Hook<suspend (ApplicationCall) -> Boolean> {
 /** Route-scoped guard for the `/admin` subtree: static token from [AdminAuthConfig.token]. */
 private val AdminAuth = createRouteScopedPlugin("AdminAuth", ::AdminAuthConfig) {
     val token = pluginConfig.token
-    on(AdminAuthHook) { call -> call.adminAuthorized(token) }
+    val onFailure = pluginConfig.onFailure
+    on(AdminAuthHook) { call -> call.adminAuthorized(token, onFailure) }
 }
 
 /**
@@ -191,21 +214,13 @@ private val AdminAuth = createRouteScopedPlugin("AdminAuth", ::AdminAuthConfig) 
  * returns false; the calling hook does `finish()`. Constant-time comparison prevents a byte-by-
  * byte timing attack against the long-lived token.
  */
-private suspend fun ApplicationCall.adminAuthorized(token: String): Boolean {
+private suspend fun ApplicationCall.adminAuthorized(token: String, onFailure: () -> Unit): Boolean {
     val provided = request.headers["X-Admin-Token"]
     val ok = token.isNotBlank() && provided != null && constantTimeEquals(provided, token)
-    if (!ok) respond(HttpStatusCode.Unauthorized, ErrorResponse("admin token required"))
+    if (!ok) {
+        onFailure()
+        respond(HttpStatusCode.Unauthorized, ErrorResponse("admin token required"))
+    }
     return ok
 }
 
-/**
- * Constant-time comparison. Both values are hashed to a fixed 32 bytes with SHA-256 first, then
- * compared — otherwise [MessageDigest.isEqual] on differing lengths returns early and leaks the
- * token length via timing.
- */
-private fun constantTimeEquals(a: String, b: String): Boolean {
-    val md = MessageDigest.getInstance("SHA-256")
-    val ha = md.digest(a.toByteArray(Charsets.UTF_8))
-    val hb = md.digest(b.toByteArray(Charsets.UTF_8)) // digest() resets md's state
-    return MessageDigest.isEqual(ha, hb)
-}
