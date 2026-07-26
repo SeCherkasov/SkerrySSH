@@ -160,6 +160,13 @@ class SyncException(val kind: Kind, message: String, cause: Throwable? = null) :
         NOT_FOUND,
         GONE,
         PROTOCOL,
+        /**
+         * The server refused on purpose (403): registration is closed, the account id is on its
+         * blocklist, or the account lacks the right for a team operation. Not retryable, and the
+         * only explanation lives in the server's message — which is why it is carried in
+         * [SyncException.message] instead of being flattened to a status code.
+         */
+        FORBIDDEN,
         /** The server's own rate limiter (429) — register, SRP login and pairing claim are throttled. */
         TOO_MANY_REQUESTS,
         /** Any 5xx: the server is down, restarting, or a reverse proxy in front of it has nothing to talk to. */

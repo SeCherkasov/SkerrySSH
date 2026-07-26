@@ -153,6 +153,7 @@ enum class SyncFailureReason {
     SaveSettingsFailed,    // sync settings didn't save (detail: cause)
     SyncFailed,            // sync cycle failure (detail: cause)
     RevokeFailed,          // device revoke failed (detail: cause)
+    Rejected,              // the server refused on purpose (closed registration, blocked account id) — detail: its message
     TooManyRequests,       // the server's rate limiter turned the request away — retrying later works
     ServerError,           // the server (or the proxy in front of it) is broken or restarting
 }
@@ -821,6 +822,7 @@ class SyncCoordinator(
                         AccountPasswordChange.Failed(SyncFailureReason.Unauthorized)
                     SyncException.Kind.NETWORK -> AccountPasswordChange.Failed(SyncFailureReason.Network, e.message)
                     SyncException.Kind.PROTOCOL -> AccountPasswordChange.Failed(SyncFailureReason.Protocol, e.message)
+                    SyncException.Kind.FORBIDDEN -> AccountPasswordChange.Failed(SyncFailureReason.Rejected, e.message)
                     SyncException.Kind.TOO_MANY_REQUESTS -> AccountPasswordChange.Failed(SyncFailureReason.TooManyRequests)
                     SyncException.Kind.SERVER_ERROR -> AccountPasswordChange.Failed(SyncFailureReason.ServerError, e.message)
                     else -> AccountPasswordChange.Failed(SyncFailureReason.ConnectFailed, e.message)
@@ -1585,6 +1587,8 @@ class SyncCoordinator(
         SyncException.Kind.GONE -> SyncStatus.Failed(SyncFailureReason.PairingCodeExpired)
         SyncException.Kind.NETWORK -> SyncStatus.Failed(SyncFailureReason.Network, e.message)
         SyncException.Kind.PROTOCOL -> SyncStatus.Failed(SyncFailureReason.Protocol, e.message)
+        // The detail is the server's own sentence — it is the only place the reason exists.
+        SyncException.Kind.FORBIDDEN -> SyncStatus.Failed(SyncFailureReason.Rejected, e.message)
         SyncException.Kind.TOO_MANY_REQUESTS -> SyncStatus.Failed(SyncFailureReason.TooManyRequests)
         SyncException.Kind.SERVER_ERROR -> SyncStatus.Failed(SyncFailureReason.ServerError, e.message)
     }

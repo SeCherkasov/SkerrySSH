@@ -162,6 +162,22 @@ sealed-envelope invitations against members' public keys.
 | `DELETE` | `/admin/accounts/{id}/tombstones` | Purge an account's tombstones early. |
 | `DELETE` | `/admin/accounts/{id}` | Delete an account with all its data. |
 
+### Deleting an account
+
+`DELETE /admin/accounts/{id}` removes everything the account owns in one transaction: records,
+devices, pairing sessions, its published Teams keys, its memberships and scope grants — no row is
+left naming an id that no longer exists (SQLite doesn't enforce foreign keys, PostgreSQL refuses the
+delete outright while any remain). A team the account **owned** passes to its most senior active
+member, who becomes the new owner; if no active member is left, the team is deleted with all of its
+records, scopes and grants. The audit line names each affected team and its new owner, a
+`team.owner_replaced` entry lands in that team's own feed, and every remaining member gets the same
+live membership signal any other membership change sends. The remaining members should rotate the
+team key afterwards — the deleted account knew it, and only a client can rotate it.
+
+Nothing stops the same person from registering the same id again afterwards: ids are deterministic
+and the local vault is still on their device, so a fresh registration re-uploads it. Close the
+instance (`SKERRY_REGISTRATION=closed`) if that matters.
+
 ## Admin console
 
 A static page at `http://localhost:8080/console` (requires `SKERRY_ADMIN_TOKEN`) — a single

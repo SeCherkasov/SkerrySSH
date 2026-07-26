@@ -4,15 +4,33 @@ import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.lessEq
+import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
 
 /**
  * Read and destructive operations needed only by the admin console: account aggregates, real
  * record envelopes, safe tombstone purge, and cascading account deletion. Zero-knowledge is
  * preserved — only metadata and ciphertext sizes are exposed, never content.
  */
+/**
+ * What an account deletion did to the teams it owned — the part that touches **other** people's
+ * data, so it belongs in the audit line rather than staying invisible.
+ */
+data class AccountDeletion(
+    val teamsTransferred: List<String>,
+    val teamsDeleted: List<String>,
+    /** New owner per transferred team, for the audit line and the feed entry members actually read. */
+    val newOwners: Map<String, String> = emptyMap(),
+    /**
+     * Everyone still in an affected team. They learn about a forced transfer or a deleted team only
+     * if the server pushes — every other membership change publishes, so this one must too.
+     */
+    val notifyAccounts: List<String> = emptyList(),
+)
+
 class AdminRepository(private val db: Database) {
 
     data class AccountSummary(
@@ -140,17 +158,80 @@ class AdminRepository(private val db: Database) {
     }
 
     /**
-     * Cascade-deletes an account with all its records, devices, and pairing sessions in one
-     * transaction. The audit log is left untouched — it has no FK on [Accounts] and must survive
-     * deletion (see [ActivityLog]). Returns false if the account doesn't exist.
+     * Cascade-deletes an account in one transaction: its records, devices, pairing sessions,
+     * published Teams keys, memberships and scope grants — every column that names it, so nothing is
+     * left pointing at an id that no longer exists. That is not cosmetic: SQLite doesn't enforce
+     * foreign keys, so leftovers rot silently there, while on PostgreSQL the `accounts` delete itself
+     * fails as long as any of them remain.
+     *
+     * Teams the account **owns** can't simply be orphaned — a team with no owner can't be managed or
+     * rekeyed by anyone. Ownership passes to the most senior active member ([heirOf]); with no active
+     * member left the team is deleted with all of its records, scopes and grants.
+     *
+     * The audit log is left untouched — it has no FK on [Accounts] and must survive deletion
+     * (see [ActivityLog]). Returns false if the account doesn't exist.
      */
-    suspend fun deleteAccount(accountId: String): Boolean = dbTransaction(db) {
+    suspend fun deleteAccount(accountId: String): AccountDeletion? = dbTransaction(db) {
         val exists = Accounts.selectAll().where { Accounts.id eq accountId }.any()
-        if (!exists) return@dbTransaction false
+        if (!exists) return@dbTransaction null
+        val transferred = mutableListOf<String>()
+        val deletedTeams = mutableListOf<String>()
+        val newOwners = mutableMapOf<String, String>()
+        val notify = mutableSetOf<String>()
+
+        Teams.selectAll().where { Teams.ownerAccountId eq accountId }.map { it[Teams.id] }.forEach { teamId ->
+            // Collected before the rows go away: after the transaction there is no query left that
+            // could tell who was in a deleted team, or who now owns a transferred one.
+            notify += TeamMembers.selectAll()
+                .where { (TeamMembers.teamId eq teamId) and (TeamMembers.accountId neq accountId) }
+                .map { it[TeamMembers.accountId] }
+            val heir = heirOf(teamId, accountId)
+            if (heir == null) {
+                deletedTeams += teamId
+                TeamRecords.deleteWhere { TeamRecords.teamId eq teamId }
+                TeamScopeGrants.deleteWhere { TeamScopeGrants.teamId eq teamId }
+                TeamScopes.deleteWhere { TeamScopes.teamId eq teamId }
+                TeamMembers.deleteWhere { TeamMembers.teamId eq teamId }
+                Teams.deleteWhere { Teams.id eq teamId }
+            } else {
+                transferred += teamId
+                newOwners[teamId] = heir
+                Teams.update({ Teams.id eq teamId }) { it[ownerAccountId] = heir }
+                TeamMembers.update({ (TeamMembers.teamId eq teamId) and (TeamMembers.accountId eq heir) }) {
+                    it[role] = TeamRoles.OWNER
+                }
+            }
+        }
+
+        TeamScopeGrants.deleteWhere { TeamScopeGrants.accountId eq accountId }
+        TeamMembers.deleteWhere { TeamMembers.accountId eq accountId }
+        AccountKeys.deleteWhere { AccountKeys.accountId eq accountId }
         Records.deleteWhere { Records.accountId eq accountId }
         Pairing.deleteWhere { Pairing.accountId eq accountId }
         Devices.deleteWhere { Devices.accountId eq accountId }
         Accounts.deleteWhere { Accounts.id eq accountId }
-        true
+        AccountDeletion(transferred, deletedTeams, newOwners, notify.toList())
+    }
+
+    /**
+     * Who inherits [teamId] when its owner is deleted: the most senior **active** member, oldest
+     * membership first on a tie. Invited-but-not-accepted members are not candidates — they never
+     * adopted the team key, so handing them the team would hand them something they can't open.
+     */
+    private fun heirOf(teamId: String, leavingAccountId: String): String? =
+        TeamMembers.selectAll()
+            .where {
+                (TeamMembers.teamId eq teamId) and
+                    (TeamMembers.accountId neq leavingAccountId) and
+                    (TeamMembers.status eq TeamMemberStatus.ACTIVE)
+            }
+            .minWithOrNull(
+                compareBy({ SUCCESSION.indexOf(it[TeamMembers.role]).takeIf { i -> i >= 0 } ?: SUCCESSION.size }, { it[TeamMembers.createdAt] }),
+            )
+            ?.get(TeamMembers.accountId)
+
+    private companion object {
+        /** Succession order for an orphaned team; an unknown role sorts last but still qualifies. */
+        val SUCCESSION = listOf(TeamRoles.ADMIN, TeamRoles.EDITOR, TeamRoles.MEMBER, TeamRoles.VIEWER)
     }
 }

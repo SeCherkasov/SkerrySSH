@@ -4,6 +4,8 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AdminRepositoryTest {
@@ -178,8 +180,8 @@ class AdminRepositoryTest {
         devices.register("bob@example.com", "devC", "Desktop")
         records.upsert("bob@example.com", listOf(rec("b1", 1, deviceId = "devC")))
 
-        assertTrue(admin.deleteAccount("alice@example.com"))
-        assertFalse(admin.deleteAccount("alice@example.com")) // already gone
+        assertNotNull(admin.deleteAccount("alice@example.com"))
+        assertNull(admin.deleteAccount("alice@example.com")) // already gone
 
         assertEquals(null, AccountRepository(db).find("alice@example.com"))
         assertTrue(devices.list("alice@example.com").isEmpty())

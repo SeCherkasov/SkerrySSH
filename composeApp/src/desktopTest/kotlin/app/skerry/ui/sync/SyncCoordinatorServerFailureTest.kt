@@ -69,7 +69,10 @@ class SyncCoordinatorServerFailureTest {
             .also { it.create(password.toCharArray()) }
     }
 
-    private fun reasonForRejectedConnect(kind: SyncException.Kind): SyncFailureReason = runBlocking {
+    private fun reasonForRejectedConnect(kind: SyncException.Kind): SyncFailureReason =
+        failedConnect(kind).reason
+
+    private fun failedConnect(kind: SyncException.Kind): SyncStatus.Failed = runBlocking {
         initializeVaultCrypto()
         val sut = SyncCoordinator(
             clientFactory = { RejectingClient(kind) },
@@ -79,7 +82,7 @@ class SyncCoordinatorServerFailureTest {
         )
         try {
             sut.connect(serverUrl, account, password.toCharArray())
-            withTimeout(30_000) { (sut.status.first { it is SyncStatus.Failed } as SyncStatus.Failed).reason }
+            withTimeout(30_000) { sut.status.first { it is SyncStatus.Failed } as SyncStatus.Failed }
         } finally {
             sut.close()
         }
@@ -98,5 +101,18 @@ class SyncCoordinatorServerFailureTest {
     @Test
     fun `an actual protocol error still reports as one`() {
         assertEquals(SyncFailureReason.Protocol, reasonForRejectedConnect(SyncException.Kind.PROTOCOL))
+    }
+
+    /**
+     * A refusal the server chose (closed registration, a blocked account id) is neither the user's
+     * fault nor a retryable failure: it is named, so the server's own explanation can be shown
+     * instead of "protocol error".
+     */
+    @Test
+    fun `a refused registration is reported as a rejection, with the server's own words`() {
+        val failed = failedConnect(SyncException.Kind.FORBIDDEN)
+        assertEquals(SyncFailureReason.Rejected, failed.reason)
+        // Without the detail the user only learns "rejected" — never by whom or what to do about it.
+        assertEquals("rejected", failed.detail)
     }
 }
