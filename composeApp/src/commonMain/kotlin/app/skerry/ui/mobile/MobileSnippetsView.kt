@@ -122,9 +122,9 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
-            Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-                MobileScreenTitle(stringResource(Res.string.lib_snippets_screen_title))
-            }
+            // A push screen since the library left the tab bar (More → Snippets), so it carries a
+            // back arrow instead of a bare title.
+            MobilePushHeader(stringResource(Res.string.lib_snippets_screen_title), onBack = state::pop)
             if (snippets.isEmpty()) {
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 30.dp),

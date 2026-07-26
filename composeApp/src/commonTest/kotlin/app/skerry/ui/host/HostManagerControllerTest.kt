@@ -1,10 +1,12 @@
 package app.skerry.ui.host
 
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.host.HostStore
 import app.skerry.shared.ssh.SshConfigHost
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.test.assertNull
 
 class HostManagerControllerTest {
@@ -318,5 +320,81 @@ private class FakeHostStore(vararg initial: Host) : HostStore {
         val updated = transform(entries.toList())
         entries.clear()
         entries += updated
+    }
+}
+
+/**
+ * Reordering from a section sidebar: the user drags among the rows THAT SECTION shows, while the
+ * catalog holds both kinds. The other section's profiles must keep their relative order.
+ */
+class SectionReorderTest {
+
+    private fun shell(id: String) = Host(id, id, "$id.local", 22, "root")
+    private fun desktop(id: String) = Host(id, id, "$id.local", 5900, "", connectionType = ConnectionType.VNC)
+
+    @Test
+    fun `dragging a shell to the top of a mixed folder lands above the first shell`() {
+        val store = FakeHostStore(shell("a"), desktop("x"), shell("b"))
+        val controller = HostManagerController(store) { "gen" }
+
+        // In the hosts sidebar the user sees [a, b] and drops b before a.
+        controller.moveHostInSection("b", targetGroup = null, targetIndexInGroup = 0, section = HostSection.Terminal)
+
+        assertEquals(listOf("b", "a", "x"), controller.hosts.map { it.id })
+    }
+
+    @Test
+    fun `dragging past the last visible row does not jump over a hidden profile`() {
+        // Catalog [a, x, b]: the desktops sidebar shows only x, the hosts one [a, b].
+        val store = FakeHostStore(shell("a"), desktop("x"), shell("b"))
+        val controller = HostManagerController(store) { "gen" }
+
+        // Hosts sidebar: drop a after b (visible index 1 of [b]).
+        controller.moveHostInSection("a", targetGroup = null, targetIndexInGroup = 1, section = HostSection.Terminal)
+
+        // a sits after b, and the shells' order is what the user asked for.
+        val ids = controller.hosts.map { it.id }
+        assertTrue(ids.indexOf("b") < ids.indexOf("a"))
+        assertTrue("x" in ids)
+    }
+
+    @Test
+    fun `a section drag keeps the other section's relative order`() {
+        val store = FakeHostStore(desktop("x"), shell("a"), desktop("y"), shell("b"))
+        val controller = HostManagerController(store) { "gen" }
+
+        controller.moveHostInSection("b", targetGroup = null, targetIndexInGroup = 0, section = HostSection.Terminal)
+
+        val ids = controller.hosts.map { it.id }
+        assertTrue(ids.indexOf("x") < ids.indexOf("y")) // desktops untouched relative to each other
+        assertTrue(ids.indexOf("b") < ids.indexOf("a")) // the drag did what it said
+    }
+
+    @Test
+    fun `moving into a folder that has nothing of this section appends to it`() {
+        val store = FakeHostStore(shell("a"), Host("x", "x", "x.local", 5900, "", "Lab", connectionType = ConnectionType.VNC))
+        val controller = HostManagerController(store) { "gen" }
+
+        controller.moveHostInSection("a", targetGroup = "Lab", targetIndexInGroup = 0, section = HostSection.Terminal)
+
+        assertEquals("Lab", controller.hosts.first { it.id == "a" }.group)
+        assertEquals(listOf("x", "a"), controller.hosts.map { it.id })
+    }
+
+    @Test
+    fun `folder reorder from a section counts only folders it shows`() {
+        // Catalog folder order: Screens (desktops), Shells, Lab. The hosts sidebar shows [Shells, Lab].
+        val store = FakeHostStore(
+            desktop("x").copy(group = "Screens"),
+            shell("a").copy(group = "Shells"),
+            shell("b").copy(group = "Lab"),
+        )
+        val controller = HostManagerController(store) { "gen" }
+
+        // Dropped after the last folder the sidebar shows (index 1 among [Shells]) — i.e. "stay last".
+        controller.moveFolderInSection("Lab", targetGroupIndex = 1, section = HostSection.Terminal)
+
+        // Counting the hidden Screens folder would have landed Lab between Screens and Shells.
+        assertEquals(listOf("Screens", "Shells", "Lab"), controller.hosts.mapNotNull { it.group }.distinct())
     }
 }

@@ -26,9 +26,9 @@ import app.skerry.ui.app.MobileTab
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.nav_tab_desktops
 import app.skerry.ui.generated.resources.nav_tab_hosts
 import app.skerry.ui.generated.resources.nav_tab_more
-import app.skerry.ui.generated.resources.nav_tab_snippets
 import app.skerry.ui.generated.resources.nav_tab_vault
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
@@ -73,7 +73,7 @@ private fun MobileTabItem(tab: MobileTab, active: Boolean, onClick: () -> Unit) 
         Sym(tab.icon, size = 24.sp, color = color)
         val label = when (tab) {
             MobileTab.Hosts -> stringResource(Res.string.nav_tab_hosts)
-            MobileTab.Snippets -> stringResource(Res.string.nav_tab_snippets)
+            MobileTab.Desktops -> stringResource(Res.string.nav_tab_desktops)
             MobileTab.Vault -> stringResource(Res.string.nav_tab_vault)
             MobileTab.More -> stringResource(Res.string.nav_tab_more)
         }

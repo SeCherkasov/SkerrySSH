@@ -604,7 +604,7 @@ private fun openMobileSession(
 private fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
     when (state.tab) {
         MobileTab.Hosts -> MobileHostsScreen(state)
-        MobileTab.Snippets -> MobileSnippetsScreen(state)
+        MobileTab.Desktops -> MobileDesktopsScreen(state)
         MobileTab.Vault -> MobileVaultScreen(state)
         MobileTab.More -> MobileMoreScreen(state, onLock)
     }
@@ -621,6 +621,7 @@ private fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Terminal -> MobileTerminalScreen(state)
         MobileRoute.Vnc -> MobileVncScreen(state)
         MobileRoute.Files -> MobileFilesScreen(onBack = state::pop)
+        MobileRoute.Snippets -> MobileSnippetsScreen(state)
         MobileRoute.Ports -> MobilePortsScreen(state)
         MobileRoute.Known -> MobileKnownScreen(state)
         MobileRoute.Team -> MobileTeamsScreen(state)

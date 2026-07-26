@@ -1,6 +1,7 @@
 package app.skerry.ui.app
 
 import app.skerry.shared.host.Host
+import app.skerry.ui.host.HostSection
 import app.skerry.ui.settings.SETTINGS_NAV
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
@@ -75,13 +76,27 @@ class DesktopDesignStateTest {
     }
 
     @Test
-    fun vnc_sidebar_starts_closed_and_toggles() {
+    fun work_area_starts_on_the_terminal_section() {
+        assertEquals(HostSection.Terminal, DesktopDesignState().section)
+    }
+
+    @Test
+    fun showSection_switches_the_work_area_and_clears_the_overlay() {
         val s = DesktopDesignState()
-        assertFalse(s.vncSidebar)
-        s.toggleVncSidebar()
-        assertTrue(s.vncSidebar)
-        s.toggleVncSidebar()
-        assertFalse(s.vncSidebar)
+        s.showView(DesktopView.Vault)                 // an app-level section is open over the tabs
+        s.showSection(HostSection.RemoteDesktops)
+        assertEquals(HostSection.RemoteDesktops, s.section)
+        assertNull(s.appOverlay)                      // the rail click must reveal the work area
+    }
+
+    @Test
+    fun showSection_keeps_the_session_sub_view() {
+        val s = DesktopDesignState()
+        s.showView(DesktopView.Sftp)
+        s.showSection(HostSection.RemoteDesktops)
+        s.showSection(HostSection.Terminal)
+        // Returning to the terminal lands back on the sub-view that was open, not a reset to Terminal.
+        assertEquals(DesktopView.Sftp, s.view)
     }
 
     @Test

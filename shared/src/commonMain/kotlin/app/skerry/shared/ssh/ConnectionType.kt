@@ -52,6 +52,25 @@ val ConnectionType.carriedBySsh: Boolean
  * (stored as [app.skerry.shared.vault.CredentialSecret.Password], like SSH) but has no username,
  * private key, jump host or keep-alive — so the form gates auth on this separately from
  * [usesSshAuth].
+ *
+ * Narrower than [isRemoteDesktop]: this one means the RFB protocol specifically (framebuffer stack,
+ * VNC-Auth), the other means the "remote desktop" section a profile is filed under.
  */
 val ConnectionType.isVnc: Boolean
     get() = this == ConnectionType.VNC
+
+/**
+ * Whether the profile is a remote desktop rather than a terminal-style connection — the split the
+ * shell navigates by: remote desktops have their own catalog, their own creation form and their own
+ * rail item / bottom tab, while everything else lives under the terminal section.
+ *
+ * Currently VNC only; RDP joins it here, and the exhaustive `when`s over [ConnectionType] elsewhere
+ * are what force each new transport to declare where it belongs.
+ */
+val ConnectionType.isRemoteDesktop: Boolean
+    get() = when (this) {
+        ConnectionType.VNC -> true
+        ConnectionType.SSH, ConnectionType.MOSH, ConnectionType.TELNET, ConnectionType.SERIAL,
+        ConnectionType.LOCAL, ConnectionType.CONTAINER,
+        -> false
+    }

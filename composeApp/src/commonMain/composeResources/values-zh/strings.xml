@@ -40,6 +40,7 @@
 
     <!-- 桌面端左侧图标栏 -->
     <string name="rail_terminal">终端</string>
+    <string name="rail_desktops">远程桌面</string>
     <string name="rail_tunnels">隧道</string>
     <string name="rail_snippets">片段</string>
     <string name="rail_vault">保险库</string>

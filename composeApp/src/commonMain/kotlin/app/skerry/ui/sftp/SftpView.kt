@@ -197,7 +197,7 @@ private fun mockFileIconTint(icon: String): Color = when (icon) {
 fun SftpView() {
     val mono = LocalFonts.current.mono
     val sessions = LocalSessions.current
-    val active = sessions?.active
+    val active = sessions?.activeTerminal
 
     when {
         sessions == null -> MockSftpView(mono)

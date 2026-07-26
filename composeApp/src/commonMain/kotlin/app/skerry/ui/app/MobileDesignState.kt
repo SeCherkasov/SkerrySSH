@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.host.Host
+import app.skerry.ui.host.HostSection
+import app.skerry.ui.host.section
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -27,23 +29,28 @@ import app.skerry.ui.terminal.TerminalThemes
 
 /**
  * Bottom navigation — exactly 4 root tabs ([showTabs]=true). [icon] is a Material Symbols ligature
- * (see [Sym]), aligned with the desktop rail ([RAIL]) where the section matches (Snippets/Vault).
+ * (see [Sym]), aligned with the desktop rail ([RAIL]) where the section matches (Hosts/Desktops/Vault).
  * No Files tab: SFTP opens as a push screen ([MobileRoute.Files]) from a host card's SFTP button —
  * a separate root tab would duplicate the terminal.
+ *
+ * Snippets is not a root tab either: the bar holds four, and the two catalogs (hosts and remote
+ * desktops) come first — the library is reached from More ([MobileRoute.Snippets]) and, in the
+ * moment it is actually needed, from the terminal's snippet palette.
  */
 // Labels are not part of the enum: they are localized in the tab bar (nav_tab_* resources).
 enum class MobileTab(val icon: String) {
     Hosts("dns"),
-    Snippets("code_blocks"),
+    Desktops("desktop_windows"),
     Vault("vpn_key"),
     More("more_horiz"),
 }
 
 /**
  * Full-screen push screens over the tab navigation (tab bar hidden): terminal and host detail open
- * from Hosts, SFTP (Files) via the host card's SFTP button, and Ports/Known/Team from the More tab.
+ * from Hosts, the framebuffer from Desktops, SFTP (Files) via the host card's SFTP button, and
+ * Snippets/Ports/Known/Team from the More tab.
  */
-enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Ports, Known, Team, Appearance, Sync, Ai, Security, Trash, About }
+enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Snippets, Ports, Known, Team, Appearance, Sync, Ai, Security, Trash, About }
 
 /** What the system back gesture should do in the mobile shell. */
 enum class MobileBackAction {
@@ -135,6 +142,9 @@ class MobileDesignState(
     private val onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
 ) {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
+
+    /** Which section's protocols the open New connection sheet offers (see [openNewConn]). */
+    var sheetSection: HostSection by mutableStateOf(HostSection.Terminal); private set
     var route: MobileRoute? by mutableStateOf(null); private set
     var sheetNewConn: Boolean by mutableStateOf(false); private set
 
@@ -274,14 +284,24 @@ class MobileDesignState(
         }
     }
 
-    /** Open the sheet in create-new-host mode (empty form). */
-    fun openNewConn() { editingHost = null; duplicatingHost = null; sheetNewConn = true }
+    /**
+     * Open the sheet in create-new-host mode (empty form) for [section]: it offers only that
+     * section's protocols and starts on its default one — desktop parity, see
+     * [app.skerry.ui.app.DesktopDesignState.openModal].
+     */
+    fun openNewConn(section: HostSection = HostSection.Terminal) {
+        editingHost = null; duplicatingHost = null; sheetSection = section; sheetNewConn = true
+    }
 
     /** Open the sheet in edit mode for [host] (form prefilled, save keeps its id). */
-    fun openEditConn(host: Host) { editingHost = host; duplicatingHost = null; sheetNewConn = true }
+    fun openEditConn(host: Host) {
+        editingHost = host; duplicatingHost = null; sheetSection = host.section; sheetNewConn = true
+    }
 
     /** Open the sheet prefilled as a copy of [host] (save creates a new profile). */
-    fun openDuplicateConn(host: Host) { editingHost = null; duplicatingHost = host; sheetNewConn = true }
+    fun openDuplicateConn(host: Host) {
+        editingHost = null; duplicatingHost = host; sheetSection = host.section; sheetNewConn = true
+    }
 
     fun closeSheet() { sheetNewConn = false; editingHost = null; duplicatingHost = null }
 

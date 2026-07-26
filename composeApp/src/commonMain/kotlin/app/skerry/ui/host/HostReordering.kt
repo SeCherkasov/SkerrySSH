@@ -18,6 +18,22 @@ import app.skerry.shared.host.Host
  */
 private fun String?.canonicalGroup(): String? = this?.takeIf { it.isNotBlank() }
 
+/**
+ * Translate a drop index taken over a filtered view into an index in the full list.
+ *
+ * The sidebars show one [HostSection] at a time, while order lives in the single catalog: dropping
+ * "after the second visible row" must not count the rows of the other section, or a profile invisible
+ * here would be jumped over and silently reordered. [visiblePositions] are the full-list positions of
+ * the rows the user can see, in order; [visibleIndex] is the insertion point among them (0 = before
+ * the first, size = after the last). With nothing visible the item goes to the end ([fullSize]).
+ */
+fun filteredIndexToFull(fullSize: Int, visiblePositions: List<Int>, visibleIndex: Int): Int = when {
+    visiblePositions.isEmpty() -> fullSize
+    visibleIndex <= 0 -> visiblePositions.first()
+    visibleIndex >= visiblePositions.size -> visiblePositions.last() + 1
+    else -> visiblePositions[visibleIndex]
+}
+
 /** "Group -> hosts" buckets in order of the group's first appearance (null-group is its own key). */
 private fun bucketize(hosts: List<Host>): LinkedHashMap<String?, MutableList<Host>> {
     val buckets = LinkedHashMap<String?, MutableList<Host>>()

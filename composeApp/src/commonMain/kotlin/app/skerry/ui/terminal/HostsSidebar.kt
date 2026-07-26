@@ -61,9 +61,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import app.skerry.ui.host.rowSubtitle
 import app.skerry.shared.host.Host
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.isRemoteDesktop
 import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.HostClickConnectMode
@@ -93,6 +95,10 @@ import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.rd_add_first
+import app.skerry.ui.generated.resources.rd_no_desktops
+import app.skerry.ui.generated.resources.rd_search_placeholder
+import app.skerry.ui.generated.resources.rd_section
 import app.skerry.ui.generated.resources.term_hosts_section
 import app.skerry.ui.generated.resources.term_menu_delete
 import app.skerry.ui.generated.resources.term_menu_duplicate
@@ -108,6 +114,8 @@ import app.skerry.ui.host.HostDragState
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.HostGroup
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.HostSection
+import app.skerry.ui.host.inSection
 import app.skerry.ui.host.MockHost
 import app.skerry.ui.host.ProdBadge
 import app.skerry.ui.host.isProdHost
@@ -231,8 +239,14 @@ private fun Modifier.hostConnectClick(
         }
     }
 
+/**
+ * Host sidebar of a work-area section. [section] narrows the catalog to the profiles that belong
+ * here (terminal-style connections or remote desktops) — everything else (search, tag chips,
+ * folders, drag-and-drop, RECENT, team hosts) then works within that slice, so the two sections
+ * read as separate lists over one store.
+ */
 @Composable
-internal fun HostsSidebar(state: DesktopDesignState) {
+internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = HostSection.Terminal) {
     val mono = LocalFonts.current.mono
     val liveHosts = LocalHosts.current
     // Manual reorder (drag-and-drop) state for the live catalog; unused on the mock path.
@@ -241,9 +255,13 @@ internal fun HostsSidebar(state: DesktopDesignState) {
     // connect mode (file-manager convention: click selects, double-click opens). Also updated on
     // connect so the row that just opened reads as selected. Null = no selection.
     var selectedHostId by remember { mutableStateOf<String?>(null) }
+    // This section's slice of the catalog: everything below (chips, folders, RECENT, drag targets)
+    // is derived from it, so a remote desktop never shows up among the shells and vice versa.
+    val sectionHosts = liveHosts?.let { remember(it.hosts, section) { it.hosts.inSection(section) } } ?: emptyList()
     // Active filter chip (tag); live catalog only, chips are static on the mock path.
     var activeChip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
-    val chips = liveHosts?.let { remember(it.hosts) { hostTagChips(it.hosts) } } ?: emptyList()
+    // Tags of THIS section only: a chip that would filter the list down to nothing is noise.
+    val chips = liveHosts?.let { remember(sectionHosts) { hostTagChips(sectionHosts) } } ?: emptyList()
     // If the active tag disappears (host edited/deleted), the filter falls back to "All".
     val effectiveChip = if (activeChip in chips) activeChip else ALL_HOSTS_CHIP
     Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)) {
@@ -252,7 +270,7 @@ internal fun HostsSidebar(state: DesktopDesignState) {
             // in from the right edge (it no longer runs to the panel border) and collapses the
             // sidebar; the reopen handle then lives at the terminal's left edge (SidebarReopenHandle).
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                HostSearchField(state, Modifier.weight(1f))
+                HostSearchField(state, section, Modifier.weight(1f))
                 IconBtn("chevron_left", onClick = state::toggleSidebar, box = 30, icon = 18.sp, tint = Skerry.colors.faint)
             }
             // The filter-tag row overflows the narrow sidebar, so it scrolls horizontally. Desktop's
@@ -301,8 +319,16 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                SidebarSectionTitle(stringResource(Res.string.term_hosts_section))
+                SidebarSectionTitle(
+                    stringResource(
+                        when (section) {
+                            HostSection.Terminal -> Res.string.term_hosts_section
+                            HostSection.RemoteDesktops -> Res.string.rd_section
+                        },
+                    ),
+                )
                 // Create a new (initially empty) group in the live catalog; decorative on the mock path.
+                // Groups are shared by both sections (one catalog), so the button belongs to either.
                 if (liveHosts != null) {
                     IconBtn("create_new_folder", onClick = state::openCreateGroup, box = 20, icon = 14.sp, tint = Skerry.colors.faint)
                 } else {
@@ -313,16 +339,26 @@ internal fun HostsSidebar(state: DesktopDesignState) {
             // mock data (offscreen render/preview path). Folders are grouped and narrowed by the active tag.
             if (liveHosts != null) {
                 val query = state.hostSearchQuery
-                val folders = remember(liveHosts.hosts, effectiveChip, query, state.customGroups) {
-                    val base = groupHostsByFolder(filterHosts(liveHosts.hosts, effectiveChip, query))
+                val folders = remember(sectionHosts, effectiveChip, query, state.customGroups, section) {
+                    val base = groupHostsByFolder(filterHosts(sectionHosts, effectiveChip, query))
                     // Empty user groups are shown as folders with no hosts, but only outside a filter
-                    // (search/tag narrow by host, and an empty folder has nothing to match).
+                    // (search/tag narrow by host, and an empty folder has nothing to match). Both
+                    // sections show them: a folder has no section of its own, and the "+folder"
+                    // button sits in both sidebars — hiding it in one would make the folder just
+                    // created there vanish, with nothing to drop a host onto.
                     if (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP) {
                         base
                     } else {
                         val present = base.map { it.name }.toSet()
                         base + state.customGroups.filter { it !in present }.map { HostFolder(it, emptyList()) }
                     }
+                }
+                // An empty remote-desktop catalog says so, instead of leaving a blank column above
+                // the "New connection" button (the terminal section always has the local shell path).
+                if (folders.isEmpty() && section == HostSection.RemoteDesktops &&
+                    query.isBlank() && effectiveChip == ALL_HOSTS_CHIP
+                ) {
+                    EmptyCatalogNote()
                 }
                 // Search/tag narrowing found nothing: show a hint instead of silent emptiness (unlike an
                 // empty catalog, where the RECENT section/New connection button still appear below).
@@ -342,17 +378,17 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 folders.forEach { folder ->
                     key(folder.name) {
                         if (folder.name == folderLineBefore) DropLine()
-                        LiveHostFolder(folder, state, mono, dragState, liveHosts, selectedHostId, { selectedHostId = it }) { foldersUpdated.value }
+                        LiveHostFolder(folder, state, section, mono, dragState, liveHosts, selectedHostId, { selectedHostId = it }) { foldersUpdated.value }
                     }
                 }
                 if (folderLineIndex != null && folderLineIndex == otherFolders.size) DropLine()
                 // Shared team hosts: per-team sections below the personal catalog, shown only outside
                 // search/filter since those narrow the personal catalog.
                 if (query.isBlank() && effectiveChip == ALL_HOSTS_CHIP) {
-                    TeamHostsSection(liveHosts.hosts, state, mono)
+                    TeamHostsSection(liveHosts.hosts, state, section, mono)
                 }
             } else {
-                HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, mono) }
+                HOST_GROUPS.forEach { group -> HostGroupBlock(group, state, section, mono) }
             }
             // Live catalog: RECENT section from actual connection history ([DesktopDesignState.recentHostIds]),
             // resolved against current profiles; deleted/unknown ids are simply hidden, empty means no section.
@@ -361,8 +397,13 @@ internal fun HostsSidebar(state: DesktopDesignState) {
                 // The section can be hidden entirely (Settings -> Appearance -> Interface) and size-limited.
                 // Memoized by (recent order, catalog contents, limit), like the `folders` above, so the
                 // resolve doesn't rerun on every sidebar recomposition (drag/chip switch/tab switch).
-                val recent = remember(state.recentHostIds, liveHosts.hosts, state.recentLimit) {
-                    state.recentHostIds.mapNotNull { liveHosts.find(it) }.take(state.recentLimit)
+                // Narrowed to this section: history is per catalog too, so the desktops list doesn't
+                // offer to reconnect a shell. The limit applies after narrowing, so a section with
+                // few recents still fills its quota.
+                val recent = remember(state.recentHostIds, liveHosts.hosts, state.recentLimit, section) {
+                    state.recentHostIds.mapNotNull { liveHosts.find(it) }
+                        .inSection(section)
+                        .take(state.recentLimit)
                 }
                 if (state.showRecent && recent.isNotEmpty()) {
                     // Divider belongs to the section: hidden together with it when RECENT is off/empty.
@@ -388,11 +429,19 @@ internal fun HostsSidebar(state: DesktopDesignState) {
         val importScope = rememberCoroutineScope()
         Box(Modifier.height(BOTTOM_BAR_HEIGHT).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                PrimaryButton(stringResource(Res.string.term_new_connection), onClick = state::openModal, icon = "add_link", modifier = Modifier.weight(1f))
+                // The form opens on this section's protocols: a remote desktop is never created from
+                // the terminal list, and a shell never from the desktops list.
+                PrimaryButton(
+                    stringResource(Res.string.term_new_connection),
+                    onClick = { state.openModal(section) },
+                    icon = "add_link",
+                    modifier = Modifier.weight(1f),
+                )
                 // Import hosts from an OpenSSH ~/.ssh/config: pick + parse off the main thread, then the
                 // preview modal (rendered at the app root) handles selection and persistence. Shown only
-                // on the live path — importing needs a host store to write to (mock/preview has none).
-                if (liveHosts != null) {
+                // on the live path — importing needs a host store to write to (mock/preview has none)
+                // and only under the terminal section: an ssh_config holds SSH hosts, not desktops.
+                if (liveHosts != null && section == HostSection.Terminal) {
                     IconBtn(
                         "download",
                         onClick = { importScope.launch { pickAndParseSshConfig()?.let(state::beginSshImport) } },
@@ -410,8 +459,12 @@ internal fun HostsSidebar(state: DesktopDesignState) {
  * cross once text is entered.
  */
 @Composable
-private fun HostSearchField(state: DesktopDesignState, modifier: Modifier = Modifier) {
-    SidebarSearchField(state.hostSearchQuery, state::onHostSearch, stringResource(Res.string.term_search_hosts_placeholder), modifier)
+private fun HostSearchField(state: DesktopDesignState, section: HostSection, modifier: Modifier = Modifier) {
+    val placeholder = when (section) {
+        HostSection.Terminal -> Res.string.term_search_hosts_placeholder
+        HostSection.RemoteDesktops -> Res.string.rd_search_placeholder
+    }
+    SidebarSearchField(state.hostSearchQuery, state::onHostSearch, stringResource(placeholder), modifier)
 }
 
 /**
@@ -467,7 +520,7 @@ private fun TeamHostsSectionHeader() {
  * links are stripped on share).
  */
 @Composable
-private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignState, mono: FontFamily) {
+private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignState, section: HostSection, mono: FontFamily) {
     val teams = LocalTeams.current ?: return
     // Pulls shared team hosts when sync transitions to Online, see AutoPullTeamsOnOnline.
     AutoPullTeamsOnOnline()
@@ -475,10 +528,12 @@ private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignStat
     // Changes on every team sync, so hosts freshly pulled into the team vault appear without a
     // manual sync (the personal catalog doesn't change, and these sections read the vault directly).
     val revision by teams.revision.collectAsState()
-    val sections = remember(teamList, hostsSnapshot, revision) {
+    val sections = remember(teamList, hostsSnapshot, revision, section) {
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.mapNotNull { team ->
             val vault = teams.teamVault(team.id) ?: return@mapNotNull null
-            val shared = VaultHostStore(vault).all()
+            // Shared hosts are split by section like the personal catalog: a team's VNC box belongs
+            // to the desktops list, its servers to the terminal one.
+            val shared = VaultHostStore(vault).all().inSection(section)
             if (shared.isEmpty()) null else team.name to shared
         }
     }
@@ -543,7 +598,7 @@ private fun TeamHostRow(host: Host, mono: FontFamily) {
         Sym(host.connectionType.icon, size = 14.sp, color = Skerry.colors.faint)
         Column(Modifier.weight(1f)) {
             Txt(host.label, color = Skerry.colors.dim, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Txt("${host.username}@${host.address}", color = Skerry.colors.faint, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Txt(host.rowSubtitle(), color = Skerry.colors.faint, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -577,7 +632,7 @@ private fun RecentHostRow(host: Host, mono: FontFamily) {
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Txt(
-                "${host.username}@${host.address}",
+                host.rowSubtitle(),
                 color = Skerry.colors.faint, size = 10.5.sp, font = mono,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
@@ -586,16 +641,37 @@ private fun RecentHostRow(host: Host, mono: FontFamily) {
 }
 
 @Composable
-private fun HostGroupBlock(group: HostGroup, state: DesktopDesignState, mono: FontFamily) {
+private fun HostGroupBlock(group: HostGroup, state: DesktopDesignState, section: HostSection, mono: FontFamily) {
+    // The mock catalog is split by section too, so the preview of each sidebar shows its own kind of
+    // host; a folder left with nothing to show is skipped entirely.
+    val hosts = group.hosts.filter { mockHostSection(it) == section }
+    if (hosts.isEmpty()) return
     val collapsed = state.isGroupCollapsed(group.name)
     val onToggleCollapsed = remember(state, group.name) { { state.toggleGroupCollapsed(group.name) } }
     Column(Modifier.padding(bottom = 2.dp)) {
-        FolderHeader(group.name, group.hosts.size, collapsed, onToggleCollapsed)
+        FolderHeader(group.name, hosts.size, collapsed, onToggleCollapsed)
         if (!collapsed) {
             Column(Modifier.padding(start = 22.dp)) {
-                group.hosts.forEach { host -> HostRow(host, state, mono) }
+                hosts.forEach { host -> HostRow(host, state, mono) }
             }
         }
+    }
+}
+
+/** Section of a preview-catalog row ([MockHost] carries a transport but is not a saved profile). */
+private fun mockHostSection(host: MockHost): HostSection =
+    if (host.connectionType.isRemoteDesktop) HostSection.RemoteDesktops else HostSection.Terminal
+
+/** Note shown instead of an empty column when a section's catalog holds nothing yet. */
+@Composable
+private fun EmptyCatalogNote() {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp)) {
+        Txt(stringResource(Res.string.rd_no_desktops), color = Skerry.colors.dim, size = 12.sp)
+        Txt(
+            stringResource(Res.string.rd_add_first),
+            color = Skerry.colors.faint, size = 11.5.sp, lineHeight = 16.sp,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 
@@ -612,6 +688,7 @@ private fun HostGroupBlock(group: HostGroup, state: DesktopDesignState, mono: Fo
 private fun LiveHostFolder(
     folder: HostFolder,
     state: DesktopDesignState,
+    section: HostSection,
     mono: FontFamily,
     dragState: HostDragState,
     controller: HostManagerController,
@@ -650,8 +727,10 @@ private fun LiveHostFolder(
     ) {
         Box(
             Modifier.folderHeaderAnchor(dragState, folder.name)
+                // Section-aware: the drop index counts the folders this sidebar shows, not the
+                // catalog's (a folder of the other section is invisible here and keeps its place).
                 .draggableFolderHeader(dragState, folder.name, foldersProvider) { index ->
-                    controller.moveFolder(group, index)
+                    controller.moveFolderInSection(group, index, section)
                 },
         ) {
             // The synthetic bucket shows the localized "no group" label; real folders show their name.
@@ -668,7 +747,7 @@ private fun LiveHostFolder(
                     HostTypeSubheader(connectionTypeLabel(type))
                     typeHosts.forEach { host ->
                         key(host.id) {
-                            HostRow(host, state, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
+                            HostRow(host, state, section, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
                         }
                     }
                 }
@@ -678,7 +757,7 @@ private fun LiveHostFolder(
                 folder.hosts.forEach { host ->
                     key(host.id) {
                         if (host.id == lineBeforeId) DropLine()
-                        HostRow(host, state, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
+                        HostRow(host, state, section, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
                     }
                 }
                 // Drop at the folder's end: the line goes after the last row.
@@ -706,6 +785,7 @@ private fun HostTypeSubheader(label: String) {
 private fun HostRow(
     host: Host,
     state: DesktopDesignState,
+    section: HostSection,
     controller: HostManagerController,
     sessions: SessionsController?,
     connect: (Host) -> Unit,
@@ -729,7 +809,8 @@ private fun HostRow(
             .alpha(if (dragState.draggingHostId == host.id) 0.4f else 1f)
             .hostBoundsAnchor(dragState, host.id)
             .draggableHostRow(dragState, host.id, foldersProvider) { drop ->
-                controller.moveHost(host.id, drop.group, drop.index)
+                // Index is relative to the rows this sidebar shows; the controller translates it.
+                controller.moveHostInSection(host.id, drop.group, drop.index, section)
             },
     ) {
         HostEntryRow(

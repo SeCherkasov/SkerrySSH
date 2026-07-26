@@ -37,7 +37,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.host.rowSubtitle
 import app.skerry.shared.host.Host
+import app.skerry.ui.host.HostSection
+import app.skerry.ui.host.inSection
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.generated.resources.lib_teams_sidebar
@@ -439,7 +442,7 @@ private fun MobileTeamDetail(
     MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
     if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
     sharedHosts.forEach { host ->
-        MobileSharedRow(host.label, "${host.username}@${host.address}", canUnshare = canWrite) { onUnshare(host.id) }
+        MobileSharedRow(host.label, host.rowSubtitle(), canUnshare = canWrite) { onUnshare(host.id) }
     }
     if (canWrite) {
         GhostButton(stringResource(Res.string.lib_teams_share_host), onClick = { onShare(RecordType.HOST) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
@@ -531,7 +534,7 @@ private fun MobileMemberRow(
  * via [LocalConnectHost].
  */
 @Composable
-internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>) {
+internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>, section: HostSection) {
     val teams = LocalTeams.current ?: return
     val mono = LocalFonts.current.mono
     val connect = LocalConnectHost.current
@@ -539,10 +542,11 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>) {
     // revision changes on every team sync — otherwise hosts live-pulled into the team vault wouldn't
     // appear until a manual sync (the personal catalog is unchanged and sections read the vault imperatively).
     val revision by teams.revision.collectAsState()
-    val sections = remember(teamList, hostsSnapshot, revision) {
+    val sections = remember(teamList, hostsSnapshot, revision, section) {
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.mapNotNull { team ->
             val vault = teams.teamVault(team.id) ?: return@mapNotNull null
-            val shared = VaultHostStore(vault).all()
+            // Split by section like the personal catalog (desktop parity).
+            val shared = VaultHostStore(vault).all().inSection(section)
             if (shared.isEmpty()) null else team.name to shared
         }
     }
@@ -605,7 +609,7 @@ private fun MobileTeamHostRow(host: Host, mono: androidx.compose.ui.text.font.Fo
         Column(Modifier.weight(1f)) {
             Txt(host.label, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(2.dp))
-            Txt("${host.username}@${host.address}", color = Skerry.colors.dim, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Txt(host.rowSubtitle(), color = Skerry.colors.dim, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
     }

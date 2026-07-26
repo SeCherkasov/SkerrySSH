@@ -17,6 +17,8 @@ import app.skerry.shared.files.FileContentBrowser
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
+import app.skerry.ui.host.HostSection
 import app.skerry.ui.files.FileEditController
 import app.skerry.ui.files.FileEditorScreen
 import app.skerry.shared.host.HostStore
@@ -147,12 +149,15 @@ fun main() {
     }
 
     val state = DesktopDesignState()
-    runCatching { state.showView(DesktopView.valueOf(viewName)) }
+    // view is a DesktopView name, or a HostSection name for the two work-area sections
+    // (Terminal / RemoteDesktops) — those are not rail "views" any more.
+    runCatching { state.showSection(HostSection.valueOf(viewName)) }
+        .onFailure { runCatching { state.showView(DesktopView.valueOf(viewName)) } }
     // Terminal theme for visual review: -Dskerry.screenshot.termTheme=<id> (e.g. tokyo-night).
     System.getProperty("skerry.screenshot.termTheme")?.let { state.chooseTerminalTheme(TerminalThemes.fromId(it)) }
     when (overlay) {
         "lock" -> state.lock()
-        "modal" -> state.openModal()
+        "modal" -> state.openModal(state.section) // form of the section being rendered
         "settings" -> {
             state.openSettings()
             // Settings tab to render: -Dskerry.screenshot.settingsTab=Appearance.
@@ -273,7 +278,8 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
             }
         }
     }
-    if (overlay == "sheet") state.openNewConn() // New connection sheet over the current tab
+    // New connection sheet over the current tab, on that tab's section (Hosts / Desktops).
+    if (overlay == "sheet") state.openNewConn(if (tab == MobileTab.Desktops) HostSection.RemoteDesktops else HostSection.Terminal)
     // Scene width/height are in pixels: 780x1688 at density 2 = logical 390x844dp (phone).
     val themeMode = ThemeMode.fromId(System.getProperty("skerry.screenshot.theme", "dark"))
     val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
@@ -429,6 +435,9 @@ private fun seededHosts(boundCredentialId: String? = null): HostManagerControlle
         Host("h2", "db-master", "192.168.1.50", 22, "root", "Production", credentialId = boundCredentialId, tags = listOf("prod", "db")),
         Host("h3", "homelab-pi", "10.0.0.12", 22, "pi", "Homelab", tags = listOf("docker")),
         Host("h4", "vps-edge", "vps.example.com", 2222, "deploy", null, tags = listOf("edge")),
+        // Remote desktops: their own section in the shell, so the demo catalog seeds both kinds.
+        Host("h5", "lab-desktop", "10.0.0.30", 5900, "", "Homelab", connectionType = ConnectionType.VNC),
+        Host("h6", "win-bench", "10.0.0.31", 5901, "", null, connectionType = ConnectionType.VNC, tags = listOf("lab")),
     ).forEach(store::put)
     var seq = 0
     return HostManagerController(store) { "gen-${seq++}" }

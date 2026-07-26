@@ -93,6 +93,8 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.sessionDotColor
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.host.HostSection
+import app.skerry.ui.host.inSection
 import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
 
@@ -104,7 +106,7 @@ import app.skerry.ui.host.prodOutline
 @Composable
 private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modifier) {
     val sessions = LocalSessions.current
-    val active = sessions?.active
+    val active = sessions?.activeTerminal
     Row(
         modifier.height(PANE_HEADER_HEIGHT).padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -173,7 +175,7 @@ fun TerminalView(state: DesktopDesignState) {
             // input row; key() recreates it when the active host/policy changes. Off/mock -> null
             // (falls back to the slot below).
             val liveAi = LocalAi.current
-            val aiSession = LocalSessions.current?.active
+            val aiSession = LocalSessions.current?.activeTerminal
             val aiPolicy = aiSession?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
             val aiTerminal = (aiSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
             // liveAi.enabled is in the key: toggling the global OFF setting shows/hides the bar
@@ -192,11 +194,11 @@ fun TerminalView(state: DesktopDesignState) {
                 // Live mode: split is tied to the active tab (its own secondary session).
                 // Mock/preview uses a global flag.
                 val sessions = LocalSessions.current
-                val activeId = sessions?.active?.id
-                val showSplit = if (sessions != null) sessions.active?.splitOpen == true else state.split
+                val activeId = sessions?.activeTerminal?.id
+                val showSplit = if (sessions != null) sessions.activeTerminal?.splitOpen == true else state.split
                 // In split mode, an accent border (primary cyan) outlines the focused pane.
                 // focusedSplit=false means the primary pane.
-                val focusedSplit = sessions?.active?.focusedSplit == true
+                val focusedSplit = sessions?.activeTerminal?.focusedSplit == true
                 val focusBorderColor = Skerry.colors.cyan
                 fun paneFocusBorder(focused: Boolean): Modifier =
                     if (showSplit && focused) Modifier.border(1.dp, focusBorderColor.copy(alpha = 0.35f)) else Modifier
@@ -253,7 +255,7 @@ fun TerminalView(state: DesktopDesignState) {
  * in the sidebar's own surface so it reads as the panel peeking out; clicking it restores the panel.
  */
 @Composable
-private fun SidebarReopenHandle(onClick: () -> Unit) {
+internal fun SidebarReopenHandle(onClick: () -> Unit) {
     Box(
         Modifier.width(16.dp).fillMaxHeight().background(Skerry.colors.surface2).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -268,7 +270,7 @@ private fun SidebarReopenHandle(onClick: () -> Unit) {
 private fun SessionToolbar(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
     val sessions = LocalSessions.current
-    val active = sessions?.active
+    val active = sessions?.activeTerminal
     Column {
         Row(
             // Fixed header height shared with the split pane (PANE_HEADER_HEIGHT) so both
@@ -317,7 +319,7 @@ private fun TerminalPane(state: DesktopDesignState, modifier: Modifier = Modifie
 /** Live terminal of the active tab: renders based on its [ConnectionUiState]. */
 @Composable
 private fun LiveTerminalPane(sessions: SessionsController, state: DesktopDesignState, modifier: Modifier = Modifier) {
-    val active = sessions.active
+    val active = sessions.activeTerminal
     val st = active?.controller?.uiState
     // Ctrl+click on a file path: switch this tab to its file panel and reveal the path there. Only
     // the primary pane gets it — the SFTP view belongs to the tab's primary session, so the split
@@ -428,7 +430,7 @@ private fun LiveSplitPane(
     reserveEnd: Dp = 0.dp,
 ) {
     val mono = LocalFonts.current.mono
-    val parent = sessions.active ?: return
+    val parent = sessions.activeTerminal ?: return
     var pickerOpen by remember { mutableStateOf(false) }
     val split = parent.splitSession
     Column(
@@ -501,7 +503,9 @@ private fun LiveSplitPane(
 @Composable
 private fun SplitHostPicker(onPicked: () -> Unit) {
     val mono = LocalFonts.current.mono
-    val hosts = LocalHosts.current?.hosts ?: emptyList()
+    // Terminal profiles only: the split pane is a second shell, and a remote desktop picked here
+    // would be dialled as SSH on its RFB port.
+    val hosts = LocalHosts.current?.hosts?.inSection(HostSection.Terminal) ?: emptyList()
     val connectSplit = LocalConnectSplit.current
     Column(
         Modifier
