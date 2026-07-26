@@ -49,6 +49,8 @@ import app.skerry.ui.generated.resources.settings_terminal_cursor_block_steady
 import app.skerry.ui.generated.resources.settings_terminal_cursor_style
 import app.skerry.ui.generated.resources.settings_terminal_cursor_underline_blink
 import app.skerry.ui.generated.resources.settings_terminal_cursor_underline_steady
+import app.skerry.ui.generated.resources.settings_terminal_open_paths
+import app.skerry.ui.generated.resources.settings_terminal_open_paths_desc
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
 import app.skerry.ui.generated.resources.settings_terminal_scrollback
@@ -181,6 +183,15 @@ internal fun TerminalSection(state: DesktopDesignState) {
         stringResource(Res.string.settings_terminal_prod_warnings_desc),
         on = state.confirmProductionWarnings,
         onToggle = state::toggleConfirmProductionWarnings,
+    )
+    HLine()
+    // Clickable file paths in output (Ctrl+click → reveal in the SFTP panel). On by default; off
+    // also removes the Ctrl+hover highlight, for output where it reads as noise.
+    SettingToggleRow(
+        stringResource(Res.string.settings_terminal_open_paths),
+        stringResource(Res.string.settings_terminal_open_paths_desc),
+        on = state.openFilePathsInSftp,
+        onToggle = state::toggleOpenFilePathsInSftp,
     )
     HLine()
     // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host from

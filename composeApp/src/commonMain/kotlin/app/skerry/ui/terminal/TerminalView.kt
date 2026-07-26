@@ -319,6 +319,21 @@ private fun TerminalPane(state: DesktopDesignState, modifier: Modifier = Modifie
 private fun LiveTerminalPane(sessions: SessionsController, state: DesktopDesignState, modifier: Modifier = Modifier) {
     val active = sessions.active
     val st = active?.controller?.uiState
+    // Ctrl+click on a file path: switch this tab to its file panel and reveal the path there. Only
+    // the primary pane gets it — the SFTP view belongs to the tab's primary session, so the split
+    // pane's paths would land on the wrong host. Null when the setting is off (also kills the
+    // hover highlight) or there is no session to ask.
+    val openPath: ((String) -> Unit)? = remember(sessions, active?.id, state.openFilePathsInSftp, active?.controller?.supportsSftp) {
+        val controller = active?.controller
+        // No SFTP channel on Mosh/Telnet/serial/local/container sessions — offering the path there
+        // would only open a panel that can't list anything.
+        if (!state.openFilePathsInSftp || controller == null || !controller.supportsSftp) null
+        else ({ path: String ->
+            controller.requestReveal(path)
+            state.clearOverlay()
+            sessions.setActiveView(SessionView.Sftp)
+        })
+    }
     // A live or frozen screen sits on the terminal's own background; every notice (no session /
     // connecting / error) sits on the app background, so the empty terminal matches other sections.
     val onScreen = st is ConnectionUiState.Connected || st is ConnectionUiState.Disconnected
@@ -347,10 +362,12 @@ private fun LiveTerminalPane(sessions: SessionsController, state: DesktopDesignS
             // Form state on the active tab means an empty ("+") tab: connection not yet started.
             ConnectionUiState.Form -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new), action = launchLocalShell)
             ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), active.subtitle)
-            is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize())
+            is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize(), onOpenPath = openPath)
             is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = Skerry.colors.sunset)
             // Disconnected: screen is frozen at the moment of loss ([ConnectionUiState.Disconnected.terminal]),
             // shown under the disconnect banner so output isn't lost and status (reconnecting/gave up) stays visible.
+            // No path affordance here: the SFTP channel died with the session, so a click would only
+            // open a panel that can't list anything.
             is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 TerminalScreen(st.terminal, Modifier.fillMaxSize())
                 DisconnectedBanner(st, Modifier.align(Alignment.TopCenter))
