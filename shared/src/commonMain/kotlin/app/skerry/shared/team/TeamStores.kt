@@ -26,11 +26,30 @@ data class TeamKeyEntry(
     val role: String,
     val teamKey: String,
     val epoch: Int = 0,
+    /**
+     * Keys of the team's scopes we hold a grant for, by scopeId. Nested in this record rather than
+     * given a [RecordType] of its own: a client that doesn't know a record type drops it while
+     * advancing the sync cursor (see `SyncEngine`), which would lose a scope key for good. Here a
+     * scope key shares the TEAM record's fate — including its recovery path.
+     */
+    val scopes: Map<String, TeamScopeKeyEntry> = emptyMap(),
 ) {
-    fun dataKey(): DataKey? {
-        val bytes = teamKey.decodeBase64()?.toByteArray() ?: return null
-        return if (bytes.size == 32) DataKey(bytes) else null
-    }
+    fun dataKey(): DataKey? = decodeDataKey(teamKey)
+}
+
+/** One scope's key inside [TeamKeyEntry]. [epoch] is its own generation, independent of the team's. */
+@Serializable
+data class TeamScopeKeyEntry(
+    val name: String,
+    val key: String,
+    val epoch: Int = 0,
+) {
+    fun dataKey(): DataKey? = decodeDataKey(key)
+}
+
+private fun decodeDataKey(base64: String): DataKey? {
+    val bytes = base64.decodeBase64()?.toByteArray() ?: return null
+    return if (bytes.size == 32) DataKey(bytes) else null
 }
 
 /** Store of [RecordType.TEAM] records: one per team, record id = teamId. */
@@ -77,6 +96,46 @@ class TeamKeyStore(private val vault: Vault) {
 
     fun remove(teamId: String) {
         vault.transaction { codec.remove(teamId) }
+    }
+
+    // --- scopes (nested in the team's own record, see [TeamKeyEntry.scopes]) ---
+
+    fun scopes(teamId: String): Map<String, TeamScopeKeyEntry> {
+        if (!vault.isUnlocked) return emptyMap()
+        return codec.get(teamId)?.scopes ?: emptyMap()
+    }
+
+    fun scope(teamId: String, scopeId: String): TeamScopeKeyEntry? = scopes(teamId)[scopeId]
+
+    /** Store (or replace) a scope's key. No-op if the team itself is unknown. */
+    fun putScope(teamId: String, scopeId: String, name: String, key: DataKey, epoch: Int = 0) =
+        editScopes(teamId) { it + (scopeId to TeamScopeKeyEntry(name, key.bytes.toByteString().base64(), epoch)) }
+
+    /** Replace a scope's key and epoch on rotation, keeping its name. No-op if the scope is unknown. */
+    fun rekeyScope(teamId: String, scopeId: String, key: DataKey, epoch: Int) =
+        editScopes(teamId) { current ->
+            val scope = current[scopeId] ?: return@editScopes current
+            current + (scopeId to scope.copy(key = key.bytes.toByteString().base64(), epoch = epoch))
+        }
+
+    fun renameScope(teamId: String, scopeId: String, name: String) =
+        editScopes(teamId) { current ->
+            val scope = current[scopeId] ?: return@editScopes current
+            current + (scopeId to scope.copy(name = name))
+        }
+
+    fun removeScope(teamId: String, scopeId: String) = editScopes(teamId) { it - scopeId }
+
+    /**
+     * Read-modify-write of the scope map under the vault transaction (guideline §3): without it a
+     * background merge landing between the read and the write would drop a concurrently added scope.
+     */
+    private fun editScopes(teamId: String, transform: (Map<String, TeamScopeKeyEntry>) -> Map<String, TeamScopeKeyEntry>) {
+        vault.transaction {
+            val current = codec.get(teamId) ?: return@transaction
+            val updated = transform(current.scopes)
+            if (updated != current.scopes) codec.put(teamId, current.copy(scopes = updated))
+        }
     }
 }
 

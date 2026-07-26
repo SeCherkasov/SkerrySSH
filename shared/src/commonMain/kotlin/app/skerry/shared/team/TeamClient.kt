@@ -126,7 +126,42 @@ interface TeamClient {
 
     suspend fun deleteTeam(session: SyncSession, teamId: String)
 
-    suspend fun pullTeam(session: SyncSession, teamId: String, since: Long): RecordPage
+    suspend fun pullTeam(session: SyncSession, ref: TeamScopeRef, since: Long): RecordPage
 
-    suspend fun pushTeam(session: SyncSession, teamId: String, records: List<RemoteRecord>): RecordPage
+    suspend fun pushTeam(session: SyncSession, ref: TeamScopeRef, records: List<RemoteRecord>): RecordPage
+
+    // --- scopes (granular sharing inside a team) ---
+
+    /**
+     * Scopes of the team. Managers see every scope; a plain member sees only the ones they hold a
+     * grant for (a scope's existence is itself a hint about the team's structure).
+     */
+    suspend fun listScopes(session: SyncSession, teamId: String): List<TeamScopeSummary>
+
+    /** Creates a scope and grants it to the creator ([envelope] = scopeKey sealed to themselves). */
+    suspend fun createScope(session: SyncSession, teamId: String, scopeId: String, envelope: ByteArray)
+
+    /** Deletes a scope with its grants and records (manage-members role). */
+    suspend fun deleteScope(session: SyncSession, teamId: String, scopeId: String)
+
+    /** Accounts holding a grant on the scope (manage-members role). */
+    suspend fun scopeGrants(session: SyncSession, teamId: String, scopeId: String): List<TeamScopeGrantEntry>
+
+    /** Grants [accountId] access to the scope, delivering the sealed current-epoch scopeKey. */
+    suspend fun grantScope(session: SyncSession, teamId: String, scopeId: String, accountId: String, envelope: ByteArray)
+
+    /** Revokes [accountId]'s grant. The caller rotates the scope key afterwards (forward secrecy). */
+    suspend fun revokeScope(session: SyncSession, teamId: String, scopeId: String, accountId: String)
+
+    /**
+     * Rotates a scope's key: bumps it to [newEpoch] and stores one re-sealed key per remaining
+     * grantee. Same monotonicity contract as [rekey], scoped to the scope's own epoch.
+     */
+    suspend fun rekeyScope(
+        session: SyncSession,
+        teamId: String,
+        scopeId: String,
+        newEpoch: Long,
+        envelopes: Map<String, ByteArray>,
+    )
 }

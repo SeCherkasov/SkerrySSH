@@ -1,0 +1,189 @@
+package app.skerry.server.db
+
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.statements.api.ExposedBlob
+import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
+import org.jetbrains.exposed.v1.jdbc.insert
+import org.jetbrains.exposed.v1.jdbc.selectAll
+import org.jetbrains.exposed.v1.jdbc.update
+
+/** A scope as reported to one account: [envelope] is that account's sealed key, null without a grant. */
+data class TeamScopeRow(
+    val scopeId: String,
+    val keyEpoch: Long,
+    val memberCount: Int,
+    val envelope: ByteArray?,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is TeamScopeRow) return false
+        return scopeId == other.scopeId && keyEpoch == other.keyEpoch && memberCount == other.memberCount &&
+            (envelope?.contentEquals(other.envelope) ?: (other.envelope == null))
+    }
+
+    override fun hashCode(): Int {
+        var result = scopeId.hashCode()
+        result = 31 * result + keyEpoch.hashCode()
+        result = 31 * result + memberCount
+        result = 31 * result + (envelope?.contentHashCode() ?: 0)
+        return result
+    }
+}
+
+/** One account's grant on a scope (manager view; the envelope stays private to its owner). */
+data class TeamScopeGrantRow(val accountId: String, val createdAt: Long)
+
+/**
+ * Scopes of a team and their grants. Granular sharing is enforced on two independent levels: this
+ * repository is the ACL the routes consult, and the scope key (which the server never sees) is what
+ * actually keeps a scope's records unreadable to anyone without a grant.
+ */
+class TeamScopeRepository(private val db: Database) {
+
+    /** Creates a scope and grants it to [accountId] ([envelope] = scopeKey sealed to them). False if it exists. */
+    suspend fun create(teamId: String, scopeId: String, accountId: String, envelope: ByteArray, now: Long): Boolean =
+        dbTransaction(db) {
+            val exists = TeamScopes.selectAll()
+                .where { (TeamScopes.teamId eq teamId) and (TeamScopes.scopeId eq scopeId) }
+                .any()
+            if (exists) return@dbTransaction false
+            TeamScopes.insert {
+                it[TeamScopes.teamId] = teamId
+                it[TeamScopes.scopeId] = scopeId
+                it[keyEpoch] = 0
+                it[createdAt] = now
+            }
+            insertGrant(teamId, scopeId, accountId, envelope, now)
+            true
+        }
+
+    /** Deletes the scope with its grants and its records. */
+    suspend fun delete(teamId: String, scopeId: String): Boolean = dbTransaction(db) {
+        TeamRecords.deleteWhere { (TeamRecords.teamId eq teamId) and (TeamRecords.scopeId eq scopeId) }
+        TeamScopeGrants.deleteWhere { (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) }
+        TeamScopes.deleteWhere { (TeamScopes.teamId eq teamId) and (TeamScopes.scopeId eq scopeId) } > 0
+    }
+
+    /**
+     * Scopes of the team as [accountId] may see them. With [all] (a manager) every scope is listed,
+     * otherwise only the ones they hold a grant for — the mere existence of a scope already
+     * describes how the team is organised.
+     */
+    suspend fun scopesFor(teamId: String, accountId: String, all: Boolean): List<TeamScopeRow> = dbTransaction(db) {
+        val grants = TeamScopeGrants.selectAll().where { TeamScopeGrants.teamId eq teamId }.map {
+            Triple(it[TeamScopeGrants.scopeId], it[TeamScopeGrants.accountId], it[TeamScopeGrants.envelope].bytes)
+        }
+        val counts = grants.groupingBy { it.first }.eachCount()
+        val mine = grants.filter { it.second == accountId }.associate { it.first to it.third }
+        TeamScopes.selectAll().where { TeamScopes.teamId eq teamId }
+            .map { it[TeamScopes.scopeId] to it[TeamScopes.keyEpoch] }
+            .filter { (scopeId, _) -> all || scopeId in mine }
+            .map { (scopeId, epoch) -> TeamScopeRow(scopeId, epoch, counts[scopeId] ?: 0, mine[scopeId]) }
+    }
+
+    suspend fun exists(teamId: String, scopeId: String): Boolean = dbTransaction(db) {
+        TeamScopes.selectAll().where { (TeamScopes.teamId eq teamId) and (TeamScopes.scopeId eq scopeId) }.any()
+    }
+
+    suspend fun hasGrant(teamId: String, scopeId: String, accountId: String): Boolean = dbTransaction(db) {
+        grantExists(teamId, scopeId, accountId)
+    }
+
+    suspend fun grants(teamId: String, scopeId: String): List<TeamScopeGrantRow> = dbTransaction(db) {
+        TeamScopeGrants.selectAll()
+            .where { (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) }
+            .map { TeamScopeGrantRow(it[TeamScopeGrants.accountId], it[TeamScopeGrants.createdAt]) }
+    }
+
+    /** Grants (or re-seals) the scope to [accountId]. False if the scope doesn't exist. */
+    suspend fun grant(teamId: String, scopeId: String, accountId: String, envelope: ByteArray, now: Long): Boolean =
+        dbTransaction(db) {
+            val scopeExists = TeamScopes.selectAll()
+                .where { (TeamScopes.teamId eq teamId) and (TeamScopes.scopeId eq scopeId) }
+                .any()
+            if (!scopeExists) return@dbTransaction false
+            insertGrant(teamId, scopeId, accountId, envelope, now)
+            true
+        }
+
+    suspend fun revoke(teamId: String, scopeId: String, accountId: String): Boolean = dbTransaction(db) {
+        TeamScopeGrants.deleteWhere {
+            (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) and
+                (TeamScopeGrants.accountId eq accountId)
+        } > 0
+    }
+
+    /**
+     * Revokes every grant [accountId] held in the team (they were removed from the team itself) and
+     * returns the affected scope ids — the caller rotates those keys, since a removed member keeps
+     * their copy of every key they ever received.
+     */
+    suspend fun revokeAll(teamId: String, accountId: String): List<String> = dbTransaction(db) {
+        val held = TeamScopeGrants.selectAll()
+            .where { (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.accountId eq accountId) }
+            .map { it[TeamScopeGrants.scopeId] }
+        if (held.isNotEmpty()) {
+            TeamScopeGrants.deleteWhere {
+                (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.accountId eq accountId)
+            }
+        }
+        held
+    }
+
+    /**
+     * Rotates a scope's key: bumps its epoch to [newEpoch] and stores the re-sealed key per grantee.
+     * Monotonicity is an atomic compare-and-set on the epoch, exactly as in [TeamRepository.rekey] —
+     * two rotations racing to the same epoch would otherwise commit different keys at one epoch and
+     * leave the scope unreadable. Envelopes for accounts without a grant are ignored: a rotation
+     * must never resurrect access that was just revoked.
+     */
+    suspend fun rekey(teamId: String, scopeId: String, newEpoch: Long, envelopes: Map<String, ByteArray>): RekeyOutcome =
+        dbTransaction(db) {
+            val bumped = TeamScopes.update({
+                (TeamScopes.teamId eq teamId) and (TeamScopes.scopeId eq scopeId) and
+                    (TeamScopes.keyEpoch eq newEpoch - 1)
+            }) { it[keyEpoch] = newEpoch } > 0
+            if (!bumped) {
+                val exists = TeamScopes.selectAll()
+                    .where { (TeamScopes.teamId eq teamId) and (TeamScopes.scopeId eq scopeId) }
+                    .any()
+                return@dbTransaction if (exists) RekeyOutcome.EPOCH_CONFLICT else RekeyOutcome.NO_TEAM
+            }
+            envelopes.forEach { (accountId, envelope) ->
+                TeamScopeGrants.update({
+                    (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) and
+                        (TeamScopeGrants.accountId eq accountId)
+                }) {
+                    it[TeamScopeGrants.envelope] = ExposedBlob(envelope)
+                }
+            }
+            RekeyOutcome.OK
+        }
+
+    private fun grantExists(teamId: String, scopeId: String, accountId: String): Boolean =
+        TeamScopeGrants.selectAll().where {
+            (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) and
+                (TeamScopeGrants.accountId eq accountId)
+        }.any()
+
+    /** Upsert of a grant: re-granting replaces the sealed key instead of failing on the primary key. */
+    private fun insertGrant(teamId: String, scopeId: String, accountId: String, envelope: ByteArray, now: Long) {
+        val updated = TeamScopeGrants.update({
+            (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) and
+                (TeamScopeGrants.accountId eq accountId)
+        }) {
+            it[TeamScopeGrants.envelope] = ExposedBlob(envelope)
+        }
+        if (updated == 0) {
+            TeamScopeGrants.insert {
+                it[TeamScopeGrants.teamId] = teamId
+                it[TeamScopeGrants.scopeId] = scopeId
+                it[TeamScopeGrants.accountId] = accountId
+                it[TeamScopeGrants.envelope] = ExposedBlob(envelope)
+                it[createdAt] = now
+            }
+        }
+    }
+}

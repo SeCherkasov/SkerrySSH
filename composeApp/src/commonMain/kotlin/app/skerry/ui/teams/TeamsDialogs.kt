@@ -82,7 +82,7 @@ internal fun TeamsDialogCard(onDismiss: () -> Unit, content: @Composable () -> U
 
 /** Hand-rolled dialog field: border in decorationBox + fillMaxWidth (a click anywhere places the caret). */
 @Composable
-private fun TeamsTextField(
+internal fun TeamsTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,

@@ -178,9 +178,11 @@ class TeamRepository(private val db: Database) {
         } > 0
     }
 
-    /** Deletes a team entirely: records, members, and the team itself. */
+    /** Deletes a team entirely: records (of every scope), scopes, grants, members, and the team itself. */
     suspend fun deleteTeam(teamId: String): Boolean = dbTransaction(db) {
         TeamRecords.deleteWhere { TeamRecords.teamId eq teamId }
+        TeamScopeGrants.deleteWhere { TeamScopeGrants.teamId eq teamId }
+        TeamScopes.deleteWhere { TeamScopes.teamId eq teamId }
         TeamMembers.deleteWhere { TeamMembers.teamId eq teamId }
         Teams.deleteWhere { Teams.id eq teamId } > 0
     }
