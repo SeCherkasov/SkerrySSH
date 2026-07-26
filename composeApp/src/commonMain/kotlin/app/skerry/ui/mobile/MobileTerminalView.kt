@@ -74,6 +74,7 @@ import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
 import app.skerry.ui.generated.resources.term_open_path_in_files
+import app.skerry.ui.generated.resources.runbook_section
 import app.skerry.ui.generated.resources.term_broadcast_title
 import app.skerry.ui.generated.resources.term_monitor_title
 import app.skerry.ui.generated.resources.term_record_start
@@ -102,6 +103,7 @@ import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.app.LocalSnippets
@@ -373,6 +375,18 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             onClick = { menuOpen = false; historyOpen = true },
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                             icon = "history",
+                            filled = false,
+                        )
+                    }
+                    if (activeTerminal != null && LocalRunbooks.current != null) {
+                        // No popup picker here (the phone has no room for one over the terminal):
+                        // the row opens the library, whose Run comes straight back with the start
+                        // confirmation and the progress panel over this screen.
+                        MobileSheetButton(
+                            label = stringResource(Res.string.runbook_section),
+                            onClick = { menuOpen = false; state.push(MobileRoute.Runbooks) },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "checklist",
                             filled = false,
                         )
                     }

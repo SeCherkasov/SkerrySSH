@@ -4,6 +4,8 @@
     <string name="runbook_library">运行手册</string>
     <string name="runbook_new">新建运行手册</string>
     <string name="runbook_untitled">未命名</string>
+    <string name="runbook_palette_placeholder">运行运行手册…</string>
+    <string name="runbook_toolbar_tip">运行运行手册</string>
     <string name="runbook_search">搜索运行手册…</string>
     <string name="runbook_select_or_create">选择一个运行手册，或新建一个。</string>
     <string name="runbook_empty">暂无运行手册</string>

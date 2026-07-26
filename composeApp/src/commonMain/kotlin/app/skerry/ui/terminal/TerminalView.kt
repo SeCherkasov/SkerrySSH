@@ -98,9 +98,11 @@ import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.inSection
 import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
+import app.skerry.ui.runbook.RunbookPaletteButton
 
 /**
- * Session action icons (split / SFTP / tunnels / snippets / info panel / disconnect). Pinned to the
+ * Session action icons (split / SFTP / tunnels / snippets / runbooks / recording / player / info
+ * panel / disconnect). Pinned to the
  * top-right corner of the terminal area rather than living in a pane header: opening the info panel
  * or a split narrows the panes, and icons that shift under the pointer are hard to hit twice.
  */
@@ -122,6 +124,8 @@ private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modif
         IconBtn("lan", onClick = { state.showView(DesktopView.Ports) }, tooltip = stringResource(Res.string.shell_tip_ports))
         // Quick snippet launch into the active session without leaving for the Snippets section.
         SnippetPaletteButton(active, state.snippetPaletteRequests)
+        // Same idea one size up: start a saved procedure here instead of going to its section.
+        RunbookPaletteButton(active)
         // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
         val teams = LocalTeams.current
         RecordSessionButton(
