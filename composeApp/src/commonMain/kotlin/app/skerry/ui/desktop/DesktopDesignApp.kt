@@ -98,6 +98,10 @@ import app.skerry.ui.session.BroadcastPanel
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.runbook.RunbookManager
+import app.skerry.ui.runbook.RunbookRunner
+import app.skerry.ui.runbook.RunbookRunPanel
+import app.skerry.ui.runbook.RunbookStartDialog
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetRunDialog
 import app.skerry.ui.snippet.SnippetShortcut
@@ -180,6 +184,8 @@ import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSftpPrefs
+import app.skerry.ui.app.LocalRunbookRunner
+import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSshCertificateInspector
@@ -359,6 +365,9 @@ fun DesktopDesignApp(
     certificateInspector: SshCertificateInspector? = null,
     tunnels: TunnelManager? = null,
     snippets: SnippetManager? = null,
+    // Runbook library + the one in-flight run. `null` on the mock path (no vault behind them).
+    runbooks: RunbookManager? = null,
+    runbookRunner: RunbookRunner? = null,
     // Self-hosted sync coordinator. `null` — sync not connected on the platform / mock path: the Sync
     // settings section draws a static mock, the onboarding modal isn't shown.
     sync: SyncCoordinator? = null,
@@ -525,6 +534,8 @@ fun DesktopDesignApp(
         LocalTestTransport provides (testTransport ?: transport),
         LocalTunnels provides tunnels,
         LocalSnippets provides snippets,
+        LocalRunbooks provides runbooks,
+        LocalRunbookRunner provides runbookRunner,
         LocalTerminalHistory provides termHistory,
         LocalFeatures provides features,
         LocalSftpPrefs provides sftpPrefs,
@@ -551,7 +562,7 @@ fun DesktopDesignApp(
                 // and restarts the idle timer; Never (idleMs == null) turns it off.
                 autoLockIdleMs = state.autoLock.idleMs,
                 // Runs on EVERY lock, including the two automatic ones that bypass the lock action.
-                onBeforeLock = { tearDownForLock(tunnels, sessions, sync, snippets) },
+                onBeforeLock = { tearDownForLock(tunnels, sessions, sync, snippets, runbookRunner) },
                 onReset = onVaultReset,
                 // onPairingComplete != null (sync is present) — the create screen offers "I have a code":
                 // the coordinator creates the vault under the chosen password itself and accepts the account key.
@@ -862,7 +873,21 @@ private fun DesktopChrome(
             }
             // Confirmation for a snippet with ${{…}} variables — every launch path (palette, hotkey,
             // "Run on host", library) parks such a run in SnippetManager.pendingRun.
+            // Live runbook progress, docked over the work area of the tab the run belongs to. Not
+            // modal and placed before the dialogs below, so the terminal underneath stays readable
+            // and any modal still covers it.
+            LocalRunbookRunner.current?.let { runner ->
+                if (runner.sessionId != null && runner.sessionId == sessions?.activeTerminal?.id) {
+                    RunbookRunPanel(
+                        runner,
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 46.dp),
+                    )
+                }
+            }
             snippets?.let { SnippetRunDialog(it) }
+            // Confirmation before a runbook starts: it previews every step with its variables
+            // resolved, so the procedure is agreed to once instead of step by step.
+            LocalRunbookRunner.current?.let { RunbookStartDialog(it) }
             // Delete-host-profile confirmation (invoked from the sidebar's context menu). The keychain
             // secret itself stays in the vault (reusable, managed from the Vault tab).
             val hosts = LocalHosts.current

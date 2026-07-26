@@ -8,6 +8,7 @@ import app.skerry.ui.host.HostSection
 import app.skerry.ui.known.KnownHostsView
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.sftp.SftpView
+import app.skerry.ui.runbook.RunbooksView
 import app.skerry.ui.snippet.SnippetsView
 import app.skerry.ui.teams.TeamsView
 import app.skerry.ui.terminal.CastPlayerView
@@ -29,6 +30,7 @@ fun Viewport(state: DesktopDesignState) {
     when (state.appOverlay) {
         DesktopView.Ports -> TunnelsView()
         DesktopView.Snippets -> SnippetsView(state)
+        DesktopView.Runbooks -> RunbooksView()
         DesktopView.Vault -> VaultView()
         DesktopView.Known -> KnownHostsView()
         DesktopView.Teams -> TeamsView()

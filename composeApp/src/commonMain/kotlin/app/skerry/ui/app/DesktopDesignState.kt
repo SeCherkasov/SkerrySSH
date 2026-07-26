@@ -34,7 +34,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
 /** Left rail / top-level views of the layout. */
-enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
+enum class DesktopView { Terminal, Sftp, Ports, Snippets, Runbooks, Vault, Known, Teams }
 
 /**
  * App-level views not tied to a specific SSH session: Ports(Tunnels)/Snippets/Vault/Known/Teams.
@@ -45,8 +45,8 @@ enum class DesktopView { Terminal, Sftp, Ports, Snippets, Vault, Known, Teams }
  * connection to the host, so the section is shared rather than part of an open session.
  */
 val DesktopView.isAppLevel: Boolean
-    get() = this == DesktopView.Ports || this == DesktopView.Snippets || this == DesktopView.Vault ||
-        this == DesktopView.Known || this == DesktopView.Teams
+    get() = this == DesktopView.Ports || this == DesktopView.Snippets || this == DesktopView.Runbooks ||
+        this == DesktopView.Vault || this == DesktopView.Known || this == DesktopView.Teams
 
 /** Rail item → session sub-view; app-level/Terminal map to Terminal. */
 fun DesktopView.asSessionView(): SessionView = when (this) {
