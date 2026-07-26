@@ -28,6 +28,12 @@ class TeamsFailureMappingTest {
         assertEquals(TeamsFailure.Protocol, SyncException.Kind.PROTOCOL.toTeamsFailure())
     }
 
+    /** A team endpoint answering 403 means the account lacks the right, not that the wire broke. */
+    @Test
+    fun `a refusal is a permission failure, not a protocol one`() {
+        assertEquals(TeamsFailure.Forbidden, SyncException.Kind.FORBIDDEN.toTeamsFailure())
+    }
+
     @Test
     fun `a non-sync exception is still a protocol failure`() {
         assertEquals(TeamsFailure.Protocol, (null as SyncException.Kind?).toTeamsFailure())
