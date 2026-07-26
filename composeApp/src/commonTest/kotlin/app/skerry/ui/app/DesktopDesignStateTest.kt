@@ -23,6 +23,18 @@ import app.skerry.ui.theme.ThemeMode
 class DesktopDesignStateTest {
 
     @Test
+    fun toggleOpenFilePathsInSftp_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = DesktopDesignState(onOpenFilePathsInSftpChange = { seen += it })
+        assertEquals(true, s.openFilePathsInSftp) // on by default
+        s.toggleOpenFilePathsInSftp()
+        assertEquals(false, s.openFilePathsInSftp)
+        s.toggleOpenFilePathsInSftp()
+        assertEquals(true, s.openFilePathsInSftp)
+        assertEquals(listOf(false, true), seen)
+    }
+
+    @Test
     fun defaults_match_reference() {
         val s = DesktopDesignState()
         assertEquals(DesktopView.Terminal, s.view)

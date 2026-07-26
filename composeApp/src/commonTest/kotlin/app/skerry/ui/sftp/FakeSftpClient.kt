@@ -41,7 +41,11 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
         register(SftpEntry(nameOf(norm), norm, SftpEntryType.File, size, modifiedEpochSeconds, 0b110_100_100))
     }
 
+    /** When set, [list] blocks until it completes — lets a test hold a pane's load in flight. */
+    var listGate: CompletableDeferred<Unit>? = null
+
     override suspend fun list(path: String): List<SftpEntry> {
+        listGate?.await()
         val dir = children[realpathSync(path)] ?: throw SftpException("No directory $path")
         return dir.values.toList()
     }

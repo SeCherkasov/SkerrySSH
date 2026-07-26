@@ -484,6 +484,8 @@ fun main(args: Array<String>) {
                     onHostClickConnectModeChange = { prefs.set("host_click_connect", it.id) },
                     initialAllowServerClipboardWrite = prefs.bool("terminal_clipboard_write", false),
                     onAllowServerClipboardWriteChange = { prefs.set("terminal_clipboard_write", it) },
+                    initialOpenFilePathsInSftp = prefs.bool("terminal_open_paths", true),
+                    onOpenFilePathsInSftpChange = { prefs.set("terminal_open_paths", it) },
                     initialConfirmProductionWarnings = prefs.bool("terminal_prod_warnings", false),
                     onConfirmProductionWarningsChange = { prefs.set("terminal_prod_warnings", it) },
                     initialAutoLock = prefs.id("auto_lock", AutoLockDuration.DEFAULT, AutoLockDuration::fromId),

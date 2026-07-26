@@ -11,6 +11,8 @@ import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Listing state of a single file pane (local or remote). */
@@ -31,8 +33,10 @@ sealed interface FilePaneState {
  * (single/Ctrl-toggle/Shift-range). Cross-pane transfer is not its responsibility (see the
  * screen's transfer coordinator).
  *
- * Operations are serialized via [busy]; a failed operation moves the pane to [FilePaneState.Error]
- * without crashing the controller. Ownership of the source ([FileBrowser]/channel) is external.
+ * Operations are serialized: a user-driven one is dropped while another runs ([op]), an externally
+ * requested one waits its turn ([queuedOp]). A failed operation moves the pane to
+ * [FilePaneState.Error] without crashing the controller. Ownership of the source
+ * ([FileBrowser]/channel) is external.
  */
 @Stable
 class FilePaneController(
@@ -93,6 +97,12 @@ class FilePaneController(
     private var anchor: String? by mutableStateOf(null)
     private var busy = false
 
+    /**
+     * Serializes the actual work of [op]/[queuedOp]. [busy] alone can only drop a racing operation;
+     * the gate is what lets a queued one wait for the in-flight listing to finish.
+     */
+    private val gate = Mutex()
+
     /** Loads the source's starting directory. Call once when the pane opens. */
     fun start() = op {
         path = browser.realpath(".")
@@ -126,6 +136,44 @@ class FilePaneController(
             is FilePaneState.Loaded -> commit(resolved, next)
             else -> state = next
         }
+    }
+
+    /**
+     * Reveals [target] — a path that came from outside the pane (a file path clicked in terminal
+     * output). A directory is opened; anything else is shown *inside its parent* with the cursor on
+     * it, which is what "show me this file" means in a two-pane file manager. `~`/`~/…` is expanded
+     * against the source's start directory (the shell would have done it, the SFTP server won't).
+     *
+     * When neither the path nor its parent can be listed, the pane stays where it is and shows the
+     * original failure — same contract as [goToPath], so a stale path from old output doesn't throw
+     * away the listing being browsed. An entry hidden by [showHidden] gets no cursor: the pane will
+     * not flip a persistent setting on its own.
+     */
+    fun revealPath(target: String) = queuedOp {
+        val trimmed = target.trim()
+        if (trimmed.isEmpty()) return@queuedOp
+        val expanded = when {
+            trimmed == "~" -> browser.realpath(".")
+            trimmed.startsWith("~/") -> childPath(browser.realpath("."), trimmed.removePrefix("~/"))
+            else -> trimmed
+        }
+        val request = if (isAbsolutePathInput(expanded)) expanded else childPath(path, expanded)
+        val resolved = browser.realpath(collapseDotSegments(request))
+        val asDirectory = loadState(resolved)
+        if (asDirectory is FilePaneState.Loaded) {
+            commit(resolved, asDirectory)
+            return@queuedOp
+        }
+        val parent = parentPath(resolved)
+        val inParent = loadState(parent)
+        if (inParent !is FilePaneState.Loaded) {
+            // Report why the target itself failed, not why its parent did — the target is what the
+            // user asked for.
+            state = asDirectory
+            return@queuedOp
+        }
+        commit(parent, inParent)
+        loadedEntries().firstOrNull { it.path == resolved }?.let { setCursor(it) }
     }
 
     /** Reloads the current directory. */
@@ -468,14 +516,40 @@ class FilePaneController(
         busy = true
         scope.launch {
             try {
-                block()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: FileBrowserException) {
-                state = FilePaneState.Error(e.failure)
+                gate.withLock { runOp(block) }
             } finally {
                 busy = false
             }
+        }
+    }
+
+    /**
+     * Like [op], but waits its turn instead of being dropped while another operation runs. For
+     * requests arriving from outside the pane ([revealPath]): they race the pane's own first
+     * listing ([start]) and there is nothing on screen to retry from, whereas dropping a keypress
+     * the user can simply press again is exactly what [op] is for.
+     */
+    private fun queuedOp(block: suspend () -> Unit) {
+        scope.launch {
+            gate.withLock {
+                busy = true
+                try {
+                    runOp(block)
+                } finally {
+                    busy = false
+                }
+            }
+        }
+    }
+
+    /** Body shared by [op]/[queuedOp]: runs the operation, mapping a failure into [FilePaneState.Error]. */
+    private suspend fun runOp(block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: FileBrowserException) {
+            state = FilePaneState.Error(e.failure)
         }
     }
 

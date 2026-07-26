@@ -117,4 +117,5 @@
     <string name="term_broadcast_sent">已发送到 %1$s</string>
     <string name="local_shell_name">本地 Shell</string>
     <string name="term_launch_local_shell">启动本地 Shell</string>
+    <string name="term_open_path_in_files">在文件中打开</string>
 </resources>

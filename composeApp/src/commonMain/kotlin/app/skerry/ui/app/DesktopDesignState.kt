@@ -169,6 +169,10 @@ class DesktopDesignState(
     // [app.skerry.ui.terminal.TerminalSessionPrefs] and pushed live into open ones.
     initialAllowServerClipboardWrite: Boolean = false,
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    // Whether a file path in terminal output is clickable (Ctrl+click) and opens in the SFTP panel
+    // (Settings → Terminal). On by default; off also removes the hover highlight.
+    initialOpenFilePathsInSftp: Boolean = true,
+    private val onOpenFilePathsInSftpChange: (Boolean) -> Unit = {},
     // Production guard: also confirm Warn-level commands (Settings → Terminal). Off by default.
     initialConfirmProductionWarnings: Boolean = false,
     private val onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
@@ -334,6 +338,13 @@ class DesktopDesignState(
      * write). Off by default; snapshotted into new sessions and pushed live into open ones.
      */
     var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
+
+    /**
+     * Whether file paths printed in terminal output are clickable and open in the SFTP panel
+     * (Terminal → Open file paths in SFTP). On by default; off is the way out for anyone whose
+     * output makes the Ctrl+hover highlight a distraction.
+     */
+    var openFilePathsInSftp: Boolean by mutableStateOf(initialOpenFilePathsInSftp); private set
 
     /**
      * Whether the production guard also confirms [app.skerry.shared.ai.CommandRisk.Warn] commands
@@ -702,6 +713,12 @@ class DesktopDesignState(
     fun toggleConfirmProductionWarnings() {
         confirmProductionWarnings = !confirmProductionWarnings
         onConfirmProductionWarningsChange(confirmProductionWarnings)
+    }
+
+    /** Toggle opening clicked file paths in the SFTP panel and report outward (for persistence). */
+    fun toggleOpenFilePathsInSftp() {
+        openFilePathsInSftp = !openFilePathsInSftp
+        onOpenFilePathsInSftpChange(openFilePathsInSftp)
     }
 
     /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */

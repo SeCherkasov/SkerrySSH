@@ -290,6 +290,11 @@ private fun LiveSftpView(
     val c = coord
     // Once the coordinator is open — give the panes focus so arrows/Tab work without a click.
     LaunchedEffect(c) { if (c != null) focus.requestFocus() }
+    // A path clicked in terminal output: reveal it in the remote pane once the coordinator is open.
+    // Keyed on the request itself, so a second click while this view is already up is honoured too.
+    LaunchedEffect(c, controller.pendingRevealPath) {
+        if (c != null) controller.takeRevealRequest()?.let { c.remote.revealPath(it) }
+    }
     // Apply the saved show-hidden setting to both panes: on coordinator open and on every Ctrl+H toggle
     // (sftpPrefs.showHidden is the effect key).
     LaunchedEffect(c, sftpPrefs.showHidden) {

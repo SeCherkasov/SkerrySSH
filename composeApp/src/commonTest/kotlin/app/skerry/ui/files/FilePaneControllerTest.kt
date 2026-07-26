@@ -847,4 +847,99 @@ class FilePaneControllerTest {
         advanceUntilIdle()
         assertTrue(c.selection.isEmpty())
     }
+
+    // --- revealPath: a path clicked in terminal output ---
+
+    @Test
+    fun `revealPath opens a directory`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.revealPath("$HOME/alpha")
+        advanceUntilIdle()
+        assertEquals("$HOME/alpha", c.path)
+        assertEquals(listOf("inside.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `revealPath on a file opens its directory and puts the cursor on it`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.revealPath("$HOME/alpha/inside.txt")
+        advanceUntilIdle()
+        assertEquals("$HOME/alpha", c.path)
+        assertEquals("$HOME/alpha/inside.txt", c.cursoredItem()?.path)
+    }
+
+    @Test
+    fun `revealPath on a file in the current directory only moves the cursor`() = runTest {
+        val c = started()
+        c.revealPath("$HOME/readme.txt")
+        advanceUntilIdle()
+        assertEquals(HOME, c.path)
+        assertEquals("readme.txt", c.cursoredItem()?.name)
+    }
+
+    @Test
+    fun `revealPath expands a home-relative path`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.revealPath("~/alpha/inside.txt")
+        advanceUntilIdle()
+        assertEquals("$HOME/alpha", c.path)
+        assertEquals("inside.txt", c.cursoredItem()?.name)
+
+        c.revealPath("~")
+        advanceUntilIdle()
+        assertEquals(HOME, c.path)
+    }
+
+    @Test
+    fun `revealPath to a missing path surfaces Error and keeps the current directory`() = runTest {
+        val c = started()
+        c.revealPath("$HOME/nope/deeper")
+        advanceUntilIdle()
+        assertIs<FilePaneState.Error>(c.state)
+        assertEquals(HOME, c.path)
+    }
+
+    @Test
+    fun `revealPath ignores blank input`() = runTest {
+        val c = started()
+        c.revealPath("  ")
+        advanceUntilIdle()
+        assertEquals(HOME, c.path)
+        assertIs<FilePaneState.Loaded>(c.state)
+    }
+
+    @Test
+    fun `revealPath waits for the pane's first listing instead of being dropped`() = runTest {
+        // The click that produces a reveal is what opens the pane, so its start() listing is still
+        // in flight when the request lands. A dropped reveal is lost for good (the caller already
+        // handed the path over), which is why revealPath queues where other operations drop.
+        val fake = FakeSftpClient(startDir = HOME).apply {
+            seedDir("$HOME/alpha")
+            seedFile("$HOME/alpha/inside.txt")
+        }
+        val gate = CompletableDeferred<Unit>()
+        fake.listGate = gate
+        val c = controllerOn(SftpFileBrowser(fake, label = "prod-web-01"))
+        c.start()
+        advanceUntilIdle()
+
+        c.revealPath("$HOME/alpha")
+        advanceUntilIdle()
+        assertIs<FilePaneState.Loading>(c.state) // start() still hanging on its listing
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("$HOME/alpha", c.path)
+        assertEquals(listOf("inside.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `revealPath clears a name filter hiding the target`() = runTest {
+        val c = started(seededBrowserWithNested())
+        c.setNameFilter("zeta")
+        c.revealPath("$HOME/readme.txt")
+        advanceUntilIdle()
+        assertEquals("", c.nameFilter)
+        assertEquals("readme.txt", c.cursoredItem()?.name)
+    }
 }

@@ -85,6 +85,9 @@
     <string name="settings_terminal_show_title">在标签页上显示终端标题</string>
     <string name="settings_terminal_show_title_desc">允许 shell 重命名标签页（OSC 标题）。关闭时显示主机名。</string>
     <string name="settings_terminal_clipboard_write">允许服务器写入剪贴板 (OSC 52)</string>
+    <string name="settings_terminal_open_paths">在 SFTP 中打开文件路径</string>
+    <string name="settings_terminal_open_paths_desc">按住 Ctrl 点击输出中的路径，即可在文件面板中定位。</string>
+    <string name="settings_terminal_open_paths_desc_mobile">长按输出中的路径，然后点按“在文件中打开”。</string>
     <string name="settings_terminal_host_connect">连接主机方式</string>
     <string name="settings_terminal_host_connect_single">单击</string>
     <string name="settings_terminal_host_connect_double">双击（单击选中）</string>
@@ -182,6 +185,8 @@
     <string name="settings_kb_accept_autocomplete">接受自动补全建议</string>
     <string name="settings_kb_cycle_suggestions">循环切换建议</string>
     <string name="settings_kb_search_history">搜索命令历史</string>
+    <string name="settings_kb_open_link_or_path">打开链接或文件路径</string>
+    <string name="settings_kb_mouse_click">Ctrl+点击</string>
     <string name="settings_kb_search_output">在输出中查找</string>
     <string name="settings_kb_copy_selection">复制选中内容</string>
     <string name="settings_kb_paste">粘贴</string>

@@ -117,4 +117,5 @@
     <string name="term_broadcast_sent">Отправлено: %1$s</string>
     <string name="local_shell_name">Локальная оболочка</string>
     <string name="term_launch_local_shell">Запустить локальную оболочку</string>
+    <string name="term_open_path_in_files">Открыть в Файлах</string>
 </resources>

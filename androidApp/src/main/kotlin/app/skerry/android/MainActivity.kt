@@ -163,6 +163,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
                     initialAllowServerClipboardWrite = readClipboardWrite(dir),
                     onAllowServerClipboardWriteChange = { writeClipboardWrite(dir, it) },
+                    initialOpenFilePathsInSftp = readOpenFilePaths(dir),
+                    onOpenFilePathsInSftpChange = { writeOpenFilePaths(dir, it) },
                     initialConfirmProductionWarnings = readProdWarnings(dir),
                     onConfirmProductionWarningsChange = { writeProdWarnings(dir, it) },
                     initialUiLanguage = currentUiLanguage.value,
@@ -266,6 +268,17 @@ class MainActivity : FragmentActivity() {
     private fun writeClipboardWrite(dir: File, enabled: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_clipboard_write").writeText(enabled.toString()) }
+        }
+    }
+
+    /** Clickable file paths in terminal output: `terminal_open_paths`, default on. */
+    private fun readOpenFilePaths(dir: File): Boolean = runCatching {
+        File(dir, "terminal_open_paths").readText().trim().toBoolean()
+    }.getOrDefault(true)
+
+    private fun writeOpenFilePaths(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_open_paths").writeText(enabled.toString()) }
         }
     }
 
