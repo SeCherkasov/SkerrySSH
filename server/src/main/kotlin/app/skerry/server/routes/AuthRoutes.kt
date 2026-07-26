@@ -2,6 +2,10 @@ package app.skerry.server.routes
 
 import app.skerry.server.RateLimits
 import app.skerry.server.Services
+import app.skerry.server.metrics.AuthKind
+import app.skerry.server.metrics.AuthOutcome
+import app.skerry.server.metrics.RegistrationRejection
+import app.skerry.server.metrics.TokenType
 import app.skerry.sync.wire.ChallengeRequest
 import app.skerry.sync.wire.ChallengeResponse
 import app.skerry.sync.wire.ChangePasswordRequest
@@ -33,6 +37,8 @@ fun Route.authRoutes(services: Services) {
             // SIGNUPS_ALLOWED=false) rejects new accounts outright; existing accounts still log in
             // and pair new devices (those paths don't hit /auth/register).
             if (!services.config.registrationOpen) {
+                services.metrics.registrationRejected(RegistrationRejection.CLOSED)
+                services.metrics.authAttempt(AuthKind.REGISTER, AuthOutcome.DENIED)
                 call.respond(HttpStatusCode.Forbidden, ErrorResponse("registration is closed"))
                 return@post
             }
@@ -46,6 +52,8 @@ fun Route.authRoutes(services: Services) {
             // never a security boundary. create() still enforces uniqueness.
             val cap = services.config.maxAccounts
             if (cap > 0 && services.accounts.count() >= cap) {
+                services.metrics.registrationRejected(RegistrationRejection.CAP_REACHED)
+                services.metrics.authAttempt(AuthKind.REGISTER, AuthOutcome.DENIED)
                 call.respond(HttpStatusCode.Forbidden, ErrorResponse("registration limit reached"))
                 return@post
             }
@@ -60,11 +68,15 @@ fun Route.authRoutes(services: Services) {
                 )
             } catch (_: IllegalStateException) {
                 // Existence check inside create() plus catching the PK race (PostgreSQL) -> a single 409.
+                services.metrics.authAttempt(AuthKind.REGISTER, AuthOutcome.ERROR)
                 call.respond(HttpStatusCode.Conflict, ErrorResponse("account already exists"))
                 return@post
             }
             services.devices.register(req.accountId, req.deviceId, req.deviceName, req.platform)
             services.activity.record(req.accountId, "auth.register", "new account + device", deviceId = req.deviceId)
+            services.metrics.authAttempt(AuthKind.REGISTER, AuthOutcome.OK)
+            services.metrics.tokensIssued(TokenType.ACCESS)
+            services.metrics.tokensIssued(TokenType.REFRESH)
             call.respond(
                 TokenResponse(
                     accessToken = services.tokens.issueAccess(req.accountId, req.deviceId),
@@ -95,6 +107,9 @@ fun Route.authRoutes(services: Services) {
             Triple(req.accountId, fakeSalt, fakeVerifier)
         }
         val challenge = services.srp.startChallenge(id, salt, verifier)
+        // Deliberately no "account exists" dimension: it would hand an enumerator exactly the
+        // signal the synthesized challenge above is built to withhold.
+        services.metrics.authAttempt(AuthKind.SRP_CHALLENGE, AuthOutcome.OK)
         call.respond(ChallengeResponse(challenge.challengeId, challenge.salt, challenge.b))
         }
     }
@@ -108,9 +123,13 @@ fun Route.authRoutes(services: Services) {
         }
         val verified = services.srp.verify(req.challengeId, req.a, req.m1)
         if (verified == null) {
+            services.metrics.authAttempt(AuthKind.SRP_VERIFY, AuthOutcome.DENIED)
             call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
             return@post
         }
+        services.metrics.authAttempt(AuthKind.SRP_VERIFY, AuthOutcome.OK)
+        services.metrics.tokensIssued(TokenType.ACCESS)
+        services.metrics.tokensIssued(TokenType.REFRESH)
         val reactivated = services.devices.register(verified.accountId, req.deviceId, req.deviceName, req.platform)
         services.activity.record(verified.accountId, "auth.login", "srp login", deviceId = req.deviceId)
         // A revoked device returning with the correct password is a separate admin-console event:
@@ -148,6 +167,7 @@ fun Route.authRoutes(services: Services) {
             // The proof also establishes the accountId (from the one-shot challenge).
             val verified = services.srp.verify(req.challengeId, req.a, req.m1)
             if (verified == null) {
+                services.metrics.authAttempt(AuthKind.CHANGE_PASSWORD, AuthOutcome.DENIED)
                 call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
                 return@post
             }
@@ -165,9 +185,11 @@ fun Route.authRoutes(services: Services) {
             )
             if (syncSeq == null) {
                 // Should not happen (the SRP proof implies the account exists), but stay defensive.
+                services.metrics.authAttempt(AuthKind.CHANGE_PASSWORD, AuthOutcome.ERROR)
                 call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
                 return@post
             }
+            services.metrics.authAttempt(AuthKind.CHANGE_PASSWORD, AuthOutcome.OK)
             services.activity.record(verified.accountId, "auth.password_changed", "account password rotated", deviceId = req.deviceId)
             // Nudge currently-connected devices: the revoked ones' sockets close on the next
             // emission (per-signal isRevoked check), dropping them to "reconnect" promptly instead
@@ -193,9 +215,13 @@ fun Route.authRoutes(services: Services) {
         if (decoded == null || deviceId == null || accountId == null ||
             services.devices.isRevoked(accountId, deviceId)
         ) {
+            services.metrics.authAttempt(AuthKind.REFRESH, AuthOutcome.DENIED)
             call.respond(HttpStatusCode.Unauthorized, ErrorResponse("invalid refresh token"))
             return@post
         }
+        services.metrics.authAttempt(AuthKind.REFRESH, AuthOutcome.OK)
+        services.metrics.tokensIssued(TokenType.ACCESS)
+        services.metrics.tokensIssued(TokenType.REFRESH)
         call.respond(
             TokenResponse(
                 accessToken = services.tokens.issueAccess(accountId, deviceId),

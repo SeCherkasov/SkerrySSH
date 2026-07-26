@@ -53,7 +53,8 @@ volume (SQLite). To switch to PostgreSQL, uncomment the `db` service and the pos
 variables in `docker-compose.yml`.
 
 The container runs as an unprivileged user, exposes a `/healthz` healthcheck, and the image
-builds with `-PserverOnly` — no Android SDK required.
+builds with `-PserverOnly` — no Android SDK required. The administration CLI ships alongside it:
+`docker exec skerry-sync skerry-admin --help`.
 
 ### Local (Gradle)
 
@@ -83,6 +84,9 @@ runs — production only *requires* a stable `SKERRY_JWT_SECRET`.
 | `SKERRY_CORS_HOSTS` | *(empty)* | Comma-separated allowed CORS origins. Empty disables CORS (native clients aren't subject to it). |
 | `SKERRY_MAX_BODY_BYTES` | `4194304` (4 MiB) | Request-body cap (OOM/abuse guard); larger requests get `413`. |
 | `SKERRY_DEV` | *(unset)* | `1` unlocks the default JWT secret for local development only. |
+| `SKERRY_METRICS` | `off` | Prometheus `/metrics`: `off` (404), `token` (bearer), `open` (no credential). |
+| `SKERRY_METRICS_TOKEN` | *(empty)* | Bearer token for `SKERRY_METRICS=token`. Startup fails if the mode is `token` and this is empty. |
+| `SKERRY_METRICS_INVENTORY_SECONDS` | `60` | Refresh interval of the inventory gauges (min 15, `0` disables them). |
 
 ## How sync works
 
@@ -110,7 +114,9 @@ All cipher blobs (`blob`, `wrappedDataKey`, `encryptedDataKey`) travel as base64
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/healthz` | Liveness (open; used by the container healthcheck). |
+| `GET` | `/healthz` | Liveness (open; used by the container healthcheck). Never touches the database. |
+| `GET` | `/readyz` | Readiness: `200` + `{"status":"ready","db":"up"}`, or `503` when the database probe has failed three times in a row. |
+| `GET` | `/metrics` | Prometheus exposition. Disabled by default — see `SKERRY_METRICS`. |
 | `POST` | `/auth/register` | Registration: SRP salt/verifier + wrapped dataKey → tokens. |
 | `POST` | `/auth/srp/challenge` → `/auth/srp/verify` | SRP-6a login without transmitting the password. |
 | `POST` | `/auth/refresh` | Access/refresh token rotation. |
@@ -173,6 +179,92 @@ never record contents, the master password, or the `dataKey`.
 > events). For a single-user self-host the operator *is* the data subject — acceptable. The
 > admin token travels in the `X-Admin-Token` header in cleartext: put a TLS terminator in
 > front (below), otherwise the token is visible on the wire.
+
+## Admin CLI
+
+`skerry-admin` ships in the same image as the server (`/app/bin/skerry-admin`) and drives the same
+`/admin` endpoints as the console — one implementation and one authorization gate per operation.
+It needs `SKERRY_ADMIN_TOKEN` and a reachable server; it never touches the database directly.
+
+```bash
+docker exec -e SKERRY_ADMIN_TOKEN=… skerry-sync skerry-admin stats
+docker exec -e SKERRY_ADMIN_TOKEN=… skerry-sync skerry-admin devices list --account alice@example.com
+docker exec -e SKERRY_ADMIN_TOKEN=… skerry-sync skerry-admin devices revoke devA --account alice@example.com
+docker exec -e SKERRY_ADMIN_TOKEN=… skerry-sync skerry-admin accounts delete alice@example.com --yes
+```
+
+| Command | Purpose |
+|---|---|
+| `health` | Liveness and version (no token required). |
+| `stats` | Instance totals: accounts, active devices, records, storage. |
+| `accounts list` / `accounts records <id>` | Accounts with aggregates; per-account record metadata. |
+| `accounts purge-tombstones <id>` | Drop deletion markers every device has synced past. |
+| `accounts delete <id> --yes` | Delete an account with all of its data (irreversible, hence the flag). |
+| `devices list [--account id]` | Active devices, most recently seen first. |
+| `devices revoke <id> --account <id>` | Revoke a device (it may re-authenticate later). |
+| `activity` | Recent audit-log events. |
+| `metrics` | Raw Prometheus exposition (uses `SKERRY_METRICS_TOKEN`). |
+
+Global options: `--url` (default `SKERRY_ADMIN_URL`, else `http://127.0.0.1:$SKERRY_PORT`), `--token`
+/ `--token-file` (a flag is visible in `ps` — prefer the environment variable or a secret file),
+`--limit`, `--json` (prints the server's JSON verbatim, for `jq`), `--help`.
+
+Exit codes are meant for scripts: `0` ok, `1` error, `2` usage, `3` unauthorized, `4` not found,
+`5` server unreachable. Run it against a remote instance with `--url https://sync.example.com`; the
+URL must point at the server root (a reverse-proxy path prefix is not supported).
+
+## Metrics and monitoring
+
+`/metrics` serves a Prometheus exposition — off by default, because on a zero-knowledge server the
+metadata *is* the attack surface. Enable it with a token:
+
+```bash
+-e SKERRY_METRICS=token -e SKERRY_METRICS_TOKEN="$(openssl rand -hex 24)"
+```
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: skerry-sync
+    static_configs: [{ targets: ["sync.example.com:8080"] }]
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/skerry-metrics-token
+```
+
+What you get, beyond the standard `jvm_*`, `process_*` and `hikaricp_*` families:
+
+| Family | What it answers |
+|---|---|
+| `skerry_http_server_requests_seconds` | Latency and volume by `method`, `route` (**template**, never the id), `status`. |
+| `skerry_http_rejected_requests_total`, `skerry_http_unhandled_exceptions_total` | Requests refused before routing (411/413); server-side faults. |
+| `skerry_auth_attempts_total{kind,outcome}`, `skerry_auth_tokens_issued_total` | Login/registration/refresh outcomes — the brute-force signal. |
+| `skerry_admin_auth_failures_total`, `skerry_metrics_auth_failures_total` | Wrong static tokens, i.e. someone probing the console or the scrape endpoint. |
+| `skerry_auth_jwt_rejected_total{reason}`, `skerry_team_authz_denied_total{reason}` | Rejected device tokens; denied team/scope access. |
+| `skerry_sync_records_received_total` / `_pulled_total` / `skerry_sync_push_bytes_total` | Sync volume by scope (`account`, `team`). |
+| `skerry_sync_ws_sessions`, `…_opened_total`, `…_closed_total{reason}`, `…_session_duration_seconds` | Live-push sockets: how many are open, why they close, how long they last. |
+| `skerry_accounts`, `skerry_devices{state}`, `skerry_records{state}`, `skerry_storage_bytes{scope}`, `skerry_db_file_bytes`, `skerry_teams`, `skerry_pairing_sessions{state}` | Inventory, refreshed in the background (see `SKERRY_METRICS_INVENTORY_SECONDS`). |
+| `skerry_inventory_last_success_time_seconds`, `skerry_inventory_errors_total` | Whether the inventory above is still fresh. |
+| `skerry_db_up`, `skerry_db_probe_duration_seconds` | The readiness probe behind `/readyz`. |
+| `skerry_build_info{version}`, `skerry_server_start_time_seconds` | Running version; restart detection. |
+
+**No label ever carries an accountId, deviceId, recordId, teamId, scopeId or IP address.** Those are
+client-chosen values: as labels they would let a user grow the registry until the process dies, and
+they would publish exactly the metadata the design keeps out of the server's reach. Per-account
+figures live behind the admin token, in `/admin/accounts`.
+
+A starting set of alerts:
+
+```promql
+skerry_db_up == 0                                                    # database unreachable
+time() - skerry_inventory_last_success_time_seconds > 300            # inventory gauges went stale
+changes(skerry_server_start_time_seconds[15m]) > 2                   # restart loop
+rate(skerry_admin_auth_failures_total[10m]) > 0                      # someone guessing the admin token
+sum(rate(skerry_auth_attempts_total{outcome="denied"}[10m])) > 0.2   # login brute force
+hikaricp_connections_pending > 0                                     # contention for the single SQLite connection
+predict_linear(skerry_db_file_bytes[6h], 7*24*3600) > 20e9           # volume will fill up this week
+skerry_records{state="tombstone"} / skerry_records{state="live"} > 0.5  # tombstone cleanup is not running
+```
 
 ## Production security
 

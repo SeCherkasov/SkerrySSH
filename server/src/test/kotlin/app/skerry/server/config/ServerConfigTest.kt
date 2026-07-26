@@ -75,4 +75,41 @@ class ServerConfigTest {
     fun `wildcard passes through`() {
         assertEquals(listOf(CorsHost("*", listOf("http", "https"))), corsHosts("*"))
     }
+
+    // --- metrics exposure ---
+
+    private fun metrics(env: Map<String, String>) = ServerConfig.fromEnv(env).metrics
+
+    @Test
+    fun `metrics are off unless enabled`() {
+        assertEquals(MetricsExposure.OFF, metrics(emptyMap()))
+        assertEquals(MetricsExposure.OFF, metrics(mapOf("SKERRY_METRICS" to "")))
+        // An unrecognized value must not open the endpoint: unknown means off, as with registration.
+        assertEquals(MetricsExposure.OFF, metrics(mapOf("SKERRY_METRICS" to "yes please")))
+    }
+
+    @Test
+    fun `metrics modes are case-insensitive`() {
+        assertEquals(MetricsExposure.TOKEN, metrics(mapOf("SKERRY_METRICS" to "Token")))
+        assertEquals(MetricsExposure.OPEN, metrics(mapOf("SKERRY_METRICS" to "OPEN")))
+        assertEquals(MetricsExposure.OFF, metrics(mapOf("SKERRY_METRICS" to "off")))
+    }
+
+    @Test
+    fun `metrics token is read separately from the admin token`() {
+        val config = ServerConfig.fromEnv(
+            mapOf("SKERRY_METRICS" to "token", "SKERRY_METRICS_TOKEN" to "scrape-me", "SKERRY_ADMIN_TOKEN" to "admin"),
+        )
+        assertEquals("scrape-me", config.metricsToken)
+        assertEquals("admin", config.adminToken)
+    }
+
+    @Test
+    fun `inventory interval has a floor and can be disabled`() {
+        assertEquals(60L, ServerConfig.fromEnv(emptyMap()).metricsInventoryIntervalSeconds)
+        assertEquals(0L, ServerConfig.fromEnv(mapOf("SKERRY_METRICS_INVENTORY_SECONDS" to "0")).metricsInventoryIntervalSeconds)
+        // Below the floor the collector would scan `records` more often than it is worth on SQLite.
+        assertEquals(15L, ServerConfig.fromEnv(mapOf("SKERRY_METRICS_INVENTORY_SECONDS" to "3")).metricsInventoryIntervalSeconds)
+        assertEquals(300L, ServerConfig.fromEnv(mapOf("SKERRY_METRICS_INVENTORY_SECONDS" to "300")).metricsInventoryIntervalSeconds)
+    }
 }

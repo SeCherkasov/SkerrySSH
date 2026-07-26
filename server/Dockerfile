@@ -20,9 +20,11 @@ RUN groupadd --system --gid 999 skerry && useradd --system --uid 999 --gid skerr
 USER skerry
 
 # SQLite file lives in the /data volume by default; mount a volume for persistence.
+# /app/bin on PATH so the admin CLI is callable by name: `docker exec <c> skerry-admin stats`.
 ENV SKERRY_HOST=0.0.0.0 \
     SKERRY_PORT=8080 \
-    SKERRY_DB_URL=jdbc:sqlite:/data/skerry-sync.db
+    SKERRY_DB_URL=jdbc:sqlite:/data/skerry-sync.db \
+    PATH="/app/bin:${PATH}"
 VOLUME ["/data"]
 EXPOSE 8080
 

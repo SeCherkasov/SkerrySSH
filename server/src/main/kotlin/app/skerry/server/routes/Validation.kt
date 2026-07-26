@@ -4,6 +4,7 @@ import app.skerry.server.model.ErrorResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respond
+import java.security.MessageDigest
 
 // Upper bounds on client identifier length: keeps bloated strings out of the SRP/DB pending maps
 // and out of memory before the overall body limit kicks in. Mirrors the schema (accountId varchar(320)).
@@ -30,3 +31,15 @@ internal suspend fun ApplicationCall.requiredPathId(name: String): String? {
 /** `?limit=` query parameter with a default and hard bounds 1..[max], so lists can't grow unbounded. */
 internal fun ApplicationCall.limitParam(default: Int, max: Int): Int =
     request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, max) ?: default
+
+/**
+ * Constant-time comparison of two long-lived static tokens (admin console, metrics scraper). Both
+ * values are hashed to a fixed 32 bytes with SHA-256 first, then compared — otherwise
+ * [MessageDigest.isEqual] on differing lengths returns early and leaks the token length via timing.
+ */
+internal fun constantTimeEquals(a: String, b: String): Boolean {
+    val md = MessageDigest.getInstance("SHA-256")
+    val ha = md.digest(a.toByteArray(Charsets.UTF_8))
+    val hb = md.digest(b.toByteArray(Charsets.UTF_8)) // digest() resets md's state
+    return MessageDigest.isEqual(ha, hb)
+}

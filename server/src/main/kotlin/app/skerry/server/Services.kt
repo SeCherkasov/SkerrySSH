@@ -13,11 +13,28 @@ import app.skerry.server.db.StatsRepository
 import app.skerry.server.db.TeamRecordRepository
 import app.skerry.server.db.TeamRepository
 import app.skerry.server.db.TeamScopeRepository
+import app.skerry.server.metrics.DbProbe
+import app.skerry.server.metrics.InventoryCollector
+import app.skerry.server.metrics.ServerMetrics
 import app.skerry.server.sync.ChangeNotifier
 import org.jetbrains.exposed.v1.jdbc.Database
 
-/** Wired dependencies for one server instance. Created once in [module]. */
-class Services(val config: ServerConfig, private val database: Database) {
+/**
+ * Wired dependencies for one server instance. Created once in [module].
+ *
+ * [metrics] is per instance on purpose: a global registry would accumulate duplicate meters across
+ * the many servers the test suite starts in one JVM.
+ */
+class Services(
+    val config: ServerConfig,
+    private val database: Database,
+    val metrics: ServerMetrics = ServerMetrics(config, version = SERVER_VERSION),
+    /**
+     * What the readiness probe runs. Overridden only by tests: without a seam here, the 503 path of
+     * `/readyz` cannot be exercised through the real route at all.
+     */
+    dbCheck: (suspend () -> Unit)? = null,
+) {
     val accounts = AccountRepository(database)
     val devices = DeviceRepository(database)
     // On PostgreSQL, serialize upserts with an account-row lock; not needed on SQLite (pool=1).
@@ -31,5 +48,9 @@ class Services(val config: ServerConfig, private val database: Database) {
     val admin = AdminRepository(database)
     val srp = SrpService()
     val tokens = TokenService(config)
-    val notifier = ChangeNotifier()
+    val notifier = ChangeNotifier(metrics)
+
+    /** Feeds `GET /readyz` and `skerry_db_up`; started by [module], never queried per request. */
+    val dbProbe = DbProbe(metrics) { dbCheck?.invoke() ?: stats.ping() }
+    val inventory = InventoryCollector(stats, metrics, config.databaseUrl)
 }

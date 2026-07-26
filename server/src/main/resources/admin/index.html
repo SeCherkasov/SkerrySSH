@@ -153,6 +153,12 @@
     .stat .k { font-size: 12px; color: var(--text-faint); font-weight: 600; }
     .stat .v { font-size: 34px; font-weight: 700; color: var(--text); letter-spacing: -1px; margin-top: 8px; }
     .stat .sub { font-size: 11.5px; color: var(--text-faint); margin-top: 2px; }
+    /* Monitoring tiles hold words, not counts, so three-up with a smaller value. */
+    .stats.mon { grid-template-columns: repeat(3, 1fr); }
+    .stats.mon .v { font-size: 22px; letter-spacing: -0.4px; }
+    .stats.mon .v.off  { color: var(--text-faint); }
+    .stats.mon .v.warn { color: #E8B44A; }
+    .stats.mon .v.bad  { color: #E4685D; }
 
     /* ===== tables ===== */
     .tcard { background: var(--card); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
@@ -401,6 +407,26 @@
         <div class="tfoot" id="dev-foot"></div>
       </div>
 
+      <!-- ===== monitoring ===== -->
+      <div class="label sec">Monitoring</div>
+      <div class="stats mon">
+        <div class="stat">
+          <div class="k">Metrics endpoint</div>
+          <div class="v display" id="s-metrics">—</div>
+          <div class="sub" id="s-metrics-sub">&nbsp;</div>
+        </div>
+        <div class="stat">
+          <div class="k">Readiness</div>
+          <div class="v display" id="s-ready">—</div>
+          <div class="sub">/readyz · database probe</div>
+        </div>
+        <div class="stat">
+          <div class="k">Inventory freshness</div>
+          <div class="v display" id="s-inventory">—</div>
+          <div class="sub" id="s-inventory-sub">&nbsp;</div>
+        </div>
+      </div>
+
       <!-- ===== recent activity ===== -->
       <div class="label-row">
         <span class="label">Recent activity</span>
@@ -535,6 +561,38 @@
     if (j.pairingSessions) $("s-devices-sub").textContent =
       j.pairingSessions + (j.pairingSessions === 1 ? " pairing session open" : " pairing sessions open");
     else $("s-devices-sub").innerHTML = "&nbsp;";
+  }
+
+  async function loadObservability() {
+    const j = await adminGet("/admin/observability");
+    if (!j) return;
+    const metrics = $("s-metrics");
+    metrics.textContent = j.metrics;
+    metrics.className = "v display" + (j.metrics === "off" ? " off" : j.metrics === "open" ? " warn" : "");
+    $("s-metrics-sub").textContent =
+      j.metrics === "token" ? "scrape with Authorization: Bearer"
+      : j.metrics === "open" ? "no credential — keep it off the public interface"
+      : "disabled (SKERRY_METRICS=off)";
+
+    const ready = $("s-ready");
+    ready.textContent = j.ready ? "ready" : "not ready";
+    ready.className = "v display" + (j.ready ? "" : " bad");
+
+    const inv = $("s-inventory");
+    const sub = $("s-inventory-sub");
+    if (!j.inventoryIntervalSeconds) {
+      inv.textContent = "disabled";
+      inv.className = "v display off";
+      sub.textContent = "SKERRY_METRICS_INVENTORY_SECONDS=0";
+      return;
+    }
+    // Nothing collected yet is a different fact from "collected long ago" — say so.
+    const age = j.inventoryAgeSeconds;
+    inv.textContent = age === null || age === undefined ? "never" : age < 60 ? age + "s ago" : Math.floor(age / 60) + "m ago";
+    // Stale past twice the interval: the collector is stuck or the database is failing.
+    const stale = age !== null && age !== undefined && age > j.inventoryIntervalSeconds * 2;
+    inv.className = "v display" + (age === null || age === undefined ? " off" : stale ? " warn" : "");
+    sub.textContent = "refreshed every " + j.inventoryIntervalSeconds + "s";
   }
 
   async function loadAccounts() {
@@ -726,6 +784,7 @@
 
   function refreshData() {
     loadStats();
+    loadObservability();
     loadAccounts();
     loadDevices();
     loadActivity();

@@ -27,6 +27,11 @@ services:
       # REQUIRED: set a stable secret in production (otherwise tokens are invalidated on restart):
       SKERRY_JWT_SECRET: ${SKERRY_JWT_SECRET:-dev-insecure-change-me}
       SKERRY_ADMIN_TOKEN: ${SKERRY_ADMIN_TOKEN:-}
+      # --- Prometheus /metrics (optional) ---
+      # Off by default. `token` requires SKERRY_METRICS_TOKEN and is what a scraper should use;
+      # `open` publishes instance metadata (account/device counts, storage size) to anyone who asks.
+      # SKERRY_METRICS: token
+      # SKERRY_METRICS_TOKEN: ${SKERRY_METRICS_TOKEN:-}
       # --- PostgreSQL (optional) ---
       # SKERRY_DB_URL: jdbc:postgresql://db:5432/skerry
       # SKERRY_DB_USER: skerry

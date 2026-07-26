@@ -3,6 +3,8 @@ package app.skerry.server.db
 import app.skerry.server.config.ServerConfig
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import com.zaxxer.hikari.metrics.micrometer.MicrometerMetricsTrackerFactory
+import io.micrometer.core.instrument.MeterRegistry
 import org.jetbrains.exposed.v1.core.vendors.SQLiteDialect
 import org.jetbrains.exposed.v1.core.vendors.currentDialect
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -12,7 +14,12 @@ import org.jetbrains.exposed.v1.jdbc.vendors.currentDialectMetadata
 
 /** Database connection and schema creation. SQLite by default, PostgreSQL via URL. */
 object Db {
-    fun connect(config: ServerConfig): Database {
+    /**
+     * [meterRegistry] (when given) makes HikariCP publish `hikaricp_connections*` — on the default
+     * SQLite deployment that is the most informative metric there is, since the pool is a single
+     * connection and `hikaricp_connections_pending` is therefore direct evidence of contention.
+     */
+    fun connect(config: ServerConfig, meterRegistry: MeterRegistry? = null): Database {
         val hikari = HikariConfig().apply {
             jdbcUrl = config.databaseUrl
             if (config.databaseUser.isNotEmpty()) username = config.databaseUser
@@ -20,6 +27,7 @@ object Db {
             // SQLite is single-writer: one connection avoids "database is locked".
             // PostgreSQL uses a normal pool.
             maximumPoolSize = if (config.isPostgres) 10 else 1
+            if (meterRegistry != null) metricsTrackerFactory = MicrometerMetricsTrackerFactory(meterRegistry)
         }
         val database = Database.connect(HikariDataSource(hikari))
         createSchema(database)
