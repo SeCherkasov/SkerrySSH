@@ -167,11 +167,33 @@ fun Route.adminRoutes(services: Services) {
 
         delete("/accounts/{id}") {
             val accountId = call.requiredPathId("id") ?: return@delete
-            val deleted = services.admin.deleteAccount(accountId)
-            if (deleted) {
-                services.activity.record(accountId, "account.deleted", "admin-deleted account")
+            val outcome = services.admin.deleteAccount(accountId)
+            if (outcome != null) {
+                // Name the teams, not just how many: once the transaction commits, the owner column
+                // is rewritten and the account row is gone, so the ids survive nowhere else — and
+                // without them nobody can be told their team changed hands or vanished.
+                val teams = listOfNotNull(
+                    outcome.teamsTransferred.takeIf { it.isNotEmpty() }
+                        ?.joinToString { id -> "$id → ${outcome.newOwners[id]}" }
+                        ?.let { "transferred: $it" },
+                    outcome.teamsDeleted.takeIf { it.isNotEmpty() }?.let { "deleted: ${it.joinToString()}" },
+                )
+                val detail = "admin-deleted account" + if (teams.isEmpty()) "" else " (${teams.joinToString("; ")})"
+                services.activity.record(accountId, "account.deleted", detail)
+                // The members of a transferred team read their own feed, not the admin console's.
+                outcome.teamsTransferred.forEach { teamId ->
+                    services.activity.record(
+                        accountId = outcome.newOwners.getValue(teamId),
+                        event = "team.owner_replaced",
+                        detail = "owner account deleted by an administrator",
+                        teamId = teamId,
+                    )
+                }
+                // Same push every other membership change makes: without it the new owner and the
+                // members of a deleted team only find out on their next poll.
+                outcome.notifyAccounts.forEach { services.notifier.publishMembership(it) }
             }
-            call.respond(if (deleted) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
+            call.respond(if (outcome != null) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
         }
     }
 }

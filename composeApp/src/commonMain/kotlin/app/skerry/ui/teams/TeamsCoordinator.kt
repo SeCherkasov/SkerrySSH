@@ -53,7 +53,7 @@ enum class TeamsFailure {
  */
 internal fun SyncException.Kind?.toTeamsFailure(): TeamsFailure = when (this) {
     SyncException.Kind.NETWORK -> TeamsFailure.Network
-    SyncException.Kind.UNAUTHORIZED -> TeamsFailure.Forbidden
+    SyncException.Kind.UNAUTHORIZED, SyncException.Kind.FORBIDDEN -> TeamsFailure.Forbidden
     SyncException.Kind.NOT_FOUND -> TeamsFailure.NoSuchAccount
     SyncException.Kind.CONFLICT -> TeamsFailure.AlreadyInvited
     SyncException.Kind.TOO_MANY_REQUESTS -> TeamsFailure.TooManyRequests
