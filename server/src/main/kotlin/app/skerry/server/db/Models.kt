@@ -110,4 +110,9 @@ data class ActivityRow(
     val event: String,
     val detail: String,
     val createdAt: Long,
+    /** Record subject of a team event (see [ActivityLog.recordId]); null when the event has none. */
+    val recordId: String? = null,
+    val recordType: String? = null,
+    val scopeId: String? = null,
+    val durationSec: Long? = null,
 )

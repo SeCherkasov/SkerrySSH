@@ -58,6 +58,7 @@ object RateLimits {
     val REFRESH = RateLimitName("auth-refresh")
     val CHANGE_PASSWORD = RateLimitName("auth-change-password")
     val ADMIN = RateLimitName("admin")
+    val TEAM_SESSION_EVENTS = RateLimitName("team-session-events")
 }
 
 /**
@@ -139,6 +140,21 @@ fun Application.configureServer(services: Services) {
         // The admin console uses a constant-time static token compare, which doesn't stop brute
         // forcing the token itself, hence a rate limit on /admin/*.
         perIp(RateLimits.ADMIN, limit = 30)
+        // Session reports are a member-driven write into an audit log with a bounded retention
+        // window, so they get a budget of their own — keyed by **account**, not by IP: an attacker
+        // can't buy more of it by changing address, and members behind one NAT don't share one.
+        // Generous for real use (a report per connect, per recording) and low enough that flooding
+        // the feed takes sustained, plainly visible effort.
+        register(RateLimits.TEAM_SESSION_EVENTS) {
+            rateLimiter(limit = 60, refillPeriod = 60.seconds)
+            requestKey { call ->
+                call.principal<JWTPrincipal>()?.accountId ?: rateLimitClientKey(
+                    directPeer = call.request.origin.remoteHost,
+                    forwardedFor = call.request.header(HttpHeaders.XForwardedFor),
+                    trustedProxies = trustedProxies,
+                )
+            }
+        }
     }
     // Hard upper bound on request body size. Content-Length lets us reject oversized bodies with
     // 413 before reading. Content-Length alone isn't enough: a chunked-encoded body has none, so

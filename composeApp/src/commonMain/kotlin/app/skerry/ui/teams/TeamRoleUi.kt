@@ -8,11 +8,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
@@ -22,23 +19,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamRole
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_cancel
-import app.skerry.ui.generated.resources.lib_teams_event_accept
-import app.skerry.ui.generated.resources.lib_teams_event_create
-import app.skerry.ui.generated.resources.lib_teams_event_delete
-import app.skerry.ui.generated.resources.lib_teams_event_invite
-import app.skerry.ui.generated.resources.lib_teams_event_remove
-import app.skerry.ui.generated.resources.lib_teams_event_role_change
-import app.skerry.ui.generated.resources.lib_teams_event_share
-import app.skerry.ui.generated.resources.lib_teams_event_unknown
-import app.skerry.ui.generated.resources.lib_teams_history_empty
-import app.skerry.ui.generated.resources.lib_teams_history_title
 import app.skerry.ui.generated.resources.lib_teams_role_admin
 import app.skerry.ui.generated.resources.lib_teams_role_editor
 import app.skerry.ui.generated.resources.lib_teams_role_owner
@@ -74,19 +60,6 @@ internal fun roleBadgeColors(role: TeamRole): Pair<Color, Color> = when (role) {
     TeamRole.ADMIN -> Skerry.colors.cyanBright to Skerry.colors.cyan.copy(alpha = 0.12f)
     TeamRole.EDITOR -> Skerry.colors.moss to Skerry.colors.moss.copy(alpha = 0.14f)
     TeamRole.VIEWER -> Skerry.colors.dim to Skerry.colors.overlayMed
-}
-
-/** Localized audit event summary; an unknown code goes into a localized fallback as a detail. */
-@Composable
-internal fun teamEventLabel(event: String): String = when (event) {
-    "team.create" -> stringResource(Res.string.lib_teams_event_create)
-    "team.invite" -> stringResource(Res.string.lib_teams_event_invite)
-    "team.remove" -> stringResource(Res.string.lib_teams_event_remove)
-    "team.accept" -> stringResource(Res.string.lib_teams_event_accept)
-    "team.role_change" -> stringResource(Res.string.lib_teams_event_role_change)
-    "team.push" -> stringResource(Res.string.lib_teams_event_share)
-    "team.delete" -> stringResource(Res.string.lib_teams_event_delete)
-    else -> stringResource(Res.string.lib_teams_event_unknown, event)
 }
 
 /** Member role/status badge (shared visual language for desktop and mobile). */
@@ -148,45 +121,6 @@ internal fun RolePickerDialog(
                     if (active) {
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                             Txt("✓", color = Skerry.colors.cyanBright, size = 13.sp)
-                        }
-                    }
-                }
-            }
-        }
-        Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-            CancelButton(stringResource(Res.string.shell_cancel), onDismiss)
-        }
-    }
-}
-
-/** Team audit-log dialog (owner/admin): newest events first, metadata only. */
-@Composable
-internal fun AuditLogDialog(entries: List<TeamActivityEntry>, onDismiss: () -> Unit) {
-    val mono = LocalFonts.current.mono
-    TeamsDialogCard(onDismiss) {
-        Txt(stringResource(Res.string.lib_teams_history_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp, modifier = Modifier.padding(bottom = 14.dp))
-        if (entries.isEmpty()) {
-            Txt(stringResource(Res.string.lib_teams_history_empty), color = Skerry.colors.dim, size = 12.5.sp)
-        } else {
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                entries.forEach { e ->
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 12.dp, vertical = 9.dp),
-                    ) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Txt(teamEventLabel(e.event), color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                            Txt(formatEpochUtc(e.createdAt), color = Skerry.colors.faint, size = 10.5.sp, font = mono)
-                        }
-                        Txt(e.actorAccountId, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
-                        if (e.detail.isNotBlank()) {
-                            Txt(e.detail, color = Skerry.colors.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 2.dp))
                         }
                     }
                 }

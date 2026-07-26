@@ -92,6 +92,13 @@ data class RekeyEnvelopeDto(val accountId: String, val envelope: String)
 /**
  * Team audit entry (`GET /teams/{id}/activity`). Zero-knowledge: metadata only — actor, event,
  * and a human-readable summary ([detail], no record contents).
+ *
+ * [recordId]/[recordType]/[scopeId] name the *subject* of a record event (`team.record_share`,
+ * `team.record_change`, `team.record_remove`) or of a session event. Ids and types are metadata the
+ * server already stores; the record's **name** is not here and never reaches the server — each
+ * client resolves it from its own copy of the share space. Absent for events with no record subject
+ * (membership, keys, and a bulk `team.push` summary). [durationSec] is set only on a reported
+ * session recording. All four default to null so an older client keeps parsing the response.
  */
 @Serializable
 data class TeamActivityDto(
@@ -99,10 +106,31 @@ data class TeamActivityDto(
     val event: String,
     val detail: String,
     val createdAt: Long,
+    val recordId: String? = null,
+    val recordType: String? = null,
+    val scopeId: String? = null,
+    val durationSec: Long? = null,
 )
 
 @Serializable
 data class TeamActivityResponse(val entries: List<TeamActivityDto>)
+
+/**
+ * A client's report that it opened a session on a shared record, or saved a recording of one
+ * (`POST /teams/{id}/session-events`). [kind] is `open` or `record`; [durationSec] belongs to a
+ * recording.
+ *
+ * Unlike everything else in the feed, this is **asserted by the client**, not observed by the
+ * server: the server has no part in an SSH connection and cannot verify (or miss) one. A member who
+ * turns reporting off simply reports nothing, so the session part of the feed is a collaboration
+ * signal, not proof — the UI says so where it shows it.
+ */
+@Serializable
+data class TeamSessionEventRequest(
+    val recordId: String,
+    val kind: String,
+    val durationSec: Long? = null,
+)
 
 // --- scopes (granular sharing inside a team) ---
 

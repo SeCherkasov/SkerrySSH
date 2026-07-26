@@ -103,6 +103,7 @@ import app.skerry.ui.app.LocalAi
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
+import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.MobileDesignState
@@ -147,6 +148,8 @@ private val TOP_EDGE_STRIP = 72.dp
 fun MobileTerminalScreen(state: MobileDesignState) {
     val sessions = LocalSessions.current
     val active = sessions?.active
+    // Teams: a saved recording of a shared host is reported to its team (see the record toggle below).
+    val teams = LocalTeams.current
     // Stable Disconnect lambda (recreated only on session change): drops the connection and returns to
     // the list — the back arrow leaves the session alive, Disconnect closes it.
     val onDisconnect = remember(active?.id, sessions) {
@@ -402,7 +405,11 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                                             recordingNotice = RecordingOutcome.Empty
                                         } else {
                                             val name = castFileName(active?.displayTitle.orEmpty().ifBlank { active?.subtitle.orEmpty() }, recordingStamp())
+                                            val seconds = activeTerminal.recordingSeconds
                                             val saved = exportTextFile(name, cast)
+                                            // Desktop parity: report a saved recording of a shared
+                                            // host to its team. A cancelled Save-As kept nothing.
+                                            if (saved) active.hostId?.let { teams?.reportSessionRecorded(it, seconds) }
                                             recordingNotice = when {
                                                 !saved -> null
                                                 truncated -> RecordingOutcome.SavedTruncated

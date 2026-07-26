@@ -175,12 +175,25 @@ class TerminalScreenState(
      */
     fun startRecording(title: String?) {
         if (recording) return
-        val queued = commands.trySend(TerminalCommand.StartRecording(title, epochMillis(), cols, rows))
+        val startedAt = epochMillis()
+        val queued = commands.trySend(TerminalCommand.StartRecording(title, startedAt, cols, rows))
         // The queue is closed once the session's output ends: there is nothing left to record.
         if (queued.isFailure) return
         recording = true
         recordingTruncated = false
+        recordingStartedAtMillis = startedAt
     }
+
+    private var recordingStartedAtMillis: Long = 0
+
+    /**
+     * Wall-clock length of the running (or last finished) recording in seconds; 0 when this session
+     * was never recorded. Read right after [stopRecording] for the length to report to a team — the
+     * clock keeps running for a recording that hit its size limit, so a truncated take reads as the
+     * window it covered rather than as the bytes it kept.
+     */
+    val recordingSeconds: Long
+        get() = if (recordingStartedAtMillis == 0L) 0 else (epochMillis() - recordingStartedAtMillis) / 1000
 
     /**
      * Stop recording and return the asciicast, or `null` if nothing was being recorded. The caller

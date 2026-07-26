@@ -113,6 +113,47 @@
     <string name="lib_teams_event_role_change">Changed a role</string>
     <string name="lib_teams_event_share">Shared records</string>
     <string name="lib_teams_event_delete">Deleted team</string>
+    <!-- Activity feed: event labels. A record event's subject (host/snippet name) is shown beside the label. -->
+    <string name="lib_teams_event_rekey">Rotated the team key</string>
+    <string name="lib_teams_event_scope_create">Created an area</string>
+    <string name="lib_teams_event_scope_delete">Deleted an area</string>
+    <string name="lib_teams_event_scope_grant">Granted access to an area</string>
+    <string name="lib_teams_event_scope_revoke">Revoked access to an area</string>
+    <string name="lib_teams_event_scope_rekey">Rotated an area key</string>
+    <string name="lib_teams_event_record_share">Shared</string>
+    <string name="lib_teams_event_record_change">Changed</string>
+    <string name="lib_teams_event_record_remove">Removed</string>
+    <string name="lib_teams_event_session_open">Opened a session</string>
+    <string name="lib_teams_event_session_record">Recorded a session</string>
+    <string name="lib_teams_record_host">host</string>
+    <string name="lib_teams_record_snippet">snippet</string>
+    <string name="lib_teams_record_credential">password</string>
+    <string name="lib_teams_record_identity">key</string>
+    <string name="lib_teams_record_tunnel">tunnel</string>
+    <string name="lib_teams_record_group">group</string>
+    <string name="lib_teams_record_other">record</string>
+    <!-- Actor of an event when it was this account -->
+    <string name="lib_teams_actor_you">you</string>
+    <!-- Area (scope) an event happened in; %1$s — its name -->
+    <string name="lib_teams_feed_in_scope">area %1$s</string>
+    <string name="lib_teams_feed_day_today">Today</string>
+    <string name="lib_teams_feed_day_yesterday">Yesterday</string>
+    <string name="lib_teams_filter_all">All</string>
+    <string name="lib_teams_filter_records">Records</string>
+    <string name="lib_teams_filter_members">Members</string>
+    <string name="lib_teams_filter_access">Access</string>
+    <string name="lib_teams_filter_sessions">Sessions</string>
+    <!-- Length of a reported session recording; %1$s — like "12 min" -->
+    <string name="lib_teams_feed_duration">%1$s min</string>
+    <string name="lib_teams_feed_duration_short">under a minute</string>
+    <!-- Honesty note under the feed: sessions are asserted by members' apps, the server cannot verify them -->
+    <string name="lib_teams_feed_reported_note">Sessions are reported by member apps — the server takes no part in a connection and cannot confirm one.</string>
+    <!-- Per-record history; %1$s — the record's name -->
+    <string name="lib_teams_feed_record_title">History · %1$s</string>
+    <string name="lib_teams_feed_record_empty">Nothing has happened to this record yet.</string>
+    <string name="lib_teams_feed_record_history">History of this record</string>
+    <!-- Bulk push summary row; %1$d — how many records changed at once -->
+    <string name="lib_teams_event_records_bulk">Updated %1$d records</string>
     <!-- Fallback for an audit event code this client doesn't know; %1$s — the raw server code -->
     <string name="lib_teams_event_unknown">Other event (%1$s)</string>
     <string name="lib_teams_shared_hosts_count">Shared hosts · %1$d</string>
