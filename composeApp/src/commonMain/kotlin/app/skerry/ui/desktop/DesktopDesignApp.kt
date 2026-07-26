@@ -871,8 +871,6 @@ private fun DesktopChrome(
             jumpProblem?.let { problem ->
                 JumpErrorDialog(problem, onDismiss = { jumpProblem = null })
             }
-            // Confirmation for a snippet with ${{…}} variables — every launch path (palette, hotkey,
-            // "Run on host", library) parks such a run in SnippetManager.pendingRun.
             // Live runbook progress, docked over the work area of the tab the run belongs to. Not
             // modal and placed before the dialogs below, so the terminal underneath stays readable
             // and any modal still covers it.
@@ -884,6 +882,8 @@ private fun DesktopChrome(
                     )
                 }
             }
+            // Confirmation for a snippet with ${{…}} variables — every launch path (palette,
+            // hotkey, "Run on host", library) parks such a run in SnippetManager.pendingRun.
             snippets?.let { SnippetRunDialog(it) }
             // Confirmation before a runbook starts: it previews every step with its variables
             // resolved, so the procedure is agreed to once instead of step by step.

@@ -1,18 +1,19 @@
 <resources>
     <!-- Runbooks (RunbooksView, MobileRunbooksView, RunbookRunPanel) -->
     <string name="runbook_section">Runbooks</string>
-    <string name="runbook_snippets_section">Snippets</string>
     <string name="runbook_library">RUNBOOKS</string>
     <string name="runbook_new">New runbook</string>
     <string name="runbook_untitled">Untitled runbook</string>
     <string name="runbook_search">Search runbooks…</string>
     <string name="runbook_select_or_create">Select a runbook or create a new one.</string>
     <string name="runbook_empty">No runbooks yet</string>
+    <string name="runbook_no_matches">No matches</string>
     <string name="runbook_empty_mobile">No runbooks yet. Tap + to write a procedure.</string>
     <string name="runbook_field_name">Name</string>
     <string name="runbook_field_description">Description</string>
     <string name="runbook_field_tags">Tags</string>
     <string name="runbook_ph_name">Restart the API</string>
+    <string name="runbook_ph_tags">#ops</string>
     <string name="runbook_ph_description">What this procedure does, and when to abort it.</string>
     <string name="runbook_steps">Steps</string>
     <string name="runbook_step_n">Step %1$d</string>
@@ -24,14 +25,13 @@
     <string name="runbook_step_down">Move down</string>
     <string name="runbook_step_confirm">Ask before running</string>
     <string name="runbook_step_continue_on_error">Keep going if it fails</string>
-    <string name="runbook_no_steps">No steps yet. Add the first command of the procedure.</string>
     <string name="runbook_save">Save</string>
     <string name="runbook_delete">Delete</string>
     <string name="runbook_run">Run</string>
     <string name="runbook_run_title">Run runbook</string>
     <string name="runbook_run_needs_session">Connect a session first — a runbook runs in a terminal.</string>
     <string name="runbook_run_busy">Another runbook is already running.</string>
-    <string name="runbook_step_count">%1$d steps</string>
+    <string name="runbook_step_count">Steps: %1$d</string>
 
     <!-- Run panel -->
     <string name="runbook_panel_running">Running</string>
@@ -46,5 +46,5 @@
     <string name="runbook_panel_close">Close</string>
     <string name="runbook_panel_exit_code">exit %1$d</string>
     <string name="runbook_panel_progress">%1$d of %2$d</string>
-    <string name="runbook_panel_shell_note">Steps run in this session\'s shell; the exit code comes back through a marker line.</string>
+    <string name="runbook_panel_shell_note">Steps run in the shell of this session; the exit code comes back through a marker line.</string>
 </resources>

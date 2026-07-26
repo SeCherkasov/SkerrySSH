@@ -136,10 +136,6 @@ class RunbookRunner(
     /** Whether a run is in flight (sending or waiting for a confirmation). */
     val active: Boolean get() = phase == RunbookPhase.RUNNING || phase == RunbookPhase.AWAITING_CONFIRM
 
-    /** The step the user is being asked about, or `null` when the run isn't paused on one. */
-    val awaiting: RunbookStepState?
-        get() = if (phase == RunbookPhase.AWAITING_CONFIRM) steps.getOrNull(currentIndex) else null
-
     private var script: RunbookScript? = null
     private var contextValue: (SnippetSegment.Variable) -> String = { "" }
     private var target: RunbookTarget? = null
@@ -148,7 +144,11 @@ class RunbookRunner(
 
     // Bumped by every start/stop/close. A watcher captures it and drops its result if it no longer
     // matches — otherwise a poll that completed just as the user hit Stop would resurrect the run
-    // (same guard as PingController's post-stop measurement).
+    // and type the NEXT step into a live terminal. The watcher runs on a multi-threaded scope while
+    // Stop comes from the UI thread, so the stamp is read and written under a lock and the whole
+    // check-then-act is inside it (same guard as PingController's post-stop measurement, which is
+    // locked for exactly this reason).
+    private val lock = Any()
     private var generation: Int = 0
 
     /**
@@ -188,9 +188,11 @@ class RunbookRunner(
     /** Starts a prepared [request]. Returns false (changing nothing) if a run is already in flight. */
     fun start(request: RunbookStartRequest, contextValue: (SnippetSegment.Variable) -> String): Boolean {
         if (active) return false
-        generation++
-        watchJob?.cancel()
-        watchJob = null
+        synchronized(lock) {
+            generation++
+            watchJob?.cancel()
+            watchJob = null
+        }
         this.runbook = request.runbook
         this.target = request.target
         this.contextValue = contextValue
@@ -224,9 +226,11 @@ class RunbookRunner(
      */
     fun stop() {
         if (!active) return
-        generation++
-        watchJob?.cancel()
-        watchJob = null
+        synchronized(lock) {
+            generation++
+            watchJob?.cancel()
+            watchJob = null
+        }
         steps.getOrNull(currentIndex)?.let {
             if (it.status == RunbookStepStatus.RUNNING || it.status == RunbookStepStatus.AWAITING_CONFIRM) {
                 it.status = RunbookStepStatus.STOPPED
@@ -238,10 +242,12 @@ class RunbookRunner(
     /** Dismisses the run entirely (stopping it first if needed) and forgets its resolved values. */
     fun close() {
         stop()
-        generation++
+        synchronized(lock) {
+            generation++
+            watchJob?.cancel()
+            watchJob = null
+        }
         pending = null
-        watchJob?.cancel()
-        watchJob = null
         runbook = null
         steps = emptyList()
         phase = null
@@ -296,22 +302,33 @@ class RunbookRunner(
      * with [stop].
      */
     private fun watch(index: Int, token: String, target: RunbookTarget) {
-        val generationAtStart = generation
-        watchJob = scope.launch {
+        val generationAtStart = synchronized(lock) { generation }
+        val job = scope.launch {
             while (true) {
                 delay(pollIntervalMillis)
-                if (generationAtStart != generation) return@launch
+                if (stale(generationAtStart)) return@launch
                 if (!target.isLive()) {
                     stop()
                     return@launch
                 }
                 val code = RunbookMarker.exitCodeIn(target.readOutput(), token) ?: continue
-                if (generationAtStart != generation) return@launch
-                finishStep(index, code)
+                // Check-then-act under the lock: without it a Stop landing between the check and
+                // finishStep would still let the run advance and send the next command.
+                synchronized(lock) {
+                    if (generationAtStart != generation) return@launch
+                    finishStep(index, code)
+                }
                 return@launch
             }
         }
+        synchronized(lock) {
+            // A Stop that ran while this coroutine was being launched already bumped the stamp;
+            // publishing the job then would leave it uncancelled, so cancel it here instead.
+            if (generationAtStart == generation) watchJob = job else job.cancel()
+        }
     }
+
+    private fun stale(generationAtStart: Int): Boolean = synchronized(lock) { generationAtStart != generation }
 
     private fun finishStep(index: Int, exitCode: Int) {
         val state = steps.getOrNull(index) ?: return

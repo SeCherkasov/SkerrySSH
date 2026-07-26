@@ -46,7 +46,7 @@ class RunbookFormState private constructor(private val editingId: String?) {
     var label: String by mutableStateOf("")
     var description: String by mutableStateOf("")
 
-    /** Committed tags (pills); edited via [addTags]/[removeTag]/[pickTag]. */
+    /** Committed tags (pills); edited via [addTags]/[removeTag]. */
     var tags: List<String> by mutableStateOf(emptyList())
         private set
 
@@ -88,11 +88,6 @@ class RunbookFormState private constructor(private val editingId: String?) {
 
     fun removeTag(tag: String) {
         tags = tags - tag
-    }
-
-    fun pickTag(tag: String) {
-        tags = (tags + tag).distinct()
-        tagDraft = ""
     }
 
     /**

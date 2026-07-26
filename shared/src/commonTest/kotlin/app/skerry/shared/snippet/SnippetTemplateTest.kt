@@ -188,6 +188,21 @@ class SnippetTemplateTest {
         assertEquals("echo ab\nwhoami 2026-07-03", SnippetTemplate.resolve(segments, env) { "" })
     }
 
+    @Test
+    fun `a date-time format cannot smuggle a second command into the line`() {
+        // The format part of ${{date:…}} is arbitrary text carried through by formatMoment, and a
+        // template can arrive over sync or Teams sharing. A newline there would end the previewed
+        // command and start one the user never confirmed.
+        val segments = SnippetTemplate.parse("echo ${'$'}{{date:X\nrm -rf ~}} done")
+        assertEquals("echo X rm -rf ~ done", SnippetTemplate.resolve(segments, env) { "" })
+    }
+
+    @Test
+    fun `a date-time format cannot smuggle bidi text into the line`() {
+        val segments = SnippetTemplate.parse("echo ${'$'}{{time:a‮b}}")
+        assertEquals("echo ab", SnippetTemplate.resolve(segments, env) { "" })
+    }
+
     // --- value sanitization ---
 
     @Test

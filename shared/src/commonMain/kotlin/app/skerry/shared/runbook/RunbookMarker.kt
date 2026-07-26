@@ -43,10 +43,42 @@ object RunbookMarker {
         val trimmed = command.trimEnd()
         if (trimmed.isEmpty()) return probe
         if (trimmed.contains('\n')) return "$trimmed\n$probe"
+        // Anything the probe cannot legally follow on the same line goes onto the next one, exactly
+        // as if the step had been pasted as a two-line script. Both cases are silent killers when
+        // got wrong: after a trailing comment the probe is swallowed and never runs, and after a
+        // dangling `&&`/`;;` the appended `;` is a syntax error that makes the shell drop the WHOLE
+        // line — in both cases no marker is ever printed and the run waits forever.
+        if (endsInComment(trimmed) || endsInDanglingOperator(trimmed)) return "$trimmed\n$probe"
         val last = trimmed.last()
-        val doubled = trimmed.length >= 2 && trimmed[trimmed.length - 2] == last
-        return if ((last == ';' || last == '&') && !doubled) "$trimmed $probe" else "$trimmed; $probe"
+        return if (last == ';' || last == '&') "$trimmed $probe" else "$trimmed; $probe"
     }
+
+    /**
+     * Whether [line] ends inside a `#` comment. `#` only opens one at the start of a word and
+     * outside quotes, so `echo a#b` and `grep "#tag"` are ordinary arguments. Backslash escapes and
+     * both quote styles are tracked; `$'…'` and here-documents are not — a step needing those is
+     * multi-line anyway and takes the branch above.
+     */
+    private fun endsInComment(line: String): Boolean {
+        var single = false
+        var double = false
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            when {
+                c == '\\' && !single -> i++ // the next character is literal
+                c == '\'' && !double -> single = !single
+                c == '"' && !single -> double = !double
+                c == '#' && !single && !double && (i == 0 || line[i - 1].isWhitespace()) -> return true
+            }
+            i++
+        }
+        return false
+    }
+
+    /** Whether [line] ends on an operator that still expects a command after it. */
+    private fun endsInDanglingOperator(line: String): Boolean =
+        DANGLING_OPERATORS.any { line.endsWith(it) }
 
     /**
      * Exit code printed by [token]'s probe in [text] (terminal buffer), or `null` if the step hasn't
@@ -67,6 +99,8 @@ object RunbookMarker {
         }
         return found
     }
+
+    private val DANGLING_OPERATORS = listOf("&&", "||", "|", ";;")
 
     private const val PREFIX = "__skerry_rb_"
     // Short on purpose: the printed marker must fit one terminal row, or a wrap would split it in

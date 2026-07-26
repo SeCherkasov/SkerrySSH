@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
@@ -123,13 +124,16 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
     ) {
         Sym(statusIcon(state.status), size = 14.sp, color = color)
         Column(Modifier.weight(1f)) {
-            val title = state.step.title.ifBlank { state.step.command }
+            // Bidi/format characters are stripped: this row is the last thing read before "Run this
+            // step" is clicked, and a runbook can arrive over sync — it must not be able to render
+            // one command and run another (Trojan Source).
+            val title = stripUnsafeFormatChars(state.step.title.ifBlank { state.step.command })
             Txt(title, color = Skerry.colors.text, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             // The command as written, not as resolved: a `${{vault}}` value has no business on screen.
             if (state.step.title.isNotBlank()) {
                 Txt(
-                    state.step.command, color = Skerry.colors.faint, size = 10.5.sp, font = mono,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    stripUnsafeFormatChars(state.step.command), color = Skerry.colors.faint, size = 10.5.sp,
+                    font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
         }

@@ -48,6 +48,39 @@ class RunbookMarkerTest {
     }
 
     @Test
+    fun `a command ending in a comment gets the probe on its own line`() {
+        // `uptime # after deploy` with the probe appended on the same line would swallow the probe
+        // into the comment: the step would run fine and never report, hanging the run forever.
+        val line = RunbookMarker.probeLine("uptime # after deploy", "TOK")
+        assertEquals("uptime # after deploy\n${RunbookMarker.probe("TOK")}", line)
+    }
+
+    @Test
+    fun `a hash inside quotes is not a comment`() {
+        assertEquals("echo '#1'; ${RunbookMarker.probe("TOK")}", RunbookMarker.probeLine("echo '#1'", "TOK"))
+        assertEquals("grep \"#tag\" f; ${RunbookMarker.probe("TOK")}", RunbookMarker.probeLine("grep \"#tag\" f", "TOK"))
+    }
+
+    @Test
+    fun `a hash glued to a word is not a comment`() {
+        assertEquals("echo a#b; ${RunbookMarker.probe("TOK")}", RunbookMarker.probeLine("echo a#b", "TOK"))
+    }
+
+    @Test
+    fun `a command ending in a doubled separator gets the probe on its own line`() {
+        // `a && b &&; probe` is a syntax error, so the shell runs NOTHING on that line — not even
+        // the part that was valid — and the step hangs with no marker.
+        assertEquals("a && b &&\n${RunbookMarker.probe("TOK")}", RunbookMarker.probeLine("a && b &&", "TOK"))
+        assertEquals("a ;;\n${RunbookMarker.probe("TOK")}", RunbookMarker.probeLine("a ;;", "TOK"))
+    }
+
+    @Test
+    fun `a command ending in a pipe or logical operator gets the probe on its own line`() {
+        assertEquals("a &&\n${RunbookMarker.probe("TOK")}", RunbookMarker.probeLine("a &&", "TOK"))
+        assertEquals("a |\n${RunbookMarker.probe("TOK")}", RunbookMarker.probeLine("a |", "TOK"))
+    }
+
+    @Test
     fun `exit code is read back from the printed marker`() {
         val token = RunbookMarker.token("run", 0)
         assertEquals(0, RunbookMarker.exitCodeIn("some output\n$token:0\n$ ", token))

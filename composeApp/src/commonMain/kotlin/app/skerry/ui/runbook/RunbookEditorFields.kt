@@ -37,6 +37,7 @@ import app.skerry.ui.generated.resources.runbook_field_name
 import app.skerry.ui.generated.resources.runbook_field_tags
 import app.skerry.ui.generated.resources.runbook_ph_description
 import app.skerry.ui.generated.resources.runbook_ph_name
+import app.skerry.ui.generated.resources.runbook_ph_tags
 import app.skerry.ui.generated.resources.runbook_step_add
 import app.skerry.ui.generated.resources.runbook_step_command
 import app.skerry.ui.generated.resources.runbook_step_confirm
@@ -80,7 +81,7 @@ fun RunbookEditorFields(form: RunbookFormState, mono: FontFamily) {
                     form.tags.forEach { tag -> key(tag) { Chip("#$tag", onClick = { form.removeTag(tag) }) } }
                 }
             }
-            RunbookLineField(form.tagDraft, form::updateTagDraft, "#ops", mono)
+            RunbookLineField(form.tagDraft, form::updateTagDraft, stringResource(Res.string.runbook_ph_tags), mono)
         }
 
         Column(Modifier.padding(top = 24.dp)) {

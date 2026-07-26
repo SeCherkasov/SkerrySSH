@@ -19,13 +19,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.SnippetSegment
 import app.skerry.shared.snippet.SnippetTemplate
-import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
@@ -75,9 +73,6 @@ private fun SnippetRunDialogContent(
     onDismiss: () -> Unit,
 ) {
     val mono = LocalFonts.current.mono
-    val clipboard = LocalClipboard.current
-    val credentials = LocalCredentials.current
-
     val variables = remember(request) { request.segments.filterIsInstance<SnippetSegment.Variable>() }
     // One draw per placeholder, shared by the preview and the sent line (uuid/random stability).
     val machine = remember(request) { SnippetTemplate.machineValues(request.segments, request.environment) }

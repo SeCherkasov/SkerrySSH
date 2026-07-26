@@ -516,9 +516,10 @@ private fun MobileChrome(
             // Runbooks: the live progress panel (bottom of the terminal screen, non-modal so the
             // output stays readable) and the start confirmation above it. Desktop parity.
             LocalRunbookRunner.current?.let { runner ->
-                if (runner.sessionId != null && runner.sessionId == LocalSessions.current?.activeTerminal?.id &&
-                    state.route == MobileRoute.Terminal
-                ) {
+                // Not gated on the terminal route: a run paused on a confirmation would otherwise
+                // lose its only Run/Skip/Stop buttons the moment the user opened another screen,
+                // and nothing would say a procedure is half-finished.
+                if (runner.sessionId != null && runner.sessionId == LocalSessions.current?.activeTerminal?.id) {
                     RunbookRunPanel(
                         runner,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp),

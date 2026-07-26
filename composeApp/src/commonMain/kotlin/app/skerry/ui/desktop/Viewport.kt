@@ -30,7 +30,7 @@ fun Viewport(state: DesktopDesignState) {
     when (state.appOverlay) {
         DesktopView.Ports -> TunnelsView()
         DesktopView.Snippets -> SnippetsView(state)
-        DesktopView.Runbooks -> RunbooksView()
+        DesktopView.Runbooks -> RunbooksView(state)
         DesktopView.Vault -> VaultView()
         DesktopView.Known -> KnownHostsView()
         DesktopView.Teams -> TeamsView()

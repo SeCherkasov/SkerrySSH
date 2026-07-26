@@ -210,6 +210,36 @@ class RunbookRunnerTest {
     }
 
     @Test
+    fun a_stop_landing_during_the_poll_does_not_send_the_next_step() = runTest {
+        // Single-threaded stand-in for the cross-thread race (same trick as PingControllerTest): the
+        // buffer read is where Stop lands, so the watcher holds a finished step's exit code that is
+        // no longer allowed to advance the run.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val term = FakeTerminal()
+        var runner: RunbookRunner? = null
+        val target = RunbookTarget(
+            sessionId = "tab-1",
+            send = { line -> term.sent += line; term.buffer += line },
+            readOutput = { runner!!.stop(); term.buffer },
+            isLive = { true },
+        )
+        val r = RunbookRunner(scope, newId = { RUN_ID }, environment = ::environment, pollIntervalMillis = poll)
+        runner = r
+        try {
+            r.requestStart(runbook(step("s1", "uptime"), step("s2", "df -h")), target)
+            r.confirmStart { "" }
+            term.complete(0, 0)
+            testScheduler.advanceTimeBy(poll * 5); testScheduler.runCurrent()
+
+            assertEquals(RunbookPhase.STOPPED, r.phase)
+            assertEquals(1, term.sent.size, "the next step must not be typed after Stop")
+        } finally {
+            r.close()
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun losing_the_session_aborts_the_run() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "uptime"), step("s2", "df -h")), term.target()) { "" }
         term.live = false

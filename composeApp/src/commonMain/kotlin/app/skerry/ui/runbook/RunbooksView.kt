@@ -32,8 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
+import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.host.HostSection
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.GhostButton
@@ -51,6 +53,7 @@ import app.skerry.ui.generated.resources.runbook_delete
 import app.skerry.ui.generated.resources.runbook_empty
 import app.skerry.ui.generated.resources.runbook_library
 import app.skerry.ui.generated.resources.runbook_new
+import app.skerry.ui.generated.resources.runbook_no_matches
 import app.skerry.ui.generated.resources.runbook_run
 import app.skerry.ui.generated.resources.runbook_run_busy
 import app.skerry.ui.generated.resources.runbook_run_needs_session
@@ -71,8 +74,13 @@ import org.jetbrains.compose.resources.stringResource
  * per-step flags versus one command line) and reached for at different moments.
  */
 @Composable
-fun RunbooksView() {
-    val manager = LocalRunbooks.current ?: return
+fun RunbooksView(state: DesktopDesignState) {
+    val manager = LocalRunbooks.current
+    if (manager == null) {
+        // Mock/preview path (no vault behind the section): say so instead of a blank pane.
+        EmptyState(icon = "checklist", title = stringResource(Res.string.runbook_empty))
+        return
+    }
     val mono = LocalFonts.current.mono
     var selectedId by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
@@ -102,6 +110,7 @@ fun RunbooksView() {
                     RunbookEditor(
                         entry = selected,
                         manager = manager,
+                        state = state,
                         mono = mono,
                         onSaved = { id -> selectedId = id; adding = false },
                         onDeleted = { selectedId = null; adding = false },
@@ -122,7 +131,10 @@ private fun RunbookSidebar(
     onSelect: (String) -> Unit,
     onNew: () -> Unit,
 ) {
-    val shown = remember(all, query) { all.filter { it.matches(query) } }
+    // Not memoized: RunbookManager.save() updates an entry in place, so neither `all` nor `query`
+    // changes identity on a rename and a cached result would go stale (same reason snippets filter
+    // on every composition).
+    val shown = all.filter { it.matches(query) }
     Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)) {
         Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
             SidebarSearchField(query, onQuery, stringResource(Res.string.runbook_search))
@@ -135,7 +147,9 @@ private fun RunbookSidebar(
             )
             if (shown.isEmpty()) {
                 Txt(
-                    stringResource(Res.string.runbook_empty), color = Skerry.colors.faint, size = 11.5.sp, font = mono,
+                    if (all.isEmpty()) stringResource(Res.string.runbook_empty)
+                    else stringResource(Res.string.runbook_no_matches),
+                    color = Skerry.colors.faint, size = 11.5.sp, font = mono,
                     modifier = Modifier.padding(start = 10.dp, top = 6.dp),
                 )
             }
@@ -200,6 +214,7 @@ internal fun RunbookEntry.matches(query: String): Boolean {
 private fun RunbookEditor(
     entry: RunbookEntry?,
     manager: RunbookManager,
+    state: DesktopDesignState,
     mono: FontFamily,
     onSaved: (String) -> Unit,
     onDeleted: () -> Unit,
@@ -249,8 +264,12 @@ private fun RunbookEditor(
                         stringResource(Res.string.runbook_run),
                         icon = "play_arrow",
                         onClick = {
-                            if (target != null && terminal != null) {
+                            if (target != null && terminal != null &&
                                 runner.requestStart(entry.runbook, target, recording = terminal.recording)
+                            ) {
+                                // Leave the section: the confirmation and the progress panel are
+                                // read against the terminal's own output, which this pane covers.
+                                state.showSection(HostSection.Terminal)
                             }
                         },
                         fg = if (hint == null) Skerry.colors.cyanBright else Skerry.colors.faint,

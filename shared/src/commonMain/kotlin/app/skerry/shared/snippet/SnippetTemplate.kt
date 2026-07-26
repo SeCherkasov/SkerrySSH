@@ -127,8 +127,13 @@ object SnippetTemplate {
         segments.forEachIndexed { i, segment ->
             when (segment) {
                 is SnippetSegment.Literal -> append(stripUnsafeFormatChars(segment.text))
+                // Machine values go through the same sanitizer as context ones. They look
+                // machine-made, but `${{date:…}}`/`${{time:…}}` carry a caller-authored format
+                // string that [formatMoment] copies through verbatim — and the template itself can
+                // arrive over sync or Teams sharing. Without this, `${{date:x<newline>rm -rf ~}}`
+                // would end the previewed line and start a command the user never confirmed.
                 is SnippetSegment.Variable ->
-                    append(machineValues.getOrNull(i) ?: sanitizeSnippetValue(contextValue(segment)))
+                    append(sanitizeSnippetValue(machineValues.getOrNull(i) ?: contextValue(segment)))
             }
         }
     }

@@ -67,7 +67,19 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun MobileRunbooksScreen(state: MobileDesignState) {
-    val manager = LocalRunbooks.current ?: return
+    val manager = LocalRunbooks.current
+    if (manager == null) {
+        // Mock/preview path (no vault behind the library): still a real push screen, so the back
+        // arrow exists and the user isn't trapped on a blank one.
+        Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
+            MobilePushHeader(stringResource(Res.string.runbook_section), onBack = state::pop)
+            Txt(
+                stringResource(Res.string.runbook_empty_mobile), color = Skerry.colors.faint, size = 13.sp,
+                modifier = Modifier.padding(horizontal = 22.dp, vertical = 30.dp),
+            )
+        }
+        return
+    }
     val mono = LocalFonts.current.mono
     val runner = LocalRunbookRunner.current
     val sessions = LocalSessions.current

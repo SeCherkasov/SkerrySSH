@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
@@ -123,7 +124,9 @@ private fun RunbookStartDialogContent(
                                     color = Skerry.colors.faint, size = 10.5.sp,
                                 )
                                 if (step.title.isNotBlank()) {
-                                    Txt(step.title, color = Skerry.colors.text, size = 11.5.sp)
+                                    // Stripped like the panel rows: a synced runbook must not be able
+                                    // to reorder what the user reads before approving the run.
+                                    Txt(stripUnsafeFormatChars(step.title), color = Skerry.colors.text, size = 11.5.sp)
                                 }
                                 if (step.confirm) Sym("pause_circle", size = 13.sp, color = Skerry.colors.cyanBright)
                                 if (step.continueOnError) Sym("skip_next", size = 13.sp, color = Skerry.colors.dim)
