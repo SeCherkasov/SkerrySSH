@@ -1,0 +1,52 @@
+<resources>
+    <!-- Runbooks (RunbooksView, MobileRunbooksView, RunbookRunPanel) -->
+    <string name="runbook_section">Сценарии</string>
+    <string name="runbook_library">СЦЕНАРИИ</string>
+    <string name="runbook_new">Новый сценарий</string>
+    <string name="runbook_untitled">Без названия</string>
+    <string name="runbook_palette_placeholder">Запустить сценарий…</string>
+    <string name="runbook_toolbar_tip">Запустить сценарий</string>
+    <string name="runbook_search">Поиск сценариев…</string>
+    <string name="runbook_select_or_create">Выберите сценарий или создайте новый.</string>
+    <string name="runbook_empty">Сценариев пока нет</string>
+    <string name="runbook_no_matches">Ничего не найдено</string>
+    <string name="runbook_empty_mobile">Сценариев пока нет. Нажмите +, чтобы записать процедуру.</string>
+    <string name="runbook_field_name">Название</string>
+    <string name="runbook_field_description">Описание</string>
+    <string name="runbook_field_tags">Теги</string>
+    <string name="runbook_ph_name">Перезапуск API</string>
+    <string name="runbook_ph_tags">#ops</string>
+    <string name="runbook_ph_description">Что делает процедура и когда её нужно прервать.</string>
+    <string name="runbook_steps">Шаги</string>
+    <string name="runbook_step_n">Шаг %1$d</string>
+    <string name="runbook_step_title">Название шага</string>
+    <string name="runbook_step_command">Команда</string>
+    <string name="runbook_step_add">Добавить шаг</string>
+    <string name="runbook_step_remove">Удалить шаг</string>
+    <string name="runbook_step_up">Выше</string>
+    <string name="runbook_step_down">Ниже</string>
+    <string name="runbook_step_confirm">Спрашивать перед запуском</string>
+    <string name="runbook_step_continue_on_error">Продолжать при ошибке</string>
+    <string name="runbook_save">Сохранить</string>
+    <string name="runbook_delete">Удалить</string>
+    <string name="runbook_run">Запустить</string>
+    <string name="runbook_run_title">Запуск сценария</string>
+    <string name="runbook_run_needs_session">Сначала подключитесь — сценарий выполняется в терминале.</string>
+    <string name="runbook_run_busy">Другой сценарий уже выполняется.</string>
+    <string name="runbook_step_count">Шагов: %1$d</string>
+
+    <!-- Run panel -->
+    <string name="runbook_panel_running">Выполняется</string>
+    <string name="runbook_panel_waiting">Ждёт вас</string>
+    <string name="runbook_panel_done">Завершён</string>
+    <string name="runbook_panel_done_with_failures">Завершён с ошибками</string>
+    <string name="runbook_panel_failed">Остановлен из-за ошибки</string>
+    <string name="runbook_panel_stopped">Остановлен</string>
+    <string name="runbook_panel_run_step">Выполнить шаг</string>
+    <string name="runbook_panel_skip_step">Пропустить</string>
+    <string name="runbook_panel_stop">Остановить</string>
+    <string name="runbook_panel_close">Закрыть</string>
+    <string name="runbook_panel_exit_code">код %1$d</string>
+    <string name="runbook_panel_progress">%1$d из %2$d</string>
+    <string name="runbook_panel_shell_note">Шаги выполняются в шелле этой сессии; код возврата возвращается строкой-маркером.</string>
+</resources>

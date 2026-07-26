@@ -271,6 +271,16 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // Saved snippets: the command library is SNIPPET records in the vault (commands may contain
     // inline credentials, so they share encryption and E2E sync). Run targets the active terminal.
     val snippets = SnippetManager(VaultSnippetStore(vault, trash)) { UUID.randomUUID().toString() }
+    // Runbooks: RUNBOOK records in the same vault (steps carry the same kind of inline secrets as
+    // snippets). The runner is app-scoped so a procedure survives switching tabs; its coroutine
+    // scope is the app's, and the vault gate ends any run on lock (see tearDownForLock).
+    val runbooks = app.skerry.ui.runbook.RunbookManager(
+        app.skerry.shared.runbook.VaultRunbookStore(vault, trash),
+    ) { UUID.randomUUID().toString() }
+    val runbookRunner = app.skerry.ui.runbook.RunbookRunner(
+        scope = tunnelScope,
+        newId = { UUID.randomUUID().toString() },
+    )
     // AI assistant: settings (provider/BYOK/local model) are an encrypted SETTINGS record in the
     // vault; a request routes to the cloud or to the local runtime (Llamatik/llama.cpp). Local AI:
     // GGUF models under ~/.local/share/skerry/models (XDG), downloaded with resume and sha256
@@ -305,6 +315,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     reloadManagers = {
         hosts.reload()
         snippets.reload()
+        runbooks.reload()
         tunnels.reload()
         knownHosts.refresh()
         // Keychain secrets are CREDENTIAL records too: a key/password pulled by live sync must show
@@ -370,12 +381,13 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         }
         hosts.reload()
         snippets.reload()
+        runbooks.reload()
         tunnels.reload()
         // The vault is locked after reset, so this clears the in-memory secret list (all() is empty
         // on a locked vault); the list rereads when a new vault is created and unlocked.
         credentials.reload()
     }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, sync = sync, teams = teams, localAi = localAi)
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, localAi = localAi)
     return DesktopGraph(
         deps = deps,
         securityLog = securityLog,
@@ -509,6 +521,8 @@ fun main(args: Array<String>) {
                     certificateInspector = deps.certificateInspector,
                     tunnels = deps.tunnels,
                     snippets = deps.snippets,
+                    runbooks = deps.runbooks,
+                    runbookRunner = deps.runbookRunner,
                     sync = deps.sync,
                     teams = deps.teams,
                     ai = graph.ai,

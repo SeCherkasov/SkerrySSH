@@ -1,5 +1,6 @@
 package app.skerry.ui.vault
 
+import app.skerry.ui.runbook.RunbookRunner
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
@@ -22,7 +23,10 @@ import app.skerry.ui.tunnel.TunnelManager
  * kept retrying. [SyncCoordinator.resumeAfterUnlock] is the other half, wired to `onVaultUnlocked`.
  *
  * The pending snippet-variable run is dismissed too: its dialog previews vault secrets, and after
- * unlock the run must be re-initiated with a fresh user intent, not resumed.
+ * unlock the run must be re-initiated with a fresh user intent, not resumed. A runbook run is ended
+ * outright for the same reason and one more: it holds the resolved values of every remaining step
+ * (a `${{vault}}` secret among them) and would otherwise keep typing them into a shell while the
+ * vault is locked.
  *
  * Shared by desktop and Android so the two can't drift apart on which of these gets forgotten.
  */
@@ -31,6 +35,7 @@ fun tearDownForLock(
     sessions: SessionsController?,
     sync: SyncCoordinator?,
     snippets: SnippetManager?,
+    runbooks: RunbookRunner? = null,
 ) {
     tunnels?.closeAll()
     sessions?.sessions?.forEach { session ->
@@ -39,4 +44,5 @@ fun tearDownForLock(
     }
     sync?.pauseForLock()
     snippets?.dismissRun()
+    runbooks?.close()
 }

@@ -21,6 +21,7 @@ class SyncSettingsTest {
     fun `snippets toggle gates only snippet type`() {
         val s = SyncSettings(syncSnippets = false)
         assertFalse(s.shouldSync(RecordType.SNIPPET))
+        assertFalse(s.shouldSync(RecordType.RUNBOOK), "runbooks follow the snippets toggle")
         assertTrue(s.shouldSync(RecordType.HOST))
         assertTrue(s.shouldSync(RecordType.SETTINGS), "settings record always syncs")
     }

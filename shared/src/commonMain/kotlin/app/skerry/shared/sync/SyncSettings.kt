@@ -39,7 +39,9 @@ data class SyncSettings(
         // Team keys and the identity pair carry access to Teams: always synced between a user's
         // devices, otherwise a team wouldn't open on a second device.
         RecordType.TEAM, RecordType.TEAM_IDENTITY -> true
-        RecordType.SNIPPET -> syncSnippets
+        // A runbook is a checklist of the same commands, saved and shared for the same reasons, so
+        // it follows the snippets toggle instead of adding a switch nobody would set differently.
+        RecordType.SNIPPET, RecordType.RUNBOOK -> syncSnippets
         RecordType.HOST,
         RecordType.GROUP,
         RecordType.IDENTITY,

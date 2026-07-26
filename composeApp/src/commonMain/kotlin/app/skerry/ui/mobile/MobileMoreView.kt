@@ -70,6 +70,7 @@ import app.skerry.ui.generated.resources.settings_terminal_cursor_style
 import app.skerry.ui.generated.resources.settings_terminal_scrollback
 import app.skerry.ui.generated.resources.appearance_title
 import app.skerry.ui.generated.resources.lib_snippets_screen_title
+import app.skerry.ui.generated.resources.runbook_section
 import app.skerry.ui.generated.resources.more_about
 import app.skerry.ui.generated.resources.more_ai_privacy
 import app.skerry.ui.generated.resources.more_ai_subtitle_byok
@@ -206,6 +207,7 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             // Snippet library: it lost its root tab to the remote-desktops one, so this is its home
             // in the shell (the terminal's snippet palette still reaches it mid-session).
             MoreRow("code_blocks", Skerry.colors.cyanBright, stringResource(Res.string.lib_snippets_screen_title), null, Skerry.colors.dim, onClick = { state.push(MobileRoute.Snippets) })
+            MoreRow("checklist", Skerry.colors.cyanBright, stringResource(Res.string.runbook_section), null, Skerry.colors.dim, onClick = { state.push(MobileRoute.Runbooks) })
             MoreRow("lan", Skerry.colors.cyanBright, stringResource(Res.string.more_port_forwarding), ports, Skerry.colors.moss, onClick = { state.push(MobileRoute.Ports) })
             MoreRow("fingerprint", Skerry.colors.cyanBright, stringResource(Res.string.more_known_hosts), known, if (knownWarn) Skerry.colors.sunset else Skerry.colors.moss, onClick = { state.push(MobileRoute.Known) })
             MoreRow("groups", Skerry.colors.cyanBright, stringResource(Res.string.more_team), if (preview) "Platform crew" else null, Skerry.colors.dim, onClick = { state.push(MobileRoute.Team) })

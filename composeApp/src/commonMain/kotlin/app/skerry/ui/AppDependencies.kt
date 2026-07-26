@@ -48,6 +48,10 @@ data class AppDependencies(
     val tunnels: TunnelManager? = null,
     /** Manager for saved snippets (Snippets section); `null` if not wired up. */
     val snippets: SnippetManager? = null,
+    /** Library of saved runbooks (Runbooks section); `null` if not wired up. */
+    val runbooks: app.skerry.ui.runbook.RunbookManager? = null,
+    /** The one in-flight runbook run, app-wide; `null` if not wired up. */
+    val runbookRunner: app.skerry.ui.runbook.RunbookRunner? = null,
     /** Biometric vault unlock; `null` on a platform without biometrics. */
     val biometrics: VaultBiometrics? = null,
     /** Self-hosted sync coordinator; `null` if sync isn't wired up on this platform. */
