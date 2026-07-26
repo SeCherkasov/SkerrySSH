@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.ui.app.AiPolicy
 import app.skerry.ui.app.DesktopDesignState
@@ -78,6 +81,10 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_tip_disconnect
 import app.skerry.ui.generated.resources.shell_tip_files
 import app.skerry.ui.generated.resources.shell_tip_info
+import app.skerry.ui.generated.resources.shell_tip_more_actions
+import app.skerry.ui.generated.resources.shell_tip_play
+import app.skerry.ui.generated.resources.shell_tip_record
+import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.generated.resources.shell_tip_ports
 import app.skerry.ui.generated.resources.shell_tip_add_pane
 import app.skerry.ui.generated.resources.shell_tip_sync_panes
@@ -114,88 +121,260 @@ import app.skerry.ui.host.inSection
 import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
 import app.skerry.ui.runbook.RunbookPaletteButton
+import app.skerry.ui.generated.resources.runbook_toolbar_tip
+import org.jetbrains.compose.resources.StringResource
 
 /**
- * Session action icons (split / SFTP / tunnels / snippets / runbooks / recording / player / info
- * panel / disconnect). Pinned to the
- * top-right corner of the terminal area rather than living in a pane header: opening the info panel
- * or a split narrows the panes, and icons that shift under the pointer are hard to hit twice.
+ * One entry of the session action row. Panes narrow the row, so when the icons stop fitting the
+ * ones listed here give way in this order — the rarely-reached first, the ones a session is steered
+ * with last. [Sync], [AddPane] and [Disconnect] are not in the list: they never overflow.
+ */
+internal enum class ToolbarAction { Play, Record, Runbook, Snippets, Tunnels, Info, Files }
+
+/** Width one icon claims in the row: the button box plus the spacing in front of it. */
+private val ACTION_SLOT_WIDTH = 30.dp
+
+/** Room the pane under the row keeps for its own header (host label, dot, its controls). */
+private val PANE_HEADER_ROOM = 140.dp
+
+/**
+ * Session action icons (sync / add pane / SFTP / tunnels / snippets / runbooks / recording / player
+ * / info panel / disconnect). Pinned to the top-right corner of the terminal area rather than living
+ * in a pane header: opening the info panel or a pane narrows the panes, and icons that shift under
+ * the pointer are hard to hit twice.
+ *
+ * [available] is the width of the pane the row floats over, or `null` when there is no grid under it
+ * (design preview / empty tab). Once the icons no longer fit beside that pane's own header they
+ * collapse into an overflow menu, in the order of [ToolbarAction] — otherwise the row would draw
+ * over the header of a pane it does not belong to.
  */
 @Composable
-private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modifier) {
+private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: Modifier = Modifier) {
     val sessions = LocalSessions.current
     val tab = sessions?.activeTerminal
     // Session-scoped actions (snippets, runbooks, recording) act on the pane the user is working
     // in, not on the tab's first pane — on a split those are different sessions. Tab-scoped ones
-    // (the split/sync toggles and the power button) keep using the tab itself.
+    // (the sync/add-pane toggles and the power button) keep using the tab itself.
     val active = tab?.focusedPane
-    Row(
-        modifier.height(PANE_HEADER_HEIGHT).padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        // Synchronized input: typing in one pane reaches every connected pane of this tab. Lit while
-        // on, since it changes where every keystroke goes. Shown only once the tab is actually split
-        // — with a single pane there is nothing to synchronize it with.
-        if (tab != null && tab.hasPanes) {
-            IconBtn(
-                "sync_alt",
-                onClick = { sessions?.toggleSyncInput(tab.id) },
-                tint = if (tab.syncInput) Skerry.colors.cyanBright else Skerry.colors.dim,
-                tooltip = stringResource(Res.string.shell_tip_sync_panes),
-            )
+    val teams = LocalTeams.current
+    val syncShown = tab != null && tab.hasPanes
+    val hidden = overflowedActions(available, syncShown)
+
+    // Files / tunnels / info are stateless, so the overflow menu can run them directly. The palettes
+    // and the recorder own their popups and save dialogs, so those are parked below instead and
+    // reached through the request signals they already listen on.
+    val openSftp = {
+        if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp)
+    }
+    val infoAvailable = tab != null || sessions == null
+    val playerTabTitle = stringResource(Res.string.term_player_title)
+    val onCastOpened: (CastOpenResult) -> Unit = { result ->
+        if (result is CastOpenResult.Loaded && sessions != null) {
+            state.clearOverlay()
+            // The file name labels the tab: it says "recording", and two recordings of the same
+            // host stay apart (their in-file titles are both just the host name).
+            sessions.openPlayer(result.fileName.ifBlank { playerTabTitle }, result.cast)
+        } else {
+            state.showCast(result)
         }
-        // Add pane: live mode puts another independent session on the active tab's grid (up to
-        // MAX_PANES); mock/preview toggles the demo split.
-        // Dimmed and inert once the tab is full (MAX_PANES) — the same treatment the info button
-        // gets when there is nothing for it to open.
-        val canAddPane = tab?.paneLayout?.isFull != true && tab?.isPlayer != true
-        IconBtn(
-            "splitscreen_right",
-            onClick = { if (sessions == null) state.toggleSplit() else if (canAddPane) sessions.addPane() },
-            tint = if (canAddPane) Skerry.colors.dim else Skerry.colors.faint,
-            tooltip = stringResource(Res.string.shell_tip_add_pane),
-        )
-        // Switches the active tab's subview (live mode, plus overlay reset) / mock fallback state.view.
-        IconBtn("folder", onClick = { if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp) }, tooltip = stringResource(Res.string.shell_tip_files))
-        // Tunnels is a global section, always opens as an overlay.
-        IconBtn("lan", onClick = { state.showView(DesktopView.Ports) }, tooltip = stringResource(Res.string.shell_tip_ports))
-        // Quick snippet launch into the active session without leaving for the Snippets section.
-        SnippetPaletteButton(active, state.snippetPaletteRequests)
-        // Same idea one size up: start a saved procedure here instead of going to its section.
-        RunbookPaletteButton(active)
-        // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
-        val teams = LocalTeams.current
-        RecordSessionButton(
-            active,
-            state.recordingToggleRequests,
-            onSaved = { hostId, seconds -> teams?.reportSessionRecorded(hostId, seconds) },
-        ) { state.showRecordingNotice(it) }
-        // Plays a .cast back. Not tied to a session (a recording is watched, not run), which is why
-        // it sits here rather than behind a connected-only guard. Live mode opens the recording in
-        // its own tab, so the shells stay reachable while it plays; the mock/preview path (no
-        // session manager) has no tabs and falls back to the overlay.
-        val playerTabTitle = stringResource(Res.string.term_player_title)
-        PlayRecordingButton(state.castOpenRequests) { result ->
-            if (result is CastOpenResult.Loaded && sessions != null) {
-                state.clearOverlay()
-                // The file name labels the tab: it says "recording", and two recordings of the same
-                // host stay apart (their in-file titles are both just the host name).
-                sessions.openPlayer(result.fileName.ifBlank { playerTabTitle }, result.cast)
-            } else {
-                state.showCast(result)
+    }
+
+    Box(modifier) {
+        Row(
+            Modifier.height(PANE_HEADER_HEIGHT).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            // Synchronized input: typing in one pane reaches every connected pane of this tab. Lit
+            // while on, since it changes where every keystroke goes. Shown only once the tab is
+            // actually split — with a single pane there is nothing to synchronize it with.
+            if (syncShown && tab != null) {
+                IconBtn(
+                    "sync_alt",
+                    onClick = { sessions?.toggleSyncInput(tab.id) },
+                    tint = if (tab.syncInput) Skerry.colors.cyanBright else Skerry.colors.dim,
+                    tooltip = stringResource(Res.string.shell_tip_sync_panes),
+                )
             }
+            // Add pane: live mode puts another independent session on the active tab's grid (up to
+            // MAX_PANES); mock/preview toggles the demo split. Dimmed and inert once the tab is
+            // full — the same treatment the info button gets when there is nothing for it to open.
+            val canAddPane = tab?.paneLayout?.isFull != true && tab?.isPlayer != true
+            IconBtn(
+                "splitscreen_right",
+                onClick = { if (sessions == null) state.toggleSplit() else if (canAddPane) sessions.addPane() },
+                tint = if (canAddPane) Skerry.colors.dim else Skerry.colors.faint,
+                tooltip = stringResource(Res.string.shell_tip_add_pane),
+            )
+            // Switches the active tab's subview (live mode, plus overlay reset) / mock fallback.
+            if (ToolbarAction.Files !in hidden) {
+                IconBtn("folder", onClick = openSftp, tooltip = stringResource(Res.string.shell_tip_files))
+            }
+            // Tunnels is a global section, always opens as an overlay.
+            if (ToolbarAction.Tunnels !in hidden) {
+                IconBtn("lan", onClick = { state.showView(DesktopView.Ports) }, tooltip = stringResource(Res.string.shell_tip_ports))
+            }
+            // Quick snippet launch into the active session without leaving for the Snippets section.
+            if (ToolbarAction.Snippets !in hidden) SnippetPaletteButton(active, state.snippetPaletteRequests)
+            // Same idea one size up: start a saved procedure here instead of going to its section.
+            if (ToolbarAction.Runbook !in hidden) RunbookPaletteButton(active, state.runbookPaletteRequests)
+            // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
+            if (ToolbarAction.Record !in hidden) {
+                RecordSessionButton(
+                    active,
+                    state.recordingToggleRequests,
+                    onSaved = { hostId, seconds -> teams?.reportSessionRecorded(hostId, seconds) },
+                ) { state.showRecordingNotice(it) }
+            }
+            // Plays a .cast back. Not tied to a session (a recording is watched, not run), which is
+            // why it sits here rather than behind a connected-only guard. Live mode opens the
+            // recording in its own tab, so the shells stay reachable while it plays; the mock path
+            // (no session manager) has no tabs and falls back to the overlay.
+            if (ToolbarAction.Play !in hidden) PlayRecordingButton(state.castOpenRequests, onCastOpened)
+            // Lit while the info panel is open — the only action here with a visible on/off state.
+            // The panel is session-scoped, so with no active session there is nothing to show: the
+            // button dims and no-ops rather than toggling a panel that can't appear.
+            if (ToolbarAction.Info !in hidden) {
+                IconBtn(
+                    "info",
+                    onClick = { if (infoAvailable) state.toggleInfo() },
+                    tint = if (state.infoPanel && infoAvailable) Skerry.colors.cyanBright else Skerry.colors.dim,
+                    tooltip = stringResource(Res.string.shell_tip_info),
+                )
+            }
+            if (hidden.isNotEmpty()) {
+                OverflowActionsButton(
+                    hidden = hidden,
+                    state = state,
+                    infoAvailable = infoAvailable,
+                    onOpenSftp = openSftp,
+                )
+            }
+            // Power: closes the active session (live path) with a confirmation prompt
+            // (destructive, no auto-reconnect); no-op stub in mock mode.
+            IconBtn("power_settings_new", onClick = { if (tab != null) state.requestCloseSession(tab.id) }, tint = Skerry.colors.sunset, tooltip = stringResource(Res.string.shell_tip_disconnect))
         }
-        // Lit while the info panel is open — the only action here with a visible on/off state. The
-        // panel is session-scoped, so with no active session there is nothing to show: the button
-        // dims and no-ops rather than toggling a panel that can't appear. Mock preview keeps it live.
-        val infoAvailable = tab != null || sessions == null
-        IconBtn("info", onClick = { if (infoAvailable) state.toggleInfo() }, tint = if (state.infoPanel && infoAvailable) Skerry.colors.cyanBright else Skerry.colors.dim, tooltip = stringResource(Res.string.shell_tip_info))
-        // Power: closes the active session (live path) with a confirmation prompt
-        // (destructive, no auto-reconnect); no-op stub in mock mode.
-        IconBtn("power_settings_new", onClick = { if (tab != null) state.requestCloseSession(tab.id) }, tint = Skerry.colors.sunset, tooltip = stringResource(Res.string.shell_tip_disconnect))
+        // Parked out of sight, still in composition: these buttons own the palettes, the recorder
+        // and the file pickers behind them, and dropping them from the tree would take that state
+        // with them — the overflow menu drives them through their request signals instead.
+        Box(Modifier.size(0.dp).clipToBounds()) {
+            if (ToolbarAction.Snippets in hidden) SnippetPaletteButton(active, state.snippetPaletteRequests)
+            if (ToolbarAction.Runbook in hidden) RunbookPaletteButton(active, state.runbookPaletteRequests)
+            if (ToolbarAction.Record in hidden) {
+                RecordSessionButton(
+                    active,
+                    state.recordingToggleRequests,
+                    onSaved = { hostId, seconds -> teams?.reportSessionRecorded(hostId, seconds) },
+                ) { state.showRecordingNotice(it) }
+            }
+            if (ToolbarAction.Play in hidden) PlayRecordingButton(state.castOpenRequests, onCastOpened)
+        }
     }
 }
+
+/**
+ * Which actions have to leave the row for it to fit beside the header of the pane it floats over.
+ * [available] is that pane's width (`null` = no pane under the row, so nothing overflows), and
+ * [syncShown] counts the sync toggle, which is only there on a split tab.
+ *
+ * Pure so the thresholds can be tested without a window: the row must also keep room for the
+ * overflow button itself once anything is hidden.
+ */
+internal fun overflowedActions(available: Dp?, syncShown: Boolean): Set<ToolbarAction> {
+    if (available == null) return emptySet()
+    val total = ToolbarAction.entries.size + 2 + if (syncShown) 1 else 0 // + add-pane and power
+    val room = available - PANE_HEADER_ROOM - 32.dp // the row's own horizontal padding
+    val fits = (room / ACTION_SLOT_WIDTH).toInt()
+    if (fits >= total) return emptySet()
+    // One slot goes to the overflow button; whatever still doesn't fit gives way in enum order.
+    val keep = (fits - 1).coerceAtLeast(0)
+    val drop = (total - keep).coerceIn(0, ToolbarAction.entries.size)
+    return ToolbarAction.entries.take(drop).toSet()
+}
+
+/** The "⋯" menu holding the actions that did not fit the row. */
+@Composable
+private fun OverflowActionsButton(
+    hidden: Set<ToolbarAction>,
+    state: DesktopDesignState,
+    infoAvailable: Boolean,
+    onOpenSftp: () -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconBtn("more_horiz", onClick = { open = !open }, tooltip = stringResource(Res.string.shell_tip_more_actions))
+        if (open) {
+            Popup(alignment = Alignment.TopEnd, onDismissRequest = { open = false }, properties = PopupProperties(focusable = true)) {
+                Column(
+                    Modifier
+                        .padding(top = PANE_HEADER_HEIGHT)
+                        .width(220.dp)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Skerry.colors.surface2)
+                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
+                        .padding(4.dp),
+                ) {
+                    // Listed the way they sit in the row, so the menu reads as its continuation.
+                    hidden.sortedByDescending { it.ordinal }.forEach { action ->
+                        val run: () -> Unit = when (action) {
+                            ToolbarAction.Files -> onOpenSftp
+                            ToolbarAction.Tunnels -> ({ state.showView(DesktopView.Ports) })
+                            ToolbarAction.Info -> ({ if (infoAvailable) state.toggleInfo() })
+                            ToolbarAction.Snippets -> state::requestSnippetPalette
+                            ToolbarAction.Runbook -> state::requestRunbookPalette
+                            ToolbarAction.Record -> state::requestRecordingToggle
+                            ToolbarAction.Play -> state::requestCastOpen
+                        }
+                        OverflowActionRow(icon = action.icon, label = stringResource(action.label)) {
+                            open = false
+                            run()
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverflowActionRow(icon: String, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(5.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Sym(icon, size = 15.sp, color = Skerry.colors.cyanBright)
+        Txt(label, color = Skerry.colors.dim, size = 12.sp)
+    }
+}
+
+/** The glyph the action carries in the row, reused by its overflow entry. */
+private val ToolbarAction.icon: String
+    get() = when (this) {
+        ToolbarAction.Files -> "folder"
+        ToolbarAction.Tunnels -> "lan"
+        ToolbarAction.Snippets -> "bolt"
+        ToolbarAction.Runbook -> "checklist"
+        ToolbarAction.Record -> "radio_button_checked"
+        ToolbarAction.Play -> "play_circle"
+        ToolbarAction.Info -> "info"
+    }
+
+/** The action's own tooltip, reused as its label in the overflow menu. */
+private val ToolbarAction.label: StringResource
+    get() = when (this) {
+        ToolbarAction.Files -> Res.string.shell_tip_files
+        ToolbarAction.Tunnels -> Res.string.shell_tip_ports
+        ToolbarAction.Snippets -> Res.string.shell_tip_snippets
+        ToolbarAction.Runbook -> Res.string.runbook_toolbar_tip
+        ToolbarAction.Record -> Res.string.shell_tip_record
+        ToolbarAction.Play -> Res.string.shell_tip_play
+        ToolbarAction.Info -> Res.string.shell_tip_info
+    }
 
 /** Shared pane header height (primary, split, and the info panel's top strip) so rows align. */
 internal val PANE_HEADER_HEIGHT = 40.dp
@@ -238,10 +417,14 @@ fun TerminalView(state: DesktopDesignState) {
             // for it instead of drawing its own header controls underneath.
             var actionsWidth by remember { mutableStateOf(0.dp) }
             val density = LocalDensity.current
+            val sessions = LocalSessions.current
+            val tab = sessions?.activeTerminal
+            // Width of the pane the pinned actions float over: the row collapses into an overflow
+            // menu rather than drawing over that pane's own header. Held here, beside the row
+            // itself, since both the grid that measures it and the row that reads it live below.
+            var actionsPaneWidth by remember { mutableStateOf<Dp?>(null) }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 Row(Modifier.fillMaxSize()) {
-                    val sessions = LocalSessions.current
-                    val tab = sessions?.activeTerminal
                     // With the info panel closed the pinned actions sit over the top-right pane's
                     // header, so that pane reserves room for them; with the panel open they're over it.
                     val reserveEnd = if (state.infoPanel) 0.dp else actionsWidth
@@ -255,7 +438,7 @@ fun TerminalView(state: DesktopDesignState) {
                                 HLine()
                                 LivePaneBody(state, pane = null, primary = true, modifier = Modifier.weight(1f).fillMaxWidth())
                             }
-                            else -> PaneGrid(sessions, tab, state, reserveEnd)
+                            else -> PaneGrid(sessions, tab, state, reserveEnd) { actionsPaneWidth = it }
                         }
                     }
                     // Same treatment as the hosts sidebar: the panel slides out of the right edge
@@ -272,7 +455,8 @@ fun TerminalView(state: DesktopDesignState) {
                 }
                 SessionActions(
                     state,
-                    Modifier.align(Alignment.TopEnd).onGloballyPositioned {
+                    available = if (tab != null) actionsPaneWidth else null,
+                    modifier = Modifier.align(Alignment.TopEnd).onGloballyPositioned {
                         actionsWidth = with(density) { it.size.width.toDp() }
                     },
                 )
@@ -464,7 +648,14 @@ private val PANE_DIVIDER_GRIP = 6.dp
  * and terminal; the focused one carries the accent border, and headers drag panes to another slot.
  */
 @Composable
-private fun PaneGrid(sessions: SessionsController, tab: Session, state: DesktopDesignState, reserveEnd: Dp) {
+private fun PaneGrid(
+    sessions: SessionsController,
+    tab: Session,
+    state: DesktopDesignState,
+    reserveEnd: Dp,
+    onActionsPaneWidth: (Dp) -> Unit,
+) {
+    val density = LocalDensity.current
     // Per tab: one tab's pane geometry must not resolve drops on another's grid.
     val drag = remember(tab.id) { PaneDragState() }
     // Divider drags arrive in pixels but the layout is in shares of the grid, so its size is the
@@ -487,14 +678,22 @@ private fun PaneGrid(sessions: SessionsController, tab: Session, state: DesktopD
                     }
                     val pane = tab.pane(cell.paneId)
                     if (pane != null) {
+                        // Only the pane the pinned actions float over gives them room — and it is
+                        // the one whose width decides how many of them stay on screen.
+                        val underActions = rowIndex == 0 && columnIndex == row.cells.lastIndex
                         key(pane.id) {
                             PaneCell(
                                 sessions, tab, pane, state, drag,
                                 row = rowIndex,
                                 column = columnIndex,
-                                // Only the pane the pinned actions float over gives them room.
-                                reserveEnd = if (rowIndex == 0 && columnIndex == row.cells.lastIndex) reserveEnd else 0.dp,
-                                modifier = Modifier.weight(cell.weight).fillMaxHeight(),
+                                reserveEnd = if (underActions) reserveEnd else 0.dp,
+                                modifier = Modifier.weight(cell.weight).fillMaxHeight().then(
+                                    if (underActions) {
+                                        Modifier.onGloballyPositioned { onActionsPaneWidth(with(density) { it.size.width.toDp() }) }
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                             )
                         }
                     }

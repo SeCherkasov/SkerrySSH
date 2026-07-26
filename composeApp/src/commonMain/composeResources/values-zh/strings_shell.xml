@@ -100,6 +100,7 @@
     <string name="shell_status_disconnected">已断开</string>
     <string name="shell_status_encoding">UTF-8 · LF</string>
     <string name="shell_tip_add_pane">添加窗格</string>
+    <string name="shell_tip_more_actions">更多操作</string>
     <string name="shell_tip_sync_panes">窗格间输入同步</string>
     <string name="shell_tip_files">文件 (SFTP)</string>
     <string name="shell_tip_ports">端口转发</string>

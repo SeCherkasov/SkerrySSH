@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,7 @@ import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.connection.ConnectionUiState
+import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
@@ -65,12 +67,15 @@ import org.jetbrains.compose.resources.stringResource
  * comes first, and the progress panel takes over from there.
  */
 @Composable
-fun RunbookPaletteButton(active: Session?) {
+fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
     val manager = LocalRunbooks.current
     val runner = LocalRunbookRunner.current
     val terminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     // Keyed on active: switching tabs must not leave the palette open over a different toolbar.
     var open by remember(active) { mutableStateOf(false) }
+    // Same signal channel the snippet palette uses: the shortcut and the overflow menu reach the
+    // palette without this button having to be on screen (it may be parked out of a narrow toolbar).
+    LaunchedEffect(requests, terminal) { requests?.collect { if (terminal != null) open = true } }
     if (manager == null || runner == null) return
     // Nothing to run into without a connected session, and one run at a time: the button dims and
     // doesn't open rather than offering a list that can't start anything.
