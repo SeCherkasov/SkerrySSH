@@ -42,6 +42,7 @@ import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
+import app.skerry.shared.team.TeamScopeRef
 import app.skerry.shared.vault.RecordType
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSnippets
@@ -66,6 +67,8 @@ import app.skerry.ui.generated.resources.lib_teams_delete_message
 import app.skerry.ui.generated.resources.lib_teams_empty_subtitle
 import app.skerry.ui.generated.resources.lib_teams_empty_title
 import app.skerry.ui.generated.resources.lib_teams_err_already_invited
+import app.skerry.ui.generated.resources.lib_teams_err_already_shared
+import app.skerry.ui.generated.resources.lib_teams_err_scopes_unsupported
 import app.skerry.ui.generated.resources.lib_teams_err_forbidden
 import app.skerry.ui.generated.resources.lib_teams_err_key_missing
 import app.skerry.ui.generated.resources.lib_teams_err_network
@@ -100,6 +103,9 @@ import app.skerry.ui.generated.resources.lib_teams_share_snippet_title
 import app.skerry.ui.generated.resources.lib_teams_shared_hosts_count
 import app.skerry.ui.generated.resources.lib_teams_shared_snippets_count
 import app.skerry.ui.generated.resources.lib_teams_sidebar
+import app.skerry.ui.generated.resources.lib_teams_scope_delete_message
+import app.skerry.ui.generated.resources.lib_teams_scope_delete
+import app.skerry.ui.generated.resources.lib_teams_scopes
 import app.skerry.ui.generated.resources.lib_teams_status_invited
 import app.skerry.ui.generated.resources.lib_teams_sync_now
 import kotlinx.coroutines.CoroutineScope
@@ -119,6 +125,7 @@ private sealed interface TeamsConfirm {
     data class Leave(val teamId: String) : TeamsConfirm
     data class Delete(val teamId: String) : TeamsConfirm
     data class Remove(val teamId: String, val accountId: String) : TeamsConfirm
+    data class DeleteScope(val teamId: String, val scopeId: String) : TeamsConfirm
 }
 
 @Composable
@@ -139,8 +146,16 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     var confirm by remember { mutableStateOf<TeamsConfirm?>(null) }
     var showHistory by remember { mutableStateOf(false) }
     var rolePicker by remember { mutableStateOf<TeamMember?>(null) }
+    // Selected share space of the current team ("" = team-wide). Kept per team so switching teams
+    // doesn't land on a scope id that belongs to another one.
+    var selectedScope by remember { mutableStateOf("") }
+    var showCreateScope by remember { mutableStateOf(false) }
+    var scopeAccess by remember { mutableStateOf<TeamScopeUi?>(null) }
 
     val selected = teams.firstOrNull { it.id == selectedId } ?: teams.firstOrNull()
+    // A scope that vanished (revoked, deleted, or simply another team's) falls back to team-wide.
+    val activeScope = selected?.scopes?.firstOrNull { it.id == selectedScope }
+    val scopeId = activeScope?.id ?: ""
     fun afterOp() {
         tick++
     }
@@ -167,6 +182,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                 else -> TeamDetail(
                     tc = tc,
                     team = selected,
+                    scopeId = scopeId,
                     tick = tick,
                     busy = busy,
                     onInvite = { showInvite = true; invitePreview = null },
@@ -175,9 +191,12 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                     onAccept = { scope.launch2 { tc.accept(selected.id); afterOp() } },
                     onDecline = { scope.launch2 { tc.decline(selected.id); afterOp() } },
                     onSync = { scope.launch2 { tc.refresh(); tc.syncTeam(selected.id); afterOp() } },
-                    onUnshare = { recordId -> scope.launch2 { tc.unshareRecord(selected.id, recordId); afterOp() } },
+                    onUnshare = { recordId -> scope.launch2 { tc.unshareRecord(TeamScopeRef(selected.id, scopeId), recordId); afterOp() } },
                     onShowHistory = { showHistory = true },
                     onChangeRole = { member -> rolePicker = member },
+                    onSelectScope = { selectedScope = it },
+                    onNewScope = { showCreateScope = true },
+                    onScopeAccess = { scopeAccess = it },
                 )
             }
         }
@@ -205,13 +224,14 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     val shareTeam = selected
     val shareKind = sharePicker
     if (shareKind != null && shareTeam != null) {
-        SharePicker(tc, shareTeam.id, shareKind, tick, onDone = { sharePicker = null; afterOp() }, onDismiss = { sharePicker = null })
+        SharePicker(tc, TeamScopeRef(shareTeam.id, scopeId), shareKind, tick, onDone = { sharePicker = null; afterOp() }, onDismiss = { sharePicker = null })
     }
     confirm?.let { c ->
         val (title, message) = when (c) {
             is TeamsConfirm.Leave -> stringResource(Res.string.lib_teams_leave) to stringResource(Res.string.lib_teams_leave_message)
             is TeamsConfirm.Delete -> stringResource(Res.string.lib_teams_delete) to stringResource(Res.string.lib_teams_delete_message)
             is TeamsConfirm.Remove -> stringResource(Res.string.lib_teams_remove_member_title) to stringResource(Res.string.lib_teams_remove_member_message, c.accountId)
+            is TeamsConfirm.DeleteScope -> stringResource(Res.string.lib_teams_scope_delete) to stringResource(Res.string.lib_teams_scope_delete_message)
         }
         ConfirmActionDialog(
             title = title,
@@ -224,6 +244,10 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                         is TeamsConfirm.Leave -> tc.leave(c.teamId)
                         is TeamsConfirm.Delete -> tc.deleteTeam(c.teamId)
                         is TeamsConfirm.Remove -> tc.removeMember(c.teamId, c.accountId)
+                        is TeamsConfirm.DeleteScope -> {
+                            tc.deleteScope(c.teamId, c.scopeId)
+                            selectedScope = ""
+                        }
                     }
                     afterOp()
                 }
@@ -237,6 +261,32 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
             value = tc.teamActivity(historyTeam.id)
         }
         AuditLogDialog(entries, onDismiss = { showHistory = false })
+    }
+    val scopeTeam = selected
+    if (showCreateScope && scopeTeam != null) {
+        CreateScopeDialog(
+            onDismiss = { showCreateScope = false },
+            onCreate = { name -> showCreateScope = false; scope.launch2 { tc.createScope(scopeTeam.id, name); afterOp() } },
+        )
+    }
+    val accessScope = scopeAccess
+    if (accessScope != null && scopeTeam != null) {
+        val members by produceState(emptyList<TeamMember>(), scopeTeam.id, tick) { value = tc.members(scopeTeam.id) }
+        val granted by produceState(emptySet<String>(), scopeTeam.id, accessScope.id, tick) {
+            value = tc.scopeGrants(scopeTeam.id, accessScope.id).toSet()
+        }
+        ScopeAccessDialog(
+            scopeName = accessScope.name,
+            members = members.filter { it.status == TeamMemberStatus.ACTIVE },
+            granted = granted,
+            // Sealing the scope key to someone requires holding it: a manager without a grant can
+            // see and revoke, but has nothing to hand out.
+            canGrant = accessScope.hasKey,
+            busy = busy,
+            onGrant = { accountId -> scope.launch2 { tc.grantScope(scopeTeam.id, accessScope.id, accountId); afterOp() } },
+            onRevoke = { accountId -> scope.launch2 { tc.revokeScope(scopeTeam.id, accessScope.id, accountId); afterOp() } },
+            onDismiss = { scopeAccess = null },
+        )
     }
     val roleTeam = selected
     val roleTarget = rolePicker
@@ -255,7 +305,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
 @Composable
 private fun SharePicker(
     tc: TeamsCoordinator,
-    teamId: String,
+    ref: TeamScopeRef,
     kind: RecordType,
     tick: Int,
     onDone: () -> Unit,
@@ -264,14 +314,8 @@ private fun SharePicker(
     val scope = rememberCoroutineScope()
     val hosts = LocalHosts.current
     val snippets = LocalSnippets.current
-    val sharedIds = remember(teamId, kind, tick) {
-        val vault = tc.teamVault(teamId)
-        when {
-            vault == null -> emptySet()
-            kind == RecordType.HOST -> VaultHostStore(vault).all().map { it.id }.toSet()
-            else -> VaultSnippetStore(vault).all().map { it.id }.toSet()
-        }
-    }
+    // Across every space of the team, not just the selected one: a record lives in exactly one space.
+    val sharedIds = remember(ref, kind, tick) { tc.sharedRecordIds(ref.teamId, kind) }
     val items = if (kind == RecordType.HOST) {
         (hosts?.hosts ?: emptyList()).filter { it.id !in sharedIds }.map { ShareItem(it.id, it.label, "${it.username}@${it.address}") }
     } else {
@@ -283,7 +327,7 @@ private fun SharePicker(
         emptyText = stringResource(Res.string.lib_teams_share_empty),
         onPick = { item ->
             scope.launch2 {
-                tc.shareRecord(teamId, item.id, kind, if (kind == RecordType.HOST) HOST_SHARE_STRIP else emptySet())
+                tc.shareRecord(ref, item.id, kind, if (kind == RecordType.HOST) HOST_SHARE_STRIP else emptySet())
                 onDone()
             }
         },
@@ -295,6 +339,7 @@ private fun SharePicker(
 private fun TeamDetail(
     tc: TeamsCoordinator,
     team: TeamUi,
+    scopeId: String,
     tick: Int,
     busy: Boolean,
     onInvite: () -> Unit,
@@ -306,19 +351,28 @@ private fun TeamDetail(
     onUnshare: (String) -> Unit,
     onShowHistory: () -> Unit,
     onChangeRole: (TeamMember) -> Unit,
+    onSelectScope: (String) -> Unit,
+    onNewScope: () -> Unit,
+    onScopeAccess: (TeamScopeUi) -> Unit,
 ) {
     val mono = LocalFonts.current.mono
     val invited = team.status == TeamMemberStatus.INVITED
     val owner = team.role == TeamRole.OWNER && !invited
     val canManage = team.role.canManageMembers && !invited
-    val canWrite = team.role.canWrite && !invited && team.hasKey
+    val activeScope = team.scopes.firstOrNull { it.id == scopeId }
+    val canWrite = team.role.canWrite && !invited && team.hasKey && (scopeId.isEmpty() || activeScope?.hasKey == true)
     val canAudit = team.role.canViewAudit && !invited
     val members by produceState(emptyList<TeamMember>(), team.id, team.memberCount, tick) {
         value = tc.members(team.id)
     }
-    val teamVault = if (!invited && team.hasKey) tc.teamVault(team.id) else null
-    val sharedHosts = remember(team.id, tick, teamVault) { teamVault?.let { VaultHostStore(it).all() } ?: emptyList() }
-    val sharedSnippets = remember(team.id, tick, teamVault) { teamVault?.let { VaultSnippetStore(it).all() } ?: emptyList() }
+    // Records of the selected space only. A scope we hold no key for has nothing readable to show.
+    val spaceVault = if (!invited && team.hasKey && (scopeId.isEmpty() || activeScope?.hasKey == true)) {
+        tc.spaceVault(TeamScopeRef(team.id, scopeId))
+    } else {
+        null
+    }
+    val sharedHosts = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultHostStore(it).all() } ?: emptyList() }
+    val sharedSnippets = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultSnippetStore(it).all() } ?: emptyList() }
 
     SectionHeader(
         title = team.name,
@@ -384,6 +438,18 @@ private fun TeamDetail(
             }
         }
         if (!invited) {
+            Column(Modifier.padding(top = 24.dp)) {
+                LiveSectionLabel(stringResource(Res.string.lib_teams_scopes))
+                ScopeSection(
+                    scopes = team.scopes,
+                    selected = scopeId,
+                    canManage = canManage,
+                    onSelect = onSelectScope,
+                    onNew = onNewScope,
+                    onAccess = onScopeAccess,
+                    onDelete = { onConfirm(TeamsConfirm.DeleteScope(team.id, it.id)) },
+                )
+            }
             Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 Column(Modifier.weight(1f)) {
                     LiveSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
@@ -505,6 +571,8 @@ internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.VaultUnreadable -> stringResource(Res.string.lib_teams_err_vault_unreadable)
     TeamsFailure.TooManyRequests -> stringResource(Res.string.lib_teams_err_too_many_requests)
     TeamsFailure.ServerError -> stringResource(Res.string.lib_teams_err_server_error)
+    TeamsFailure.AlreadyShared -> stringResource(Res.string.lib_teams_err_already_shared)
+    TeamsFailure.ScopesUnsupported -> stringResource(Res.string.lib_teams_err_scopes_unsupported)
 }
 
 /** launch from click handlers: a param-less suspend block, shorter than a lambda with CoroutineScope. */

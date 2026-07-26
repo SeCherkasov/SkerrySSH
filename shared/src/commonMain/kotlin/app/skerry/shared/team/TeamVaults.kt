@@ -9,10 +9,12 @@ import okio.FileSystem
 import okio.Path
 
 /**
- * File-backed team vaults: `<dir>/<teamId>.vault`, dataKey = teamKey (record blobs are
- * wire-compatible between members: the server and other members decrypt with the same key).
- * The key lives in a TEAM record in the account vault; this only opens/creates the files.
- * Instances are cached: one [Vault] per team per process (FileVault has its own internal lock).
+ * File-backed vaults of team share spaces: `<dir>/<teamId>.vault` for the team itself and
+ * `<dir>/<teamId>__<scopeId>.vault` for each scope (see [TeamScopeRef]). The vault's dataKey is that
+ * space's key, so record blobs stay wire-compatible between members: the server and every member
+ * holding the key decrypt the same bytes. The keys themselves live in a TEAM record in the account
+ * vault; this only opens/creates the files.
+ * Instances are cached: one [Vault] per space per process (FileVault has its own internal lock).
  */
 class TeamVaults(
     private val dir: Path,
@@ -40,24 +42,24 @@ class TeamVaults(
     }
 
     /**
-     * Open (creating if needed) the team's vault. Returns null if the file can't be opened under
-     * [teamKey] — either a superseded key or a corrupt file. Callers that must distinguish the two
+     * Open (creating if needed) the space's vault. Returns null if the file can't be opened under
+     * [key] — either a superseded key or a corrupt file. Callers that must distinguish the two
      * (to avoid deleting recoverable data) use [openOrClassify].
      */
-    fun open(teamId: String, teamKey: DataKey): Vault? =
-        (openOrClassify(teamId, teamKey) as? OpenResult.Opened)?.vault
+    fun open(ref: TeamScopeRef, key: DataKey): Vault? =
+        (openOrClassify(ref, key) as? OpenResult.Opened)?.vault
 
     /** Like [open] but classifies a failure as [OpenResult.StaleKey] vs [OpenResult.Unreadable]. */
-    fun openOrClassify(teamId: String, teamKey: DataKey): OpenResult {
-        require(isSafeTeamId(teamId)) { "unsafe teamId" }
-        open[teamId]?.let { cached ->
+    fun openOrClassify(ref: TeamScopeRef, key: DataKey): OpenResult {
+        requireSafe(ref)
+        open[ref.key]?.let { cached ->
             if (cached.isUnlocked) return OpenResult.Opened(cached)
         }
         // FileVault takes ownership of the passed key (and wipes it on lock), so hand it a copy
         // to keep the caller's instance valid across repeated open/lock cycles.
-        val ownedKey = DataKey(teamKey.bytes.copyOf())
+        val ownedKey = DataKey(key.bytes.copyOf())
         val vault = FileVault(
-            path = dir / "$teamId.vault",
+            path = dir / ref.fileName,
             crypto = crypto,
             deviceId = deviceId,
             fileSystem = fileSystem,
@@ -80,7 +82,7 @@ class TeamVaults(
                 return OpenResult.StaleKey
             }
         }
-        open[teamId] = vault
+        open[ref.key] = vault
         return OpenResult.Opened(vault)
     }
 
@@ -90,17 +92,34 @@ class TeamVaults(
         open.clear()
     }
 
-    /** Delete the team's file (leave/delete/access revoked): the local copy is no longer needed. */
-    fun reset(teamId: String) {
-        require(isSafeTeamId(teamId)) { "unsafe teamId" }
-        open.remove(teamId)?.lock()
-        fileSystem.delete(dir / "$teamId.vault", mustExist = false)
+    /** Delete one space's file (left/deleted/access revoked): the local copy is no longer needed. */
+    fun reset(ref: TeamScopeRef) {
+        requireSafe(ref)
+        open.remove(ref.key)?.lock()
+        fileSystem.delete(dir / ref.fileName, mustExist = false)
+    }
+
+    /**
+     * Delete the team's file **and every scope file under it**. Used when the team itself is gone
+     * (leave/delete/removal): dropping only the team vault would leave a scope's records — which the
+     * account no longer has any right to — sitting on disk.
+     */
+    fun resetTeam(teamId: String) {
+        require(TeamScopeRef.isSafeId(teamId)) { "unsafe teamId" }
+        reset(TeamScopeRef(teamId))
+        val prefix = "${teamId}__"
+        val files = runCatching { fileSystem.list(dir) }.getOrDefault(emptyList())
+        files.map { it.name }
+            .filter { it.startsWith(prefix) && it.endsWith(SUFFIX) }
+            .forEach { reset(TeamScopeRef(teamId, it.removePrefix(prefix).removeSuffix(SUFFIX))) }
+    }
+
+    private fun requireSafe(ref: TeamScopeRef) {
+        require(TeamScopeRef.isSafeId(ref.teamId)) { "unsafe teamId" }
+        require(ref.isTeamWide || TeamScopeRef.isSafeId(ref.scopeId)) { "unsafe scopeId" }
     }
 
     private companion object {
-        /** teamId is a client-generated UUID: [a-z0-9-] only, or the filename becomes a path injection. */
-        fun isSafeTeamId(teamId: String): Boolean =
-            teamId.isNotEmpty() && teamId.length <= 64 &&
-                teamId.all { it in 'a'..'z' || it in '0'..'9' || it == '-' }
+        const val SUFFIX = ".vault"
     }
 }

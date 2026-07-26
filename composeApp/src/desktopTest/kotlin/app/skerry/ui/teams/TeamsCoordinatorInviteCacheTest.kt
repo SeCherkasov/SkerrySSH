@@ -12,6 +12,9 @@ import app.skerry.shared.team.TeamInviteCodec
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
+import app.skerry.shared.team.TeamScopeGrantEntry
+import app.skerry.shared.team.TeamScopeRef
+import app.skerry.shared.team.TeamScopeSummary
 import app.skerry.shared.team.TeamSummary
 import app.skerry.shared.team.TeamVaults
 import app.skerry.shared.vault.FileVault
@@ -49,10 +52,17 @@ class TeamsCoordinatorInviteCacheTest {
             if (accountId == inviterId) inviterKeys else null
         override suspend fun publishKey(session: SyncSession, publicKey: ByteArray, signPublicKey: ByteArray) = Unit
         override suspend fun members(session: SyncSession, teamId: String): List<TeamMember> = emptyList()
-        override suspend fun pullTeam(session: SyncSession, teamId: String, since: Long): RecordPage =
+        override suspend fun pullTeam(session: SyncSession, ref: TeamScopeRef, since: Long): RecordPage =
             RecordPage(emptyList(), since)
-        override suspend fun pushTeam(session: SyncSession, teamId: String, records: List<RemoteRecord>): RecordPage =
+        override suspend fun pushTeam(session: SyncSession, ref: TeamScopeRef, records: List<RemoteRecord>): RecordPage =
             RecordPage(emptyList(), 0)
+        override suspend fun listScopes(session: SyncSession, teamId: String): List<TeamScopeSummary> = emptyList()
+        override suspend fun createScope(session: SyncSession, teamId: String, scopeId: String, envelope: ByteArray) = error("unused")
+        override suspend fun deleteScope(session: SyncSession, teamId: String, scopeId: String) = error("unused")
+        override suspend fun scopeGrants(session: SyncSession, teamId: String, scopeId: String): List<TeamScopeGrantEntry> = emptyList()
+        override suspend fun grantScope(session: SyncSession, teamId: String, scopeId: String, accountId: String, envelope: ByteArray) = error("unused")
+        override suspend fun revokeScope(session: SyncSession, teamId: String, scopeId: String, accountId: String) = error("unused")
+        override suspend fun rekeyScope(session: SyncSession, teamId: String, scopeId: String, newEpoch: Long, envelopes: Map<String, ByteArray>) = error("unused")
         override suspend fun createTeam(session: SyncSession, teamId: String) = error("unused")
         override suspend fun invite(session: SyncSession, teamId: String, accountId: String, role: TeamRole, envelope: ByteArray) = error("unused")
         override suspend fun accept(session: SyncSession, teamId: String) = error("unused")
@@ -99,7 +109,7 @@ class TeamsCoordinatorInviteCacheTest {
             crypto = crypto,
             teamVaults = TeamVaults(teamDir, crypto, deviceId = "dev-alice", fileSystem = FileSystem.SYSTEM, now = { NOW }),
             teamState = InMemorySyncStateStore(),
-            newTeamId = { "unused" },
+            newId = { "unused" },
         )
 
         assertNotNull(coord.acceptPreview(teamId)) // banner shown: the verified invite is now cached

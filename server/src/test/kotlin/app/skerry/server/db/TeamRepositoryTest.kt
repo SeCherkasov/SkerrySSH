@@ -164,7 +164,7 @@ class TeamRepositoryTest {
         val records = TeamRecordRepository(db)
         repo.create("team-1", alice, now = 10)
         repo.invite("team-1", bob, TeamRoles.VIEWER, byteArrayOf(1), alice, now = 20)
-        records.upsert("team-1", listOf(IncomingRecord("r1", "HOST", 1, "2026-07-04T00:00:00Z", "devA", false, byteArrayOf(1))))
+        records.upsert("team-1", "", listOf(IncomingRecord("r1", "HOST", 1, "2026-07-04T00:00:00Z", "devA", false, byteArrayOf(1))))
 
         assertTrue(repo.deleteTeam("team-1"))
         assertFalse(repo.deleteTeam("team-1"))

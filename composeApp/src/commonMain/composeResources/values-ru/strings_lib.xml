@@ -144,4 +144,21 @@
     <string name="lib_teams_err_server_error">Сервер отвечает с ошибкой — попробуйте позже</string>
     <string name="lib_teams_err_forbidden">Недоступно для вашей роли в команде</string>
     <string name="lib_teams_err_vault_unreadable">Локальный файл командного хранилища нечитаем — он сохранён, не удалён</string>
+    <string name="lib_teams_scopes">Области доступа</string>
+    <string name="lib_teams_scope_all">Вся команда</string>
+    <string name="lib_teams_scope_new">Новая область</string>
+    <string name="lib_teams_scope_create_title">Новая область доступа</string>
+    <string name="lib_teams_scope_create_hint">Записи в области шифруются собственным ключом и остаются нечитаемыми для участников без доступа.</string>
+    <string name="lib_teams_scope_name">Название области</string>
+    <string name="lib_teams_scope_delete">Удалить область</string>
+    <string name="lib_teams_scope_delete_message">Область, её список доступа и всё, чем в ней поделились, исчезнут у всех участников.</string>
+    <string name="lib_teams_scope_access">Доступ</string>
+    <string name="lib_teams_scope_access_title">Доступ к «%1$s»</string>
+    <string name="lib_teams_scope_access_hint">Только перечисленные участники могут получить и расшифровать эту область. Отзыв доступа ротирует её ключ.</string>
+    <string name="lib_teams_scope_grant">Выдать</string>
+    <string name="lib_teams_scope_revoke">Отозвать</string>
+    <string name="lib_teams_scope_no_key">У вас нет ключа этой области — её записи на этом устройстве не прочитать</string>
+    <string name="lib_teams_scope_members_count">с доступом: %1$d</string>
+    <string name="lib_teams_err_already_shared">Эта запись уже расшарена в другой области этой команды — сначала уберите её оттуда</string>
+    <string name="lib_teams_err_scopes_unsupported">Этот sync-сервер слишком старый для областей доступа — обновите сервер</string>
 </resources>

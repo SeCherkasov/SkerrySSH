@@ -154,6 +154,13 @@ object TeamMembers : Table("team_members") {
 object TeamRecords : Table("team_records") {
     val teamId = varchar("team_id", 64).references(Teams.id)
     val recordId = varchar("record_id", 64)
+    /**
+     * Share space inside the team: `""` = team-wide (readable by every active member), otherwise a
+     * [TeamScopes] id whose members hold a grant. Not part of the primary key — the key of an
+     * existing deployment can't be altered in place, and a record belonging to exactly one space is
+     * the model anyway (moving it between spaces is an unshare plus a share).
+     */
+    val scopeId = varchar("scope_id", 64).default("")
     val type = varchar("type", 32)
     val version = long("version")
     val updatedAt = text("updated_at")
@@ -167,6 +174,37 @@ object TeamRecords : Table("team_records") {
     init {
         index("idx_team_records_delta", false, teamId, teamSeq)
     }
+}
+
+/**
+ * Scopes: share spaces inside a team, each with its own key (granular sharing — "juniors see
+ * staging, not prod"). Zero-knowledge as everywhere: the scope's **name** is not stored here, it
+ * travels inside the sealed key envelope. [keyEpoch] is that scope's own key generation, bumped by
+ * a rotation when a grant is revoked.
+ */
+object TeamScopes : Table("team_scopes") {
+    val teamId = varchar("team_id", 64).references(Teams.id)
+    val scopeId = varchar("scope_id", 64)
+    val keyEpoch = long("key_epoch").default(0)
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(teamId, scopeId)
+}
+
+/**
+ * Who may read a scope. A row is both the ACL entry and the delivery slot for that account's
+ * scopeKey ([envelope], a signed sealed box like [TeamMembers.envelope]). Unlike an invite envelope
+ * it is kept after adoption: it is how a client recovers a scope key its local vault record lost.
+ * Revoking access deletes the row; the manager then rotates the scope key.
+ */
+object TeamScopeGrants : Table("team_scope_grants") {
+    val teamId = varchar("team_id", 64)
+    val scopeId = varchar("scope_id", 64)
+    val accountId = varchar("account_id", 320).references(Accounts.id)
+    val envelope = blob("envelope")
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(teamId, scopeId, accountId)
 }
 
 /** One-time pairing sessions (variant B): dataKey encrypted with a transferKey, with a TTL. */

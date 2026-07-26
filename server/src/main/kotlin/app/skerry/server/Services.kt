@@ -12,6 +12,7 @@ import app.skerry.server.db.RecordRepository
 import app.skerry.server.db.StatsRepository
 import app.skerry.server.db.TeamRecordRepository
 import app.skerry.server.db.TeamRepository
+import app.skerry.server.db.TeamScopeRepository
 import app.skerry.server.sync.ChangeNotifier
 import org.jetbrains.exposed.v1.jdbc.Database
 
@@ -24,6 +25,7 @@ class Services(val config: ServerConfig, private val database: Database) {
     val pairing = PairingRepository(database)
     val teams = TeamRepository(database)
     val teamRecords = TeamRecordRepository(database, lockTeamRow = config.isPostgres)
+    val teamScopes = TeamScopeRepository(database)
     val stats = StatsRepository(database)
     val activity = ActivityRepository(database)
     val admin = AdminRepository(database)

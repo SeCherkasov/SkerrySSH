@@ -245,7 +245,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
             now = { Instant.now().toString() },
         ),
         teamState = FileSyncStateStore(dir.resolve("team-cursor.json")),
-        newTeamId = { UUID.randomUUID().toString() },
+        newId = { UUID.randomUUID().toString() },
         onTeamsChanged = { reloadManagers() },
     )
     teamsForSync = teams

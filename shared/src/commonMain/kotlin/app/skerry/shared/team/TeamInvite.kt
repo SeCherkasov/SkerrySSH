@@ -24,9 +24,10 @@ class TeamInvitePayload(
     val inviterAccountId: String,
     val inviteeAccountId: String,
     val epoch: Int,
-    /** Detached signature over [signedBytes]; verified via [TeamInviteCodec.verify]. */
+    /** Scope this key belongs to; empty for the team-wide key. See [TeamInviteCodec] on why it's signed. */
+    val scopeId: String = "",
+    /** Detached signature over the canonical binding; checked by [TeamInviteCodec.verify]. */
     internal val signature: ByteArray,
-    internal val signedBytes: ByteArray,
 )
 
 /**
@@ -40,6 +41,13 @@ class TeamInvitePayload(
  *   alone is anonymous — a malicious server could fabricate an invite to a fake team it controls the
  *   key for. The signature binds the envelope to a specific inviter, teamId, and invitee, so the
  *   server can neither forge one without the inviter's secret key nor retarget an existing one.
+ *
+ * The same envelope carries a **scope** key ([scopeId] non-empty), signed under a different domain
+ * tag. Domain separation, not just an extra field, because crypto_box_seal is anonymous: anyone can
+ * seal to the recipient. Without it a member who legitimately holds a scope key could re-seal the
+ * inviter's signature over that key as a team-wide rekey envelope; the recipient would adopt an
+ * attacker-known key as teamKey and everything they wrote afterwards would be readable by them.
+ * Keeping the team-wide layout byte-identical also means envelopes in flight stay verifiable.
  *
  * Format version 2 (signed). Version 1 (unsigned, anonymous) is rejected — there are no released
  * clients holding v1 envelopes.
@@ -56,6 +64,8 @@ class TeamInviteCodec(private val crypto: VaultCrypto) {
         val inviteeId: String,
         val epoch: Int,
         val sig: String,
+        /** Empty (and absent in team-wide envelopes) — see the class doc on domain separation. */
+        val scope: String = "",
     )
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -73,8 +83,9 @@ class TeamInviteCodec(private val crypto: VaultCrypto) {
         teamKey: DataKey,
         teamName: String,
         epoch: Int,
+        scopeId: String = "",
     ): ByteArray {
-        val signed = inviteSignedBytes(teamId, inviterId, inviteeId, teamKey, teamName, epoch)
+        val signed = inviteSignedBytes(teamId, inviterId, inviteeId, teamKey, teamName, epoch, scopeId)
         val sig = crypto.sign(inviter, signed)
         val plain = json.encodeToString(
             WireInvite.serializer(),
@@ -87,6 +98,7 @@ class TeamInviteCodec(private val crypto: VaultCrypto) {
                 inviteeId = inviteeId,
                 epoch = epoch,
                 sig = sig.toByteString().base64(),
+                scope = scopeId,
             ),
         ).encodeToByteArray()
         return crypto.sealForRecipient(recipientPublicKey, plain).also { plain.fill(0); signed.fill(0) }
@@ -105,16 +117,15 @@ class TeamInviteCodec(private val crypto: VaultCrypto) {
             val keyBytes = wire.teamKey.decodeBase64()?.toByteArray() ?: return null
             if (keyBytes.size != 32) return null
             val sig = wire.sig.decodeBase64()?.toByteArray() ?: return null
-            val teamKey = DataKey(keyBytes)
             TeamInvitePayload(
-                teamKey = teamKey,
+                teamKey = DataKey(keyBytes),
                 teamName = wire.name,
                 teamId = wire.teamId,
                 inviterAccountId = wire.inviterId,
                 inviteeAccountId = wire.inviteeId,
                 epoch = wire.epoch,
+                scopeId = wire.scope,
                 signature = sig,
-                signedBytes = inviteSignedBytes(wire.teamId, wire.inviterId, wire.inviteeId, teamKey, wire.name, wire.epoch),
             )
         } catch (e: kotlinx.serialization.SerializationException) {
             null
@@ -123,10 +134,26 @@ class TeamInviteCodec(private val crypto: VaultCrypto) {
         }
     }
 
-    /** True if [payload]'s signature is valid for [inviterSignPublicKey] (the inviter's published Ed25519 key). */
-    fun verify(payload: TeamInvitePayload, inviterSignPublicKey: ByteArray): Boolean =
-        crypto.verifySignature(inviterSignPublicKey, payload.signedBytes, payload.signature)
+    /**
+     * True if [payload] is signed by [inviterSignPublicKey] **as the key of [scopeId]** (empty =
+     * team-wide). The expected scope is an argument rather than read off the payload on purpose: the
+     * binding is only meaningful when the caller pins the slot it is about to store the key into, so
+     * an envelope filed under the wrong scope by the server can't be adopted.
+     */
+    fun verify(payload: TeamInvitePayload, inviterSignPublicKey: ByteArray, scopeId: String = ""): Boolean {
+        val signed = inviteSignedBytes(
+            payload.teamId, payload.inviterAccountId, payload.inviteeAccountId,
+            payload.teamKey, payload.teamName, payload.epoch, scopeId,
+        )
+        return crypto.verifySignature(inviterSignPublicKey, signed, payload.signature)
+            .also { signed.fill(0) }
+    }
 
+    /**
+     * Canonical bytes of the binding. A scope key is signed under its own domain tag with the scope
+     * id as an extra field; the team-wide layout is left exactly as it was so v2 envelopes sealed by
+     * an older client still verify.
+     */
     private fun inviteSignedBytes(
         teamId: String,
         inviterId: String,
@@ -134,18 +161,33 @@ class TeamInviteCodec(private val crypto: VaultCrypto) {
         teamKey: DataKey,
         teamName: String,
         epoch: Int,
-    ): ByteArray = canonicalBytes(
-        "skerry.team.invite.v$VERSION",
-        teamId.encodeToByteArray(),
-        inviterId.encodeToByteArray(),
-        inviteeId.encodeToByteArray(),
-        teamKey.bytes,
-        teamName.encodeToByteArray(),
-        intBytes(epoch),
-    )
+        scopeId: String,
+    ): ByteArray = if (scopeId.isEmpty()) {
+        canonicalBytes(
+            "skerry.team.invite.v$VERSION",
+            teamId.encodeToByteArray(),
+            inviterId.encodeToByteArray(),
+            inviteeId.encodeToByteArray(),
+            teamKey.bytes,
+            teamName.encodeToByteArray(),
+            intBytes(epoch),
+        )
+    } else {
+        canonicalBytes(
+            "skerry.team.scope.v$SCOPE_VERSION",
+            teamId.encodeToByteArray(),
+            scopeId.encodeToByteArray(),
+            inviterId.encodeToByteArray(),
+            inviteeId.encodeToByteArray(),
+            teamKey.bytes,
+            teamName.encodeToByteArray(),
+            intBytes(epoch),
+        )
+    }
 
     private companion object {
         const val VERSION = 2
+        const val SCOPE_VERSION = 1
     }
 }
 

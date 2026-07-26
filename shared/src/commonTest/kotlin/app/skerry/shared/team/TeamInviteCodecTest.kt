@@ -105,6 +105,56 @@ class TeamInviteCodecTest {
     }
 
     @Test
+    fun `scope grant round-trips its scope id and verifies only under that scope`() = cryptoTest {
+        val alice = crypto.newSigningKeyPair()
+        val bob = crypto.newSharingKeyPair()
+        val scopeKey = crypto.newDataKey()
+
+        val envelope = codec.seal(
+            bob.publicKey, alice, "alice@x", "bob@y", "team-1", scopeKey, "Production", epoch = 1, scopeId = "prod",
+        )
+        val opened = assertNotNull(codec.open(bob, envelope))
+
+        assertEquals("prod", opened.scopeId)
+        assertEquals("Production", opened.teamName)
+        assertTrue(codec.verify(opened, alice.publicKey, scopeId = "prod"))
+        // Bound to its scope: the same signature doesn't authenticate the key for a different scope,
+        // so a server that files this grant under another scope's slot is caught.
+        assertFalse(codec.verify(opened, alice.publicKey, scopeId = "staging"))
+    }
+
+    @Test
+    fun `a scope key cannot be re-sealed as a team-wide key`() = cryptoTest {
+        // Domain separation. Without it, a member who legitimately holds a scope key could re-seal
+        // alice's signature over that key as a team-wide rekey envelope (crypto_box_seal is anonymous
+        // — anyone can seal to bob). Bob would adopt the attacker's key as teamKey and every team
+        // record he writes afterwards would be readable by the attacker.
+        val alice = crypto.newSigningKeyPair()
+        val bob = crypto.newSharingKeyPair()
+        val scopeKey = crypto.newDataKey()
+
+        val scopeGrant = codec.seal(
+            bob.publicKey, alice, "alice@x", "bob@y", "team-1", scopeKey, "Production", epoch = 1, scopeId = "prod",
+        )
+        val opened = assertNotNull(codec.open(bob, scopeGrant))
+
+        assertFalse(codec.verify(opened, alice.publicKey))
+    }
+
+    @Test
+    fun `a team-wide envelope cannot be presented as a scope grant`() = cryptoTest {
+        val alice = crypto.newSigningKeyPair()
+        val bob = crypto.newSharingKeyPair()
+
+        val teamEnvelope = codec.seal(bob.publicKey, alice, "alice@x", "bob@y", "team-1", crypto.newDataKey(), "Crew", epoch = 0)
+        val opened = assertNotNull(codec.open(bob, teamEnvelope))
+
+        assertEquals("", opened.scopeId)
+        assertTrue(codec.verify(opened, alice.publicKey))
+        assertFalse(codec.verify(opened, alice.publicKey, scopeId = "prod"))
+    }
+
+    @Test
     fun `fingerprint covers both halves, is stable per identity, and is 128-bit`() = cryptoTest {
         val box = crypto.newSharingKeyPair()
         val sign = crypto.newSigningKeyPair()
