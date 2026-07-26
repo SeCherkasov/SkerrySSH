@@ -109,7 +109,9 @@ import app.skerry.ui.generated.resources.lib_teams_scopes
 import app.skerry.ui.generated.resources.lib_teams_status_invited
 import app.skerry.ui.generated.resources.lib_teams_sync_now
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 
@@ -145,6 +147,8 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     var sharePicker by remember { mutableStateOf<RecordType?>(null) }
     var confirm by remember { mutableStateOf<TeamsConfirm?>(null) }
     var showHistory by remember { mutableStateOf(false) }
+    // Set to look at one record's history instead of the team's whole feed ("who touched this host").
+    var historyRecord by remember { mutableStateOf<HistoryTarget?>(null) }
     var rolePicker by remember { mutableStateOf<TeamMember?>(null) }
     // Selected share space of the current team ("" = team-wide). Kept per team so switching teams
     // doesn't land on a scope id that belongs to another one.
@@ -193,6 +197,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                     onSync = { scope.launch2 { tc.refresh(); tc.syncTeam(selected.id); afterOp() } },
                     onUnshare = { recordId -> scope.launch2 { tc.unshareRecord(TeamScopeRef(selected.id, scopeId), recordId); afterOp() } },
                     onShowHistory = { showHistory = true },
+                    onShowRecordHistory = { historyRecord = it },
                     onChangeRole = { member -> rolePicker = member },
                     onSelectScope = { selectedScope = it },
                     onNewScope = { showCreateScope = true },
@@ -256,11 +261,27 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
         )
     }
     val historyTeam = selected
-    if (showHistory && historyTeam != null) {
+    val recordFocus = historyRecord
+    if ((showHistory || recordFocus != null) && historyTeam != null) {
         val entries by produceState(emptyList<TeamActivityEntry>(), historyTeam.id, tick) {
             value = tc.teamActivity(historyTeam.id)
         }
-        AuditLogDialog(entries, onDismiss = { showHistory = false })
+        // Record names come from our own copy of each share space — the server holds only ids.
+        // Fetched like the entries above rather than in a bare remember{}: resolving them decrypts
+        // every shared record of the team, which has no business blocking a frame.
+        val recordNames by produceState(emptyMap<String, Map<String, String>>(), historyTeam.id, tick) {
+            value = withContext(Dispatchers.Default) { tc.sharedRecordNames(historyTeam.id) }
+        }
+        val scopeNames = remember(historyTeam.scopes) { historyTeam.scopes.associate { it.id to it.name } }
+        TeamActivityDialog(
+            entries = entries,
+            selfAccountId = tc.selfAccountId(),
+            recordNames = recordNames,
+            scopeNames = scopeNames,
+            focusRecordId = recordFocus?.recordId,
+            focusRecordLabel = recordFocus?.label,
+            onDismiss = { showHistory = false; historyRecord = null },
+        )
     }
     val scopeTeam = selected
     if (showCreateScope && scopeTeam != null) {
@@ -350,6 +371,7 @@ private fun TeamDetail(
     onSync: () -> Unit,
     onUnshare: (String) -> Unit,
     onShowHistory: () -> Unit,
+    onShowRecordHistory: (HistoryTarget) -> Unit,
     onChangeRole: (TeamMember) -> Unit,
     onSelectScope: (String) -> Unit,
     onNewScope: () -> Unit,
@@ -455,7 +477,16 @@ private fun TeamDetail(
                     LiveSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
                     if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
                     sharedHosts.forEach { host ->
-                        SharedRecordRow(host.label, host.rowSubtitle(), mono, canUnshare = canWrite) { onUnshare(host.id) }
+                        SharedRecordRow(
+                            host.label, host.rowSubtitle(), mono,
+                            canUnshare = canWrite,
+                            onHistory = if (canAudit) {
+                                { onShowRecordHistory(HistoryTarget(host.id, host.label)) }
+                            } else {
+                                null
+                            },
+                            onUnshare = { onUnshare(host.id) },
+                        )
                     }
                     if (canWrite) {
                         GhostButton(stringResource(Res.string.lib_teams_share_host), onClick = { onShare(RecordType.HOST) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
@@ -465,7 +496,16 @@ private fun TeamDetail(
                     LiveSectionLabel(stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size))
                     if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
                     sharedSnippets.forEach { snippet ->
-                        SharedRecordRow(snippet.label, snippet.command, mono, canUnshare = canWrite) { onUnshare(snippet.id) }
+                        SharedRecordRow(
+                            snippet.label, snippet.command, mono,
+                            canUnshare = canWrite,
+                            onHistory = if (canAudit) {
+                                { onShowRecordHistory(HistoryTarget(snippet.id, snippet.label)) }
+                            } else {
+                                null
+                            },
+                            onUnshare = { onUnshare(snippet.id) },
+                        )
                     }
                     if (canWrite) {
                         GhostButton(stringResource(Res.string.lib_teams_share_snippet), onClick = { onShare(RecordType.SNIPPET) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
@@ -539,8 +579,18 @@ private fun LiveMemberRow(
     }
 }
 
+/** A record to show the history of: its id, plus the name to put in the dialog's title. */
+internal data class HistoryTarget(val recordId: String, val label: String)
+
 @Composable
-private fun SharedRecordRow(label: String, detail: String, mono: androidx.compose.ui.text.font.FontFamily, canUnshare: Boolean, onUnshare: () -> Unit) {
+private fun SharedRecordRow(
+    label: String,
+    detail: String,
+    mono: androidx.compose.ui.text.font.FontFamily,
+    canUnshare: Boolean,
+    onHistory: (() -> Unit)? = null,
+    onUnshare: () -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -548,6 +598,12 @@ private fun SharedRecordRow(label: String, detail: String, mono: androidx.compos
     ) {
         Txt(label, color = Skerry.colors.textBright, size = 12.sp, font = mono)
         Txt(detail, color = Skerry.colors.faint, size = 10.5.sp, modifier = Modifier.weight(1f))
+        // "What happened to this one" — only for readers who may see the audit log at all.
+        if (onHistory != null) {
+            Box(Modifier.clip(CircleShape).clickable(onClick = onHistory).padding(3.dp)) {
+                Sym("history", size = 14.sp, color = Skerry.colors.faint)
+            }
+        }
         if (canUnshare) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onUnshare).padding(3.dp)) {
                 Sym("close", size = 14.sp, color = Skerry.colors.faint)

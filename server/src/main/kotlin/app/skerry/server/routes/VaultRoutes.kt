@@ -67,10 +67,15 @@ fun Route.vaultRoutes(services: Services) {
 
         val result = services.records.upsert(principal.accountId, req.records.map { it.toIncoming() })
         services.devices.touch(principal.accountId, principal.deviceId, syncVersion = result.cursor)
-        services.activity.record(
-            principal.accountId, "sync.push", "${req.records.size} records · cursor ${result.cursor}",
-            deviceId = principal.deviceId,
-        )
+        // Log only pushes that changed something, mirroring the empty-pull rule above. A client
+        // re-pushes all of its records on every sync cycle, so without this the log is mostly no-ops
+        // — and its retention window would evict the events (team history) somebody actually reads.
+        if (result.changed) {
+            services.activity.record(
+                principal.accountId, "sync.push", "${req.records.size} records · cursor ${result.cursor}",
+                deviceId = principal.deviceId,
+            )
+        }
         // Notify other devices on the account: "changes exist up to cursor" (no payload). Published only
         // when the cursor actually advanced; a no-op push (same version+deviceId, wins=false) publishes
         // nothing, otherwise live-sync would loop push -> WS -> push (another/the same device pulls the

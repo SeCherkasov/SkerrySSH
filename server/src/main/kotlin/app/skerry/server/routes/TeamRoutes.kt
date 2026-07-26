@@ -2,10 +2,14 @@ package app.skerry.server.routes
 
 import app.skerry.server.Services
 import app.skerry.server.accountId
+import app.skerry.server.db.ActivityEvent
+import app.skerry.server.db.AppliedTeamRecord
 import app.skerry.server.db.RekeyOutcome
 import app.skerry.server.db.TeamMemberRow
+import app.skerry.server.db.TeamRecordChange
 import app.skerry.server.db.TeamMemberStatus
 import app.skerry.server.db.TeamRoles
+import app.skerry.server.RateLimits
 import app.skerry.server.jwtPrincipal
 import app.skerry.server.model.ErrorResponse
 import app.skerry.server.model.b64
@@ -26,10 +30,12 @@ import app.skerry.sync.wire.TeamActivityResponse
 import app.skerry.sync.wire.TeamMembersResponse
 import app.skerry.sync.wire.TeamRekeyRequest
 import app.skerry.sync.wire.TeamRoleChangeRequest
+import app.skerry.sync.wire.TeamSessionEventRequest
 import app.skerry.sync.wire.TeamsResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.plugins.BadRequestException
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -289,15 +295,27 @@ fun Route.teamRoutes(services: Services) {
         if (unknown != null) throw BadRequestException("unknown record type: ${unknown.type}")
 
         val result = services.teamRecords.upsert(teamId, scopeId, req.records.map { it.toIncoming() })
-        val ids = req.records.joinToString(" ") { it.id }.take(200)
-        val where = if (scopeId.isEmpty()) "" else " · scope $scopeId"
-        services.activity.record(
-            principal.accountId, "team.push", "${req.records.size} records$where · $ids", teamId = teamId,
-        )
+        // The records are committed; the audit trail is written after them and must not undo that.
+        // A failure here is logged and swallowed on purpose: answering 500 would have the client
+        // retry a push that LWW now treats as a no-op, so `applied` would come back empty and the
+        // entries would never be written anyway — the same audit gap, plus a failed sync on top.
+        try {
+            logRecordChanges(services, principal.accountId, teamId, scopeId, result.applied)
+        } catch (e: Exception) {
+            call.application.environment.log.error("team audit write failed for $teamId (records are committed)", e)
+        }
         if (result.changed) services.notifier.publishTeam(teamId, result.cursor)
         call.respond(PushResponse(result.records.map { it.toDto() }, result.cursor))
     }
 
+    /**
+     * The team's audit log (owner/admin). Rows are **not** filtered by the reader's scope grants: a
+     * manager sees that a record of some type changed in some scope, exactly as they already see the
+     * scope itself and its member count. What a grant gates is the records' contents — a manager
+     * without one still cannot read a name (the feed resolves those locally, and their vault has no
+     * key for that space) let alone a payload. Filtering the log by grant instead would leave the
+     * team's owner unable to audit their own team.
+     */
     get("/teams/{id}/activity") {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@get
@@ -305,10 +323,124 @@ fun Route.teamRoutes(services: Services) {
             services, teamId, principal.accountId, TeamRoles::canViewAudit, "audit role required",
         ) ?: return@get
         val entries = services.activity.recentForTeam(teamId).map {
-            TeamActivityDto(it.accountId, it.event, it.detail, it.createdAt)
+            TeamActivityDto(
+                actorAccountId = it.accountId,
+                event = it.event,
+                detail = it.detail,
+                createdAt = it.createdAt,
+                recordId = it.recordId,
+                recordType = it.recordType,
+                scopeId = it.scopeId,
+                durationSec = it.durationSec,
+            )
         }
         call.respond(TeamActivityResponse(entries))
     }
+
+    /**
+     * A member reporting that they opened a session on a shared record, or saved a recording of one.
+     * Any active member may report (connecting is not a privileged act); reading the feed back is
+     * still owner/admin only.
+     *
+     * The record must be one the team actually holds **and** one the caller can see: the space comes
+     * from the stored row, so a report can't file itself under a scope of the reporter's choosing,
+     * and a member without the grant gets the same 404 as anywhere else rather than a confirmation
+     * that the record exists.
+     */
+    // Rate-limited per account (see RateLimits.TEAM_SESSION_EVENTS): unlike every other write here
+    // this one needs no role at all, and it appends to a log with a bounded retention window.
+    rateLimit(RateLimits.TEAM_SESSION_EVENTS) {
+      post("/teams/{id}/session-events") {
+        val principal = call.jwtPrincipal()
+        val teamId = call.requiredPathId("id") ?: return@post
+        val req = call.receive<TeamSessionEventRequest>()
+        // Membership first, as everywhere else in this file: a caller who is not a member gets the
+        // same "no such team" 404 whatever they sent, rather than a 400 confirming the route exists.
+        call.requireActiveMember(services, teamId, principal.accountId) ?: return@post
+        if (req.recordId.isBlank() || anyTooLong(req.recordId)) throw BadRequestException("bad recordId")
+        val event = SESSION_EVENTS[req.kind] ?: throw BadRequestException("unknown kind: ${req.kind}")
+        val duration = req.durationSec?.coerceIn(0, MAX_SESSION_DURATION_SEC)
+        val location = services.teamRecords.locate(teamId, req.recordId)
+        if (location == null) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("no such record"))
+            return@post
+        }
+        if (!call.requireScopeAccess(services, teamId, location.scopeId, principal.accountId)) return@post
+        services.activity.recordTeamSession(
+            accountId = principal.accountId,
+            teamId = teamId,
+            event = event,
+            recordId = req.recordId,
+            recordType = location.type,
+            scopeId = location.scopeId,
+            durationSec = duration,
+        )
+        // Created even when the report was collapsed as a duplicate: from the client's side the
+        // report landed, and a retry loop over "already known" would be pointless traffic.
+        call.respond(HttpStatusCode.Created)
+      }
+    }
+}
+
+/** Reportable session kinds (wire value -> audit event). */
+private val SESSION_EVENTS = mapOf("open" to "team.session_open", "record" to "team.session_record")
+
+/** A reported recording longer than this is clamped: a bogus number must not read as fact. */
+private const val MAX_SESSION_DURATION_SEC = 30L * 24 * 3600
+
+/**
+ * How many changed records a push may report one by one. Past it the push gets a single summary
+ * event: a key rotation re-encrypts and re-pushes the whole space at once, and spelling out every
+ * record would flood the feed with "changed" rows that say nothing about anyone's intent (and would
+ * push the rest of the team's history out of retention).
+ */
+internal const val TEAM_RECORD_EVENT_LIMIT = 10
+
+/**
+ * Audit trail of a push: one event per record that actually changed, so the feed can say who touched
+ * which host. Only [applied] records are logged — a client re-pushes all of its records on every
+ * sync cycle, and the ones that lost LWW changed nothing.
+ *
+ * [detail] keeps the human-readable summary for readers with no structured fields (the admin
+ * console, an older client); the record's name is not among them and never leaves the members'
+ * devices.
+ */
+private suspend fun logRecordChanges(
+    services: Services,
+    accountId: String,
+    teamId: String,
+    scopeId: String,
+    applied: List<AppliedTeamRecord>,
+) {
+    if (applied.isEmpty()) return
+    val where = if (scopeId.isEmpty()) "" else " · scope $scopeId"
+    if (applied.size > TEAM_RECORD_EVENT_LIMIT) {
+        services.activity.record(
+            accountId, "team.push", "${applied.size} records$where", teamId = teamId, scopeId = scopeId,
+        )
+        return
+    }
+    // One transaction for the whole batch: these rows describe a single push, and half of them is
+    // worse than none — the client's retry is a no-op by LWW, so a partial write could never be
+    // completed later (see ActivityRepository.recordAll).
+    services.activity.recordAll(
+        applied.map { entry ->
+            val event = when (entry.change) {
+                TeamRecordChange.SHARED -> "team.record_share"
+                TeamRecordChange.CHANGED -> "team.record_change"
+                TeamRecordChange.REMOVED -> "team.record_remove"
+            }
+            ActivityEvent(
+                accountId = accountId,
+                event = event,
+                detail = "${entry.record.type} ${entry.record.id}$where",
+                teamId = teamId,
+                recordId = entry.record.id,
+                recordType = entry.record.type,
+                scopeId = scopeId,
+            )
+        },
+    )
 }
 
 /**

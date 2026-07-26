@@ -113,6 +113,47 @@
     <string name="lib_teams_event_role_change">更改了角色</string>
     <string name="lib_teams_event_share">共享了记录</string>
     <string name="lib_teams_event_delete">删除了团队</string>
+    <!-- 活动动态：事件标签。记录事件的主体（主机/片段名称）显示在标签旁边。 -->
+    <string name="lib_teams_event_rekey">轮换了团队密钥</string>
+    <string name="lib_teams_event_scope_create">创建了区域</string>
+    <string name="lib_teams_event_scope_delete">删除了区域</string>
+    <string name="lib_teams_event_scope_grant">授予了区域访问权限</string>
+    <string name="lib_teams_event_scope_revoke">撤销了区域访问权限</string>
+    <string name="lib_teams_event_scope_rekey">轮换了区域密钥</string>
+    <string name="lib_teams_event_record_share">共享了</string>
+    <string name="lib_teams_event_record_change">修改了</string>
+    <string name="lib_teams_event_record_remove">移除了</string>
+    <string name="lib_teams_event_session_open">开启了会话</string>
+    <string name="lib_teams_event_session_record">录制了会话</string>
+    <string name="lib_teams_record_host">主机</string>
+    <string name="lib_teams_record_snippet">片段</string>
+    <string name="lib_teams_record_credential">密码</string>
+    <string name="lib_teams_record_identity">密钥</string>
+    <string name="lib_teams_record_tunnel">隧道</string>
+    <string name="lib_teams_record_group">分组</string>
+    <string name="lib_teams_record_other">记录</string>
+    <!-- 事件作者为当前账户时 -->
+    <string name="lib_teams_actor_you">您</string>
+    <!-- 事件发生的区域；%1$s — 区域名称 -->
+    <string name="lib_teams_feed_in_scope">区域 %1$s</string>
+    <string name="lib_teams_feed_day_today">今天</string>
+    <string name="lib_teams_feed_day_yesterday">昨天</string>
+    <string name="lib_teams_filter_all">全部</string>
+    <string name="lib_teams_filter_records">记录</string>
+    <string name="lib_teams_filter_members">成员</string>
+    <string name="lib_teams_filter_access">访问</string>
+    <string name="lib_teams_filter_sessions">会话</string>
+    <!-- 已报告录制会话的时长；%1$s — 例如 “12” -->
+    <string name="lib_teams_feed_duration">%1$s 分钟</string>
+    <string name="lib_teams_feed_duration_short">不到一分钟</string>
+    <!-- 动态下方的说明：会话由成员的应用报告，服务器无法验证 -->
+    <string name="lib_teams_feed_reported_note">会话由成员的应用报告 — 服务器不参与连接，也无法确认连接。</string>
+    <!-- 单条记录的历史；%1$s — 记录名称 -->
+    <string name="lib_teams_feed_record_title">历史 · %1$s</string>
+    <string name="lib_teams_feed_record_empty">此记录尚无任何变更。</string>
+    <string name="lib_teams_feed_record_history">此记录的历史</string>
+    <!-- 折叠的批量推送；%1$d — 一次变更了多少条记录 -->
+    <string name="lib_teams_event_records_bulk">更新了 %1$d 条记录</string>
     <!-- 客户端未知的审计事件代码的回退文案；%1$s — 服务器返回的原始代码 -->
     <string name="lib_teams_event_unknown">其他事件（%1$s）</string>
     <string name="lib_teams_shared_hosts_count">共享的主机 · %1$d</string>

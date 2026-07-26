@@ -57,6 +57,7 @@ import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalConnectSplit
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
+import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
 import app.skerry.ui.design.Dot
@@ -122,7 +123,12 @@ private fun SessionActions(state: DesktopDesignState, modifier: Modifier = Modif
         // Quick snippet launch into the active session without leaving for the Snippets section.
         SnippetPaletteButton(active, state.snippetPaletteRequests)
         // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
-        RecordSessionButton(active, state.recordingToggleRequests) { state.showRecordingNotice(it) }
+        val teams = LocalTeams.current
+        RecordSessionButton(
+            active,
+            state.recordingToggleRequests,
+            onSaved = { hostId, seconds -> teams?.reportSessionRecorded(hostId, seconds) },
+        ) { state.showRecordingNotice(it) }
         // Plays a .cast back. Not tied to a session (a recording is watched, not run), which is why
         // it sits here rather than behind a connected-only guard. Live mode opens the recording in
         // its own tab, so the shells stay reachable while it plays; the mock/preview path (no

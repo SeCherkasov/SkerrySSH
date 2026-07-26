@@ -146,12 +146,15 @@ fun MobileDesignApp(
     // Per-host terminal command history over the encrypted vault: autocomplete writes it, the
     // command palette reads every host's. Hoisted out of the sessions factory so both can see it.
     val termHistory = remember(deps.vault) { deps.vault?.let { VaultTerminalHistoryStore(it) } }
-    val liveSessions = sessions ?: remember(deps.transport, scope, deps.vault) {
+    val liveSessions = sessions ?: remember(deps.transport, scope, deps.vault, deps.teams) {
         deps.transport?.let { t ->
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
                 vncControllerFactory = deps.vncTransport?.let { vt -> { app.skerry.ui.vnc.VncSessionController(vt, scope) } },
+                // Desktop parity: the session half of the Teams activity feed (the coordinator holds
+                // the privacy gates).
+                onHostSessionOpened = { hostId -> deps.teams?.reportSessionOpened(hostId) },
                 controllerFactory = {
                     ConnectionController(
                         t, scope, history = termHistory,
@@ -192,6 +195,8 @@ fun MobileDesignApp(
             s.splitSession?.liveTerminal?.applyScrollback(scrollbackLines)
         }
     }
+    // Desktop parity: the Teams session-report gate reads the live setting (see DesktopDesignApp).
+    LaunchedEffect(deps.teams, state) { deps.teams?.reportSessionsEnabled = { state.reportTeamSessions } }
     // Toggling the OSC 52 clipboard-write gate applies to ALREADY open sessions live; new sessions
     // pick the value up at connect via terminalPrefs above.
     val allowClipboardWrite = state.allowServerClipboardWrite

@@ -25,6 +25,7 @@ import com.nimbusds.srp6.SRP6Exception
 import com.nimbusds.srp6.SRP6VerifierGenerator
 import app.skerry.shared.team.AccountKeys
 import app.skerry.shared.team.TeamActivityEntry
+import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
@@ -37,6 +38,7 @@ import app.skerry.sync.wire.AccountKeyResponse
 import app.skerry.sync.wire.PublishKeyRequest
 import app.skerry.sync.wire.RekeyEnvelopeDto
 import app.skerry.sync.wire.TeamActivityResponse
+import app.skerry.sync.wire.TeamSessionEventRequest
 import app.skerry.sync.wire.TeamCreateRequest
 import app.skerry.sync.wire.TeamInviteRequest
 import app.skerry.sync.wire.TeamMembersResponse
@@ -359,7 +361,32 @@ class KtorSyncClient(
         val resp: TeamActivityResponse = get("/teams/${teamId.encodeURLPathPart()}/activity") {
             bearerAuth(session.accessToken)
         }.bodyChecked()
-        return resp.entries.map { TeamActivityEntry(it.actorAccountId, it.event, it.detail, it.createdAt) }
+        return resp.entries.map {
+            TeamActivityEntry(
+                actorAccountId = it.actorAccountId,
+                event = it.event,
+                detail = it.detail,
+                createdAt = it.createdAt,
+                recordId = it.recordId,
+                recordType = it.recordType,
+                scopeId = it.scopeId,
+                durationSec = it.durationSec,
+            )
+        }
+    }
+
+    override suspend fun reportSessionEvent(
+        session: SyncSession,
+        teamId: String,
+        recordId: String,
+        kind: TeamSessionKind,
+        durationSec: Long?,
+    ) {
+        post("/teams/${teamId.encodeURLPathPart()}/session-events") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(TeamSessionEventRequest(recordId, kind.wire, durationSec))
+        }.expectSuccess()
     }
 
     override suspend fun removeMember(session: SyncSession, teamId: String, accountId: String) {

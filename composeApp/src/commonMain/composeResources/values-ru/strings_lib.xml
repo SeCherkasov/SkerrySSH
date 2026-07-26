@@ -113,6 +113,47 @@
     <string name="lib_teams_event_role_change">Сменил роль</string>
     <string name="lib_teams_event_share">Поделился записями</string>
     <string name="lib_teams_event_delete">Удалил команду</string>
+    <!-- Фид активности: подписи событий. Субъект записи (имя хоста/сниппета) показывается рядом. -->
+    <string name="lib_teams_event_rekey">Сменил ключ команды</string>
+    <string name="lib_teams_event_scope_create">Создал область</string>
+    <string name="lib_teams_event_scope_delete">Удалил область</string>
+    <string name="lib_teams_event_scope_grant">Выдал доступ к области</string>
+    <string name="lib_teams_event_scope_revoke">Отозвал доступ к области</string>
+    <string name="lib_teams_event_scope_rekey">Сменил ключ области</string>
+    <string name="lib_teams_event_record_share">Поделился</string>
+    <string name="lib_teams_event_record_change">Изменил</string>
+    <string name="lib_teams_event_record_remove">Убрал</string>
+    <string name="lib_teams_event_session_open">Открыл сессию</string>
+    <string name="lib_teams_event_session_record">Записал сессию</string>
+    <string name="lib_teams_record_host">хост</string>
+    <string name="lib_teams_record_snippet">сниппет</string>
+    <string name="lib_teams_record_credential">пароль</string>
+    <string name="lib_teams_record_identity">ключ</string>
+    <string name="lib_teams_record_tunnel">туннель</string>
+    <string name="lib_teams_record_group">группу</string>
+    <string name="lib_teams_record_other">запись</string>
+    <!-- Автор события, если это текущий аккаунт -->
+    <string name="lib_teams_actor_you">вы</string>
+    <!-- Область, в которой произошло событие; %1$s — её имя -->
+    <string name="lib_teams_feed_in_scope">область %1$s</string>
+    <string name="lib_teams_feed_day_today">Сегодня</string>
+    <string name="lib_teams_feed_day_yesterday">Вчера</string>
+    <string name="lib_teams_filter_all">Все</string>
+    <string name="lib_teams_filter_records">Записи</string>
+    <string name="lib_teams_filter_members">Участники</string>
+    <string name="lib_teams_filter_access">Доступ</string>
+    <string name="lib_teams_filter_sessions">Сессии</string>
+    <!-- Длительность записанной сессии; %1$s — например «12» -->
+    <string name="lib_teams_feed_duration">%1$s мин</string>
+    <string name="lib_teams_feed_duration_short">меньше минуты</string>
+    <!-- Честная сноска под фидом: сессии сообщают приложения участников, сервер их не проверяет -->
+    <string name="lib_teams_feed_reported_note">О сессиях сообщают приложения участников — сервер не участвует в подключении и не может его подтвердить.</string>
+    <!-- История одной записи; %1$s — имя записи -->
+    <string name="lib_teams_feed_record_title">История · %1$s</string>
+    <string name="lib_teams_feed_record_empty">С этой записью пока ничего не происходило.</string>
+    <string name="lib_teams_feed_record_history">История этой записи</string>
+    <!-- Свёрнутый массовый пуш; %1$d — сколько записей изменилось разом -->
+    <string name="lib_teams_event_records_bulk">Обновил записей: %1$d</string>
     <!-- Фолбэк для неизвестного клиенту кода события аудита; %1$s — исходный код с сервера -->
     <string name="lib_teams_event_unknown">Другое событие (%1$s)</string>
     <string name="lib_teams_shared_hosts_count">Общие хосты · %1$d</string>

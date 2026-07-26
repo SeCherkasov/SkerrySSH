@@ -178,6 +178,13 @@ class SessionsController(
     // points that don't wire a VNC transport keep compiling; the desktop/Android entry points pass a
     // real one (VncSessionController over VncTcpTransport).
     private val vncControllerFactory: (() -> VncSessionController)? = null,
+    /**
+     * Called with the catalog host id whenever a session to it actually starts — every path here
+     * that opens a connection, and no others (a blank tab, a player, or an ad-hoc target typed into
+     * the form belong to no host). Wired by the entry points to the Teams activity report; must not
+     * throw or block, since a connection is already under way.
+     */
+    private val onHostSessionOpened: (String) -> Unit = {},
 ) {
     var sessions: List<Session> by mutableStateOf(emptyList())
         private set
@@ -218,6 +225,7 @@ class SessionsController(
         val session = Session(newId(), hostId, title, subtitle, controller)
         sessions = sessions + session
         activeId = session.id
+        reportHostSession(hostId)
         controller.connect(target, auth, onConnected)
         return session.id
     }
@@ -253,6 +261,7 @@ class SessionsController(
         val blank = active?.takeIf { it.isBlank }
         if (blank != null) {
             blank.bind(hostId, title, subtitle)
+            reportHostSession(hostId)
             blank.controller.connect(target, auth, onConnected)
             return blank.id
         }
@@ -280,6 +289,7 @@ class SessionsController(
         session.setView(SessionView.Vnc)
         sessions = sessions + session
         activeId = session.id
+        reportHostSession(hostId)
         vnc.connect(target, auth, remoteResize, onRemoteResizeChanged)
         return session.id
     }
@@ -347,7 +357,16 @@ class SessionsController(
         parent.setSplitOpen(true)
         parent.setSplitSession(secondary)
         parent.setFocusedSplit(true)
+        reportHostSession(hostId)
         secondary.controller.connect(target, auth)
+    }
+
+    /**
+     * Reports a starting session on a catalog host (see [onHostSessionOpened]). A null [hostId] is an
+     * ad-hoc target with no catalog record behind it, so there is nothing to report it against.
+     */
+    private fun reportHostSession(hostId: String?) {
+        if (hostId != null) onHostSessionOpened(hostId)
     }
 
     /** Close the split pane of tab [id]: tear down the secondary connection and reset split flags. */

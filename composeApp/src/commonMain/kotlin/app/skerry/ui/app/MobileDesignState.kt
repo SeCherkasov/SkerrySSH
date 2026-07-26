@@ -116,6 +116,8 @@ class MobileDesignState(
     // and pushed live into open ones. Persisted on Android; no-op default for previews/tests.
     initialAllowServerClipboardWrite: Boolean = false,
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    initialReportTeamSessions: Boolean = true,
+    private val onReportTeamSessionsChange: (Boolean) -> Unit = {},
     // Whether a file path selected in terminal output offers "Open in Files" (More → Terminal).
     // Desktop parity (Ctrl+click there). On by default; persisted on Android.
     initialOpenFilePathsInSftp: Boolean = true,
@@ -336,6 +338,12 @@ class MobileDesignState(
     var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
 
     /**
+     * Whether a session on a team-shared host is reported to that team's activity feed (More →
+     * Security). Desktop parity, see [app.skerry.ui.app.DesktopDesignState.reportTeamSessions].
+     */
+    var reportTeamSessions: Boolean by mutableStateOf(initialReportTeamSessions); private set
+
+    /**
      * Whether a file path selected in terminal output offers "Open in Files" (More → Terminal).
      * On by default; desktop parity, see [app.skerry.ui.app.DesktopDesignState.openFilePathsInSftp].
      */
@@ -409,6 +417,12 @@ class MobileDesignState(
     fun toggleAllowServerClipboardWrite() {
         allowServerClipboardWrite = !allowServerClipboardWrite
         onAllowServerClipboardWriteChange(allowServerClipboardWrite)
+    }
+
+    /** Toggle reporting sessions on team-shared hosts and report outward (for persistence). */
+    fun toggleReportTeamSessions() {
+        reportTeamSessions = !reportTeamSessions
+        onReportTeamSessionsChange(reportTeamSessions)
     }
 
     /**

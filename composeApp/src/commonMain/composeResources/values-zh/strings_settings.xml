@@ -138,6 +138,8 @@
     <string name="settings_autolock_never">从不</string>
     <string name="settings_security_2fa">双因素认证</string>
     <string name="settings_security_2fa_desc">通过身份验证器应用使用 TOTP。</string>
+    <string name="settings_security_report_team_sessions">报告共享主机上的会话</string>
+    <string name="settings_security_report_team_sessions_desc">当您在与团队共享的主机上开启会话时通知团队。您自己的主机永远不会被报告。</string>
     <string name="settings_recent_security_events">最近安全事件</string>
     <string name="settings_security_no_events">暂无安全事件。</string>
     <string name="settings_event_vault_created">保险库已创建</string>

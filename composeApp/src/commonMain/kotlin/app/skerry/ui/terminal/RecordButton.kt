@@ -33,6 +33,11 @@ import app.skerry.ui.theme.Skerry
 fun RecordSessionButton(
     session: Session?,
     requests: SharedFlow<Unit>? = null,
+    /**
+     * A recording of a catalog host was saved: `(hostId, wall-clock seconds)`. Reported to the team
+     * that host is shared with, if any (see [app.skerry.ui.teams.TeamsCoordinator.reportSessionRecorded]).
+     */
+    onSaved: (String, Long) -> Unit = { _, _ -> },
     onDone: (RecordingOutcome) -> Unit,
 ) {
     val terminal = (session?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
@@ -54,7 +59,11 @@ fun RecordSessionButton(
                     return@launch
                 }
                 val name = castFileName(session.displayTitle.ifBlank { session.subtitle }, recordingStamp())
+                val seconds = live.recordingSeconds
                 val saved = exportTextFile(name, cast)
+                // Only an actually exported recording is reported: a cancelled Save-As wrote nothing,
+                // and announcing a recording nobody kept would be a plain falsehood in the feed.
+                if (saved) session.hostId?.let { onSaved(it, seconds) }
                 onDone(
                     when {
                         !saved -> RecordingOutcome.Cancelled

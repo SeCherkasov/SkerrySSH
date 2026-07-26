@@ -60,6 +60,48 @@ class TeamRecordRepositoryTest {
     }
 
     @Test
+    fun `upsert reports which records changed and how`() = withTestDb { db ->
+        // What the team audit log is built from. A push carries every local record on every sync
+        // cycle (SyncEngine pushes all of them), so only the ones that actually won LWW are events.
+        val repo = seedTeam(db)
+
+        val shared = repo.upsert("team-1", teamWide, listOf(rec("r1", 1), rec("r2", 1)))
+        assertEquals(
+            listOf("r1" to TeamRecordChange.SHARED, "r2" to TeamRecordChange.SHARED),
+            shared.applied.map { it.record.id to it.change },
+        )
+
+        val noop = repo.upsert("team-1", teamWide, listOf(rec("r1", 1), rec("r2", 1)))
+        assertTrue(noop.applied.isEmpty())
+        assertFalse(noop.changed)
+
+        val edited = repo.upsert("team-1", teamWide, listOf(rec("r1", 2), rec("r2", 1)))
+        assertEquals(listOf("r1" to TeamRecordChange.CHANGED), edited.applied.map { it.record.id to it.change })
+
+        val removed = repo.upsert("team-1", teamWide, listOf(rec("r1", 3, deleted = true)))
+        assertEquals(listOf("r1" to TeamRecordChange.REMOVED), removed.applied.map { it.record.id to it.change })
+
+        // Sharing over a tombstone is a share again, not an edit of something the team could see.
+        val reshared = repo.upsert("team-1", teamWide, listOf(rec("r1", 4)))
+        assertEquals(listOf("r1" to TeamRecordChange.SHARED), reshared.applied.map { it.record.id to it.change })
+
+        // A stale write that loses LWW changed nothing and must not show up as somebody's edit.
+        val stale = repo.upsert("team-1", teamWide, listOf(rec("r2", 1, blob = byteArrayOf(9))))
+        assertTrue(stale.applied.isEmpty())
+    }
+
+    @Test
+    fun `a push into the wrong scope is not reported as a change`() = withTestDb { db ->
+        val repo = seedTeam(db)
+        TeamScopeRepository(db).create("team-1", "prod", alice, byteArrayOf(1), now = 11)
+        repo.upsert("team-1", "prod", listOf(rec("h1", 1)))
+
+        val intruder = repo.upsert("team-1", teamWide, listOf(rec("h1", 99)))
+
+        assertTrue(intruder.applied.isEmpty())
+    }
+
+    @Test
     fun `LWW breaks version ties by lexicographically greater deviceId`() = withTestDb { db ->
         val repo = seedTeam(db)
         repo.upsert("team-1", teamWide, listOf(rec("r1", 7, deviceId = "devB", blob = byteArrayOf(11))))

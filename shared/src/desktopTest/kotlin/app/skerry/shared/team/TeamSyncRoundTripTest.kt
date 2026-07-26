@@ -68,6 +68,13 @@ class TeamSyncRoundTripTest {
         override suspend fun changeRole(session: SyncSession, teamId: String, accountId: String, role: TeamRole) = error("unused")
         override suspend fun rekey(session: SyncSession, teamId: String, newEpoch: Long, envelopes: Map<String, ByteArray>) = error("unused")
         override suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry> = error("unused")
+        override suspend fun reportSessionEvent(
+            session: SyncSession,
+            teamId: String,
+            recordId: String,
+            kind: TeamSessionKind,
+            durationSec: Long?,
+        ) = error("unused")
         override suspend fun removeMember(session: SyncSession, teamId: String, accountId: String) = error("unused")
         override suspend fun deleteTeam(session: SyncSession, teamId: String) = error("unused")
         override suspend fun listScopes(session: SyncSession, teamId: String): List<TeamScopeSummary> = error("unused")

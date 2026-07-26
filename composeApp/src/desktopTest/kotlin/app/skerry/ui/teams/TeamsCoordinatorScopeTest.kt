@@ -7,6 +7,7 @@ import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.team.AccountKeys
 import app.skerry.shared.team.TeamActivityEntry
+import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamInviteCodec
 import app.skerry.shared.team.TeamIdentityStore
@@ -147,6 +148,13 @@ class TeamsCoordinatorScopeTest {
             teamRekeyCalls += newEpoch
         }
         override suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry> = error("unused")
+        override suspend fun reportSessionEvent(
+            session: SyncSession,
+            teamId: String,
+            recordId: String,
+            kind: TeamSessionKind,
+            durationSec: Long?,
+        ) = error("unused")
         override suspend fun removeMember(session: SyncSession, teamId: String, accountId: String) {
             removed += accountId
             scopes.values.forEach { it.remove(accountId) } // the server drops grants with the membership

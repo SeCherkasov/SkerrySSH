@@ -138,6 +138,8 @@
     <string name="settings_autolock_never">Never</string>
     <string name="settings_security_2fa">Two-factor authentication</string>
     <string name="settings_security_2fa_desc">TOTP via an authenticator app.</string>
+    <string name="settings_security_report_team_sessions">Report sessions on shared hosts</string>
+    <string name="settings_security_report_team_sessions_desc">Tell the team when you open a session on a host shared with it. Your own hosts are never reported.</string>
     <string name="settings_recent_security_events">RECENT SECURITY EVENTS</string>
     <string name="settings_security_no_events">No security events yet.</string>
     <string name="settings_event_vault_created">Vault created</string>

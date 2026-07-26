@@ -41,13 +41,32 @@ enum class TeamRole {
     }
 }
 
-/** Team audit log entry: actor, event, human-readable summary (no record contents). */
+/**
+ * Team audit log entry: actor, event, human-readable summary (no record contents), and — for events
+ * about one record — which record it was ([recordId], [recordType]) and the share space it lives in
+ * ([scopeId], empty = team-wide). The record's **name** is deliberately absent: the server never
+ * learns it, so each client resolves it from its own copy of the space (see [TeamActivityFeed]).
+ */
 class TeamActivityEntry(
     val actorAccountId: String,
     val event: String,
     val detail: String,
     val createdAt: Long,
+    val recordId: String? = null,
+    val recordType: String? = null,
+    val scopeId: String? = null,
+    /** Length of a reported session recording, in seconds. */
+    val durationSec: Long? = null,
 )
+
+/** What a member reports about a session on a shared record (see [TeamClient.reportSessionEvent]). */
+enum class TeamSessionKind(val wire: String) {
+    /** A session to the shared host was opened. */
+    OPEN("open"),
+
+    /** A recording of a session on the shared host was saved. */
+    RECORD("record"),
+}
 
 /** Membership status. Unknown string degrades to [INVITED] (no record access). */
 enum class TeamMemberStatus { INVITED, ACTIVE;
@@ -120,6 +139,23 @@ interface TeamClient {
 
     /** Team audit log (owner/admin); newest events first. */
     suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry>
+
+    /**
+     * Reports a session on a record shared with the team, for the members' activity feed. Any active
+     * member may report; the server derives the share space from the record itself and rejects a
+     * record the team doesn't hold (or the caller can't see).
+     *
+     * Unverifiable by design — the server takes no part in an SSH connection — so this is a
+     * collaboration signal rather than proof, and a member who turns reporting off simply sends
+     * nothing.
+     */
+    suspend fun reportSessionEvent(
+        session: SyncSession,
+        teamId: String,
+        recordId: String,
+        kind: TeamSessionKind,
+        durationSec: Long? = null,
+    )
 
     /** Removes a member as owner, leaves the team, or declines an invite (target = self). */
     suspend fun removeMember(session: SyncSession, teamId: String, accountId: String)

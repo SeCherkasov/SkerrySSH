@@ -163,6 +163,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
                     initialAllowServerClipboardWrite = readClipboardWrite(dir),
                     onAllowServerClipboardWriteChange = { writeClipboardWrite(dir, it) },
+                    initialReportTeamSessions = readReportTeamSessions(dir),
+                    onReportTeamSessionsChange = { writeReportTeamSessions(dir, it) },
                     initialOpenFilePathsInSftp = readOpenFilePaths(dir),
                     onOpenFilePathsInSftpChange = { writeOpenFilePaths(dir, it) },
                     initialConfirmProductionWarnings = readProdWarnings(dir),
@@ -268,6 +270,17 @@ class MainActivity : FragmentActivity() {
     private fun writeClipboardWrite(dir: File, enabled: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_clipboard_write").writeText(enabled.toString()) }
+        }
+    }
+
+    /** Reporting sessions on team-shared hosts: `teams_report_sessions`, default on. */
+    private fun readReportTeamSessions(dir: File): Boolean = runCatching {
+        File(dir, "teams_report_sessions").readText().trim().toBoolean()
+    }.getOrDefault(true)
+
+    private fun writeReportTeamSessions(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "teams_report_sessions").writeText(enabled.toString()) }
         }
     }
 
@@ -578,6 +591,7 @@ class MainActivity : FragmentActivity() {
                 writeTerminalTheme(dir, TerminalThemes.DEFAULT)
                 writeThemeMode(dir, ThemeMode.DEFAULT)
                 writeClipboardWrite(dir, false)
+                writeReportTeamSessions(dir, true)
                 writeProdWarnings(dir, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)

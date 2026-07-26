@@ -286,6 +286,9 @@ fun DesktopDesignApp(
     // OSC 52 server clipboard-write gate (Settings → Terminal) — persisted externally (desktop main).
     initialAllowServerClipboardWrite: Boolean = false,
     onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    // Reporting sessions on team-shared hosts (Settings → Security) — persisted externally (desktop main).
+    initialReportTeamSessions: Boolean = true,
+    onReportTeamSessionsChange: (Boolean) -> Unit = {},
     // Clickable file paths in terminal output (Settings → Terminal) — persisted externally (desktop main).
     initialOpenFilePathsInSftp: Boolean = true,
     onOpenFilePathsInSftpChange: (Boolean) -> Unit = {},
@@ -323,6 +326,7 @@ fun DesktopDesignApp(
             initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
             initialHostClickConnectMode, onHostClickConnectModeChange,
             initialAllowServerClipboardWrite, onAllowServerClipboardWriteChange,
+            initialReportTeamSessions, onReportTeamSessionsChange,
             initialOpenFilePathsInSftp, onOpenFilePathsInSftpChange,
             initialConfirmProductionWarnings, onConfirmProductionWarningsChange,
             initialTerminalTheme, onTerminalThemeChange,
@@ -422,12 +426,15 @@ fun DesktopDesignApp(
     // Per-host terminal command history persistence (autocomplete + the command palette) on top of
     // the encrypted vault. Hoisted out of the sessions factory: the palette reads it directly.
     val termHistory = remember(vault) { vault?.let { VaultTerminalHistoryStore(it) } }
-    val liveSessions = sessions ?: remember(transport, vncTransport, scope, vault) {
+    val liveSessions = sessions ?: remember(transport, vncTransport, scope, vault, teams) {
         transport?.let { t ->
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
                 vncControllerFactory = vncTransport?.let { vt -> { app.skerry.ui.vnc.VncSessionController(vt, scope) } },
+                // Session half of the Teams activity feed. Both privacy rules (the setting, and
+                // "never a host of our own") live in the coordinator, not here.
+                onHostSessionOpened = { hostId -> teams?.reportSessionOpened(hostId) },
                 controllerFactory = {
                     ConnectionController(
                         t, scope, history = termHistory,
@@ -473,6 +480,9 @@ fun DesktopDesignApp(
             s.splitSession?.liveTerminal?.applyScrollback(scrollbackLines)
         }
     }
+    // The Teams session-report gate reads the live setting: it lives in this screen's state, while
+    // the coordinator is built at startup, so it is handed a getter rather than a value.
+    LaunchedEffect(teams, state) { teams?.reportSessionsEnabled = { state.reportTeamSessions } }
     // Toggling the OSC 52 clipboard-write gate applies to ALREADY open sessions live: turning it off
     // stops honoring server clipboard writes immediately, turning it on lets them through. New
     // sessions pick up the value at connect via terminalPrefs.

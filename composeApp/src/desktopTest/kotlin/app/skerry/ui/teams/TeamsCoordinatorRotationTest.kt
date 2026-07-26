@@ -7,6 +7,7 @@ import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.team.AccountKeys
 import app.skerry.shared.team.TeamActivityEntry
+import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamKeyStore
 import app.skerry.shared.team.TeamMember
@@ -106,6 +107,13 @@ class TeamsCoordinatorRotationTest {
         override suspend fun accept(session: SyncSession, teamId: String) = error("unused")
         override suspend fun changeRole(session: SyncSession, teamId: String, accountId: String, role: TeamRole) = error("unused")
         override suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry> = error("unused")
+        override suspend fun reportSessionEvent(
+            session: SyncSession,
+            teamId: String,
+            recordId: String,
+            kind: TeamSessionKind,
+            durationSec: Long?,
+        ) = error("unused")
         override suspend fun deleteTeam(session: SyncSession, teamId: String) = error("unused")
         override suspend fun listScopes(session: SyncSession, teamId: String): List<TeamScopeSummary> = emptyList()
         override suspend fun createScope(session: SyncSession, teamId: String, scopeId: String, envelope: ByteArray) = error("unused")

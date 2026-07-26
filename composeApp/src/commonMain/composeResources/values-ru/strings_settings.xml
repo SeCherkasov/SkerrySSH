@@ -138,6 +138,8 @@
     <string name="settings_autolock_never">Никогда</string>
     <string name="settings_security_2fa">Двухфакторная аутентификация</string>
     <string name="settings_security_2fa_desc">TOTP через приложение-аутентификатор.</string>
+    <string name="settings_security_report_team_sessions">Сообщать о сессиях на общих хостах</string>
+    <string name="settings_security_report_team_sessions_desc">Сообщать команде, когда вы открываете сессию на расшаренном с ней хосте. Свои хосты не сообщаются никогда.</string>
     <string name="settings_recent_security_events">НЕДАВНИЕ СОБЫТИЯ БЕЗОПАСНОСТИ</string>
     <string name="settings_security_no_events">Пока событий безопасности нет.</string>
     <string name="settings_event_vault_created">Хранилище создано</string>
