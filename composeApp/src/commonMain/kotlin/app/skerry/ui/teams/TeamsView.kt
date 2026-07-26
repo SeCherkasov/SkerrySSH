@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.host.rowSubtitle
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.snippet.VaultSnippetStore
 import app.skerry.shared.team.HOST_SHARE_STRIP
@@ -388,7 +389,7 @@ private fun TeamDetail(
                     LiveSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
                     if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
                     sharedHosts.forEach { host ->
-                        SharedRecordRow(host.label, "${host.username}@${host.address}", mono, canUnshare = canWrite) { onUnshare(host.id) }
+                        SharedRecordRow(host.label, host.rowSubtitle(), mono, canUnshare = canWrite) { onUnshare(host.id) }
                     }
                     if (canWrite) {
                         GhostButton(stringResource(Res.string.lib_teams_share_host), onClick = { onShare(RecordType.HOST) }, icon = "add", modifier = Modifier.padding(top = 10.dp))

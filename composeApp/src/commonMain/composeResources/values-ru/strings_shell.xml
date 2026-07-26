@@ -106,4 +106,6 @@
     <string name="shell_tip_play">Воспроизвести запись</string>
     <string name="shell_tip_info">Сведения о сессии</string>
     <string name="shell_tip_disconnect">Отключить</string>
+    <string name="shell_no_hosts_yet">Пока нет хостов</string>
+    <string name="shell_add_first_host">Добавьте подключение, и оно появится здесь.</string>
 </resources>

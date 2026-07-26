@@ -1,8 +1,10 @@
 package app.skerry.ui.vnc
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -57,6 +60,8 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.rd_no_session
+import app.skerry.ui.generated.resources.rd_pick_to_connect
 import app.skerry.ui.generated.resources.vnc_connecting
 import app.skerry.ui.generated.resources.vnc_connection_lost
 import app.skerry.ui.generated.resources.vnc_quality
@@ -67,7 +72,10 @@ import app.skerry.ui.generated.resources.vnc_quality_medium
 import app.skerry.ui.generated.resources.vnc_resize_to_window
 import app.skerry.ui.generated.resources.vnc_session_closed
 import app.skerry.ui.generated.resources.vnc_view_only
+import app.skerry.ui.design.EmptyState
+import app.skerry.ui.host.HostSection
 import app.skerry.ui.terminal.HostsSidebar
+import app.skerry.ui.terminal.SidebarReopenHandle
 import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.terminal.readPlainText
 import kotlin.math.roundToInt
@@ -75,14 +83,49 @@ import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 
 /**
+ * The remote-desktop section: its own host sidebar (the desktops catalog) beside the work area,
+ * mirroring how the terminal section is laid out. With no desktop session open the area explains
+ * what to do instead of sitting blank — the sidebar is the only way into one.
+ */
+@Composable
+fun RemoteDesktopsView(state: DesktopDesignState) {
+    Row(Modifier.fillMaxSize()) {
+        // Same collapse behaviour as the terminal sidebar (shared [DesktopDesignState.sidebarHidden]),
+        // so hiding the panel in one section hides it in both — one shell, one preference.
+        AnimatedVisibility(
+            visible = !state.sidebarHidden,
+            enter = expandHorizontally(expandFrom = Alignment.End),
+            exit = shrinkHorizontally(shrinkTowards = Alignment.End),
+        ) { HostsSidebar(state, HostSection.RemoteDesktops) }
+        AnimatedVisibility(
+            visible = state.sidebarHidden,
+            enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
+            exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
+        ) { SidebarReopenHandle(onClick = state::toggleSidebar) }
+        Box(Modifier.weight(1f).fillMaxHeight()) {
+            if (LocalSessions.current?.activeDesktop != null) {
+                VncView(state)
+            } else {
+                EmptyState(
+                    icon = "desktop_windows",
+                    title = stringResource(Res.string.rd_no_session),
+                    subtitle = stringResource(Res.string.rd_pick_to_connect),
+                    tint = Skerry.colors.dim,
+                )
+            }
+        }
+    }
+}
+
+/**
  * The VNC tab's work area. Renders the active session's [VncSessionController] state: connecting /
- * live framebuffer / error / disconnected. The framebuffer sibling of `TerminalView`; it is its own
- * top-level view (Viewport routes [app.skerry.ui.session.SessionView.Vnc] here).
+ * live framebuffer / error / disconnected. The framebuffer sibling of `TerminalView`, rendered by
+ * [RemoteDesktopsView] beside the desktops sidebar.
  */
 @Composable
 fun VncView(state: DesktopDesignState) {
     val sessions = LocalSessions.current
-    val vnc = sessions?.active?.vncController ?: return
+    val vnc = sessions?.activeDesktop?.vncController ?: return
     Box(Modifier.fillMaxSize()) {
         when (val ui = vnc.uiState) {
             is VncUiState.Connecting -> CenterNotice("hourglass_empty", stringResource(Res.string.vnc_connecting))
@@ -104,16 +147,6 @@ fun VncView(state: DesktopDesignState) {
                 )
             }
         }
-        // Slide-over hosts drawer (rail chevron): overlays the framebuffer instead of shrinking it —
-        // a layout resize would ripple to the remote desktop when "Resize to window" is on.
-        // clipToBounds: slide transitions draw outside the node's bounds, so without it the panel
-        // rides in from off-screen across the icon rail instead of emerging at the work-area edge.
-        AnimatedVisibility(
-            visible = state.vncSidebar,
-            modifier = Modifier.align(Alignment.CenterStart).clipToBounds(),
-            enter = slideInHorizontally { -it },
-            exit = slideOutHorizontally { -it },
-        ) { HostsSidebar(state) }
     }
 }
 

@@ -24,6 +24,15 @@ import app.skerry.shared.vnc.VncUpdate
 import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.DesktopView
+import app.skerry.ui.desktop.RAIL
+import app.skerry.ui.desktop.RailTarget
+import app.skerry.ui.desktop.closeSessionTab
+import app.skerry.ui.desktop.followActiveTabSection
+import app.skerry.ui.desktop.openRailSection
+import app.skerry.ui.desktop.railItemActive
+import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.prodGuardDialogOpen
 import app.skerry.ui.vnc.VncSessionController
 import kotlinx.coroutines.CoroutineScope
@@ -638,6 +647,56 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
+    // Section-scoped active tab (terminal shell vs remote desktop)
+
+    @Test
+    fun `the active tab is reported to the section it belongs to`() = runTest {
+        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
+        val shell = sessions.open(hostId = "host-a")
+
+        assertEquals(shell, sessions.activeTerminal?.id)
+        assertNull(sessions.activeDesktop)
+
+        val desktop = sessions.openVnc(hostId = "screen")!!
+        assertEquals(desktop, sessions.activeDesktop?.id)
+        assertNull(sessions.activeTerminal)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a player tab belongs to the terminal section`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+
+        val id = sessions.openPlayer("deploy", cast)
+
+        assertEquals(id, sessions.activeTerminal?.id)
+        assertNull(sessions.activeDesktop)
+        sessions.close(id)
+        scope.cancel()
+    }
+
+    @Test
+    fun `lastSessionIn finds the newest tab of a section`() = runTest {
+        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
+        val shellA = sessions.open(hostId = "a")
+        val desktop = sessions.openVnc(hostId = "screen")!!
+        val shellB = sessions.open(hostId = "b")
+
+        assertEquals(shellB, sessions.lastSessionIn(remoteDesktop = false)?.id)
+        assertEquals(desktop, sessions.lastSessionIn(remoteDesktop = true)?.id)
+        assertTrue(shellA != shellB)
+        scope.cancel()
+    }
+
+    @Test
+    fun `lastSessionIn reports nothing when the section has no tabs`() = runTest {
+        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
+        sessions.open(hostId = "a")
+
+        assertNull(sessions.lastSessionIn(remoteDesktop = true))
+        scope.cancel()
+    }
+
     // Player tabs
 
     private val cast = Asciicast(80, 24, "deploy", listOf(CastEvent(0.0, "hi")))
@@ -773,5 +832,133 @@ private class FakeChannel : ShellChannel {
     override suspend fun resize(size: PtySize) {}
     override suspend fun close() {
         emissions.close()
+    }
+}
+
+/**
+ * Rail ⇄ tabs agreement: the work area, the sidebar and the highlighted rail item all read
+ * [DesktopDesignState.section], so switching one must move the others.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class DesktopSectionNavigationTest {
+
+    private val target = SshTarget(host = "h", port = 22, username = "u")
+
+    private fun TestScope.sessions(): Pair<SessionsController, CoroutineScope> {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        var n = 0
+        val controller = SessionsController(
+            newId = { "s${n++}" },
+            controllerFactory = {
+                ConnectionController(
+                    transport = FakeTransport(),
+                    scope = scope,
+                    newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
+                )
+            },
+            vncControllerFactory = { VncSessionController(FakeVncTransport(), scope) },
+        )
+        return controller to scope
+    }
+
+    @Test
+    fun `opening a section activates its newest tab`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
+        val desktop = sessions.openVnc("screen", "screen", "", target, VncAuth.None)!!
+
+        openRailSection(state, sessions, HostSection.Terminal)
+        assertEquals(HostSection.Terminal, state.section)
+        assertEquals(shell, sessions.activeId)
+
+        openRailSection(state, sessions, HostSection.RemoteDesktops)
+        assertEquals(HostSection.RemoteDesktops, state.section)
+        assertEquals(desktop, sessions.activeId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `opening a section with no tabs still switches the work area`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
+
+        openRailSection(state, sessions, HostSection.RemoteDesktops)
+
+        // The section opens on its empty state; the shell tab stays selected for the way back.
+        assertEquals(HostSection.RemoteDesktops, state.section)
+        assertEquals(shell, sessions.activeId)
+        assertNull(sessions.activeDesktop)
+        scope.cancel()
+    }
+
+    @Test
+    fun `selecting a tab moves the work area to its section`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
+        sessions.openVnc("screen", "screen", "", target, VncAuth.None)
+
+        followActiveTabSection(state, sessions)
+        assertEquals(HostSection.RemoteDesktops, state.section)
+
+        sessions.activate(shell)
+        followActiveTabSection(state, sessions)
+        assertEquals(HostSection.Terminal, state.section)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the rail highlights the open section, and nothing while an overlay is up`() {
+        val state = DesktopDesignState()
+        val terminal = RAIL.first { it.target == RailTarget.Section(HostSection.Terminal) }
+        val desktops = RAIL.first { it.target == RailTarget.Section(HostSection.RemoteDesktops) }
+        val vault = RAIL.first { it.target == RailTarget.View(DesktopView.Vault) }
+
+        assertTrue(railItemActive(terminal, state))
+        assertFalse(railItemActive(desktops, state))
+
+        state.showSection(HostSection.RemoteDesktops)
+        assertTrue(railItemActive(desktops, state))
+        assertFalse(railItemActive(terminal, state))
+
+        state.showView(DesktopView.Vault)
+        assertTrue(railItemActive(vault, state))
+        assertFalse(railItemActive(desktops, state)) // work-area items dim under an overlay
+    }
+
+    @Test
+    fun `closing a tab hands the work area to the tab that becomes active`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
+        sessions.openVnc("screen", "screen", "", target, VncAuth.None)
+        sessions.activate(shell)
+        followActiveTabSection(state, sessions)
+        assertEquals(HostSection.Terminal, state.section)
+
+        // Closing the active shell promotes its right neighbour — a remote desktop.
+        closeSessionTab(state, sessions, shell)
+
+        assertEquals(HostSection.RemoteDesktops, state.section)
+        assertEquals(sessions.activeId, sessions.activeDesktop?.id)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing the last tab of a section falls back to the other one`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        sessions.open("a", "a", "", target, SshAuth.Password("pw"))
+        val desktop = sessions.openVnc("screen", "screen", "", target, VncAuth.None)!!
+        followActiveTabSection(state, sessions)
+
+        sessions.close(desktop)
+        followActiveTabSection(state, sessions)
+
+        // The shell tab became active, so the shell section is what the work area shows.
+        assertEquals(HostSection.Terminal, state.section)
+        scope.cancel()
     }
 }

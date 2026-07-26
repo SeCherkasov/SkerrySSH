@@ -1,10 +1,5 @@
 package app.skerry.ui.desktop
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -218,6 +213,7 @@ import app.skerry.ui.design.rememberUiFont
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.session.tabBoundsAnchor
 import app.skerry.ui.app.asDesktopView
+import app.skerry.ui.host.HostSection
 import app.skerry.ui.session.draggableTab
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.host.isProdHostId
@@ -648,11 +644,13 @@ private fun DesktopChrome(
                     // "ask every time" (no bound secret) prompts for one first. No ProxyJump/host-key path.
                     val cred = credentials?.find(host.credentialId)
                     if (cred != null) {
+                        state.recordRecentHost(host.id)
                         sessions?.openVnc(
                             host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
                             remoteResize = host.vncResizeToWindow,
                             onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
                         )
+                        state.showSection(HostSection.RemoteDesktops)
                     } else {
                         pendingVncHost = host
                     }
@@ -828,11 +826,13 @@ private fun DesktopChrome(
                     onConnect = { pw ->
                         pendingVncHost = null
                         val auth = if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw)
+                        state.recordRecentHost(host.id)
                         sessions?.openVnc(
                             host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
                             remoteResize = host.vncResizeToWindow,
                             onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
                         )
+                        state.showSection(HostSection.RemoteDesktops)
                     },
                 )
             }
@@ -897,7 +897,7 @@ private fun DesktopChrome(
                         title = stringResource(Res.string.shell_disconnect_title, name),
                         message = stringResource(Res.string.shell_disconnect_message),
                         confirmLabel = stringResource(Res.string.shell_disconnect),
-                        onConfirm = { sessions?.close(pc.id); state.dismissClose() },
+                        onConfirm = { closeSessionTab(state, sessions, pc.id); state.dismissClose() },
                         onDismiss = state::dismissClose,
                     )
                 }
@@ -971,7 +971,9 @@ private fun runDesktopShortcut(
         is DesktopShortcut.SelectTab -> return selectTabByIndex(shortcut.index, state, sessions)
         DesktopShortcut.NextTab -> return cycleTab(+1, state, sessions)
         DesktopShortcut.PrevTab -> return cycleTab(-1, state, sessions)
-        DesktopShortcut.NewConnection -> state.openModal()
+        // Opens the form of the section on screen: pressed over the desktops list it creates a
+        // remote desktop, over the hosts list a shell.
+        DesktopShortcut.NewConnection -> state.openModal(state.section)
         DesktopShortcut.SplitTerminal -> if (sessions != null) sessions.toggleSplit() else state.toggleSplit()
         DesktopShortcut.OpenSftp -> if (sessions != null) {
             state.clearOverlay(); sessions.setActiveView(SessionView.Sftp)
@@ -1024,6 +1026,8 @@ internal fun selectTabByIndex(index: Int, state: DesktopDesignState, sessions: S
     if (sessions != null) {
         val target = sessions.sessions.getOrNull(index) ?: return false
         sessions.activate(target.id)
+        // A tab hotkey can cross sections (Alt+3 onto a remote desktop): the work area follows.
+        followActiveTabSection(state, sessions)
         return true
     }
     if (index !in state.tabs.indices) return false
@@ -1039,6 +1043,7 @@ internal fun cycleTab(delta: Int, state: DesktopDesignState, sessions: SessionsC
         val current = list.indexOfFirst { it.id == sessions.activeId }.coerceAtLeast(0)
         val next = ((current + delta) % list.size + list.size) % list.size
         sessions.activate(list[next].id)
+        followActiveTabSection(state, sessions)
         return true
     }
     val count = state.tabs.size
@@ -1071,9 +1076,9 @@ private fun openHostSession(
         auth = auth,
         onConnected = onConnected,
     )
-    // Live mode: the sub-view is held by the tab itself — just clear the overlay to show its terminal.
-    // Mock/preview (no sessions): fall back to Terminal via showView.
-    if (sessions != null) state.clearOverlay() else state.showView(DesktopView.Terminal)
+    // Live mode: the sub-view is held by the tab itself — showing the terminal section reveals it
+    // (and clears any app overlay). Mock/preview (no sessions): fall back to Terminal via showView.
+    if (sessions != null) state.showSection(HostSection.Terminal) else state.showView(DesktopView.Terminal)
 }
 
 /**
@@ -1157,8 +1162,10 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                         accent = if (s.isPlayer || prodTab) Skerry.colors.sunset else Skerry.colors.cyan,
                         split = s.splitOpen,
                         active = s.id == sessions.activeId,
-                        onClick = { sessions.activate(s.id) },
-                        onClose = { tabDrag.tabClosed(s.id); sessions.close(s.id) },
+                        // Chips of both sections share one row, so selecting one also moves the work
+                        // area to the section that tab belongs to.
+                        onClick = { sessions.activate(s.id); followActiveTabSection(state, sessions) },
+                        onClose = { tabDrag.tabClosed(s.id); closeSessionTab(state, sessions, s.id) },
                         dragging = tabDrag.draggingTabId == s.id,
                         modifier = Modifier
                             .tabBoundsAnchor(tabDrag, s.id)
@@ -1179,10 +1186,10 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                 "add",
                 onClick = {
                     if (sessions != null) {
-                        // A new blank tab starts on the Terminal sub-view (Session.view's default);
-                        // clear the overlay to show its terminal placeholder.
+                        // A new blank tab starts on the Terminal sub-view (Session.view's default),
+                        // so the work area moves to the terminal section to show its placeholder.
                         sessions.openBlank(newTabTitle)
-                        state.clearOverlay()
+                        state.showSection(HostSection.Terminal)
                     } else {
                         state.openModal()
                     }
@@ -1330,9 +1337,6 @@ private fun TabInsertLine() {
 @Composable
 private fun IconRail(state: DesktopDesignState) {
     val sessions = LocalSessions.current
-    // Current session-level item to highlight: the active tab's subview (live mode) or the mock fallback
-    // [state.view]. Under an open app overlay, session items aren't highlighted.
-    val currentSessionView = sessions?.active?.view?.asDesktopView() ?: state.view
     Column(
         Modifier
             .width(52.dp)
@@ -1342,33 +1346,19 @@ private fun IconRail(state: DesktopDesignState) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        // The terminal's hosts-sidebar collapse now lives in the sidebar header itself (a chevron
-        // next to search), so the rail no longer carries it. Only VNC keeps a rail toggle: its
-        // framebuffer view has no header to host one, and the host drawer overlays the framebuffer.
-        // It fades and collapses to zero height so entering and leaving VNC doesn't jolt the icons.
-        val showVncDrawerToggle = state.appOverlay == null && sessions?.active?.view == SessionView.Vnc
-        AnimatedVisibility(
-            visible = showVncDrawerToggle,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically(),
-        ) {
-            SidebarToggle(hidden = !state.vncSidebar, onToggle = state::toggleVncSidebar)
-        }
+        // No sidebar toggle here: both work-area sections carry their collapse chevron in the
+        // sidebar header itself (next to search).
         RAIL.forEach { item ->
-            val active = if (state.appOverlay != null) item.view == state.appOverlay
-            else item.view == currentSessionView
             RailButton(
                 icon = item.icon,
                 label = stringResource(item.label),
-                active = active,
+                active = railItemActive(item, state),
                 onClick = {
-                    // App-level (Vault/Known/Teams/Snippets) → overlay. Session-level: in live mode edits
-                    // only the active tab's subview (source of truth) + clears the overlay, without
-                    // touching the mock fallback state.view; with no sessions — the mock path via showView.
-                    when {
-                        item.view.isAppLevel -> state.showView(item.view)
-                        sessions != null -> { state.clearOverlay(); sessions.setActiveView(item.view.asSessionView()) }
-                        else -> state.showView(item.view)
+                    when (val target = item.target) {
+                        // App-level (Vault/Known/Teams/Tunnels/Snippets) → overlay over the tabs.
+                        is RailTarget.View -> state.showView(target.view)
+                        // Work-area section: switch the shell and land on that section's newest tab.
+                        is RailTarget.Section -> openRailSection(state, sessions, target.section)
                     }
                 },
             )

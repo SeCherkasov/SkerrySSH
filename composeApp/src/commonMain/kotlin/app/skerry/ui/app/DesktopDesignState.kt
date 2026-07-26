@@ -5,10 +5,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.host.Host
+import app.skerry.ui.host.HostSection
+import app.skerry.ui.host.section
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.settings.SETTINGS_NAV
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.session.BroadcastController
+import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
@@ -60,6 +63,15 @@ fun SessionView.asDesktopView(): DesktopView = when (this) {
     SessionView.Vnc -> DesktopView.Terminal
     SessionView.Player -> DesktopView.Terminal
 }
+
+/**
+ * Work-area section a session tab belongs to: a remote-desktop tab ([Session.isVnc]) renders in the
+ * remote-desktop section, everything else (shells, SFTP, recording player) in the terminal one.
+ * Activating a tab moves the shell to its section, so the rail, the sidebar and the work area never
+ * disagree about what is on screen.
+ */
+fun sectionOf(session: Session?): HostSection =
+    if (session?.isVnc == true) HostSection.RemoteDesktops else HostSection.Terminal
 
 /** Settings panel tabs. */
 enum class SettingsTab { AI, Sync, Security, Appearance, Terminal, Keyboard, Trash, About }
@@ -257,11 +269,11 @@ class DesktopDesignState(
     var sidebarHidden: Boolean by mutableStateOf(false); private set
 
     /**
-     * Whether the VNC view's slide-over host drawer is open. Separate from [sidebarHidden]: the VNC
-     * framebuffer wants the full work area, so its drawer overlays the render and defaults to closed
-     * instead of reserving layout space like the terminal sidebar.
+     * Which catalog the work area is showing: terminal-style connections or remote desktops (the
+     * rail's two session-level items). Each section has its own host sidebar, its own "New
+     * connection" form and its own session tabs; [appOverlay] renders over whichever is selected.
      */
-    var vncSidebar: Boolean by mutableStateOf(false); private set
+    var section: HostSection by mutableStateOf(HostSection.Terminal); private set
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
 
     /**
@@ -376,6 +388,9 @@ class DesktopDesignState(
     /** Host open in the modal for editing (null means the modal is in "New connection" mode). */
     var editingHost: Host? by mutableStateOf(null); private set
 
+    /** Which section's protocols the open connection form offers (see [openModal]). */
+    var modalSection: HostSection by mutableStateOf(HostSection.Terminal); private set
+
     /** Host the modal is prefilled from as a copy ("Duplicate"); saving creates a new profile. */
     var duplicatingHost: Host? by mutableStateOf(null); private set
 
@@ -431,6 +446,18 @@ class DesktopDesignState(
      * is only a mock/preview fallback and must not be overwritten when navigating with live sessions.
      */
     fun clearOverlay() { appOverlay = null }
+
+    /**
+     * Open a work-area section from the rail (terminal / remote desktops). Clears the app overlay —
+     * the click asks for the work area, which an open Vault/Teams section would otherwise hide. The
+     * session sub-view ([view]) is left alone, so returning to the terminal lands on the SFTP panel
+     * if that is where the user was. Activating the section's newest tab is the caller's job (it
+     * holds the session manager), see [app.skerry.ui.desktop.openRailSection].
+     */
+    fun showSection(s: HostSection) {
+        appOverlay = null
+        section = s
+    }
     fun selectHost(name: String) { selectedHost = name }
     fun onHostSearch(value: String) { hostSearchQuery = value }
     fun setTab(i: Int) { if (i in tabs.indices) activeTab = i }
@@ -451,9 +478,22 @@ class DesktopDesignState(
 
     fun lock() { locked = true; hostSearchQuery = "" }
     fun unlock() { locked = false }
-    fun openModal() { editingHost = null; duplicatingHost = null; modalOpen = true }
-    fun openEditModal(host: Host) { editingHost = host; duplicatingHost = null; modalOpen = true }
-    fun openDuplicateModal(host: Host) { editingHost = null; duplicatingHost = host; modalOpen = true }
+    /**
+     * Open the connection form for [section]: it offers only that section's protocols and starts on
+     * its default one, so the list a profile is created from decides what kind of profile it is.
+     */
+    fun openModal(section: HostSection = HostSection.Terminal) {
+        editingHost = null; duplicatingHost = null; modalSection = section; modalOpen = true
+    }
+
+    // Editing/duplicating follows the profile itself: its transport already says which section it
+    // belongs to, whichever list the action was invoked from.
+    fun openEditModal(host: Host) {
+        editingHost = host; duplicatingHost = null; modalSection = host.section; modalOpen = true
+    }
+    fun openDuplicateModal(host: Host) {
+        editingHost = null; duplicatingHost = host; modalSection = host.section; modalOpen = true
+    }
     fun closeModal() { modalOpen = false; editingHost = null; duplicatingHost = null }
     fun beginSshImport(result: app.skerry.shared.ssh.SshConfigParseResult) { sshImport = result }
     fun closeSshImport() { sshImport = null }
@@ -489,7 +529,6 @@ class DesktopDesignState(
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
     fun toggleSidebar() { sidebarHidden = !sidebarHidden }
-    fun toggleVncSidebar() { vncSidebar = !vncSidebar }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
 
     // Signal to focus the AI bar's input (hotkey Cmd// Ctrl+Shift+/). SharedFlow rather than a counter

@@ -198,3 +198,41 @@ class HostReorderingTest {
         assertEquals(hosts, renameHostGroup(hosts, oldName = "Prod", newName = "Prod"))
     }
 }
+
+/**
+ * Drop indices come from a list the user sees, which holds only one section's profiles; the catalog
+ * they are applied to holds both. These cover the translation between the two.
+ */
+class SectionDropIndexTest {
+
+    // Visible (section) rows at catalog positions 0, 2, 3 — position 1 belongs to the other section.
+    private val visible = listOf(0, 2, 3)
+
+    @Test
+    fun dropping_before_the_first_visible_row_lands_at_its_catalog_position() {
+        assertEquals(0, filteredIndexToFull(fullSize = 4, visiblePositions = visible, visibleIndex = 0))
+    }
+
+    @Test
+    fun dropping_between_visible_rows_lands_on_the_following_row() {
+        assertEquals(2, filteredIndexToFull(fullSize = 4, visiblePositions = visible, visibleIndex = 1))
+        assertEquals(3, filteredIndexToFull(fullSize = 4, visiblePositions = visible, visibleIndex = 2))
+    }
+
+    @Test
+    fun dropping_past_the_last_visible_row_lands_right_after_it() {
+        // Not at the end of the catalog: a hidden row may follow, and it must keep its place.
+        assertEquals(4, filteredIndexToFull(fullSize = 6, visiblePositions = visible, visibleIndex = 3))
+    }
+
+    @Test
+    fun a_section_with_nothing_visible_appends_to_the_end() {
+        assertEquals(3, filteredIndexToFull(fullSize = 3, visiblePositions = emptyList(), visibleIndex = 0))
+    }
+
+    @Test
+    fun out_of_range_indices_are_clamped_to_the_visible_ends() {
+        assertEquals(0, filteredIndexToFull(fullSize = 4, visiblePositions = visible, visibleIndex = -3))
+        assertEquals(4, filteredIndexToFull(fullSize = 4, visiblePositions = visible, visibleIndex = 99))
+    }
+}

@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.collectAsState
+import app.skerry.ui.host.rowSubtitle
 import app.skerry.ui.sync.SyncIndicatorLevel
 import app.skerry.ui.sync.syncIndicatorLocalized
 import androidx.compose.foundation.layout.Box
@@ -45,11 +46,19 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.HostSection
+import app.skerry.ui.host.inSection
 import app.skerry.ui.host.ProdBadge
 import app.skerry.ui.host.isProdHost
 import app.skerry.ui.host.UNGROUPED_LABEL
 import app.skerry.ui.host.ungroupedLabel
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.rd_add_first
+import app.skerry.ui.generated.resources.rd_search_placeholder
+import app.skerry.ui.generated.resources.shell_no_hosts_yet
+import app.skerry.ui.generated.resources.shell_add_first_host
+import app.skerry.ui.generated.resources.rd_no_desktops
+import app.skerry.ui.generated.resources.rd_screen_title
 import app.skerry.ui.generated.resources.shell_hosts
 import app.skerry.ui.generated.resources.shell_search_hosts
 import org.jetbrains.compose.resources.stringResource
@@ -81,16 +90,28 @@ internal val MOBILE_PREVIEW_HOSTS = listOf(
     Host("p4", "nas-truenas", "10.0.0.20", 22, "admin", "Homelab"),
 )
 
+/** Root screen of the Hosts tab: the terminal-style half of the catalog. */
+@Composable
+fun MobileHostsScreen(state: MobileDesignState) = MobileCatalogScreen(state, HostSection.Terminal)
+
+/** Root screen of the Desktops tab: remote desktops, the same list over the other half of the catalog. */
+@Composable
+fun MobileDesktopsScreen(state: MobileDesignState) = MobileCatalogScreen(state, HostSection.RemoteDesktops)
+
 /**
- * Root screen of the Hosts tab: header with title and sync indicator, search field, tag
- * filter-chip row, host sections, and "new connection" FAB. Catalog is the live [LocalHosts]
- * (behind the vault gate) or [MOBILE_PREVIEW_HOSTS] on the preview path. Tapping a host opens
+ * One catalog screen, shown once per [section] (Hosts / Desktops): header with title and sync
+ * indicator, search field, tag filter-chip row, folder sections, and a "new connection" FAB that
+ * opens the form on this section's protocols. Catalog is the live [LocalHosts] (behind the vault
+ * gate) or [MOBILE_PREVIEW_HOSTS] on the preview path, narrowed to [section]. Tapping a host opens
  * [MobileRoute.HostDetail].
  */
 @Composable
-fun MobileHostsScreen(state: MobileDesignState) {
+private fun MobileCatalogScreen(state: MobileDesignState, section: HostSection) {
     val controller = LocalHosts.current
-    val hosts = controller?.hosts ?: MOBILE_PREVIEW_HOSTS
+    val allHosts = controller?.hosts ?: MOBILE_PREVIEW_HOSTS
+    // Memoized like the desktop sidebar's slice: the filter would otherwise rerun on every
+    // recomposition (every drag frame) over the whole catalog.
+    val hosts = remember(allHosts, section) { allHosts.inSection(section) }
     // Pulls shared team hosts when sync goes Online (see AutoPullTeamsOnOnline): the screen is
     // recreated on tab selection (MobileDesignApp `when(tab)`), so the effect runs on every entry,
     // keyed on Online so it fires once per connection.
@@ -106,8 +127,8 @@ fun MobileHostsScreen(state: MobileDesignState) {
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            HostsHeader()
-            HostsSearch(query, onChange = { query = it })
+            HostsHeader(section)
+            HostsSearch(query, section, onChange = { query = it })
             HostsChips(list.chips, active = chip, onSelect = { chip = it })
             Spacer(Modifier.height(2.dp))
             // Insertion line while dragging a folder: before the folder at the target index (or at the end).
@@ -117,21 +138,25 @@ fun MobileHostsScreen(state: MobileDesignState) {
             list.sections.forEach { folder ->
                 key(folder.name) {
                     if (folder.name == folderLineBefore) MobileDropLine()
-                    MobileHostFolder(folder, state, controller, dragState) { foldersUpdated.value }
+                    MobileHostFolder(folder, state, section, controller, dragState) { foldersUpdated.value }
                 }
             }
             if (folderLineIndex != null && folderLineIndex == otherFolders.size) MobileDropLine()
             // Shared team hosts (Teams): sections below the personal catalog, outside search/filter
             // (parity with the desktop sidebar). Tap connects directly (LocalConnectHost).
             if (query.isBlank() && chip == ALL_HOSTS_CHIP) {
-                MobileTeamHostsSections(hosts)
+                MobileTeamHostsSections(hosts, section)
+            }
+            // An empty catalog says so rather than leaving a blank screen under the FAB.
+            if (list.sections.isEmpty() && query.isBlank() && chip == ALL_HOSTS_CHIP) {
+                MobileEmptyCatalogNote(section)
             }
             // Room for the tab bar AND the FAB above it (bottom 104dp + 56dp size + 16dp margin): anything less
             // leaves the last rows permanently stuck under the "+" button at full scroll.
             Spacer(Modifier.height(176.dp))
         }
         MobileFabButton(
-            onClick = state::openNewConn,
+            onClick = { state.openNewConn(section) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
         )
     }
@@ -146,6 +171,7 @@ fun MobileHostsScreen(state: MobileDesignState) {
 private fun MobileHostFolder(
     folder: HostFolder,
     state: MobileDesignState,
+    section: HostSection,
     controller: HostManagerController?,
     dragState: HostDragState,
     foldersProvider: () -> List<HostFolder>,
@@ -175,8 +201,9 @@ private fun MobileHostFolder(
         val headerMod = if (controller != null) {
             Modifier
                 .folderHeaderAnchor(dragState, folder.name)
+                // Section-aware, like desktop: the index counts only the folders on screen.
                 .draggableFolderHeader(dragState, folder.name, foldersProvider, longPress = true) { index ->
-                    controller.moveFolder(group, index)
+                    controller.moveFolderInSection(group, index, section)
                 }
         } else {
             Modifier
@@ -204,7 +231,7 @@ private fun MobileHostFolder(
                                 .alpha(if (dragState.draggingHostId == host.id) 0.4f else 1f)
                                 .hostBoundsAnchor(dragState, host.id)
                                 .draggableHostRow(dragState, host.id, foldersProvider, longPress = true) { drop ->
-                                    controller.moveHost(host.id, drop.group, drop.index)
+                                    controller.moveHostInSection(host.id, drop.group, drop.index, section)
                                 }
                         } else {
                             Modifier
@@ -239,15 +266,45 @@ private fun MobileDropLine(horizontal: Dp = 18.dp) {
     )
 }
 
-/** Header: "Hosts" (28sp) + sync indicator on the right. */
+/**
+ * Note shown when a section's catalog is empty (before any filtering): an empty screen under a lone
+ * "+" button doesn't say whether anything was hidden by a filter or never created.
+ */
 @Composable
-private fun HostsHeader() {
+private fun MobileEmptyCatalogNote(section: HostSection) {
+    val title = when (section) {
+        HostSection.Terminal -> Res.string.shell_no_hosts_yet
+        HostSection.RemoteDesktops -> Res.string.rd_no_desktops
+    }
+    val subtitle = when (section) {
+        HostSection.Terminal -> Res.string.shell_add_first_host
+        HostSection.RemoteDesktops -> Res.string.rd_add_first
+    }
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 30.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Txt(stringResource(title), color = Skerry.colors.dim, size = 14.sp)
+        Txt(stringResource(subtitle), color = Skerry.colors.faint, size = 12.5.sp, lineHeight = 18.sp)
+    }
+}
+
+/** Header: the section title (28sp) + sync indicator on the right. */
+@Composable
+private fun HostsHeader(section: HostSection) {
     Row(
         Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        MobileScreenTitle(stringResource(Res.string.shell_hosts))
+        MobileScreenTitle(
+            stringResource(
+                when (section) {
+                    HostSection.Terminal -> Res.string.shell_hosts
+                    HostSection.RemoteDesktops -> Res.string.rd_screen_title
+                },
+            ),
+        )
         // Sync indicator driven by session status (see syncIndicator), not just server
         // reachability: shows "paused/error" without a working session instead of a false green online.
         val syncC = LocalSync.current
@@ -262,9 +319,9 @@ private fun HostsHeader() {
     }
 }
 
-/** Search field over host name/address/username/group. */
+/** Search field over host name/address/username/group of this section. */
 @Composable
-private fun HostsSearch(query: String, onChange: (String) -> Unit) {
+private fun HostsSearch(query: String, section: HostSection, onChange: (String) -> Unit) {
     // Outer padding is on the wrapper; the border lives in decorationBox so a click anywhere places the caret.
     BasicTextField(
         value = query,
@@ -288,7 +345,13 @@ private fun HostsSearch(query: String, onChange: (String) -> Unit) {
             ) {
                 Sym("search", size = 19.sp, color = Skerry.colors.faint)
                 Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Txt(stringResource(Res.string.shell_search_hosts), color = Skerry.colors.faint, size = 15.sp)
+                    if (query.isEmpty()) {
+                        val placeholder = when (section) {
+                            HostSection.Terminal -> Res.string.shell_search_hosts
+                            HostSection.RemoteDesktops -> Res.string.rd_search_placeholder
+                        }
+                        Txt(stringResource(placeholder), color = Skerry.colors.faint, size = 15.sp)
+                    }
                     inner()
                 }
             }
@@ -437,7 +500,7 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
             }
             Spacer(Modifier.height(2.dp))
             Txt(
-                "${host.username}@${host.address}",
+                host.rowSubtitle(),
                 color = Skerry.colors.dim,
                 size = 11.5.sp,
                 font = LocalFonts.current.mono,

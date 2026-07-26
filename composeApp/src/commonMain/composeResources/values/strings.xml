@@ -41,6 +41,7 @@
 
     <!-- Левый icon-rail desktop-оболочки: подписи пунктов. -->
     <string name="rail_terminal">Terminal</string>
+    <string name="rail_desktops">Remote desktops</string>
     <string name="rail_tunnels">Tunnels</string>
     <string name="rail_snippets">Snippets</string>
     <string name="rail_vault">Vault</string>

@@ -27,6 +27,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.host.HostSection
+import app.skerry.ui.host.rowSubtitle
+import app.skerry.ui.host.section
 import app.skerry.shared.host.Host
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shtail_host_address
@@ -128,7 +131,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             Txt(host.label, color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(3.dp))
             Txt(
-                "${host.username}@${host.address}",
+                host.rowSubtitle(),
                 color = Skerry.colors.dim,
                 size = 12.5.sp,
                 font = LocalFonts.current.mono,
@@ -136,8 +139,9 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
         }
 
         // Connect: opens a live session via LocalConnectHost (resolves identity or prompts for a
-        // password) and pushes the terminal screen; a no-op in preview/outside the gate.
+        // password) and pushes the terminal (or framebuffer) screen; a no-op in preview/outside the gate.
         val connect = LocalConnectHost.current
+        val remoteDesktop = host.section == HostSection.RemoteDesktops
         Box(Modifier.padding(horizontal = 22.dp)) {
             Row(
                 Modifier
@@ -153,7 +157,8 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             ) {
-                Sym("terminal", size = 21.sp, color = Skerry.colors.ink)
+                // A remote desktop opens a framebuffer, not a shell — the button says so.
+                Sym(if (remoteDesktop) "desktop_windows" else "terminal", size = 21.sp, color = Skerry.colors.ink)
                 Txt(stringResource(Res.string.shell_connect), color = Skerry.colors.ink, size = 16.sp, weight = FontWeight.Bold)
             }
         }
@@ -166,7 +171,12 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
             Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            QuickAction("folder", stringResource(Res.string.shell_quick_sftp), Modifier.weight(1f), onClick = { openSftp(host) })
+            // No SFTP over RFB: a remote desktop has no file channel, so the action is inert there
+            // rather than opening a browser that can never list anything.
+            QuickAction(
+                "folder", stringResource(Res.string.shell_quick_sftp), Modifier.weight(1f),
+                onClick = if (remoteDesktop) null else ({ openSftp(host) }),
+            )
             QuickAction("lan", stringResource(Res.string.shell_quick_tunnels), Modifier.weight(1f), onClick = { state.push(MobileRoute.Ports) })
             QuickAction("code_blocks", stringResource(Res.string.shell_quick_snippets), Modifier.weight(1f), onClick = null)
         }

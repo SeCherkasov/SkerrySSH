@@ -146,6 +146,9 @@ import app.skerry.ui.generated.resources.conn_test_connected
 import app.skerry.ui.generated.resources.conn_test_rtt_ms
 import app.skerry.ui.generated.resources.conn_title_edit
 import app.skerry.ui.generated.resources.conn_title_new
+import app.skerry.ui.generated.resources.conn_title_new_desktop
+import app.skerry.ui.generated.resources.conn_title_edit_desktop
+import app.skerry.ui.generated.resources.conn_subtitle_new_desktop
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
@@ -193,11 +196,14 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
     val copyName = duplicateOf?.let { stringResource(Res.string.conn_duplicate_name, it.label) }
     // Keyed by editHost/duplicateOf: opening the modal for editing or duplicating (or switching target)
     // rebuilds the form from the profile.
-    val form = remember(editHost, duplicateOf) {
+    // Which catalog this form belongs to (the list its button was pressed in, or the edited
+    // profile's own section): it fixes the protocols offered and the wording of the header.
+    val section = state.modalSection
+    val form = remember(editHost, duplicateOf, section) {
         when {
             editHost != null -> NewConnectionFormState.fromHost(editHost)
             duplicateOf != null -> NewConnectionFormState.duplicateOf(duplicateOf, copyName.orEmpty())
-            else -> NewConnectionFormState()
+            else -> NewConnectionFormState.forSection(section)
         }
     }
     // Guards repeated Save (Enter/double click) until the modal closes, otherwise a duplicate secret+host in the vault.
@@ -256,9 +262,21 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
         ) {
             Box(Modifier.fillMaxWidth().padding(start = 26.dp, end = 26.dp, top = 22.dp, bottom = 14.dp)) {
                 Column {
-                    Txt(if (editHost != null) stringResource(Res.string.conn_title_edit) else stringResource(Res.string.conn_title_new), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+                    val remote = section == HostSection.RemoteDesktops
+                    Txt(
+                        stringResource(
+                            when {
+                                editHost != null && remote -> Res.string.conn_title_edit_desktop
+                                editHost != null -> Res.string.conn_title_edit
+                                remote -> Res.string.conn_title_new_desktop
+                                else -> Res.string.conn_title_new
+                            },
+                        ),
+                        color = Skerry.colors.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
+                    )
                     Txt(
                         if (editHost != null) stringResource(Res.string.conn_subtitle_edit)
+                        else if (remote) stringResource(Res.string.conn_subtitle_new_desktop)
                         else stringResource(Res.string.conn_subtitle_new),
                         color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp),
                     )
@@ -266,9 +284,16 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                 IconBtn("close", onClick = state::closeModal, modifier = Modifier.align(Alignment.TopEnd))
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(start = 26.dp, end = 26.dp, top = 6.dp, bottom = 22.dp)) {
-                Field(stringResource(Res.string.conn_field_name)) { ModalTextField(form.name, { form.name = it }, "e.g. prod-web-01") }
+                val namePlaceholder = if (section == HostSection.RemoteDesktops) "e.g. lab-desktop" else "e.g. prod-web-01"
+                Field(stringResource(Res.string.conn_field_name)) { ModalTextField(form.name, { form.name = it }, namePlaceholder) }
                 Spacer14()
-                Field(stringResource(Res.string.conn_field_protocol)) { ProtocolPicker(form) }
+                // A section with a single protocol has nothing to pick: VNC is the only remote
+                // desktop today, and a one-segment switch would just be chrome. It comes back on
+                // its own once RDP lands beside it.
+                val protocols = remember(section) { connectionTypesIn(section) }
+                if (protocols.size > 1) {
+                    Field(stringResource(Res.string.conn_field_protocol)) { ProtocolPicker(form, protocols) }
+                }
                 // Telnet has no transport encryption (unlike SSH/Mosh) — warn inline, mirroring the
                 // insecure-URL notices on the Sync/AI forms. The transport itself is correct (no creds
                 // auto-sent), this is a heads-up, not a block.
@@ -720,16 +745,15 @@ private fun BrowseNote(icon: String, text: String, color: Color) {
 }
 
 @Composable
-private fun ProtocolPicker(form: NewConnectionFormState) {
+private fun ProtocolPicker(form: NewConnectionFormState, protocols: List<ConnectionType>) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        // Driven off ConnectionType.entries: a new protocol gets its segment for free, and the
-        // exhaustive `when`s behind labelRes/icon fail the build until it's given a label and an icon.
-        // LOCAL is excluded: the local shell isn't a user-created profile — it's launched from the
-        // empty-tab placeholder and configured in Settings → Terminal → Local shell, not here.
-        ConnectionType.entries.filter { it != ConnectionType.LOCAL }.forEach { type ->
+        // [protocols] is this section's set (see connectionTypesIn): a new transport gets its segment
+        // for free once it declares a section, and the exhaustive `when`s behind labelRes/icon fail
+        // the build until it's given a label and an icon.
+        protocols.forEach { type ->
             ProtocolSegment(stringResource(type.labelRes), type.icon, form.connectionType == type, Modifier.weight(1f)) {
                 form.chooseConnectionType(type)
             }
