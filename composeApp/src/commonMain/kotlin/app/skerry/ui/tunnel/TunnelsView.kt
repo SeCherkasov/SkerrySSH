@@ -520,7 +520,8 @@ private fun TunnelEditor(
 
     val draft = form.draft
     val (badgeBg, badgeFg) = form.direction.badgeColors()
-    val hostList = hosts?.hosts ?: emptyList()
+    // The tunnel dials this host over SSH, so remote desktops are not candidates.
+    val hostList = hosts?.hosts?.filter { it.connectionType.usesSshAuth } ?: emptyList()
     val hostLabel = form.hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: stringResource(Res.string.ports_select_host)
 
     Column(

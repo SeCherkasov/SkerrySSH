@@ -187,6 +187,24 @@ class SessionsController(
 
     val active: Session? get() = sessions.firstOrNull { it.id == activeId }
 
+    /**
+     * The active tab as seen by the terminal section — `null` when a remote-desktop tab is active.
+     * The two sections have their own work areas, so each reads the active tab through its own lens
+     * instead of rendering a tab that belongs to the other one (a VNC tab under the terminal would
+     * show its idle placeholder controller as "not connected"). A player tab counts as terminal: it
+     * lives beside the shells, not in the remote-desktop catalog.
+     */
+    val activeTerminal: Session? get() = active?.takeIf { !it.isVnc }
+
+    /** The active tab as seen by the remote-desktop section, `null` when a terminal tab is active. */
+    val activeDesktop: Session? get() = active?.takeIf { it.isVnc }
+
+    /**
+     * Newest tab of a section, or `null` if it has none. Switching sections from the rail activates
+     * this one, so returning to a section lands back on a live session instead of an empty area.
+     */
+    fun lastSessionIn(remoteDesktop: Boolean): Session? = sessions.lastOrNull { it.isVnc == remoteDesktop }
+
     /** Open a new session to [target] and make it active; connects immediately. Returns the new tab's id. */
     fun open(
         hostId: String?,

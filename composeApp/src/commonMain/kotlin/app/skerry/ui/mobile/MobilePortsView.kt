@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.forward.rateFraction
@@ -330,7 +331,8 @@ private fun MobileTunnelEditorSheet(
 
     val draft = form.draft
     val (badgeBg, badgeFg) = form.direction.badgeColors()
-    val hostList = hosts?.hosts ?: emptyList()
+    // The tunnel dials this host over SSH, so remote desktops are not candidates.
+    val hostList = hosts?.hosts?.filter { it.connectionType.usesSshAuth } ?: emptyList()
     val hostName = form.hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: stringResource(Res.string.ports_select_host)
 
     MobileBottomSheet(
@@ -439,7 +441,8 @@ private fun MobileServicesSheet(
     onDismiss: () -> Unit,
 ) {
     val scan = manager.services
-    val hostList = hosts?.hosts ?: emptyList()
+    // The tunnel dials this host over SSH, so remote desktops are not candidates.
+    val hostList = hosts?.hosts?.filter { it.connectionType.usesSshAuth } ?: emptyList()
     var hostId by remember { mutableStateOf(scan.scannedHostId ?: hostList.firstOrNull()?.id) }
     val hostName = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label }
         ?: stringResource(Res.string.ports_select_host)

@@ -76,7 +76,7 @@ fun CastPlayerOverlay(cast: Asciicast, onDismiss: () -> Unit) {
  */
 @Composable
 fun CastPlayerView() {
-    val playback = LocalSessions.current?.active?.playback ?: return
+    val playback = LocalSessions.current?.activeTerminal?.playback ?: return
     // Start on first display only ([CastPlayback.start]) — returning to the tab must not rewind.
     LaunchedEffect(playback) { playback.start() }
     Column(Modifier.fillMaxSize().background(Skerry.colors.surface)) {

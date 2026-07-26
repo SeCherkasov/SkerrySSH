@@ -67,7 +67,7 @@ internal fun InfoPanel() {
     val sessions = LocalSessions.current
     val hosts = LocalHosts.current
     val credentials = LocalCredentials.current
-    val active = sessions?.active
+    val active = sessions?.activeTerminal
     val host = active?.hostId?.let { id -> hosts?.find(id) }
     val live = sessions != null
     val connected = active?.controller?.uiState is ConnectionUiState.Connected

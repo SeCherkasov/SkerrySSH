@@ -13,4 +13,15 @@
     <string name="vnc_view_only">View only</string>
     <string name="vnc_resize_to_window">Resize to window</string>
     <string name="vnc_reset_zoom">Reset zoom</string>
+    <string name="rd_section">DESKTOPS</string>
+    <string name="rd_search_placeholder">Search desktops, tags, IPs…</string>
+    <string name="rd_no_session">No remote desktop open</string>
+    <string name="rd_pick_to_connect">Pick a connection from the sidebar to open its desktop.</string>
+    <string name="rd_no_desktops">No remote desktops yet</string>
+    <string name="rd_add_first">Add a VNC connection to see it here.</string>
+    <string name="conn_title_new_desktop">New remote desktop</string>
+    <string name="conn_title_edit_desktop">Edit remote desktop</string>
+    <string name="conn_subtitle_new_desktop">Add a remote desktop. Its password is encrypted with your master password.</string>
+    <string name="nav_tab_desktops">Desktops</string>
+    <string name="rd_screen_title">Remote desktops</string>
 </resources>

@@ -1,6 +1,7 @@
 package app.skerry.ui.host
 
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.host.MAX_NOTES_LENGTH
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -489,5 +490,47 @@ class NewConnectionFormStateTest {
         val host = Host(id = "h3", label = "box", address = "a", port = 22, username = "u", tags = listOf("prod", "db"))
         val f = NewConnectionFormState.fromHost(host)
         assertEquals(listOf("prod", "db"), f.tags)
+    }
+}
+
+/** The form is opened per section (hosts list vs remote desktops), which fixes its protocol set. */
+class SectionFormStateTest {
+
+    @Test
+    fun a_terminal_form_starts_on_ssh_with_its_port() {
+        val form = NewConnectionFormState.forSection(HostSection.Terminal)
+        assertEquals(ConnectionType.SSH, form.connectionType)
+        assertEquals("22", form.port)
+    }
+
+    @Test
+    fun a_remote_desktop_form_starts_on_vnc_with_its_port() {
+        val form = NewConnectionFormState.forSection(HostSection.RemoteDesktops)
+        assertEquals(ConnectionType.VNC, form.connectionType)
+        assertEquals("5900", form.port)
+    }
+
+    @Test
+    fun a_remote_desktop_form_saves_a_profile_filed_under_remote_desktops() {
+        // The whole point of the split: what you create here shows up there and nowhere else.
+        val form = NewConnectionFormState.forSection(HostSection.RemoteDesktops).apply {
+            name = "lab-desktop"
+            address = "10.0.0.5"
+        }
+        assertTrue(form.canSave)
+        val draft = form.toDraft()
+        assertEquals(ConnectionType.VNC, draft.connectionType)
+        assertEquals(5900, draft.port)
+    }
+
+    @Test
+    fun a_remote_desktop_form_needs_no_username() {
+        // VNC authenticates with a password only, so requiring a user would block saving.
+        val form = NewConnectionFormState.forSection(HostSection.RemoteDesktops).apply {
+            name = "screen"
+            address = "10.0.0.5"
+        }
+        assertEquals("", form.username)
+        assertTrue(form.canSave)
     }
 }

@@ -53,6 +53,8 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isVnc
+import app.skerry.ui.host.HostSection
+import app.skerry.ui.host.connectionTypesIn
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
@@ -121,6 +123,9 @@ import app.skerry.ui.generated.resources.conn_tag_add_placeholder
 import app.skerry.ui.generated.resources.conn_duplicate_name
 import app.skerry.ui.generated.resources.conn_title_edit
 import app.skerry.ui.generated.resources.conn_title_new
+import app.skerry.ui.generated.resources.conn_title_new_desktop
+import app.skerry.ui.generated.resources.conn_title_edit_desktop
+import app.skerry.ui.generated.resources.conn_protocol_local
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.AiPolicy
 import app.skerry.ui.ai.shortLabel
@@ -180,11 +185,14 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
     val copyName = duplicateOf?.let { stringResource(Res.string.conn_duplicate_name, it.label) }
     // Keyed on editHost/duplicateOf: opening the sheet to edit or duplicate (or switching target)
     // rebuilds the form from the profile.
-    val form = remember(editHost, duplicateOf) {
+    // Which catalog this sheet belongs to (the tab its FAB was tapped on, or the edited profile's
+    // own section): it fixes the protocols offered and the header wording. Desktop parity.
+    val section = state.sheetSection
+    val form = remember(editHost, duplicateOf, section) {
         when {
             editHost != null -> NewConnectionFormState.fromHost(editHost)
             duplicateOf != null -> NewConnectionFormState.duplicateOf(duplicateOf, copyName.orEmpty())
-            else -> NewConnectionFormState()
+            else -> NewConnectionFormState.forSection(section)
         }
     }
     val canSave = hosts == null || form.canSave
@@ -248,7 +256,18 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Txt(if (editHost != null) stringResource(Res.string.conn_title_edit) else stringResource(Res.string.conn_title_new), color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
+                val remote = section == HostSection.RemoteDesktops
+                Txt(
+                    stringResource(
+                        when {
+                            editHost != null && remote -> Res.string.conn_title_edit_desktop
+                            editHost != null -> Res.string.conn_title_edit
+                            remote -> Res.string.conn_title_new_desktop
+                            else -> Res.string.conn_title_new
+                        },
+                    ),
+                    color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold,
+                )
                 Sym(
                     "close",
                     size = 24.sp,
@@ -268,9 +287,15 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 modifier = Modifier.padding(top = 4.dp, bottom = 18.dp),
             )
 
-            MobileFormField(stringResource(Res.string.conn_field_name)) { MobileFormInput(form.name, { form.name = it }, "prod-web-01") }
+            val namePlaceholder = if (section == HostSection.RemoteDesktops) "lab-desktop" else "prod-web-01"
+            MobileFormField(stringResource(Res.string.conn_field_name)) { MobileFormInput(form.name, { form.name = it }, namePlaceholder) }
             Spacer(Modifier.height(14.dp))
-            MobileFormField(stringResource(Res.string.conn_field_protocol)) { MobileProtocolPicker(form) }
+            // A single-protocol section has nothing to pick (VNC is the only remote desktop today);
+            // the picker returns on its own once RDP joins it.
+            val protocols = remember(section) { connectionTypesIn(section) }
+            if (protocols.size > 1) {
+                MobileFormField(stringResource(Res.string.conn_field_protocol)) { MobileProtocolPicker(form, protocols) }
+            }
             Spacer(Modifier.height(14.dp))
             val serial = form.connectionType == ConnectionType.SERIAL
             MobileFormField(if (serial) stringResource(Res.string.conn_field_device) else stringResource(Res.string.conn_field_host_address)) {
@@ -445,25 +470,34 @@ private fun MobileSerialPortPicker(form: NewConnectionFormState) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MobileProtocolPicker(form: NewConnectionFormState) {
-    // Six protocols don't fit one phone-width row, so they wrap three per row (a segment narrower
-    // than its label reads as a truncated mess).
+private fun MobileProtocolPicker(form: NewConnectionFormState, protocols: List<ConnectionType>) {
+    // Protocols don't fit one phone-width row, so they wrap three per row (a segment narrower than
+    // its label reads as a truncated mess). Driven off the section's set, like the desktop picker.
     FlowRow(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         maxItemsInEachRow = 3,
     ) {
-        MobileProtocolSegment(stringResource(Res.string.conn_protocol_ssh), form.connectionType == ConnectionType.SSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SSH) }
-        MobileProtocolSegment(stringResource(Res.string.conn_protocol_mosh), form.connectionType == ConnectionType.MOSH, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.MOSH) }
-        MobileProtocolSegment(stringResource(Res.string.conn_protocol_telnet), form.connectionType == ConnectionType.TELNET, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.TELNET) }
-        MobileProtocolSegment(stringResource(Res.string.conn_protocol_serial), form.connectionType == ConnectionType.SERIAL, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.SERIAL) }
-        MobileProtocolSegment(stringResource(Res.string.conn_protocol_vnc), form.connectionType == ConnectionType.VNC, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.VNC) }
-        MobileProtocolSegment(stringResource(Res.string.conn_protocol_container), form.connectionType == ConnectionType.CONTAINER, Modifier.weight(1f)) { form.chooseConnectionType(ConnectionType.CONTAINER) }
-        // LOCAL is intentionally absent — the local shell isn't a user-created profile; it's launched
-        // from the empty-tab placeholder and configured in Settings, not created here.
+        protocols.forEach { type ->
+            MobileProtocolSegment(stringResource(type.protocolLabel), form.connectionType == type, Modifier.weight(1f)) {
+                form.chooseConnectionType(type)
+            }
+        }
     }
 }
+
+/** Localized protocol name for a picker segment (LOCAL is never offered — see [connectionTypesIn]). */
+private val ConnectionType.protocolLabel: org.jetbrains.compose.resources.StringResource
+    get() = when (this) {
+        ConnectionType.SSH -> Res.string.conn_protocol_ssh
+        ConnectionType.MOSH -> Res.string.conn_protocol_mosh
+        ConnectionType.TELNET -> Res.string.conn_protocol_telnet
+        ConnectionType.SERIAL -> Res.string.conn_protocol_serial
+        ConnectionType.VNC -> Res.string.conn_protocol_vnc
+        ConnectionType.CONTAINER -> Res.string.conn_protocol_container
+        ConnectionType.LOCAL -> Res.string.conn_protocol_local
+    }
 
 /**
  * Auth for the container listing probe, materialized at tap time (like the desktop modal's) so the

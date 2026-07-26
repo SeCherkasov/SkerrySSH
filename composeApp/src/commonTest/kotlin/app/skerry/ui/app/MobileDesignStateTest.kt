@@ -1,6 +1,8 @@
 package app.skerry.ui.app
 
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
+import app.skerry.ui.host.HostSection
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LINE_HEIGHT
@@ -173,17 +175,39 @@ class MobileDesignStateTest {
 
     @Test
     fun four_tabs_in_template_order() {
-        // Bottom navigation: 4 root tabs in this order. Files isn't in the bar — SFTP opens as a
-        // push screen ([MobileRoute.Files]) from the host card, like the terminal.
+        // Bottom navigation: 4 root tabs in this order — the two catalogs first, then the vault and
+        // the More hub. Files isn't in the bar (SFTP is a push screen from the host card), and
+        // neither is the snippet library ([MobileRoute.Snippets], reached from More).
         assertEquals(
             listOf(
                 MobileTab.Hosts,
-                MobileTab.Snippets,
+                MobileTab.Desktops,
                 MobileTab.Vault,
                 MobileTab.More,
             ),
             MobileTab.entries.toList(),
         )
+    }
+
+    @Test
+    fun the_new_connection_sheet_opens_on_the_section_it_was_started_from() {
+        val s = MobileDesignState()
+        s.openNewConn(HostSection.RemoteDesktops)
+        assertEquals(HostSection.RemoteDesktops, s.sheetSection)
+        s.closeSheet()
+        s.openNewConn()
+        assertEquals(HostSection.Terminal, s.sheetSection)
+    }
+
+    @Test
+    fun editing_a_profile_opens_the_sheet_on_that_profile_section() {
+        val s = MobileDesignState()
+        val desktop = Host(
+            id = "d1", label = "lab", address = "10.0.0.5", username = "",
+            connectionType = ConnectionType.VNC,
+        )
+        s.openEditConn(desktop)
+        assertEquals(HostSection.RemoteDesktops, s.sheetSection)
     }
 
     @Test
@@ -241,7 +265,7 @@ class MobileDesignStateTest {
         assertNull(s.selectedHostId) // otherwise 2B would read a stale id
 
         s.openHost("host-7")
-        s.select(MobileTab.Snippets)
+        s.select(MobileTab.Desktops)
         assertNull(s.selectedHostId)
     }
 
@@ -430,8 +454,8 @@ class MobileDesignStateTest {
 
     @Test
     fun back_on_non_hosts_tab_goes_home() {
-        // From a non-root tab (Snippets/Vault/More), back returns to Hosts instead of exiting the app.
-        assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Snippets))
+        // From a non-root tab (Desktops/Vault/More), back returns to Hosts instead of exiting the app.
+        assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Desktops))
         assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Vault))
         assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.More))
     }

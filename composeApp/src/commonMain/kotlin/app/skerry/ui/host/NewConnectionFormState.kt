@@ -255,6 +255,15 @@ class NewConnectionFormState {
     )
 
     companion object {
+        /**
+         * Empty form for creating a profile in [section]: it starts on that section's default
+         * transport (with its default port), and the picker offers no other section's protocols —
+         * a remote desktop is created from the desktops list, a shell from the hosts list.
+         */
+        fun forSection(section: HostSection): NewConnectionFormState = NewConnectionFormState().apply {
+            chooseConnectionType(defaultConnectionTypeIn(section))
+        }
+
         /** Default port/speed by type: SSH/Mosh->22 (the SSH hop's port), Telnet->23, Serial->9600 (baud), VNC->5900 (RFB display :0). */
         fun defaultPortFor(type: ConnectionType): Int = when (type) {
             // Container profiles dial the host over SSH; the port is that hop's.
