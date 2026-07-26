@@ -1,6 +1,8 @@
 package app.skerry.server.routes
 
+import app.skerry.server.SERVER_VERSION
 import app.skerry.server.Services
+import app.skerry.server.metrics.ServerMetrics
 import app.skerry.server.config.ServerConfig
 import app.skerry.server.db.Db
 import app.skerry.sync.wire.ChallengeRequest
@@ -32,14 +34,21 @@ import java.security.SecureRandom
 
 val SRP_PARAMS: SRP6CryptoParams = SRP6CryptoParams.getInstance(2048, "SHA-256")
 
-fun testServices(adminToken: String = "", extraEnv: Map<String, String> = emptyMap()): Services {
+fun testServices(
+    adminToken: String = "",
+    extraEnv: Map<String, String> = emptyMap(),
+    dbCheck: (suspend () -> Unit)? = null,
+): Services {
     val file = Files.createTempFile("skerry-routes-", ".db")
     file.toFile().deleteOnExit()
     val config = ServerConfig.fromEnv(
         mapOf("SKERRY_DB_URL" to "jdbc:sqlite:${file.toAbsolutePath()}", "SKERRY_ADMIN_TOKEN" to adminToken) + extraEnv,
     )
-    val database: Database = Db.connect(config)
-    return Services(config, database)
+    // Same order as Application.module: the registry has to exist before the pool, or HikariCP has
+    // nothing to publish into and hikaricp_* silently disappears from the exposition.
+    val metrics = ServerMetrics(config, version = SERVER_VERSION)
+    val database: Database = Db.connect(config, metrics.registry)
+    return Services(config, database, metrics, dbCheck)
 }
 
 /** SRP registration material, as the client would compute it before /auth/register. */

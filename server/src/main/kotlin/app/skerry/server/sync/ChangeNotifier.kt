@@ -1,5 +1,7 @@
 package app.skerry.server.sync
 
+import app.skerry.server.metrics.NotifyKind
+import app.skerry.server.metrics.ServerMetrics
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -12,7 +14,7 @@ import kotlinx.coroutines.flow.map
  * payload). Carries only accountId and the new cursor, no data. Single self-hosted instance model;
  * horizontal scaling would need an external broker.
  */
-class ChangeNotifier {
+class ChangeNotifier(private val metrics: ServerMetrics? = null) {
     /**
      * [channel]: `acc:{accountId}` — account vault cursor; `team:{teamId}` — team record cursor;
      * `member:{accountId}` — membership/invites changed (cursor is meaningless, 0).
@@ -33,16 +35,19 @@ class ChangeNotifier {
     /** Non-suspend: tryEmit never blocks the publisher (buffer with DROP_OLDEST). */
     fun publish(accountId: String, cursor: Long) {
         flow.tryEmit(Change("acc:$accountId", cursor))
+        metrics?.notificationPublished(NotifyKind.ACCOUNT)
     }
 
     /** Signals "team has records up to cursor" for active members' WS sessions. */
     fun publishTeam(teamId: String, cursor: Long) {
         flow.tryEmit(Change("team:$teamId", cursor))
+        metrics?.notificationPublished(NotifyKind.TEAM)
     }
 
     /** Signals "account's team membership/invites changed"; client re-reads the team list. */
     fun publishMembership(accountId: String) {
         flow.tryEmit(Change("member:$accountId", 0))
+        metrics?.notificationPublished(NotifyKind.MEMBERSHIP)
     }
 
     /** Cursor stream for a specific account (one WS session). */

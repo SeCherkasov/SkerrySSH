@@ -71,18 +71,24 @@ class DeviceRepository(private val db: Database) {
      * never deleted, so including them would let the list grow without bound. A revoked device that
      * re-authenticates clears its revocation and reappears here.
      */
-    suspend fun listAll(limit: Int = 200): List<DeviceRow> = dbTransaction(db) {
+    suspend fun listAll(limit: Int = 200, accountId: String? = null): List<DeviceRow> = dbTransaction(db) {
         Devices.selectAll()
-            .where { Devices.revoked eq false }
+            .where { activeDevices(accountId) }
             .orderBy(Devices.lastSeenAt to SortOrder.DESC)
             .limit(limit)
             .map { it.toDeviceRow() }
     }
 
     /** Active (non-revoked) devices on the instance, matching [listAll] for an accurate "N of M". */
-    suspend fun count(): Long = dbTransaction(db) {
-        Devices.selectAll().where { Devices.revoked eq false }.count()
+    suspend fun count(accountId: String? = null): Long = dbTransaction(db) {
+        Devices.selectAll().where { activeDevices(accountId) }.count()
     }
+
+    /** The listing predicate, shared by [listAll] and [count] so a page and its total can't disagree. */
+    private fun activeDevices(accountId: String?) =
+        (Devices.revoked eq false).let { active ->
+            if (accountId == null) active else active and (Devices.accountId eq accountId)
+        }
 
     suspend fun find(accountId: String, deviceId: String): DeviceRow? = dbTransaction(db) {
         Devices.selectAll()

@@ -2,6 +2,9 @@ package app.skerry.server.routes
 
 import app.skerry.server.RateLimits
 import app.skerry.server.Services
+import app.skerry.server.metrics.AuthKind
+import app.skerry.server.metrics.AuthOutcome
+import app.skerry.server.metrics.TokenType
 import app.skerry.server.accountId
 import app.skerry.server.jwtPrincipal
 import app.skerry.server.model.ErrorResponse
@@ -61,9 +64,13 @@ fun Route.pairingClaimRoute(services: Services) {
             }
             val session = services.pairing.consume(req.code)
             if (session == null) {
+                services.metrics.authAttempt(AuthKind.PAIRING_CLAIM, AuthOutcome.DENIED)
                 call.respond(HttpStatusCode.Gone, ErrorResponse("pairing code invalid or expired"))
                 return@post
             }
+            services.metrics.authAttempt(AuthKind.PAIRING_CLAIM, AuthOutcome.OK)
+            services.metrics.tokensIssued(TokenType.ACCESS)
+            services.metrics.tokensIssued(TokenType.REFRESH)
             services.devices.register(session.accountId, req.deviceId, req.deviceName)
             call.respond(
                 PairingClaimResponse(

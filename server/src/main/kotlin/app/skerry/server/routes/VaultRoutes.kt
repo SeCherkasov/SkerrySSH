@@ -4,6 +4,7 @@ import app.skerry.server.Services
 import app.skerry.server.accountId
 import app.skerry.server.deviceId
 import app.skerry.server.jwtPrincipal
+import app.skerry.server.metrics.SyncScope
 import app.skerry.server.model.ErrorResponse
 import app.skerry.sync.wire.KeysResponse
 import app.skerry.sync.wire.PushRequest
@@ -55,6 +56,7 @@ fun Route.vaultRoutes(services: Services) {
         }
         // After touch, so this device's cursor is already reflected in the watermark. Tombstone ids
         // that all devices have read; the client compacts them locally and stops re-pushing them.
+        services.metrics.recordsPulled(SyncScope.ACCOUNT, delta.size)
         val compactedIds = services.records.compactedTombstoneIds(principal.accountId)
         call.respond(RecordsResponse(delta.map { it.toDto() }, cursor, compactedIds))
     }
@@ -65,7 +67,11 @@ fun Route.vaultRoutes(services: Services) {
         val unknown = req.records.firstOrNull { it.type !in ALLOWED_TYPES }
         if (unknown != null) throw BadRequestException("unknown record type: ${unknown.type}")
 
-        val result = services.records.upsert(principal.accountId, req.records.map { it.toIncoming() })
+        val incoming = req.records.map { it.toIncoming() }
+        // Received, not applied: a client re-pushes its whole vault every cycle, and the ratio between
+        // this and the cursor movement is the honest picture of that.
+        services.metrics.recordsReceived(SyncScope.ACCOUNT, incoming.size, incoming.sumOf { it.blob.size.toLong() })
+        val result = services.records.upsert(principal.accountId, incoming)
         services.devices.touch(principal.accountId, principal.deviceId, syncVersion = result.cursor)
         // Log only pushes that changed something, mirroring the empty-pull rule above. A client
         // re-pushes all of its records on every sync cycle, so without this the log is mostly no-ops
