@@ -43,7 +43,7 @@ private val TEAM_ALLOWED_TYPES = setOf("HOST", "GROUP", "IDENTITY", "CREDENTIAL"
 
 /** Public X25519 key is exactly 32 bytes; a crypto_box_seal envelope is 48 bytes overhead + payload. */
 private const val PUBLIC_KEY_BYTES = 32
-private const val MAX_ENVELOPE_BYTES = 4096
+internal const val MAX_ENVELOPE_BYTES = 4096
 
 /**
  * Teams: account keys, team membership, and team-scoped records. Zero-knowledge: the server
@@ -242,7 +242,12 @@ fun Route.teamRoutes(services: Services) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("no such member (owner cannot be removed)"))
             return@delete
         }
-        services.activity.record(principal.accountId, "team.remove", target, teamId = teamId)
+        // Leaving the team takes every scope grant with it — otherwise a former member would keep
+        // pulling a scope's records through an ACL row nobody thinks to clean up. The client rotates
+        // the affected scope keys (the removed member still holds their copies).
+        val lostScopes = services.teamScopes.revokeAll(teamId, target)
+        val scopeNote = if (lostScopes.isEmpty()) "" else " · scopes ${lostScopes.joinToString(",")}"
+        services.activity.record(principal.accountId, "team.remove", "$target$scopeNote", teamId = teamId)
         services.notifier.publishMembership(target)
         call.respond(HttpStatusCode.OK)
     }
@@ -261,29 +266,33 @@ fun Route.teamRoutes(services: Services) {
     get("/teams/{id}/records") {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@get
+        val scopeId = call.scopeParam() ?: return@get
         call.requireActiveMember(services, teamId, principal.accountId) ?: return@get
+        if (!call.requireScopeAccess(services, teamId, scopeId, principal.accountId)) return@get
         val since = call.request.queryParameters["since"]?.toLongOrNull() ?: 0L
-        val delta = services.teamRecords.delta(teamId, since)
-        val cursor = delta.lastOrNull()?.serverSeq ?: since
+        val delta = services.teamRecords.delta(teamId, scopeId, since)
         // Team scope has no compactedIds: tombstones are cleaned up by age, redelivery is idempotent.
-        call.respond(RecordsResponse(delta.map { it.toDto() }, cursor, emptyList()))
+        call.respond(RecordsResponse(delta.records.map { it.toDto() }, delta.cursor, emptyList()))
     }
 
     put("/teams/{id}/records") {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@put
+        val scopeId = call.scopeParam() ?: return@put
         // Write is gated by role: viewer is active but canWrite=false -> 403.
         call.requireActiveMember(
             services, teamId, principal.accountId, TeamRoles::canWrite, "write role required",
         ) ?: return@put
+        if (!call.requireScopeAccess(services, teamId, scopeId, principal.accountId)) return@put
         val req = call.receive<PushRequest>()
         val unknown = req.records.firstOrNull { it.type !in TEAM_ALLOWED_TYPES }
         if (unknown != null) throw BadRequestException("unknown record type: ${unknown.type}")
 
-        val result = services.teamRecords.upsert(teamId, req.records.map { it.toIncoming() })
+        val result = services.teamRecords.upsert(teamId, scopeId, req.records.map { it.toIncoming() })
         val ids = req.records.joinToString(" ") { it.id }.take(200)
+        val where = if (scopeId.isEmpty()) "" else " · scope $scopeId"
         services.activity.record(
-            principal.accountId, "team.push", "${req.records.size} records · $ids", teamId = teamId,
+            principal.accountId, "team.push", "${req.records.size} records$where · $ids", teamId = teamId,
         )
         if (result.changed) services.notifier.publishTeam(teamId, result.cursor)
         call.respond(PushResponse(result.records.map { it.toDto() }, result.cursor))
@@ -307,7 +316,7 @@ fun Route.teamRoutes(services: Services) {
  * is given) their role passes the check; otherwise responds 404 (not a member, don't reveal the
  * team) / 403 and returns null. The team owner also goes through capability checks (see [TeamRoles]).
  */
-private suspend fun ApplicationCall.requireActiveMember(
+internal suspend fun ApplicationCall.requireActiveMember(
     services: Services,
     teamId: String,
     accountId: String,
@@ -328,4 +337,32 @@ private suspend fun ApplicationCall.requireActiveMember(
         return null
     }
     return membership
+}
+
+/**
+ * `?scope=` on the record endpoints: empty/absent means the team-wide space. Validated here so a
+ * malformed id is a 400 before any lookup.
+ */
+private suspend fun ApplicationCall.scopeParam(): String? {
+    val raw = request.queryParameters["scope"] ?: return ""
+    if (raw.isEmpty()) return ""
+    return validScopeId(raw)
+}
+
+/**
+ * Granular read/write ACL: a scoped space is served only to accounts holding a grant. Responds 404
+ * (not 403) on a missing grant — same reasoning as for a team the caller isn't a member of: the
+ * existence of a scope is itself information about how the team is organised. Team-wide records
+ * (empty [scopeId]) are open to every active member, as before.
+ */
+private suspend fun ApplicationCall.requireScopeAccess(
+    services: Services,
+    teamId: String,
+    scopeId: String,
+    accountId: String,
+): Boolean {
+    if (scopeId.isEmpty()) return true
+    if (services.teamScopes.hasGrant(teamId, scopeId, accountId)) return true
+    respond(HttpStatusCode.NotFound, ErrorResponse("no such scope"))
+    return false
 }

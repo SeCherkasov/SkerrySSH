@@ -16,11 +16,11 @@ import app.skerry.shared.team.TeamIdentityStore
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
+import app.skerry.shared.team.TeamScopeRef
 import app.skerry.shared.team.TeamScopedSyncClient
 import app.skerry.shared.team.TeamSummary
 import app.skerry.shared.team.TeamVaults
 import app.skerry.shared.team.accountKeyFingerprint
-import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
@@ -40,7 +40,7 @@ import app.skerry.shared.team.stripShareFields
 enum class TeamsFailure {
     NotConnected, VaultLocked, NoRecipientKey, AlreadyInvited, NoSuchAccount,
     KeyMissing, Network, Protocol, Forbidden, VaultUnreadable,
-    TooManyRequests, ServerError,
+    TooManyRequests, ServerError, AlreadyShared, ScopesUnsupported,
 }
 
 /**
@@ -69,6 +69,8 @@ data class TeamUi(
     val memberCount: Int,
     /** false for an active team = the key didn't arrive (or the envelope didn't open) — records inaccessible. */
     val hasKey: Boolean,
+    /** Scopes of this team we may see: everything for a manager, our grants otherwise. */
+    val scopes: List<TeamScopeUi> = emptyList(),
 )
 
 /** Invite confirmation data: the invitee's key fingerprint is verified over voice/chat. */
@@ -79,6 +81,10 @@ data class InvitePreview(val accountId: String, val fingerprint: String)
  * vaults, and a team-scoped [SyncEngine]. All operations report [TeamsFailure] in [lastError] instead
  * of throwing (except CancellationException). Concurrency conventions as in SyncCoordinator: one
  * [opMutex] for mutations, [syncMutex] for sync cycles.
+ *
+ * A team's records live in **share spaces** ([TeamScopeRef]): the team itself, plus one per scope for
+ * granular sharing. Everything about their keys and vaults is in [TeamSpaces]; this class
+ * orchestrates.
  */
 class TeamsCoordinator(
     private val session: () -> SyncSession?,
@@ -87,7 +93,8 @@ class TeamsCoordinator(
     private val crypto: VaultCrypto,
     private val teamVaults: TeamVaults,
     private val teamState: SyncStateStore,
-    private val newTeamId: () -> String,
+    /** Generator of client-side ids (teams and scopes) — a UUID in production. */
+    private val newId: () -> String,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val onTeamsChanged: () -> Unit = {},
 ) {
@@ -95,6 +102,16 @@ class TeamsCoordinator(
     private val keyStore = TeamKeyStore(vault)
     private val identityStore = TeamIdentityStore(vault, crypto)
     private val inviteCodec = TeamInviteCodec(crypto)
+
+    private val spaces = TeamSpaces(
+        keyStore = keyStore,
+        teamVaults = teamVaults,
+        crypto = crypto,
+        inviteCodec = inviteCodec,
+        accountVaultUnlocked = { vault.isUnlocked },
+        markError = { markError(it) },
+        syncSpace = { syncSpace(it) },
+    )
 
     private val opMutex = Mutex()
     private val syncMutex = Mutex()
@@ -110,15 +127,15 @@ class TeamsCoordinator(
     val teams: StateFlow<List<TeamUi>> = _teams
 
     /**
-     * Monotonic counter bumped on every actual change to team-vault contents: a pull brought remote
-     * records ([syncTeam] with `pulled > 0`) or we shared/unshared a record
+     * Monotonic counter bumped on every actual change to a team space's contents: a pull brought
+     * remote records ([syncSpace] with `pulled > 0`) or we shared/unshared a record
      * ([shareRecord]/[unshareRecord]). The shared-host UI sections read the team vault imperatively (not
      * via a records StateFlow), so without this signal a live-sync that pulled new records wouldn't
      * repaint the list: [_teams] doesn't change and the personal catalog (which the sections were tied
      * to indirectly) stays the same — Compose would skip recomposition. Sections key `remember` on this.
      *
-     * Bump only on actual changes (not every [syncTeam]): [syncAll] on each Online transition runs all
-     * teams, and an unconditional ++ would invalidate the sections' `remember` (→ recompute
+     * Bump only on actual changes (not every [syncSpace]): [syncAll] on each Online transition runs all
+     * spaces, and an unconditional ++ would invalidate the sections' `remember` (→ recompute
      * `VaultHostStore.all()` for all teams) even on an empty delta.
      */
     private val _revision = MutableStateFlow(0)
@@ -146,12 +163,22 @@ class TeamsCoordinator(
     // otherwise run a full re-pull for nothing.
     private val recoveryRequested = mutableSetOf<String>()
 
+    /**
+     * The connected server predates scopes: it answers 404 on `/teams/{id}/scopes` even for a team
+     * we're an active member of. Remembered so scope operations can say "update the server" instead
+     * of failing as "no such account" — and cleared as soon as a listing succeeds, so it can't stick
+     * after the server is upgraded mid-session.
+     */
+    private var scopesUnsupported = false
+
     /** Wire to SyncCoordinator's WS signals (`sync.onTeamSignal = teams::onSignal`). */
     fun onSignal(signal: SyncSignal) {
         when (signal) {
             is SyncSignal.Team -> scope.launch {
                 // Cursor guard, like the account watch: our own echo doesn't run a redundant cycle.
-                if (signal.cursor > teamState.cursor(cursorKey(signal.teamId))) syncTeam(signal.teamId)
+                // The cursor is the team's, shared by all its spaces, so any space lagging behind it
+                // has something to fetch.
+                if (spacesOf(signal.teamId).any { signal.cursor > teamState.cursor(it.key) }) syncTeam(signal.teamId)
             }
             SyncSignal.Membership -> scope.launch { refresh() }
             is SyncSignal.Account -> Unit // the account channel is handled by SyncCoordinator
@@ -194,13 +221,10 @@ class TeamsCoordinator(
             val identity = publishIdentity(s, c)
             val remote = c.listTeams(s)
             adoptRotatedKeys(s, c, remote, identity)
-            publishTeams(remote, identity)
+            publishTeams(s, c, remote, identity)
             // Keys of teams we were removed from (or that were deleted) are no longer needed.
             val liveIds = remote.map { it.id }.toSet()
-            keyStore.list().keys.filter { it !in liveIds }.forEach { gone ->
-                keyStore.remove(gone)
-                teamVaults.reset(gone)
-            }
+            keyStore.list().keys.filter { it !in liveIds }.forEach { gone -> forgetTeamLocally(gone) }
             // A cached invite of a vanished team holds teamKey material — drop it with the team.
             verifiedInvites.update { cached -> cached.filterKeys { it in liveIds } }
             onTeamsChanged()
@@ -228,7 +252,7 @@ class TeamsCoordinator(
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
             publishIdentity(s, c)
-            val teamId = newTeamId()
+            val teamId = newId()
             c.createTeam(s, teamId)
             keyStore.put(teamId, name.ifBlank { teamId }, TeamRole.OWNER, crypto.newDataKey(), epoch = 0)
             refreshUnlocked(s, c)
@@ -361,16 +385,31 @@ class TeamsCoordinator(
         val sess = session() ?: return markError(TeamsFailure.NotConnected)
         val c = client() ?: return markError(TeamsFailure.NotConnected)
         op {
+            // Which scopes the member holds has to be read before the removal: the server drops their
+            // grants along with the membership, and afterwards there is no way to tell which keys they
+            // walked away with.
+            val heldScopes = if (accountId == sess.accountId) emptyList() else scopesHeldBy(sess, c, teamId, accountId)
             c.removeMember(sess, teamId, accountId)
             if (accountId == sess.accountId) {
                 // Voluntary leave/decline: we can't rotate (we're gone). A remaining manager rotates.
                 forgetTeamLocally(teamId)
             } else {
-                // Removing someone else revokes their server ACL but not their copy of teamKey. Rotate
-                // so records shared after removal are encrypted under a key the removed member lacks
+                // Removing someone else revokes their server ACL but not their copy of the keys. Rotate
+                // so records shared after removal are encrypted under keys the removed member lacks
                 // (forward secrecy against a leaked backup / compromised server). Best-effort: a rotation
                 // failure still leaves the member removed — surfaced via lastError.
                 rotateTeamKey(sess, c, teamId)
+                // Each scope rotates independently: one failing must not leave the rest un-rotated,
+                // since every skipped scope is a key the removed member still holds.
+                heldScopes.forEach { scopeId ->
+                    try {
+                        rotateScopeKey(sess, c, TeamScopeRef(teamId, scopeId))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        markError(e.toFailure())
+                    }
+                }
             }
             refreshUnlocked(sess, c)
         }
@@ -386,51 +425,140 @@ class TeamsCoordinator(
         }
     }
 
-    /** Team vault (for shared-record stores in the UI); null — no key/not active/vault locked. */
-    fun teamVault(teamId: String): Vault? {
-        if (!vault.isUnlocked) return null
-        val key = keyStore.get(teamId)?.dataKey() ?: return null
-        return teamVaults.open(teamId, key)
+    // --- scopes ---
+
+    /** Create a scope with its own key: what is shared into it stays unreadable outside its grants. */
+    suspend fun createScope(teamId: String, name: String) {
+        val s = session() ?: return markError(TeamsFailure.NotConnected)
+        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
+        if (scopesUnsupported) return markError(TeamsFailure.ScopesUnsupported)
+        op {
+            val identity = identityStore.ensure()
+            val scopeId = newId()
+            spaces.createScope(s, c, teamId, scopeId, name.ifBlank { scopeId }, identity)
+            refreshUnlocked(s, c)
+        }
+    }
+
+    suspend fun deleteScope(teamId: String, scopeId: String) {
+        val s = session() ?: return markError(TeamsFailure.NotConnected)
+        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        op {
+            spaces.deleteScope(s, c, teamId, scopeId)
+            refreshUnlocked(s, c)
+        }
+    }
+
+    /** Give a team member access to a scope: its current key, sealed and signed to them. */
+    suspend fun grantScope(teamId: String, scopeId: String, accountId: String) {
+        val s = session() ?: return markError(TeamsFailure.NotConnected)
+        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
+        if (scopesUnsupported) return markError(TeamsFailure.ScopesUnsupported)
+        op {
+            spaces.grantScope(s, c, teamId, scopeId, accountId, identityStore.ensure())
+            refreshUnlocked(s, c)
+        }
     }
 
     /**
-     * Share an account-vault record with a team: a copy of the decrypted payload is placed in the team
-     * vault under the same id. [stripFields] are fields meaningless outside the personal workspace
-     * (e.g. a host's `groupId`). Returns false if the vault/record is inaccessible.
+     * Take a member's scope access away and rotate the scope key: the ACL row is gone, but they keep
+     * their copy of the old key, so anything shared afterwards must be under a new one.
+     */
+    suspend fun revokeScope(teamId: String, scopeId: String, accountId: String) {
+        val s = session() ?: return markError(TeamsFailure.NotConnected)
+        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
+        op {
+            c.revokeScope(s, teamId, scopeId, accountId)
+            if (accountId == s.accountId) {
+                spaces.forgetScope(teamId, scopeId) // gave up our own access: the local copy must go
+            } else {
+                rotateScopeKey(s, c, TeamScopeRef(teamId, scopeId))
+            }
+            refreshUnlocked(s, c)
+        }
+    }
+
+    /** Accounts holding a grant on the scope (managers only); empty list plus [lastError] on failure. */
+    suspend fun scopeGrants(teamId: String, scopeId: String): List<String> {
+        val s = session() ?: return emptyList()
+        val c = client() ?: return emptyList()
+        return try {
+            c.scopeGrants(s, teamId, scopeId).map { it.accountId }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            markError(e.toFailure())
+            emptyList()
+        }
+    }
+
+    // --- records ---
+
+    /** Vault of one share space (for shared-record stores in the UI); null — no key/vault locked. */
+    fun spaceVault(ref: TeamScopeRef): Vault? = spaces.vault(ref)
+
+    /**
+     * Ids of records already shared into **any** space of the team, by type. A record belongs to
+     * exactly one space (the server refuses to move one, see TeamRecordRepository.upsert), so the
+     * share picker has to hide what is already shared elsewhere in the team — offering it again would
+     * write a local copy the server then silently declines.
+     */
+    fun sharedRecordIds(teamId: String, type: RecordType): Set<String> =
+        spacesOf(teamId).mapNotNull { spaces.vault(it) }
+            .flatMapTo(mutableSetOf()) { space ->
+                space.records().filter { it.type == type && !it.deleted }.map { it.id }
+            }
+
+    /**
+     * Share an account-vault record with a team space: a copy of the decrypted payload is placed in
+     * that space's vault under the same id. [stripFields] are fields meaningless outside the personal
+     * workspace (e.g. a host's `groupId`). Returns false if the vault/record is inaccessible, or if
+     * the record is already shared into another space of this team — the server keeps a record in the
+     * space it was first shared into, so writing it here would be a local copy nobody else ever sees.
+     * Moving a record between spaces is an unshare followed by a share.
      */
     suspend fun shareRecord(
-        teamId: String,
+        ref: TeamScopeRef,
         recordId: String,
         type: RecordType,
         stripFields: Set<String> = emptySet(),
     ): Boolean {
-        val target = teamVault(teamId) ?: run { markError(TeamsFailure.KeyMissing); return false }
+        val target = spaceVault(ref) ?: run { markError(TeamsFailure.KeyMissing); return false }
+        val elsewhere = spacesOf(ref.teamId).filter { it != ref }
+            .any { space -> spaces.vault(space)?.records()?.any { it.id == recordId && !it.deleted } == true }
+        if (elsewhere) {
+            markError(TeamsFailure.AlreadyShared)
+            return false
+        }
         val payload = runCatching { vault.openPayload(recordId) }.getOrNull() ?: return false
         val cleaned = stripShareFields(payload, stripFields)
         target.put(recordId, type, cleaned)
-        _revision.value++ // local mutation: syncTeam below yields pulled==0 on our own record
-        syncTeam(teamId)
+        _revision.value++ // local mutation: syncSpace below yields pulled==0 on our own record
+        syncSpace(ref)
         return true
     }
 
-    /** Remove a record from a team (the tombstone reaches all members). */
-    suspend fun unshareRecord(teamId: String, recordId: String) {
-        teamVault(teamId)?.remove(recordId) ?: return
-        _revision.value++ // local mutation: syncTeam below yields pulled==0 on our own tombstone
-        syncTeam(teamId)
+    /** Remove a record from a team space (the tombstone reaches everyone holding that space's key). */
+    suspend fun unshareRecord(ref: TeamScopeRef, recordId: String) {
+        spaceVault(ref)?.remove(recordId) ?: return
+        _revision.value++ // local mutation: syncSpace below yields pulled==0 on our own tombstone
+        syncSpace(ref)
     }
 
-    /** Sync one team (team-scoped pull+push via the shared SyncEngine). */
-    suspend fun syncTeam(teamId: String) {
+    /** Sync one share space (scoped pull+push via the shared SyncEngine). */
+    suspend fun syncSpace(ref: TeamScopeRef) {
         val s = session() ?: return
         val c = client() ?: return
-        val teamVault = openTeamVaultResettingStale(teamId) ?: return
+        val spaceVault = spaces.vaultResettingStale(ref) ?: return
         syncMutex.withLock {
             try {
                 val engine = SyncEngine(
-                    TeamScopedSyncClient(c, teamId),
-                    teamVault,
-                    KeyedStateStore(teamState, cursorKey(teamId)),
+                    TeamScopedSyncClient(c, ref),
+                    spaceVault,
+                    KeyedStateStore(teamState, ref.key),
                     settings = { SyncSettings() },
                 )
                 val outcome = engine.sync(s)
@@ -448,6 +576,9 @@ class TeamsCoordinator(
         }
     }
 
+    /** Sync every space of one team: the team itself plus each scope we hold a key for. */
+    suspend fun syncTeam(teamId: String) = spacesOf(teamId).forEach { syncSpace(it) }
+
     suspend fun syncAll() {
         _teams.value.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }
             .forEach { syncTeam(it.id) }
@@ -462,10 +593,17 @@ class TeamsCoordinator(
 
     // --- internals ---
 
+    /** Spaces of a team whose key we hold: the team itself and each granted scope. */
+    private fun spacesOf(teamId: String): List<TeamScopeRef> =
+        listOf(TeamScopeRef(teamId)) + keyStore.scopes(teamId).keys.map { TeamScopeRef(teamId, it) }
+
     private fun forgetTeamLocally(teamId: String) {
+        // Read the spaces first: removing the TEAM record takes the nested scope keys with it, and
+        // their cursors would then never be cleared (a re-join would resume mid-stream and miss records).
+        val spaceKeys = spacesOf(teamId).map { it.key }
         keyStore.remove(teamId)
-        teamVaults.reset(teamId)
-        teamState.setCursor(cursorKey(teamId), 0)
+        teamVaults.resetTeam(teamId) // the team's vault and every scope vault under it
+        spaceKeys.forEach { teamState.setCursor(it, 0) }
         verifiedInvites.update { it - teamId } // decline/leave: drop any cached invite for this team
     }
 
@@ -474,7 +612,7 @@ class TeamsCoordinator(
         val identity = identityStore.load()
         val remote = c.listTeams(s)
         if (identity != null) adoptRotatedKeys(s, c, remote, identity)
-        publishTeams(remote, identity)
+        publishTeams(s, c, remote, identity)
         onTeamsChanged()
         maybeRecoverKeys()
     }
@@ -487,22 +625,69 @@ class TeamsCoordinator(
     }
 
     /** Map server summaries to [TeamUi]; the display name comes from the local key or the invite envelope. */
-    private fun publishTeams(remote: List<TeamSummary>, identity: AccountIdentity?) {
+    private suspend fun publishTeams(s: SyncSession, c: TeamClient, remote: List<TeamSummary>, identity: AccountIdentity?) {
         val keys = keyStore.list()
         _teams.value = remote.map { t ->
             val entry = keys[t.id]
             val name = entry?.name ?: t.envelope?.let { env ->
                 identity?.let { inviteCodec.open(it.sharing, env)?.teamName }
             } ?: t.id
-            TeamUi(t.id, name, t.ownerAccountId, t.role, t.status, t.memberCount, entry != null)
+            val scopes = if (t.status == TeamMemberStatus.ACTIVE) refreshScopes(s, c, t.id, identity) else emptyList()
+            TeamUi(t.id, name, t.ownerAccountId, t.role, t.status, t.memberCount, entry != null, scopes)
         }
     }
 
     /**
+     * Scopes of one team, tolerating a server that doesn't know about them: a self-hosted deployment
+     * older than granular sharing answers 404, and losing the whole team list over an optional feature
+     * would be a far worse trade (same reasoning as the trash-record push batch in SyncEngine).
+     *
+     * The two failure modes are kept apart. A 404 means "this server has no scopes" — the list is
+     * genuinely empty and [scopesUnsupported] is raised so a later create/grant can explain itself.
+     * Anything else (network blip, 5xx) says nothing about whether scopes exist, so the ones we
+     * already know are kept on screen rather than blinking out, and the failure is surfaced.
+     */
+    private suspend fun refreshScopes(s: SyncSession, c: TeamClient, teamId: String, identity: AccountIdentity?): List<TeamScopeUi> =
+        try {
+            spaces.refreshScopes(s, c, teamId, identity).also { scopesUnsupported = false }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if ((e as? SyncException)?.kind == SyncException.Kind.NOT_FOUND) {
+                scopesUnsupported = true
+                emptyList()
+            } else {
+                markError(e.toFailure())
+                _teams.value.firstOrNull { it.id == teamId }?.scopes ?: emptyList()
+            }
+        }
+
+    /**
+     * Scope ids [accountId] holds in the team, read **before** the removal — the server drops their
+     * grants along with the membership, and afterwards there is no way to tell which keys they walked
+     * away with.
+     *
+     * Fails safe: if the grant lists can't be read, every scope we hold a key for is rotated instead
+     * of none. Over-rotating costs the other members a re-pull; under-rotating would leave the removed
+     * member with a live key, which is the thing this exists to prevent. Best-effort against one race:
+     * a grant handed out from another device between this read and the removal isn't covered.
+     */
+    private suspend fun scopesHeldBy(s: SyncSession, c: TeamClient, teamId: String, accountId: String): List<String> =
+        try {
+            c.listScopes(s, teamId)
+                .filter { scope -> c.scopeGrants(s, teamId, scope.scopeId).any { it.accountId == accountId } }
+                .map { it.scopeId }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            keyStore.scopes(teamId).keys.toList()
+        }
+
+    /**
      * Adopt a rotated teamKey delivered by the server ([TeamSummary.keyEnvelope]): open+verify the
      * signed rekey envelope and, if its epoch is newer than the locally stored key, replace the key.
-     * The stale local team-vault file (still under the old key) is dropped so [syncTeam] re-pulls the
-     * re-encrypted records. A forged/unverifiable envelope is ignored (the old key is kept).
+     * The stale local team-vault file (still under the old key) is dropped so the next sync re-pulls
+     * the re-encrypted records. A forged/unverifiable envelope is ignored (the old key is kept).
      */
     private suspend fun adoptRotatedKeys(s: SyncSession, c: TeamClient, remote: List<TeamSummary>, identity: AccountIdentity) {
         val adopted = mutableListOf<String>()
@@ -515,73 +700,41 @@ class TeamsCoordinator(
             val rotatorKeys = c.fetchPublicKey(s, payload.inviterAccountId) ?: continue
             if (!inviteCodec.verify(payload, rotatorKeys.signing)) continue
             keyStore.rekey(summary.id, payload.teamKey, payload.epoch)
-            teamVaults.reset(summary.id) // old-key file is unreadable under the new key — rebuild on pull
+            teamVaults.reset(TeamScopeRef(summary.id)) // old-key file is unreadable under the new key
             adopted += summary.id
         }
         // Re-pull the re-encrypted records under the freshly adopted key (the reset dropped the stale file).
-        adopted.forEach { syncTeam(it) }
+        adopted.forEach { syncSpace(TeamScopeRef(it)) }
     }
 
-    /**
-     * Rotate the teamKey after a member removal: generate a fresh key, re-seal it (signed) to every
-     * remaining member, bump the server epoch, then re-encrypt local records under the new key so they
-     * win LWW and overwrite the server's old-key copies.
-     *
-     * Fails closed: re-encrypting local records is mandatory (otherwise the server keeps old-key blobs
-     * while members adopt the new key, leaving every shared record unreadable for everyone). So the
-     * team vault is opened under the CURRENT key *before* the server epoch is bumped — if it can't be
-     * opened (vault locked, or the on-disk file is already under a superseded key), rotation aborts
-     * before touching the server: the old key stays authoritative and records stay readable. The next
-     * epoch is derived from the server's epoch, not the (possibly stale) local one, so a lagging device
-     * doesn't 409 while the member is already removed; a genuine concurrent rotation is retried a
-     * bounded number of times.
-     */
+    /** Rotate the team key (member removal). See [TeamSpaces.rotate] for the fail-closed contract. */
     private suspend fun rotateTeamKey(s: SyncSession, c: TeamClient, teamId: String) {
-        val entry = keyStore.get(teamId) ?: return
-        val oldKey = entry.dataKey() ?: return markError(TeamsFailure.KeyMissing)
-        // Open under the current key up front (before keyStore.rekey swaps it) — the returned vault is
-        // what we re-encrypt after the server accepts the rotation. Abort here means nothing changed.
-        val teamVault = openTeamVault(teamId, oldKey) ?: return markError(TeamsFailure.KeyMissing)
         val identity = identityStore.ensure()
-        var attempt = 0
-        while (true) {
-            val serverEpoch = c.listTeams(s).firstOrNull { it.id == teamId }?.keyEpoch
-                ?: return markError(TeamsFailure.KeyMissing)
-            val newEpoch = (serverEpoch + 1).toInt()
-            val newKey = crypto.newDataKey()
-            val envelopes = mutableMapOf<String, ByteArray>()
-            for (member in c.members(s, teamId)) {
-                if (member.accountId == s.accountId) continue // we adopt the key locally, no self-envelope
-                val keys = c.fetchPublicKey(s, member.accountId) ?: continue // unpublished key: can't re-seal
-                envelopes[member.accountId] = inviteCodec.seal(
-                    recipientPublicKey = keys.sharing,
-                    inviter = identity.signing,
-                    inviterId = s.accountId,
-                    inviteeId = member.accountId,
-                    teamId = teamId,
-                    teamKey = newKey,
-                    teamName = entry.name,
-                    epoch = newEpoch,
-                )
-            }
-            try {
-                c.rekey(s, teamId, newEpoch.toLong(), envelopes)
-            } catch (e: SyncException) {
-                newKey.zeroize() // rotation didn't commit — don't leave the unused key dangling
-                // A stale-epoch conflict means someone else rotated meanwhile: refetch the epoch and
-                // retry (their rotation may already cover the removal, but ours re-encrypts our local
-                // records). Give up after a few tries and surface — the member stays removed regardless.
-                if (e.kind == SyncException.Kind.CONFLICT && attempt++ < REKEY_MAX_ATTEMPTS) continue
-                throw e
-            }
-            // Server bumped and envelopes delivered. Commit locally: store the new key (keyStore.rekey
-            // base64-copies it) and re-encrypt records (version+1 wins LWW, overwriting the server's
-            // old-key copies), then push. rekeyRecords takes ownership of newKey.
-            keyStore.rekey(teamId, newKey, newEpoch)
-            teamVault.rekeyRecords(newKey)
-            syncTeam(teamId)
-            return
-        }
+        spaces.rotate(
+            s, c,
+            RotationTarget(
+                ref = TeamScopeRef(teamId),
+                identity = identity,
+                serverEpoch = { sess, cl -> cl.listTeams(sess).firstOrNull { it.id == teamId }?.keyEpoch },
+                recipients = { sess, cl -> cl.members(sess, teamId).map { it.accountId } },
+                commit = { sess, cl, epoch, envelopes -> cl.rekey(sess, teamId, epoch, envelopes) },
+            ),
+        )
+    }
+
+    /** Rotate one scope's key (grant revoked, or its holder removed from the team). */
+    private suspend fun rotateScopeKey(s: SyncSession, c: TeamClient, ref: TeamScopeRef) {
+        val identity = identityStore.ensure()
+        spaces.rotate(
+            s, c,
+            RotationTarget(
+                ref = ref,
+                identity = identity,
+                serverEpoch = { sess, cl -> cl.listScopes(sess, ref.teamId).firstOrNull { it.scopeId == ref.scopeId }?.keyEpoch },
+                recipients = { sess, cl -> cl.scopeGrants(sess, ref.teamId, ref.scopeId).map { it.accountId } },
+                commit = { sess, cl, epoch, envelopes -> cl.rekeyScope(sess, ref.teamId, ref.scopeId, epoch, envelopes) },
+            ),
+        )
     }
 
     internal class VerifiedInvite(val payload: TeamInvitePayload)
@@ -605,34 +758,6 @@ class TeamsCoordinator(
     }
 
     internal fun cachedInvite(teamId: String): VerifiedInvite? = verifiedInvites.value[teamId]
-
-    /** Open the team vault under [key] (no stale-file handling — used where the exact key is known). */
-    private fun openTeamVault(teamId: String, key: DataKey): Vault? {
-        if (!vault.isUnlocked) return null
-        return teamVaults.open(teamId, key)
-    }
-
-    /**
-     * Open the team vault under the current key, rebuilding it ONLY if the on-disk file is under a
-     * superseded key (a rotation adopted on another device left the local file stale). A structurally
-     * unreadable file is left in place and surfaced — resetting it would silently drop any local
-     * records that were never pushed. Used by sync paths, not by UI reads.
-     */
-    private fun openTeamVaultResettingStale(teamId: String): Vault? {
-        if (!vault.isUnlocked) return null
-        val key = keyStore.get(teamId)?.dataKey() ?: return null
-        return when (val r = teamVaults.openOrClassify(teamId, key)) {
-            is TeamVaults.OpenResult.Opened -> r.vault
-            TeamVaults.OpenResult.StaleKey -> {
-                teamVaults.reset(teamId) // old-key file → drop it and rebuild empty; syncTeam re-pulls
-                teamVaults.open(teamId, key)
-            }
-            TeamVaults.OpenResult.Unreadable -> {
-                markError(TeamsFailure.VaultUnreadable) // don't destroy a corrupt-but-maybe-unpushed file
-                null
-            }
-        }
-    }
 
     /**
      * Active team without a key → ask the account sync for a full re-pull once (per team per process):
@@ -667,15 +792,9 @@ class TeamsCoordinator(
     }
 
     private fun Exception.toFailure(): TeamsFailure = (this as? SyncException)?.kind.toTeamsFailure()
-
-    private companion object {
-        /** Bounded retries when a rotation loses the epoch race to a concurrent rotation. */
-        const val REKEY_MAX_ATTEMPTS = 3
-        fun cursorKey(teamId: String) = "team:$teamId"
-    }
 }
 
-/** [SyncStateStore] with a fixed key — so SyncEngine keeps a per-team cursor. */
+/** [SyncStateStore] with a fixed key — so SyncEngine keeps a per-space cursor. */
 private class KeyedStateStore(
     private val backing: SyncStateStore,
     private val key: String,
@@ -683,4 +802,3 @@ private class KeyedStateStore(
     override fun cursor(accountId: String): Long = backing.cursor(key)
     override fun setCursor(accountId: String, cursor: Long) = backing.setCursor(key, cursor)
 }
-

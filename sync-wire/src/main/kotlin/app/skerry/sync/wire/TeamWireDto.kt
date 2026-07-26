@@ -104,5 +104,42 @@ data class TeamActivityDto(
 @Serializable
 data class TeamActivityResponse(val entries: List<TeamActivityDto>)
 
+// --- scopes (granular sharing inside a team) ---
+
+/**
+ * A scope of a team (`GET /teams/{id}/scopes`). Granular sharing: records filed under a scope are
+ * encrypted with that scope's own key and served only to accounts holding a grant, so a member
+ * without the grant can neither fetch nor decrypt them.
+ *
+ * Zero-knowledge as everywhere else: the scope's **name** is not here — it travels inside
+ * [envelope] alongside the key. [envelope] is the sealed current-epoch scopeKey for the calling
+ * account (null without a grant) and, unlike an invite envelope, is kept after adoption: it is how a
+ * client recovers a scope key its local vault record lost.
+ */
+@Serializable
+data class TeamScopeDto(
+    val scopeId: String,
+    val keyEpoch: Long = 0,
+    val memberCount: Int = 0,
+    val envelope: String? = null,
+)
+
+@Serializable
+data class TeamScopesResponse(val scopes: List<TeamScopeDto>)
+
+/** Scope creation: [envelope] is the new scopeKey sealed to the creator themselves. */
+@Serializable
+data class TeamScopeCreateRequest(val scopeId: String, val envelope: String)
+
+/** Grant of a scope to an account: [envelope] is the current-epoch scopeKey sealed to them. */
+@Serializable
+data class TeamScopeGrantRequest(val accountId: String, val envelope: String)
+
+@Serializable
+data class TeamScopeGrantDto(val accountId: String, val createdAt: Long)
+
+@Serializable
+data class TeamScopeGrantsResponse(val grants: List<TeamScopeGrantDto>)
+
 // Team records reuse RecordDto/RecordsResponse/PushRequest/PushResponse: format is identical,
-// only the scope changes (`/teams/{id}/records` instead of `/vault/records`).
+// only the scope changes (`/teams/{id}/records[?scope=]` instead of `/vault/records`).

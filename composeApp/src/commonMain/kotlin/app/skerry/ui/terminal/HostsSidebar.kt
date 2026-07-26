@@ -76,6 +76,7 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTeams
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.team.TeamMemberStatus
+import app.skerry.shared.team.TeamScopeRef
 import androidx.compose.runtime.collectAsState
 import app.skerry.ui.teams.AutoPullTeamsOnOnline
 import app.skerry.ui.generated.resources.lib_teams_sidebar
@@ -529,12 +530,18 @@ private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignStat
     // manual sync (the personal catalog doesn't change, and these sections read the vault directly).
     val revision by teams.revision.collectAsState()
     val sections = remember(teamList, hostsSnapshot, revision, section) {
-        teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.mapNotNull { team ->
-            val vault = teams.teamVault(team.id) ?: return@mapNotNull null
-            // Shared hosts are split by section like the personal catalog: a team's VNC box belongs
-            // to the desktops list, its servers to the terminal one.
-            val shared = VaultHostStore(vault).all().inSection(section)
-            if (shared.isEmpty()) null else team.name to shared
+        teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.flatMap { team ->
+            // One group per share space: the team itself, plus every scope whose key we hold. A scope
+            // we're merely told about (manager without a grant) has no readable records, so no group.
+            val spaces = listOf(TeamScopeRef(team.id) to team.name) +
+                team.scopes.filter { it.hasKey }.map { TeamScopeRef(team.id, it.id) to "${team.name} · ${it.name}" }
+            spaces.mapNotNull { (ref, label) ->
+                val vault = teams.spaceVault(ref) ?: return@mapNotNull null
+                // Shared hosts are split by section like the personal catalog: a team's VNC box belongs
+                // to the desktops list, its servers to the terminal one.
+                val shared = VaultHostStore(vault).all().inSection(section)
+                if (shared.isEmpty()) null else label to shared
+            }
         }
     }
     if (sections.isEmpty()) return

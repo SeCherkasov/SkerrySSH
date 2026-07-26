@@ -12,20 +12,21 @@ import app.skerry.shared.sync.SyncSignal
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Adapts team scope to [SyncClient]: pull/push close over `/teams/{id}/records`, letting team
- * records run through the same [app.skerry.shared.sync.SyncEngine] (LWW, paging, cursor) as the
- * account vault. The rest of the contract is deliberately unsupported — the engine never calls it.
+ * Adapts one team share space (the team itself or one of its scopes, see [TeamScopeRef]) to
+ * [SyncClient]: pull/push close over `/teams/{id}/records`, letting team records run through the
+ * same [app.skerry.shared.sync.SyncEngine] (LWW, paging, cursor) as the account vault. The rest of
+ * the contract is deliberately unsupported — the engine never calls it.
  */
 class TeamScopedSyncClient(
     private val teams: TeamClient,
-    private val teamId: String,
+    private val ref: TeamScopeRef,
 ) : SyncClient {
 
     override suspend fun pull(session: SyncSession, since: Long): RecordPage =
-        teams.pullTeam(session, teamId, since)
+        teams.pullTeam(session, ref, since)
 
     override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage =
-        teams.pushTeam(session, teamId, records)
+        teams.pushTeam(session, ref, records)
 
     override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession = unsupported()
     override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession = unsupported()

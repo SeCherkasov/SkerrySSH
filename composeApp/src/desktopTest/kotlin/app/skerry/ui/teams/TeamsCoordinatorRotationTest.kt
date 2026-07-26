@@ -12,6 +12,9 @@ import app.skerry.shared.team.TeamKeyStore
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
+import app.skerry.shared.team.TeamScopeGrantEntry
+import app.skerry.shared.team.TeamScopeRef
+import app.skerry.shared.team.TeamScopeSummary
 import app.skerry.shared.team.TeamSummary
 import app.skerry.shared.team.TeamVaults
 import app.skerry.shared.vault.DataKey
@@ -82,12 +85,12 @@ class TeamsCoordinatorRotationTest {
             removed += accountId
         }
 
-        override suspend fun pullTeam(session: SyncSession, teamId: String, since: Long): RecordPage {
+        override suspend fun pullTeam(session: SyncSession, ref: TeamScopeRef, since: Long): RecordPage {
             val page = store.values.filter { it.second > since }.sortedBy { it.second }
             return RecordPage(page.map { it.first }, page.lastOrNull()?.second ?: since)
         }
 
-        override suspend fun pushTeam(session: SyncSession, teamId: String, records: List<RemoteRecord>): RecordPage {
+        override suspend fun pushTeam(session: SyncSession, ref: TeamScopeRef, records: List<RemoteRecord>): RecordPage {
             val result = records.map { rec ->
                 val existing = store[rec.id]?.first
                 val wins = existing == null || rec.version > existing.version ||
@@ -104,6 +107,13 @@ class TeamsCoordinatorRotationTest {
         override suspend fun changeRole(session: SyncSession, teamId: String, accountId: String, role: TeamRole) = error("unused")
         override suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry> = error("unused")
         override suspend fun deleteTeam(session: SyncSession, teamId: String) = error("unused")
+        override suspend fun listScopes(session: SyncSession, teamId: String): List<TeamScopeSummary> = emptyList()
+        override suspend fun createScope(session: SyncSession, teamId: String, scopeId: String, envelope: ByteArray) = error("unused")
+        override suspend fun deleteScope(session: SyncSession, teamId: String, scopeId: String) = error("unused")
+        override suspend fun scopeGrants(session: SyncSession, teamId: String, scopeId: String): List<TeamScopeGrantEntry> = emptyList()
+        override suspend fun grantScope(session: SyncSession, teamId: String, scopeId: String, accountId: String, envelope: ByteArray) = error("unused")
+        override suspend fun revokeScope(session: SyncSession, teamId: String, scopeId: String, accountId: String) = error("unused")
+        override suspend fun rekeyScope(session: SyncSession, teamId: String, scopeId: String, newEpoch: Long, envelopes: Map<String, ByteArray>) = error("unused")
     }
 
     private class Fixture(
@@ -131,7 +141,7 @@ class TeamsCoordinatorRotationTest {
         crypto = crypto,
         teamVaults = f.teamVaults,
         teamState = InMemorySyncStateStore(),
-        newTeamId = { "unused" },
+        newId = { "unused" },
     )
 
     @Test
@@ -142,7 +152,7 @@ class TeamsCoordinatorRotationTest {
         val oldKey = crypto.newDataKey()
         ks.put(teamId, "Ops", TeamRole.OWNER, oldKey, epoch = 0)
         // Seed a shared record, then corrupt the on-disk team vault so it can't be opened under oldKey.
-        f.teamVaults.open(teamId, oldKey)!!.put("h1", RecordType.HOST, "secret".encodeToByteArray())
+        f.teamVaults.open(TeamScopeRef(teamId), oldKey)!!.put("h1", RecordType.HOST, "secret".encodeToByteArray())
         f.teamVaults.lockAll()
         val teamFile = f.teamDir / "$teamId.vault"
         FileSystem.SYSTEM.write(teamFile) { writeUtf8("corrupted") }
@@ -168,7 +178,7 @@ class TeamsCoordinatorRotationTest {
         val ks = TeamKeyStore(f.vault)
         val oldKey = crypto.newDataKey()
         ks.put(teamId, "Ops", TeamRole.OWNER, oldKey, epoch = 0) // local epoch lags behind the server
-        f.teamVaults.open(teamId, oldKey)!!.put("h1", RecordType.HOST, "secret".encodeToByteArray())
+        f.teamVaults.open(TeamScopeRef(teamId), oldKey)!!.put("h1", RecordType.HOST, "secret".encodeToByteArray())
 
         val client = FakeTeamClient(self, teamId, listOf(carol to carolKeys()))
         client.serverEpoch = 2 // server is two rotations ahead of this device's local key
@@ -181,7 +191,7 @@ class TeamsCoordinatorRotationTest {
         assertNull(coord.lastError.value)
         // The record was re-encrypted under the new key and is still readable through it.
         val newKey = ks.get(teamId)!!.dataKey()!!
-        assertContentEquals("secret".encodeToByteArray(), f.teamVaults.open(teamId, newKey)!!.openPayload("h1"))
+        assertContentEquals("secret".encodeToByteArray(), f.teamVaults.open(TeamScopeRef(teamId), newKey)!!.openPayload("h1"))
     }
 
     @Test
@@ -191,7 +201,7 @@ class TeamsCoordinatorRotationTest {
         val ks = TeamKeyStore(f.vault)
         val oldKey = crypto.newDataKey()
         ks.put(teamId, "Ops", TeamRole.OWNER, oldKey, epoch = 0)
-        f.teamVaults.open(teamId, oldKey)!!.put("h1", RecordType.HOST, "secret".encodeToByteArray())
+        f.teamVaults.open(TeamScopeRef(teamId), oldKey)!!.put("h1", RecordType.HOST, "secret".encodeToByteArray())
 
         val client = FakeTeamClient(self, teamId, listOf(carol to carolKeys()))
         client.rekeyOutcomes.addAll(listOf(false, true)) // first attempt conflicts, second wins

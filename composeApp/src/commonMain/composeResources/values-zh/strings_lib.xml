@@ -144,4 +144,21 @@
     <string name="lib_teams_err_server_error">服务器响应异常，请稍后重试</string>
     <string name="lib_teams_err_forbidden">你的角色不允许此操作</string>
     <string name="lib_teams_err_vault_unreadable">本地团队保险库文件不可读 — 已保留，未删除</string>
+    <string name="lib_teams_scopes">访问范围</string>
+    <string name="lib_teams_scope_all">整个团队</string>
+    <string name="lib_teams_scope_new">新建范围</string>
+    <string name="lib_teams_scope_create_title">新建访问范围</string>
+    <string name="lib_teams_scope_create_hint">共享到范围中的记录使用自己的密钥加密，没有访问权限的成员无法读取。</string>
+    <string name="lib_teams_scope_name">范围名称</string>
+    <string name="lib_teams_scope_delete">删除范围</string>
+    <string name="lib_teams_scope_delete_message">该范围、其访问列表以及其中共享的全部内容将对所有成员删除。</string>
+    <string name="lib_teams_scope_access">访问权限</string>
+    <string name="lib_teams_scope_access_title">“%1$s”的访问权限</string>
+    <string name="lib_teams_scope_access_hint">只有列出的成员才能获取并解密此范围。撤销访问会轮换该范围的密钥。</string>
+    <string name="lib_teams_scope_grant">授予</string>
+    <string name="lib_teams_scope_revoke">撤销</string>
+    <string name="lib_teams_scope_no_key">你没有此范围的密钥 — 在本设备上无法读取其记录</string>
+    <string name="lib_teams_scope_members_count">%1$d 人可访问</string>
+    <string name="lib_teams_err_already_shared">该记录已共享到此团队的另一个范围 — 请先在那里取消共享</string>
+    <string name="lib_teams_err_scopes_unsupported">此同步服务器版本过旧，不支持访问范围 — 请更新服务器</string>
 </resources>

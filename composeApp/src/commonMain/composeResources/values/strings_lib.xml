@@ -144,4 +144,21 @@
     <string name="lib_teams_err_server_error">The server isn't responding correctly — try again later</string>
     <string name="lib_teams_err_forbidden">Not allowed for your role in this team</string>
     <string name="lib_teams_err_vault_unreadable">The local team vault file is unreadable — it was kept, not deleted</string>
+    <string name="lib_teams_scopes">Access scopes</string>
+    <string name="lib_teams_scope_all">Whole team</string>
+    <string name="lib_teams_scope_new">New scope</string>
+    <string name="lib_teams_scope_create_title">New access scope</string>
+    <string name="lib_teams_scope_create_hint">Records shared into a scope get their own key and stay unreadable for members without access.</string>
+    <string name="lib_teams_scope_name">Scope name</string>
+    <string name="lib_teams_scope_delete">Delete scope</string>
+    <string name="lib_teams_scope_delete_message">The scope, its access list and everything shared into it will be removed for all members.</string>
+    <string name="lib_teams_scope_access">Access</string>
+    <string name="lib_teams_scope_access_title">Access to “%1$s”</string>
+    <string name="lib_teams_scope_access_hint">Only members listed here can fetch and decrypt this scope. Revoking access rotates the scope key.</string>
+    <string name="lib_teams_scope_grant">Grant</string>
+    <string name="lib_teams_scope_revoke">Revoke</string>
+    <string name="lib_teams_scope_no_key">You have no key for this scope — its records can't be read on this device</string>
+    <string name="lib_teams_scope_members_count">%1$d with access</string>
+    <string name="lib_teams_err_already_shared">This record is already shared into another scope of this team — unshare it there first</string>
+    <string name="lib_teams_err_scopes_unsupported">This sync server is too old for access scopes — update the server</string>
 </resources>

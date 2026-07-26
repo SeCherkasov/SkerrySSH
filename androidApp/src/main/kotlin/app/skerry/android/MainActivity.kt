@@ -525,7 +525,7 @@ class MainActivity : FragmentActivity() {
                 now = { Instant.now().toString() },
             ),
             teamState = FileSyncStateStore(File(dir, "team-cursor.json").toPath()),
-            newTeamId = { UUID.randomUUID().toString() },
+            newId = { UUID.randomUUID().toString() },
             onTeamsChanged = {
                 lifecycleScope.launch(Dispatchers.Main) {
                     hosts.reload(); snippets.reload(); tunnels.reload()

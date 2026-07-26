@@ -29,6 +29,9 @@ import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
+import app.skerry.shared.team.TeamScopeGrantEntry
+import app.skerry.shared.team.TeamScopeRef
+import app.skerry.shared.team.TeamScopeSummary
 import app.skerry.shared.team.TeamSummary
 import app.skerry.sync.wire.AccountKeyResponse
 import app.skerry.sync.wire.PublishKeyRequest
@@ -38,6 +41,10 @@ import app.skerry.sync.wire.TeamCreateRequest
 import app.skerry.sync.wire.TeamInviteRequest
 import app.skerry.sync.wire.TeamMembersResponse
 import app.skerry.sync.wire.TeamRekeyRequest
+import app.skerry.sync.wire.TeamScopeCreateRequest
+import app.skerry.sync.wire.TeamScopeGrantRequest
+import app.skerry.sync.wire.TeamScopeGrantsResponse
+import app.skerry.sync.wire.TeamScopesResponse
 import app.skerry.sync.wire.TeamRoleChangeRequest
 import app.skerry.sync.wire.TeamsResponse
 import io.ktor.client.HttpClient
@@ -58,6 +65,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -368,20 +376,89 @@ class KtorSyncClient(
         }.expectSuccess()
     }
 
-    override suspend fun pullTeam(session: SyncSession, teamId: String, since: Long): RecordPage {
-        val resp: RecordsResponse = get("/teams/${teamId.encodeURLPathPart()}/records?since=$since") {
+    override suspend fun pullTeam(session: SyncSession, ref: TeamScopeRef, since: Long): RecordPage {
+        val resp: RecordsResponse = get(ref.recordsUrl("since=$since")) {
             bearerAuth(session.accessToken)
         }.bodyChecked()
         return RecordPage(resp.records.map { it.toRemote() }, resp.cursor, resp.compactedIds)
     }
 
-    override suspend fun pushTeam(session: SyncSession, teamId: String, records: List<RemoteRecord>): RecordPage {
-        val resp: PushResponse = put("/teams/${teamId.encodeURLPathPart()}/records") {
+    override suspend fun pushTeam(session: SyncSession, ref: TeamScopeRef, records: List<RemoteRecord>): RecordPage {
+        val resp: PushResponse = put(ref.recordsUrl()) {
             bearerAuth(session.accessToken)
             contentType(ContentType.Application.Json)
             setBody(PushRequest(records.map { it.toWire() }))
         }.bodyChecked()
         return RecordPage(resp.records.map { it.toRemote() }, resp.cursor)
+    }
+
+    // --- scopes ---
+
+    override suspend fun listScopes(session: SyncSession, teamId: String): List<TeamScopeSummary> {
+        val resp: TeamScopesResponse = get("/teams/${teamId.encodeURLPathPart()}/scopes") {
+            bearerAuth(session.accessToken)
+        }.bodyChecked()
+        return resp.scopes.map { TeamScopeSummary(it.scopeId, it.keyEpoch, it.memberCount, it.envelope?.unb64()) }
+    }
+
+    override suspend fun createScope(session: SyncSession, teamId: String, scopeId: String, envelope: ByteArray) {
+        post("/teams/${teamId.encodeURLPathPart()}/scopes") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(TeamScopeCreateRequest(scopeId, envelope.b64()))
+        }.expectSuccess()
+    }
+
+    override suspend fun deleteScope(session: SyncSession, teamId: String, scopeId: String) {
+        request {
+            http.delete("$serverUrl${scopePath(teamId, scopeId)}") { bearerAuth(session.accessToken) }
+        }.expectSuccess()
+    }
+
+    override suspend fun scopeGrants(session: SyncSession, teamId: String, scopeId: String): List<TeamScopeGrantEntry> {
+        val resp: TeamScopeGrantsResponse = get("${scopePath(teamId, scopeId)}/grants") {
+            bearerAuth(session.accessToken)
+        }.bodyChecked()
+        return resp.grants.map { TeamScopeGrantEntry(it.accountId, it.createdAt) }
+    }
+
+    override suspend fun grantScope(session: SyncSession, teamId: String, scopeId: String, accountId: String, envelope: ByteArray) {
+        post("${scopePath(teamId, scopeId)}/grants") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(TeamScopeGrantRequest(accountId, envelope.b64()))
+        }.expectSuccess()
+    }
+
+    override suspend fun revokeScope(session: SyncSession, teamId: String, scopeId: String, accountId: String) {
+        request {
+            http.delete("$serverUrl${scopePath(teamId, scopeId)}/grants/${accountId.encodeURLPathPart()}") {
+                bearerAuth(session.accessToken)
+            }
+        }.expectSuccess()
+    }
+
+    override suspend fun rekeyScope(
+        session: SyncSession,
+        teamId: String,
+        scopeId: String,
+        newEpoch: Long,
+        envelopes: Map<String, ByteArray>,
+    ) {
+        post("${scopePath(teamId, scopeId)}/rekey") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(TeamRekeyRequest(newEpoch, envelopes.map { (id, env) -> RekeyEnvelopeDto(id, env.b64()) }))
+        }.expectSuccess()
+    }
+
+    private fun scopePath(teamId: String, scopeId: String) =
+        "/teams/${teamId.encodeURLPathPart()}/scopes/${scopeId.encodeURLPathPart()}"
+
+    /** Records URL of one share space; the team-wide space simply omits `scope=`. */
+    private fun TeamScopeRef.recordsUrl(vararg params: String): String {
+        val query = (params.toList() + if (isTeamWide) emptyList() else listOf("scope=${scopeId.encodeURLParameter()}"))
+        return "/teams/${teamId.encodeURLPathPart()}/records" + if (query.isEmpty()) "" else "?" + query.joinToString("&")
     }
 
     override suspend fun ping(): Boolean = try {
