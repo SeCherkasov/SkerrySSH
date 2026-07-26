@@ -103,7 +103,8 @@ import app.skerry.ui.generated.resources.lib_teams_sync_now
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_create
 import app.skerry.ui.generated.resources.shell_route_team
-import app.skerry.ui.teams.AuditLogDialog
+import app.skerry.ui.teams.HistoryTarget
+import app.skerry.ui.teams.TeamActivityDialog
 import app.skerry.ui.teams.InviteMemberDialog
 import app.skerry.ui.teams.RoleBadge
 import app.skerry.ui.teams.RolePickerDialog
@@ -120,7 +121,9 @@ import app.skerry.ui.teams.ScopeAccessDialog
 import app.skerry.ui.teams.ScopeSection
 import app.skerry.ui.teams.TeamsCoordinator
 import app.skerry.ui.teams.teamsFailureText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 
@@ -219,6 +222,8 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     var sharePicker by remember { mutableStateOf<RecordType?>(null) }
     var confirm by remember { mutableStateOf<MobileTeamsConfirm?>(null) }
     var showHistory by remember { mutableStateOf(false) }
+    // One record's history instead of the team's whole feed (desktop parity).
+    var historyRecord by remember { mutableStateOf<HistoryTarget?>(null) }
     var rolePicker by remember { mutableStateOf<TeamMember?>(null) }
     // Selected share space of the current team ("" = team-wide), like the desktop screen.
     var selectedScope by remember { mutableStateOf("") }
@@ -265,6 +270,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
                     scope.launch { tc.unshareRecord(ref, recordId); tick++ }
                 },
                 onShowHistory = { showHistory = true },
+                onShowRecordHistory = { historyRecord = it },
                 onChangeRole = { member -> rolePicker = member },
                 onSelectScope = { selectedScope = it },
                 onNewScope = { showCreateScope = true },
@@ -320,11 +326,27 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
         )
     }
     val historyTeam = selected
-    if (showHistory && historyTeam != null) {
+    val recordFocus = historyRecord
+    if ((showHistory || recordFocus != null) && historyTeam != null) {
         val entries by produceState(emptyList<TeamActivityEntry>(), historyTeam.id, tick) {
             value = tc.teamActivity(historyTeam.id)
         }
-        AuditLogDialog(entries, onDismiss = { showHistory = false })
+        // Record names come from our own copy of each share space — the server holds only ids.
+        // Fetched like the entries above rather than in a bare remember{}: resolving them decrypts
+        // every shared record of the team, which has no business blocking a frame.
+        val recordNames by produceState(emptyMap<String, Map<String, String>>(), historyTeam.id, tick) {
+            value = withContext(Dispatchers.Default) { tc.sharedRecordNames(historyTeam.id) }
+        }
+        val scopeNames = remember(historyTeam.scopes) { historyTeam.scopes.associate { it.id to it.name } }
+        TeamActivityDialog(
+            entries = entries,
+            selfAccountId = tc.selfAccountId(),
+            recordNames = recordNames,
+            scopeNames = scopeNames,
+            focusRecordId = recordFocus?.recordId,
+            focusRecordLabel = recordFocus?.label,
+            onDismiss = { showHistory = false; historyRecord = null },
+        )
     }
     val roleTeam = selected
     val roleTarget = rolePicker
@@ -423,6 +445,7 @@ private fun MobileTeamDetail(
     onSync: () -> Unit,
     onUnshare: (String) -> Unit,
     onShowHistory: () -> Unit,
+    onShowRecordHistory: (HistoryTarget) -> Unit,
     onChangeRole: (TeamMember) -> Unit,
     onSelectScope: (String) -> Unit,
     onNewScope: () -> Unit,
@@ -509,7 +532,12 @@ private fun MobileTeamDetail(
     MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
     if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
     sharedHosts.forEach { host ->
-        MobileSharedRow(host.label, host.rowSubtitle(), canUnshare = canWrite) { onUnshare(host.id) }
+        MobileSharedRow(
+            host.label, host.rowSubtitle(),
+            canUnshare = canWrite,
+            onHistory = if (canAudit) { { onShowRecordHistory(HistoryTarget(host.id, host.label)) } } else null,
+            onUnshare = { onUnshare(host.id) },
+        )
     }
     if (canWrite) {
         GhostButton(stringResource(Res.string.lib_teams_share_host), onClick = { onShare(RecordType.HOST) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
@@ -518,7 +546,12 @@ private fun MobileTeamDetail(
     MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size))
     if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
     sharedSnippets.forEach { snippet ->
-        MobileSharedRow(snippet.label, snippet.command, canUnshare = canWrite) { onUnshare(snippet.id) }
+        MobileSharedRow(
+            snippet.label, snippet.command,
+            canUnshare = canWrite,
+            onHistory = if (canAudit) { { onShowRecordHistory(HistoryTarget(snippet.id, snippet.label)) } } else null,
+            onUnshare = { onUnshare(snippet.id) },
+        )
     }
     if (canWrite) {
         GhostButton(stringResource(Res.string.lib_teams_share_snippet), onClick = { onShare(RecordType.SNIPPET) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
@@ -688,7 +721,13 @@ private fun MobileTeamHostRow(host: Host, mono: androidx.compose.ui.text.font.Fo
 }
 
 @Composable
-private fun MobileSharedRow(label: String, detail: String, canUnshare: Boolean, onUnshare: () -> Unit) {
+private fun MobileSharedRow(
+    label: String,
+    detail: String,
+    canUnshare: Boolean,
+    onHistory: (() -> Unit)? = null,
+    onUnshare: () -> Unit,
+) {
     val mono = LocalFonts.current.mono
     Row(
         Modifier.fillMaxWidth().padding(vertical = 7.dp),
@@ -697,6 +736,12 @@ private fun MobileSharedRow(label: String, detail: String, canUnshare: Boolean, 
     ) {
         Txt(label, color = Skerry.colors.textBright, size = 12.5.sp, font = mono)
         Txt(detail, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.weight(1f))
+        // "What happened to this one" — only for readers who may see the audit log at all.
+        if (onHistory != null) {
+            Box(Modifier.clip(CircleShape).clickable(onClick = onHistory).padding(3.dp)) {
+                Sym("history", size = 14.sp, color = Skerry.colors.faint)
+            }
+        }
         if (canUnshare) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onUnshare).padding(3.dp)) {
                 Sym("close", size = 14.sp, color = Skerry.colors.faint)

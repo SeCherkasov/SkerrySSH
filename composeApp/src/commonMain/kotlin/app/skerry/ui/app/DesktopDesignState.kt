@@ -181,6 +181,8 @@ class DesktopDesignState(
     // [app.skerry.ui.terminal.TerminalSessionPrefs] and pushed live into open ones.
     initialAllowServerClipboardWrite: Boolean = false,
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    initialReportTeamSessions: Boolean = true,
+    private val onReportTeamSessionsChange: (Boolean) -> Unit = {},
     // Whether a file path in terminal output is clickable (Ctrl+click) and opens in the SFTP panel
     // (Settings → Terminal). On by default; off also removes the hover highlight.
     initialOpenFilePathsInSftp: Boolean = true,
@@ -350,6 +352,14 @@ class DesktopDesignState(
      * write). Off by default; snapshotted into new sessions and pushed live into open ones.
      */
     var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
+
+    /**
+     * Whether opening a session on a host **shared with a team** is reported to that team's activity
+     * feed (Security → Report sessions on shared hosts). On by default: a host somebody shared into a
+     * team is shared infrastructure, and the feed is only useful if it is not full of holes. Never
+     * covers hosts of one's own — those are reported nowhere regardless of this setting.
+     */
+    var reportTeamSessions: Boolean by mutableStateOf(initialReportTeamSessions); private set
 
     /**
      * Whether file paths printed in terminal output are clickable and open in the SFTP panel
@@ -764,6 +774,12 @@ class DesktopDesignState(
     fun toggleAllowServerClipboardWrite() {
         allowServerClipboardWrite = !allowServerClipboardWrite
         onAllowServerClipboardWriteChange(allowServerClipboardWrite)
+    }
+
+    /** Toggle reporting sessions on team-shared hosts and report outward (for persistence). */
+    fun toggleReportTeamSessions() {
+        reportTeamSessions = !reportTeamSessions
+        onReportTeamSessionsChange(reportTeamSessions)
     }
 
     fun toggleSanitize() { sanitize = !sanitize }

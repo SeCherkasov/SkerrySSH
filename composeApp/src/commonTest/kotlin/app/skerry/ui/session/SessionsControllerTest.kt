@@ -487,6 +487,42 @@ class SessionsControllerTest {
     }
 
     @Test
+    fun `every real connection to a host is reported once, blank tabs and players never`() = runTest {
+        // Feeds the Teams activity log (see TeamsCoordinator.reportSessionOpen): every path that
+        // actually opens a session to a catalog host must report, and only those.
+        val opened = mutableListOf<String>()
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        var n = 0
+        val vncTransport = FakeVncTransport()
+        val sessions = SessionsController(
+            newId = { "s${n++}" },
+            controllerFactory = {
+                ConnectionController(
+                    transport = FakeTransport(),
+                    scope = scope,
+                    newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
+                )
+            },
+            vncControllerFactory = { VncSessionController(vncTransport, scope) },
+            onHostSessionOpened = { opened += it },
+        )
+
+        val blank = sessions.openBlank()
+        assertTrue(opened.isEmpty()) // no connection started yet
+        sessions.connect(hostId = "host-a", title = "a", subtitle = "u@h:22", target = target, auth = auth)
+        sessions.connect(hostId = "host-b", title = "b", subtitle = "u@h:22", target = target, auth = auth)
+        sessions.open(hostId = "host-c")
+        sessions.connectSplit(parentId = blank, hostId = "host-d", title = "d", subtitle = "u@h:22", target = target, auth = auth)
+        sessions.openVnc(hostId = "host-e")
+        sessions.openPlayer("recording", Asciicast(80, 24, "cast", emptyList()))
+        // An ad-hoc connection typed into the form belongs to no catalog host: nothing to report.
+        sessions.open(hostId = null)
+
+        assertEquals(listOf("host-a", "host-b", "host-c", "host-d", "host-e"), opened)
+        scope.cancel()
+    }
+
+    @Test
     fun `connect opens a new tab when the active one is not blank`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a") // connected, not blank

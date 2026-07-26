@@ -116,6 +116,8 @@ import app.skerry.ui.generated.resources.settings_recent_security_events
 import app.skerry.ui.generated.resources.settings_security_2fa
 import app.skerry.ui.generated.resources.settings_security_2fa_desc
 import app.skerry.ui.generated.resources.settings_security_auto_lock
+import app.skerry.ui.generated.resources.settings_security_report_team_sessions
+import app.skerry.ui.generated.resources.settings_security_report_team_sessions_desc
 import app.skerry.ui.generated.resources.settings_security_auto_lock_desc
 import app.skerry.ui.generated.resources.settings_security_account_password
 import app.skerry.ui.generated.resources.settings_security_account_password_desc
@@ -463,6 +465,18 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                         Txt(stringResource(Res.string.settings_security_2fa_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                     }
                     Txt(stringResource(Res.string.settings_manage), color = Skerry.colors.faint, size = 13.sp)
+                }
+
+                HLine()
+
+                // Desktop parity (Settings -> Security): what this device tells a team about our
+                // own sessions on hosts shared with it.
+                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(Modifier.weight(1f)) {
+                        Txt(stringResource(Res.string.settings_security_report_team_sessions), color = Skerry.colors.text, size = 14.5.sp)
+                        Txt(stringResource(Res.string.settings_security_report_team_sessions_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+                    }
+                    Toggle(on = state.reportTeamSessions, onToggle = state::toggleReportTeamSessions)
                 }
 
                 // Recent security events from the real log (or "no events yet").

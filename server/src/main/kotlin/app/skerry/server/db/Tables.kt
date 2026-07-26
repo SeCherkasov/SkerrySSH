@@ -81,6 +81,17 @@ object ActivityLog : Table("activity_log") {
     val detail = text("detail")
     /** Team the event belongs to (for team-scoped history); null for account-level events. */
     val teamId = varchar("team_id", 64).nullable()
+    /**
+     * Subject of a team event, for the members' activity feed: which record it was about, its type,
+     * and the share space it lives in (empty = team-wide). Ids and types are the plaintext metadata
+     * the server already holds; the record's **name** stays unknown to it — clients resolve it from
+     * their own copy of the team vault. Null for events with no record subject.
+     */
+    val recordId = varchar("record_id", 64).nullable()
+    val recordType = varchar("record_type", 32).nullable()
+    val scopeId = varchar("scope_id", 64).nullable()
+    /** Reported session length in seconds (client-reported session events only). */
+    val durationSec = long("duration_sec").nullable()
     val createdAt = long("created_at")
 
     override val primaryKey = PrimaryKey(seq)

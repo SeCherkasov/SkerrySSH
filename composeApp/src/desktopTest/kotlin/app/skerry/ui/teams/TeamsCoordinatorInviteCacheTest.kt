@@ -6,6 +6,7 @@ import app.skerry.shared.sync.RemoteRecord
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.team.AccountKeys
 import app.skerry.shared.team.TeamActivityEntry
+import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamIdentityStore
 import app.skerry.shared.team.TeamInviteCodec
@@ -70,6 +71,13 @@ class TeamsCoordinatorInviteCacheTest {
         override suspend fun removeMember(session: SyncSession, teamId: String, accountId: String) = error("unused")
         override suspend fun rekey(session: SyncSession, teamId: String, newEpoch: Long, envelopes: Map<String, ByteArray>) = error("unused")
         override suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry> = error("unused")
+        override suspend fun reportSessionEvent(
+            session: SyncSession,
+            teamId: String,
+            recordId: String,
+            kind: TeamSessionKind,
+            durationSec: Long?,
+        ) = error("unused")
         override suspend fun deleteTeam(session: SyncSession, teamId: String) = error("unused")
     }
 

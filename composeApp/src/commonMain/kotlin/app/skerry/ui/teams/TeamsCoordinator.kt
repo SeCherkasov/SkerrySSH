@@ -18,6 +18,7 @@ import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
 import app.skerry.shared.team.TeamScopeRef
 import app.skerry.shared.team.TeamScopedSyncClient
+import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamSummary
 import app.skerry.shared.team.TeamVaults
 import app.skerry.shared.team.accountKeyFingerprint
@@ -35,6 +36,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.skerry.shared.team.stripShareFields
+import app.skerry.shared.host.VaultHostStore
+import app.skerry.shared.snippet.VaultSnippetStore
 
 /** Typed cause of a Teams operation failure (text in the UI layer, syncFailureText style). */
 enum class TeamsFailure {
@@ -158,6 +161,17 @@ class TeamsCoordinator(
      * teamsForSync: sync is created before teams.
      */
     var onKeyMissing: (() -> Unit)? = null
+
+    /**
+     * Whether this device may tell a team about our sessions on its shared hosts (Settings →
+     * Security). Late-bound like [onKeyMissing]: the setting lives in the platform's UI state, which
+     * is built after this coordinator.
+     *
+     * The gate belongs here rather than at each call site so it cannot drift between the platforms or
+     * between the connect and the recording path — and so it sits beside the other privacy rule, that
+     * a host of our own is reported nowhere at all ([spaceHoldingHost]).
+     */
+    var reportSessionsEnabled: () -> Boolean = { true }
 
     // Recover a key once per team per process: if it's also missing on the server, every refresh would
     // otherwise run a full re-pull for nothing.
@@ -329,6 +343,78 @@ class TeamsCoordinator(
             emptyList()
         }
     }
+
+    /**
+     * Reports to the owning team that a session on shared host [hostId] just started — the session
+     * half of the activity feed (see [TeamClient.reportSessionEvent]).
+     *
+     * Fire-and-forget and deliberately silent: a connection is already under way, the user asked for
+     * nothing here, and the server may be older than the endpoint. Nothing at all is sent for a host
+     * that isn't shared with a team — connecting to one's own hosts is private, and the feature would
+     * be indefensible otherwise.
+     */
+    fun reportSessionOpened(hostId: String) = reportSession(hostId, TeamSessionKind.OPEN, null)
+
+    /** Reports that a recording of a session on shared host [hostId] was saved. See [reportSessionOpened]. */
+    fun reportSessionRecorded(hostId: String, durationSec: Long) =
+        reportSession(hostId, TeamSessionKind.RECORD, durationSec.coerceAtLeast(0))
+
+    private fun reportSession(hostId: String, kind: TeamSessionKind, durationSec: Long?) {
+        val s = session() ?: return
+        val c = client() ?: return
+        if (!reportSessionsEnabled()) return
+        // Everything past this point runs off the caller's thread. This is called straight from a
+        // Connect click, and finding the owning space means decrypting the account's team records and
+        // opening each space's vault — on the UI thread that is a stutter on desktop and an ANR risk
+        // on Android, the more so while a background sync holds the same vault's lock.
+        scope.launch {
+            if (!vault.isUnlocked) return@launch
+            val ref = spaceHoldingHost(hostId) ?: return@launch
+            try {
+                c.reportSessionEvent(s, ref.teamId, hostId, kind, durationSec)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Best-effort by contract: never surfaced in lastError, never retried. A report that
+                // didn't land leaves a gap in the feed, which is why the UI presents session events
+                // as reported rather than as an authoritative record.
+            }
+        }
+    }
+
+    /**
+     * The share space whose vault holds [hostId] as a live host, across every team we hold a key
+     * for — or null when the host is ours alone. Read from the key store rather than [teams] so a
+     * report works before the first refresh and while offline.
+     */
+    private fun spaceHoldingHost(hostId: String): TeamScopeRef? =
+        keyStore.list().keys.asSequence()
+            .flatMap { teamId -> spacesOf(teamId).asSequence() }
+            .firstOrNull { ref ->
+                spaces.vault(ref)?.records()?.any { it.id == hostId && it.type == RecordType.HOST && !it.deleted } == true
+            }
+
+    /** The signed-in account, for marking our own actions in the activity feed. */
+    fun selfAccountId(): String? = session()?.accountId
+
+    /**
+     * Names of the records shared in this team, per share space: `scopeId -> recordId -> name`
+     * (team-wide space under an empty key). This is what makes the activity feed readable — the
+     * server logs record ids and never learns a name, so the reader's own copy of each space is the
+     * only place one can come from.
+     *
+     * A space we hold no key for contributes nothing, and neither does a record that has since been
+     * unshared (its tombstone carries no payload) — the feed falls back to a short id for those.
+     */
+    fun sharedRecordNames(teamId: String): Map<String, Map<String, String>> =
+        spacesOf(teamId).mapNotNull { ref ->
+            val vault = spaces.vault(ref) ?: return@mapNotNull null
+            val names = buildMap {
+                VaultHostStore(vault).all().forEach { put(it.id, it.label) }
+                VaultSnippetStore(vault).all().forEach { put(it.id, it.label) }
+            }
+            if (names.isEmpty()) null else ref.scopeId to names
+        }.toMap()
 
     /**
      * Invite step (invitee side): open+verify the envelope and return the **verified inviter's**

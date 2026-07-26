@@ -71,6 +71,8 @@ import app.skerry.ui.generated.resources.settings_event_vault_created
 import app.skerry.ui.generated.resources.settings_event_with_detail
 import app.skerry.ui.generated.resources.settings_manage
 import app.skerry.ui.generated.resources.settings_recent_security_events
+import app.skerry.ui.generated.resources.settings_security_report_team_sessions
+import app.skerry.ui.generated.resources.settings_security_report_team_sessions_desc
 import app.skerry.ui.generated.resources.settings_security_2fa
 import app.skerry.ui.generated.resources.settings_security_2fa_desc
 import app.skerry.ui.generated.resources.settings_security_auto_lock
@@ -241,6 +243,16 @@ internal fun SecuritySection(
         // Inert (dimmed) button: feature not ready yet.
         GhostButton(stringResource(Res.string.settings_manage), onClick = {}, fg = Skerry.colors.faint, border = Skerry.colors.line)
     }
+    HLine()
+
+    // What this device tells a team about our own sessions. Sits here rather than under Teams: it is
+    // about what leaves this machine, and it is where someone looks to turn that off.
+    SettingToggleRow(
+        stringResource(Res.string.settings_security_report_team_sessions),
+        stringResource(Res.string.settings_security_report_team_sessions_desc),
+        on = state.reportTeamSessions,
+        onToggle = state::toggleReportTeamSessions,
+    )
     HLine()
 
     // Recent security events from the real log (or "no events yet").

@@ -2,6 +2,8 @@ package app.skerry.server.db
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class ActivityRepositoryTest {
 
@@ -24,6 +26,117 @@ class ActivityRepositoryTest {
         val repo = ActivityRepository(db)
         repo.record("alice@example.com", "device.stale", "no sync for 6 days", now = 5_000)
         assertEquals(null, repo.recent(1).single().deviceId)
+    }
+
+    @Test
+    fun `a team event carries its record subject`() = withTestDb { db ->
+        val repo = ActivityRepository(db)
+        repo.record(
+            "alice@example.com", "team.record_change", "HOST h-1",
+            teamId = "team-1", recordId = "h-1", recordType = "HOST", scopeId = "prod", now = 1_000,
+        )
+
+        val row = repo.recentForTeam("team-1").single()
+        assertEquals("h-1", row.recordId)
+        assertEquals("HOST", row.recordType)
+        assertEquals("prod", row.scopeId)
+        assertEquals(null, row.durationSec)
+    }
+
+    @Test
+    fun `session events collapse repeats inside the dedup window`() = withTestDb { db ->
+        // Reconnect storms (a flapping link reopens the session over and over) must not bury the
+        // rest of the team's history under identical rows.
+        val repo = ActivityRepository(db)
+        val first = repo.recordTeamSession(
+            "alice@example.com", "team-1", "team.session_open", "h-1", "HOST", "", null, now = 100_000,
+        )
+        val repeat = repo.recordTeamSession(
+            "alice@example.com", "team-1", "team.session_open", "h-1", "HOST", "", null, now = 130_000,
+        )
+        assertTrue(first)
+        assertFalse(repeat)
+        assertEquals(1, repo.recentForTeam("team-1").size)
+
+        // Past the window the next connect is news again.
+        assertTrue(
+            repo.recordTeamSession(
+                "alice@example.com", "team-1", "team.session_open", "h-1", "HOST", "", null, now = 300_000,
+            ),
+        )
+        // Another host, another member, and another kind of event are all distinct subjects.
+        assertTrue(
+            repo.recordTeamSession(
+                "alice@example.com", "team-1", "team.session_open", "h-2", "HOST", "", null, now = 300_100,
+            ),
+        )
+        assertTrue(
+            repo.recordTeamSession(
+                "bob@example.com", "team-1", "team.session_open", "h-1", "HOST", "", null, now = 300_200,
+            ),
+        )
+        assertTrue(
+            repo.recordTeamSession(
+                "alice@example.com", "team-1", "team.session_record", "h-1", "HOST", "", 42, now = 300_300,
+            ),
+        )
+        assertEquals(5, repo.recentForTeam("team-1").size)
+        assertEquals(42, repo.recentForTeam("team-1").first().durationSec)
+    }
+
+    @Test
+    fun `a clock that jumped backwards does not wedge the dedup shut`() = withTestDb { db ->
+        // NTP correction or a suspend/resume can stamp a report earlier than the previous one. Treating
+        // that as "recent" would silently drop genuine reports until the clock caught up again.
+        val repo = ActivityRepository(db)
+        assertTrue(repo.recordTeamSession("a", "team-1", "team.session_open", "h-1", "HOST", "", null, now = 300_000))
+        assertTrue(repo.recordTeamSession("a", "team-1", "team.session_open", "h-1", "HOST", "", null, now = 280_000))
+        assertEquals(2, repo.recentForTeam("team-1").size)
+    }
+
+    @Test
+    fun `the same record in another space is a separate subject`() = withTestDb { db ->
+        // A record can move between spaces (an unshare plus a share), and a session in its new space
+        // is a different fact — not a duplicate of the one before the move.
+        val repo = ActivityRepository(db)
+        assertTrue(repo.recordTeamSession("a", "team-1", "team.session_open", "h-1", "HOST", "", null, now = 1_000))
+        assertTrue(repo.recordTeamSession("a", "team-1", "team.session_open", "h-1", "HOST", "prod", null, now = 1_500))
+        assertEquals(2, repo.recentForTeam("team-1").size)
+    }
+
+    @Test
+    fun `one team cannot evict another team's history, nor the account log`() = withTestDb { db ->
+        // Any active member (a viewer included) can append to their team's bucket by reporting
+        // sessions. With one global cap that traffic would push everybody else's audit trail out.
+        val repo = ActivityRepository(db, maxRows = 3, teamMaxRows = 2)
+        repeat(3) { i -> repo.record("a", "auth.login", "login $i", now = i.toLong()) }
+        repeat(2) { i -> repo.record("a", "team.record_change", "b $i", teamId = "team-b", now = 100L + i) }
+
+        repeat(20) { i ->
+            repo.recordTeamSession("flood", "team-a", "team.session_open", "h-$i", "HOST", "", null, now = 200L + i)
+        }
+
+        assertEquals(2, repo.recentForTeam("team-a").size) // the flooder only trims their own bucket
+        assertEquals(listOf("b 1", "b 0"), repo.recentForTeam("team-b").map { it.detail })
+        assertEquals(
+            listOf("login 2", "login 1", "login 0"),
+            repo.recent(50).filter { it.event == "auth.login" }.map { it.detail },
+        )
+    }
+
+    @Test
+    fun `a batch of events lands in one transaction`() = withTestDb { db ->
+        val repo = ActivityRepository(db)
+        repo.recordAll(
+            listOf(
+                ActivityEvent("a", "team.record_share", "HOST h-1", teamId = "team-1", recordId = "h-1"),
+                ActivityEvent("a", "team.record_share", "HOST h-2", teamId = "team-1", recordId = "h-2"),
+            ),
+            now = 5_000,
+        )
+        val rows = repo.recentForTeam("team-1")
+        assertEquals(listOf("h-2", "h-1"), rows.map { it.recordId })
+        assertTrue(rows.all { it.createdAt == 5_000L })
     }
 
     @Test
