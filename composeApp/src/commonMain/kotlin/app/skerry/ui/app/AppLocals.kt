@@ -6,6 +6,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.TerminalHistoryStore
+import app.skerry.shared.vault.SecretFileReader
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.SecurityLog
@@ -88,6 +89,15 @@ val LocalSshKeyGenerator: ProvidableCompositionLocal<SshKeyGenerator?> = staticC
  * vault gate.
  */
 val LocalSshCertificateInspector: ProvidableCompositionLocal<SshCertificateInspector?> = staticCompositionLocalOf { null }
+
+/**
+ * Reader for key/certificate files a credential only references
+ * ([app.skerry.shared.vault.CredentialSecret.KeyFile]). The Vault section uses it to show whether a
+ * referenced file is actually readable here and to parse the certificate behind it; connections read
+ * the same files through their own resolver. `null` — mock path/preview: file-backed secrets render
+ * without a status. Supplied behind the vault gate.
+ */
+val LocalSecretFileReader: ProvidableCompositionLocal<SecretFileReader?> = staticCompositionLocalOf { null }
 
 /**
  * Manager for open sessions (tabs + live connections). `null` — mock path without a connection

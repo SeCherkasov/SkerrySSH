@@ -70,6 +70,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vault.SecretFileReader
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
@@ -193,6 +194,7 @@ import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTerminalHistory
+import app.skerry.ui.app.LocalSecretFileReader
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalSync
@@ -371,6 +373,7 @@ fun DesktopDesignApp(
     knownHosts: KnownHostsController? = null,
     keyGenerator: SshKeyGenerator? = null,
     certificateInspector: SshCertificateInspector? = null,
+    secretFiles: SecretFileReader? = null,
     tunnels: TunnelManager? = null,
     snippets: SnippetManager? = null,
     // Runbook library + the one in-flight run. `null` on the mock path (no vault behind them).
@@ -530,6 +533,7 @@ fun DesktopDesignApp(
         LocalKnownHosts provides knownHosts,
         LocalSshKeyGenerator provides keyGenerator,
         LocalSshCertificateInspector provides certificateInspector,
+        LocalSecretFileReader provides secretFiles,
         LocalCredentials provides credentials,
         LocalTestTransport provides (testTransport ?: transport),
         LocalTunnels provides tunnels,

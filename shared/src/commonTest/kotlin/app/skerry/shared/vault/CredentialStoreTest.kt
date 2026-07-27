@@ -53,6 +53,34 @@ class CredentialStoreTest {
     }
 
     @Test
+    fun `key-file credential round-trips`() {
+        val store = CredentialStore(FakeVault())
+        val cred = Credential(
+            "c-5",
+            "Teleport cert",
+            CredentialSecret.KeyFile(
+                privateKeyRef = "~/.ssh/id_ed25519",
+                certificateRef = "~/.ssh/id_ed25519-cert.pub",
+                passphrase = "pp",
+            ),
+        )
+
+        store.put(cred)
+
+        assertEquals(cred, store.get("c-5"))
+    }
+
+    @Test
+    fun `key-file credential without an explicit certificate round-trips with null`() {
+        val store = CredentialStore(FakeVault())
+        val cred = Credential("c-6", "Vault-signed", CredentialSecret.KeyFile(privateKeyRef = "/keys/id_rsa"))
+
+        store.put(cred)
+
+        assertEquals(cred, store.get("c-6"))
+    }
+
+    @Test
     fun `all returns live credentials and skips tombstones`() {
         val store = CredentialStore(FakeVault())
         store.put(Credential("a", "A", CredentialSecret.Password("x")))

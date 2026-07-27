@@ -35,6 +35,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_auth_ask
 import app.skerry.ui.generated.resources.term_auth_certificate
 import app.skerry.ui.generated.resources.term_auth_identity
+import app.skerry.ui.generated.resources.term_auth_key_file
 import app.skerry.ui.generated.resources.term_auth_password
 import app.skerry.ui.generated.resources.term_info_address
 import app.skerry.ui.generated.resources.term_info_auth
@@ -104,6 +105,7 @@ internal fun InfoPanel() {
                     is CredentialSecret.Password -> stringResource(Res.string.term_auth_password)
                     is CredentialSecret.PrivateKey -> stringResource(Res.string.term_auth_identity)
                     is CredentialSecret.Certificate -> stringResource(Res.string.term_auth_certificate)
+                    is CredentialSecret.KeyFile -> stringResource(Res.string.term_auth_key_file)
                     null -> stringResource(Res.string.term_auth_ask)
                 }
             }

@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ssh.SshConfigParseResult
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.HLine
@@ -41,6 +42,7 @@ import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.conn_cancel
+import app.skerry.ui.generated.resources.conn_import_keys_note
 import app.skerry.ui.generated.resources.conn_import_button
 import app.skerry.ui.generated.resources.conn_import_empty
 import app.skerry.ui.generated.resources.conn_import_select_all
@@ -59,6 +61,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun SshConfigImportModal(state: DesktopDesignState, result: SshConfigParseResult) {
     val hosts = LocalHosts.current
+    val credentials = LocalCredentials.current
     val defaultUser = remember { localOsUserName() }
     var selected by remember(result) { mutableStateOf(result.hosts.map { it.alias }.toSet()) }
     val allSelected = result.hosts.isNotEmpty() && selected.size == result.hosts.size
@@ -140,12 +143,24 @@ fun SshConfigImportModal(state: DesktopDesignState, result: SshConfigParseResult
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Spacer(Modifier.weight(1f))
+                // Says what the import does with keys before it does it: profiles alone would be a
+                // surprise-free import, credentials appearing in the vault would not.
+                if (result.hosts.any { !it.identityFile.isNullOrBlank() }) {
+                    Txt(stringResource(Res.string.conn_import_keys_note), color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.weight(1f))
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
                 CancelButton(stringResource(Res.string.conn_cancel), onClick = state::closeSshImport)
                 PrimaryButton(
                     stringResource(Res.string.conn_import_button, selected.size),
                     onClick = {
-                        hosts?.importSshConfig(result.hosts, selected, defaultUser)
+                        hosts?.importSshConfig(
+                            result.hosts,
+                            selected,
+                            defaultUser,
+                            existingLabels = credentials?.credentials?.map { it.label }?.toSet().orEmpty(),
+                            saveCredentials = { credentials?.importCredentials(it) },
+                        )
                         state.closeSshImport()
                     },
                     icon = "download",

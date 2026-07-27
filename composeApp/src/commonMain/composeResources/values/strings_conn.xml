@@ -141,4 +141,5 @@
     <string name="conn_container_err_command">The host could not list containers</string>
     <string name="conn_auth_interactive">Interactive (2FA)</string>
     <string name="conn_auth_interactive_desc">the server asks for a code at connect time</string>
+    <string name="conn_import_keys_note">IdentityFile and CertificateFile are linked by location — no key material is copied into the vault.</string>
 </resources>

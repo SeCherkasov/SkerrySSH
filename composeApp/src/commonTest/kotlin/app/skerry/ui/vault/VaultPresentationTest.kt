@@ -24,6 +24,17 @@ class VaultPresentationTest {
     }
 
     @Test
+    fun `files a file-backed secret by whether it names a certificate`() {
+        val plainKey = Credential("f1", "key file", CredentialSecret.KeyFile("~/.ssh/id_ed25519"))
+        val withCert = Credential("f2", "cert file", CredentialSecret.KeyFile("~/.ssh/id_ed25519", "~/.ssh/id_ed25519-cert.pub"))
+
+        assertEquals(VaultCategoryKind.SSH_KEYS, VaultPresentation.categoryOf(plainKey))
+        assertEquals(VaultCategoryKind.CERTIFICATES, VaultPresentation.categoryOf(withCert))
+        assertEquals("key", VaultPresentation.secretIcon(plainKey.secret))
+        assertEquals("workspace_premium", VaultPresentation.secretIcon(withCert.secret))
+    }
+
+    @Test
     fun `filters credentials into keychain categories`() {
         assertEquals(listOf("k1", "k2"), VaultPresentation.credentialsIn(VaultCategoryKind.SSH_KEYS, credentials).map { it.id })
         assertEquals(listOf("p1"), VaultPresentation.credentialsIn(VaultCategoryKind.PASSWORDS, credentials).map { it.id })

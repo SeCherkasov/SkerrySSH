@@ -83,6 +83,7 @@ import app.skerry.ui.runbook.RunbookRunPanel
 import app.skerry.ui.runbook.RunbookStartDialog
 import app.skerry.ui.snippet.SnippetRunDialog
 import app.skerry.ui.app.LocalTerminalHistory
+import app.skerry.ui.app.LocalSecretFileReader
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalSync
@@ -286,6 +287,7 @@ fun MobileDesignApp(
         // SSH key inspector/generator + certificate inspector — Vault tab: fingerprints, generation, cert parsing.
         LocalSshKeyGenerator provides deps.keyGenerator,
         LocalSshCertificateInspector provides deps.certificateInspector,
+        LocalSecretFileReader provides deps.secretFiles,
         LocalTunnels provides deps.tunnels,
         // Saved snippets — Snippets tab (command library + run into the active terminal).
         LocalSnippets provides deps.snippets,

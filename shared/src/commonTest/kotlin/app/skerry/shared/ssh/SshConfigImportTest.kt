@@ -1,5 +1,6 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.vault.CredentialSecret
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -18,7 +19,9 @@ class SshConfigImportTest {
         port: Int = 22,
         user: String? = null,
         proxyJump: String? = null,
-    ) = SshConfigHost(alias, hostName, port, user, proxyJump, identityFile = null)
+        identityFile: String? = null,
+        certificateFile: String? = null,
+    ) = SshConfigHost(alias, hostName, port, user, proxyJump, identityFile, certificateFile)
 
     @Test
     fun `maps parsed fields onto a host profile`() {
@@ -28,7 +31,7 @@ class SshConfigImportTest {
             defaultUser = null,
             newId = ids(),
         )
-        val h = plan.single()
+        val h = plan.hosts.single()
         assertEquals("web", h.label)
         assertEquals("10.0.0.1", h.address)
         assertEquals(2222, h.port)
@@ -50,7 +53,7 @@ class SshConfigImportTest {
             defaultUser = "localuser",
             newId = ids(),
         )
-        assertEquals("localuser", plan.single().username)
+        assertEquals("localuser", plan.hosts.single().username)
     }
 
     @Test
@@ -61,7 +64,7 @@ class SshConfigImportTest {
             defaultUser = "localuser",
             newId = ids(),
         )
-        assertEquals("configured", plan.single().username)
+        assertEquals("configured", plan.hosts.single().username)
     }
 
     @Test
@@ -72,7 +75,7 @@ class SshConfigImportTest {
             defaultUser = null,
             newId = ids(),
         )
-        assertEquals("", plan.single().username)
+        assertEquals("", plan.hosts.single().username)
     }
 
     @Test
@@ -83,7 +86,7 @@ class SshConfigImportTest {
             defaultUser = null,
             newId = ids(),
         )
-        assertEquals(listOf("a", "c"), plan.map { it.label })
+        assertEquals(listOf("a", "c"), plan.hosts.map { it.label })
     }
 
     @Test
@@ -94,8 +97,8 @@ class SshConfigImportTest {
             defaultUser = null,
             newId = ids(),
         )
-        val web = plan.single { it.label == "web" }
-        val bastion = plan.single { it.label == "bastion" }
+        val web = plan.hosts.single { it.label == "web" }
+        val bastion = plan.hosts.single { it.label == "bastion" }
         assertEquals(bastion.id, web.jumpHostId)
     }
 
@@ -107,7 +110,7 @@ class SshConfigImportTest {
             defaultUser = null,
             newId = ids(),
         )
-        assertNull(plan.single().jumpHostId)
+        assertNull(plan.hosts.single().jumpHostId)
     }
 
     @Test
@@ -118,8 +121,8 @@ class SshConfigImportTest {
             defaultUser = null,
             newId = ids(),
         )
-        assertEquals(3, plan.map { it.id }.toSet().size)
-        assertTrue(plan.all { it.id.isNotBlank() })
+        assertEquals(3, plan.hosts.map { it.id }.toSet().size)
+        assertTrue(plan.hosts.all { it.id.isNotBlank() })
     }
 
     @Test
@@ -130,7 +133,7 @@ class SshConfigImportTest {
             defaultUser = null,
             newId = ids(),
         )
-        assertNull(plan.single().jumpHostId)
+        assertNull(plan.hosts.single().jumpHostId)
     }
 
     @Test
@@ -141,6 +144,104 @@ class SshConfigImportTest {
             defaultUser = null,
             newId = ids(),
         )
-        assertTrue(plan.isEmpty())
+        assertTrue(plan.hosts.isEmpty())
+    }
+
+    @Test
+    fun `IdentityFile becomes a file-backed credential bound to the host`() {
+        val plan = SshConfigImport.plan(
+            hosts = listOf(host("web", identityFile = "~/.ssh/id_ed25519")),
+            selected = setOf("web"),
+            defaultUser = null,
+            newId = ids(),
+        )
+
+        val credential = plan.credentials.single()
+        assertEquals(CredentialSecret.KeyFile("~/.ssh/id_ed25519", null), credential.secret)
+        assertEquals("id_ed25519", credential.label)
+        assertEquals(credential.id, plan.hosts.single().credentialId)
+    }
+
+    @Test
+    fun `CertificateFile is carried into the credential`() {
+        val plan = SshConfigImport.plan(
+            hosts = listOf(host("web", identityFile = "~/.ssh/id_ed25519", certificateFile = "~/.ssh/work-cert.pub")),
+            selected = setOf("web"),
+            defaultUser = null,
+            newId = ids(),
+        )
+
+        assertEquals(
+            CredentialSecret.KeyFile("~/.ssh/id_ed25519", "~/.ssh/work-cert.pub"),
+            plan.credentials.single().secret,
+        )
+    }
+
+    @Test
+    fun `hosts sharing an identity file share one credential`() {
+        val plan = SshConfigImport.plan(
+            hosts = listOf(host("web", identityFile = "~/.ssh/id_ed25519"), host("db", identityFile = "~/.ssh/id_ed25519")),
+            selected = setOf("web", "db"),
+            defaultUser = null,
+            newId = ids(),
+        )
+
+        assertEquals(1, plan.credentials.size)
+        assertEquals(plan.hosts[0].credentialId, plan.hosts[1].credentialId)
+    }
+
+    @Test
+    fun `same file name from different directories gets a distinct label`() {
+        // Labels are how snippets reference a secret (${{vault:label}}), so two "id_ed25519" entries
+        // pointing at different files must not collide.
+        val plan = SshConfigImport.plan(
+            hosts = listOf(host("a", identityFile = "~/.ssh/id_ed25519"), host("b", identityFile = "/work/keys/id_ed25519")),
+            selected = setOf("a", "b"),
+            defaultUser = null,
+            newId = ids(),
+        )
+
+        assertEquals(2, plan.credentials.size)
+        assertEquals(2, plan.credentials.map { it.label }.toSet().size)
+    }
+
+    @Test
+    fun `a label already used in the vault is not reused`() {
+        val plan = SshConfigImport.plan(
+            hosts = listOf(host("web", identityFile = "~/.ssh/id_ed25519")),
+            selected = setOf("web"),
+            defaultUser = null,
+            existingLabels = setOf("id_ed25519"),
+            newId = ids(),
+        )
+
+        assertTrue(plan.credentials.single().label != "id_ed25519", plan.credentials.single().label)
+    }
+
+    @Test
+    fun `CertificateFile without an IdentityFile creates nothing`() {
+        // Without a key there is nothing to authenticate with; inventing a credential would only
+        // produce a profile that fails at connect time.
+        val plan = SshConfigImport.plan(
+            hosts = listOf(host("web", certificateFile = "~/.ssh/work-cert.pub")),
+            selected = setOf("web"),
+            defaultUser = null,
+            newId = ids(),
+        )
+
+        assertTrue(plan.credentials.isEmpty())
+        assertNull(plan.hosts.single().credentialId)
+    }
+
+    @Test
+    fun `identity files of unselected hosts are ignored`() {
+        val plan = SshConfigImport.plan(
+            hosts = listOf(host("web", identityFile = "~/.ssh/a"), host("db", identityFile = "~/.ssh/b")),
+            selected = setOf("web"),
+            defaultUser = null,
+            newId = ids(),
+        )
+
+        assertEquals(listOf("a"), plan.credentials.map { it.label })
     }
 }

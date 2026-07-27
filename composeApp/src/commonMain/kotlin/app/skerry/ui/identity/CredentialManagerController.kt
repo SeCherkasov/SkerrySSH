@@ -9,7 +9,7 @@ import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialStore
 
 /** Kind of keychain secret in the form; expands into [CredentialSecret]. */
-enum class CredentialKind { PASSWORD, PRIVATE_KEY, CERTIFICATE }
+enum class CredentialKind { PASSWORD, PRIVATE_KEY, CERTIFICATE, KEY_FILE }
 
 /**
  * Editable fields of a keychain secret, without [Credential.id]. Fields for all kinds are kept
@@ -26,11 +26,17 @@ data class CredentialDraft(
     val privateKeyPem: String = "",
     val passphrase: String = "",
     val certificate: String = "",
+    /** Location of a key kept outside the vault (for [CredentialKind.KEY_FILE]); path or `content://` Uri. */
+    val privateKeyRef: String = "",
+    /** Location of its certificate; blank means "use the `<key>-cert.pub` sibling, if there is one". */
+    val certificateRef: String = "",
 ) {
     fun toSecret(): CredentialSecret = when (kind) {
         CredentialKind.PASSWORD -> CredentialSecret.Password(password)
         CredentialKind.PRIVATE_KEY -> CredentialSecret.PrivateKey(privateKeyPem, passphrase.ifBlank { null })
         CredentialKind.CERTIFICATE -> CredentialSecret.Certificate(privateKeyPem, certificate, passphrase.ifBlank { null })
+        CredentialKind.KEY_FILE ->
+            CredentialSecret.KeyFile(privateKeyRef.trim(), certificateRef.trim().ifBlank { null }, passphrase.ifBlank { null })
     }
 
     // Secrets must not leak into logs/exception messages: only metadata is exposed.
@@ -72,6 +78,15 @@ class CredentialManagerController(
      */
     fun rename(id: String, label: String) {
         store.rename(id, label)
+        credentials = store.all()
+    }
+
+    /**
+     * Persist a batch of already-built secrets (ids assigned by the caller, e.g. an `ssh_config`
+     * import whose hosts already reference them) and reload once.
+     */
+    fun importCredentials(imported: List<Credential>) {
+        for (credential in imported) store.put(credential)
         credentials = store.all()
     }
 
