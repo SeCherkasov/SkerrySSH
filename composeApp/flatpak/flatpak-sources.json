@@ -1849,45 +1849,45 @@
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio-jvm/3.17.0/okio-jvm-3.17.0.jar",
-    "sha512": "2da2e240fb11ee254554bd59b94d4f9545078f69182a56cb528cb3228e42b8cd8e7a6547ed81d198f105413ff03e111f42a903ff092c4c3a0c3b46433ad10921",
-    "dest": "offline-repository/com/squareup/okio/okio-jvm/3.17.0",
-    "dest-filename": "okio-jvm-3.17.0.jar"
+    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio-jvm/3.18.0/okio-jvm-3.18.0.jar",
+    "sha512": "631b7dc7cdcebe506b810628d01bf603c5dcf4b419ec9b562607f37940cfab1e7f095ce39fcae991383fa668ff56811ce29b77527a7e96d719c8c733b529fc7a",
+    "dest": "offline-repository/com/squareup/okio/okio-jvm/3.18.0",
+    "dest-filename": "okio-jvm-3.18.0.jar"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio-jvm/3.17.0/okio-jvm-3.17.0.module",
-    "sha512": "00292549423fb5d40163bf5b188db4d43c6d8f295d98ed00756a660c075bc2e0a858a1278e205bc5d29cbe0c3fbefde01a5ed7eb09687597209a574787db2606",
-    "dest": "offline-repository/com/squareup/okio/okio-jvm/3.17.0",
-    "dest-filename": "okio-jvm-3.17.0.module"
+    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio-jvm/3.18.0/okio-jvm-3.18.0.module",
+    "sha512": "b30f715bdbbd90b3e68204de76507d3264b8f5aecd478a58e4850303d6720a6721c7bb8a4546353b4e0a1c6db94fd36d4c10c6639bfeafcff9673443c6fe1957",
+    "dest": "offline-repository/com/squareup/okio/okio-jvm/3.18.0",
+    "dest-filename": "okio-jvm-3.18.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio-jvm/3.17.0/okio-jvm-3.17.0.pom",
-    "sha512": "cb39b93ed4f06f13be7f61448133a640bc04f41d8595a6949365e330c01e67a777e9acaaa43bb2074f6b973fab8fc39967152002a98a643f0ca319a170f18a78",
-    "dest": "offline-repository/com/squareup/okio/okio-jvm/3.17.0",
-    "dest-filename": "okio-jvm-3.17.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio-jvm/3.18.0/okio-jvm-3.18.0.pom",
+    "sha512": "eb081b8423485a91d807677ca461e038500cdda0ac1e1fc015e94852f2c3fbea4cf0bf07d6c083d2d85f0a1d67afc270a103cbae682ca9f854383eb49115f575",
+    "dest": "offline-repository/com/squareup/okio/okio-jvm/3.18.0",
+    "dest-filename": "okio-jvm-3.18.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio/3.17.0/okio-3.17.0.module",
-    "sha512": "0d20d79f869195911d36ed45190120690ffb2b214fb3fa6bcbda762e03be60f373938a0e4ea2703da931b38eaa57a6aacb830c2c751621868eb70547f58c1910",
-    "dest": "offline-repository/com/squareup/okio/okio/3.17.0",
-    "dest-filename": "okio-3.17.0.module"
+    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio/3.18.0/okio-3.18.0.module",
+    "sha512": "4d782f504780817aaaa8470bf9bb8c8d2c337d4d51e30e613fd55c6f4839c4cc3f4746b6d4d573483f9ffa45c8f12920c78fe821cb36d89f515326e938cc345f",
+    "dest": "offline-repository/com/squareup/okio/okio/3.18.0",
+    "dest-filename": "okio-3.18.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio/3.17.0/okio-3.17.0.pom",
-    "sha512": "be74a69d06ab0ea29b56361331b2c052985a826d595c6a2359a323a3d0150b5b5cef6cece519384f42c2cec19dabe40d415f08630071cf7d852071852d97fd36",
-    "dest": "offline-repository/com/squareup/okio/okio/3.17.0",
-    "dest-filename": "okio-3.17.0.pom"
+    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio/3.18.0/okio-3.18.0.pom",
+    "sha512": "75f053afee6a5f43fbcd43d991f6aae84fa55725d8acea2263408095475b42010a1ea757ded50b8fb709c150d199f79011bb3f186e865e2bb38d3bd942024b46",
+    "dest": "offline-repository/com/squareup/okio/okio/3.18.0",
+    "dest-filename": "okio-3.18.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio/3.17.0/../../okio-jvm/3.17.0/okio-jvm-3.17.0.module",
-    "sha512": "00292549423fb5d40163bf5b188db4d43c6d8f295d98ed00756a660c075bc2e0a858a1278e205bc5d29cbe0c3fbefde01a5ed7eb09687597209a574787db2606",
-    "dest": "offline-repository/com/squareup/okio/okio/3.17.0/../../okio-jvm/3.17.0",
-    "dest-filename": "okio-jvm-3.17.0.module"
+    "url": "https://repo.maven.apache.org/maven2/com/squareup/okio/okio/3.18.0/../../okio-jvm/3.18.0/okio-jvm-3.18.0.module",
+    "sha512": "b30f715bdbbd90b3e68204de76507d3264b8f5aecd478a58e4850303d6720a6721c7bb8a4546353b4e0a1c6db94fd36d4c10c6639bfeafcff9673443c6fe1957",
+    "dest": "offline-repository/com/squareup/okio/okio/3.18.0/../../okio-jvm/3.18.0",
+    "dest-filename": "okio-jvm-3.18.0.module"
   },
   {
     "type": "file",
