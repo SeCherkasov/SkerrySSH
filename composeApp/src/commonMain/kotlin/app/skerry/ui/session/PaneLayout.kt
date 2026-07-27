@@ -23,6 +23,9 @@ data class PaneCell(val paneId: String, val weight: Float)
 @Immutable
 data class PaneRow(val cells: List<PaneCell>, val weight: Float)
 
+/** Where the focus goes from the pane it is on — the four keyboard directions. */
+enum class PaneDirection { Left, Right, Up, Down }
+
 /** Where a pane goes when it is added or dropped. */
 sealed interface PaneSlot {
     /** Into an existing [row], before the pane currently at [column] (`column == size` appends). */
@@ -147,6 +150,40 @@ data class PaneLayout(val rows: List<PaneRow>) {
         } else {
             PaneSlot.NewRow(rows.size)
         }
+    }
+
+    /**
+     * The pane one step from [paneId] in [direction], or `null` when the grid ends there. Left and
+     * right walk the pane's own row; up and down step to the next row and land on the pane that
+     * covers the current one's horizontal middle, so a step down and back up returns to a pane over
+     * the same part of the screen. Nothing wraps around: at the edge the caller lets the key reach
+     * the terminal instead of teleporting the focus across the grid.
+     */
+    fun neighbor(paneId: String, direction: PaneDirection): String? {
+        val (row, column) = positionOf(paneId) ?: return null
+        return when (direction) {
+            PaneDirection.Left -> rows[row].cells.getOrNull(column - 1)?.paneId
+            PaneDirection.Right -> rows[row].cells.getOrNull(column + 1)?.paneId
+            PaneDirection.Up -> across(row, column, -1)
+            PaneDirection.Down -> across(row, column, +1)
+        }
+    }
+
+    /** The pane of row `row + step` under (or over) the middle of the pane at ([row], [column]). */
+    private fun across(row: Int, column: Int, step: Int): String? {
+        val target = rows.getOrNull(row + step) ?: return null
+        val cells = rows[row].cells
+        val middle = cells.take(column).sumOf { it.weight.toDouble() }.toFloat() + cells[column].weight / 2f
+        var start = 0f
+        target.cells.forEach { cell ->
+            start += cell.weight
+            // `<=` so a pane whose middle falls exactly on a divider (a full-width pane under an
+            // even split) steps to the left one instead of the right — a tie has to go somewhere.
+            if (middle <= start) return cell.paneId
+        }
+        // Only reachable if the row's weights sum just under the middle (float drift): the last
+        // pane is the one that reaches the right edge.
+        return target.cells.last().paneId
     }
 
     /** (row, column) of [paneId], or `null` when it isn't placed. */

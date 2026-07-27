@@ -180,6 +180,7 @@
     <string name="settings_kb_play_recording">Воспроизвести запись</string>
     <string name="settings_kb_add_pane">Добавить панель</string>
     <string name="settings_kb_sync_panes">Синхронизация ввода между панелями</string>
+    <string name="settings_kb_focus_pane">Фокус на панель в этом направлении</string>
     <string name="settings_kb_next_prev_tab">Следующая / предыдущая вкладка</string>
     <string name="settings_kb_select_tab_number">Выбрать вкладку по номеру</string>
     <string name="settings_kb_focus_ai">Фокус на строке AI</string>

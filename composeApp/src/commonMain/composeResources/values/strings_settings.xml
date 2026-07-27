@@ -180,6 +180,7 @@
     <string name="settings_kb_play_recording">Play a recording</string>
     <string name="settings_kb_add_pane">Add pane</string>
     <string name="settings_kb_sync_panes">Synchronized input between panes</string>
+    <string name="settings_kb_focus_pane">Focus the pane in that direction</string>
     <string name="settings_kb_next_prev_tab">Next / previous tab</string>
     <string name="settings_kb_select_tab_number">Select tab by number</string>
     <string name="settings_kb_focus_ai">Focus AI bar</string>

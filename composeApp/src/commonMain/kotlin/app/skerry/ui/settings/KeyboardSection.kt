@@ -46,6 +46,7 @@ import app.skerry.ui.generated.resources.settings_kb_files_hidden
 import app.skerry.ui.generated.resources.settings_kb_files_save
 import app.skerry.ui.generated.resources.settings_kb_files_switch_pane
 import app.skerry.ui.generated.resources.settings_kb_focus_ai
+import app.skerry.ui.generated.resources.settings_kb_focus_pane
 import app.skerry.ui.generated.resources.settings_kb_global
 import app.skerry.ui.generated.resources.settings_kb_lock
 import app.skerry.ui.generated.resources.settings_kb_new_connection
@@ -90,6 +91,7 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_play_recording), mod("P"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_add_pane), mod("D"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_sync_panes), mod("I"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_focus_pane), mod("←↑↓→"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_next_prev_tab), "${ctrl("Tab")} / ${ctrlShift("Tab")}", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_select_tab_number), if (mac) "⌥1–9" else "Alt+1–9", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_focus_ai), mod("/"), live = true),

@@ -3,6 +3,7 @@ package app.skerry.ui.session
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -300,6 +301,83 @@ class PaneLayoutTest {
             .add("c", PaneSlot.InRow(row = 1, column = 1))
             .add("d", PaneSlot.InRow(row = 0, column = 0))
         assertEquals(listOf("d", "a", "b", "c"), layout.paneIds)
+    }
+
+    @Test
+    fun `left and right walk the row the pane sits in`() {
+        val layout = PaneLayout.of("a")
+            .add("b", PaneSlot.InRow(row = 0, column = 1))
+            .add("c", PaneSlot.InRow(row = 0, column = 2))
+        assertEquals("b", layout.neighbor("a", PaneDirection.Right))
+        assertEquals("c", layout.neighbor("b", PaneDirection.Right))
+        assertEquals("b", layout.neighbor("c", PaneDirection.Left))
+    }
+
+    @Test
+    fun `the edge of a row has no neighbor to step onto`() {
+        val layout = PaneLayout.of("a").add("b", PaneSlot.InRow(row = 0, column = 1))
+        // No wrap-around: at the left edge the key falls through to the terminal instead of
+        // jumping the focus to the far side of the grid.
+        assertNull(layout.neighbor("a", PaneDirection.Left))
+        assertNull(layout.neighbor("b", PaneDirection.Right))
+    }
+
+    @Test
+    fun `up and down step to the row above or below`() {
+        val layout = PaneLayout.of("a").add("b", PaneSlot.NewRow(1))
+        assertEquals("b", layout.neighbor("a", PaneDirection.Down))
+        assertEquals("a", layout.neighbor("b", PaneDirection.Up))
+        assertNull(layout.neighbor("a", PaneDirection.Up))
+        assertNull(layout.neighbor("b", PaneDirection.Down))
+    }
+
+    @Test
+    fun `stepping into a wider row lands on the pane the current one sits over`() {
+        // "a,b" on top, "c" below: down from either lands on c, and up from c lands on the pane
+        // above its own middle — a, since c spans the full width and a holds the left half.
+        val layout = PaneLayout.of("a")
+            .add("b", PaneSlot.InRow(row = 0, column = 1))
+            .add("c", PaneSlot.NewRow(1))
+        assertEquals("c", layout.neighbor("a", PaneDirection.Down))
+        assertEquals("c", layout.neighbor("b", PaneDirection.Down))
+        assertEquals("a", layout.neighbor("c", PaneDirection.Up))
+    }
+
+    @Test
+    fun `stepping between rows keeps the horizontal side`() {
+        val layout = PaneLayout.of("a")
+            .add("b", PaneSlot.InRow(row = 0, column = 1))
+            .add("c", PaneSlot.NewRow(1))
+            .add("d", PaneSlot.InRow(row = 1, column = 1))
+        assertEquals("c", layout.neighbor("a", PaneDirection.Down))
+        assertEquals("d", layout.neighbor("b", PaneDirection.Down))
+        assertEquals("a", layout.neighbor("c", PaneDirection.Up))
+        assertEquals("b", layout.neighbor("d", PaneDirection.Up))
+    }
+
+    @Test
+    fun `a hand-resized divider moves which pane is above which`() {
+        // Top row dragged so "a" takes 85% of the width: "d", the right pane below, now sits under
+        // a rather than under the sliver left to b.
+        val layout = PaneLayout.of("a")
+            .add("b", PaneSlot.InRow(row = 0, column = 1))
+            .add("c", PaneSlot.NewRow(1))
+            .add("d", PaneSlot.InRow(row = 1, column = 1))
+            .resizeCells(row = 0, boundary = 0, delta = 0.35f)
+        assertEquals("a", layout.neighbor("d", PaneDirection.Up))
+        assertEquals("d", layout.neighbor("b", PaneDirection.Down))
+    }
+
+    @Test
+    fun `a pane that is not on the grid has no neighbors`() {
+        val layout = PaneLayout.of("a").add("b", PaneSlot.NewRow(1))
+        PaneDirection.entries.forEach { assertNull(layout.neighbor("zzz", it), "$it") }
+    }
+
+    @Test
+    fun `a single pane has nowhere to go`() {
+        val layout = PaneLayout.of("a")
+        PaneDirection.entries.forEach { assertNull(layout.neighbor("a", it), "$it") }
     }
 
     @Test

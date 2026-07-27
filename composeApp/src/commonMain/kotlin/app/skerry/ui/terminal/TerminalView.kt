@@ -9,6 +9,7 @@ import app.skerry.ui.design.EmptyState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
@@ -32,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +46,17 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerHoverIcon
@@ -62,6 +75,8 @@ import app.skerry.ui.app.AiPolicy
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.design.GhostButton
+import app.skerry.ui.desktop.matchDesktopShortcut
+import app.skerry.ui.desktop.paneGridDirection
 import app.skerry.ui.host.localTerminalHost
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.app.LocalAi
@@ -549,6 +564,7 @@ private fun LivePaneBody(
     solo: Boolean,
     modifier: Modifier = Modifier,
     tabId: String? = null,
+    focused: Boolean = true,
 ) {
     val sessions = LocalSessions.current
     val st = pane?.controller?.uiState
@@ -598,14 +614,14 @@ private fun LivePaneBody(
                 else -> TerminalNotice("terminal", stringResource(Res.string.term_session_closed), pane.subtitle)
             }
             ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), pane.subtitle)
-            is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize(), onOpenPath = openPath)
+            is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize(), focused = focused, onOpenPath = openPath)
             is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = Skerry.colors.sunset)
             // Disconnected: screen is frozen at the moment of loss ([ConnectionUiState.Disconnected.terminal]),
             // shown under the disconnect banner so output isn't lost and status (reconnecting/gave up) stays visible.
             // No path affordance here: the SFTP channel died with the session, so a click would only
             // open a panel that can't list anything.
             is ConnectionUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
-                TerminalScreen(st.terminal, Modifier.fillMaxSize())
+                TerminalScreen(st.terminal, Modifier.fillMaxSize(), focused = focused)
                 DisconnectedBanner(st, Modifier.align(Alignment.TopCenter))
             }
         }
@@ -672,7 +688,23 @@ private fun PaneGrid(
     // conversion factor — measured here, since rows are full-width and the column is full-height.
     var gridSize by remember { mutableStateOf(IntSize.Zero) }
     val layout = tab.layout
-    Column(Modifier.fillMaxSize().onGloballyPositioned { gridSize = it.size }) {
+    // Keyboard navigation between panes. Preview events reach here on their way down to the focused
+    // terminal, so the chord is claimed only while the keyboard is inside the grid — in a text field,
+    // on the file panel or on a remote desktop the same keys keep their usual meaning. Claimed even
+    // when there is no pane that way (unsplit tab, edge of the grid): letting it reach the terminal
+    // would send ESC[1;6D, which a shell that doesn't know the sequence echoes as a stray "D".
+    val onGridKey: (KeyEvent) -> Boolean = { event ->
+        if (event.type != KeyEventType.KeyDown) {
+            false
+        } else {
+            val shortcut = matchDesktopShortcut(
+                event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
+            )
+            val direction = paneGridDirection(shortcut, searchOpen = tab.focusedPane.liveTerminal?.searchQuery != null)
+            if (direction == null) false else { sessions.focusNeighborPane(direction); true }
+        }
+    }
+    Column(Modifier.fillMaxSize().onPreviewKeyEvent(onGridKey).onGloballyPositioned { gridSize = it.size }) {
         layout.rows.forEachIndexed { rowIndex, row ->
             if (rowIndex > 0) {
                 PaneDivider(vertical = false) { px ->
@@ -731,17 +763,28 @@ private fun PaneCell(
     // pane can go away from outside its own header (closing its tab, locking the vault), and the
     // gesture coroutine dies with it without an onDragEnd to clear the indicator.
     DisposableEffect(pane.id) { onDispose { drag.paneClosed(pane.id) } }
+    // A pane that draws no live terminal (blank, connecting, failed, or a frozen dead session) never
+    // claims the keyboard ([TerminalScreen] requests focus only for a live, focused one). Focusing it
+    // must still take the keyboard away from the pane that had it — otherwise the accent border, the
+    // tab chip and the snippet target move here while typing keeps going into a sibling's live shell.
+    // The empty pane itself holds the focus (rather than it being cleared), so the grid's key handler
+    // still sees the arrow chord and the user can move on to a pane that does have a shell.
+    val paneFocus = remember { FocusRequester() }
+    val takesKeyboard = pane.controller.uiState is ConnectionUiState.Connected
+    LaunchedEffect(focused) { if (focused && !takesKeyboard) paneFocus.requestFocus() }
     Column(
         modifier
             .paneBoundsAnchor(drag, pane.id, row, column)
             // A single-pane tab has nothing to tell apart, so the focus border only shows on a split.
             .then(if (tab.isSplit && focused) Modifier.border(1.dp, Skerry.colors.cyan.copy(alpha = 0.35f)) else Modifier)
-            .focusPaneOnPress(sessions, tab.id, pane.id),
+            .focusPaneOnPress(sessions, tab.id, pane.id)
+            .focusRequester(paneFocus)
+            .focusable(),
     ) {
         PaneHeader(sessions, tab, pane, state, drag, reserveEnd)
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            LivePaneBody(state, pane, solo = !tab.isSplit, modifier = Modifier.fillMaxSize(), tabId = tab.id)
+            LivePaneBody(state, pane, solo = !tab.isSplit, modifier = Modifier.fillMaxSize(), tabId = tab.id, focused = focused)
             drag.drop?.takeIf { it.overPaneId == pane.id }?.let { PaneDropIndicator(it.edge) }
         }
     }

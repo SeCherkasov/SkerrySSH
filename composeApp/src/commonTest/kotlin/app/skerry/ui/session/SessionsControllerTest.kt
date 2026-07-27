@@ -456,6 +456,61 @@ class SessionsControllerTest {
     }
 
     @Test
+    fun `focusNeighborPane walks the grid from the focused pane`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        val right = sessions.addPane()!!
+        val below = sessions.addPane(slot = PaneSlot.NewRow(1))!!
+        sessions.focusPane(a, a)
+
+        assertTrue(sessions.focusNeighborPane(PaneDirection.Right))
+        assertEquals(right, sessions.active!!.focusedPaneId)
+
+        assertTrue(sessions.focusNeighborPane(PaneDirection.Down))
+        assertEquals(below, sessions.active!!.focusedPaneId)
+
+        assertTrue(sessions.focusNeighborPane(PaneDirection.Up))
+        assertEquals(a, sessions.active!!.focusedPaneId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `focusNeighborPane reports nothing to move to at the edge of the grid`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+
+        // Unsplit tab: no pane in any direction, so the caller lets the key reach the terminal.
+        assertFalse(sessions.focusNeighborPane(PaneDirection.Right))
+
+        sessions.addPane()
+        sessions.focusPane(a, a)
+        assertFalse(sessions.focusNeighborPane(PaneDirection.Left))
+        assertEquals(a, sessions.active!!.focusedPaneId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `focusNeighborPane does nothing while the tab shows something other than its panes`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val a = sessions.open(hostId = "host-a")
+        sessions.addPane()
+        sessions.focusPane(a, a)
+
+        // Over the file panel the grid isn't on screen and the arrows belong to the listing, so the
+        // focus must not move behind the user's back (the file panel follows the focused pane).
+        // Same for every other view a tab can show — none of them draws the pane grid.
+        (SessionView.entries - SessionView.Terminal).forEach { view ->
+            sessions.setActiveView(view)
+            assertFalse(sessions.focusNeighborPane(PaneDirection.Right), "$view")
+            assertEquals(a, sessions.active!!.focusedPaneId, "$view")
+        }
+
+        sessions.setActiveView(SessionView.Terminal)
+        assertTrue(sessions.focusNeighborPane(PaneDirection.Right))
+        scope.cancel()
+    }
+
+    @Test
     fun `movePane rearranges the grid`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")

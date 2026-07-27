@@ -1048,6 +1048,10 @@ private fun runDesktopShortcut(
         DesktopShortcut.NewConnection -> state.openModal(state.section)
         DesktopShortcut.AddPane -> if (sessions != null) sessions.addPane() else state.toggleSplit()
         DesktopShortcut.SyncPanes -> if (sessions != null) sessions.toggleSyncInput() else Unit
+        // Handled by the pane grid itself ([paneGridDirection]), which sees the key only while the
+        // keyboard is inside a pane — claiming it here would take the same chord away from every
+        // text field, the file panel and a remote desktop.
+        is DesktopShortcut.FocusPane -> return false
         DesktopShortcut.OpenSftp -> if (sessions != null) {
             state.clearOverlay(); sessions.setActiveView(SessionView.Sftp)
         } else {

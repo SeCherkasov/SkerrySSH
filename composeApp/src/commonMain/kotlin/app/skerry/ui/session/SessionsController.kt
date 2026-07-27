@@ -550,6 +550,21 @@ class SessionsController(
         if (tab.pane(paneId) != null) tab.setFocusedPane(paneId)
     }
 
+    /**
+     * Move the active tab's focus one pane in [direction] ([PaneLayout.neighbor]); `false` when
+     * there is no pane that way — an unsplit tab or the edge of the grid.
+     */
+    fun focusNeighborPane(direction: PaneDirection): Boolean {
+        val tab = active ?: return false
+        // Only while the grid is what the tab shows: over the file panel or a recording the panes
+        // aren't on screen, and moving the focus there would silently re-point the file panel.
+        if (tab.view != SessionView.Terminal) return false
+        val next = tab.layout.neighbor(tab.focusedPaneId, direction) ?: return false
+        if (tab.pane(next) == null) return false
+        tab.setFocusedPane(next)
+        return true
+    }
+
     /** Close tab [id]: tear down every pane it holds, remove it, select a neighbor. */
     fun close(id: String) {
         val index = tabs.indexOfFirst { it.id == id }
