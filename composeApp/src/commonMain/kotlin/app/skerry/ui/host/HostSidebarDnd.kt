@@ -162,7 +162,7 @@ private val MOUSE_DRAG_DEAD_ZONE = 6.dp
  * row's click handlers untouched; a genuine drag replays the accumulated offset on start, so the
  * dragged row doesn't jump. [onEnd]/[onCancel] fire only if the drag actually started.
  */
-private suspend fun PointerInputScope.detectDeadZoneDragGestures(
+internal suspend fun PointerInputScope.detectDeadZoneDragGestures(
     onStart: (Offset) -> Unit,
     onMove: (PointerInputChange, Offset) -> Unit,
     onEnd: () -> Unit,

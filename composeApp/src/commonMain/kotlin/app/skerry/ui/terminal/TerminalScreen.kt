@@ -201,6 +201,10 @@ fun TerminalScreen(
     imeInput: Boolean = false,
     imeTransform: ((String) -> String)? = null,
     fixedGrid: PtySize? = null,
+    // Whether this is the pane the user is typing into. On a split every pane draws its own
+    // terminal, and only the focused one claims the keyboard — otherwise the last one composed
+    // would take it and the accent border would point at a pane that receives nothing.
+    focused: Boolean = true,
     // Ctrl+click on a file path in the output hands it here (the caller reveals it in its session's
     // file panel). `null` — no path affordance at all: the setting is off, or this pane has no file
     // panel of its own (split pane, recording playback, preview).
@@ -317,10 +321,12 @@ fun TerminalScreen(
     // otherwise typing goes dead until the user clicks the terminal.
     // Also re-keyed on the search panel: while it is open its field owns the keyboard, and the
     // terminal takes focus back when it closes (otherwise typing would go dead until a click).
+    // Also re-keyed on [focused]: that is how the keyboard follows a pane focused from the keyboard
+    // (⌘/Ctrl+Shift + arrow), where there is no click on the terminal to hand it over.
     val modalsOpen = ModalPresence.openCount
     val searchOpen = state.searchQuery != null
-    LaunchedEffect(state, modalsOpen, searchOpen) {
-        if (!closed && !imeInput && modalsOpen == 0 && !searchOpen) focusRequester.requestFocus()
+    LaunchedEffect(state, modalsOpen, searchOpen, focused) {
+        if (focused && !closed && !imeInput && modalsOpen == 0 && !searchOpen) focusRequester.requestFocus()
     }
 
     // Autoscroll to bottom on new output — but only when the user was already at the bottom

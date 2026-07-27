@@ -125,7 +125,7 @@ fun RemoteDesktopsView(state: DesktopDesignState) {
 @Composable
 fun VncView(state: DesktopDesignState) {
     val sessions = LocalSessions.current
-    val vnc = sessions?.activeDesktop?.vncController ?: return
+    val vnc = sessions?.activeDesktop?.focusedPane?.vncController ?: return
     Box(Modifier.fillMaxSize()) {
         when (val ui = vnc.uiState) {
             is VncUiState.Connecting -> CenterNotice("hourglass_empty", stringResource(Res.string.vnc_connecting))

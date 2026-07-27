@@ -62,7 +62,7 @@ class FullAppThemeSwitchRenderTest {
         )
         val h = hosts.hosts.first()
         sessions.open(h.id, h.label, h.connectionSubtitle(), h.toTarget(), SshAuth.Password(""))
-        sessions.activate(sessions.sessions.first().id)
+        sessions.activate(sessions.tabs.first().id)
         val state = DesktopDesignState()
         try {
             ImageComposeScene(width = 1280, height = 820, density = Density(1f)).use { scene ->

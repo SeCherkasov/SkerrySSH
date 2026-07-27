@@ -149,13 +149,15 @@ private val TOP_EDGE_STRIP = 72.dp
 @Composable
 fun MobileTerminalScreen(state: MobileDesignState) {
     val sessions = LocalSessions.current
-    val active = sessions?.active
+    // The phone shows one session at a time: no pane grid, so the active tab's focused pane is it.
+    val tab = sessions?.active
+    val active = tab?.focusedPane
     // Teams: a saved recording of a shared host is reported to its team (see the record toggle below).
     val teams = LocalTeams.current
     // Stable Disconnect lambda (recreated only on session change): drops the connection and returns to
     // the list — the back arrow leaves the session alive, Disconnect closes it.
-    val onDisconnect = remember(active?.id, sessions) {
-        active?.let { s -> { sessions.close(s.id); state.pop() } }
+    val onDisconnect = remember(tab?.id, sessions) {
+        tab?.let { t -> { sessions.close(t.id); state.pop() } }
     }
     // Clean shell exit (`exit`) on phone: close the session and return to the host list — a full-screen
     // push terminal has no reason to hang frozen (unlike desktop, which keeps a "Session closed" card).
@@ -163,7 +165,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     val cleanlyExited = (active?.controller?.uiState as? ConnectionUiState.Disconnected)?.cleanExit == true
     LaunchedEffect(active?.id, cleanlyExited) {
         if (cleanlyExited) {
-            sessions.close(active.id)
+            sessions.close(tab.id)
             state.pop()
         }
     }

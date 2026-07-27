@@ -38,9 +38,8 @@ fun tearDownForLock(
     runbooks: RunbookRunner? = null,
 ) {
     tunnels?.closeAll()
-    sessions?.sessions?.forEach { session ->
-        session.controller.clearReconnectCredentials()
-        session.splitSession?.controller?.clearReconnectCredentials()
+    sessions?.tabs?.forEach { tab ->
+        tab.panes.forEach { it.controller.clearReconnectCredentials() }
     }
     sync?.pauseForLock()
     snippets?.dismissRun()

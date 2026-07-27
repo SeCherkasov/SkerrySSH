@@ -10,6 +10,7 @@ import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSearchError
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.ui.session.paneSyncTargets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -25,6 +26,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TerminalScreenStateTest {
@@ -55,6 +57,108 @@ class TerminalScreenStateTest {
         session.emit(byteArrayOf(0x9F.toByte()))
 
         assertEquals("П", state.output)
+        scope.cancel()
+    }
+
+    // --- Synchronized panes: the input mirror ---
+
+    @Test
+    fun `typed input is mirrored to the other panes`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        val mirrored = mutableListOf<Pair<String, MirroredInput>>()
+        state.inputMirror = { text, kind -> mirrored += text to kind }
+
+        state.typeInput("ls\n")
+        state.paste("echo hi")
+
+        assertEquals(listOf("ls\n" to MirroredInput.Typed, "echo hi" to MirroredInput.Pasted), mirrored)
+        scope.cancel()
+    }
+
+    @Test
+    fun `mirrored input does not mirror again`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val mirrored = mutableListOf<String>()
+        state.inputMirror = { text, _ -> mirrored += text }
+
+        // How a pane receives a keystroke from a synchronized sibling: delivered, never bounced back.
+        state.typeInput("ls\n", guarded = false, mirror = false)
+        state.paste("echo hi", mirror = false)
+
+        assertTrue(mirrored.isEmpty())
+        assertEquals(listOf("ls\n", "echo hi"), session.sent.map { it.decodeToString() })
+        scope.cancel()
+    }
+
+    @Test
+    fun `a command held by the production guard is mirrored only once confirmed`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        val mirrored = mutableListOf<String>()
+        state.inputMirror = { text, _ -> mirrored += text }
+
+        state.typeInput("rm -rf /srv\r")
+        // Held here, so it must be held everywhere: mirroring now would run it on the other panes
+        // while this one still asks.
+        assertTrue(mirrored.isEmpty())
+
+        state.confirmGuardedCommand()
+        assertEquals(listOf("rm -rf /srv\r"), mirrored)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a dismissed command is never mirrored`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        val mirrored = mutableListOf<String>()
+        state.inputMirror = { text, _ -> mirrored += text }
+
+        state.typeInput("rm -rf /srv\r")
+        state.dismissGuardedCommand()
+
+        assertTrue(mirrored.isEmpty())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a secret is mirrored only into panes that are taking one too`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val originSession = FakeTerminalSession().apply { echoOff = true }
+        val atPromptSession = FakeTerminalSession().apply { echoOff = true }
+        val origin = TerminalScreenState(originSession, scope)
+        val atPrompt = TerminalScreenState(atPromptSession, scope)
+        val atShell = TerminalScreenState(FakeTerminalSession(), scope)
+
+        // Origin is at a password prompt: only the pane that is at one as well may take the secret.
+        // The one sitting at an ordinary shell would echo it, store it in history and then run it.
+        assertEquals(listOf(atPrompt), paneSyncTargets(origin, listOf(atPrompt, atShell)))
+
+        // Ordinary typing goes everywhere, as the toggle promises.
+        originSession.echoOff = false
+        assertEquals(listOf(atPrompt, atShell), paneSyncTargets(origin, listOf(atPrompt, atShell)))
+        scope.cancel()
+    }
+
+    @Test
+    fun `an MFA prompt reads as a secret, ordinary output does not`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        // SSH never reports echo suppression (only telnet does), so the prompt line is all there is
+        // to go by. Under synchronized input a miss no longer costs one host's history: the secret
+        // is mirrored in cleartext into every other connected pane and then run there.
+        session.emit("Verification token: ".encodeToByteArray())
+        assertEquals(true, state.awaitingSecret)
+
+        session.emit("\r\nroot@host:~# cat secrets.txt\r\n".encodeToByteArray())
+        assertEquals(false, state.awaitingSecret)
         scope.cancel()
     }
 
@@ -1403,6 +1507,10 @@ private class FakeTerminalSession : TerminalSession {
 
     val sent = mutableListOf<ByteArray>()
     val resizes = mutableListOf<PtySize>()
+
+    /** Host stopped echoing — how the transport reports a password prompt. */
+    var echoOff = false
+    override val echoSuppressed: Boolean get() = echoOff
 
     /** When set, `resize` throws this before recording the call (simulates a PTY error/cancellation). */
     var resizeError: (() -> Throwable)? = null

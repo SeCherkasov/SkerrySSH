@@ -97,6 +97,7 @@ import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.session.BroadcastPanel
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.broadcastTargets
+import app.skerry.ui.session.PaneSyncBinder
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.runbook.RunbookManager
 import app.skerry.ui.runbook.RunbookRunner
@@ -140,11 +141,15 @@ import app.skerry.ui.generated.resources.term_ai_dismiss
 import app.skerry.ui.generated.resources.term_player_invalid
 import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.generated.resources.term_record_start
+import app.skerry.ui.generated.resources.shell_disconnect_all_message
+import app.skerry.ui.generated.resources.shell_disconnect_all_title
 import app.skerry.ui.generated.resources.shell_disconnect_title
 import app.skerry.ui.generated.resources.shell_disconnect_message
 import app.skerry.ui.generated.resources.shell_disconnect
-import app.skerry.ui.generated.resources.shell_close_split_title
-import app.skerry.ui.generated.resources.shell_close_split_message
+import app.skerry.ui.generated.resources.shell_close_pane_title
+import app.skerry.ui.generated.resources.shell_close_pane_message
+import app.skerry.ui.generated.resources.shell_connect
+import app.skerry.ui.generated.resources.shell_replace_pane_title
 import app.skerry.ui.generated.resources.shell_close_panel
 import app.skerry.ui.generated.resources.shell_lock
 import app.skerry.ui.generated.resources.shell_settings
@@ -172,7 +177,7 @@ import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalConnectHost
-import app.skerry.ui.app.LocalConnectSplit
+import app.skerry.ui.app.LocalConnectPane
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.design.LocalFonts
@@ -468,15 +473,12 @@ fun DesktopDesignApp(
         onDispose { if (ownsSessions) liveSessions?.disconnectAll() }
     }
     // A cursor-style change in settings applies to ALREADY open sessions live (new ones pick it up at
-    // connect via terminalPrefs). Pushed into each tab's terminal and its split pane; the command goes
+    // connect via terminalPrefs). Pushed into every pane of every tab; the command goes
     // through the emulator's queue, so no race. Detached/empty tabs are simply skipped.
     val cursorStyle = state.terminalCursorStyle
     LaunchedEffect(cursorStyle, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
-        manager.sessions.forEach { s ->
-            s.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
-            s.splitSession?.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink)
-        }
+        manager.allSessions.forEach { it.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink) }
     }
     // A scrollback-buffer change in settings likewise applies to ALREADY open sessions live: shrinking
     // trims the extra old history, growing keeps new lines around longer. New sessions pick up the
@@ -484,10 +486,7 @@ fun DesktopDesignApp(
     val scrollbackLines = TerminalSessionPrefs(scrollback = state.terminalScrollback).effectiveScrollback
     LaunchedEffect(scrollbackLines, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
-        manager.sessions.forEach { s ->
-            s.liveTerminal?.applyScrollback(scrollbackLines)
-            s.splitSession?.liveTerminal?.applyScrollback(scrollbackLines)
-        }
+        manager.allSessions.forEach { it.liveTerminal?.applyScrollback(scrollbackLines) }
     }
     // The Teams session-report gate reads the live setting: it lives in this screen's state, while
     // the coordinator is built at startup, so it is handed a getter rather than a value.
@@ -498,10 +497,7 @@ fun DesktopDesignApp(
     val allowClipboardWrite = state.allowServerClipboardWrite
     LaunchedEffect(allowClipboardWrite, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
-        manager.sessions.forEach { s ->
-            s.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite)
-            s.splitSession?.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite)
-        }
+        manager.allSessions.forEach { it.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite) }
     }
     // Memoized: LocalTerminalAppearance is staticCompositionLocalOf (reference comparison), and
     // DesktopDesignApp recomposes on tab/session switches and vault events. Without remember a new
@@ -611,15 +607,15 @@ private fun DesktopChrome(
     }
 
     // A host with no bound secret → ask for a password before connecting. One shared state for all
-    // three paths ([PendingAuth]): new tab / split (the target tab is fixed at the moment the host is
-    // chosen, not at submit — otherwise switching tabs while typing the password would open the split
-    // in the wrong place) / snippet's "Run on host" (also remembers the command).
+    // three paths ([PendingAuth]): new tab / pane (the target pane is fixed at the moment the host is
+    // chosen, not at submit — otherwise switching tabs while typing the password would connect in the
+    // wrong place) / snippet's "Run on host" (also remembers the command).
     var pendingAuth by remember { mutableStateOf<PendingAuth?>(null) }
     // VNC "ask every time": a host with no stored password prompts before opening the framebuffer tab.
     var pendingVncHost by remember { mutableStateOf<Host?>(null) }
 
     // Production guard: a connection to a #prod host is held here until confirmed. It wraps ALL
-    // connect paths (new tab / split / VNC / snippet), so the confirmation can't be walked around by
+    // connect paths (new tab / pane / VNC / snippet), so the confirmation can't be walked around by
     // taking another route to the same host.
     var prodConnect by remember { mutableStateOf<ProdConnectRequest?>(null) }
 
@@ -640,7 +636,7 @@ private fun DesktopChrome(
         }
         when (target) {
             is PendingAuth.NewTab -> openHostSession(sessions, state, target.host, auth, jump)
-            is PendingAuth.Split -> openSplitSession(sessions, state, target.parentId, target.host, auth, jump)
+            is PendingAuth.Pane -> openPaneSession(sessions, state, target.tabId, target.paneId, target.host, auth, jump)
             is PendingAuth.Snippet ->
                 openHostSession(sessions, state, target.host, auth, jump) { it.send(target.line) }
         }
@@ -694,10 +690,10 @@ private fun DesktopChrome(
         }
     }
 
-    // Same resolution, but into the active tab's split pane (a new independent secondary session).
-    val connectSplitHost = remember(sessions, credentials, hostManager, state) {
-        { host: Host ->
-            prodConnect = prodConnectGate(host) { connectOrAsk(PendingAuth.Split(host, sessions?.activeId)) }
+    // Same resolution, but into a pane of the active tab (its own independent session).
+    val connectPaneHost = remember(sessions, credentials, hostManager, state) {
+        { host: Host, paneId: String ->
+            prodConnect = prodConnectGate(host) { connectOrAsk(PendingAuth.Pane(host, sessions?.activeId, paneId)) }
         }
     }
 
@@ -723,7 +719,7 @@ private fun DesktopChrome(
 
     CompositionLocalProvider(
         LocalConnectHost provides connectHost,
-        LocalConnectSplit provides connectSplitHost,
+        LocalConnectPane provides connectPaneHost,
         LocalRunSnippetOnHost provides runSnippetOnHost,
         LocalCredentials provides credentials,
         LocalHostClickConnectMode provides state.hostClickConnectMode,
@@ -806,10 +802,13 @@ private fun DesktopChrome(
                 )
             }
             if (state.commandPaletteOpen) {
-                val liveTerminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+                // The palette fills the command line of the pane in focus, so it reads that pane's
+                // own history key.
+                val palettePane = sessions?.active?.focusedPane
+                val liveTerminal = (palettePane?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
                 CommandPalette(
                     history = termHistory,
-                    currentKey = sessions?.active?.controller?.historyKey,
+                    currentKey = palettePane?.controller?.historyKey,
                     onPick = { command ->
                         liveTerminal?.applyHistoryCommand(command)
                         state.closeCommandPalette()
@@ -865,6 +864,8 @@ private fun DesktopChrome(
             // …and, once inside, keep every open session armed and confirm the risky commands it
             // holds. At the root, so the confirmation is never covered by the terminal's own chrome.
             ProdGuardSync(sessions, state.confirmProductionWarnings)
+            // Keeps each tab's synchronized-input wiring in step with its toggle.
+            PaneSyncBinder(sessions)
             ProdCommandGate(sessions?.active)
             // Broken ProxyJump chain for the clicked host: explain instead of connecting (never
             // silently direct). Set by openResolved for all three connect paths.
@@ -875,7 +876,9 @@ private fun DesktopChrome(
             // modal and placed before the dialogs below, so the terminal underneath stays readable
             // and any modal still covers it.
             LocalRunbookRunner.current?.let { runner ->
-                if (runner.sessionId != null && runner.sessionId == sessions?.activeTerminal?.id) {
+                // Any pane of the active tab: a run started in a split pane is still this tab's.
+                val runPaneId = runner.sessionId
+                if (runPaneId != null && sessions?.activeTerminal?.pane(runPaneId) != null) {
                     RunbookRunPanel(
                         runner,
                         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 46.dp),
@@ -924,28 +927,62 @@ private fun DesktopChrome(
                 )
                 null -> {}
             }
-            // Confirm disconnecting a session (power) / closing a split pane — destructive, no auto-reconnect.
+            // Confirm disconnecting a session (power) / closing a pane — destructive, no auto-reconnect.
             when (val pc = state.pendingClose) {
                 is PendingClose.Session -> {
-                    val name = sessions?.sessions?.firstOrNull { it.id == pc.id }?.displayTitle ?: stringResource(Res.string.shell_this_session)
+                    val tab = sessions?.tab(pc.id)
+                    // The power button closes the tab, and a split tab takes every pane with it —
+                    // so a tab holding several sessions is warned about as a group, not by the name
+                    // of whichever host happens to be its first pane.
+                    val open = tab?.panes.orEmpty().filterNot { it.isBlank }
+                    val name = tab?.displayTitle ?: stringResource(Res.string.shell_this_session)
                     ConfirmActionDialog(
-                        title = stringResource(Res.string.shell_disconnect_title, name),
-                        message = stringResource(Res.string.shell_disconnect_message),
+                        title = if (open.size > 1) {
+                            stringResource(Res.string.shell_disconnect_all_title)
+                        } else {
+                            stringResource(Res.string.shell_disconnect_title, name)
+                        },
+                        message = if (open.size > 1) {
+                            stringResource(
+                                Res.string.shell_disconnect_all_message,
+                                open.joinToString(", ") { it.displayTitle.ifBlank { it.subtitle } },
+                            )
+                        } else {
+                            stringResource(Res.string.shell_disconnect_message)
+                        },
                         confirmLabel = stringResource(Res.string.shell_disconnect),
                         onConfirm = { closeSessionTab(state, sessions, pc.id); state.dismissClose() },
                         onDismiss = state::dismissClose,
                     )
                 }
-                is PendingClose.Split -> {
+                is PendingClose.Pane -> {
+                    val pane = sessions?.tab(pc.tabId)?.pane(pc.paneId)
+                    val paneName = pane?.let { p -> p.displayTitle.ifBlank { p.subtitle } }
+                        .orEmpty().ifBlank { stringResource(Res.string.shell_this_session) }
                     ConfirmActionDialog(
-                        title = stringResource(Res.string.shell_close_split_title),
-                        message = stringResource(Res.string.shell_close_split_message),
+                        title = stringResource(Res.string.shell_close_pane_title),
+                        message = stringResource(Res.string.shell_close_pane_message, paneName),
                         confirmLabel = stringResource(Res.string.shell_close_panel),
-                        onConfirm = { sessions?.closeSplit(pc.parentId); state.dismissClose() },
+                        onConfirm = { sessions?.closePane(pc.tabId, pc.paneId); state.dismissClose() },
                         onDismiss = state::dismissClose,
                     )
                 }
                 null -> {}
+            }
+            // Confirm re-pointing a pane that already holds a session: the connection it runs goes
+            // down the moment the new one is dialled, and the picker sits under the whole header.
+            state.pendingPaneConnect?.let { pending ->
+                val pane = sessions?.tab(pending.tabId)?.pane(pending.paneId)
+                val paneName = pane?.let { p -> p.displayTitle.ifBlank { p.subtitle } }
+                    .orEmpty().ifBlank { stringResource(Res.string.shell_this_session) }
+                val connectPane = LocalConnectPane.current
+                ConfirmActionDialog(
+                    title = stringResource(Res.string.shell_replace_pane_title, pending.host.label),
+                    message = stringResource(Res.string.shell_close_pane_message, paneName),
+                    confirmLabel = stringResource(Res.string.shell_connect),
+                    onConfirm = { connectPane(pending.host, pending.paneId); state.dismissPaneConnect() },
+                    onDismiss = state::dismissPaneConnect,
+                )
             }
         }
     }
@@ -962,8 +999,8 @@ private sealed interface PendingAuth {
     /** Connect as a new tab (or into the active empty one). */
     data class NewTab(override val host: Host) : PendingAuth
 
-    /** Connect into the split pane of tab [parentId] (fixed at the moment the host was chosen). */
-    data class Split(override val host: Host, val parentId: String?) : PendingAuth
+    /** Connect into pane [paneId] of tab [tabId] (both fixed at the moment the host was chosen). */
+    data class Pane(override val host: Host, val tabId: String?, val paneId: String) : PendingAuth
 
     /**
      * Open a session to the host and send [line] once connected — the fully resolved snippet
@@ -985,7 +1022,7 @@ private fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, sessions
         event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
     ) ?: return false
     val entry = manager.forShortcut(combo) ?: return false
-    val terminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
+    val terminal = (sessions?.active?.focusedPane?.controller?.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
     manager.run(entry.id, recording = terminal.recording) { terminal.sendUserInputGuarded(it) }
     return true
 }
@@ -1009,19 +1046,23 @@ private fun runDesktopShortcut(
         // Opens the form of the section on screen: pressed over the desktops list it creates a
         // remote desktop, over the hosts list a shell.
         DesktopShortcut.NewConnection -> state.openModal(state.section)
-        DesktopShortcut.SplitTerminal -> if (sessions != null) sessions.toggleSplit() else state.toggleSplit()
+        DesktopShortcut.AddPane -> if (sessions != null) sessions.addPane() else state.toggleSplit()
+        DesktopShortcut.SyncPanes -> if (sessions != null) sessions.toggleSyncInput() else Unit
+        // Handled by the pane grid itself ([paneGridDirection]), which sees the key only while the
+        // keyboard is inside a pane — claiming it here would take the same chord away from every
+        // text field, the file panel and a remote desktop.
+        is DesktopShortcut.FocusPane -> return false
         DesktopShortcut.OpenSftp -> if (sessions != null) {
             state.clearOverlay(); sessions.setActiveView(SessionView.Sftp)
         } else {
             state.showView(DesktopView.Sftp)
         }
-        // Search over the buffer of the pane the user is looking at (the split, when it holds focus).
+        // Search over the buffer of the pane the user is looking at (the focused one on a split).
         // With no terminal on screen there is nothing to search: fall through instead of no-oping,
         // so the chord can still reach a snippet binding.
         DesktopShortcut.FindInTerminal -> {
             val session = sessions?.active ?: return false
-            val pane = if (session.focusedSplit) session.splitSession else session
-            val terminal = paneTerminal(pane?.controller?.uiState) ?: return false
+            val terminal = paneTerminal(session.focusedPane.controller.uiState) ?: return false
             // The panel lives inside the terminal view, so bring that view up first — pressed over
             // SFTP or a recording, the chord would otherwise open a panel on a screen nobody sees.
             state.clearOverlay()
@@ -1037,7 +1078,7 @@ private fun runDesktopShortcut(
         // Only over a live terminal: the palette inserts into it, so with nothing to insert into the
         // key falls through (to the snippet hotkey) instead of opening a dead-end overlay.
         DesktopShortcut.CommandPalette -> {
-            if (sessions?.active?.controller?.uiState !is ConnectionUiState.Connected) return false
+            if (sessions?.activeSession?.controller?.uiState !is ConnectionUiState.Connected) return false
             state.openCommandPalette()
         }
         DesktopShortcut.FocusAiBar -> state.requestAiBarFocus()
@@ -1059,7 +1100,7 @@ private fun paneTerminal(state: ConnectionUiState?): TerminalScreenState? = when
 /** Select a tab by 0-based index; `false` if no such tab exists (the key falls through). */
 internal fun selectTabByIndex(index: Int, state: DesktopDesignState, sessions: SessionsController?): Boolean {
     if (sessions != null) {
-        val target = sessions.sessions.getOrNull(index) ?: return false
+        val target = sessions.tabs.getOrNull(index) ?: return false
         sessions.activate(target.id)
         // A tab hotkey can cross sections (Alt+3 onto a remote desktop): the work area follows.
         followActiveTabSection(state, sessions)
@@ -1073,7 +1114,7 @@ internal fun selectTabByIndex(index: Int, state: DesktopDesignState, sessions: S
 /** Cyclically shift the active tab by [delta] (wrapping); `false` if there are no tabs. */
 internal fun cycleTab(delta: Int, state: DesktopDesignState, sessions: SessionsController?): Boolean {
     if (sessions != null) {
-        val list = sessions.sessions
+        val list = sessions.tabs
         if (list.isEmpty()) return false
         val current = list.indexOfFirst { it.id == sessions.activeId }.coerceAtLeast(0)
         val next = ((current + delta) % list.size + list.size) % list.size
@@ -1117,15 +1158,24 @@ private fun openHostSession(
 }
 
 /**
- * Connect [host] with [auth] into the active tab's split pane (a new independent secondary session).
- * No-op with no active tab. See [SessionsController.connectSplit].
+ * Connect [host] with [auth] into pane [paneId] of tab [tabId] (its own independent session).
+ * No-op with no active tab. See [SessionsController.connectPane].
  */
-private fun openSplitSession(sessions: SessionsController?, state: DesktopDesignState, parentId: String?, host: Host, auth: SshAuth, jump: SshJump? = null) {
-    if (sessions == null || parentId == null) return
-    // Connecting into the secondary pane is also a real connect to the host — record it in RECENT too.
+private fun openPaneSession(
+    sessions: SessionsController?,
+    state: DesktopDesignState,
+    tabId: String?,
+    paneId: String,
+    host: Host,
+    auth: SshAuth,
+    jump: SshJump? = null,
+) {
+    if (sessions == null || tabId == null) return
+    // Connecting into a pane is also a real connect to the host — record it in RECENT too.
     state.recordRecentHost(host.id)
-    sessions.connectSplit(
-        parentId = parentId,
+    sessions.connectPane(
+        tabId = tabId,
+        paneId = paneId,
         hostId = host.id,
         title = host.label,
         subtitle = host.connectionSubtitle(),
@@ -1179,13 +1229,13 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                 // rememberUpdatedState: pointerInput is only recreated by the tabId key, so the ids()
                 // lambda must read the fresh list via .value, otherwise onDragEnd would use a stale
                 // order (same as done for host drag).
-                val tabIds = rememberUpdatedState(sessions.sessions.map { it.id })
-                sessions.sessions.forEachIndexed { index, s ->
+                val tabIds = rememberUpdatedState(sessions.tabs.map { it.id })
+                sessions.tabs.forEachIndexed { index, s ->
                     // Insert line before the chip the dragged tab is currently hovering over.
                     if (tabDrag.insertLineIndex == index) TabInsertLine()
-                    // On a split, the chip shows the focused pane: the name changes when focus
-                    // switches between the main and split panes.
-                    val focused = if (s.splitOpen && s.focusedSplit) s.splitSession ?: s else s
+                    // On a split tab the chip shows the focused pane: the name changes as focus
+                    // moves between panes.
+                    val focused = s.focusedPane
                     // A production session paints its chip sunset (strip/border/tint) — the tab row
                     // is where a wrong-window mistake starts, so the marker sits there too.
                     val prodTab = isProdHostId(focused.hostId)
@@ -1195,7 +1245,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                         // never reads as a live (or dead) session.
                         dot = if (s.isPlayer) Skerry.colors.sunset else sessionDotColor(focused.controller.uiState),
                         accent = if (s.isPlayer || prodTab) Skerry.colors.sunset else Skerry.colors.cyan,
-                        split = s.splitOpen,
+                        split = s.isSplit,
                         active = s.id == sessions.activeId,
                         // Chips of both sections share one row, so selecting one also moves the work
                         // area to the section that tab belongs to.
@@ -1208,7 +1258,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                     )
                 }
                 // Insert line at the very end of the row (moving a tab to the tail).
-                if (tabDrag.insertLineIndex == sessions.sessions.size) TabInsertLine()
+                if (tabDrag.insertLineIndex == sessions.tabs.size) TabInsertLine()
             } else {
                 state.tabs.forEachIndexed { i, tab ->
                     SessionTabChip(tab.name, tab.dot.tint(), active = i == state.activeTab, onClick = { state.setTab(i) }, onClose = { state.closeTab(i) })
@@ -1490,7 +1540,8 @@ private fun StatusBar() {
     val mono = LocalFonts.current.mono
     // In live mode the left status and throughput reflect the active session.
     val sessions = LocalSessions.current
-    val active = sessions?.active
+    // The pane being worked in: on a split tab the bar describes that session, not a fixed one.
+    val active = sessions?.activeSession
     val connected = active?.controller?.uiState is ConnectionUiState.Connected
     val live = sessions != null
     val statusText = if (!live || connected) stringResource(Res.string.shell_status_connected) else stringResource(Res.string.shell_status_disconnected)
@@ -1510,7 +1561,7 @@ private fun StatusBar() {
     }
     val rttMs = ping?.rttMs
     // Grid size — live cols×rows of the active terminal; off-connection the mock label remains.
-    val gridLabel = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)
+    val gridLabel = (active?.controller?.uiState as? ConnectionUiState.Connected)
         ?.terminal?.let { "${it.cols} × ${it.rows}" } ?: "80 × 24"
     // ProxyJump route of the active session's profile ("outer → inner", entry hop first) — the
     // at-a-glance "this session rides through a bastion" marker. Hidden for direct connections
@@ -1552,7 +1603,7 @@ private fun StatusBar() {
             // are just template values, so off-connection they drop out (mock mode keeps them).
             if (!live || connected) {
                 // Server version — live ident of the active session (before connect / if the transport is silent — "—").
-                StatusItem("memory", if (live) (sessions.active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
+                StatusItem("memory", if (live) (active?.controller?.serverVersion ?: "—") else "SSH-2.0-OpenSSH_8.9p1", mono = mono)
                 Txt(stringResource(Res.string.shell_status_encoding), color = Skerry.colors.faint, size = 10.5.sp, font = mono)
                 Txt(gridLabel, color = Skerry.colors.faint, size = 10.5.sp, font = mono)
             }
