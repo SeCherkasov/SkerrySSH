@@ -1765,45 +1765,45 @@
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library-jvm/1.9.1/library-jvm-1.9.1.jar",
-    "sha512": "4d6be18eb5245331a407dd4babbe02dc6262f9c6973b768c37cd42488810cc7adcc49d0ce75849bb0b6b3b21f1bd28858e4525f35973de9ba75dfdf18422e33b",
-    "dest": "offline-repository/com/llamatik/library-jvm/1.9.1",
-    "dest-filename": "library-jvm-1.9.1.jar"
+    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library-jvm/1.9.0/library-jvm-1.9.0.jar",
+    "sha512": "a5709759028e7913930b6587b4991a26ae6b4ee12c4c773649162f9a2997b6ff8a315ba011834ff542cba0de904efeaa0195e6743b4c56ae46288988ca126a24",
+    "dest": "offline-repository/com/llamatik/library-jvm/1.9.0",
+    "dest-filename": "library-jvm-1.9.0.jar"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library-jvm/1.9.1/library-jvm-1.9.1.module",
-    "sha512": "64d954002043aa296baeb70a3682999b8cc8a3fcb94f1473573f62327985fc2e97b70f293fa06e6b5a051d7dea8bbd48e52f7d073c87a63007894d2a7e5cbfbb",
-    "dest": "offline-repository/com/llamatik/library-jvm/1.9.1",
-    "dest-filename": "library-jvm-1.9.1.module"
+    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library-jvm/1.9.0/library-jvm-1.9.0.module",
+    "sha512": "042b7f8ec7775834111d6dfbc1d944d7e1b635e259d7f1562d9851ff61bfc2d88f697f8f9a09cd0cb38780b70be451e08bd2240efd8a1e7e5f575a9d49c95ea5",
+    "dest": "offline-repository/com/llamatik/library-jvm/1.9.0",
+    "dest-filename": "library-jvm-1.9.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library-jvm/1.9.1/library-jvm-1.9.1.pom",
-    "sha512": "fd3907b6c5c8e8aae0e73a534a26ccf1962ad9d23488bf1a265371ec727ebcb5db7163e05959c8243f10505090538c7a60eeea05f40db0e6d9678ce2f7ff2da9",
-    "dest": "offline-repository/com/llamatik/library-jvm/1.9.1",
-    "dest-filename": "library-jvm-1.9.1.pom"
+    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library-jvm/1.9.0/library-jvm-1.9.0.pom",
+    "sha512": "2e55e4d910f97c40c593d6abc3220918f1b50b2db16dcdaefbfcfcbb51ee22e7c517b2e25116b513438e7c4e93f501998e86ae1932ec87e240110804def3ad0b",
+    "dest": "offline-repository/com/llamatik/library-jvm/1.9.0",
+    "dest-filename": "library-jvm-1.9.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library/1.9.1/library-1.9.1.module",
-    "sha512": "9ebb2d683644669f6dec3cb867bd2466f7a1b9a7d0b06257b1fc201e556eadec3f83d60a4b3c4280d2a596b092baebfbf73b61b1652e1f610fb0b0df653aa23e",
-    "dest": "offline-repository/com/llamatik/library/1.9.1",
-    "dest-filename": "library-1.9.1.module"
+    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library/1.9.0/library-1.9.0.module",
+    "sha512": "9d0dbbe0222747884bc48e107d83a95e6c484963b84db91ed0752eb5a986d53f8f0dfa110d6d1bc338c2b23789dfe20071abb40a379c3363e9479163abe311f5",
+    "dest": "offline-repository/com/llamatik/library/1.9.0",
+    "dest-filename": "library-1.9.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library/1.9.1/library-1.9.1.pom",
-    "sha512": "8756e89109da68f305120a66a3e54b4234412b0d9aff830d9bc4aef37c7eefb947627c7c2149ac9a21c170a3d27b673be5a4f0751ad03cd62ea8d0cb4fc58382",
-    "dest": "offline-repository/com/llamatik/library/1.9.1",
-    "dest-filename": "library-1.9.1.pom"
+    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library/1.9.0/library-1.9.0.pom",
+    "sha512": "dd228fda7c1a0fc62c7935456cfb1900fb86bb939c328d8d4fa1b7a18fa7bd30dad47e2cd5ec61ad07764f1807bb136a441d44f4b473880bc5185658e6839965",
+    "dest": "offline-repository/com/llamatik/library/1.9.0",
+    "dest-filename": "library-1.9.0.pom"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library/1.9.1/../../library-jvm/1.9.1/library-jvm-1.9.1.module",
-    "sha512": "64d954002043aa296baeb70a3682999b8cc8a3fcb94f1473573f62327985fc2e97b70f293fa06e6b5a051d7dea8bbd48e52f7d073c87a63007894d2a7e5cbfbb",
-    "dest": "offline-repository/com/llamatik/library/1.9.1/../../library-jvm/1.9.1",
-    "dest-filename": "library-jvm-1.9.1.module"
+    "url": "https://repo.maven.apache.org/maven2/com/llamatik/library/1.9.0/../../library-jvm/1.9.0/library-jvm-1.9.0.module",
+    "sha512": "042b7f8ec7775834111d6dfbc1d944d7e1b635e259d7f1562d9851ff61bfc2d88f697f8f9a09cd0cb38780b70be451e08bd2240efd8a1e7e5f575a9d49c95ea5",
+    "dest": "offline-repository/com/llamatik/library/1.9.0/../../library-jvm/1.9.0",
+    "dest-filename": "library-jvm-1.9.0.module"
   },
   {
     "type": "file",

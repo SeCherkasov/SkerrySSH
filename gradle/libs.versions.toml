@@ -69,7 +69,10 @@ camerax = "1.4.1"
 # Llamatik — a KMP binding of llama.cpp (GGUF, streaming, chat template from GGUF): the only
 # maintained option with natives for both desktop JVM (Linux/Win/macOS) and Android arm64
 # (16KB pages aligned). MIT. java-llama.cpp (kherud) has been dead since 2025-06 and cannot load Qwen3.
-llamatik = "1.9.1"
+# Held back from 1.9.1: its Linux x86-64 native runs AVX-512 unconditionally in ggml_cpu_init,
+# before any CPU dispatch, so loading it is an instant SIGILL on every CPU without AVX-512
+# (all AMD Zen 1-3, Intel parts with E-cores). 1.9.0 has no AVX-512 on that path.
+llamatik = "1.9.0"
 # ML Kit barcode-scanning — QR recognition in the camera frame (Android, on-device, no network)
 mlkit-barcode = "17.3.0"
 # JNA platform bindings — desktop-only; used for the Linux/X11 _NET_WM_MOVERESIZE native window drag
