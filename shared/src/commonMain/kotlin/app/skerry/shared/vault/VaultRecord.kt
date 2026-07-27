@@ -14,6 +14,12 @@ enum class RecordType {
     /** An ordered checklist of commands run step by step (see [app.skerry.shared.runbook.Runbook]). */
     RUNBOOK,
 
+    /**
+     * A certificate authority trusted to vouch for host keys — the `@cert-authority` entry
+     * (see [app.skerry.shared.ssh.TrustedCa]).
+     */
+    TRUSTED_CA,
+
     /** Key and metadata of one team (teamKey + name + role) — in the member's own vault. */
     TEAM,
 

@@ -33,10 +33,19 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ssh.TrustedCa
 import app.skerry.ui.known.KnownHostEntry
 import app.skerry.ui.known.KnownHostStatus
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.known.TrustCaDialog
+import app.skerry.ui.known.TrustedCaController
+import app.skerry.ui.known.shortFingerprint
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_ca_add
+import app.skerry.ui.generated.resources.lib_ca_empty
+import app.skerry.ui.generated.resources.lib_ca_remove
+import app.skerry.ui.generated.resources.lib_ca_section
+import app.skerry.ui.generated.resources.lib_ca_section_sub
 import app.skerry.ui.generated.resources.lib_known_accept
 import app.skerry.ui.generated.resources.lib_known_empty_desc_mobile
 import app.skerry.ui.generated.resources.lib_known_empty_title
@@ -46,6 +55,7 @@ import app.skerry.ui.generated.resources.lib_known_title
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalKnownHosts
+import app.skerry.ui.app.LocalTrustedCas
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -67,6 +77,82 @@ fun MobileKnownScreen(state: MobileDesignState) {
             null -> MockMobileKnownBody(mono)
             else -> LiveMobileKnownBody(controller, mono)
         }
+    }
+}
+
+/**
+ * Trusted certificate authorities on the phone: the same list as the desktop section, with the
+ * add dialog behind a row and removal in a long-press sheet (there is no hover to reveal it).
+ */
+@Composable
+private fun MobileTrustedCas(controller: TrustedCaController, mono: FontFamily) {
+    var adding by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { controller.refresh() }
+    Column(Modifier.fillMaxWidth().padding(top = 22.dp)) {
+        Txt(stringResource(Res.string.lib_ca_section), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.SemiBold)
+        Txt(
+            stringResource(Res.string.lib_ca_section_sub),
+            color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp,
+            modifier = Modifier.padding(top = 3.dp, bottom = 10.dp),
+        )
+        val authorities = controller.authorities
+        if (authorities.isEmpty()) {
+            Txt(stringResource(Res.string.lib_ca_empty), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(bottom = 10.dp))
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+                authorities.forEach { ca ->
+                    key(ca.id) {
+                        MobileTrustedCaRow(ca, mono, onRemove = remember(ca.id) { { controller.remove(ca.id) } })
+                    }
+                }
+            }
+        }
+        BannerButton(
+            label = stringResource(Res.string.lib_ca_add),
+            fg = Skerry.colors.cyan,
+            bg = Color.Transparent,
+            border = Skerry.colors.cyan14,
+            bold = false,
+            onClick = { adding = true },
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    if (adding) {
+        TrustCaDialog(controller, onDismiss = { adding = false })
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun MobileTrustedCaRow(ca: TrustedCa, mono: FontFamily, onRemove: () -> Unit) {
+    var menuOpen by remember(ca.id) { mutableStateOf(false) }
+    val subtitle = ca.keyType.removePrefix("ssh-") + " · " + shortFingerprint(ca.fingerprint)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Skerry.colors.surface2)
+            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(12.dp))
+            .combinedClickable(onClick = {}, onLongClick = { menuOpen = true })
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Sym("verified_user", size = 18.sp, color = Skerry.colors.moss)
+        Column(Modifier.weight(1f)) {
+            Txt(ca.hostPattern, color = Skerry.colors.textBright, size = 13.sp, font = mono)
+            Txt(subtitle, color = Skerry.colors.faint, size = 11.sp, font = mono, modifier = Modifier.padding(top = 2.dp))
+        }
+    }
+    if (menuOpen) {
+        MobileActionSheet(
+            title = ca.hostPattern,
+            subtitle = subtitle,
+            actions = listOf(
+                MobileSheetAction(stringResource(Res.string.lib_ca_remove), onClick = onRemove, icon = "delete", danger = true),
+            ),
+            onDismiss = { menuOpen = false },
+        )
     }
 }
 
@@ -117,6 +203,7 @@ private fun LiveMobileKnownBody(controller: KnownHostsController, mono: FontFami
                 }
             }
         }
+        LocalTrustedCas.current?.let { MobileTrustedCas(it, mono) }
         Spacer(Modifier.height(30.dp))
     }
 }

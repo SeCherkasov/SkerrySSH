@@ -5,6 +5,14 @@ import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecord
 
+/**
+ * Record types introduced after servers were already deployed in the field. They are pushed in a
+ * separate, best-effort batch so a server that doesn't know one of them rejects only that batch
+ * (see the push in [SyncEngine.sync]). A type joins this set when it ships and leaves it once every
+ * supported server release accepts it.
+ */
+private val TYPES_NEWER_THAN_SOME_SERVERS = setOf(RecordType.TRASH, RecordType.RUNBOOK, RecordType.TRUSTED_CA)
+
 /** Where the delta sync cursor (`lastSyncVersion`) is stored, per device/account. */
 interface SyncStateStore {
     fun cursor(accountId: String): Long
@@ -66,19 +74,19 @@ class SyncEngine(
         // simple and correct at current vault sizes; fine-grained dirty tracking is a future optimization.
         val filter = settings()
         val local = vault.records().filter { filter.shouldSync(it.type, it.id) }
-        // Trash snapshots ([RecordType.TRASH]) go in a batch of their own: a self-hosted server
-        // older than the trash feature rejects a whole push batch on an unknown type, and losing
-        // hosts/keys/settings sync because a deleted record can't be mirrored would be a far worse
-        // trade. Their rejection is swallowed — the trash then stays device-local until the server
-        // is updated, and the next cycle retries (push-all sends them again anyway).
-        val (trash, records) = local.partition { it.type == RecordType.TRASH }
+        // Types a self-hosted server may not know yet go in a batch of their own: the server
+        // rejects a whole push batch on an unknown type, and losing hosts/keys/settings sync
+        // because a trash snapshot or a trusted CA can't be mirrored would be a far worse trade.
+        // Their rejection is swallowed — those records then stay device-local until the server is
+        // updated, and the next cycle retries (push-all sends them again anyway).
+        val (recentTypes, records) = local.partition { it.type in TYPES_NEWER_THAN_SOME_SERVERS }
         var pushed = 0
         if (records.isNotEmpty()) {
             client.push(session, records.map { it.toRemote() })
             pushed += records.size
         }
-        if (trash.isNotEmpty() && runCatching { client.push(session, trash.map { it.toRemote() }) }.isSuccess) {
-            pushed += trash.size
+        if (recentTypes.isNotEmpty() && runCatching { client.push(session, recentTypes.map { it.toRemote() }) }.isSuccess) {
+            pushed += recentTypes.size
         }
 
         // Pull again: picks up our own just-pushed records (merge is idempotent) and any remote

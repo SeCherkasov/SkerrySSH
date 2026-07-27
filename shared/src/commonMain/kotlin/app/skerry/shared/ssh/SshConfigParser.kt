@@ -218,29 +218,4 @@ object SshConfigParser {
         return host.ifBlank { null }
     }
 
-    /**
-     * OpenSSH glob: `*` matches any run (including empty), `?` matches exactly one character;
-     * everything else is literal. Deliberately a two-pointer matcher rather than a translated regex:
-     * patterns come from an untrusted file, and a regex built from many `*` (`.*.*.*…`) is the classic
-     * catastrophic-backtracking (ReDoS) shape on the JVM engine. This algorithm backtracks only the
-     * last `*`, so many wildcards can't blow up; its remaining worst case (a `*` followed by a long
-     * literal that keeps failing) is O(pattern × value), which is why callers cap the pattern length
-     * (MAX_PATTERN_LEN) and the total resolution steps (MAX_RESOLVE_STEPS).
-     */
-    private fun globMatches(pattern: String, value: String): Boolean {
-        var p = 0
-        var v = 0
-        var star = -1
-        var afterStar = 0
-        while (v < value.length) {
-            when {
-                p < pattern.length && (pattern[p] == '?' || pattern[p] == value[v]) -> { p++; v++ }
-                p < pattern.length && pattern[p] == '*' -> { star = p; afterStar = v; p++ }
-                star != -1 -> { p = star + 1; afterStar++; v = afterStar }
-                else -> return false
-            }
-        }
-        while (p < pattern.length && pattern[p] == '*') p++
-        return p == pattern.length
-    }
 }

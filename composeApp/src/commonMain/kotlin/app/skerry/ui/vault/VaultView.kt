@@ -1021,7 +1021,7 @@ internal fun DeleteSecretDialog(label: String, boundHostCount: Int, onDismiss: (
 }
 
 @Composable
-private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () -> Unit, content: @Composable () -> Unit) {
+internal fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () -> Unit, content: @Composable () -> Unit) {
     // System back/gesture closes the dialog (same as tapping the scrim). Intercepts back before the
     // shell's navigation on Android (dispatcher LIFO); BackHandler without a dispatcher is a no-op on desktop.
     PlatformBackHandler(onBack = onDismiss)
@@ -1057,7 +1057,7 @@ private fun VaultDialogScaffold(title: String, subtitle: String?, onDismiss: () 
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DialogField(
+internal fun DialogField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
@@ -1129,7 +1129,7 @@ private fun DialogField(
 }
 
 @Composable
-private fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+internal fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(top = 20.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
