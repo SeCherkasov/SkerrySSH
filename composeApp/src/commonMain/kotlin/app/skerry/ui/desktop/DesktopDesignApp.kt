@@ -95,6 +95,7 @@ import app.skerry.ui.host.GroupDialog as GroupEditDialog
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.known.TrustedCaController
 import app.skerry.ui.session.BroadcastPanel
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.broadcastTargets
@@ -186,6 +187,7 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalHostClickConnectMode
 import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.app.LocalKnownHosts
+import app.skerry.ui.app.LocalTrustedCas
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
@@ -371,6 +373,7 @@ fun DesktopDesignApp(
     credentials: CredentialManagerController? = null,
     sessions: SessionsController? = null,
     knownHosts: KnownHostsController? = null,
+    trustedCas: TrustedCaController? = null,
     keyGenerator: SshKeyGenerator? = null,
     certificateInspector: SshCertificateInspector? = null,
     secretFiles: SecretFileReader? = null,
@@ -531,6 +534,7 @@ fun DesktopDesignApp(
         LocalHosts provides hosts,
         LocalSessions provides liveSessions,
         LocalKnownHosts provides knownHosts,
+        LocalTrustedCas provides trustedCas,
         LocalSshKeyGenerator provides keyGenerator,
         LocalSshCertificateInspector provides certificateInspector,
         LocalSecretFileReader provides secretFiles,

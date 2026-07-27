@@ -47,6 +47,8 @@ data class SyncSettings(
         RecordType.IDENTITY,
         RecordType.CREDENTIAL,
         RecordType.KNOWN_HOST,
+        // Host key trust, whether remembered per host or delegated to a CA, follows the same toggle.
+        RecordType.TRUSTED_CA,
         RecordType.TUNNEL -> syncHosts
         RecordType.TRASH -> trashOriginType(id)?.let { shouldSync(it) } ?: (syncHosts && syncSnippets)
         // Terminal command history is local (per-host, encrypted in the vault) but never synced:

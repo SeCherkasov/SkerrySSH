@@ -130,12 +130,64 @@ sealed interface SshAuth {
 }
 
 /**
- * Trust decision for a host key. Fingerprint uses OpenSSH format (`SHA256:` + unpadded base64),
- * keyType is the algorithm identifier (`ssh-ed25519`, `rsa-sha2-512`, …).
+ * What a server presented as its host key, and for whom. [fingerprint] uses OpenSSH format
+ * (`SHA256:` + unpadded base64) and [keyType] is the algorithm identifier (`ssh-ed25519`,
+ * `rsa-sha2-512`, …) — both describe what was actually offered, so for a certificate they describe
+ * the certificate blob (`ssh-ed25519-cert-v01@openssh.com`), not the key inside it.
+ *
+ * [certificate] is non-null when the server offered a CA-signed host certificate; [bareKey] strips
+ * it down to the key inside, which is what trust-on-first-use has to remember (a certificate is
+ * re-issued on a schedule, the key under it is not).
  */
-fun interface HostKeyVerifier {
-    fun verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean
+data class HostKeyOffer(
+    val host: String,
+    val port: Int,
+    val keyType: String,
+    val fingerprint: String,
+    val certificate: OfferedHostCertificate? = null,
+) {
+    /** This offer as if the server had presented the plain key inside the certificate. */
+    fun bareKey(): HostKeyOffer = certificate?.let {
+        copy(keyType = it.keyType, fingerprint = it.fingerprint, certificate = null)
+    } ?: this
 }
+
+/**
+ * The fields of an offered OpenSSH host certificate that a trust decision needs. [keyType] and
+ * [fingerprint] describe the key inside the certificate; [caKeyType]/[caFingerprint] the key that
+ * signed it. [principals] are the names the certificate was issued for (empty means "any host",
+ * per PROTOCOL.certkeys) and may be patterns. Validity is in epoch seconds.
+ *
+ * [hostCertificate] is `false` for a *user* certificate — the same CA usually issues both, and
+ * nothing else in the exchange distinguishes them.
+ *
+ * [caSignatureVerified] states that the transport checked the CA's signature over this certificate.
+ * The trust decision lives in `commonMain`, which has no crypto; a verifier must refuse a
+ * certificate whose signature nobody vouched for rather than assume it was checked.
+ */
+data class OfferedHostCertificate(
+    val keyType: String,
+    val fingerprint: String,
+    val caKeyType: String,
+    val caFingerprint: String,
+    val principals: List<String>,
+    val validAfterEpochSeconds: Long,
+    val validBeforeEpochSeconds: Long,
+    val hostCertificate: Boolean,
+    val caSignatureVerified: Boolean,
+    val keyId: String = "",
+    val serial: String = "",
+    val criticalOptions: List<String> = emptyList(),
+)
+
+/** Trust decision for a host key. See [HostKeyOffer]. */
+fun interface HostKeyVerifier {
+    fun verify(offer: HostKeyOffer): Boolean
+}
+
+/** Trust decision for a plain (non-certificate) host key — the shorthand used by tests and probes. */
+fun HostKeyVerifier.verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean =
+    verify(HostKeyOffer(host, port, keyType, fingerprint))
 
 /**
  * One prompt of a keyboard-interactive exchange (RFC 4256). [text] is the server's wording verbatim
@@ -343,6 +395,6 @@ open class SshException(message: String, cause: Throwable? = null) : Exception(m
 
 class SshConnectionException(message: String, cause: Throwable? = null) : SshException(message, cause)
 
-class SshHostKeyRejectedException(message: String) : SshException(message)
+class SshHostKeyRejectedException(message: String, cause: Throwable? = null) : SshException(message, cause)
 
 class SshAuthenticationException(message: String, cause: Throwable? = null) : SshException(message, cause)

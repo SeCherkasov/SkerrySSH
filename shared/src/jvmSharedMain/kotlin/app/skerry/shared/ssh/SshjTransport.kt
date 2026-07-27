@@ -13,6 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import com.hierynomus.sshj.userauth.certificate.Certificate
+import net.schmizz.sshj.DefaultConfig
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
@@ -113,7 +115,7 @@ class SshjTransport(
             dial(next.host, next.port, next.jump, opened, hop = true)
                 .also { authenticate(it, next.username, next.auth, hop = true, host = next.host, port = next.port) }
         }
-        val client = SSHClient()
+        val client = SSHClient(sshjConfig())
         // TCP connect timeout: sshj's default is 0 = wait forever. Without this, "Test
         // connection" to a nonexistent/firewalled address hangs with no way to cancel from the
         // UI. (Protocol-level KEX/I-O timeout is separate, sshj default ~30s; round-trip ping
@@ -138,6 +140,19 @@ class SshjTransport(
                     if (hop) "Jump host key rejected by verifier" else "Host key rejected by verifier",
                 )
             }
+            // sshj checks a host certificate (CA signature, principals, validity) during KEX and
+            // fails the exchange itself, so our verifier never runs. Without this the user gets
+            // "failed to establish connection" for what is a trust decision.
+            if (certificateCheckFailed(e)) {
+                throw SshHostKeyRejectedException(
+                    if (hop) {
+                        "Jump host certificate rejected: not valid for this host, or expired"
+                    } else {
+                        "Host certificate rejected: not valid for this host, or expired"
+                    },
+                    e,
+                )
+            }
             throw SshConnectionException("Failed to establish connection", e)
         }
         return client
@@ -153,10 +168,13 @@ class SshjTransport(
         client.addHostKeyVerifier(object : net.schmizz.sshj.transport.verification.HostKeyVerifier {
             override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
                 val trusted = hostKeyVerifier.verify(
-                    host = hostname,
-                    port = port,
-                    keyType = KeyType.fromKey(key).toString(),
-                    fingerprint = opensshFingerprint(key),
+                    HostKeyOffer(
+                        host = hostname,
+                        port = port,
+                        keyType = KeyType.fromKey(key).toString(),
+                        fingerprint = opensshFingerprint(key),
+                        certificate = (key as? Certificate<*>)?.let { offeredCertificate(it, hostname) },
+                    ),
                 )
                 if (!trusted) hostKeyRejected.set(true)
                 return trusted
@@ -438,8 +456,91 @@ private fun certificateKeyProvider(privateKeys: KeyProvider, certificate: String
     }
 }
 
+/**
+ * The certificate fields a trust decision needs, read off what sshj parsed from the wire, with the
+ * CA's signature over it verified **here** against [hostname].
+ *
+ * Verifying it ourselves rather than relying on the key exchange having done it is deliberate: only
+ * `AbstractDHG` runs that check (`verifyCertificate` -> `KeyType.CertUtils.verifyHostCertificate`).
+ * `AbstractDHGex` — the `diffie-hellman-group-exchange-*` family, which sshj's `DefaultConfig`
+ * offers third and seventh — verifies the exchange-hash signature against the key *inside* the
+ * certificate and never looks at the CA signature at all. A hostile server that advertises only
+ * group-exchange KEX forces that path; it could then present a certificate naming a trusted CA (a
+ * CA key is public by design) with arbitrary signature bytes, and a verifier told "the transport
+ * checked the signature" would trust it outright. Re-checking costs one signature verification per
+ * connection.
+ *
+ * The certificate blob is rebuilt from the parsed form, which is how sshj's own API documents this
+ * call; the round trip is byte-exact, including the "expires never" sentinel it clamps on read.
+ * What the check does *not* cover is [OfferedHostCertificate.hostCertificate] — a user certificate
+ * from the same CA passes it unchanged, so the trust policy tests that separately.
+ */
+internal fun offeredCertificate(certificate: Certificate<*>, hostname: String): OfferedHostCertificate {
+    // Any failure to even run the check counts as "not verified" — never as verified.
+    val signatureVerified = runCatching {
+        val blob = Buffer.PlainBuffer().putPublicKey(certificate).compactData
+        KeyType.CertUtils.verifyHostCertificate(blob, certificate, hostname) == null
+    }.getOrDefault(false)
+    return offeredCertificateFields(certificate, signatureVerified)
+}
+
+private fun offeredCertificateFields(
+    certificate: Certificate<*>,
+    signatureVerified: Boolean,
+): OfferedHostCertificate {
+    val innerKey = certificate.key
+    // A CA key we can't parse leaves the fingerprint blank, which matches no stored authority —
+    // the offer then falls through to TOFU on the host's own key instead of being trusted.
+    val caKey = runCatching { Buffer.PlainBuffer(certificate.signatureKey).readPublicKey() }.getOrNull()
+    return OfferedHostCertificate(
+        keyType = KeyType.fromKey(innerKey).toString(),
+        fingerprint = opensshFingerprint(innerKey),
+        caKeyType = caKey?.let { KeyType.fromKey(it).toString() }.orEmpty(),
+        caFingerprint = caKey?.let { opensshFingerprint(it) }.orEmpty(),
+        principals = certificate.validPrincipals.orEmpty(),
+        // sshj clamps an "expires never" certificate (validBefore = 2^64-1) to Long.MAX_VALUE
+        // milliseconds, so the seconds below stay far in the future rather than wrapping.
+        validAfterEpochSeconds = certificate.validAfter?.let { it.time / 1000 } ?: 0L,
+        validBeforeEpochSeconds = certificate.validBefore?.let { it.time / 1000 } ?: Long.MAX_VALUE,
+        hostCertificate = certificate.type == SSH_CERT_TYPE_HOST,
+        caSignatureVerified = signatureVerified,
+        keyId = certificate.id.orEmpty(),
+        serial = certificate.serial?.toString().orEmpty(),
+        criticalOptions = certificate.critOptions?.keys?.toList().orEmpty(),
+    )
+}
+
+/** `SSH_CERT_TYPE_HOST` from PROTOCOL.certkeys; `1` is a user certificate. */
+private const val SSH_CERT_TYPE_HOST = 2L
+
+/**
+ * sshj's defaults with host certificate verification pinned on. Our own check ([offeredCertificate])
+ * is what the trust decision rests on; this keeps sshj's KEX-level check from being turned off by a
+ * future change of its default, so a bad certificate still fails the exchange on the paths that run
+ * it — one connection refused outright rather than one silently downgraded to trust-on-first-use.
+ */
+private fun sshjConfig(): DefaultConfig = DefaultConfig().apply { isVerifyHostKeyCertificates = true }
+
+/**
+ * Whether [error] is sshj refusing a host certificate during key exchange (bad CA signature, a
+ * principal that doesn't cover the host, an expired window). sshj reports it as a plain
+ * `TransportException` carrying that text, so the cause chain is the only signal available.
+ */
+private fun certificateCheckFailed(error: Throwable): Boolean {
+    var current: Throwable? = error
+    var depth = 0
+    while (current != null && depth++ < MAX_CAUSE_DEPTH) {
+        if (current.message?.contains("certificate check failed", ignoreCase = true) == true) return true
+        current = current.cause
+    }
+    return false
+}
+
+/** Cause chains are short; the bound only guards against a self-referencing one. */
+private const val MAX_CAUSE_DEPTH = 16
+
 /** Fingerprint in OpenSSH format: `SHA256:` + unpadded base64 of the key's wire encoding. */
-private fun opensshFingerprint(key: PublicKey): String {
+internal fun opensshFingerprint(key: PublicKey): String {
     val encoded = Buffer.PlainBuffer().putPublicKey(key).compactData
     val digest = MessageDigest.getInstance("SHA-256").digest(encoded)
     return "SHA256:" + Base64.getEncoder().withoutPadding().encodeToString(digest)

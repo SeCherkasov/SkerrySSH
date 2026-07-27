@@ -72,7 +72,10 @@ import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.HostManagerController
+import app.skerry.shared.ssh.TrustedCa
+import app.skerry.shared.ssh.TrustedCaStore
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.known.TrustedCaController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.theme.SkerryTheme
@@ -186,6 +189,7 @@ fun main() {
     // A recording plays in its own tab, so it can't be reached through the rail: open one directly.
     if (viewName == "Player") sessions?.openPlayer("deploy.cast", seededCast())
     val knownHosts = if (live) seededKnownHosts() else null
+    val trustedCas = if (live) seededTrustedCas() else null
     val tunnels = if (live && hosts != null) seededTunnels(hosts) else null
     val ai = if (live) seededAi() else null
     // Built once outside the content lambda: recomposition must not recreate the controller
@@ -213,7 +217,7 @@ fun main() {
         // Trash section with a seeded trash: the settings overlay can't show it (the mock graph has
         // no vault), so the list is rendered standalone against an in-memory vault.
         "trash" -> { { GateScreenPreview { TrashPreview() } } }
-        else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, ai = ai, updates = updates, windowChrome = windowChrome) } }
+        else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, trustedCas = trustedCas, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, ai = ai, updates = updates, windowChrome = windowChrome) } }
     }
 
     // Theme for visual review: -Dskerry.screenshot.theme=<system|light|dark> (default dark).
@@ -252,12 +256,13 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     val updates = if (live) seededUpdates() else null
     // Known-hosts manager is seeded only in live mode; otherwise the Known screen uses a built-in mock.
     val knownHosts = if (live) seededKnownHosts() else null
+    val trustedCas = if (live) seededTrustedCas() else null
     // Keychain is seeded for the sheet overlay (live) so the auth picker shows saved secrets.
     val credentials = if (live) seededVault(BouncyCastleSshKeyGenerator()) else null
     // Key generator/inspector: the Vault tab uses it to compute fingerprints of seeded keys in live mode.
     val keyGenerator = if (live) BouncyCastleSshKeyGenerator() else null
     val deps = if (hosts != null) {
-        AppDependencies(hosts = hosts, knownHosts = knownHosts, credentials = credentials, keyGenerator = keyGenerator, tunnels = seededTunnels(hosts))
+        AppDependencies(hosts = hosts, knownHosts = knownHosts, trustedCas = trustedCas, credentials = credentials, keyGenerator = keyGenerator, tunnels = seededTunnels(hosts))
     } else {
         AppDependencies()
     }
@@ -575,6 +580,28 @@ private fun seededTunnels(hosts: HostManagerController): TunnelManager {
  * shows a live table (firstSeen/Verified), a warning, and a fingerprint comparison panel with real
  * components ([KnownHostsController] -> [KnownHostsView]). In-memory, no files.
  */
+/**
+ * Trusted certificate authorities for the offscreen render of the known-hosts screen: two entries
+ * over an in-memory store, so the CA section shows real rows rather than its empty state.
+ */
+private fun seededTrustedCas(): TrustedCaController {
+    val store = object : TrustedCaStore {
+        private val items = mutableListOf(
+            TrustedCa("ca-1", "*.prod.example.com", "ssh-ed25519", "AAAA", "SHA256:Qz8kR2mVpL4tXw9nB7sJ1dF0", "Production CA", "2026-05-02T10:00:00Z"),
+            TrustedCa("ca-2", "*.staging.example.com,!admin.staging.example.com", "ecdsa-sha2-nistp256", "AAAA", "SHA256:7hT4bN0xZq2wE5rY8uI3oP6a", "Staging CA", "2026-06-18T10:00:00Z"),
+        )
+        override fun all() = items.toList()
+        override fun put(ca: TrustedCa) {
+            items.removeAll { it.id == ca.id }
+            items += ca
+        }
+        override fun remove(id: String) {
+            items.removeAll { it.id == id }
+        }
+    }
+    return TrustedCaController(store, { null }, newId = { "ca-x" }, now = { "2026-06-22T12:00:00Z" })
+}
+
 private fun seededKnownHosts(): KnownHostsController {
     val ed = "ssh-ed25519"
     val store = object : KnownHostsStore {

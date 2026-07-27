@@ -12,6 +12,7 @@ import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.known.TrustedCaController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.tunnel.TunnelManager
@@ -41,6 +42,7 @@ data class AppDependencies(
     val credentials: CredentialManagerController? = null,
     /** Known-hosts manager (trusted keys + key-change events); `null` if not wired up. */
     val knownHosts: KnownHostsController? = null,
+    val trustedCas: TrustedCaController? = null,
     /** SSH key generator/inspector (Vault section); `null` on a platform without key crypto. */
     val keyGenerator: SshKeyGenerator? = null,
     /** SSH certificate inspector (Vault → Certificates); `null` on a platform without cert parsing. */

@@ -55,7 +55,7 @@ class SshjJumpTest {
     private fun target(jump: SshJump?) =
         SshTarget(host = "127.0.0.1", port = targetServer.port, username = USER, jump = jump)
 
-    private val acceptAll = HostKeyVerifier { _, _, _, _ -> true }
+    private val acceptAll = HostKeyVerifier { true }
 
     @Test
     fun `connects through the jump host and executes a command`() = runTest {
@@ -83,8 +83,8 @@ class SshjJumpTest {
     @Test
     fun `host key verifier sees the jump and the target hops`() = runTest {
         val seen = mutableListOf<Pair<String, Int>>()
-        val recording = HostKeyVerifier { host, port, _, _ ->
-            synchronized(seen) { seen += host to port }
+        val recording = HostKeyVerifier { offer ->
+            synchronized(seen) { seen += offer.host to offer.port }
             true
         }
         val connection = SshjTransport(recording).connect(target(jumpHop()), SshAuth.Password(PASSWORD))
@@ -95,7 +95,7 @@ class SshjJumpTest {
 
     @Test
     fun `rejected jump host key fails the connect and names the hop`() = runTest {
-        val rejectJump = HostKeyVerifier { _, port, _, _ -> port != jumpServer.port }
+        val rejectJump = HostKeyVerifier { it.port != jumpServer.port }
         val e = assertFailsWith<SshHostKeyRejectedException> {
             SshjTransport(rejectJump).connect(target(jumpHop()), SshAuth.Password(PASSWORD))
         }
@@ -107,7 +107,7 @@ class SshjJumpTest {
 
     @Test
     fun `rejected target host key names the target, not the hop`() = runTest {
-        val rejectTarget = HostKeyVerifier { _, port, _, _ -> port != targetServer.port }
+        val rejectTarget = HostKeyVerifier { it.port != targetServer.port }
         val e = assertFailsWith<SshHostKeyRejectedException> {
             SshjTransport(rejectTarget).connect(target(jumpHop()), SshAuth.Password(PASSWORD))
         }
