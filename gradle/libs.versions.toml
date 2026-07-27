@@ -58,7 +58,8 @@ nimbus-srp = "2.1.0"
 # Micrometer + its Prometheus registry — the sync server's /metrics exposition. 1.16.5 is the
 # version ktor-server-metrics-micrometer 3.5.1 is built against; keeping them equal avoids a
 # mixed-version registry. Server-only: the clients ship no metrics.
-micrometer = "1.17.0"
+# Held back from 1.17.0 on purpose: bump it together with ktor, not ahead of it.
+micrometer = "1.16.5"
 # --- Fast device pairing (option B): QR generation + camera scanner ---
 # ZXing core — pure Java (works on both desktop JVM and Android), generates the pairing QR matrix
 zxing = "3.5.4"
