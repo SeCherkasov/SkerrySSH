@@ -119,4 +119,5 @@
     <string name="term_launch_local_shell">Launch local shell</string>
     <string name="term_open_path_in_files">Open in Files</string>
     <string name="term_pane_sync_badge">SYNC</string>
+    <string name="term_auth_key_file">Key file</string>
 </resources>

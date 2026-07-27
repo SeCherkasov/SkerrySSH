@@ -141,4 +141,5 @@
     <string name="conn_container_err_command">Хост не смог получить список контейнеров</string>
     <string name="conn_auth_interactive">Интерактивная (2FA)</string>
     <string name="conn_auth_interactive_desc">сервер сам спросит код при подключении</string>
+    <string name="conn_import_keys_note">IdentityFile и CertificateFile связываются по пути — ключи не копируются в волт.</string>
 </resources>

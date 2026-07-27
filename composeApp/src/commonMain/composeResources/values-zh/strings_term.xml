@@ -119,4 +119,5 @@
     <string name="term_launch_local_shell">启动本地 Shell</string>
     <string name="term_open_path_in_files">在文件中打开</string>
     <string name="term_pane_sync_badge">同步</string>
+    <string name="term_auth_key_file">密钥文件</string>
 </resources>

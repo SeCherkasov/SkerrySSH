@@ -119,4 +119,22 @@
     <string name="vault_reset_scope_everything_subtitle">Также удалить профили хостов, known_hosts и настройки.</string>
     <string name="vault_reset_confirm_label">Впишите %1$s для подтверждения</string>
     <string name="vault_reset_confirm_button">Сбросить безвозвратно</string>
+    <string name="vault_link_key_file">Связать файл ключа</string>
+    <string name="vault_dialog_key_file_subtitle">Ключ и сертификат остаются на диске и перечитываются при каждом подключении</string>
+    <string name="vault_subtitle_key_file">Файл ключа</string>
+    <string name="vault_subtitle_key_file_cert">Файл сертификата</string>
+    <string name="vault_field_key_path">ФАЙЛ ПРИВАТНОГО КЛЮЧА</string>
+    <string name="vault_field_cert_path">ФАЙЛ СЕРТИФИКАТА (НЕОБЯЗАТЕЛЬНО)</string>
+    <string name="vault_placeholder_name_key_file">Рабочий SSH CA</string>
+    <string name="vault_hint_cert_sibling">Пусто: берётся %1$s рядом с ключом, если он есть</string>
+    <string name="vault_hint_cert_sibling_opaque">Пусто: без сертификата — ключ аутентифицируется сам</string>
+    <string name="vault_browse">Обзор…</string>
+    <string name="vault_link">Связать</string>
+    <string name="vault_badge_file">ФАЙЛ</string>
+    <string name="vault_badge_file_missing">ФАЙЛ НЕ НАЙДЕН</string>
+    <string name="vault_label_key_path">ФАЙЛ КЛЮЧА</string>
+    <string name="vault_label_cert_path">ФАЙЛ СЕРТИФИКАТА</string>
+    <string name="vault_key_file_missing">Недоступен с этого устройства</string>
+    <string name="vault_meta_key_file">файл · %1$s</string>
+    <string name="vault_cert_from_file_unreadable">Файл сертификата не читается</string>
 </resources>

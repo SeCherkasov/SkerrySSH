@@ -39,6 +39,7 @@ import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vault_add_password
+import app.skerry.ui.generated.resources.vault_any_principal
 import app.skerry.ui.generated.resources.vault_badge_expired
 import app.skerry.ui.generated.resources.vault_banner_encrypted
 import app.skerry.ui.generated.resources.vault_copy_certificate
@@ -57,14 +58,17 @@ import app.skerry.ui.generated.resources.vault_import_certificate
 import app.skerry.ui.generated.resources.vault_key_unreadable
 import app.skerry.ui.generated.resources.vault_label_fingerprint
 import app.skerry.ui.generated.resources.vault_label_public_key
+import app.skerry.ui.generated.resources.vault_link_key_file
 import app.skerry.ui.generated.resources.vault_meta_any_principal
 import app.skerry.ui.generated.resources.vault_meta_certificate
+import app.skerry.ui.generated.resources.vault_meta_key_file
 import app.skerry.ui.generated.resources.vault_meta_password
 import app.skerry.ui.generated.resources.vault_rename
 import app.skerry.ui.generated.resources.vault_subtitle_certificate
 import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
+import app.skerry.ui.generated.resources.vault_subtitle_key_file
+import app.skerry.ui.generated.resources.vault_subtitle_key_file_cert
 import app.skerry.ui.generated.resources.vault_subtitle_password
-import app.skerry.ui.generated.resources.vault_any_principal
 import app.skerry.ui.generated.resources.vault_subtitle_private_key
 import app.skerry.ui.generated.resources.vault_title
 import app.skerry.ui.generated.resources.vtail_meta_fingerprint
@@ -93,9 +97,15 @@ import app.skerry.ui.vault.DetailLabel
 import app.skerry.ui.vault.GenerateKeyDialog
 import app.skerry.ui.vault.ImportCertificateDialog
 import app.skerry.ui.app.LocalCredentials
+import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalSecretFileReader
+import app.skerry.ui.vault.KeyFileBadges
+import app.skerry.ui.vault.KeyFileDetailBody
+import app.skerry.ui.vault.LinkKeyFileDialog
+import app.skerry.ui.vault.rememberKeyFileState
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalVault
@@ -151,7 +161,9 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     var selectedId by remember { mutableStateOf<String?>(null) }
     var showGenerate by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
+    val secretFiles = LocalSecretFileReader.current
     var showImportCert by remember { mutableStateOf(false) }
+    var showLinkKeyFile by remember { mutableStateOf(false) }
     var pendingRename by remember { mutableStateOf<Credential?>(null) }
     var pendingDelete by remember { mutableStateOf<Credential?>(null) }
 
@@ -162,7 +174,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     // over the centered dialog and covers the bottom input fields above the keyboard. LaunchedEffect
     // writes the flag only on value change (not every list recomposition); DisposableEffect clears it
     // on leaving the tab so the tab bar isn't left hidden.
-    val modalOpen = showGenerate || showAddPassword || showImportCert || pendingRename != null || pendingDelete != null ||
+    val modalOpen = showGenerate || showAddPassword || showImportCert || showLinkKeyFile || pendingRename != null || pendingDelete != null ||
         selectedCred != null || copyAuth.passwordPromptVisible
     LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
@@ -184,7 +196,9 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 canImportCert = inspector != null,
                 onGenerate = { showGenerate = true },
                 onAddPassword = { showAddPassword = true },
+                canLinkFile = secretFiles != null,
                 onImportCert = { showImportCert = true },
+                onLinkKeyFile = { showLinkKeyFile = true },
             )
             Column(
                 Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 6.dp),
@@ -251,6 +265,24 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                     )
                     category = VaultCategoryKind.CERTIFICATES
                     showImportCert = false
+                },
+            )
+        }
+        if (showLinkKeyFile) {
+            LinkKeyFileDialog(
+                onDismiss = { showLinkKeyFile = false },
+                onCreate = { name, keyRef, certRef, passphrase ->
+                    selectedId = credentials.save(
+                        CredentialDraft(
+                            label = name,
+                            kind = CredentialKind.KEY_FILE,
+                            privateKeyRef = keyRef,
+                            certificateRef = certRef ?: "",
+                            passphrase = passphrase ?: "",
+                        ),
+                    )
+                    category = if (certRef == null) VaultCategoryKind.SSH_KEYS else VaultCategoryKind.CERTIFICATES
+                    showLinkKeyFile = false
                 },
             )
         }
@@ -370,15 +402,21 @@ private fun MobileVaultAction(
     category: VaultCategoryKind,
     canGenerate: Boolean,
     canImportCert: Boolean,
+    canLinkFile: Boolean,
     onGenerate: () -> Unit,
     onAddPassword: () -> Unit,
     onImportCert: () -> Unit,
+    onLinkKeyFile: () -> Unit,
 ) {
-    Box(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (category) {
             VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add", modifier = Modifier.fillMaxWidth())
             VaultCategoryKind.PASSWORDS -> PrimaryButton(stringResource(Res.string.vault_add_password), onClick = onAddPassword, icon = "add", modifier = Modifier.fillMaxWidth())
             VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = onImportCert, icon = "add", modifier = Modifier.fillMaxWidth())
+        }
+        // Same rule as desktop: a file-backed secret can be either kind, so the action shows in both.
+        if (canLinkFile && category != VaultCategoryKind.PASSWORDS) {
+            GhostButton(stringResource(Res.string.vault_link_key_file), onClick = onLinkKeyFile, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -418,9 +456,10 @@ private fun MobileSecretCard(credential: Credential, usedBy: String?, mono: Font
                         if (certInfo?.expired == true) Badge(stringResource(Res.string.vault_badge_expired), bg = Skerry.colors.sunset.copy(alpha = 0.16f), fg = Skerry.colors.sunset, size = 9.sp)
                     }
                     is CredentialSecret.Password -> Unit
+                    is CredentialSecret.KeyFile -> KeyFileBadges(rememberKeyFileState(credential.secret as CredentialSecret.KeyFile, LocalSecretFileReader.current, LocalSshCertificateInspector.current))
                 }
             }
-            val meta = when (credential.secret) {
+            val meta = when (val secret = credential.secret) {
                 is CredentialSecret.PrivateKey -> when {
                     keyInfo != null && usedBy != null ->
                         stringResource(Res.string.vtail_meta_fingerprint, shortFingerprint(keyInfo.fingerprintSha256), usedBy)
@@ -437,6 +476,7 @@ private fun MobileSecretCard(credential: Credential, usedBy: String?, mono: Font
                 }
                 is CredentialSecret.Password ->
                     usedBy?.let { stringResource(Res.string.vault_meta_password, it) } ?: stringResource(Res.string.vault_subtitle_password)
+                is CredentialSecret.KeyFile -> stringResource(Res.string.vault_meta_key_file, secret.privateKeyRef)
             }
             Txt(meta, color = Skerry.colors.dim, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
         }
@@ -485,11 +525,15 @@ private fun MobileSecretDetailSheet(
     val secret = credential.secret
     val keyInfo = rememberKeyInfo(credential, generator)
     val certInfo = rememberCertInfo(credential, inspector)
+    val keyFileState = (secret as? CredentialSecret.KeyFile)?.let { rememberKeyFileState(it, LocalSecretFileReader.current, inspector) }
     val (icon, color, tinted) = VaultPresentation.secretStyle(secret, Skerry.colors)
     val subtitle = when (secret) {
         is CredentialSecret.Certificate -> certInfo?.keyTypeLabel?.let { stringResource(Res.string.vault_subtitle_certificate_typed, it) } ?: stringResource(Res.string.vault_subtitle_certificate)
         is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: stringResource(Res.string.vault_subtitle_private_key)
         is CredentialSecret.Password -> stringResource(Res.string.vault_subtitle_password)
+        is CredentialSecret.KeyFile ->
+            if (secret.certificateRef.isNullOrBlank()) stringResource(Res.string.vault_subtitle_key_file)
+            else stringResource(Res.string.vault_subtitle_key_file_cert)
     }
     // Full-screen scrim; a tap outside the sheet closes it. The sheet swallows clicks so it doesn't
     // close. It fits its content (a short password ⇒ short sheet) but not above 85% of the screen —
@@ -516,6 +560,7 @@ private fun MobileSecretDetailSheet(
                         Txt(keyInfo?.fingerprintSha256 ?: "—", color = Skerry.colors.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
                     }
                     is CredentialSecret.Password -> Unit
+                    is CredentialSecret.KeyFile -> KeyFileDetailBody(secret, keyFileState, mono)
                 }
                 UsedByHosts(hosts, snippetLabels, mono)
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -531,6 +576,8 @@ private fun MobileSecretDetailSheet(
                         // sensitive clip + auto-clear), not the normal clipboard like cert/public key.
                         is CredentialSecret.Password ->
                             MobileSheetButton(stringResource(Res.string.vault_copy_password), onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                        // Nothing to copy: the material is on disk, and the refs are already spelled out above.
+                        is CredentialSecret.KeyFile -> Unit
                     }
                     MobileSheetButton(stringResource(Res.string.vault_rename), onClick = onRename, filled = false, modifier = Modifier.fillMaxWidth())
                     when (secret) {
@@ -542,7 +589,7 @@ private fun MobileSecretDetailSheet(
                             MobileSheetButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, filled = false, modifier = Modifier.weight(1f))
                             MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
                         }
-                        is CredentialSecret.Password ->
+                        is CredentialSecret.Password, is CredentialSecret.KeyFile ->
                             MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
                     }
                 }

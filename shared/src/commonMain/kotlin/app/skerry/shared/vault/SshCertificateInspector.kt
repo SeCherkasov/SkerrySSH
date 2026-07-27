@@ -33,7 +33,7 @@ data class SshCertificateInfo(
  * format) is injected; the UI only depends on this contract. Coroutine-free: parsing is
  * synchronous and cheap (triggered by user action).
  */
-interface SshCertificateInspector {
+fun interface SshCertificateInspector {
     /**
      * Extract public metadata from certificate string [certificate] (`*-cert.pub`, format
      * `ssh-…-cert-v01@openssh.com <base64> [comment]`). Returns `null` if the certificate can't

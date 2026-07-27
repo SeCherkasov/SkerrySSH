@@ -119,4 +119,22 @@
     <string name="vault_reset_scope_everything_subtitle">同时删除主机配置、known_hosts 和设置。</string>
     <string name="vault_reset_confirm_label">输入 %1$s 以确认</string>
     <string name="vault_reset_confirm_button">永久重置</string>
+    <string name="vault_link_key_file">关联密钥文件</string>
+    <string name="vault_dialog_key_file_subtitle">密钥和证书保留在磁盘上，每次连接时重新读取</string>
+    <string name="vault_subtitle_key_file">密钥文件</string>
+    <string name="vault_subtitle_key_file_cert">证书文件</string>
+    <string name="vault_field_key_path">私钥文件</string>
+    <string name="vault_field_cert_path">证书文件（可选）</string>
+    <string name="vault_placeholder_name_key_file">工作 SSH CA</string>
+    <string name="vault_hint_cert_sibling">留空：使用密钥旁的 %1$s（若存在）</string>
+    <string name="vault_hint_cert_sibling_opaque">留空：无证书 — 仅用密钥认证</string>
+    <string name="vault_browse">浏览…</string>
+    <string name="vault_link">关联</string>
+    <string name="vault_badge_file">文件</string>
+    <string name="vault_badge_file_missing">文件缺失</string>
+    <string name="vault_label_key_path">密钥文件</string>
+    <string name="vault_label_cert_path">证书文件</string>
+    <string name="vault_key_file_missing">此设备无法读取</string>
+    <string name="vault_meta_key_file">文件 · %1$s</string>
+    <string name="vault_cert_from_file_unreadable">无法读取证书文件</string>
 </resources>

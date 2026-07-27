@@ -14,6 +14,8 @@ data class SshConfigHost(
     val user: String?,
     val proxyJump: String?,
     val identityFile: String?,
+    /** `CertificateFile` — the CA-issued certificate that goes with [identityFile]; null when absent. */
+    val certificateFile: String? = null,
 )
 
 /**
@@ -31,7 +33,7 @@ data class SshConfigParseResult(
  * supplies the file text (read via the platform file picker) so it stays testable in commonTest.
  *
  * Scope is deliberately a pragmatic subset (v1): `Host` blocks with `HostName`, `Port`, `User`,
- * `ProxyJump`, `IdentityFile`. Wildcard patterns (`*`, `?`) and negations (`!`) are honoured for
+ * `ProxyJump`, `IdentityFile`, `CertificateFile`. Wildcard patterns (`*`, `?`) and negations (`!`) are honoured for
  * option matching but never become hosts themselves. `Match` blocks and `Include` are skipped with a
  * warning — evaluating them needs a live host/connection context the importer doesn't have.
  *
@@ -153,6 +155,7 @@ object SshConfigParser {
                     user = resolve("user"),
                     proxyJump = resolve("proxyjump")?.let { firstJumpHop(it) },
                     identityFile = resolve("identityfile"),
+                    certificateFile = resolve("certificatefile"),
                 )
             )
         }

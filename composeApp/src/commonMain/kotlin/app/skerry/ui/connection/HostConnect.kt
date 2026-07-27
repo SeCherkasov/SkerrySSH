@@ -59,6 +59,9 @@ fun Credential.toSshAuth(): SshAuth = when (val s = secret) {
     is CredentialSecret.Password -> SshAuth.Password(s.password)
     is CredentialSecret.PrivateKey -> SshAuth.PublicKey(s.privateKeyPem, s.passphrase)
     is CredentialSecret.Certificate -> SshAuth.Certificate(s.privateKeyPem, s.certificate, s.passphrase)
+    // Refs travel as refs: the files behind them are read by the transport at connect time, so a
+    // certificate the issuer rewrote a minute ago is the one presented.
+    is CredentialSecret.KeyFile -> SshAuth.KeyFile(s.privateKeyRef, s.certificateRef, s.passphrase)
 }
 
 /**

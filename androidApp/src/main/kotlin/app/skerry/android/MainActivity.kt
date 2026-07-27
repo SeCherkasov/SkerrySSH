@@ -21,6 +21,9 @@ import app.skerry.shared.ssh.VaultKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshjTransport
+import app.skerry.shared.ssh.KeyFileResolver
+import app.skerry.shared.vault.OkioSecretFileReader
+import app.skerry.ui.vault.AndroidSecretFileReader
 import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.snippet.VaultSnippetStore
@@ -452,10 +455,21 @@ class MainActivity : FragmentActivity() {
         // Keyboard-interactive challenges (2FA codes) reach the UI through this controller; shared by
         // every transport that authenticates, so a tunnel or container probe prompts like a session.
         val keyboardInteractive = KeyboardInteractivePromptController().also { this.keyboardInteractive = it }
+        // File-backed credentials (key/certificate kept outside the vault) are read at connect time:
+        // `content://` refs go through the Storage Access Framework, plain paths through okio. Shared
+        // by every transport that authenticates, and carrying the inspector so an expired certificate
+        // is refused here, with its date, rather than as "server rejected the credentials".
+        val certificateInspector = SshjCertificateInspector()
+        val secretFiles = AndroidSecretFileReader(
+            applicationContext,
+            OkioSecretFileReader(FileSystem.SYSTEM, homeDir = null),
+        )
+        val keyFileResolver = KeyFileResolver(files = secretFiles, inspector = certificateInspector)
         val transport = RoutingTransport(
             ssh = SshjTransport(
                 TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
-                keyboardInteractive.responder,
+                keyFiles = keyFileResolver,
+                keyboardInteractiveResponder = keyboardInteractive.responder,
             ),
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
@@ -482,7 +496,11 @@ class MainActivity : FragmentActivity() {
         // Probe transport (read-only verifier, no silent TOFU): activating a saved tunnel and
         // listing a host's containers from the connection form both ride it, so neither can
         // establish trust in a host key on their own.
-        val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore), keyboardInteractive.responder)
+        val probeTransport = SshjTransport(
+            ProbeHostKeyVerifier(knownHostsStore),
+            keyFiles = keyFileResolver,
+            keyboardInteractiveResponder = keyboardInteractive.responder,
+        )
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { tunnelScope = it }
         val tunnels = TunnelManager(
             store = VaultTunnelStore(vault, trash),
@@ -645,7 +663,8 @@ class MainActivity : FragmentActivity() {
             // SSH key inspector/generator (BouncyCastle, shared JVM source set): fingerprints/generation in the Vault tab.
             keyGenerator = BouncyCastleSshKeyGenerator(),
             // SSH certificate inspector (sshj): Vault → Certificates parses *-cert.pub.
-            certificateInspector = SshjCertificateInspector(),
+            certificateInspector = certificateInspector,
+            secretFiles = secretFiles,
             biometrics = biometrics,
             tunnels = tunnels,
             snippets = snippets,

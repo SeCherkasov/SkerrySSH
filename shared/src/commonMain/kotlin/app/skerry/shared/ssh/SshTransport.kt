@@ -100,6 +100,25 @@ sealed interface SshAuth {
     }
 
     /**
+     * Key and (optional) certificate to be read from where they live at connect time rather than
+     * carried in the vault — the form short-lived CA certificates take, since an external issuer
+     * rewrites the file every few hours. Comes from
+     * [app.skerry.shared.vault.CredentialSecret.KeyFile] and is expanded by [KeyFileResolver] into
+     * [PublicKey] or [Certificate] just before authentication, so the file read is as late as
+     * possible.
+     *
+     * [privateKeyRef]/[certificateRef] are locations (path or `content://` Uri), not secrets, but
+     * [passphrase] is one — `toString` redacts the lot, like its siblings.
+     */
+    data class KeyFile(
+        val privateKeyRef: String,
+        val certificateRef: String? = null,
+        val passphrase: String? = null,
+    ) : SshAuth {
+        override fun toString(): String = "KeyFile(redacted)"
+    }
+
+    /**
      * No stored secret: the server drives the exchange and the user answers it
      * ([KeyboardInteractiveResponder]) — a TOTP-only login, a push confirmation, an SMS token.
      *

@@ -119,4 +119,22 @@
     <string name="vault_reset_scope_everything_subtitle">Also delete host profiles, known_hosts and settings.</string>
     <string name="vault_reset_confirm_label">Type %1$s to confirm</string>
     <string name="vault_reset_confirm_button">Reset permanently</string>
+    <string name="vault_link_key_file">Link key file</string>
+    <string name="vault_dialog_key_file_subtitle">Key and certificate stay on disk and are re-read on every connection</string>
+    <string name="vault_subtitle_key_file">Key file</string>
+    <string name="vault_subtitle_key_file_cert">Certificate file</string>
+    <string name="vault_field_key_path">PRIVATE KEY FILE</string>
+    <string name="vault_field_cert_path">CERTIFICATE FILE (OPTIONAL)</string>
+    <string name="vault_placeholder_name_key_file">Work SSH CA</string>
+    <string name="vault_hint_cert_sibling">Empty: uses %1$s next to the key, if present</string>
+    <string name="vault_hint_cert_sibling_opaque">Empty: no certificate — the key authenticates on its own</string>
+    <string name="vault_browse">Browse…</string>
+    <string name="vault_link">Link</string>
+    <string name="vault_badge_file">FILE</string>
+    <string name="vault_badge_file_missing">FILE MISSING</string>
+    <string name="vault_label_key_path">KEY FILE</string>
+    <string name="vault_label_cert_path">CERTIFICATE FILE</string>
+    <string name="vault_key_file_missing">Not readable from this device</string>
+    <string name="vault_meta_key_file">file · %1$s</string>
+    <string name="vault_cert_from_file_unreadable">Certificate file not readable</string>
 </resources>

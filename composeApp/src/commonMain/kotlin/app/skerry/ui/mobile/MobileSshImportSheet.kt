@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ssh.SshConfigParseResult
+import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
@@ -39,6 +40,7 @@ import app.skerry.ui.host.sshImportHostSummary
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.conn_import_button
+import app.skerry.ui.generated.resources.conn_import_keys_note
 import app.skerry.ui.generated.resources.conn_import_empty
 import app.skerry.ui.generated.resources.conn_import_select_all
 import app.skerry.ui.generated.resources.conn_import_skipped
@@ -55,6 +57,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun MobileSshImportSheet(state: MobileDesignState, result: SshConfigParseResult) {
     val hosts = LocalHosts.current
+    val credentials = LocalCredentials.current
     val defaultUser = remember { localOsUserName() }
     var selected by remember(result) { mutableStateOf(result.hosts.map { it.alias }.toSet()) }
     val allSelected = result.hosts.isNotEmpty() && selected.size == result.hosts.size
@@ -121,6 +124,10 @@ fun MobileSshImportSheet(state: MobileDesignState, result: SshConfigParseResult)
             }
         }
 
+        if (result.hosts.any { !it.identityFile.isNullOrBlank() }) {
+            Spacer(Modifier.height(12.dp))
+            Txt(stringResource(Res.string.conn_import_keys_note), color = Skerry.colors.faint, size = 11.5.sp, lineHeight = 16.sp)
+        }
         Spacer(Modifier.height(16.dp))
         val enabled = selected.isNotEmpty()
         Box(
@@ -129,7 +136,13 @@ fun MobileSshImportSheet(state: MobileDesignState, result: SshConfigParseResult)
                 .clip(RoundedCornerShape(14.dp))
                 .background(if (enabled) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.4f))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, enabled = enabled) {
-                    hosts?.importSshConfig(result.hosts, selected, defaultUser)
+                    hosts?.importSshConfig(
+                        result.hosts,
+                        selected,
+                        defaultUser,
+                        existingLabels = credentials?.credentials?.map { it.label }?.toSet().orEmpty(),
+                        saveCredentials = { credentials?.importCredentials(it) },
+                    )
                     state.closeSshImport()
                 }
                 .padding(15.dp),

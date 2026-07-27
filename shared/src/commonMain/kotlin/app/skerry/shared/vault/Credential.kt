@@ -48,6 +48,34 @@ sealed interface CredentialSecret {
     ) : CredentialSecret {
         override fun toString(): String = "Certificate(redacted)"
     }
+
+    /**
+     * Key (and optional certificate) kept *outside* the vault, referenced by location and re-read on
+     * every connection. This is what makes short-lived CA certificates usable: an external issuer
+     * (`tsh login`, `vault write ssh/sign`, `step ssh certificate`) rewrites the file every few
+     * hours and the profile keeps working — a certificate pasted into the vault as text would have
+     * to be pasted again each time.
+     *
+     * [privateKeyRef]/[certificateRef] are opaque to this model and interpreted by the platform
+     * reader ([SecretFileReader]): a filesystem path on desktop, a `content://` document Uri on
+     * Android. A null/blank [certificateRef] means "look for the OpenSSH sibling"
+     * (`<privateKeyRef>-cert.pub`) and, failing that, authenticate with the plain key.
+     *
+     * The refs are locations, not secrets, but [passphrase] is one — and so is the fact of which
+     * files a user keeps keys in, so `toString` redacts everything as the other secrets do. The
+     * refs are device-local by nature: synced to a device where that file doesn't exist, the
+     * profile fails to connect with "file not found" rather than silently authenticating as
+     * someone else.
+     */
+    @Serializable
+    @SerialName("key_file")
+    data class KeyFile(
+        val privateKeyRef: String,
+        val certificateRef: String? = null,
+        val passphrase: String? = null,
+    ) : CredentialSecret {
+        override fun toString(): String = "KeyFile(redacted)"
+    }
 }
 
 /**
