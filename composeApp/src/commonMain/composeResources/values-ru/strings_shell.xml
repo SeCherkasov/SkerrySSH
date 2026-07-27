@@ -93,6 +93,7 @@
     <string name="shell_disconnect_all_message">Будут закрыты сессии: %1$s</string>
     <string name="shell_close_pane_title">Закрыть панель?</string>
     <string name="shell_close_pane_message">Будет закрыта сессия: %1$s</string>
+    <string name="shell_replace_pane_title">Заменить сессию в панели на «%1$s»?</string>
     <string name="shell_close_panel">Закрыть панель</string>
     <string name="shell_lock">Заблокировать</string>
     <string name="shell_settings">Настройки</string>

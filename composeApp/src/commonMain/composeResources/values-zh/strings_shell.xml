@@ -93,6 +93,7 @@
     <string name="shell_disconnect_all_message">将关闭以下会话：%1$s</string>
     <string name="shell_close_pane_title">关闭窗格？</string>
     <string name="shell_close_pane_message">将关闭会话：%1$s</string>
+    <string name="shell_replace_pane_title">将此窗格的会话替换为 \"%1$s\"？</string>
     <string name="shell_close_panel">关闭窗格</string>
     <string name="shell_lock">锁定</string>
     <string name="shell_settings">设置</string>

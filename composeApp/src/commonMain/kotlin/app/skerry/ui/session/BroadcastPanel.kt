@@ -75,8 +75,8 @@ internal fun broadcastTargets(
     // Whether a session's host is production; the panel confirms once before a fan-out reaches one.
     isProduction: (String?) -> Boolean = { false },
 ): List<BroadcastTarget> =
-    sessions?.sessions.orEmpty().flatMap { session ->
-        session.allPanes.mapNotNull { candidate ->
+    sessions?.tabs.orEmpty().flatMap { tab ->
+        tab.panes.mapNotNull { candidate ->
             val terminal = (candidate.controller.uiState as? ConnectionUiState.Connected)?.terminal
             terminal?.let {
                 BroadcastTarget(

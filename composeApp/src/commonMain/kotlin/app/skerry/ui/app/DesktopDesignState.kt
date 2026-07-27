@@ -13,6 +13,7 @@ import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.session.Tab
 import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
@@ -65,13 +66,13 @@ fun SessionView.asDesktopView(): DesktopView = when (this) {
 }
 
 /**
- * Work-area section a session tab belongs to: a remote-desktop tab ([Session.isVnc]) renders in the
+ * Work-area section a tab belongs to: a remote-desktop tab ([Tab.isVnc]) renders in the
  * remote-desktop section, everything else (shells, SFTP, recording player) in the terminal one.
  * Activating a tab moves the shell to its section, so the rail, the sidebar and the work area never
  * disagree about what is on screen.
  */
-fun sectionOf(session: Session?): HostSection =
-    if (session?.isVnc == true) HostSection.RemoteDesktops else HostSection.Terminal
+fun sectionOf(tab: Tab?): HostSection =
+    if (tab?.isVnc == true) HostSection.RemoteDesktops else HostSection.Terminal
 
 /** Settings panel tabs. */
 enum class SettingsTab { AI, Sync, Security, Appearance, Terminal, Keyboard, Trash, About }
@@ -93,6 +94,13 @@ sealed interface PendingClose {
     /** Closing pane [paneId] of tab [tabId] (close icon in the pane's header). */
     data class Pane(val tabId: String, val paneId: String) : PendingClose
 }
+
+/**
+ * A pane re-point awaiting confirmation: pointing pane [paneId] of tab [tabId] at [host] tears down
+ * the session that pane already holds, so it is confirmed like the other destructive actions. Only
+ * raised for a pane that holds one — a blank pane connects straight away.
+ */
+data class PendingPaneConnect(val tabId: String, val paneId: String, val host: Host)
 
 /**
  * Open dialog for managing a sidebar host group: creating a new one ([Create]) or editing an
@@ -418,6 +426,7 @@ class DesktopDesignState(
 
     /** Destructive session action awaiting confirmation (null means no dialog). */
     var pendingClose: PendingClose? by mutableStateOf(null); private set
+    var pendingPaneConnect: PendingPaneConnect? by mutableStateOf(null); private set
 
     var tabs: List<SessionTab> by mutableStateOf(
         listOf(
@@ -512,6 +521,10 @@ class DesktopDesignState(
     fun requestCloseSession(id: String) { pendingClose = PendingClose.Session(id) }
     fun requestClosePane(tabId: String, paneId: String) { pendingClose = PendingClose.Pane(tabId, paneId) }
     fun dismissClose() { pendingClose = null }
+    fun requestPaneConnect(tabId: String, paneId: String, host: Host) {
+        pendingPaneConnect = PendingPaneConnect(tabId, paneId, host)
+    }
+    fun dismissPaneConnect() { pendingPaneConnect = null }
     fun choosePolicy(p: AiPolicy) { modalPolicy = p }
     fun showRecordingNotice(outcome: RecordingOutcome) { recordingNotice = outcome.takeIf { it.worthReporting } }
     fun dismissRecordingNotice() { recordingNotice = null }

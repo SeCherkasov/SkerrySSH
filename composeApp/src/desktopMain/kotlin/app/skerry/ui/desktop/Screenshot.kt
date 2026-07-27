@@ -686,11 +686,11 @@ private fun seededSessions(hosts: HostManagerController): SessionsController {
     val h = hosts.hosts.first()
     sessions.open(h.id, h.label, h.connectionSubtitle(), h.toTarget(), SshAuth.Password(""))
     hosts.hosts.getOrNull(1)?.let { h2 -> sessions.open(h2.id, h2.label, h2.connectionSubtitle(), h2.toTarget(), SshAuth.Password("")) }
-    sessions.activate(sessions.sessions.first().id)
+    sessions.activate(sessions.tabs.first().id)
     // Seeds port forwards on the active session for a live Tunnels tab screenshot: waits for the
     // fake connection to come up (connect is async), then raises -L/-R/-D the same way the UI does
     // (PortForwardController). The fake forward is Active immediately.
-    val ctrl = sessions.sessions.first().controller
+    val ctrl = sessions.tabs.first().focusedPane.controller
     scope.launch {
         // uiState is Compose snapshot state; waits for the transition to Connected via snapshotFlow
         // (not a busy-spin) to properly subscribe to the snapshot system without spinning the CPU.

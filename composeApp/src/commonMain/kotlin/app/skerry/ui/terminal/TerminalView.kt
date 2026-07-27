@@ -65,6 +65,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.host.localTerminalHost
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.app.LocalAi
+import app.skerry.shared.host.Host
 import app.skerry.ui.app.LocalConnectPane
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
@@ -110,6 +111,7 @@ import app.skerry.ui.session.PaneEdge
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.session.Tab
 import app.skerry.ui.session.draggablePaneHeader
 import app.skerry.ui.session.paneBoundsAnchor
 import app.skerry.ui.session.paneResizeCursor
@@ -161,7 +163,7 @@ private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: 
     // (the sync/add-pane toggles and the power button) keep using the tab itself.
     val active = tab?.focusedPane
     val teams = LocalTeams.current
-    val syncShown = tab != null && tab.hasPanes
+    val syncShown = tab != null && tab.isSplit
     val hidden = overflowedActions(available, syncShown)
 
     // Files / tunnels / info are stateless, so the overflow menu can run them directly. The palettes
@@ -203,7 +205,7 @@ private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: 
             // Add pane: live mode puts another independent session on the active tab's grid (up to
             // MAX_PANES); mock/preview toggles the demo split. Dimmed and inert once the tab is
             // full — the same treatment the info button gets when there is nothing for it to open.
-            val canAddPane = tab?.paneLayout?.isFull != true && tab?.isPlayer != true
+            val canAddPane = tab?.layout?.isFull != true && tab?.isPlayer != true
             IconBtn(
                 "splitscreen_right",
                 onClick = { if (sessions == null) state.toggleSplit() else if (canAddPane) sessions.addPane() },
@@ -380,7 +382,7 @@ private val ToolbarAction.label: StringResource
         ToolbarAction.Info -> Res.string.shell_tip_info
     }
 
-/** Shared pane header height (primary, split, and the info panel's top strip) so rows align. */
+/** Shared pane header height (panes and the info panel's top strip) so rows align. */
 internal val PANE_HEADER_HEIGHT = 40.dp
 
 /** Terminal view: hosts sidebar + main (toolbar, panes, AI bar) + info panel. */
@@ -440,7 +442,7 @@ fun TerminalView(state: DesktopDesignState) {
                             tab == null -> Column(Modifier.fillMaxSize()) {
                                 PaneHeaderBar(reserveEnd) {}
                                 HLine()
-                                LivePaneBody(state, pane = null, primary = true, modifier = Modifier.weight(1f).fillMaxWidth())
+                                LivePaneBody(state, pane = null, solo = true, modifier = Modifier.weight(1f).fillMaxWidth())
                             }
                             else -> PaneGrid(sessions, tab, state, reserveEnd) { actionsPaneWidth = it }
                         }
@@ -536,25 +538,29 @@ private fun MockPaneHeader() {
  * The terminal area of one pane: the session's grid via [TerminalScreen], or a placeholder for the
  * other connection states. [pane] is `null` only when the tab bar is empty (nothing is open at all).
  *
- * [primary] marks the tab's own pane. It is the one the tab's file panel belongs to, so Ctrl+click
- * on a path is offered there and nowhere else — a path from another pane would be resolved on the
- * wrong host.
+ * [solo] means the pane is the tab's only one, which is what the empty-state text speaks to: a tab
+ * that never connected reads as "pick a host or open a tab", while an empty pane on a split grid is
+ * about that pane alone.
  */
 @Composable
 private fun LivePaneBody(
     state: DesktopDesignState,
     pane: Session?,
-    primary: Boolean,
+    solo: Boolean,
     modifier: Modifier = Modifier,
+    tabId: String? = null,
 ) {
     val sessions = LocalSessions.current
     val st = pane?.controller?.uiState
-    val openPath: ((String) -> Unit)? = remember(sessions, pane?.id, primary, state.openFilePathsInSftp, pane?.controller?.supportsSftp) {
+    // Ctrl+click on a path opens it in the file panel — which follows the focused pane, so the pane
+    // is focused first and the path is resolved on the host the user clicked in, not on a sibling.
+    val openPath: ((String) -> Unit)? = remember(sessions, pane?.id, tabId, state.openFilePathsInSftp, pane?.controller?.supportsSftp) {
         val controller = pane?.controller
         // No SFTP channel on Mosh/Telnet/serial/local/container sessions — offering the path there
         // would only open a panel that can't list anything.
-        if (!primary || sessions == null || !state.openFilePathsInSftp || controller == null || !controller.supportsSftp) null
+        if (sessions == null || !state.openFilePathsInSftp || controller == null || !controller.supportsSftp) null
         else ({ path: String ->
+            if (tabId != null) sessions.focusPane(tabId, pane.id)
             controller.requestReveal(path)
             state.clearOverlay()
             sessions.setActiveView(SessionView.Sftp)
@@ -584,10 +590,10 @@ private fun LivePaneBody(
     ) {
         when (st) {
             null -> TerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_notice_pick_host_to_connect), action = launchLocalShell)
-            // Form state means no connection started yet: on the tab's own pane that is an empty
+            // Form state means no connection started yet: on a tab's only pane that is an empty
             // ("+") tab, on an added pane it is one waiting for a host to be picked in its header.
             ConnectionUiState.Form -> when {
-                primary -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new), action = launchLocalShell)
+                pane.isBlank && solo -> TerminalNotice("terminal", stringResource(Res.string.term_notice_not_connected), stringResource(Res.string.term_notice_pick_or_new), action = launchLocalShell)
                 pane.isBlank -> TerminalNotice("splitscreen_right", stringResource(Res.string.term_no_host_selected), stringResource(Res.string.term_notice_pick_side_by_side))
                 else -> TerminalNotice("terminal", stringResource(Res.string.term_session_closed), pane.subtitle)
             }
@@ -647,14 +653,14 @@ private fun TerminalNotice(icon: String, title: String, subtitle: String, color:
 private val PANE_DIVIDER_GRIP = 6.dp
 
 /**
- * The active tab's panes on its grid ([Session.paneLayout]): rows top to bottom, panes left to
+ * The active tab's panes on its grid ([Session.layout]): rows top to bottom, panes left to
  * right inside a row, dividers in between. Each pane is an independent session with its own header
  * and terminal; the focused one carries the accent border, and headers drag panes to another slot.
  */
 @Composable
 private fun PaneGrid(
     sessions: SessionsController,
-    tab: Session,
+    tab: Tab,
     state: DesktopDesignState,
     reserveEnd: Dp,
     onActionsPaneWidth: (Dp) -> Unit,
@@ -665,7 +671,7 @@ private fun PaneGrid(
     // Divider drags arrive in pixels but the layout is in shares of the grid, so its size is the
     // conversion factor — measured here, since rows are full-width and the column is full-height.
     var gridSize by remember { mutableStateOf(IntSize.Zero) }
-    val layout = tab.paneLayout
+    val layout = tab.layout
     Column(Modifier.fillMaxSize().onGloballyPositioned { gridSize = it.size }) {
         layout.rows.forEachIndexed { rowIndex, row ->
             if (rowIndex > 0) {
@@ -711,7 +717,7 @@ private fun PaneGrid(
 @Composable
 private fun PaneCell(
     sessions: SessionsController,
-    tab: Session,
+    tab: Tab,
     pane: Session,
     state: DesktopDesignState,
     drag: PaneDragState,
@@ -720,7 +726,6 @@ private fun PaneCell(
     reserveEnd: Dp,
     modifier: Modifier = Modifier,
 ) {
-    val primary = pane.id == tab.id
     val focused = tab.focusedPaneId == pane.id
     // Geometry is dropped when the pane leaves the grid, which also aborts a drag of that pane: a
     // pane can go away from outside its own header (closing its tab, locking the vault), and the
@@ -730,37 +735,38 @@ private fun PaneCell(
         modifier
             .paneBoundsAnchor(drag, pane.id, row, column)
             // A single-pane tab has nothing to tell apart, so the focus border only shows on a split.
-            .then(if (tab.hasPanes && focused) Modifier.border(1.dp, Skerry.colors.cyan.copy(alpha = 0.35f)) else Modifier)
+            .then(if (tab.isSplit && focused) Modifier.border(1.dp, Skerry.colors.cyan.copy(alpha = 0.35f)) else Modifier)
             .focusPaneOnPress(sessions, tab.id, pane.id),
     ) {
-        PaneHeader(sessions, tab, pane, state, drag, primary, reserveEnd)
+        PaneHeader(sessions, tab, pane, state, drag, reserveEnd)
         HLine()
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            LivePaneBody(state, pane, primary, Modifier.fillMaxSize())
+            LivePaneBody(state, pane, solo = !tab.isSplit, modifier = Modifier.fillMaxSize(), tabId = tab.id)
             drag.drop?.takeIf { it.overPaneId == pane.id }?.let { PaneDropIndicator(it.edge) }
         }
     }
 }
 
 /**
- * A pane's header: host label, connection dot, and — on an added pane — the picker that points it at
- * a host and the button that closes it. Dragging the header moves the pane to another slot on the
+ * A pane's header: host label, connection dot, the picker that points the pane at a host, and — on a
+ * split tab — the button that closes it. Dragging the header moves the pane to another slot on the
  * grid; the drag only claims the pointer past a dead zone, so the picker still opens on a click.
  *
- * The tab's own pane has no picker or close button: it is the tab's session, so re-pointing or
- * closing it is done on the tab (the host list and the power button), not here.
+ * Every pane carries the same header, the first one included: panes are equal, so re-pointing works
+ * anywhere. The close button is left off an unsplit tab — there the pane IS the tab, and the tab is
+ * closed from its chip or the power button.
  */
 @Composable
 private fun PaneHeader(
     sessions: SessionsController,
-    tab: Session,
+    tab: Tab,
     pane: Session,
     state: DesktopDesignState,
     drag: PaneDragState,
-    primary: Boolean,
     reserveEnd: Dp,
 ) {
     val mono = LocalFonts.current.mono
+    val connectPane = LocalConnectPane.current
     var pickerOpen by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth().background(Skerry.colors.surface2)) {
         PaneHeaderBar(
@@ -768,13 +774,13 @@ private fun PaneHeader(
             Modifier.draggablePaneHeader(drag, pane.id) { slot -> sessions.movePane(tab.id, pane.id, slot) },
         ) {
             Row(
-                Modifier.weight(1f).then(if (primary) Modifier else Modifier.clickable { pickerOpen = !pickerOpen }),
+                Modifier.weight(1f).clickable { pickerOpen = !pickerOpen },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // No chevron next to the label: the whole header is the picker, and on a narrow pane
                 // that glyph competed for the room the host's own name needs.
-                if (pane.isBlank && !primary) {
+                if (pane.isBlank) {
                     Txt(stringResource(Res.string.term_select_host_placeholder), color = Skerry.colors.faint, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
                 } else {
                     // Both stay on one line: a narrow pane (four of them, or the one reserving room
@@ -792,8 +798,8 @@ private fun PaneHeader(
             }
             // Synchronized input is marked on every pane it reaches, not just in the toolbar: what
             // makes it dangerous is typing into a pane while forgetting the others are listening.
-            if (tab.syncInput && tab.hasPanes) SyncInputBadge()
-            if (!primary) {
+            if (tab.syncInput && tab.isSplit) SyncInputBadge()
+            if (tab.isSplit) {
                 // Closing a pane that holds a session is confirmed (its connection goes with it); an
                 // empty one has nothing to lose and closes straight away.
                 IconBtn(
@@ -805,7 +811,14 @@ private fun PaneHeader(
         }
         if (pickerOpen) {
             Popup(alignment = Alignment.BottomStart, onDismissRequest = { pickerOpen = false }) {
-                PaneHostPicker(pane.id) { pickerOpen = false }
+                // A pane that already holds a session is re-pointed only after a confirmation: the
+                // old connection goes down with it, and the header is one stray click away from the
+                // host list. An empty pane has nothing to lose, so it connects straight away.
+                PaneHostPicker { host ->
+                    if (pane.isBlank) connectPane(host, pane.id)
+                    else state.requestPaneConnect(tab.id, pane.id, host)
+                    pickerOpen = false
+                }
             }
         }
     }
@@ -825,17 +838,16 @@ private fun SyncInputBadge() {
 }
 
 /**
- * Host picker from the catalog ([LocalHosts]) for pane [paneId]: clicking a host connects a new
- * independent session into that pane via [LocalConnectPane] (same secret-resolution path as the
- * primary connection). Empty outside the vault gate (no live catalog).
+ * Host picker from the catalog ([LocalHosts]): clicking a host hands it to [onPick], which either
+ * connects it into the pane or asks first (see the call site). Empty outside the vault gate (no
+ * live catalog).
  */
 @Composable
-private fun PaneHostPicker(paneId: String, onPicked: () -> Unit) {
+private fun PaneHostPicker(onPick: (Host) -> Unit) {
     val mono = LocalFonts.current.mono
     // Terminal profiles only: a pane is a shell, and a remote desktop picked here would be dialled
     // as SSH on its RFB port.
     val hosts = LocalHosts.current?.hosts?.inSection(HostSection.Terminal) ?: emptyList()
-    val connectPane = LocalConnectPane.current
     Column(
         Modifier
             .width(240.dp)
@@ -854,7 +866,7 @@ private fun PaneHostPicker(paneId: String, onPicked: () -> Unit) {
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(5.dp))
-                    .clickable { connectPane(host, paneId); onPicked() }
+                    .clickable { onPick(host) }
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

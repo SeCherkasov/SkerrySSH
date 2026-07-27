@@ -45,6 +45,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.key
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.session.Tab
 import app.skerry.ui.ai.commandRiskReasonText
 import app.skerry.shared.ai.CommandRiskReason
 import app.skerry.shared.guard.ProductionGuard
@@ -93,16 +94,16 @@ private val DISPLAY_POLICY = ProductionGuardPolicy(production = true, confirmWar
  */
 @Composable
 fun ProdGuardSync(sessions: SessionsController?, confirmWarnings: Boolean) {
-    val open = sessions?.sessions ?: return
+    val open = sessions?.tabs ?: return
     val hosts = LocalHosts.current
-    for (session in open) {
-        key(session.id) {
-            val panes = session.allPanes
+    for (tab in open) {
+        key(tab.id) {
+            val panes = tab.panes
             val policies = panes.map { pane -> prodGuardPolicy(pane.hostId?.let { hosts?.find(it) }, confirmWarnings) }
             // With synchronized input any pane carries what is typed into all the others, so the
             // whole tab runs under the strictest policy of the group: one confirmation then covers
             // the fan-out, and a production pane can't be reached from a non-production one unasked.
-            val group = if (session.syncInput && policies.size > 1) policies.reduce(::strictestOf) else null
+            val group = if (tab.syncInput && policies.size > 1) policies.reduce(::strictestOf) else null
             panes.forEachIndexed { index, pane ->
                 key(pane.id) { BindProdGuard(pane, group ?: policies[index]) }
             }
@@ -143,26 +144,26 @@ fun isRootLogin(host: Host?): Boolean = host?.username?.trim().equals(ROOT_LOGIN
 private const val ROOT_LOGIN = "root"
 
 /**
- * Whether a guard confirmation is on screen for [session] (any of its panes).
+ * Whether a guard confirmation is on screen for [tab] (any of its panes).
  *
  * The window-level hotkey handler asks before acting: it sits on the root's preview pass, above the
  * focus the dialog's scrim takes, so without this a snippet chord or a shell shortcut would fire
  * over an open confirmation.
  */
-fun prodGuardDialogOpen(session: Session?): Boolean =
-    session != null && session.allPanes.any { it.liveTerminal?.pendingGuarded != null }
+fun prodGuardDialogOpen(tab: Tab?): Boolean =
+    tab != null && tab.panes.any { it.liveTerminal?.pendingGuarded != null }
 
 /**
- * Shows the confirmation for a command held by the guard in one of [session]'s panes. Rendered at
+ * Shows the confirmation for a command held by the guard in one of [tab]'s panes. Rendered at
  * the app root, not inside the terminal pane, so the scrim covers the window and the confirmation
  * can't be left behind an overlay.
  */
 @Composable
-fun ProdCommandGate(session: Session?) {
-    if (session == null) return
+fun ProdCommandGate(tab: Tab?) {
+    if (tab == null) return
     // The focused pane is checked first: it is the one being typed into, so with several holds
     // pending its confirmation is the one the user is waiting on.
-    val held = (listOf(session.focusedPane) + session.allPanes)
+    val held = (listOf(tab.focusedPane) + tab.panes)
         .firstOrNull { it.liveTerminal?.pendingGuarded != null }
     val terminal = held?.liveTerminal ?: return
     val guarded = terminal.pendingGuarded ?: return

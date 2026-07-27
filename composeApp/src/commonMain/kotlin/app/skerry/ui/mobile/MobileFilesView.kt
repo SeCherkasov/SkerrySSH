@@ -117,7 +117,7 @@ import app.skerry.ui.theme.Skerry
 fun MobileFilesScreen(onBack: (() -> Unit)? = null) {
     val mono = LocalFonts.current.mono
     val sessions = LocalSessions.current
-    val active = sessions?.active
+    val active = sessions?.activeSession
     val uiState = active?.controller?.uiState
     val connected = uiState is ConnectionUiState.Connected
     val connecting = uiState is ConnectionUiState.Connecting

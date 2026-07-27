@@ -186,18 +186,14 @@ fun MobileDesignApp(
     val cursorStyle = state.terminalCursorStyle
     LaunchedEffect(cursorStyle, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
-        manager.sessions.forEach { s ->
-            s.allPanes.forEach { it.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink) }
-        }
+        manager.allSessions.forEach { it.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink) }
     }
     // A scrollback change likewise applies to ALREADY open sessions live: shrinking trims old history,
     // growing keeps new lines around longer. New sessions pick up the value at connect via terminalPrefs.
     val scrollbackLines = TerminalSessionPrefs(scrollback = state.terminalScrollback).effectiveScrollback
     LaunchedEffect(scrollbackLines, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
-        manager.sessions.forEach { s ->
-            s.allPanes.forEach { it.liveTerminal?.applyScrollback(scrollbackLines) }
-        }
+        manager.allSessions.forEach { it.liveTerminal?.applyScrollback(scrollbackLines) }
     }
     // Desktop parity: the Teams session-report gate reads the live setting (see DesktopDesignApp).
     LaunchedEffect(deps.teams, state) { deps.teams?.reportSessionsEnabled = { state.reportTeamSessions } }
@@ -206,9 +202,7 @@ fun MobileDesignApp(
     val allowClipboardWrite = state.allowServerClipboardWrite
     LaunchedEffect(allowClipboardWrite, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
-        manager.sessions.forEach { s ->
-            s.allPanes.forEach { it.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite) }
-        }
+        manager.allSessions.forEach { it.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite) }
     }
     // Memoized: LocalTerminalAppearance is staticCompositionLocalOf (reference comparison); without
     // remember a new instance on every recomposition would force a rebuild of the terminal subtree.
@@ -393,10 +387,10 @@ private fun MobileChrome(
             // Production guard: opening a session on a #prod host confirms first. Returning to a
             // session that is already live is NOT gated — the confirmation belongs to opening the
             // connection, and asking on every tab switch would train the user to tap through it.
-            val live = sessions?.sessions?.lastOrNull { it.hostId == host.id }
+            val live = sessions?.tabs?.lastOrNull { it.focusedPane.hostId == host.id }
             // Decided here, before the question is asked, and carried into [open] — re-reading the
             // session list on OK would connect against a state the user was never shown.
-            val planned = mobileConnectAction(live?.controller?.uiState)
+            val planned = mobileConnectAction(live?.focusedPane?.controller?.uiState)
             val liveId = live?.id
             val confirmProd = mobileProdConfirmNeeded(
                 production = isProdHost(host),
@@ -422,7 +416,7 @@ private fun MobileChrome(
                     // The session the decision was made about, looked up by the id captured with it.
                     // Only its survival is re-checked ([mobileResolvedAction]) — a session that died
                     // behind the confirmation has nothing to resume onto.
-                    val existing = liveId?.let { id -> sessions?.sessions?.firstOrNull { it.id == id } }
+                    val existing = liveId?.let { id -> sessions?.tab(id) }
                     when (mobileResolvedAction(planned, stillLive = existing != null)) {
                         MobileConnectAction.Resume -> {
                             existing?.let { sessions.activate(it.id) }

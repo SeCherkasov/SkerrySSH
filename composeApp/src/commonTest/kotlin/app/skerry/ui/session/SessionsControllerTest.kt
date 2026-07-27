@@ -82,7 +82,7 @@ class SessionsControllerTest {
     @Test
     fun `starts empty with no active session`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         assertNull(sessions.activeId)
         assertNull(sessions.active)
         scope.cancel()
@@ -94,9 +94,9 @@ class SessionsControllerTest {
 
         val id = sessions.open(hostId = "host-a")
 
-        assertEquals(1, sessions.sessions.size)
+        assertEquals(1, sessions.tabs.size)
         assertEquals(id, sessions.activeId)
-        assertIs<ConnectionUiState.Connected>(sessions.active!!.controller.uiState)
+        assertIs<ConnectionUiState.Connected>(sessions.active!!.focusedPane.controller.uiState)
         scope.cancel()
     }
 
@@ -107,7 +107,7 @@ class SessionsControllerTest {
         val first = sessions.open(hostId = "host-a")
         val second = sessions.open(hostId = "host-b")
 
-        assertEquals(listOf(first, second), sessions.sessions.map { it.id })
+        assertEquals(listOf(first, second), sessions.tabs.map { it.id })
         assertEquals(second, sessions.activeId)
         scope.cancel()
     }
@@ -147,7 +147,7 @@ class SessionsControllerTest {
 
         sessions.close(b)
 
-        assertEquals(listOf(a, c), sessions.sessions.map { it.id })
+        assertEquals(listOf(a, c), sessions.tabs.map { it.id })
         assertEquals(c, sessions.activeId) // next sibling
         assertTrue(bConn.disconnected)
         scope.cancel()
@@ -173,7 +173,7 @@ class SessionsControllerTest {
 
         sessions.close(a)
 
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         assertNull(sessions.activeId)
         scope.cancel()
     }
@@ -188,7 +188,7 @@ class SessionsControllerTest {
         sessions.close(b)
 
         assertEquals(a, sessions.activeId)
-        assertEquals(listOf(a), sessions.sessions.map { it.id })
+        assertEquals(listOf(a), sessions.tabs.map { it.id })
         scope.cancel()
     }
 
@@ -213,7 +213,7 @@ class SessionsControllerTest {
         )
 
     // Grid shape as it reads on screen: rows separated by "|", panes within a row by ",".
-    private fun shapeOf(tab: Session): String = tab.paneLayout.rows.joinToString("|") { row ->
+    private fun shapeOf(tab: Tab): String = tab.layout.rows.joinToString("|") { row ->
         row.cells.joinToString(",") { cell -> tab.pane(cell.paneId)?.let { it.hostId ?: "empty" } ?: "?" }
     }
 
@@ -222,15 +222,15 @@ class SessionsControllerTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val id = sessions.open(hostId = "host-a")
         val tab = sessions.active!!
-        assertFalse(tab.hasPanes)
-        assertEquals(listOf(id), tab.paneLayout.paneIds)
+        assertFalse(tab.isSplit)
+        assertEquals(listOf(id), tab.layout.paneIds)
         assertEquals(id, tab.focusedPaneId)
         assertFalse(tab.syncInput)
         scope.cancel()
     }
 
     @Test
-    fun `addPane puts an empty pane beside the primary one and focuses it`() = runTest {
+    fun `addPane puts an empty pane beside the first one and focuses it`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")
 
@@ -253,7 +253,7 @@ class SessionsControllerTest {
         val tab = sessions.active!!
         assertEquals("host-a,empty|empty,empty", shapeOf(tab))
         assertNull(sessions.addPane())
-        assertEquals(MAX_PANES - 1, tab.panes.size)
+        assertEquals(MAX_PANES, tab.panes.size)
         scope.cancel()
     }
 
@@ -287,10 +287,10 @@ class SessionsControllerTest {
 
         val tab = sessions.active!!
         assertEquals("host-a,host-b", shapeOf(tab))
-        assertEquals(pane, tab.panes.single().id) // filled in place: same pane, same slot
+        assertEquals(pane, tab.panes.last().id) // filled in place: same pane, same slot
         assertEquals(pane, tab.focusedPaneId)
-        assertTrue(tab.panes.single().controller !== tab.controller) // its own connection
-        assertIs<ConnectionUiState.Connected>(tab.panes.single().controller.uiState)
+        assertTrue(tab.panes.last().controller !== tab.panes.first().controller) // its own connection
+        assertIs<ConnectionUiState.Connected>(tab.panes.last().controller.uiState)
         scope.cancel()
     }
 
@@ -308,8 +308,8 @@ class SessionsControllerTest {
         val tab = sessions.active!!
         assertTrue(firstConnection.disconnected) // the replaced session is torn down, not leaked
         assertEquals("host-a,host-c", shapeOf(tab))
-        assertEquals(1, tab.panes.size)
-        assertEquals(tab.panes.single().id, tab.focusedPaneId)
+        assertEquals(2, tab.panes.size)
+        assertEquals(tab.panes.last().id, tab.focusedPaneId)
         scope.cancel()
     }
 
@@ -321,7 +321,7 @@ class SessionsControllerTest {
 
         sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
 
-        assertEquals(listOf(a), sessions.sessions.map { it.id }) // panes are not tabs
+        assertEquals(listOf(a), sessions.tabs.map { it.id }) // panes are not tabs
         scope.cancel()
     }
 
@@ -337,23 +337,72 @@ class SessionsControllerTest {
         sessions.closePane(a, pane)
 
         val tab = sessions.active!!
-        assertFalse(tab.hasPanes)
+        assertFalse(tab.isSplit)
         assertEquals("host-a", shapeOf(tab))
-        assertEquals(a, tab.focusedPaneId) // focus falls back to the primary pane
+        assertEquals(a, tab.focusedPaneId) // focus falls back to the remaining neighbor
         assertTrue(paneConnection.disconnected)
         scope.cancel()
     }
 
     @Test
-    fun `closePane refuses the tab's own pane`() = runTest {
+    fun `closePane closes the tab's first pane like any other and keeps the tab`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
+        val firstConnection = transport.connections[0]
+
+        sessions.closePane(a, a)
+
+        val tab = sessions.active!!
+        assertEquals("host-b", shapeOf(tab)) // the survivor takes the whole grid
+        assertEquals(listOf(pane), tab.panes.map { it.id })
+        assertEquals(pane, tab.focusedPaneId)
+        assertTrue(firstConnection.disconnected)
+        assertEquals(a, tab.id) // the tab keeps its identity, chip and position
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing the last pane closes its tab`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        sessions.open(hostId = "host-b")
+        sessions.activate(a)
+
+        sessions.closePane(a, a)
+
+        assertEquals(1, sessions.tabs.size) // the tab went with its only pane
+        assertTrue(transport.connections[0].disconnected)
+        scope.cancel()
+    }
+
+    @Test
+    fun `connectPane re-points the tab's first pane`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+
+        sessions.connectPane(tabId = a, paneId = a, hostId = "host-b")
+
+        val tab = sessions.active!!
+        assertEquals("host-b", shapeOf(tab))
+        assertEquals(1, tab.panes.size)
+        assertTrue(transport.connections[0].disconnected) // the old session is torn down, not leaked
+        assertEquals(tab.panes.single().id, tab.focusedPaneId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `statusFor sees a host connected in a pane, not just in a tab of its own`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")
-        sessions.addPane()
+        val pane = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
 
-        sessions.closePane(a, a) // closing the primary pane means closing the tab
-
-        assertEquals("host-a,empty", shapeOf(sessions.active!!))
-        assertIs<ConnectionUiState.Connected>(sessions.active!!.controller.uiState)
+        assertIs<ConnectionUiState.Connected>(sessions.statusFor("host-b"))
         scope.cancel()
     }
 
@@ -367,7 +416,7 @@ class SessionsControllerTest {
 
         sessions.close(a)
 
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         assertTrue(transport.connections.all { it.disconnected })
         scope.cancel()
     }
@@ -382,7 +431,7 @@ class SessionsControllerTest {
 
         sessions.disconnectAll()
 
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         assertTrue(transport.connections.all { it.disconnected })
         scope.cancel()
     }
@@ -413,7 +462,7 @@ class SessionsControllerTest {
         val pane = sessions.addPane()!!
         assertEquals("host-a,empty", shapeOf(sessions.active!!))
 
-        sessions.movePane(a, pane, PaneSlot.NewRow(0)) // dragged above the primary pane
+        sessions.movePane(a, pane, PaneSlot.NewRow(0)) // dragged above the first pane
 
         assertEquals("empty|host-a", shapeOf(sessions.active!!))
         scope.cancel()
@@ -429,7 +478,7 @@ class SessionsControllerTest {
         sessions.resizePaneCells(a, row = 0, boundary = 0, delta = 0.1f)
         sessions.resizePaneRows(a, boundary = 0, delta = -0.2f)
 
-        val layout = sessions.active!!.paneLayout
+        val layout = sessions.active!!.layout
         assertEquals(0.6f, layout.rows[0].cells[0].weight, 1e-4f)
         assertEquals(0.3f, layout.rows[0].weight, 1e-4f)
         scope.cancel()
@@ -466,11 +515,11 @@ class SessionsControllerTest {
         val tab = sessions.active!!
         sessions.toggleSyncInput(a)
 
-        // From the primary pane: only the connected sibling, never the origin itself.
+        // From the first pane: only the connected sibling, never the origin itself.
         val fromPrimary = tab.syncTargetsFrom(a)
         assertEquals(listOf(tab.pane(connected)!!.liveTerminal), fromPrimary)
         // And the other way round.
-        assertEquals(listOf(tab.liveTerminal), tab.syncTargetsFrom(connected))
+        assertEquals(listOf(tab.pane(a)!!.liveTerminal), tab.syncTargetsFrom(connected))
         scope.cancel()
     }
 
@@ -480,10 +529,14 @@ class SessionsControllerTest {
         val a = sessions.open(hostId = "host-a")
         val paneId = sessions.addPane()!!
         sessions.connectPane(tabId = a, paneId = paneId, hostId = "host-b")
+        val other = sessions.open(hostId = "host-other") // a second tab, live, with sync of its own
+        sessions.toggleSyncInput(other)
+        sessions.activate(a)
         val tab = sessions.active!!
         val pane = tab.pane(paneId)!!
         sessions.toggleSyncInput(a)
         val before = pane.liveTerminal!!.inputVersion
+        val otherBefore = sessions.tab(other)!!.focusedPane.liveTerminal!!.inputVersion
 
         mirrorPaneInput(tab, originPaneId = a, text = "uptime\n", kind = MirroredInput.Typed)
 
@@ -491,6 +544,26 @@ class SessionsControllerTest {
         assertTrue(pane.liveTerminal!!.inputVersion > before)
         // ...and did not hand it back: a mirror on the receiving side would have bounced it.
         assertNull(pane.liveTerminal!!.inputMirror)
+        // ...and the other tab never saw it: synchronized input is scoped to one tab, so a second
+        // tab with its own live session stays untouched however the fan-out is wired.
+        assertEquals(otherBefore, sessions.tab(other)!!.focusedPane.liveTerminal!!.inputVersion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `connectPane refuses a remote-desktop pane`() = runTest {
+        val vncTransport = FakeVncTransport()
+        val (sessions, scope) = sessionsWithVnc(vncTransport)
+        val vnc = sessions.openVnc(hostId = "host-a")!!
+
+        sessions.connectPane(tabId = vnc, paneId = vnc, hostId = "host-b")
+
+        // Still the framebuffer it was: swapping a remote desktop for a shell under the same tab
+        // would leave the tab belonging to neither section.
+        val tab = sessions.tab(vnc)!!
+        assertTrue(tab.isVnc)
+        assertEquals(1, tab.panes.size)
+        assertEquals("host-a", tab.focusedPane.hostId)
         scope.cancel()
     }
 
@@ -508,7 +581,7 @@ class SessionsControllerTest {
         // Each pane is its own shell, so it is a target in its own right.
         assertEquals(3, targets.size)
         assertEquals(listOf("alpha", "beta"), targets.map { it.label }.filter { it == "alpha" || it == "beta" })
-        assertTrue(targets.map { it.id }.contains(sessions.active!!.panes.single().id))
+        assertTrue(targets.map { it.id }.contains(sessions.active!!.panes.last().id))
         scope.cancel()
     }
 
@@ -524,9 +597,9 @@ class SessionsControllerTest {
         val before = sibling.inputVersion
         // Wire the mirror exactly as PaneSyncBinder does in composition — without this the test
         // would pass no matter what, since nothing would be listening to fan out in the first place.
-        tab.liveTerminal!!.inputMirror = { text, kind -> mirrorPaneInput(tab, a, text, kind) }
+        tab.pane(a)!!.liveTerminal!!.inputMirror = { text, kind -> mirrorPaneInput(tab, a, text, kind) }
 
-        // The panel's checkboxes are the target list: a send to the primary pane alone must not
+        // The panel's checkboxes are the target list: a send to the first pane alone must not
         // fan out through the tab's sync, which would reach a pane left unchecked on purpose —
         // past the production confirmation, which counted only the selected ones.
         val targets = broadcastTargets(sessions)
@@ -548,7 +621,7 @@ class SessionsControllerTest {
         // The per-session guard is deliberately off for a broadcast: the panel confirms once for the
         // whole fan-out, and holding here would park commands in tabs nobody is looking at. That is
         // also why the panel MUST ask — nothing downstream will.
-        val terminal = sessions.sessions.first { it.id == prod }.liveTerminal!!
+        val terminal = sessions.tabs.first { it.id == prod }.focusedPane.liveTerminal!!
         terminal.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         assertTrue(targets.first { it.production }.send("rm -rf /srv\n"))
         assertNull(terminal.pendingGuarded)
@@ -568,7 +641,7 @@ class SessionsControllerTest {
 
         // Held in the second pane — the one being typed into. The gate has to see it there too, or a
         // snippet chord would fire over the open dialog.
-        val secondary = session.panes.single().liveTerminal!!
+        val secondary = session.panes.last().liveTerminal!!
         secondary.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         secondary.typeInput("shutdown now\r")
         assertTrue(prodGuardDialogOpen(session))
@@ -608,7 +681,7 @@ class SessionsControllerTest {
 
         sessions.disconnectAll()
 
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         assertNull(sessions.activeId)
         assertTrue(transport.connections.all { it.disconnected })
         scope.cancel()
@@ -622,12 +695,12 @@ class SessionsControllerTest {
 
         val id = sessions.openBlank()
 
-        assertEquals(1, sessions.sessions.size)
+        assertEquals(1, sessions.tabs.size)
         assertEquals(id, sessions.activeId)
         val tab = sessions.active!!
         assertTrue(tab.isBlank)
-        assertNull(tab.hostId)
-        assertIs<ConnectionUiState.Form>(tab.controller.uiState) // no connection is started
+        assertNull(tab.focusedPane.hostId)
+        assertIs<ConnectionUiState.Form>(tab.focusedPane.controller.uiState) // no connection is started
         scope.cancel()
     }
 
@@ -655,8 +728,8 @@ class SessionsControllerTest {
 
         sessions.setActiveView(SessionView.Sftp)
 
-        assertEquals(SessionView.Sftp, sessions.sessions.first { it.id == b }.view)
-        assertEquals(SessionView.Terminal, sessions.sessions.first { it.id == a }.view) // leaves the sibling untouched
+        assertEquals(SessionView.Sftp, sessions.tabs.first { it.id == b }.view)
+        assertEquals(SessionView.Terminal, sessions.tabs.first { it.id == a }.view) // leaves the sibling untouched
         scope.cancel()
     }
 
@@ -668,12 +741,12 @@ class SessionsControllerTest {
         val id = sessions.connect(hostId = "host-a", title = "host-a", subtitle = "u@h:22", target = target, auth = auth)
 
         assertEquals(blank, id) // same tab, no new one created
-        assertEquals(1, sessions.sessions.size)
+        assertEquals(1, sessions.tabs.size)
         val tab = sessions.active!!
-        assertEquals("host-a", tab.hostId)
-        assertEquals("host-a", tab.title)
+        assertEquals("host-a", tab.focusedPane.hostId)
+        assertEquals("host-a", tab.focusedPane.title)
         assertFalse(tab.isBlank)
-        assertIs<ConnectionUiState.Connected>(tab.controller.uiState)
+        assertIs<ConnectionUiState.Connected>(tab.focusedPane.controller.uiState)
         scope.cancel()
     }
 
@@ -722,7 +795,7 @@ class SessionsControllerTest {
         val id = sessions.connect(hostId = "host-b", title = "host-b", subtitle = "u@h:22", target = target, auth = auth)
 
         assertTrue(id != a)
-        assertEquals(2, sessions.sessions.size)
+        assertEquals(2, sessions.tabs.size)
         assertEquals(id, sessions.activeId)
         scope.cancel()
     }
@@ -733,7 +806,7 @@ class SessionsControllerTest {
 
         val id = sessions.connect(hostId = "host-a", title = "host-a", subtitle = "u@h:22", target = target, auth = auth)
 
-        assertEquals(1, sessions.sessions.size)
+        assertEquals(1, sessions.tabs.size)
         assertEquals(id, sessions.activeId)
         scope.cancel()
     }
@@ -750,7 +823,7 @@ class SessionsControllerTest {
 
         sessions.moveTab(fromIndex = 0, toIndex = 2) // a moves to the end
 
-        assertEquals(listOf(b, c, a), sessions.sessions.map { it.id })
+        assertEquals(listOf(b, c, a), sessions.tabs.map { it.id })
         assertEquals(a, sessions.activeId) // active tab does not change on move
         scope.cancel()
     }
@@ -764,7 +837,7 @@ class SessionsControllerTest {
 
         sessions.moveTab(fromIndex = 2, toIndex = 0) // c moves to front
 
-        assertEquals(listOf(c, a, b), sessions.sessions.map { it.id })
+        assertEquals(listOf(c, a, b), sessions.tabs.map { it.id })
         scope.cancel()
     }
 
@@ -778,7 +851,7 @@ class SessionsControllerTest {
         sessions.moveTab(fromIndex = 5, toIndex = 0) // out of range
         sessions.moveTab(fromIndex = 0, toIndex = 9) // out of range
 
-        assertEquals(listOf(a, b), sessions.sessions.map { it.id })
+        assertEquals(listOf(a, b), sessions.tabs.map { it.id })
         scope.cancel()
     }
 
@@ -832,7 +905,7 @@ class SessionsControllerTest {
         val id = sessions.openVnc(hostId = "host-a")
 
         assertNull(id)
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         scope.cancel()
     }
 
@@ -844,7 +917,7 @@ class SessionsControllerTest {
         val id = sessions.openVnc(hostId = "host-a")
 
         assertTrue(id != blank)
-        assertEquals(2, sessions.sessions.size)
+        assertEquals(2, sessions.tabs.size)
         assertEquals(id, sessions.activeId)
         scope.cancel()
     }
@@ -857,7 +930,7 @@ class SessionsControllerTest {
 
         sessions.close(id)
 
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         assertTrue(vncTransport.sessions.single().closed)
         scope.cancel()
     }
@@ -870,7 +943,7 @@ class SessionsControllerTest {
 
         sessions.disconnectAll()
 
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         assertTrue(vncTransport.sessions.single().closed)
         scope.cancel()
     }
@@ -940,7 +1013,7 @@ class SessionsControllerTest {
         assertTrue(tab.isPlayer)
         assertFalse(tab.isBlank) // a player tab is not an empty tab waiting for a connection
         assertEquals(SessionView.Player, tab.view)
-        assertEquals(cast, tab.playback?.cast)
+        assertEquals(cast, tab.focusedPane.playback?.cast)
 
         sessions.setActiveView(SessionView.Sftp) // no-op on a player tab
         assertEquals(SessionView.Player, tab.view)
@@ -956,7 +1029,7 @@ class SessionsControllerTest {
         val id = sessions.openPlayer("deploy", cast)
 
         assertTrue(id != blank)
-        assertEquals(2, sessions.sessions.size)
+        assertEquals(2, sessions.tabs.size)
         sessions.close(id)
         scope.cancel()
     }
@@ -965,11 +1038,11 @@ class SessionsControllerTest {
     fun `closing a player tab stops its playback`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val id = sessions.openPlayer("deploy", cast)
-        val playback = sessions.active!!.playback!!
+        val playback = sessions.active!!.focusedPane.playback!!
 
         sessions.close(id)
 
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         assertTrue(playback.stopped)
         scope.cancel()
     }
@@ -978,11 +1051,11 @@ class SessionsControllerTest {
     fun `disconnectAll stops playback too`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         sessions.openPlayer("deploy", cast)
-        val playback = sessions.active!!.playback!!
+        val playback = sessions.active!!.focusedPane.playback!!
 
         sessions.disconnectAll()
 
-        assertTrue(sessions.sessions.isEmpty())
+        assertTrue(sessions.tabs.isEmpty())
         assertTrue(playback.stopped)
         scope.cancel()
     }

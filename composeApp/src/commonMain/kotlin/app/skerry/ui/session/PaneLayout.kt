@@ -66,8 +66,9 @@ data class PaneLayout(val rows: List<PaneRow>) {
 
     /**
      * Take [paneId] out. The row it leaves is dropped when it was its last pane; the freed share
-     * goes back to its siblings proportionally. Removing the only pane is refused — a tab always has
-     * its primary pane (closing that one closes the tab).
+     * goes back to its siblings proportionally. Removing the only pane is refused — an empty grid
+     * has nothing to draw, and closing the last pane closes the tab instead
+     * ([app.skerry.ui.session.SessionsController.closePane]).
      */
     fun remove(paneId: String): PaneLayout {
         if (paneId !in this || size <= 1) return this
@@ -181,7 +182,7 @@ data class PaneLayout(val rows: List<PaneRow>) {
     }
 
     companion object {
-        /** The layout of a tab that has only its primary pane. */
+        /** The layout of a tab that holds a single pane. */
         fun of(paneId: String): PaneLayout = PaneLayout(listOf(PaneRow(listOf(PaneCell(paneId, 1f)), 1f)))
     }
 }

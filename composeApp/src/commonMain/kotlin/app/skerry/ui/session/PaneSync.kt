@@ -8,7 +8,7 @@ import app.skerry.ui.terminal.TerminalScreenState
 
 /**
  * Keeps the synchronized-input wiring of every tab in step with its toggle
- * ([Session.syncInput]): while it is on, each pane's terminal mirrors what it delivers into the
+ * ([Tab.syncInput]): while it is on, each pane's terminal mirrors what it delivers into the
  * tab's other connected panes (tmux `synchronize-panes`); while it is off, the hooks are cleared.
  *
  * Lives at the app root next to [app.skerry.ui.host.ProdGuardSync] rather than in the pane
@@ -17,10 +17,10 @@ import app.skerry.ui.terminal.TerminalScreenState
  */
 @Composable
 fun PaneSyncBinder(sessions: SessionsController?) {
-    val open = sessions?.sessions ?: return
+    val open = sessions?.tabs ?: return
     for (tab in open) {
         key(tab.id) {
-            for (pane in tab.allPanes) {
+            for (pane in tab.panes) {
                 key(pane.id) {
                     val terminal = pane.liveTerminal
                     val on = tab.syncInput
@@ -43,7 +43,7 @@ fun PaneSyncBinder(sessions: SessionsController?) {
  * strictest policy of the panes, see [app.skerry.ui.host.ProdGuardSync]), and a mirrored keystroke
  * that mirrored again would bounce between panes forever.
  */
-internal fun mirrorPaneInput(tab: Session, originPaneId: String, text: String, kind: MirroredInput) {
+internal fun mirrorPaneInput(tab: Tab, originPaneId: String, text: String, kind: MirroredInput) {
     val origin = tab.pane(originPaneId)?.liveTerminal
     paneSyncTargets(origin, tab.syncTargetsFrom(originPaneId)).forEach { target ->
         when (kind) {
