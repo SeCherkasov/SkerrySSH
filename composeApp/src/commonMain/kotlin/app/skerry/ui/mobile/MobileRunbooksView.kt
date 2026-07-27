@@ -83,7 +83,7 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
     val mono = LocalFonts.current.mono
     val runner = LocalRunbookRunner.current
     val sessions = LocalSessions.current
-    val session = sessions?.activeTerminal
+    val session = sessions?.activeTerminal?.focusedPane
     val terminal = (session?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
 
     var editing by remember { mutableStateOf<RunbookEntry?>(null) }

@@ -105,7 +105,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
     val mono = LocalFonts.current.mono
     val sessions = LocalSessions.current
     // Snippet run targets the active connected session; no live terminal means no Run button in the editor.
-    val activeTerminal = (sessions?.active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+    val activeTerminal = (sessions?.activeSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
 
     var editing by remember { mutableStateOf<SnippetEntry?>(null) }
     var adding by remember { mutableStateOf(false) }

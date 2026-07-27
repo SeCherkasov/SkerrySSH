@@ -1,6 +1,7 @@
 package app.skerry.ui.desktop
 
 import androidx.compose.ui.input.key.Key
+import app.skerry.ui.session.PaneDirection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -80,9 +81,41 @@ class DesktopShortcutsTest {
     }
 
     @Test
+    fun `the app modifier plus an arrow moves focus between panes`() {
+        assertEquals(DesktopShortcut.FocusPane(PaneDirection.Left), match(meta = true, key = Key.DirectionLeft))
+        assertEquals(DesktopShortcut.FocusPane(PaneDirection.Right), match(ctrl = true, shift = true, key = Key.DirectionRight))
+        assertEquals(DesktopShortcut.FocusPane(PaneDirection.Up), match(meta = true, key = Key.DirectionUp))
+        assertEquals(DesktopShortcut.FocusPane(PaneDirection.Down), match(ctrl = true, shift = true, key = Key.DirectionDown))
+    }
+
+    @Test
+    fun `a bare or terminal-bound arrow is left alone`() {
+        // Arrows are the shell's history and cursor keys, and Ctrl/Shift+arrow are word-wise
+        // movement and selection — only the app modifier claims them.
+        assertNull(match(key = Key.DirectionLeft))
+        assertNull(match(ctrl = true, key = Key.DirectionLeft))
+        assertNull(match(shift = true, key = Key.DirectionRight))
+        assertNull(match(alt = true, key = Key.DirectionUp))
+    }
+
+    @Test
+    fun `the pane grid acts on the arrow chord and on nothing else`() {
+        assertEquals(PaneDirection.Up, paneGridDirection(DesktopShortcut.FocusPane(PaneDirection.Up), searchOpen = false))
+        assertNull(paneGridDirection(DesktopShortcut.AddPane, searchOpen = false))
+        assertNull(paneGridDirection(null, searchOpen = false))
+    }
+
+    @Test
+    fun `an open find bar keeps the chord for its own field`() {
+        // Ctrl+Shift+arrow selects by word in the search field — the grid must not steal it there.
+        assertNull(paneGridDirection(DesktopShortcut.FocusPane(PaneDirection.Left), searchOpen = true))
+    }
+
+    @Test
     fun `app modifier on macOS is Cmd alone`() {
         assertEquals(DesktopShortcut.NewConnection, match(meta = true, key = Key.N))
-        assertEquals(DesktopShortcut.SplitTerminal, match(meta = true, key = Key.D))
+        assertEquals(DesktopShortcut.AddPane, match(meta = true, key = Key.D))
+        assertEquals(DesktopShortcut.SyncPanes, match(meta = true, key = Key.I))
         assertEquals(DesktopShortcut.OpenSftp, match(meta = true, key = Key.E))
         assertEquals(DesktopShortcut.Lock, match(meta = true, key = Key.L))
         assertEquals(DesktopShortcut.FocusAiBar, match(meta = true, key = Key.Slash))
@@ -91,7 +124,8 @@ class DesktopShortcutsTest {
     @Test
     fun `app modifier off macOS is Ctrl plus Shift`() {
         assertEquals(DesktopShortcut.NewConnection, match(ctrl = true, shift = true, key = Key.N))
-        assertEquals(DesktopShortcut.SplitTerminal, match(ctrl = true, shift = true, key = Key.D))
+        assertEquals(DesktopShortcut.AddPane, match(ctrl = true, shift = true, key = Key.D))
+        assertEquals(DesktopShortcut.SyncPanes, match(ctrl = true, shift = true, key = Key.I))
         assertEquals(DesktopShortcut.OpenSftp, match(ctrl = true, shift = true, key = Key.E))
         assertEquals(DesktopShortcut.Lock, match(ctrl = true, shift = true, key = Key.L))
         assertEquals(DesktopShortcut.FocusAiBar, match(ctrl = true, shift = true, key = Key.Slash))

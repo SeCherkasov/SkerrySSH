@@ -102,9 +102,10 @@ Building it yourself is also easy — see [Building from source](#building-from-
   dynamic/SOCKS, plus discovery of listening services with one-tap forwarding; VNC remote
   desktop; Docker and Kubernetes exec (pick a container/pod on the host and drop into its
   shell); Telnet; serial (desktop and Android USB-OTG).
-- **Terminal** — custom grid emulation, session tabs with split view, SSH auto-reconnect,
-  scrollback search, live host metrics, a command palette over the history, broadcast input
-  to several sessions, and session recording (asciinema v2) with in-app playback.
+- **Terminal** — custom grid emulation, session tabs with up to four tiled panes and
+  synchronized input, SSH auto-reconnect, scrollback search, live host metrics, a command
+  palette over the history, broadcast input to several sessions, and session recording
+  (asciinema v2) with in-app playback.
 - **Themes** — dark and light app themes with a card-based catalog; the terminal follows
   the app theme, and the System mode tracks the OS live.
 - **Vault** — always-on encryption (Argon2id + XChaCha20-Poly1305) for keys, passwords,

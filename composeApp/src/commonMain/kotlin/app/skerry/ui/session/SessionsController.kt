@@ -23,15 +23,15 @@ import app.skerry.ui.vnc.VncSessionController
 enum class SessionView { Terminal, Sftp, Vnc, Player }
 
 /**
- * One open session — a titlebar tab. Owns its own [ConnectionController] (one shell per session).
- * [hostId] links the tab to a host-catalog profile so the sidebar can mark hosts with a live
- * session via a status dot; `null` for ad-hoc connections without a saved host. [title]/[subtitle]
- * are the tab label and the `user@host:port` string for the session bar.
+ * One session — a single connection with its own [ConnectionController] (one shell per session),
+ * shown as one pane of a [Tab]. [hostId] links it to a host-catalog profile so the sidebar can mark
+ * hosts with a live session via a status dot; `null` for ad-hoc connections without a saved host.
+ * [title]/[subtitle] are the label and the `user@host:port` string shown in the pane header.
  *
- * The connection fields ([hostId]/[title]/[subtitle]) are mutable (snapshot state): a blank tab
- * ([isBlank]) is created unfilled and gets bound by the first connection via
- * [SessionsController.connect] (can only be bound once — after that the connection has started).
- * [view] is the selected sub-view, tracked per tab.
+ * The connection fields ([hostId]/[title]/[subtitle]) are mutable (snapshot state): a blank pane
+ * ([isBlank]) is created unfilled and gets bound by the first connection
+ * ([SessionsController.connect]/[SessionsController.connectPane]) — once only, since after the
+ * connection starts rewriting them would break the pane's correspondence with its live session.
  */
 @Stable
 class Session(
@@ -41,13 +41,13 @@ class Session(
     subtitle: String,
     val controller: ConnectionController,
     /**
-     * Set only for VNC tabs (a framebuffer session): when non-null, this tab renders a remote
-     * desktop instead of a terminal, and [controller] is an idle, unused terminal controller kept
-     * so the many `session.controller` read-sites (split/status/close) stay total. See [isVnc].
+     * Set only for a VNC session (a framebuffer): when non-null, the pane renders a remote desktop
+     * instead of a terminal, and [controller] is an idle, unused terminal controller kept so the
+     * many `session.controller` read-sites (status/close) stay total. See [isVnc].
      */
     val vncController: VncSessionController? = null,
     /**
-     * Set only for player tabs (a recording being watched): when non-null, this tab replays a
+     * Set only for a player session (a recording being watched): when non-null, the pane replays a
      * `.cast` instead of holding a connection, and [controller] is an idle, unused terminal
      * controller kept so the many `session.controller` read-sites stay total. See [isPlayer].
      */
@@ -56,74 +56,49 @@ class Session(
     var hostId: String? by mutableStateOf(hostId)
         private set
 
-    /** Whether this is a VNC (remote-desktop) tab rather than a terminal one. */
+    /** Whether this is a VNC (remote-desktop) session rather than a terminal one. */
     val isVnc: Boolean get() = vncController != null
 
-    /** Whether this tab replays a recording rather than holding a session. */
+    /** Whether this replays a recording rather than holding a connection. */
     val isPlayer: Boolean get() = playback != null
     var title: String by mutableStateOf(title)
         private set
     var subtitle: String by mutableStateOf(subtitle)
         private set
 
-    /** Selected sub-view of this tab (Terminal/SFTP), persists across tab switches. */
-    var view: SessionView by mutableStateOf(SessionView.Terminal)
-        private set
-
     /**
-     * Split: a tab can hold a second, independent session alongside the first. [splitOpen] is
-     * whether the split pane is shown (toggled by the toolbar split button); [splitSession] is the
-     * secondary pane with its own [ConnectionController] (own connection/terminal/selection), `null`
-     * until a host is picked (the pane then shows the host picker). [focusedSplit] is which pane has
-     * focus (false = primary, true = split), which determines what host the tab chip shows.
-     */
-    var splitOpen: Boolean by mutableStateOf(false)
-        private set
-    var splitSession: Session? by mutableStateOf(null)
-        private set
-    var focusedSplit: Boolean by mutableStateOf(false)
-        private set
-
-    /**
-     * A blank tab with no session: no host selected and no connection started yet (controller in
-     * [ConnectionUiState.Form]). Created by the "+" button; the first connection fills it. A tab
-     * with a host already bound does not become blank again after [ConnectionController.disconnect].
+     * A blank pane with no session: no host selected and no connection started yet (controller in
+     * [ConnectionUiState.Form]). A pane with a host already bound does not become blank again after
+     * [ConnectionController.disconnect].
      */
     val isBlank: Boolean get() = hostId == null && vncController == null && playback == null &&
         controller.uiState is ConnectionUiState.Form
 
-    internal fun setView(v: SessionView) { view = v }
-
-    internal fun setSplitOpen(open: Boolean) { splitOpen = open }
-    internal fun setSplitSession(session: Session?) { splitSession = session }
-    internal fun setFocusedSplit(focused: Boolean) { focusedSplit = focused }
-
     /**
-     * Fill a blank tab with a profile before its first connection (see [SessionsController.connect]).
-     * Only valid while the tab is blank ([isBlank]): can be bound once — after the connection starts,
-     * rewriting hostId/title would break the tab's correspondence with its live session.
+     * Fill a blank pane with a profile before its first connection. Only valid while the pane is
+     * blank ([isBlank]).
      */
     internal fun bind(hostId: String?, title: String, subtitle: String) {
-        check(isBlank) { "bind() on a non-blank tab: connection already started" }
+        check(isBlank) { "bind() on a non-blank session: connection already started" }
         this.hostId = hostId
         this.title = title
         this.subtitle = subtitle
     }
 
     /**
-     * Tab title: the host's catalog name ([title]).
+     * Label of this session: the host's catalog name ([title]).
      *
      * The terminal's live OSC 0/1/2 title is intentionally not used here: on plain-bash servers it
      * reduces to a noisy `root@<hostname>` and would override a clear label inconsistently (busybox
      * routers don't send OSC titles at all). [effectiveTabTitle] exists for a future setting that
-     * opts into it; until then the tab always shows the host label.
+     * opts into it; until then the label is always the host's.
      */
     val displayTitle: String get() = title
 
     /**
-     * Live window title from OSC 0/1/2 of this tab's connected terminal (`vim ~/app`, `root@host`…),
-     * or `null` if no session is open or no title was ever set. Read from terminal snapshot state,
-     * so the getter is reactive in Compose.
+     * Live window title from OSC 0/1/2 of this session's terminal (`vim ~/app`, `root@host`…), or
+     * `null` if no session is open or no title was ever set. Read from terminal snapshot state, so
+     * the getter is reactive in Compose.
      */
     val liveTitle: String?
         get() = when (val s = controller.uiState) {
@@ -132,7 +107,7 @@ class Session(
             else -> null
         }
 
-    /** This tab's live terminal (Connected/Disconnected), or `null` while no session is open. */
+    /** This session's live terminal (Connected/Disconnected), or `null` while none is open. */
     val liveTerminal: TerminalScreenState?
         get() = when (val s = controller.uiState) {
             is ConnectionUiState.Connected -> s.terminal
@@ -141,12 +116,108 @@ class Session(
         }
 
     /**
-     * Tab title honoring the "show terminal title on tabs" setting (Settings → Terminal). Off:
-     * always the host label ([displayTitle]); on: the live OSC title ([liveTitle]) overrides the
-     * label, falling back to it when absent (see [effectiveTabTitle]).
+     * Label honoring the "show terminal title on tabs" setting (Settings → Terminal). Off: always
+     * the host label ([displayTitle]); on: the live OSC title ([liveTitle]) overrides it, falling
+     * back to the label when absent (see [effectiveTabTitle]).
      */
     fun tabTitle(showLiveTitle: Boolean): String =
         if (showLiveTitle) effectiveTabTitle(liveTitle, displayTitle) else displayTitle
+
+    /** Tear this session down whatever kind it is; idempotent, safe to call on an idle pane. */
+    internal fun teardown() {
+        controller.disconnect()
+        vncController?.disconnect()
+        playback?.stop()
+    }
+}
+
+/**
+ * One titlebar tab: a grid of up to [MAX_PANES] [Session]s, each an independent connection with its
+ * own terminal and selection. Panes are equal — the first one is not privileged, so any of them can
+ * be pointed at another host or closed, and closing the last one closes the tab
+ * ([SessionsController.closePane]).
+ *
+ * [layout] places the panes on the grid (see [PaneLayout]); [focusedPaneId] is the pane the user is
+ * working in, which decides what the tab chip shows and where a snippet or a runbook lands.
+ * [syncInput] mirrors typing into every connected pane of this tab (tmux `synchronize-panes`).
+ * [view] is the selected sub-view (Terminal/SFTP), tracked per tab.
+ *
+ * Panes are deliberately not in [SessionsController.tabs]: a pane is owned by its tab and torn down
+ * with it, and the tab bar lists tabs, not panes.
+ */
+@Stable
+class Tab(val id: String, first: Session) {
+    var panes: List<Session> by mutableStateOf(listOf(first))
+        private set
+    var layout: PaneLayout by mutableStateOf(PaneLayout.of(first.id))
+        private set
+    var focusedPaneId: String by mutableStateOf(first.id)
+        private set
+    var syncInput: Boolean by mutableStateOf(false)
+        private set
+
+    /** Selected sub-view of this tab (Terminal/SFTP), persists across tab switches. */
+    var view: SessionView by mutableStateOf(SessionView.Terminal)
+        private set
+
+    /** Pane [paneId] of this tab, or `null` if it holds no such pane. */
+    fun pane(paneId: String): Session? = panes.firstOrNull { it.id == paneId }
+
+    /** The pane the user is working in; falls back to the first one if the focused pane is gone. */
+    val focusedPane: Session get() = pane(focusedPaneId) ?: panes.first()
+
+    /** Whether this tab is split at all — i.e. holds more than one pane. */
+    val isSplit: Boolean get() = panes.size > 1
+
+    /**
+     * Whether this is a remote-desktop tab rather than a terminal one. A VNC session never shares a
+     * tab with shells ([SessionsController.addPane] refuses to split it), so the kind of the tab is
+     * the kind of its only pane.
+     */
+    val isVnc: Boolean get() = panes.first().isVnc
+
+    /** Whether this tab replays a recording rather than holding sessions. */
+    val isPlayer: Boolean get() = panes.first().isPlayer
+
+    /**
+     * A blank tab with nothing connected: one pane, no host picked yet. Created by the "+" button;
+     * the first connection fills it in place ([SessionsController.connect]).
+     */
+    val isBlank: Boolean get() = panes.size == 1 && panes.first().isBlank
+
+    /** Tab label: the focused pane's, so a split tab is named after the pane being worked in. */
+    val displayTitle: String get() = focusedPane.displayTitle
+
+    /** Tab label honoring the "show terminal title on tabs" setting; see [Session.tabTitle]. */
+    fun tabTitle(showLiveTitle: Boolean): String = focusedPane.tabTitle(showLiveTitle)
+
+    internal fun setView(v: SessionView) { view = v }
+
+    /**
+     * A tab always holds at least one pane — half its getters read [panes]`.first()`, and the grid
+     * has nothing to draw without one. Emptying it is closing the tab
+     * ([SessionsController.closePane] does exactly that), so an empty list here is a bug upstream
+     * and is refused loudly rather than surfacing later as a failure inside a getter.
+     */
+    internal fun setPanes(list: List<Session>) {
+        require(list.isNotEmpty()) { "a tab cannot lose its last pane: close the tab instead" }
+        panes = list
+    }
+    internal fun setLayout(l: PaneLayout) { layout = l }
+    internal fun setFocusedPane(paneId: String) { focusedPaneId = paneId }
+    internal fun setSyncInput(on: Boolean) { syncInput = on }
+
+    /**
+     * Live terminals that synchronized input typed in [originPaneId] must also reach: every other
+     * connected pane of this tab, and only while [syncInput] is on. A pane that is still connecting,
+     * failed, or lost its session is skipped — mirrored keys would land in a screen that cannot
+     * take them.
+     */
+    fun syncTargetsFrom(originPaneId: String): List<TerminalScreenState> {
+        if (!syncInput) return emptyList()
+        return panes.filter { it.id != originPaneId }
+            .mapNotNull { (it.controller.uiState as? ConnectionUiState.Connected)?.terminal }
+    }
 }
 
 /**
@@ -186,13 +257,25 @@ class SessionsController(
      */
     private val onHostSessionOpened: (String) -> Unit = {},
 ) {
-    var sessions: List<Session> by mutableStateOf(emptyList())
+    var tabs: List<Tab> by mutableStateOf(emptyList())
         private set
 
     var activeId: String? by mutableStateOf(null)
         private set
 
-    val active: Session? get() = sessions.firstOrNull { it.id == activeId }
+    val active: Tab? get() = tabs.firstOrNull { it.id == activeId }
+
+    /** Tab [id], or `null` if no tab has it. */
+    fun tab(id: String?): Tab? = tabs.firstOrNull { it.id == id }
+
+    /** Every open session, panes included — what the sidebar and the host status dots read. */
+    val allSessions: List<Session> get() = tabs.flatMap { it.panes }
+
+    /**
+     * The session being worked in: the focused pane of the active tab. What every single-session
+     * read-site wants (the status bar, the info panel, the mobile screens, which have no panes).
+     */
+    val activeSession: Session? get() = active?.focusedPane
 
     /**
      * The active tab as seen by the terminal section — `null` when a remote-desktop tab is active.
@@ -201,16 +284,30 @@ class SessionsController(
      * show its idle placeholder controller as "not connected"). A player tab counts as terminal: it
      * lives beside the shells, not in the remote-desktop catalog.
      */
-    val activeTerminal: Session? get() = active?.takeIf { !it.isVnc }
+    val activeTerminal: Tab? get() = active?.takeIf { !it.isVnc }
 
     /** The active tab as seen by the remote-desktop section, `null` when a terminal tab is active. */
-    val activeDesktop: Session? get() = active?.takeIf { it.isVnc }
+    val activeDesktop: Tab? get() = active?.takeIf { it.isVnc }
 
     /**
      * Newest tab of a section, or `null` if it has none. Switching sections from the rail activates
      * this one, so returning to a section lands back on a live session instead of an empty area.
      */
-    fun lastSessionIn(remoteDesktop: Boolean): Session? = sessions.lastOrNull { it.isVnc == remoteDesktop }
+    fun lastSessionIn(remoteDesktop: Boolean): Tab? = tabs.lastOrNull { it.isVnc == remoteDesktop }
+
+    /**
+     * Put [session] in a tab of its own, append it to the bar and make it active.
+     *
+     * The tab takes its first session's id. The two are addressed separately everywhere (a pane is
+     * always reached as `tabId` + `paneId`), so sharing the id costs nothing and keeps a tab's id
+     * stable and recognizable — replacing that pane later gives it an id of its own.
+     */
+    private fun openTab(session: Session): Tab {
+        val tab = Tab(session.id, session)
+        tabs = tabs + tab
+        activeId = tab.id
+        return tab
+    }
 
     /** Open a new session to [target] and make it active; connects immediately. Returns the new tab's id. */
     fun open(
@@ -222,12 +319,10 @@ class SessionsController(
         onConnected: ((TerminalScreenState) -> Unit)? = null,
     ): String {
         val controller = controllerFactory()
-        val session = Session(newId(), hostId, title, subtitle, controller)
-        sessions = sessions + session
-        activeId = session.id
+        val tab = openTab(Session(newId(), hostId, title, subtitle, controller))
         reportHostSession(hostId)
         controller.connect(target, auth, onConnected)
-        return session.id
+        return tab.id
     }
 
     /**
@@ -237,16 +332,11 @@ class SessionsController(
      * [title] is the placeholder tab label; the calling composable resolves the localized label
      * (stringResource is unavailable in the controller). `null` gives an empty label (tests/ad-hoc).
      */
-    fun openBlank(title: String? = null): String {
-        val controller = controllerFactory()
-        val session = Session(newId(), hostId = null, title = title ?: "", subtitle = "", controller)
-        sessions = sessions + session
-        activeId = session.id
-        return session.id
-    }
+    fun openBlank(title: String? = null): String =
+        openTab(Session(newId(), hostId = null, title = title ?: "", subtitle = "", controllerFactory())).id
 
     /**
-     * Connect to [target]: if the active tab is blank ([Session.isBlank]), fill and connect it in
+     * Connect to [target]: if the active tab is blank ([Tab.isBlank]), fill and connect its pane in
      * place (no new tab); otherwise open a new one via [open]. Returns the id of the tab the
      * connection started in.
      */
@@ -260,9 +350,10 @@ class SessionsController(
     ): String {
         val blank = active?.takeIf { it.isBlank }
         if (blank != null) {
-            blank.bind(hostId, title, subtitle)
+            val pane = blank.panes.first()
+            pane.bind(hostId, title, subtitle)
             reportHostSession(hostId)
-            blank.controller.connect(target, auth, onConnected)
+            pane.controller.connect(target, auth, onConnected)
             return blank.id
         }
         return open(hostId, title, subtitle, target, auth, onConnected)
@@ -286,12 +377,11 @@ class SessionsController(
         val vnc = vncFactory()
         // An idle terminal controller keeps `session.controller` non-null for the shared read-sites.
         val session = Session(newId(), hostId, title, subtitle, controllerFactory(), vncController = vnc)
-        session.setView(SessionView.Vnc)
-        sessions = sessions + session
-        activeId = session.id
+        val tab = openTab(session)
+        tab.setView(SessionView.Vnc)
         reportHostSession(hostId)
         vnc.connect(target, auth, remoteResize, onRemoteResizeChanged)
-        return session.id
+        return tab.id
     }
 
     /**
@@ -306,10 +396,9 @@ class SessionsController(
             newId(), hostId = null, title = title, subtitle = "", controllerFactory(),
             playback = CastPlayback(cast),
         )
-        session.setView(SessionView.Player)
-        sessions = sessions + session
-        activeId = session.id
-        return session.id
+        val tab = openTab(session)
+        tab.setView(SessionView.Player)
+        return tab.id
     }
 
     /** Switch the active tab's sub-view (Terminal/SFTP); no-op on a VNC/player tab or with none active. */
@@ -320,9 +409,9 @@ class SessionsController(
         tab.setView(view)
     }
 
-    /** Make session [id] active; an unknown id is ignored. */
+    /** Make tab [id] active; an unknown id is ignored. */
     fun activate(id: String) {
-        if (sessions.any { it.id == id }) activeId = id
+        if (tabs.any { it.id == id }) activeId = id
     }
 
     /**
@@ -331,34 +420,98 @@ class SessionsController(
      * doesn't change when reordering.
      */
     fun moveTab(fromIndex: Int, toIndex: Int) {
-        val indices = sessions.indices
+        val indices = tabs.indices
         if (fromIndex !in indices || toIndex !in indices || fromIndex == toIndex) return
-        sessions = sessions.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
+        tabs = tabs.toMutableList().apply { add(toIndex, removeAt(fromIndex)) }
     }
 
     /**
-     * Toggle the split pane of tab [id] (active tab by default): no split open -> open an empty one
-     * (shows the host picker); open -> close it via [closeSplit] (tearing down the secondary connection).
+     * Add an empty pane to tab [id] (active tab by default) and focus it; the pane shows the host
+     * picker until something is connected into it ([connectPane]). [slot] places it explicitly (a
+     * drop from the pane grid); without one it goes where [PaneLayout.defaultSlot] puts it.
+     *
+     * Returns the new pane's id, or `null` when the tab is already at [MAX_PANES], holds a remote
+     * desktop or a recording (neither has a shell beside it), or does not exist.
      */
-    fun toggleSplit(id: String? = activeId) {
-        val tab = sessions.firstOrNull { it.id == id } ?: return
-        if (tab.splitOpen) closeSplit(tab.id) else tab.setSplitOpen(true)
+    fun addPane(id: String? = activeId, slot: PaneSlot? = null): String? {
+        val tab = tab(id) ?: return null
+        if (tab.isVnc || tab.isPlayer || tab.layout.isFull) return null
+        val pane = Session(newId(), hostId = null, title = "", subtitle = "", controllerFactory())
+        tab.setPanes(tab.panes + pane)
+        tab.setLayout(tab.layout.add(pane.id, slot ?: tab.layout.defaultSlot()))
+        tab.setFocusedPane(pane.id)
+        return pane.id
     }
 
     /**
-     * Connect a new, independent secondary session into the split pane of tab [parentId]: its own
-     * [ConnectionController] (own connection/terminal), stored in [Session.splitSession] and given
-     * focus. The secondary session is not added to [sessions] — it's owned by the parent tab.
+     * Connect [target] into pane [paneId] of tab [tabId] and focus it. An empty pane is filled in
+     * place; a pane that already holds a session has it disconnected and replaced by a fresh one in
+     * the same slot (pointing a pane at another host is how it is re-used). Every pane can be
+     * re-pointed, the first one included.
+     *
+     * A remote desktop or a recording is refused: those tabs hold no shell, and swapping a
+     * framebuffer for a terminal under the same tab would leave the tab in neither section.
      */
-    fun connectSplit(parentId: String, hostId: String?, title: String, subtitle: String, target: SshTarget, auth: SshAuth) {
-        val parent = sessions.firstOrNull { it.id == parentId } ?: return
-        parent.splitSession?.controller?.disconnect() // replace the previous secondary session, if any
-        val secondary = Session(newId(), hostId, title, subtitle, controllerFactory())
-        parent.setSplitOpen(true)
-        parent.setSplitSession(secondary)
-        parent.setFocusedSplit(true)
+    fun connectPane(
+        tabId: String,
+        paneId: String,
+        hostId: String?,
+        title: String,
+        subtitle: String,
+        target: SshTarget,
+        auth: SshAuth,
+    ) {
+        val tab = tab(tabId) ?: return
+        val existing = tab.pane(paneId) ?: return
+        if (existing.isVnc || existing.isPlayer) return
         reportHostSession(hostId)
-        secondary.controller.connect(target, auth)
+        if (existing.isBlank) {
+            existing.bind(hostId, title, subtitle)
+            tab.setFocusedPane(existing.id)
+            existing.controller.connect(target, auth)
+            return
+        }
+        // A pane that already ran a session is replaced wholesale: the controller keeps the state of
+        // the connection it opened, so re-using it for another host would carry that history over.
+        // Torn down through the one path every removal uses, so a pane kind added later can't be
+        // half-released here (the guard above is what keeps a framebuffer out today, not this line).
+        existing.teardown()
+        val replacement = Session(newId(), hostId, title, subtitle, controllerFactory())
+        tab.setPanes(tab.panes.map { if (it.id == paneId) replacement else it })
+        tab.setLayout(tab.layout.replace(paneId, replacement.id))
+        tab.setFocusedPane(replacement.id)
+        replacement.controller.connect(target, auth)
+    }
+
+    /**
+     * Move pane [paneId] of tab [tabId] to [slot] — the drop of a pane drag. Panes only move within
+     * their own tab.
+     */
+    fun movePane(tabId: String, paneId: String, slot: PaneSlot) {
+        val tab = tab(tabId) ?: return
+        tab.setLayout(tab.layout.move(paneId, slot))
+    }
+
+    /** Drag the divider under row [boundary] of tab [tabId] by [delta] (share of the tab's height). */
+    fun resizePaneRows(tabId: String, boundary: Int, delta: Float) {
+        val tab = tab(tabId) ?: return
+        tab.setLayout(tab.layout.resizeRows(boundary, delta))
+    }
+
+    /** Drag the divider after pane [boundary] of row [row] by [delta] (share of the row's width). */
+    fun resizePaneCells(tabId: String, row: Int, boundary: Int, delta: Float) {
+        val tab = tab(tabId) ?: return
+        tab.setLayout(tab.layout.resizeCells(row, boundary, delta))
+    }
+
+    /**
+     * Toggle synchronized input on tab [tabId] (active tab by default): while on, what is typed in
+     * one pane is mirrored into every other connected pane of the tab. Turning it on with a single
+     * pane is allowed — it stays armed for the panes added next.
+     */
+    fun toggleSyncInput(tabId: String? = activeId) {
+        val tab = tab(tabId) ?: return
+        tab.setSyncInput(!tab.syncInput)
     }
 
     /**
@@ -369,49 +522,70 @@ class SessionsController(
         if (hostId != null) onHostSessionOpened(hostId)
     }
 
-    /** Close the split pane of tab [id]: tear down the secondary connection and reset split flags. */
-    fun closeSplit(id: String) {
-        val tab = sessions.firstOrNull { it.id == id } ?: return
-        tab.splitSession?.controller?.disconnect()
-        tab.setSplitSession(null)
-        tab.setSplitOpen(false)
-        tab.setFocusedSplit(false)
+    /**
+     * Close pane [paneId] of tab [tabId]: tear down its session and take it off the grid; focus
+     * moves to the neighbor that follows it on the grid. Closing the last pane of a tab closes the
+     * tab itself ([close]) — a tab without panes has nothing to show.
+     */
+    fun closePane(tabId: String, paneId: String) {
+        val tab = tab(tabId) ?: return
+        val pane = tab.pane(paneId) ?: return
+        if (tab.panes.size == 1) {
+            close(tabId)
+            return
+        }
+        // The neighbor is picked before the removal, while the closed pane still has a position.
+        val order = tab.layout.paneIds
+        val at = order.indexOf(paneId)
+        val neighbor = order.getOrNull(at + 1) ?: order.getOrNull(at - 1)
+        pane.teardown()
+        tab.setPanes(tab.panes - pane)
+        tab.setLayout(tab.layout.remove(paneId))
+        if (tab.focusedPaneId == paneId) tab.setFocusedPane(neighbor ?: tab.panes.first().id)
     }
 
-    /** Focus a pane of tab [id]: false = primary, true = split. Determines the tab chip's title. */
-    fun focusPane(id: String, split: Boolean) {
-        sessions.firstOrNull { it.id == id }?.setFocusedSplit(split)
+    /** Focus pane [paneId] of tab [tabId]; a pane this tab doesn't hold is ignored. */
+    fun focusPane(tabId: String, paneId: String) {
+        val tab = tab(tabId) ?: return
+        if (tab.pane(paneId) != null) tab.setFocusedPane(paneId)
     }
 
-    /** Close session [id]: disconnect it (and its split), remove the tab, select a neighbor. */
+    /**
+     * Move the active tab's focus one pane in [direction] ([PaneLayout.neighbor]); `false` when
+     * there is no pane that way — an unsplit tab or the edge of the grid.
+     */
+    fun focusNeighborPane(direction: PaneDirection): Boolean {
+        val tab = active ?: return false
+        // Only while the grid is what the tab shows: over the file panel or a recording the panes
+        // aren't on screen, and moving the focus there would silently re-point the file panel.
+        if (tab.view != SessionView.Terminal) return false
+        val next = tab.layout.neighbor(tab.focusedPaneId, direction) ?: return false
+        if (tab.pane(next) == null) return false
+        tab.setFocusedPane(next)
+        return true
+    }
+
+    /** Close tab [id]: tear down every pane it holds, remove it, select a neighbor. */
     fun close(id: String) {
-        val index = sessions.indexOfFirst { it.id == id }
+        val index = tabs.indexOfFirst { it.id == id }
         if (index < 0) return
-        sessions[index].controller.disconnect()
-        sessions[index].vncController?.disconnect()
-        sessions[index].playback?.stop()
-        sessions[index].splitSession?.controller?.disconnect()
-        val remaining = sessions.toMutableList().apply { removeAt(index) }
+        tabs[index].panes.forEach { it.teardown() }
+        val remaining = tabs.toMutableList().apply { removeAt(index) }
         if (activeId == id) {
             // The right neighbor shifted into the freed index; else take the left one, else none.
             activeId = remaining.getOrNull(index)?.id ?: remaining.getOrNull(index - 1)?.id
         }
-        sessions = remaining
+        tabs = remaining
     }
 
     /** State of the most recent session for host [hostId] (for the sidebar status dot), or null. */
     fun statusFor(hostId: String): ConnectionUiState? =
-        sessions.lastOrNull { it.hostId == hostId }?.controller?.uiState
+        allSessions.lastOrNull { it.hostId == hostId }?.controller?.uiState
 
-    /** Close all sessions (and their splits) — call on screen teardown to avoid leaking sockets. */
+    /** Close all sessions (panes included) — call on screen teardown to avoid leaking sockets. */
     fun disconnectAll() {
-        sessions.forEach {
-            it.controller.disconnect()
-            it.vncController?.disconnect()
-            it.playback?.stop()
-            it.splitSession?.controller?.disconnect()
-        }
-        sessions = emptyList()
+        tabs.forEach { tab -> tab.panes.forEach { it.teardown() } }
+        tabs = emptyList()
         activeId = null
     }
 }

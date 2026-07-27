@@ -79,7 +79,7 @@ import app.skerry.ui.theme.Skerry
 @Composable
 fun MobileVncScreen(state: MobileDesignState) {
     val sessions = LocalSessions.current
-    val vnc = sessions?.active?.vncController
+    val vnc = sessions?.activeSession?.vncController
     var keyboardOn by remember { mutableStateOf(false) }
     // The bar starts visible so the screen still explains itself on arrival, then gets out of the way.
     var barVisible by remember { mutableStateOf(true) }
@@ -140,7 +140,7 @@ fun MobileVncScreen(state: MobileDesignState) {
             MobileVncBar(
                 state = state,
                 screen = (vnc?.uiState as? VncUiState.Connected)?.screen,
-                title = sessions?.active?.title ?: "VNC",
+                title = sessions?.activeSession?.title ?: "VNC",
                 keyboardOn = keyboardOn,
                 menuOpen = menuOpen,
                 onMenuOpenChange = { menuOpen = it },

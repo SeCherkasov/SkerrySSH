@@ -1,6 +1,7 @@
 package app.skerry.ui.desktop
 
 import androidx.compose.ui.input.key.Key
+import app.skerry.ui.session.PaneDirection
 import app.skerry.ui.snippet.SnippetShortcut
 
 /**
@@ -12,8 +13,14 @@ sealed interface DesktopShortcut {
     /** Open the "New connection" modal (⌘N / Ctrl+Shift+N). */
     data object NewConnection : DesktopShortcut
 
-    /** Split/collapse the active tab's terminal pane (⌘D / Ctrl+Shift+D). */
-    data object SplitTerminal : DesktopShortcut
+    /** Add a pane to the active tab's grid (⌘D / Ctrl+Shift+D). */
+    data object AddPane : DesktopShortcut
+
+    /** Type into every pane of the active tab at once (⌘I / Ctrl+Shift+I). */
+    data object SyncPanes : DesktopShortcut
+
+    /** Move focus to the neighbouring pane of the active tab (⌘/Ctrl+Shift + arrow). */
+    data class FocusPane(val direction: PaneDirection) : DesktopShortcut
 
     /** Open the active tab's SFTP (⌘E / Ctrl+Shift+E). */
     data object OpenSftp : DesktopShortcut
@@ -81,7 +88,8 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
     if (!appMod) return null
     return when (key) {
         Key.N -> DesktopShortcut.NewConnection
-        Key.D -> DesktopShortcut.SplitTerminal
+        Key.D -> DesktopShortcut.AddPane
+        Key.I -> DesktopShortcut.SyncPanes
         Key.F -> DesktopShortcut.FindInTerminal
         Key.E -> DesktopShortcut.OpenSftp
         Key.L -> DesktopShortcut.Lock
@@ -91,9 +99,30 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
         Key.R -> DesktopShortcut.ToggleRecording
         Key.P -> DesktopShortcut.PlayRecording
         Key.Slash -> DesktopShortcut.FocusAiBar
+        // Arrows under the app modifier walk the pane grid; plain and Ctrl/Shift+arrow stay with the
+        // terminal (history, cursor, word-wise movement and selection). Unlike the rest of this set,
+        // the match is acted on by the grid rather than the root handler — see [paneGridDirection].
+        Key.DirectionLeft -> DesktopShortcut.FocusPane(PaneDirection.Left)
+        Key.DirectionRight -> DesktopShortcut.FocusPane(PaneDirection.Right)
+        Key.DirectionUp -> DesktopShortcut.FocusPane(PaneDirection.Up)
+        Key.DirectionDown -> DesktopShortcut.FocusPane(PaneDirection.Down)
         else -> null
     }
 }
+
+/**
+ * The direction the pane grid moves focus in for [shortcut], or `null` when the grid must leave the
+ * key alone.
+ *
+ * Pane navigation is handled by the grid itself rather than the root handler, because the chord is
+ * also the platform's text chord (⌘/Ctrl+Shift + arrow select by word or to the line's end): claimed
+ * globally it would kill selection in every field of the app and send arrows nowhere on the file
+ * panel or a remote desktop. The grid's own preview handler only ever sees the key while the
+ * keyboard is inside a pane. [searchOpen] gives it back once more: while a pane's find bar is up,
+ * that field owns the chord.
+ */
+fun paneGridDirection(shortcut: DesktopShortcut?, searchOpen: Boolean): PaneDirection? =
+    (shortcut as? DesktopShortcut.FocusPane)?.direction?.takeIf { !searchOpen }
 
 /**
  * The shell hotkey a [SnippetShortcut]-formatted chord ("Ctrl+Shift+R") stands for, or `null` if the

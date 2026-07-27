@@ -71,12 +71,12 @@ fun CastPlayerOverlay(cast: Asciicast, onDismiss: () -> Unit) {
 
 /**
  * A recording as a work-area view: the player tab's content ([app.skerry.ui.session.SessionView.Player]).
- * Playback lives on the tab ([app.skerry.ui.session.Session.playback]), so switching tabs pauses
+ * Playback lives on the session ([app.skerry.ui.session.Session.playback]), so switching tabs pauses
  * nothing and coming back continues where the recording stood; closing the tab stops it.
  */
 @Composable
 fun CastPlayerView() {
-    val playback = LocalSessions.current?.activeTerminal?.playback ?: return
+    val playback = LocalSessions.current?.activeTerminal?.focusedPane?.playback ?: return
     // Start on first display only ([CastPlayback.start]) — returning to the tab must not rewind.
     LaunchedEffect(playback) { playback.start() }
     Column(Modifier.fillMaxSize().background(Skerry.colors.surface)) {

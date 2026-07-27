@@ -4,6 +4,7 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.mobile.MobileConnectAction
 import app.skerry.ui.mobile.mobileConnectAction
+import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.ui.mobile.mobileProdConfirmNeeded
 import app.skerry.ui.mobile.mobileResolvedAction
 import app.skerry.shared.ssh.ConnectionType
@@ -131,5 +132,33 @@ class ProdGuardTest {
     fun mobile_always_asks_for_a_production_vnc_tap() {
         // A VNC tap opens a fresh framebuffer screen; the resume path never applies to it.
         assertTrue(mobileProdConfirmNeeded(production = true, isVnc = true, action = MobileConnectAction.Resume))
+    }
+
+    // Synchronized input: the whole group runs under the strictest policy of its panes
+
+    @Test
+    fun strictest_policy_of_a_group_arms_on_any_pane_that_needs_it() {
+        val lax = ProductionGuardPolicy(production = false, confirmWarnings = false, rootLogin = false)
+        val prod = ProductionGuardPolicy(production = true, confirmWarnings = false, rootLogin = false)
+        val warns = ProductionGuardPolicy(production = false, confirmWarnings = true, rootLogin = false)
+        val root = ProductionGuardPolicy(production = false, confirmWarnings = false, rootLogin = true)
+
+        // Each axis is raised by whichever pane needs it — a lax sibling can't lower the bar, which
+        // is what keeps a command typed into the group from reaching a production pane unheld.
+        assertEquals(prod, strictestOf(lax, prod))
+        assertEquals(warns, strictestOf(warns, lax))
+        assertEquals(root, strictestOf(lax, root))
+        assertEquals(lax, strictestOf(lax, lax))
+        assertEquals(
+            ProductionGuardPolicy(production = true, confirmWarnings = true, rootLogin = true),
+            listOf(prod, warns, root).reduce(::strictestOf),
+        )
+    }
+
+    @Test
+    fun strictest_policy_does_not_depend_on_the_order_of_the_panes() {
+        val a = ProductionGuardPolicy(production = true, confirmWarnings = false, rootLogin = false)
+        val b = ProductionGuardPolicy(production = false, confirmWarnings = true, rootLogin = true)
+        assertEquals(strictestOf(a, b), strictestOf(b, a))
     }
 }

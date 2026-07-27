@@ -497,11 +497,32 @@ class TerminalScreenState(
         private set
 
     /**
+     * Synchronized-input hook: called with input this session actually delivered, so the same keys
+     * (and pastes) reach the other panes of the tab. Wired by the UI while the tab's sync toggle is
+     * on, `null` otherwise. Not snapshot state — it is written from composition and only read on
+     * input, and recomposing every keystroke's worth of terminal for it would be waste.
+     *
+     * Callers that deliver mirrored input must pass `mirror = false`, or two synchronized panes
+     * would keep handing the same keystroke back to each other.
+     */
+    var inputMirror: ((String, MirroredInput) -> Unit)? = null
+
+    /**
+     * Whether this session is taking a secret right now: the transport reported that the host
+     * stopped echoing (password entry), or the current screen line reads as a password prompt.
+     *
+     * Input typed here is kept out of history and out of the production guard, and synchronized
+     * panes read it to decide whether a secret may be mirrored into them at all
+     * ([app.skerry.ui.session.paneSyncTargets]).
+     */
+    val awaitingSecret: Boolean get() = session.echoSuppressed || atPasswordPrompt()
+
+    /**
      * Keyboard/IME user input: feeds the autocomplete engine (line and history tracking) and sends
      * to the PTY. Separate from [send]/[sendBytes], used for mouse/focus reports, paste, and
      * snippet output, which must not reach the engine or the tracked line would be corrupted.
      */
-    fun typeInput(text: String, guarded: Boolean = true) {
+    fun typeInput(text: String, guarded: Boolean = true, mirror: Boolean = true) {
         inputVersion++
         // Server not echoing input (password entry / line-mode signaled by the transport): do not
         // track the line or write it to history, so a secret does not persist and surface as a
@@ -509,22 +530,29 @@ class TerminalScreenState(
         // detected heuristically from the current screen line ([atPasswordPrompt]).
         // The production guard is skipped here for the same reason: what is being typed is a secret,
         // and parking it in a confirmation dialog would put it on screen in clear text.
-        if (session.echoSuppressed || atPasswordPrompt()) {
+        if (awaitingSecret) {
             autocomplete.reset()
             if (suggestionTail != null) suggestionTail = null
             send(text)
+            // A secret is mirrored like anything else typed: entering one sudo password across
+            // synchronized panes is the case people turn the toggle on for. Each pane decides on its
+            // own screen whether to keep it out of history — this one just did.
+            if (mirror) inputMirror?.invoke(text, MirroredInput.Typed)
             return
         }
         // guarded=false: the caller already asked (broadcast confirms once for the whole fan-out,
         // where a per-session hold would strand commands in tabs nobody is looking at).
         if (guarded && holdForProductionGuard(text)) return
-        deliverTypedInput(text)
+        deliverTypedInput(text, mirror)
     }
 
-    private fun deliverTypedInput(text: String) {
+    private fun deliverTypedInput(text: String, mirror: Boolean = true) {
         val committed = autocomplete.onUserInput(text.encodeToByteArray())
         refreshSuggestion()
         send(text)
+        // Mirrored from here, not from typeInput: input held by the production guard must reach the
+        // other panes only once it is confirmed (this runs again on confirm), never on the hold.
+        if (mirror) inputMirror?.invoke(text, MirroredInput.Typed)
         // Command was committed with Enter (and was echoed): persist the history snapshot for this host.
         if (committed != null) onHistoryChanged?.invoke(autocomplete.commandHistory.commands)
     }
@@ -1037,7 +1065,7 @@ class TerminalScreenState(
     }
 
     /** Paste clipboard text: wraps it in markers when bracketed paste is enabled (DEC 2004). */
-    fun paste(text: String) {
+    fun paste(text: String, mirror: Boolean = true) {
         if (text.isEmpty()) return
         // A paste carrying a newline runs the moment it lands — on a production session it goes
         // through the same confirmation as a typed command. A paste without one only fills the
@@ -1046,25 +1074,28 @@ class TerminalScreenState(
         // secret with a trailing newline, and holding it would print it in the dialog.
         // A middle-click paste arrives through a raw pointer handler the modal scrim never sees, so
         // this is the only place that can stop one while a confirmation is open.
-        if (guardPolicy.production && !session.echoSuppressed && !atPasswordPrompt() &&
+        if (guardPolicy.production && !awaitingSecret &&
             text.any { it == '\n' || it == '\r' }
         ) {
             if (guard.hold(text, HeldInputSource.Paste) { ProductionGuard.candidatesOf(text) }) return
         }
-        deliverPaste(text)
+        deliverPaste(text, mirror)
     }
 
-    private fun deliverPaste(text: String) {
+    private fun deliverPaste(text: String, mirror: Boolean = true) {
         inputVersion++
         // A paste is tracked like typing: without this the Enter after a no-newline paste has
         // nothing to classify (the tracked line is empty and the host's echo may not have arrived
         // yet), and the guard would miss a pasted command. The engine also records the lines a
         // multi-line paste commits, same as if they had been typed.
-        if (!session.echoSuppressed && !atPasswordPrompt()) {
+        if (!awaitingSecret) {
             autocomplete.onUserInput(text.encodeToByteArray())
             refreshSuggestion()
         }
         send(bracketedPasteWrap(text, bracketedPaste))
+        // Mirrored as a paste, not as typing: each pane wraps it for its own bracketed-paste mode,
+        // which the target may have set differently from this one.
+        if (mirror) inputMirror?.invoke(text, MirroredInput.Pasted)
     }
 
     /**
@@ -1104,6 +1135,13 @@ class TerminalScreenState(
         commands.trySend(TerminalCommand.SetClipboardWriteEnabled(enabled))
     }
 }
+
+/**
+ * What a synchronized pane is mirroring (see [TerminalScreenState.inputMirror]). Typing and pasting
+ * stay apart because the receiving pane has to replay each the way it would have arrived there:
+ * typed input feeds its autocomplete, a paste gets that pane's own bracketed-paste wrapping.
+ */
+enum class MirroredInput { Typed, Pasted }
 
 /**
  * How often a published snapshot may rebuild the search match list. Long enough that streaming
@@ -1149,10 +1187,13 @@ private sealed interface TerminalCommand {
 
 /**
  * Prompt-line keywords that mark input as secret and exempt it from history (see
- * [TerminalScreenState.atPasswordPrompt]). Covers typical sudo/ssh/passwd/su prompts.
+ * [TerminalScreenState.atPasswordPrompt]). Covers typical sudo/ssh/passwd/su prompts and the common
+ * MFA wordings: with synchronized panes a missed prompt mirrors the secret into every other pane of
+ * the tab, so the list errs wide — a false match only keeps an ordinary command out of history.
  */
 private val PASSWORD_PROMPT_HINTS = listOf(
     "password", "passphrase", "passcode", "verification code", "pin",
+    "otp", "one-time", "token", "2fa", "mfa", "authenticator", "challenge",
 )
 
 /**

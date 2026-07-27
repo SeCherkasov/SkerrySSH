@@ -223,7 +223,8 @@ private fun RunbookEditor(
     val form = remember { RunbookFormState.fromEntry(entry) }
     val runner = LocalRunbookRunner.current
     val sessions = LocalSessions.current
-    val session = sessions?.activeTerminal
+    // A runbook types into the pane in focus — the terminal the user is looking at.
+    val session = sessions?.activeTerminal?.focusedPane
     val terminal = (session?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val busy = runner?.active == true || runner?.pending != null
     // A run needs both halves; keeping them in one value avoids a null check inside the click handler.
