@@ -24,6 +24,8 @@ import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.ssh.SshjTransport
+import app.skerry.shared.ssh.KeyFileResolver
+import app.skerry.shared.vault.OkioSecretFileReader
 import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
@@ -183,16 +185,28 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // controller; it is shared by every transport that authenticates, so a code asked for while
     // dialing a tunnel or probing a container prompts the same way a session does.
     val keyboardInteractive = KeyboardInteractivePromptController()
+    // File-backed credentials (key/certificate kept outside the vault) are read at connect time, so
+    // every transport that authenticates gets the same resolver. `~` expands against the user's home
+    // the way an OpenSSH config would; the inspector lets an expired certificate be refused here,
+    // with its date, instead of turning into "server rejected the credentials".
+    val certificateInspector = SshjCertificateInspector()
+    val secretFiles = OkioSecretFileReader(FileSystem.SYSTEM, homeDir = System.getProperty("user.home"))
+    val keyFileResolver = KeyFileResolver(files = secretFiles, inspector = certificateInspector)
     val transport = RoutingTransport(
         ssh = SshjTransport(
             TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
-            keyboardInteractive.responder,
+            keyFiles = keyFileResolver,
+            keyboardInteractiveResponder = keyboardInteractive.responder,
         ),
     )
     // "Test connection" from the form uses a separate transport with a read-only verifier: it
     // accepts a matching trusted key, rejects a key change on a known host, and accepts a new host
     // WITHOUT writing to known-hosts. Only a real connection (TOFU above) establishes trust.
-    val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore), keyboardInteractive.responder)
+    val probeTransport = SshjTransport(
+        ProbeHostKeyVerifier(knownHostsStore),
+        keyFiles = keyFileResolver,
+        keyboardInteractiveResponder = keyboardInteractive.responder,
+    )
     val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
     // Host manager: profiles are HOST records in the vault, tree order lives in the layout record
     // ([VaultHostStore]/[WorkspaceLayout]). The vault starts locked (empty list); the controller
@@ -262,12 +276,15 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // SSH key generation in the Vault section: BouncyCastle over the sshj format (the same one the transport reads).
     val keyGenerator = BouncyCastleSshKeyGenerator()
     // Parses imported SSH certificates (Vault -> Certificates section) via sshj over the ssh-wire format.
-    val certificateInspector = SshjCertificateInspector()
     // Global tunnels: saved forwards in tunnels.json. Activation uses a SEPARATE probe transport
     // (read-only verifier): only an already-trusted host can be enabled — a tunnel opens without a
     // terminal, so silent TOFU must not happen here. Host/secret resolution goes through the graph
     // (hosts + credentials in the unlocked vault). Scope lives for the app's lifetime.
-    val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore), keyboardInteractive.responder)
+    val tunnelTransport = SshjTransport(
+        ProbeHostKeyVerifier(knownHostsStore),
+        keyFiles = keyFileResolver,
+        keyboardInteractiveResponder = keyboardInteractive.responder,
+    )
     val tunnelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val tunnels = TunnelManager(
         store = VaultTunnelStore(vault, trash),
@@ -394,7 +411,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         // on a locked vault); the list rereads when a new vault is created and unlocked.
         credentials.reload()
     }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, localAi = localAi)
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, localAi = localAi)
     return DesktopGraph(
         deps = deps,
         keyboardInteractive = keyboardInteractive,
@@ -528,6 +545,7 @@ fun main(args: Array<String>) {
                     knownHosts = deps.knownHosts,
                     keyGenerator = deps.keyGenerator,
                     certificateInspector = deps.certificateInspector,
+                    secretFiles = deps.secretFiles,
                     tunnels = deps.tunnels,
                     snippets = deps.snippets,
                     runbooks = deps.runbooks,

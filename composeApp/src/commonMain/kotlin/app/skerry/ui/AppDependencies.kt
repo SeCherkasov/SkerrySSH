@@ -4,6 +4,7 @@ import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.vnc.VncTransport
 import app.skerry.shared.vault.SecurityLog
 import app.skerry.ui.ai.LocalAiDeps
+import app.skerry.shared.vault.SecretFileReader
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.Vault
@@ -44,6 +45,12 @@ data class AppDependencies(
     val keyGenerator: SshKeyGenerator? = null,
     /** SSH certificate inspector (Vault → Certificates); `null` on a platform without cert parsing. */
     val certificateInspector: SshCertificateInspector? = null,
+    /**
+     * Reader for files a credential references rather than stores
+     * ([app.skerry.shared.vault.CredentialSecret.KeyFile]); `null` on a platform that can't read them,
+     * where the Vault shows such a secret without a file status.
+     */
+    val secretFiles: SecretFileReader? = null,
     /** Manager for globally saved tunnels (Tunnels section); `null` if not wired up. */
     val tunnels: TunnelManager? = null,
     /** Manager for saved snippets (Snippets section); `null` if not wired up. */

@@ -11,6 +11,7 @@ import app.skerry.shared.host.HostStore
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshConfigHost
 import app.skerry.shared.ssh.SshConfigImport
+import app.skerry.shared.vault.Credential
 
 /**
  * Editable profile fields without [Host.id]: the create/edit form operates on a draft, and
@@ -111,10 +112,19 @@ class HostManagerController(
      * (resolving ProxyJump within the batch, filling [defaultUser] where the config omits `User`)
      * using this controller's id generator, persists them, and returns how many were created.
      */
-    fun importSshConfig(parsed: List<SshConfigHost>, selected: Set<String>, defaultUser: String?): Int {
-        val planned = SshConfigImport.plan(parsed, selected, defaultUser, newId)
-        importHosts(planned)
-        return planned.size
+    fun importSshConfig(
+        parsed: List<SshConfigHost>,
+        selected: Set<String>,
+        defaultUser: String?,
+        existingLabels: Set<String> = emptySet(),
+        saveCredentials: (List<Credential>) -> Unit = {},
+    ): Int {
+        val plan = SshConfigImport.plan(parsed, selected, defaultUser, newId, existingLabels)
+        // Credentials first: the hosts about to be written already reference them by id, and a crash
+        // in between would otherwise leave profiles pointing at secrets that never existed.
+        saveCredentials(plan.credentials)
+        importHosts(plan.hosts)
+        return plan.hosts.size
     }
 
     /** Persist the VNC "Resize to window" toggle changed from a live session (unknown id: no-op). */

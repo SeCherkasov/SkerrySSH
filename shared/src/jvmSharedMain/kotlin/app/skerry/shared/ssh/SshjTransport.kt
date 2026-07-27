@@ -32,9 +32,14 @@ import net.schmizz.sshj.userauth.password.Resource
  * [keyboardInteractiveResponder] answers the server's keyboard-interactive challenges (2FA codes and
  * the like). Null — the default — means the method isn't offered at all, so a server that insists on
  * it fails authentication exactly as it did before the responder existed.
+ *
+ * [keyFiles] expands file-backed credentials ([SshAuth.KeyFile]) at authentication time. Null means
+ * this transport can't read them and such a credential fails with a message saying so, rather than
+ * with an opaque auth error.
  */
 class SshjTransport(
     private val hostKeyVerifier: HostKeyVerifier,
+    private val keyFiles: KeyFileResolver? = null,
     private val keyboardInteractiveResponder: KeyboardInteractiveResponder? = null,
 ) : SshTransport {
 
@@ -170,7 +175,7 @@ class SshjTransport(
     private fun authenticate(
         client: SSHClient,
         username: String,
-        auth: SshAuth,
+        requested: SshAuth,
         hop: Boolean,
         host: String,
         port: Int,
@@ -178,6 +183,14 @@ class SshjTransport(
         // Held so the failure below can tell "the user waved the prompt away" apart from "the server
         // said no" — sshj reports both as the same UserAuthException.
         var prompts: ResponderChallengeProvider? = null
+        // File-backed credentials are read here rather than when the profile was resolved: the point
+        // of them is that an external issuer keeps rewriting the file, so the read has to be as late
+        // as the connection itself. Throws (with the ref named) if the file isn't there.
+        val auth = when (requested) {
+            is SshAuth.KeyFile -> keyFiles?.resolve(requested)
+                ?: throw SshAuthenticationException("File-backed credentials are not available on this platform")
+            else -> requested
+        }
         try {
             // One ordered list rather than a single call: a server configured with
             // `AuthenticationMethods publickey,keyboard-interactive` answers the first method with
@@ -226,6 +239,8 @@ class SshjTransport(
                     // Nothing to offer up front: the whole exchange is the server asking and the
                     // user answering, added below.
                     SshAuth.Interactive -> Unit
+                    // Resolved into one of the branches above before the list is built.
+                    is SshAuth.KeyFile -> Unit
                 }
                 keyboardInteractiveResponder?.let { responder ->
                     val provider = ResponderChallengeProvider(

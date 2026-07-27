@@ -57,10 +57,15 @@ object VaultPresentation {
     val sidebarCategories: List<VaultCategoryKind> = VaultCategoryKind.entries
 
     /** Keychain category of a secret: private key -> [SSH_KEYS], password -> [PASSWORDS], cert -> [CERTIFICATES]. */
-    fun categoryOf(credential: Credential): VaultCategoryKind = when (credential.secret) {
+    fun categoryOf(credential: Credential): VaultCategoryKind = when (val secret = credential.secret) {
         is CredentialSecret.PrivateKey -> VaultCategoryKind.SSH_KEYS
         is CredentialSecret.Password -> VaultCategoryKind.PASSWORDS
         is CredentialSecret.Certificate -> VaultCategoryKind.CERTIFICATES
+        // A file-backed secret is filed by what it authenticates with: an explicit certificate ref
+        // makes it a certificate, otherwise a key. A sibling `*-cert.pub` can't be taken into
+        // account here — that needs disk access, and categorising must stay pure.
+        is CredentialSecret.KeyFile ->
+            if (secret.certificateRef.isNullOrBlank()) VaultCategoryKind.SSH_KEYS else VaultCategoryKind.CERTIFICATES
     }
 
     /** Icon for a secret type. Theme-independent, so callers outside composition can use it. */
@@ -68,6 +73,7 @@ object VaultPresentation {
         is CredentialSecret.Certificate -> "workspace_premium"
         is CredentialSecret.PrivateKey -> "key"
         is CredentialSecret.Password -> "password"
+        is CredentialSecret.KeyFile -> if (secret.certificateRef.isNullOrBlank()) "key" else "workspace_premium"
     }
 
     /** Style for a secret type: icon/accent color/tint (see [SecretTypeStyle]) in the active [colors]. */
@@ -75,6 +81,11 @@ object VaultPresentation {
         is CredentialSecret.Certificate -> SecretTypeStyle(secretIcon(secret), colors.moss, tinted = true)
         is CredentialSecret.PrivateKey -> SecretTypeStyle(secretIcon(secret), colors.cyanBright, tinted = true)
         is CredentialSecret.Password -> SecretTypeStyle(secretIcon(secret), colors.dim, tinted = false)
+        is CredentialSecret.KeyFile -> SecretTypeStyle(
+            secretIcon(secret),
+            if (secret.certificateRef.isNullOrBlank()) colors.cyanBright else colors.moss,
+            tinted = true,
+        )
     }
 
     /** Credentials belonging to the given category. */

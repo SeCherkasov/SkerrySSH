@@ -68,7 +68,11 @@ import app.skerry.ui.generated.resources.vault_add
 import app.skerry.ui.generated.resources.vault_add_password
 import app.skerry.ui.generated.resources.vault_any_principal
 import app.skerry.ui.generated.resources.vault_badge_expired
+import app.skerry.ui.generated.resources.vault_badge_file
+import app.skerry.ui.generated.resources.vault_badge_file_missing
+import app.skerry.ui.generated.resources.vault_browse
 import app.skerry.ui.generated.resources.vault_cancel
+import app.skerry.ui.generated.resources.vault_cert_from_file_unreadable
 import app.skerry.ui.generated.resources.vault_cert_key_id
 import app.skerry.ui.generated.resources.vault_cert_read_error
 import app.skerry.ui.generated.resources.vault_cert_unreadable
@@ -87,6 +91,7 @@ import app.skerry.ui.generated.resources.vault_dialog_add_password_subtitle
 import app.skerry.ui.generated.resources.vault_dialog_generate_subtitle
 import app.skerry.ui.generated.resources.vault_dialog_generate_title
 import app.skerry.ui.generated.resources.vault_dialog_import_subtitle
+import app.skerry.ui.generated.resources.vault_dialog_key_file_subtitle
 import app.skerry.ui.generated.resources.vault_e2e_description
 import app.skerry.ui.generated.resources.vault_e2e_encrypted
 import app.skerry.ui.generated.resources.vault_empty_certificates_hint
@@ -97,7 +102,9 @@ import app.skerry.ui.generated.resources.vault_empty_ssh_hint
 import app.skerry.ui.generated.resources.vault_empty_ssh_title
 import app.skerry.ui.generated.resources.vault_export
 import app.skerry.ui.generated.resources.vault_field_algorithm
+import app.skerry.ui.generated.resources.vault_field_cert_path
 import app.skerry.ui.generated.resources.vault_field_certificate
+import app.skerry.ui.generated.resources.vault_field_key_path
 import app.skerry.ui.generated.resources.vault_field_master_password
 import app.skerry.ui.generated.resources.vault_field_name
 import app.skerry.ui.generated.resources.vault_field_passphrase
@@ -105,23 +112,32 @@ import app.skerry.ui.generated.resources.vault_field_password
 import app.skerry.ui.generated.resources.vault_field_private_key_pem
 import app.skerry.ui.generated.resources.vault_generate
 import app.skerry.ui.generated.resources.vault_generate_key
+import app.skerry.ui.generated.resources.vault_hint_cert_sibling
+import app.skerry.ui.generated.resources.vault_hint_cert_sibling_opaque
 import app.skerry.ui.generated.resources.vault_import
 import app.skerry.ui.generated.resources.vault_import_certificate
+import app.skerry.ui.generated.resources.vault_key_file_missing
 import app.skerry.ui.generated.resources.vault_key_unreadable
+import app.skerry.ui.generated.resources.vault_label_cert_path
 import app.skerry.ui.generated.resources.vault_label_fingerprint
+import app.skerry.ui.generated.resources.vault_label_key_path
 import app.skerry.ui.generated.resources.vault_label_principals
 import app.skerry.ui.generated.resources.vault_label_public_key
 import app.skerry.ui.generated.resources.vault_label_serial
 import app.skerry.ui.generated.resources.vault_label_signing_ca
 import app.skerry.ui.generated.resources.vault_label_valid
+import app.skerry.ui.generated.resources.vault_link
+import app.skerry.ui.generated.resources.vault_link_key_file
 import app.skerry.ui.generated.resources.vault_meta_any_principal
 import app.skerry.ui.generated.resources.vault_meta_certificate
+import app.skerry.ui.generated.resources.vault_meta_key_file
 import app.skerry.ui.generated.resources.vault_meta_password
 import app.skerry.ui.generated.resources.vault_not_attached
 import app.skerry.ui.generated.resources.vault_password_mismatch_retry
 import app.skerry.ui.generated.resources.vault_placeholder_master_password
 import app.skerry.ui.generated.resources.vault_placeholder_name_cert
 import app.skerry.ui.generated.resources.vault_placeholder_name_key
+import app.skerry.ui.generated.resources.vault_placeholder_name_key_file
 import app.skerry.ui.generated.resources.vault_placeholder_name_password
 import app.skerry.ui.generated.resources.vault_placeholder_optional
 import app.skerry.ui.generated.resources.vault_placeholder_password
@@ -130,6 +146,8 @@ import app.skerry.ui.generated.resources.vault_rename_title
 import app.skerry.ui.generated.resources.vault_sidebar_header
 import app.skerry.ui.generated.resources.vault_subtitle_certificate
 import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
+import app.skerry.ui.generated.resources.vault_subtitle_key_file
+import app.skerry.ui.generated.resources.vault_subtitle_key_file_cert
 import app.skerry.ui.generated.resources.vault_subtitle_password
 import app.skerry.ui.generated.resources.vault_subtitle_private_key
 import app.skerry.ui.generated.resources.vault_used_by
@@ -166,6 +184,8 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.app.LocalSecretFileReader
+import app.skerry.shared.ssh.keyFileSiblingRef
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalVault
@@ -217,7 +237,9 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var showGenerate by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
+    val secretFiles = LocalSecretFileReader.current
     var showImportCert by remember { mutableStateOf(false) }
+    var showLinkKeyFile by remember { mutableStateOf(false) }
     var pendingRenameCred by remember { mutableStateOf<Credential?>(null) }
     var pendingDeleteCred by remember { mutableStateOf<Credential?>(null) }
 
@@ -233,9 +255,11 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     category = category,
                     canGenerate = generator != null,
                     canImportCert = inspector != null,
+                    canLinkFile = secretFiles != null,
                     onGenerate = { showGenerate = true },
                     onAddPassword = { showAddPassword = true },
                     onImportCert = { showImportCert = true },
+                    onLinkKeyFile = { showLinkKeyFile = true },
                 )
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     if (credItems.isEmpty()) {
@@ -325,6 +349,24 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     )
                     category = VaultCategoryKind.CERTIFICATES
                     showImportCert = false
+                },
+            )
+        }
+        if (showLinkKeyFile) {
+            LinkKeyFileDialog(
+                onDismiss = { showLinkKeyFile = false },
+                onCreate = { name, keyRef, certRef, passphrase ->
+                    selectedId = credentials.save(
+                        CredentialDraft(
+                            label = name,
+                            kind = CredentialKind.KEY_FILE,
+                            privateKeyRef = keyRef,
+                            certificateRef = certRef ?: "",
+                            passphrase = passphrase ?: "",
+                        ),
+                    )
+                    category = if (certRef == null) VaultCategoryKind.SSH_KEYS else VaultCategoryKind.CERTIFICATES
+                    showLinkKeyFile = false
                 },
             )
         }
@@ -433,17 +475,27 @@ private fun VaultHeader(
     category: VaultCategoryKind,
     canGenerate: Boolean,
     canImportCert: Boolean,
+    canLinkFile: Boolean,
     onGenerate: () -> Unit,
     onAddPassword: () -> Unit,
     onImportCert: () -> Unit,
+    onLinkKeyFile: () -> Unit,
 ) {
     SectionHeader(
         title = category.title(),
         actions = {
             when (category) {
-                VaultCategoryKind.SSH_KEYS -> if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add")
+                // "Link file" sits in both key and certificate categories: which one a file-backed
+                // secret lands in depends on whether it names a certificate.
+                VaultCategoryKind.SSH_KEYS -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (canLinkFile) GhostButton(stringResource(Res.string.vault_link_key_file), onClick = onLinkKeyFile)
+                    if (canGenerate) PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = onGenerate, icon = "add")
+                }
                 VaultCategoryKind.PASSWORDS -> PrimaryButton(stringResource(Res.string.vault_add_password), onClick = onAddPassword, icon = "add")
-                VaultCategoryKind.CERTIFICATES -> if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = onImportCert, icon = "add")
+                VaultCategoryKind.CERTIFICATES -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (canLinkFile) GhostButton(stringResource(Res.string.vault_link_key_file), onClick = onLinkKeyFile)
+                    if (canImportCert) PrimaryButton(stringResource(Res.string.vault_import_certificate), onClick = onImportCert, icon = "add")
+                }
             }
         },
     )
@@ -487,6 +539,20 @@ private fun LiveSecretCard(
                             ?: info.principals.joinToString(", ")
                     }
                     Txt(meta, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
+            is CredentialSecret.KeyFile -> {
+                val state = rememberKeyFileState(secret, LocalSecretFileReader.current, inspector)
+                SecretIcon(VaultPresentation.secretIcon(secret), tinted = true, color = if (secret.certificateRef.isNullOrBlank()) Skerry.colors.cyanBright else Skerry.colors.moss)
+                Column(Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Txt(credential.label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.SemiBold)
+                        KeyFileBadges(state)
+                    }
+                    Txt(
+                        stringResource(Res.string.vault_meta_key_file, secret.privateKeyRef),
+                        color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp),
+                    )
                 }
             }
             is CredentialSecret.PrivateKey -> {
@@ -588,11 +654,15 @@ private fun LiveSecretDetail(
     val secret = credential.secret
     val keyInfo = rememberKeyInfo(credential, generator)
     val certInfo = rememberCertInfo(credential, inspector)
+    val keyFileState = (secret as? CredentialSecret.KeyFile)?.let { rememberKeyFileState(it, LocalSecretFileReader.current, inspector) }
     val (icon, color, tinted) = VaultPresentation.secretStyle(secret, Skerry.colors)
     val subtitle = when (secret) {
         is CredentialSecret.Certificate -> certInfo?.keyTypeLabel?.let { stringResource(Res.string.vault_subtitle_certificate_typed, it) } ?: stringResource(Res.string.vault_subtitle_certificate)
         is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: stringResource(Res.string.vault_subtitle_private_key)
         is CredentialSecret.Password -> stringResource(Res.string.vault_subtitle_password)
+        is CredentialSecret.KeyFile ->
+            if (secret.certificateRef.isNullOrBlank()) stringResource(Res.string.vault_subtitle_key_file)
+            else stringResource(Res.string.vault_subtitle_key_file_cert)
     }
     Column(Modifier.width(340.dp).fillMaxHeight().background(Skerry.colors.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
         Row(Modifier.padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
@@ -613,6 +683,7 @@ private fun LiveSecretDetail(
                 Txt(keyInfo?.fingerprintSha256 ?: "—", color = Skerry.colors.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
             }
             is CredentialSecret.Password -> Unit
+            is CredentialSecret.KeyFile -> KeyFileDetailBody(secret, keyFileState, mono)
         }
         UsedByHosts(hosts, snippetLabels, mono)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -628,6 +699,8 @@ private fun LiveSecretDetail(
                 // auto-clear) rather than the plain clipboard used for cert/public key.
                 is CredentialSecret.Password ->
                     PrimaryButton(stringResource(Res.string.vault_copy_password), onClick = { onCopyPassword(secret.password) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
+                // Nothing to copy: the material is on disk, and the refs are already spelled out above.
+                is CredentialSecret.KeyFile -> Unit
             }
             GhostButton(stringResource(Res.string.vault_rename), onClick = onRename, modifier = Modifier.fillMaxWidth())
             when (secret) {
@@ -639,7 +712,7 @@ private fun LiveSecretDetail(
                     GhostButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, modifier = Modifier.weight(1f))
                     GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
                 }
-                is CredentialSecret.Password ->
+                is CredentialSecret.Password, is CredentialSecret.KeyFile ->
                     GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
             }
         }
@@ -779,6 +852,122 @@ internal fun ImportCertificateDialog(
             }
         }
         DialogButtons(confirmLabel = stringResource(Res.string.vault_import), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onCreate(name.trim(), pem.trim(), certificate.trim(), passphrase.ifBlank { null }) })
+    }
+}
+
+/**
+ * Badges for a file-backed secret in the list: the certificate's key type, whether it has expired,
+ * and — loudest of the three — whether the files it points at can be read here at all. A credential
+ * whose issuer hasn't run today looks identical to a working one until something says so.
+ *
+ * A null [state] (read still in flight, or a platform with no reader) shows nothing rather than
+ * flashing a wrong verdict.
+ */
+@Composable
+internal fun KeyFileBadges(state: KeyFileState?) {
+    if (state == null) return
+    val broken = !state.keyReadable || (state.certificateExpected && !state.certificateReadable)
+    if (broken) {
+        Badge(stringResource(Res.string.vault_badge_file_missing), bg = Skerry.colors.sunset.copy(alpha = 0.16f), fg = Skerry.colors.sunset, radius = 3, size = 9.5.sp)
+        return
+    }
+    state.certificate?.keyTypeLabel?.let { Badge(it, bg = Skerry.colors.moss.copy(alpha = 0.16f), fg = Skerry.colors.moss, radius = 3, size = 9.5.sp) }
+    if (state.certificate?.expired == true) {
+        Badge(stringResource(Res.string.vault_badge_expired), bg = Skerry.colors.sunset.copy(alpha = 0.16f), fg = Skerry.colors.sunset, radius = 3, size = 9.5.sp)
+    } else {
+        Badge(stringResource(Res.string.vault_badge_file), bg = Skerry.colors.cyan.copy(alpha = 0.14f), fg = Skerry.colors.cyanBright, radius = 3, size = 9.5.sp)
+    }
+}
+
+/**
+ * Detail body for a file-backed secret: the refs themselves (that's the whole secret, as far as the
+ * vault is concerned), whether each is readable here, and the certificate metadata parsed off disk —
+ * the same [CertificateDetailBody] a vault-stored certificate gets, so both kinds read alike.
+ */
+@Composable
+internal fun KeyFileDetailBody(secret: CredentialSecret.KeyFile, state: KeyFileState?, mono: FontFamily) {
+    DetailLabel(stringResource(Res.string.vault_label_key_path))
+    RefRow(secret.privateKeyRef, missing = state?.keyReadable == false, mono = mono)
+    val certRef = state?.certificateRef ?: secret.certificateRef?.takeIf { it.isNotBlank() }
+    if (certRef != null) {
+        DetailLabel(stringResource(Res.string.vault_label_cert_path))
+        RefRow(certRef, missing = state?.certificateReadable == false, mono = mono)
+    }
+    if (state?.certificateExpected == true && !state.certificateReadable) {
+        Txt(stringResource(Res.string.vault_cert_from_file_unreadable), color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+    }
+    state?.certificate?.let { CertificateDetailBody(it, mono) }
+}
+
+/** One ref line in the detail panel, in monospace, with a note when the file isn't readable here. */
+@Composable
+private fun RefRow(ref: String, missing: Boolean, mono: FontFamily) {
+    Txt(ref, color = Skerry.colors.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = if (missing) 4.dp else 16.dp))
+    if (missing) {
+        Txt(stringResource(Res.string.vault_key_file_missing), color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
+    }
+}
+
+/**
+ * Links a key (and optionally a certificate) that stays on disk. Unlike [ImportCertificateDialog]
+ * nothing is read here: only the locations are kept, which is what lets a short-lived certificate
+ * keep working while its issuer rewrites the file.
+ *
+ * The certificate field may be left empty — the hint spells out which sibling would be used instead,
+ * or that there'd be no certificate at all for a ref with no siblings to guess at (an Android
+ * document Uri).
+ */
+@Composable
+internal fun LinkKeyFileDialog(
+    onDismiss: () -> Unit,
+    onCreate: (name: String, keyRef: String, certificateRef: String?, passphrase: String?) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var keyRef by remember { mutableStateOf("") }
+    var certRef by remember { mutableStateOf("") }
+    var passphrase by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    val valid = name.isNotBlank() && keyRef.isNotBlank()
+    val browseTitle = stringResource(Res.string.vault_link_key_file)
+
+    VaultDialogScaffold(stringResource(Res.string.vault_link_key_file), stringResource(Res.string.vault_dialog_key_file_subtitle), onDismiss) {
+        DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = stringResource(Res.string.vault_placeholder_name_key_file))
+        Box(Modifier.padding(top = 16.dp)) {
+            RefField(stringResource(Res.string.vault_field_key_path), keyRef, { keyRef = it }, "~/.ssh/id_ed25519") {
+                scope.launch { pickSecretFileRef(browseTitle)?.let { keyRef = it } }
+            }
+        }
+        Box(Modifier.padding(top = 16.dp)) {
+            RefField(stringResource(Res.string.vault_field_cert_path), certRef, { certRef = it }, "~/.ssh/id_ed25519-cert.pub") {
+                scope.launch { pickSecretFileRef(browseTitle)?.let { certRef = it } }
+            }
+        }
+        if (certRef.isBlank()) {
+            val sibling = keyFileSiblingRef(keyRef)
+            Txt(
+                if (sibling != null) stringResource(Res.string.vault_hint_cert_sibling, sibling)
+                else stringResource(Res.string.vault_hint_cert_sibling_opaque),
+                color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        Box(Modifier.padding(top = 16.dp)) {
+            DialogField(stringResource(Res.string.vault_field_passphrase), passphrase, { passphrase = it }, placeholder = stringResource(Res.string.vault_placeholder_optional), password = true)
+        }
+        DialogButtons(
+            confirmLabel = stringResource(Res.string.vault_link),
+            confirmEnabled = valid,
+            onDismiss = onDismiss,
+            onConfirm = { onCreate(name.trim(), keyRef.trim(), certRef.trim().ifBlank { null }, passphrase.ifBlank { null }) },
+        )
+    }
+}
+
+/** A ref field with a "Browse…" button next to it; the path stays editable by hand (pasted or typed). */
+@Composable
+private fun RefField(label: String, value: String, onValueChange: (String) -> Unit, placeholder: String, onBrowse: () -> Unit) {
+    Column {
+        DialogField(label, value, onValueChange, placeholder = placeholder)
+        GhostButton(stringResource(Res.string.vault_browse), onClick = onBrowse, modifier = Modifier.padding(top = 8.dp))
     }
 }
 

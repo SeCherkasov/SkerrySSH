@@ -45,4 +45,5 @@
     <!-- Secret card meta line: %1$s — cert principals / key fingerprint, %2$s — "used by" fragment. -->
     <string name="vtail_meta_principals">%1$s · %2$s</string>
     <string name="vtail_meta_fingerprint">%1$s · %2$s</string>
+    <string name="vtail_picker_type_key_file">Key file</string>
 </resources>
