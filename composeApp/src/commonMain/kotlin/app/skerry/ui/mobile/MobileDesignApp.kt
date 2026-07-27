@@ -123,6 +123,8 @@ import app.skerry.ui.host.isProdHost
 @Composable
 fun MobileDesignApp(
     deps: AppDependencies = AppDependencies(),
+    // Keyboard-interactive prompts (2FA codes a server asks for mid-connect); null in preview.
+    keyboardInteractive: app.skerry.ui.connection.KeyboardInteractivePromptController? = null,
     state: MobileDesignState = remember { MobileDesignState() },
     features: FeatureFlags = FeatureFlags(),
     sessions: SessionsController? = null,
@@ -265,6 +267,7 @@ fun MobileDesignApp(
         if (state.customTerminalTheme) state.terminalTheme
         else TerminalThemes.fromId(state.themeMode.terminalThemeId(termSystemDark))
     CompositionLocalProvider(
+        app.skerry.ui.app.LocalKeyboardInteractive provides keyboardInteractive,
         LocalFonts provides fonts,
         // Terminal appearance from settings (More → Appearance): font + size read by TerminalScreen.
         LocalTerminalAppearance provides terminalAppearance,
@@ -310,7 +313,7 @@ fun MobileDesignApp(
                     autoLockIdleMs = state.autoLock.idleMs,
                     // Runs on EVERY lock, including the two automatic ones that bypass the lock
                     // action — Android had no teardown at all before (only onVaultReset did).
-                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets, deps.runbookRunner) },
+                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets, deps.runbookRunner, keyboardInteractive) },
                     onReset = onVaultReset,
                     // onPairingComplete != null (sync present) — the create screen offers "I have a code":
                     // the coordinator creates the vault under the chosen password and accepts the account key.
@@ -548,6 +551,11 @@ private fun MobileChrome(
                     },
                 )
             }
+            // A server asking for a second factor mid-connect: above the sheets, since the connection
+            // is blocked on this answer and it can arrive over any of them.
+            app.skerry.ui.connection.KeyboardInteractiveHost(
+                app.skerry.ui.app.LocalKeyboardInteractive.current,
+            )
             pending?.let { (host, dest, jump) ->
                 MobilePasswordSheet(
                     host = host,

@@ -139,4 +139,6 @@
     <string name="conn_container_err_connection">Connection failed</string>
     <string name="conn_container_incomplete">Enter host, username and credentials first</string>
     <string name="conn_container_err_command">The host could not list containers</string>
+    <string name="conn_auth_interactive">Interactive (2FA)</string>
+    <string name="conn_auth_interactive_desc">the server asks for a code at connect time</string>
 </resources>

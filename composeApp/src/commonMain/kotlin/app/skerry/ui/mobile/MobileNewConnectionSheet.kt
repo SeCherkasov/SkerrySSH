@@ -63,6 +63,8 @@ import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.conn_auth_ask
 import app.skerry.ui.generated.resources.conn_auth_ask_desc
+import app.skerry.ui.generated.resources.conn_auth_interactive
+import app.skerry.ui.generated.resources.conn_auth_interactive_desc
 import app.skerry.ui.generated.resources.conn_auth_existing_saved
 import app.skerry.ui.generated.resources.conn_auth_key_desc
 import app.skerry.ui.generated.resources.conn_auth_key_option
@@ -512,6 +514,7 @@ private fun mobileFormAuth(
         ?.let { SshAuth.PublicKey(it, form.passphrase.ifBlank { null }) }
     AuthMode.EXISTING -> credentials?.credentials?.firstOrNull { it.id == form.existingCredentialId }?.toSshAuth()
     AuthMode.ASK -> null
+    AuthMode.INTERACTIVE -> SshAuth.Interactive
 }
 
 /** Container profile fields on the phone: runtime, target (with "Browse"), namespace/container, shell. */
@@ -652,6 +655,7 @@ private fun MobileAuthPicker(form: NewConnectionFormState, allowKey: Boolean = t
     var menuOpen by remember { mutableStateOf(false) }
     val selectedLabel = when (form.authMode) {
         AuthMode.ASK -> stringResource(Res.string.conn_auth_ask)
+        AuthMode.INTERACTIVE -> stringResource(Res.string.conn_auth_interactive)
         AuthMode.NEW_PASSWORD -> stringResource(Res.string.conn_auth_password)
         AuthMode.NEW_KEY -> stringResource(Res.string.conn_auth_private_key)
         AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingCredentialId }?.let { stringResource(Res.string.conn_auth_existing_saved, it.label) } ?: stringResource(Res.string.conn_auth_select_credential)
@@ -690,6 +694,9 @@ private fun MobileAuthPicker(form: NewConnectionFormState, allowKey: Boolean = t
                 ) {
                     MobileAuthOption("vpn_key_off", stringResource(Res.string.conn_auth_ask), stringResource(Res.string.conn_auth_ask_desc), form.authMode == AuthMode.ASK) {
                         form.authMode = AuthMode.ASK; menuOpen = false
+                    }
+                    MobileAuthOption("pin", stringResource(Res.string.conn_auth_interactive), stringResource(Res.string.conn_auth_interactive_desc), form.authMode == AuthMode.INTERACTIVE) {
+                        form.authMode = AuthMode.INTERACTIVE; menuOpen = false
                     }
                     MobileAuthOption("password", stringResource(Res.string.conn_auth_password_option), stringResource(Res.string.conn_auth_password_desc), form.authMode == AuthMode.NEW_PASSWORD) {
                         form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false

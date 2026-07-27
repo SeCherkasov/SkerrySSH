@@ -10,17 +10,32 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.common.Buffer
 import net.schmizz.sshj.common.KeyType
 import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.userauth.UserAuthException
+import net.schmizz.sshj.userauth.method.AuthKeyboardInteractive
+import net.schmizz.sshj.userauth.method.AuthPassword
+import net.schmizz.sshj.userauth.method.AuthPublickey
+import net.schmizz.sshj.userauth.method.ChallengeResponseProvider
+import net.schmizz.sshj.userauth.method.PasswordResponseProvider
 import net.schmizz.sshj.userauth.password.PasswordUtils
+import net.schmizz.sshj.userauth.password.Resource
 
-/** Desktop implementation of [SshTransport] over sshj (JVM). */
+/**
+ * Desktop implementation of [SshTransport] over sshj (JVM).
+ *
+ * [keyboardInteractiveResponder] answers the server's keyboard-interactive challenges (2FA codes and
+ * the like). Null — the default — means the method isn't offered at all, so a server that insists on
+ * it fails authentication exactly as it did before the responder existed.
+ */
 class SshjTransport(
     private val hostKeyVerifier: HostKeyVerifier,
+    private val keyboardInteractiveResponder: KeyboardInteractiveResponder? = null,
 ) : SshTransport {
 
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection =
@@ -53,7 +68,7 @@ class SshjTransport(
                 true
             }
         }
-        authenticate(client, target.username, auth, hop = false)
+        authenticate(client, target.username, auth, hop = false, host = target.host, port = target.port)
 
         // sshj returns the server ident without the prefix (`getServerVersion()` =
         // serverID.substring(8)); we restore the full `SSH-2.0-<software>` form for the status
@@ -91,7 +106,7 @@ class SshjTransport(
     ): SSHClient {
         val upstream = jump?.let { next ->
             dial(next.host, next.port, next.jump, opened, hop = true)
-                .also { authenticate(it, next.username, next.auth, hop = true) }
+                .also { authenticate(it, next.username, next.auth, hop = true, host = next.host, port = next.port) }
         }
         val client = SSHClient()
         // TCP connect timeout: sshj's default is 0 = wait forever. Without this, "Test
@@ -152,32 +167,91 @@ class SshjTransport(
      * connect-level cleanup's job — see `opened` there). [hop] marks a ProxyJump hop so the user
      * can tell which side rejected the credentials (still no addresses/usernames in the text).
      */
-    private fun authenticate(client: SSHClient, username: String, auth: SshAuth, hop: Boolean) {
+    private fun authenticate(
+        client: SSHClient,
+        username: String,
+        auth: SshAuth,
+        hop: Boolean,
+        host: String,
+        port: Int,
+    ) {
+        // Held so the failure below can tell "the user waved the prompt away" apart from "the server
+        // said no" — sshj reports both as the same UserAuthException.
+        var prompts: ResponderChallengeProvider? = null
         try {
-            when (auth) {
-                is SshAuth.Password -> client.authPassword(username, auth.secret)
-                is SshAuth.PublicKey -> {
-                    // loadKeys treats the strings as key content (not a path); passphrase is a
-                    // one-off PasswordFinder. sshj detects the format (OpenSSH/PKCS) itself.
-                    val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-                    val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
-                    client.authPublickey(username, keys)
+            // One ordered list rather than a single call: a server configured with
+            // `AuthenticationMethods publickey,keyboard-interactive` answers the first method with
+            // partial success, and sshj then moves on to the next one in the list (SSHClient.auth).
+            // That is what makes two-factor login work; with a single method it would stop at the
+            // partial success and report failure.
+            val methods = buildList {
+                when (auth) {
+                    is SshAuth.Password -> {
+                        add(AuthPassword(PasswordUtils.createOneOff(auth.secret.toCharArray())))
+                        // Without a responder, keep sshj's own fallback (what authPassword did here
+                        // before): it answers password-shaped prompts from the saved secret, which is
+                        // how PAM setups that only re-ask for the password work. With a responder,
+                        // ours supersedes it — it answers those same prompts from the secret and asks
+                        // the user about everything else.
+                        //
+                        // Its own finder, not the one above: createOneOff hands the password over
+                        // exactly once and blanks the array afterwards, so a shared finder would leave
+                        // the fallback answering with nothing the moment AuthPassword had run — which
+                        // is precisely the case this fallback exists for.
+                        if (keyboardInteractiveResponder == null) {
+                            add(
+                                AuthKeyboardInteractive(
+                                    PasswordResponseProvider(PasswordUtils.createOneOff(auth.secret.toCharArray())),
+                                ),
+                            )
+                        }
+                    }
+                    is SshAuth.PublicKey -> {
+                        // loadKeys treats the strings as key content (not a path); passphrase is a
+                        // one-off PasswordFinder. sshj detects the format (OpenSSH/PKCS) itself.
+                        val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
+                        val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
+                        add(AuthPublickey(keys))
+                    }
+                    is SshAuth.Certificate -> {
+                        // Cert auth: possession is proven by the private key from PEM, while the
+                        // server is shown the certificate itself (public part = parsed *-cert.pub).
+                        // sshj doesn't stitch these together from strings on its own (only from
+                        // sibling files), so we build the KeyProvider by hand: private from PEM,
+                        // public as Certificate, type as *_CERT.
+                        val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
+                        val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
+                        add(AuthPublickey(certificateKeyProvider(keys, auth.certificate)))
+                    }
+                    // Nothing to offer up front: the whole exchange is the server asking and the
+                    // user answering, added below.
+                    SshAuth.Interactive -> Unit
                 }
-                is SshAuth.Certificate -> {
-                    // Cert auth: possession is proven by the private key from PEM, while the
-                    // server is shown the certificate itself (public part = parsed *-cert.pub).
-                    // sshj doesn't stitch these together from strings on its own (only from
-                    // sibling files), so we build the KeyProvider by hand: private from PEM,
-                    // public as Certificate, type as *_CERT.
-                    val pwdf = auth.passphrase?.let { PasswordUtils.createOneOff(it.toCharArray()) }
-                    val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
-                    client.authPublickey(username, certificateKeyProvider(keys, auth.certificate))
+                keyboardInteractiveResponder?.let { responder ->
+                    val provider = ResponderChallengeProvider(
+                        responder = responder,
+                        hop = hop,
+                        knownPassword = (auth as? SshAuth.Password)?.secret,
+                        endpoint = "$username@$host:$port",
+                    )
+                    prompts = provider
+                    add(AuthKeyboardInteractive(provider))
                 }
             }
+            client.auth(username, methods)
         } catch (e: UserAuthException) {
             // No username in the text: the message must not carry an identifier (logs/reports).
+            // A prompt the user waved away (or let expire) is reported as itself: otherwise the one
+            // failure the user caused reads as "your credentials are wrong", and they go hunting for
+            // a problem with the password instead of simply answering the next prompt.
             throw SshAuthenticationException(
-                if (hop) "Jump host rejected the credentials" else "Server rejected the credentials", e,
+                when (prompts?.outcome) {
+                    ResponderChallengeProvider.Outcome.Dismissed -> "Two-factor prompt was dismissed"
+                    ResponderChallengeProvider.Outcome.TimedOut -> "Two-factor prompt timed out"
+                    ResponderChallengeProvider.Outcome.Flooded -> "Server asked for too many answers at once"
+                    else -> if (hop) "Jump host rejected the credentials" else "Server rejected the credentials"
+                },
+                e,
             )
         } catch (e: IOException) {
             throw SshConnectionException("Connection dropped during authentication", e)
@@ -187,6 +261,96 @@ class SshjTransport(
     private companion object {
         const val CONNECT_TIMEOUT_MILLIS = 10_000
     }
+}
+
+/**
+ * Adapts sshj's synchronous [ChallengeResponseProvider] to our suspend [KeyboardInteractiveResponder].
+ *
+ * sshj hands over one prompt at a time (`AuthKeyboardInteractive` loops over the request's prompts
+ * calling [getResponse] for each), so each prompt becomes its own single-prompt challenge — the
+ * contract keeps a list because RFC 4256 allows several per round and a future transport may deliver
+ * them together.
+ *
+ * The call happens on sshj's reader thread and blocks it until the user answers, which is what makes
+ * the connection wait; [KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS] keeps an unanswered prompt from pinning
+ * that thread forever. Dismissal (or timeout) is remembered: the remaining prompts of the round are
+ * answered with nothing and the method is not retried, so a cancelled prompt fails authentication
+ * instead of re-opening.
+ *
+ * [knownPassword] short-circuits password-shaped prompts with the secret we already hold, using
+ * sshj's own pattern — the user is asked only for what the vault can't answer, i.e. the second
+ * factor itself.
+ */
+private class ResponderChallengeProvider(
+    private val responder: KeyboardInteractiveResponder,
+    private val hop: Boolean,
+    private val knownPassword: String?,
+    private val endpoint: String,
+) : ChallengeResponseProvider {
+
+    /** Why the exchange stopped, for the failure message. */
+    enum class Outcome { Answering, Dismissed, TimedOut, Flooded }
+
+    @Volatile
+    var outcome: Outcome = Outcome.Answering
+        private set
+
+    private var name: String = ""
+    private var instruction: String = ""
+    private var rounds: Int = 0
+    private var promptsThisRound: Int = 0
+
+    private val stopped: Boolean get() = outcome != Outcome.Answering
+
+    override fun init(resource: Resource<*>, name: String, instruction: String) {
+        this.name = name
+        this.instruction = instruction
+        rounds++
+        promptsThisRound = 0
+    }
+
+    override fun getResponse(prompt: String, echo: Boolean): CharArray {
+        if (stopped) return CharArray(0)
+        // One request may carry any number of prompts, each costing the user a dialog; a server that
+        // sends hundreds isn't authenticating anyone, so stop answering rather than march the user
+        // through them.
+        if (++promptsThisRound > KEYBOARD_INTERACTIVE_MAX_PROMPTS_PER_ROUND) {
+            outcome = Outcome.Flooded
+            return CharArray(0)
+        }
+        if (!echo && knownPassword != null &&
+            PasswordResponseProvider.DEFAULT_PROMPT_PATTERN.matcher(prompt).matches()
+        ) {
+            return knownPassword.toCharArray()
+        }
+        val challenge = KeyboardInteractiveChallenge(
+            name = name,
+            instruction = instruction,
+            prompts = listOf(KeyboardInteractivePrompt(prompt, echo)),
+            hop = hop,
+            endpoint = endpoint,
+        )
+        // The deadline the user experiences lives in the responder, which starts counting when the
+        // prompt is actually on screen; this one only catches a responder that never returns at all.
+        // Any other failure out of the responder is treated as a dismissal rather than thrown: it
+        // would escape through sshj's auth loop as an unhandled type, bypassing the exception
+        // translation above.
+        val answers = runCatching {
+            runBlocking {
+                withTimeoutOrNull(KEYBOARD_INTERACTIVE_RESPONDER_BACKSTOP_MILLIS) { responder.respond(challenge) }
+            }
+        }.getOrNull()
+        if (answers == null) {
+            outcome = Outcome.Dismissed
+            return CharArray(0)
+        }
+        return answers.firstOrNull().orEmpty().toCharArray()
+    }
+
+    override fun shouldRetry(): Boolean = !stopped && rounds < KEYBOARD_INTERACTIVE_MAX_ROUNDS
+
+    /** No submethod hint: let the server pick whatever it has configured, like OpenSSH does. */
+    override fun getSubmethods(): List<String> = emptyList()
 }
 
 /** Once per process: registration of the full BouncyCastle provider (see [ensureCryptoProvider]). */

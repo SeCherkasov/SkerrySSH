@@ -113,4 +113,8 @@
     <string name="shell_tip_disconnect">断开连接</string>
     <string name="shell_no_hosts_yet">还没有主机</string>
     <string name="shell_add_first_host">添加连接后会显示在这里。</string>
+    <string name="shell_kbdint_title">额外验证</string>
+    <string name="shell_kbdint_jump">由跳板主机请求</string>
+    <string name="shell_kbdint_continue">继续</string>
+    <string name="shell_kbdint_asks">服务器请求：</string>
 </resources>
