@@ -26,3 +26,13 @@ updates:
     # Newer stable CMP only pairs with -alpha material3. Revisit by hand if a stable material3 > 1.9.0 ships.
     ignore:
       - dependency-name: "org.jetbrains.compose*"
+      # llamatik 1.9.1 ships a Linux x86-64 native that runs AVX-512 unconditionally in
+      # ggml_cpu_init, before any CPU dispatch — an instant SIGILL on every CPU without AVX-512
+      # (all AMD Zen 1-3, Intel parts with E-cores). CI never loads the native, so only a live run
+      # catches it. Drop this entry once upstream rebuilds without AVX-512 on the init path.
+      - dependency-name: "com.llamatik:library"
+        versions: ["1.9.1"]
+      # Micrometer follows ktor, not the other way round: ktor-server-metrics-micrometer is built
+      # against a specific registry version and taking the registry ahead of it mixes versions.
+      # Bump both together by hand.
+      - dependency-name: "io.micrometer:micrometer-registry-prometheus"
