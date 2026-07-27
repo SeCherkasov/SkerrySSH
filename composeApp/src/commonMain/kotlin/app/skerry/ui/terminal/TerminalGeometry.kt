@@ -188,3 +188,33 @@ fun hitTestSelectionHandle(
         else -> null
     }
 }
+
+/**
+ * Where a collaborator's caret goes, in pixels inside the terminal's padded content — the same
+ * layout the canvas uses (row `r` is drawn at `r * cellHeight`, scrolled by [scrollPx]).
+ *
+ * [cursorRow]/[cursorCol] are the cursor's place on the *screen*, while the canvas draws the whole
+ * snapshot ([snapshotRows] rows, of which the last [gridRows] are the screen) — so the row has to be
+ * mapped into the snapshot first. Getting that wrong is what makes a caret hover over the wrong line
+ * whenever the output is shorter than the viewport or the user has scrolled back, which is exactly
+ * why this is a function and not three terms inlined into a modifier.
+ *
+ * The result is the top-left of the marker: the row *under* the cursor's, so its bar reaches up into
+ * the cursor's cell while its name tag hangs below the line being typed.
+ */
+fun caretOffsetPx(
+    cursorRow: Int,
+    cursorCol: Int,
+    snapshotRows: Int,
+    gridRows: Int,
+    metrics: TerminalMetrics,
+    scrollPx: Float,
+): Pair<Float, Float> {
+    val screenTop = (snapshotRows - gridRows).coerceAtLeast(0)
+    val row = (screenTop + cursorRow.coerceAtLeast(0)).coerceAtMost((snapshotRows - 1).coerceAtLeast(0))
+    val x = metrics.cellWidth * cursorCol.coerceAtLeast(0)
+    // Clamped at 0: a marker pushed above the viewport's top edge would be drawn over the pane's own
+    // chrome instead of the terminal.
+    val y = (metrics.cellHeight * (row + 1) - scrollPx).coerceAtLeast(0f)
+    return x to y
+}

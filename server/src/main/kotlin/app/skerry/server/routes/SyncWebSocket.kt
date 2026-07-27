@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicReference
  * pull" signals, no content in frames. Frame formats:
  * - `{cursor}` — account vault cursor (legacy format);
  * - `team:{teamId}:{cursor}` — team record cursor;
+ * - `shares:{teamId}` — the team's live shared sessions changed, client re-reads the directory;
  * - `teams` — membership/invites changed, client re-reads the team list.
  */
 fun Route.syncWebSocket(services: Services) {
@@ -74,6 +75,19 @@ fun Route.syncWebSocket(services: Services) {
                 }
             }
         }
+        val shareNotifications = launch {
+            services.notifier.shareChanges().collect { teamId ->
+                // Same per-signal membership and revocation checks as the team channel: the
+                // directory of live shared sessions is team-scoped information.
+                if (services.devices.isRevoked(accountId, deviceId)) {
+                    markClosing(WsCloseReason.DEVICE_REVOKED)
+                    close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "device revoked"))
+                } else if (teamId in services.teams.activeTeamIdsFor(accountId)) {
+                    send(Frame.Text("shares:$teamId"))
+                    services.metrics.wsFrameSent(NotifyKind.TEAM)
+                }
+            }
+        }
         val membershipNotifications = launch {
             services.notifier.forMembership(accountId).collect {
                 if (services.devices.isRevoked(accountId, deviceId)) {
@@ -97,6 +111,7 @@ fun Route.syncWebSocket(services: Services) {
         } finally {
             notifications.cancel()
             teamNotifications.cancel()
+            shareNotifications.cancel()
             membershipNotifications.cancel()
             services.metrics.wsSessionClosed(closeReason.get(), (System.nanoTime() - openedAt) / 1_000_000_000.0)
         }

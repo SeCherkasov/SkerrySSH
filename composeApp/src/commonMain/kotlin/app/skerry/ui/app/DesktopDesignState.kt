@@ -573,6 +573,10 @@ class DesktopDesignState(
     val recordingToggleRequests: SharedFlow<Unit> = _recordingToggleRequests
     fun requestRecordingToggle() { _recordingToggleRequests.tryEmit(Unit) }
 
+    private val _sharePanelRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val sharePanelRequests: SharedFlow<Unit> = _sharePanelRequests
+    fun requestSharePanel() { _sharePanelRequests.tryEmit(Unit) }
+
     private val _runbookPaletteRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val runbookPaletteRequests: SharedFlow<Unit> = _runbookPaletteRequests
     fun requestRunbookPalette() { _runbookPaletteRequests.tryEmit(Unit) }

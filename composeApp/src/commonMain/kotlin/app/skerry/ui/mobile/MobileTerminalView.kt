@@ -70,6 +70,14 @@ import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.terminal.RecordingOutcome
+import app.skerry.shared.guard.ProductionGuardPolicy
+import app.skerry.shared.share.ShareFrame
+import app.skerry.ui.app.LocalSessionShare
+import app.skerry.ui.generated.resources.share_session
+import app.skerry.ui.generated.resources.share_session_stop
+import app.skerry.ui.share.ShareSource
+import app.skerry.ui.share.ShareUiState
+import app.skerry.ui.share.shareableTeams
 import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
@@ -203,6 +211,9 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     var menuOpen by remember(active?.id) { mutableStateOf(false) }
     // Host monitor sheet (desktop info-panel parity) — raised from the same menu, connected only.
     var monitorOpen by remember(active?.id) { mutableStateOf(false) }
+    // Session sharing (the "Share session" item below); null without sync — the item stays hidden.
+    val share = LocalSessionShare.current
+    val shareTeams = shareableTeams()
     // Outcome of the last finished recording, shown as a notice (desktop parity). null = nothing to say.
     var recordingNotice by remember(active?.id) { mutableStateOf<RecordingOutcome?>(null) }
     val scope = rememberCoroutineScope()
@@ -402,6 +413,40 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                         )
                     }
                     if (activeTerminal != null) {
+                        // Share this session with a team (desktop parity: the toolbar's cast toggle).
+                        // Starting picks the first team with a key; stopping needs no choice at all.
+                        val shareState = share?.state
+                        val sharing = shareState is ShareUiState.Live
+                        val target = shareTeams.firstOrNull()
+                        if (sharing || target != null) {
+                            MobileSheetButton(
+                                label = stringResource(if (sharing) Res.string.share_session_stop else Res.string.share_session),
+                                onClick = {
+                                    menuOpen = false
+                                    if (sharing) {
+                                        share?.stop()
+                                    } else if (target != null && active != null) {
+                                        share?.share(
+                                            teamId = target.first,
+                                            teamName = target.second,
+                                            paneId = active.id,
+                                            label = active.displayTitle.ifBlank { active.subtitle },
+                                            source = ShareSource(
+                                                output = activeTerminal.ptyOutput,
+                                                toShell = { bytes -> activeTerminal.sendSharedInput(bytes) },
+                                                geometry = { ShareFrame.Resize(activeTerminal.cols, activeTerminal.rows) },
+                                            ),
+                                            // Production sessions are watched only — a viewer's keys
+                                            // would arrive past the guard's confirmation.
+                                            readOnlyOnly = activeTerminal.guardPolicy != ProductionGuardPolicy.Off,
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                icon = if (sharing) "cast_connected" else "cast",
+                                filled = false,
+                            )
+                        }
                         // Recording toggle: stopping opens a Save-As for the .cast; nothing is
                         // written until the user picks a file.
                         val recording = activeTerminal.recording

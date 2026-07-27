@@ -265,6 +265,21 @@ val LocalSync: ProvidableCompositionLocal<SyncCoordinator?> = staticCompositionL
 val LocalTeams: ProvidableCompositionLocal<app.skerry.ui.teams.TeamsCoordinator?> = staticCompositionLocalOf { null }
 
 /**
+ * Sharing the live session with a team (session sharing over the sync server's relay). `null` —
+ * mock path/preview or sync not connected: the toolbar's share toggle is dimmed. One controller per
+ * app: only one session is shared at a time.
+ */
+val LocalSessionShare: ProvidableCompositionLocal<app.skerry.ui.share.SessionShareController?> =
+    staticCompositionLocalOf { null }
+
+/**
+ * Directory of sessions the account's teams are sharing right now, and the way into one. `null` on
+ * the mock path/preview or without sync: the team screens simply show no live sessions.
+ */
+val LocalSharedSessions: ProvidableCompositionLocal<app.skerry.ui.share.SharedSessionsController?> =
+    staticCompositionLocalOf { null }
+
+/**
  * AI assistant controller (external OpenAI-compatible provider, BYOK). `null` — mock path/preview or
  * a platform without AI: the "AI" settings tab renders a static layout. When set, the tab is live
  * (key/model input, quick chat) independent of [FeatureFlags.ai], which still gates the unfinished

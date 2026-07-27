@@ -16,6 +16,7 @@ import app.skerry.server.db.TeamScopeRepository
 import app.skerry.server.metrics.DbProbe
 import app.skerry.server.metrics.InventoryCollector
 import app.skerry.server.metrics.ServerMetrics
+import app.skerry.server.share.ShareRelay
 import app.skerry.server.sync.ChangeNotifier
 import org.jetbrains.exposed.v1.jdbc.Database
 
@@ -34,6 +35,12 @@ class Services(
      * `/readyz` cannot be exercised through the real route at all.
      */
     dbCheck: (suspend () -> Unit)? = null,
+    /**
+     * How often a live share socket re-checks that its owner is still an active member with a
+     * live device (the JWT is only verified at handshake). Overridden by tests, which cannot wait
+     * out the production cadence.
+     */
+    val shareAccessRecheckMillis: Long = 30_000,
 ) {
     val accounts = AccountRepository(database)
     val devices = DeviceRepository(database)
@@ -49,6 +56,9 @@ class Services(
     val srp = SrpService()
     val tokens = TokenService(config)
     val notifier = ChangeNotifier(metrics)
+
+    /** Live shared terminal sessions (in memory, never persisted — see [ShareRelay]). */
+    val shares = ShareRelay()
 
     /** Feeds `GET /readyz` and `skerry_db_up`; started by [module], never queried per request. */
     val dbProbe = DbProbe(metrics) { dbCheck?.invoke() ?: stats.ping() }

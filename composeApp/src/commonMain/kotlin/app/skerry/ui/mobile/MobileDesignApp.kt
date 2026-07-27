@@ -304,6 +304,8 @@ fun MobileDesignApp(
         LocalSync provides deps.sync,
         // Teams — More → "Team" push screen (sharing hosts/snippets between accounts).
         LocalTeams provides deps.teams,
+        app.skerry.ui.app.LocalSessionShare provides deps.sessionShare,
+        app.skerry.ui.app.LocalSharedSessions provides deps.sharedSessions,
     ) {
         Box(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
             val vault = deps.vault

@@ -67,6 +67,10 @@ data class AppDependencies(
     val sync: SyncCoordinator? = null,
     /** Teams (sharing hosts/secrets/snippets between accounts); `null` if not wired up. */
     val teams: app.skerry.ui.teams.TeamsCoordinator? = null,
+    /** Sharing the live session with a team; null without sync (the share toggle stays dimmed). */
+    val sessionShare: app.skerry.ui.share.SessionShareController? = null,
+    /** Directory of the teams' live shared sessions; null without sync. */
+    val sharedSessions: app.skerry.ui.share.SharedSessionsController? = null,
     /** Local security event log (Settings → Security); `null` if not logging. */
     val securityLog: SecurityLog? = null,
     /** Local AI: model store + downloader + runtime; `null` for preview/mock without the subsystem. */

@@ -39,6 +39,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -1031,6 +1032,25 @@ class TerminalScreenState(
      */
     fun sendBytes(bytes: ByteArray) {
         outbound.trySend(bytes)
+    }
+
+    /**
+     * Live PTY output of this session for a consumer beside the emulator — session sharing streams
+     * the same bytes to the team ([app.skerry.shared.share.SessionShareHost]). The session's output
+     * is a hot flow with any number of subscribers, so this observes it rather than tapping the
+     * emulator's own feed.
+     */
+    val ptyOutput: Flow<ByteArray> get() = session.output
+
+    /**
+     * Keystrokes from a viewer of this shared session. Delivered as raw bytes (a viewer sends key
+     * sequences, not text) and counted as user input, so the screen snaps back to the bottom exactly
+     * as it does when the owner types — otherwise the owner could be scrolled up in history while a
+     * colleague works, and never see what they are doing.
+     */
+    fun sendSharedInput(bytes: ByteArray) {
+        inputVersion++
+        sendBytes(bytes)
     }
 
     /**

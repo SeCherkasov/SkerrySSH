@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.terminal.Asciicast
+import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.vnc.VncAuth
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
@@ -398,6 +399,18 @@ class SessionsController(
         )
         val tab = openTab(session)
         tab.setView(SessionView.Player)
+        return tab.id
+    }
+
+    /**
+     * Open a colleague's shared session in a tab of its own (never reuses a blank one): the pane
+     * shows [viewer] as a live terminal without owning a connection ([ConnectionController.attachSession]).
+     * Closing the tab closes the viewer, which is what releases the relay socket. Returns the tab's id.
+     */
+    fun openShared(title: String, subtitle: String, viewer: TerminalSession): String {
+        val controller = controllerFactory()
+        val tab = openTab(Session(newId(), hostId = null, title = title, subtitle = subtitle, controller))
+        controller.attachSession(viewer)
         return tab.id
     }
 

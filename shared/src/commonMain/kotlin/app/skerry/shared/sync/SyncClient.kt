@@ -138,7 +138,8 @@ interface SyncClient {
 
 /**
  * Live-sync signal from the `/sync` WS channel. Frames carry no content, only "what to reread":
- * `{cursor}` -> [Account]; `team:{id}:{cursor}` -> [Team]; `teams` -> [Membership].
+ * `{cursor}` -> [Account]; `team:{id}:{cursor}` -> [Team]; `shares:{id}` -> [Shares];
+ * `teams` -> [Membership].
  */
 sealed interface SyncSignal {
     /** Changes appeared in the account vault up to [cursor] — do a delta pull. */
@@ -146,6 +147,9 @@ sealed interface SyncSignal {
 
     /** Records appeared in team [teamId] up to [cursor] — sync the team vault. */
     data class Team(val teamId: String, val cursor: Long) : SyncSignal
+
+    /** The team's live shared sessions changed — reread its share directory. */
+    data class Shares(val teamId: String) : SyncSignal
 
     /** Account's team membership/invites changed — reread the team list. */
     data object Membership : SyncSignal

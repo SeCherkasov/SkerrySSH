@@ -13,6 +13,7 @@ import app.skerry.server.routes.deviceRoutes
 import app.skerry.server.routes.metricsRoutes
 import app.skerry.server.routes.pairingClaimRoute
 import app.skerry.server.routes.pairingStartRoute
+import app.skerry.server.routes.shareRoutes
 import app.skerry.server.routes.syncWebSocket
 import app.skerry.server.routes.teamRoutes
 import app.skerry.server.routes.teamScopeRoutes
@@ -306,6 +307,7 @@ fun Application.configureServer(services: Services) {
             pairingStartRoute(services)
             teamRoutes(services)
             teamScopeRoutes(services)
+            shareRoutes(services)
             syncWebSocket(services)
         }
     }

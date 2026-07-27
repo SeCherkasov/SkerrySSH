@@ -18,6 +18,7 @@ import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.ShellTerminalSession
+import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalHistoryStore
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.terminal.terminalHistoryKey
@@ -209,6 +210,9 @@ class ConnectionController(
     private var metrics: HostMetricsController? = null
     private var throughput: ThroughputController? = null
     private var ping: PingController? = null
+    // A session shown but not owned (see [attachSession]); released with the pane, since the pane
+    // holding it is the only thing keeping the relay socket open.
+    private var attached: TerminalSession? = null
 
     /**
      * Connect to [target]/[auth]. [onConnected] (if given) is called EXACTLY ONCE on the first
@@ -341,6 +345,35 @@ class ConnectionController(
             if (connection != null) releaseSessionResources() else conn?.let(::closeConnectionQuietly)
             throw e
         }
+    }
+
+    /**
+     * Shows a session this controller did **not** open — a colleague's shared terminal being
+     * watched ([app.skerry.shared.share.SharedSessionViewer]). The pane gets a live
+     * [ConnectionUiState.Connected] and renders through the usual terminal UI, but nothing that
+     * needs a connection applies: no SFTP, no keep-alive, and no auto-reconnect (there is no target
+     * or credential to reconnect with — the session belongs to someone else's machine).
+     *
+     * Refused unless the controller is idle, for the same reason as [connect]: a pane must never
+     * hold two sessions, and the caller's would be silently orphaned.
+     */
+    fun attachSession(external: TerminalSession) {
+        if (uiState !is ConnectionUiState.Form) return
+        supportsSftp = false
+        val sScope = newSessionScope()
+        sessionScope = sScope
+        attached = external
+        val prefs = terminalPrefs()
+        val terminal = TerminalScreenState(
+            external,
+            sScope,
+            scrollback = prefs.effectiveScrollback,
+            cursorShape = prefs.cursorStyle.shape,
+            cursorBlink = prefs.cursorStyle.blink,
+            clipboardWriteEnabled = prefs.clipboardWriteEnabled,
+        )
+        uiState = ConnectionUiState.Connected(terminal)
+        watchForSessionLoss(terminal, sScope)
     }
 
     /**
@@ -572,6 +605,8 @@ class ConnectionController(
      */
     private fun releaseSessionResources() {
         val conn = connection
+        val watched = attached
+        attached = null
         portForwards?.stop()
         portForwards?.closeAll()
         portForwards = null
@@ -593,6 +628,9 @@ class ConnectionController(
         serverVersion = null
         if (sftp != null) closeSftpQuietly(sftp, coordinator)
         if (conn != null) closeConnectionQuietly(conn)
+        // NonCancellable like the other teardown launches: the relay socket must be released even
+        // if the scope dies at this moment, or the share would keep a phantom viewer forever.
+        if (watched != null) scope.launch(NonCancellable) { runCatching { watched.close() } }
     }
 
     /** Closes the connection without letting scope cancellation break teardown, and swallows errors. */

@@ -53,6 +53,10 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SIDEBAR_WIDTH
+import app.skerry.ui.app.LocalSharedSessions
+import app.skerry.ui.generated.resources.share_live_sessions
+import app.skerry.ui.share.SharedSessionsList
+import app.skerry.ui.share.rememberJoinSharedSession
 import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
@@ -446,6 +450,10 @@ private fun TeamDetail(
         } else if (!team.hasKey) {
             Txt(stringResource(Res.string.lib_teams_no_key), color = Skerry.colors.amber, size = 12.sp, modifier = Modifier.padding(bottom = 16.dp))
         }
+        // Sessions the team is sharing right now (see [SharedSessionsList]) — a live directory, not
+        // a stored one: an entry lives exactly as long as its host's socket.
+        LiveSectionLabel(stringResource(Res.string.share_live_sessions))
+        SharedSessionsList(team.id, LocalSharedSessions.current, onJoin = rememberJoinSharedSession(), modifier = Modifier.padding(bottom = 18.dp))
         LiveSectionLabel(stringResource(Res.string.lib_teams_members))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             members.forEach { m ->

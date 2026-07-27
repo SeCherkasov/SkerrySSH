@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -205,6 +206,12 @@ fun TerminalScreen(
     // terminal, and only the focused one claims the keyboard — otherwise the last one composed
     // would take it and the accent border would point at a pane that receives nothing.
     focused: Boolean = true,
+    /**
+     * Drawn just under the cursor, in the terminal's own coordinates — the sharing hint ("… is
+     * typing") belongs at the place where the text is appearing, and only this composable knows
+     * where that is. Receives a [Modifier] carrying the offset; `null` draws nothing.
+     */
+    cursorOverlay: (@Composable (Modifier) -> Unit)? = null,
     // Ctrl+click on a file path in the output hands it here (the caller reveals it in its session's
     // file panel). `null` — no path affordance at all: the setting is off, or this pane has no file
     // panel of its own (split pane, recording playback, preview).
@@ -1268,6 +1275,26 @@ fun TerminalScreen(
                   autoCorrectEnabled = false,
                   keyboardType = KeyboardType.Ascii,
                   imeAction = ImeAction.None,
+              ),
+          )
+      }
+
+      // Sharing hint under the cursor (see [cursorOverlay]): positioned from the bottom edge, so it
+      // tracks the line being typed into — the live screen keeps the cursor on one of the last rows,
+      // and measuring from the top would need the scrollback offset the canvas owns.
+      cursorOverlay?.let { slot ->
+          val (caretX, caretY) = caretOffsetPx(
+              cursorRow = state.cursorRow,
+              cursorCol = state.cursorCol,
+              snapshotRows = state.screen.size,
+              gridRows = state.rows,
+              metrics = metrics,
+              scrollPx = scroll.value.toFloat(),
+          )
+          slot(
+              Modifier.align(Alignment.TopStart).offset(
+                  x = PADDING_DP.dp + with(density) { caretX.toDp() },
+                  y = PADDING_DP.dp + with(density) { caretY.toDp() },
               ),
           )
       }

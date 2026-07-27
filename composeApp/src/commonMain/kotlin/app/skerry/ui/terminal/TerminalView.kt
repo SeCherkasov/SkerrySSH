@@ -84,7 +84,10 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.app.LocalConnectPane
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
+import app.skerry.ui.app.LocalSessionShare
 import app.skerry.ui.app.LocalTeams
+import app.skerry.ui.share.ShareSessionButton
+import app.skerry.ui.share.shareableTeams
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
 import app.skerry.ui.design.Dot
@@ -94,6 +97,7 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.share_session
 import app.skerry.ui.generated.resources.shell_tip_disconnect
 import app.skerry.ui.generated.resources.shell_tip_files
 import app.skerry.ui.generated.resources.shell_tip_info
@@ -146,7 +150,7 @@ import org.jetbrains.compose.resources.StringResource
  * ones listed here give way in this order — the rarely-reached first, the ones a session is steered
  * with last. [Sync], [AddPane] and [Disconnect] are not in the list: they never overflow.
  */
-internal enum class ToolbarAction { Play, Record, Runbook, Snippets, Tunnels, Info, Files }
+internal enum class ToolbarAction { Play, Record, Share, Runbook, Snippets, Tunnels, Info, Files }
 
 /** Width one icon claims in the row: the button box plus the spacing in front of it. */
 private val ACTION_SLOT_WIDTH = 30.dp
@@ -239,6 +243,11 @@ private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: 
             if (ToolbarAction.Snippets !in hidden) SnippetPaletteButton(active, state.snippetPaletteRequests)
             // Same idea one size up: start a saved procedure here instead of going to its section.
             if (ToolbarAction.Runbook !in hidden) RunbookPaletteButton(active, state.runbookPaletteRequests)
+            // Streams this session to a team over the sync relay (viewers watch; the host decides
+            // whether they may type).
+            if (ToolbarAction.Share !in hidden) {
+                ShareSessionButton(active, LocalSessionShare.current, shareableTeams(), state.sharePanelRequests)
+            }
             // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
             if (ToolbarAction.Record !in hidden) {
                 RecordSessionButton(
@@ -289,6 +298,9 @@ private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: 
                 ) { state.showRecordingNotice(it) }
             }
             if (ToolbarAction.Play in hidden) PlayRecordingButton(state.castOpenRequests, onCastOpened)
+            if (ToolbarAction.Share in hidden) {
+                ShareSessionButton(active, LocalSessionShare.current, shareableTeams(), state.sharePanelRequests)
+            }
         }
     }
 }
@@ -345,6 +357,7 @@ private fun OverflowActionsButton(
                             ToolbarAction.Runbook -> state::requestRunbookPalette
                             ToolbarAction.Record -> state::requestRecordingToggle
                             ToolbarAction.Play -> state::requestCastOpen
+                            ToolbarAction.Share -> state::requestSharePanel
                         }
                         OverflowActionRow(icon = action.icon, label = stringResource(action.label)) {
                             open = false
@@ -382,6 +395,7 @@ private val ToolbarAction.icon: String
         ToolbarAction.Runbook -> "checklist"
         ToolbarAction.Record -> "radio_button_checked"
         ToolbarAction.Play -> "play_circle"
+        ToolbarAction.Share -> "cast"
         ToolbarAction.Info -> "info"
     }
 
@@ -393,6 +407,7 @@ private val ToolbarAction.label: StringResource
         ToolbarAction.Snippets -> Res.string.shell_tip_snippets
         ToolbarAction.Runbook -> Res.string.runbook_toolbar_tip
         ToolbarAction.Record -> Res.string.shell_tip_record
+        ToolbarAction.Share -> Res.string.share_session
         ToolbarAction.Play -> Res.string.shell_tip_play
         ToolbarAction.Info -> Res.string.shell_tip_info
     }
@@ -614,7 +629,15 @@ private fun LivePaneBody(
                 else -> TerminalNotice("terminal", stringResource(Res.string.term_session_closed), pane.subtitle)
             }
             ConnectionUiState.Connecting -> TerminalNotice("sync", stringResource(Res.string.term_connecting), pane.subtitle)
-            is ConnectionUiState.Connected -> TerminalScreen(st.terminal, Modifier.fillMaxSize(), focused = focused, onOpenPath = openPath)
+            // The "… is typing" hint rides along inside the screen, which is what knows where the
+            // cursor is; the share's controls live in the toolbar's panel, not over the terminal.
+            is ConnectionUiState.Connected -> TerminalScreen(
+                st.terminal,
+                Modifier.fillMaxSize(),
+                focused = focused,
+                cursorOverlay = rememberTypingHint(pane.id),
+                onOpenPath = openPath,
+            )
             is ConnectionUiState.Error -> TerminalNotice("error", stringResource(Res.string.term_connection_failed), connectionErrorText(st), color = Skerry.colors.sunset)
             // Disconnected: screen is frozen at the moment of loss ([ConnectionUiState.Disconnected.terminal]),
             // shown under the disconnect banner so output isn't lost and status (reconnecting/gave up) stays visible.

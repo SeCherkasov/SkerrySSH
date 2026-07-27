@@ -17,6 +17,7 @@ import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
 import app.skerry.shared.team.TeamScopeRef
+import app.skerry.shared.vault.DataKey
 import app.skerry.shared.team.TeamScopedSyncClient
 import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamSummary
@@ -185,6 +186,19 @@ class TeamsCoordinator(
      */
     private var scopesUnsupported = false
 
+    /**
+     * The team-wide key held on this device, or `null` when it hasn't arrived (or the vault is
+     * locked). Session sharing seals its frames with it — the relay never sees the plaintext.
+     */
+    fun teamKey(teamId: String): DataKey? = spaces.key(TeamScopeRef(teamId))
+
+    /**
+     * A team's directory of live shared sessions changed (someone started or stopped sharing).
+     * Wired by the platform to the share directory controller, which re-reads the list — the
+     * coordinator itself owns no share state.
+     */
+    var onSharesChanged: ((String) -> Unit)? = null
+
     /** Wire to SyncCoordinator's WS signals (`sync.onTeamSignal = teams::onSignal`). */
     fun onSignal(signal: SyncSignal) {
         when (signal) {
@@ -194,6 +208,7 @@ class TeamsCoordinator(
                 // has something to fetch.
                 if (spacesOf(signal.teamId).any { signal.cursor > teamState.cursor(it.key) }) syncTeam(signal.teamId)
             }
+            is SyncSignal.Shares -> onSharesChanged?.invoke(signal.teamId)
             SyncSignal.Membership -> scope.launch { refresh() }
             is SyncSignal.Account -> Unit // the account channel is handled by SyncCoordinator
         }

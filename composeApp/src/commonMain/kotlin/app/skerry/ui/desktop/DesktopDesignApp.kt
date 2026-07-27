@@ -200,6 +200,8 @@ import app.skerry.ui.app.LocalSecretFileReader
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalSync
+import app.skerry.ui.app.LocalSessionShare
+import app.skerry.ui.app.LocalSharedSessions
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.app.LocalTestTransport
 import app.skerry.ui.app.LocalTunnels
@@ -387,6 +389,10 @@ fun DesktopDesignApp(
     sync: SyncCoordinator? = null,
     // Teams coordinator (cross-account sharing over sync). `null` — Teams screen in mock mode.
     teams: app.skerry.ui.teams.TeamsCoordinator? = null,
+    // Session sharing over the sync relay: the host side (one share at a time) and the directory of
+    // what the account's teams are sharing right now. Both null on the mock path / without sync.
+    sessionShare: app.skerry.ui.share.SessionShareController? = null,
+    sharedSessions: app.skerry.ui.share.SharedSessionsController? = null,
     // AI assistant controller (BYOK, external OpenAI-compatible provider). `null` — AI not connected: the
     // "AI" settings tab draws a static mock. Supplied behind the vault gate (the key is stored in the vault).
     ai: app.skerry.ui.ai.AiAssistantController? = null,
@@ -558,6 +564,8 @@ fun DesktopDesignApp(
         LocalSecurityLog provides securityLog,
         LocalSync provides sync,
         LocalTeams provides teams,
+        LocalSessionShare provides sessionShare,
+        LocalSharedSessions provides sharedSessions,
         LocalAi provides ai,
         LocalUpdates provides updates,
     ) {
