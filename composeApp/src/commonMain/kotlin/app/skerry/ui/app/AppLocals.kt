@@ -16,6 +16,7 @@ import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.known.TrustedCaController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.runbook.RunbookManager
 import app.skerry.ui.runbook.RunbookRunner
@@ -111,6 +112,12 @@ val LocalSessions: ProvidableCompositionLocal<SessionsController?> = staticCompo
  * the layout. Supplied by [DesktopDesignApp] behind the vault gate.
  */
 val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticCompositionLocalOf { null }
+
+/**
+ * Trusted certificate authorities (`@cert-authority`), shown on the known-hosts screen. `null` —
+ * mock path without a backend, where the section is simply absent. Supplied by the chrome root.
+ */
+val LocalTrustedCas: ProvidableCompositionLocal<TrustedCaController?> = staticCompositionLocalOf { null }
 
 /**
  * "Connect to host" action: resolves the secret (a keychain secret from the vault, or a password

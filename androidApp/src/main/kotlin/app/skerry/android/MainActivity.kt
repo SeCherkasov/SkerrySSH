@@ -25,7 +25,10 @@ import app.skerry.shared.ssh.KeyFileResolver
 import app.skerry.shared.vault.OkioSecretFileReader
 import app.skerry.ui.vault.AndroidSecretFileReader
 import app.skerry.ui.connection.KeyboardInteractivePromptController
+import app.skerry.shared.ssh.HostCertificateVerifier
+import app.skerry.shared.ssh.SshjCaKeyParser
 import app.skerry.shared.ssh.TofuHostKeyVerifier
+import app.skerry.shared.ssh.VaultTrustedCaStore
 import app.skerry.shared.snippet.VaultSnippetStore
 import app.skerry.shared.sync.FileSyncStateStore
 import app.skerry.shared.sync.KtorSyncClient
@@ -52,6 +55,7 @@ import app.skerry.ui.vault.AndroidLockContext
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.known.TrustedCaController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
@@ -465,14 +469,26 @@ class MainActivity : FragmentActivity() {
             OkioSecretFileReader(FileSystem.SYSTEM, homeDir = null),
         )
         val keyFileResolver = KeyFileResolver(files = secretFiles, inspector = certificateInspector)
+        // Certificate authorities trusted to vouch for host keys (@cert-authority); see the desktop
+        // graph for the wrapping rule.
+        val trustedCaStore = VaultTrustedCaStore(vault)
         val transport = RoutingTransport(
             ssh = SshjTransport(
-                TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+                HostCertificateVerifier(
+                    trustedCaStore,
+                    TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+                ) { Instant.now().epochSecond },
                 keyFiles = keyFileResolver,
                 keyboardInteractiveResponder = keyboardInteractive.responder,
             ),
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
+        val trustedCas = TrustedCaController(
+            trustedCaStore,
+            SshjCaKeyParser(),
+            newId = { UUID.randomUUID().toString() },
+            now = { Instant.now().toString() },
+        )
         // Host profiles are HOST records in the vault; tree order lives in a layout record. The vault
         // is locked at startup (list is empty); the controller reloads on unlock via reload().
         val hostStore = VaultHostStore(vault, trash = trash)
@@ -497,7 +513,7 @@ class MainActivity : FragmentActivity() {
         // listing a host's containers from the connection form both ride it, so neither can
         // establish trust in a host key on their own.
         val probeTransport = SshjTransport(
-            ProbeHostKeyVerifier(knownHostsStore),
+            HostCertificateVerifier(trustedCaStore, ProbeHostKeyVerifier(knownHostsStore)) { Instant.now().epochSecond },
             keyFiles = keyFileResolver,
             keyboardInteractiveResponder = keyboardInteractive.responder,
         )
@@ -660,6 +676,7 @@ class MainActivity : FragmentActivity() {
             vault = vault,
             credentials = credentials,
             knownHosts = knownHosts,
+            trustedCas = trustedCas,
             // SSH key inspector/generator (BouncyCastle, shared JVM source set): fingerprints/generation in the Vault tab.
             keyGenerator = BouncyCastleSshKeyGenerator(),
             // SSH certificate inspector (sshj): Vault → Certificates parses *-cert.pub.

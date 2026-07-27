@@ -104,7 +104,12 @@ class TofuHostKeyVerifier(
     private val mismatches: HostKeyMismatchStore = NoopHostKeyMismatchStore,
     private val now: () -> String = { "" },
 ) : HostKeyVerifier {
-    override fun verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean {
+    override fun verify(offer: HostKeyOffer): Boolean {
+        // A certificate is remembered by the key inside it: the certificate blob is re-issued on a
+        // schedule, so trusting its fingerprint would report "host key changed" on every rotation.
+        // Done here rather than only in [HostCertificateVerifier] so the rule holds even where this
+        // verifier is wired up on its own.
+        val (host, port, keyType, fingerprint, _) = offer.bareKey()
         val known = store.allOrNull() ?: return false
         val existing = known.firstOrNull {
             it.host == host && it.port == port && it.keyType == keyType
@@ -139,7 +144,9 @@ class TofuHostKeyVerifier(
 class ProbeHostKeyVerifier(
     private val store: KnownHostsStore,
 ) : HostKeyVerifier {
-    override fun verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean {
+    override fun verify(offer: HostKeyOffer): Boolean {
+        // Compared by the key inside a certificate, for the same reason as in [TofuHostKeyVerifier].
+        val (host, port, keyType, fingerprint, _) = offer.bareKey()
         val known = store.allOrNull() ?: return false
         val existing = known.firstOrNull {
             it.host == host && it.port == port && it.keyType == keyType

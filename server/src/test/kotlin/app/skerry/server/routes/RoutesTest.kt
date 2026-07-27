@@ -51,6 +51,28 @@ class RoutesTest {
     private val password = "auth-key-hex-abc123"
 
     @Test
+    fun `accepts a trusted CA record and still refuses an unknown type`() = testApplication {
+        // A record type the server doesn't know fails the WHOLE batch (400), so every client-side
+        // type has to be listed here before the client that writes it ships.
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokens = client.registerAccount(accountId, password)
+
+        val accepted = client.pushRecord(
+            tokens.accessToken,
+            RecordDto("ca-1", "TRUSTED_CA", 1, "2026-07-27T00:00:00Z", "devA", false, byteArrayOf(1, 2).b64()),
+        )
+        assertEquals(HttpStatusCode.OK, accepted.status)
+
+        val rejected = client.pushRecord(
+            tokens.accessToken,
+            RecordDto("x-1", "NOT_A_TYPE", 1, "2026-07-27T00:00:00Z", "devA", false, byteArrayOf(1).b64()),
+        )
+        assertEquals(HttpStatusCode.BadRequest, rejected.status)
+    }
+
+    @Test
     fun `register then push and pull round-trips encrypted record`() = testApplication {
         val services = testServices()
         application { configureServer(services) }

@@ -40,8 +40,10 @@ class SyncSettingsTest {
     @Test
     fun `hosts toggle gates workspace types but never settings`() {
         val s = SyncSettings(syncHosts = false)
-        listOf(RecordType.HOST, RecordType.GROUP, RecordType.IDENTITY, RecordType.CREDENTIAL, RecordType.KNOWN_HOST, RecordType.TUNNEL)
-            .forEach { assertFalse(s.shouldSync(it), "$it must be gated by syncHosts") }
+        listOf(
+            RecordType.HOST, RecordType.GROUP, RecordType.IDENTITY, RecordType.CREDENTIAL,
+            RecordType.KNOWN_HOST, RecordType.TRUSTED_CA, RecordType.TUNNEL,
+        ).forEach { assertFalse(s.shouldSync(it), "$it must be gated by syncHosts") }
         assertTrue(s.shouldSync(RecordType.SETTINGS), "settings record always syncs")
         assertTrue(s.shouldSync(RecordType.SNIPPET), "snippet independent of syncHosts")
     }

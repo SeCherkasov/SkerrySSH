@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
 private const val USER = "skerry"
 private const val PASSWORD = "correct horse battery staple"
 
-private val acceptAllKeys = HostKeyVerifier { _, _, _, _ -> true }
+private val acceptAllKeys = HostKeyVerifier { true }
 
 /** Integration tests for SshjTransport against an embedded Apache MINA SSHD. */
 class SshjTransportTest {
@@ -164,9 +164,9 @@ class SshjTransportTest {
     fun `host key rejection aborts connect before auth`() = runTest {
         var seenKeyType: String? = null
         var seenFingerprint: String? = null
-        val rejecting = HostKeyVerifier { _, _, keyType, fingerprint ->
-            seenKeyType = keyType
-            seenFingerprint = fingerprint
+        val rejecting = HostKeyVerifier { offer ->
+            seenKeyType = offer.keyType
+            seenFingerprint = offer.fingerprint
             false
         }
 

@@ -27,7 +27,10 @@ import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.KeyFileResolver
 import app.skerry.shared.vault.OkioSecretFileReader
 import app.skerry.ui.connection.KeyboardInteractivePromptController
+import app.skerry.shared.ssh.HostCertificateVerifier
+import app.skerry.shared.ssh.SshjCaKeyParser
 import app.skerry.shared.ssh.TofuHostKeyVerifier
+import app.skerry.shared.ssh.VaultTrustedCaStore
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.FileVault
@@ -59,6 +62,7 @@ import app.skerry.ui.i18n.AppLocaleProvider
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
+import app.skerry.ui.known.TrustedCaController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_FONT_SIZE
 import app.skerry.ui.terminal.DEFAULT_TERMINAL_LETTER_SPACING
@@ -178,6 +182,10 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // (non-synced) known_hosts_mismatches store so the manager can warn and offer accept/reject.
     // The clock stamps firstSeen/observedAt.
     val knownHostsStore = VaultKnownHostsStore(vault)
+    // Certificate authorities trusted to vouch for host keys (@cert-authority). Wrapped around the
+    // TOFU verifier below: a certificate from a trusted CA is accepted outright, anything else
+    // falls through to trust-on-first-use exactly as before.
+    val trustedCaStore = VaultTrustedCaStore(vault)
     val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches"))
     // Live session transport: routes by connection type (SSH/Telnet/Serial). SSH carries the TOFU
     // verifier/known-hosts; Telnet/Serial are stateless (created internally with defaults).
@@ -194,7 +202,10 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val keyFileResolver = KeyFileResolver(files = secretFiles, inspector = certificateInspector)
     val transport = RoutingTransport(
         ssh = SshjTransport(
-            TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+            HostCertificateVerifier(
+                trustedCaStore,
+                TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+            ) { Instant.now().epochSecond },
             keyFiles = keyFileResolver,
             keyboardInteractiveResponder = keyboardInteractive.responder,
         ),
@@ -203,11 +214,17 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // accepts a matching trusted key, rejects a key change on a known host, and accepts a new host
     // WITHOUT writing to known-hosts. Only a real connection (TOFU above) establishes trust.
     val probeTransport = SshjTransport(
-        ProbeHostKeyVerifier(knownHostsStore),
+        HostCertificateVerifier(trustedCaStore, ProbeHostKeyVerifier(knownHostsStore)) { Instant.now().epochSecond },
         keyFiles = keyFileResolver,
         keyboardInteractiveResponder = keyboardInteractive.responder,
     )
     val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
+    val trustedCas = TrustedCaController(
+        trustedCaStore,
+        SshjCaKeyParser(),
+        newId = { UUID.randomUUID().toString() },
+        now = { Instant.now().toString() },
+    )
     // Host manager: profiles are HOST records in the vault, tree order lives in the layout record
     // ([VaultHostStore]/[WorkspaceLayout]). The vault starts locked (empty list); the controller
     // reloads via reload() after unlock. id is a random UUID.
@@ -411,7 +428,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         // on a locked vault); the list rereads when a new vault is created and unlocked.
         credentials.reload()
     }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, localAi = localAi)
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, localAi = localAi)
     return DesktopGraph(
         deps = deps,
         keyboardInteractive = keyboardInteractive,
@@ -543,6 +560,7 @@ fun main(args: Array<String>) {
                     testTransport = graph.probeTransport,
                     credentials = deps.credentials,
                     knownHosts = deps.knownHosts,
+                    trustedCas = deps.trustedCas,
                     keyGenerator = deps.keyGenerator,
                     certificateInspector = deps.certificateInspector,
                     secretFiles = deps.secretFiles,

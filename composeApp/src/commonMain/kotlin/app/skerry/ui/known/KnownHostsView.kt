@@ -33,11 +33,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ssh.HostKeyMismatch
+import app.skerry.shared.ssh.TrustedCa
 import app.skerry.ui.known.KnownHostEntry
 import app.skerry.ui.known.KnownHostStatus
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.known.shortFingerprint
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_ca_add
+import app.skerry.ui.generated.resources.lib_ca_col_added
+import app.skerry.ui.generated.resources.lib_ca_col_fingerprint
+import app.skerry.ui.generated.resources.lib_ca_col_hosts
+import app.skerry.ui.generated.resources.lib_ca_col_key_type
+import app.skerry.ui.generated.resources.lib_ca_empty
+import app.skerry.ui.generated.resources.lib_ca_remove
+import app.skerry.ui.generated.resources.lib_ca_section
+import app.skerry.ui.generated.resources.lib_ca_section_sub
 import app.skerry.ui.generated.resources.lib_known_accept_new_key
 import app.skerry.ui.generated.resources.lib_known_col_fingerprint
 import app.skerry.ui.generated.resources.lib_known_col_first_seen
@@ -65,6 +75,7 @@ import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalKnownHosts
+import app.skerry.ui.app.LocalTrustedCas
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.Sym
@@ -127,18 +138,19 @@ private fun LiveKnownHostsView(controller: KnownHostsController) {
     val mono = LocalFonts.current.mono
     val entries = controller.entries
     val mismatches = controller.mismatches
+    val cas = LocalTrustedCas.current
+    var addingCa by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { cas?.refresh() }
 
     // Selected key-change event for the right panel: defaults to the first pending one. After
     // accept/reject it leaves the list — the selection falls to the next one (or disappears).
     var selectedKey by remember { mutableStateOf<Triple<String, Int, String>?>(null) }
     val selected = mismatches.firstOrNull { it.identity() == selectedKey } ?: mismatches.firstOrNull()
 
-    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
-        KnownHostsHeader()
-        Row(Modifier.weight(1f).fillMaxWidth()) {
-            if (entries.isEmpty() && mismatches.isEmpty()) {
-                EmptyKnownHosts(Modifier.weight(1f))
-            } else {
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
+            KnownHostsHeader()
+            Row(Modifier.weight(1f).fillMaxWidth()) {
                 Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 18.dp)) {
                     mismatches.forEach { mismatch ->
                         MismatchBanner(
@@ -158,17 +170,112 @@ private fun LiveKnownHostsView(controller: KnownHostsController) {
                             }
                         }
                     }
+                    // Certificate authorities live on this screen and not in their own: both answer
+                    // "why is this host trusted", and a CA entry replaces the per-host rows below it.
+                    if (cas != null) {
+                        TrustedCaSection(cas, mono, onAdd = { addingCa = true }, modifier = Modifier.padding(top = 26.dp))
+                    }
+                }
+                val current = selected
+                if (current != null) {
+                    VLine(Skerry.colors.line)
+                    LiveMismatchPanel(
+                        mismatch = current,
+                        mono = mono,
+                        onAccept = { controller.acceptNewKey(current) },
+                        onReject = { controller.reject(current) },
+                    )
                 }
             }
-            val current = selected
-            if (current != null) {
-                VLine(Skerry.colors.line)
-                LiveMismatchPanel(
-                    mismatch = current,
-                    mono = mono,
-                    onAccept = { controller.acceptNewKey(current) },
-                    onReject = { controller.reject(current) },
-                )
+        }
+        if (addingCa && cas != null) {
+            TrustCaDialog(cas, onDismiss = { addingCa = false })
+        }
+    }
+}
+
+/**
+ * Trusted certificate authorities: a compact table with the same columns as the key list, plus the
+ * "Trust a CA" action. Removal mirrors "Forget key" — a hover-revealed row action.
+ */
+@Composable
+private fun TrustedCaSection(
+    controller: TrustedCaController,
+    mono: FontFamily,
+    onAdd: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Txt(stringResource(Res.string.lib_ca_section), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.SemiBold)
+                Txt(stringResource(Res.string.lib_ca_section_sub), color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
+            }
+            ClickableSmallButton(stringResource(Res.string.lib_ca_add), Skerry.colors.cyan, Skerry.colors.cyan14, onClick = onAdd)
+        }
+        val authorities = controller.authorities
+        if (authorities.isEmpty()) {
+            Txt(stringResource(Res.string.lib_ca_empty), color = Skerry.colors.faint, size = 11.5.sp)
+        } else {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(10.dp))) {
+                Row(
+                    Modifier.fillMaxWidth().background(Skerry.colors.overlayFaint).padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    KHeader(stringResource(Res.string.lib_ca_col_hosts), Modifier.weight(1f))
+                    KHeader(stringResource(Res.string.lib_ca_col_key_type), Modifier.width(90.dp))
+                    KHeader(stringResource(Res.string.lib_ca_col_fingerprint), Modifier.weight(1.4f))
+                    KHeader(stringResource(Res.string.lib_ca_col_added), Modifier.width(100.dp))
+                }
+                authorities.forEach { ca ->
+                    HLine()
+                    TrustedCaRow(ca, mono, onRemove = { controller.remove(ca.id) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrustedCaRow(ca: TrustedCa, mono: FontFamily, onRemove: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .hoverable(interaction)
+            .background(if (hovered) Skerry.colors.cyan.copy(alpha = 0.04f) else Color.Transparent),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Txt(ca.hostPattern, color = Skerry.colors.textBright, size = 12.sp, font = mono)
+                if (ca.label.isNotBlank()) {
+                    Txt(ca.label, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(top = 2.dp))
+                }
+            }
+            Txt(displayKeyType(ca.keyType), color = Skerry.colors.dim, size = 12.sp, modifier = Modifier.width(90.dp))
+            Txt(shortFingerprint(ca.fingerprint), color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1.4f))
+            Txt(displayFirstSeen(ca.addedAt), color = Skerry.colors.faint, size = 12.sp, modifier = Modifier.width(100.dp))
+        }
+        if (hovered) {
+            Row(
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Skerry.colors.sunset.copy(alpha = 0.12f))
+                    .border(1.dp, Skerry.colors.sunset.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                    .clickable(onClick = onRemove)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Sym("delete", size = 14.sp, color = Skerry.colors.sunset)
+                Txt(stringResource(Res.string.lib_ca_remove), color = Skerry.colors.sunset, size = 11.5.sp)
             }
         }
     }
