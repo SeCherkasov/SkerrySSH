@@ -223,6 +223,9 @@ class SshjTransport(
                         val keys = client.loadKeys(auth.privateKeyPem, null, pwdf)
                         add(AuthPublickey(certificateKeyProvider(keys, auth.certificate)))
                     }
+                    // Nothing to offer up front: the whole exchange is the server asking and the
+                    // user answering, added below.
+                    SshAuth.Interactive -> Unit
                 }
                 keyboardInteractiveResponder?.let { responder ->
                     val provider = ResponderChallengeProvider(

@@ -167,6 +167,27 @@ class SshjKeyboardInteractiveTest {
     }
 
     @Test
+    fun `an interactive profile authenticates with no password attempt at all`() = runTest {
+        // A password attempt against a code-only server is a failed login in its log, and a couple of
+        // those is a fail2ban ban — so this profile must offer nothing but keyboard-interactive.
+        val server = startServer()
+        val offered = mutableListOf<String>()
+        server.userAuthFactories = server.userAuthFactories.map { factory ->
+            object : org.apache.sshd.server.auth.UserAuthFactory by factory {
+                override fun createUserAuth(session: org.apache.sshd.server.session.ServerSession) =
+                    factory.createUserAuth(session).also { offered += factory.name }
+            }
+        }
+        val transport = SshjTransport(trustAll) { listOf(CODE) }
+
+        val connection = transport.connect(target(server), SshAuth.Interactive)
+
+        assertTrue(connection.isConnected)
+        assertEquals(listOf("keyboard-interactive"), offered.distinct(), "no other method may be tried")
+        connection.disconnect()
+    }
+
+    @Test
     fun `without a responder a code prompt goes unanswered`() = runTest {
         val server = startServer()
 

@@ -98,6 +98,16 @@ sealed interface SshAuth {
     ) : SshAuth {
         override fun toString(): String = "Certificate(redacted)"
     }
+
+    /**
+     * No stored secret: the server drives the exchange and the user answers it
+     * ([KeyboardInteractiveResponder]) — a TOTP-only login, a push confirmation, an SMS token.
+     *
+     * Distinct from an empty [Password] on purpose: a password attempt would be offered and refused
+     * first, which costs a failed authentication in the server's log and, under fail2ban, a ban after
+     * a couple of connects.
+     */
+    data object Interactive : SshAuth
 }
 
 /**

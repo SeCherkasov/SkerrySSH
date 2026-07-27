@@ -139,4 +139,6 @@
     <string name="conn_container_err_connection">Не удалось подключиться</string>
     <string name="conn_container_incomplete">Сначала введите хост, логин и данные для входа</string>
     <string name="conn_container_err_command">Хост не смог получить список контейнеров</string>
+    <string name="conn_auth_interactive">Интерактивная (2FA)</string>
+    <string name="conn_auth_interactive_desc">сервер сам спросит код при подключении</string>
 </resources>

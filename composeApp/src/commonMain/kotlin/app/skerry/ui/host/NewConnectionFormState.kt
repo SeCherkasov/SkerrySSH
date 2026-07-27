@@ -25,7 +25,7 @@ import app.skerry.ui.identity.CredentialKind
  * - [NEW_PASSWORD] / [NEW_KEY]: create a new keychain secret (password / private key) and attach
  *   the host to it.
  */
-enum class AuthMode { ASK, EXISTING, NEW_PASSWORD, NEW_KEY }
+enum class AuthMode { ASK, INTERACTIVE, EXISTING, NEW_PASSWORD, NEW_KEY }
 
 /**
  * "New connection" form state (design-layer modal): editable profile fields as Compose state.
@@ -176,6 +176,8 @@ class NewConnectionFormState {
     private val authValid: Boolean
         get() = when (authMode) {
             AuthMode.ASK -> true
+            // Nothing to fill in: the server supplies the questions at connect time.
+            AuthMode.INTERACTIVE -> true
             AuthMode.EXISTING -> existingCredentialId != null
             AuthMode.NEW_PASSWORD -> password.isNotEmpty()
             AuthMode.NEW_KEY -> privateKeyPem.isNotBlank()
@@ -219,6 +221,7 @@ class NewConnectionFormState {
         !connectionType.usesSshAuth && !connectionType.isVnc -> null
         else -> when (authMode) {
             AuthMode.ASK -> null
+            AuthMode.INTERACTIVE -> null
             AuthMode.EXISTING -> existingCredentialId
             AuthMode.NEW_PASSWORD -> saveCredential(
                 CredentialDraft(label = identityLabel(), kind = CredentialKind.PASSWORD, password = password),
@@ -243,6 +246,7 @@ class NewConnectionFormState {
         username = username.trim(),
         group = group.trim().ifBlank { null },
         credentialId = credentialId,
+        interactiveAuth = authMode == AuthMode.INTERACTIVE,
         tags = tags,
         aiPolicy = aiPolicy,
         connectionType = connectionType,
@@ -303,6 +307,8 @@ class NewConnectionFormState {
             if (host.credentialId != null) {
                 authMode = AuthMode.EXISTING
                 existingCredentialId = host.credentialId
+            } else if (host.interactiveAuth) {
+                authMode = AuthMode.INTERACTIVE
             }
         }
 
