@@ -960,9 +960,12 @@ private fun DesktopChrome(
                     )
                 }
                 is PendingClose.Pane -> {
+                    val pane = sessions?.sessions?.firstOrNull { it.id == pc.tabId }?.pane(pc.paneId)
+                    val paneName = pane?.let { p -> p.displayTitle.ifBlank { p.subtitle } }
+                        .orEmpty().ifBlank { stringResource(Res.string.shell_this_session) }
                     ConfirmActionDialog(
                         title = stringResource(Res.string.shell_close_pane_title),
-                        message = stringResource(Res.string.shell_close_pane_message),
+                        message = stringResource(Res.string.shell_close_pane_message, paneName),
                         confirmLabel = stringResource(Res.string.shell_close_panel),
                         onConfirm = { sessions?.closePane(pc.tabId, pc.paneId); state.dismissClose() },
                         onDismiss = state::dismissClose,

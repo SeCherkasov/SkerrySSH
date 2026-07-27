@@ -87,12 +87,12 @@
     <!-- Desktop chrome: confirm dialogs, title bar, status bar (DesktopDesignApp.kt) -->
     <string name="shell_this_session">this session</string>
     <string name="shell_disconnect_title">Disconnect \"%1$s\"?</string>
-    <string name="shell_disconnect_message">Closes the SSH session and its terminal. Auto-reconnect won't bring it back; connect again to resume.</string>
+    <string name="shell_disconnect_message">The session and its terminal will be closed.</string>
     <string name="shell_disconnect">Disconnect</string>
     <string name="shell_disconnect_all_title">Disconnect all sessions in this tab?</string>
     <string name="shell_disconnect_all_message">These sessions will be closed: %1$s</string>
     <string name="shell_close_pane_title">Close pane?</string>
-    <string name="shell_close_pane_message">Disconnects this pane's session and takes it off the tab. The other panes stay connected.</string>
+    <string name="shell_close_pane_message">This session will be closed: %1$s</string>
     <string name="shell_close_panel">Close pane</string>
     <string name="shell_lock">Lock</string>
     <string name="shell_settings">Settings</string>

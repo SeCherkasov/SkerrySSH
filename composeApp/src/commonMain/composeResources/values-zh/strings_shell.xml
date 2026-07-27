@@ -87,12 +87,12 @@
     <!-- 桌面端边框：确认对话框、标题栏、状态栏 (DesktopDesignApp.kt) -->
     <string name="shell_this_session">本次会话</string>
     <string name="shell_disconnect_title">断开 \"%1$s\"？</string>
-    <string name="shell_disconnect_message">关闭 SSH 会话及其终端。自动重连不会恢复，需重新连接。</string>
+    <string name="shell_disconnect_message">将关闭会话及其终端。</string>
     <string name="shell_disconnect">断开连接</string>
     <string name="shell_disconnect_all_title">断开此标签页中的所有会话？</string>
     <string name="shell_disconnect_all_message">将关闭以下会话：%1$s</string>
     <string name="shell_close_pane_title">关闭窗格？</string>
-    <string name="shell_close_pane_message">断开此窗格的会话并将其从标签页中移除。其他窗格保持连接。</string>
+    <string name="shell_close_pane_message">将关闭会话：%1$s</string>
     <string name="shell_close_panel">关闭窗格</string>
     <string name="shell_lock">锁定</string>
     <string name="shell_settings">设置</string>
