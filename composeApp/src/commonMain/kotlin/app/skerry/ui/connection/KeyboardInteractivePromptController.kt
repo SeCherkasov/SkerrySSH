@@ -1,6 +1,7 @@
 package app.skerry.ui.connection
 
 import androidx.compose.runtime.Stable
+import app.skerry.shared.ssh.KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS
 import app.skerry.shared.ssh.KeyboardInteractiveChallenge
 import app.skerry.shared.ssh.KeyboardInteractiveResponder
 import kotlinx.coroutines.CompletableDeferred
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * A challenge waiting for the user. [id] identifies this exact request so a late answer from a
@@ -30,10 +32,10 @@ data class KeyboardInteractiveRequest(
  *
  * Challenges are serialized by a mutex: two hosts asking for a code at the same moment queue instead
  * of overwriting each other's prompt — a single dialog can only be answered for one of them, and the
- * loser would otherwise wait for an answer that can never arrive.
- *
- * The transport applies its own timeout, so a prompt nobody answers eventually resolves as dismissed
- * on that side; the controller itself waits indefinitely.
+ * loser would otherwise wait for an answer that can never arrive. The wait for a turn is deliberately
+ * unbounded while the wait for the *user* is not: the deadline starts when the prompt reaches the
+ * screen, so a challenge queued behind someone else's dialog can't quietly spend its whole budget
+ * unseen and then fail as if the code had been wrong.
  */
 @Stable
 class KeyboardInteractivePromptController {
@@ -58,7 +60,7 @@ class KeyboardInteractivePromptController {
         waiter = answer
         _pending.value = request
         try {
-            answer.await()
+            withTimeoutOrNull(KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS) { answer.await() }
         } finally {
             waiter = null
             // Only clear a prompt that is still ours: with the mutex held it always is, but the
@@ -79,6 +81,19 @@ class KeyboardInteractivePromptController {
     /** Dismisses the pending challenge, which aborts authentication for that connection. */
     fun dismiss(requestId: Long? = _pending.value?.id) {
         if (requestId == null || requestId != _pending.value?.id) return
+        waiter?.complete(null)
+    }
+
+    /**
+     * Drops whatever is being asked right now, aborting that connection's authentication.
+     *
+     * Called when the vault locks: the prompt lives inside the unlocked chrome, so a lock takes it
+     * off screen while the connection would keep waiting behind the lock screen for a code nobody
+     * can see. Failing the attempt outright is the same call the runbook runner makes when the vault
+     * locks mid-run — the user comes back to a plain failure instead of a connection that hung for
+     * two minutes on an invisible question.
+     */
+    fun cancelPending() {
         waiter?.complete(null)
     }
 }

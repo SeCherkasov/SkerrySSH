@@ -128,6 +128,15 @@ data class KeyboardInteractiveChallenge(
     val instruction: String,
     val prompts: List<KeyboardInteractivePrompt>,
     val hop: Boolean = false,
+    /**
+     * Who is asking, as `user@host:port`. Shown in the prompt so the user can tell which machine
+     * wants the code — without it, a server's own wording is the only thing on screen, and any host
+     * you dial could pose as another. Empty when the transport doesn't report it.
+     *
+     * Display-only: this carries a host address, so it must not be logged or put into exception
+     * text, per the connect-metadata rule the transport's error messages already follow.
+     */
+    val endpoint: String = "",
 )
 
 /**
@@ -153,8 +162,27 @@ fun interface KeyboardInteractiveResponder {
  */
 const val KEYBOARD_INTERACTIVE_MAX_ROUNDS: Int = 3
 
-/** How long a challenge waits for the user before it counts as dismissed. */
+/**
+ * How many prompts we answer within one round. The protocol lets the server put an arbitrary number
+ * of prompts in a single request, and each one costs the user a dialog; past a handful it isn't an
+ * authentication exchange any more, it's a machine wearing the user down.
+ */
+const val KEYBOARD_INTERACTIVE_MAX_PROMPTS_PER_ROUND: Int = 8
+
+/**
+ * How long a shown challenge waits for the user before it counts as dismissed. Timed from the moment
+ * the prompt is actually presented, not from when the server asked — a challenge queued behind
+ * another connection's prompt must not spend its budget waiting its turn.
+ */
 const val KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS: Long = 120_000
+
+/**
+ * Backstop for a responder that never returns at all (a UI that dropped the prompt on the floor).
+ * Deliberately far longer than [KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS], which is the deadline users
+ * actually experience: this one only exists so a broken implementation can't pin the transport
+ * thread for the lifetime of the process.
+ */
+const val KEYBOARD_INTERACTIVE_RESPONDER_BACKSTOP_MILLIS: Long = 600_000
 
 interface SshConnection {
     val isConnected: Boolean

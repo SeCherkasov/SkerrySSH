@@ -116,4 +116,5 @@
     <string name="shell_kbdint_title">额外验证</string>
     <string name="shell_kbdint_jump">由跳板主机请求</string>
     <string name="shell_kbdint_continue">继续</string>
+    <string name="shell_kbdint_asks">服务器请求：</string>
 </resources>

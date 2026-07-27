@@ -46,6 +46,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_cancel
+import app.skerry.ui.generated.resources.shell_kbdint_asks
 import app.skerry.ui.generated.resources.shell_kbdint_continue
 import app.skerry.ui.generated.resources.shell_kbdint_jump
 import app.skerry.ui.generated.resources.shell_kbdint_title
@@ -68,16 +69,22 @@ import org.jetbrains.compose.resources.stringResource
  */
 @Composable
 fun KeyboardInteractiveDialog(
+    requestId: Long,
     challenge: KeyboardInteractiveChallenge,
     onDismiss: () -> Unit,
     onSubmit: (List<String>) -> Unit,
 ) {
     val noop = remember { MutableInteractionSource() }
-    val answers = remember(challenge) { mutableStateListOf(*Array(challenge.prompts.size) { "" }) }
-    val focus = remember(challenge) { FocusRequester() }
+    // Keyed on the request, not the challenge: a server re-asking after a wrong code sends the very
+    // same name/instruction/prompt, so a challenge-keyed remember would keep the rejected answer in
+    // the field and skip re-focusing — the user would resubmit the code that just failed.
+    val answers = remember(requestId) { mutableStateListOf(*Array(challenge.prompts.size) { "" }) }
+    val focus = remember(requestId) { FocusRequester() }
     val submit = { onSubmit(answers.toList()) }
 
-    LaunchedEffect(challenge) { runCatching { focus.requestFocus() } }
+    // requestFocus throws if the node is gone (the dialog left composition in the same frame); the
+    // field stays usable by click, so failing to focus is not worth propagating.
+    LaunchedEffect(requestId) { runCatching { focus.requestFocus() } }
     PlatformBackHandler(onBack = onDismiss)
 
     Box(
@@ -97,14 +104,26 @@ fun KeyboardInteractiveDialog(
                 .verticalScroll(rememberScrollState())
                 .padding(26.dp),
         ) {
-            val name = sanitizeServerText(challenge.name, MAX_TITLE_CHARS)
+            // Our own heading, never the server's: the wording below is written by whatever host was
+            // dialed, and a prompt that looked like Skerry's own chrome could ask for the vault
+            // password and be believed. The title says who is asking, the server's text sits under a
+            // caption that marks it as theirs.
             Txt(
-                name.ifBlank { stringResource(Res.string.shell_kbdint_title) },
+                stringResource(Res.string.shell_kbdint_title),
                 color = Skerry.colors.text,
                 size = 16.sp,
                 weight = FontWeight.SemiBold,
                 letterSpacing = (-0.2).sp,
             )
+            if (challenge.endpoint.isNotBlank()) {
+                Txt(
+                    sanitizeServerText(challenge.endpoint, MAX_TITLE_CHARS),
+                    color = Skerry.colors.dim,
+                    size = 12.5.sp,
+                    font = LocalFonts.current.mono,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
             if (challenge.hop) {
                 Txt(
                     stringResource(Res.string.shell_kbdint_jump),
@@ -113,15 +132,37 @@ fun KeyboardInteractiveDialog(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+
+            val name = sanitizeServerText(challenge.name, MAX_TITLE_CHARS)
             val instruction = sanitizeServerText(challenge.instruction, MAX_INSTRUCTION_CHARS)
-            if (instruction.isNotBlank()) {
+            if (name.isNotBlank() || instruction.isNotBlank()) {
                 Txt(
-                    instruction,
-                    color = Skerry.colors.dim,
-                    size = 12.5.sp,
-                    lineHeight = 18.sp,
-                    modifier = Modifier.padding(top = 6.dp),
+                    stringResource(Res.string.shell_kbdint_asks),
+                    color = Skerry.colors.faint,
+                    size = 10.5.sp,
+                    weight = FontWeight.SemiBold,
+                    letterSpacing = 0.6.sp,
+                    modifier = Modifier.padding(top = 14.dp, bottom = 5.dp),
                 )
+                Column(
+                    Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(Skerry.colors.bg)
+                        .padding(horizontal = 11.dp, vertical = 9.dp),
+                ) {
+                    if (name.isNotBlank()) {
+                        Txt(name, color = Skerry.colors.text, size = 12.5.sp, lineHeight = 18.sp)
+                    }
+                    if (instruction.isNotBlank()) {
+                        Txt(
+                            instruction,
+                            color = Skerry.colors.dim,
+                            size = 12.5.sp,
+                            lineHeight = 18.sp,
+                            modifier = if (name.isBlank()) Modifier else Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
             }
 
             challenge.prompts.forEachIndexed { index, prompt ->
@@ -165,6 +206,7 @@ fun KeyboardInteractiveHost(controller: KeyboardInteractivePromptController?) {
     val request by (controller?.pending ?: return).collectAsState()
     val pending = request ?: return
     KeyboardInteractiveDialog(
+        requestId = pending.id,
         challenge = pending.challenge,
         onDismiss = { controller.dismiss(pending.id) },
         onSubmit = { answers -> controller.submit(answers, pending.id) },

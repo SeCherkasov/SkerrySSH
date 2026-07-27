@@ -28,7 +28,7 @@ class KeyboardInteractiveDialogRenderTest {
             CompositionLocalProvider(
                 LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
             ) {
-                KeyboardInteractiveDialog(challenge, onDismiss = {}, onSubmit = {})
+                KeyboardInteractiveDialog(requestId = 1L, challenge = challenge, onDismiss = {}, onSubmit = {})
             }
         }
     }

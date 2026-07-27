@@ -313,7 +313,7 @@ fun MobileDesignApp(
                     autoLockIdleMs = state.autoLock.idleMs,
                     // Runs on EVERY lock, including the two automatic ones that bypass the lock
                     // action — Android had no teardown at all before (only onVaultReset did).
-                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets, deps.runbookRunner) },
+                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets, deps.runbookRunner, keyboardInteractive) },
                     onReset = onVaultReset,
                     // onPairingComplete != null (sync present) — the create screen offers "I have a code":
                     // the coordinator creates the vault under the chosen password and accepts the account key.

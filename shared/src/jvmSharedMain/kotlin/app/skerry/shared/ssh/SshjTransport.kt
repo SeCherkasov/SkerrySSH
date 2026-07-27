@@ -68,7 +68,7 @@ class SshjTransport(
                 true
             }
         }
-        authenticate(client, target.username, auth, hop = false)
+        authenticate(client, target.username, auth, hop = false, host = target.host, port = target.port)
 
         // sshj returns the server ident without the prefix (`getServerVersion()` =
         // serverID.substring(8)); we restore the full `SSH-2.0-<software>` form for the status
@@ -106,7 +106,7 @@ class SshjTransport(
     ): SSHClient {
         val upstream = jump?.let { next ->
             dial(next.host, next.port, next.jump, opened, hop = true)
-                .also { authenticate(it, next.username, next.auth, hop = true) }
+                .also { authenticate(it, next.username, next.auth, hop = true, host = next.host, port = next.port) }
         }
         val client = SSHClient()
         // TCP connect timeout: sshj's default is 0 = wait forever. Without this, "Test
@@ -167,7 +167,17 @@ class SshjTransport(
      * connect-level cleanup's job — see `opened` there). [hop] marks a ProxyJump hop so the user
      * can tell which side rejected the credentials (still no addresses/usernames in the text).
      */
-    private fun authenticate(client: SSHClient, username: String, auth: SshAuth, hop: Boolean) {
+    private fun authenticate(
+        client: SSHClient,
+        username: String,
+        auth: SshAuth,
+        hop: Boolean,
+        host: String,
+        port: Int,
+    ) {
+        // Held so the failure below can tell "the user waved the prompt away" apart from "the server
+        // said no" — sshj reports both as the same UserAuthException.
+        var prompts: ResponderChallengeProvider? = null
         try {
             // One ordered list rather than a single call: a server configured with
             // `AuthenticationMethods publickey,keyboard-interactive` answers the first method with
@@ -177,15 +187,23 @@ class SshjTransport(
             val methods = buildList {
                 when (auth) {
                     is SshAuth.Password -> {
-                        val pwdf = PasswordUtils.createOneOff(auth.secret.toCharArray())
-                        add(AuthPassword(pwdf))
-                        // Without a responder, keep sshj's own fallback (what authPassword did
-                        // here before): it answers password-shaped prompts from the saved secret,
-                        // which is how PAM setups that only re-ask for the password already work.
-                        // With a responder, ours supersedes it — it answers those same prompts
-                        // from the secret and asks the user about everything else.
+                        add(AuthPassword(PasswordUtils.createOneOff(auth.secret.toCharArray())))
+                        // Without a responder, keep sshj's own fallback (what authPassword did here
+                        // before): it answers password-shaped prompts from the saved secret, which is
+                        // how PAM setups that only re-ask for the password work. With a responder,
+                        // ours supersedes it — it answers those same prompts from the secret and asks
+                        // the user about everything else.
+                        //
+                        // Its own finder, not the one above: createOneOff hands the password over
+                        // exactly once and blanks the array afterwards, so a shared finder would leave
+                        // the fallback answering with nothing the moment AuthPassword had run — which
+                        // is precisely the case this fallback exists for.
                         if (keyboardInteractiveResponder == null) {
-                            add(AuthKeyboardInteractive(PasswordResponseProvider(pwdf)))
+                            add(
+                                AuthKeyboardInteractive(
+                                    PasswordResponseProvider(PasswordUtils.createOneOff(auth.secret.toCharArray())),
+                                ),
+                            )
                         }
                     }
                     is SshAuth.PublicKey -> {
@@ -207,22 +225,30 @@ class SshjTransport(
                     }
                 }
                 keyboardInteractiveResponder?.let { responder ->
-                    add(
-                        AuthKeyboardInteractive(
-                            ResponderChallengeProvider(
-                                responder = responder,
-                                hop = hop,
-                                knownPassword = (auth as? SshAuth.Password)?.secret,
-                            ),
-                        ),
+                    val provider = ResponderChallengeProvider(
+                        responder = responder,
+                        hop = hop,
+                        knownPassword = (auth as? SshAuth.Password)?.secret,
+                        endpoint = "$username@$host:$port",
                     )
+                    prompts = provider
+                    add(AuthKeyboardInteractive(provider))
                 }
             }
             client.auth(username, methods)
         } catch (e: UserAuthException) {
             // No username in the text: the message must not carry an identifier (logs/reports).
+            // A prompt the user waved away (or let expire) is reported as itself: otherwise the one
+            // failure the user caused reads as "your credentials are wrong", and they go hunting for
+            // a problem with the password instead of simply answering the next prompt.
             throw SshAuthenticationException(
-                if (hop) "Jump host rejected the credentials" else "Server rejected the credentials", e,
+                when (prompts?.outcome) {
+                    ResponderChallengeProvider.Outcome.Dismissed -> "Two-factor prompt was dismissed"
+                    ResponderChallengeProvider.Outcome.TimedOut -> "Two-factor prompt timed out"
+                    ResponderChallengeProvider.Outcome.Flooded -> "Server asked for too many answers at once"
+                    else -> if (hop) "Jump host rejected the credentials" else "Server rejected the credentials"
+                },
+                e,
             )
         } catch (e: IOException) {
             throw SshConnectionException("Connection dropped during authentication", e)
@@ -256,21 +282,39 @@ private class ResponderChallengeProvider(
     private val responder: KeyboardInteractiveResponder,
     private val hop: Boolean,
     private val knownPassword: String?,
+    private val endpoint: String,
 ) : ChallengeResponseProvider {
+
+    /** Why the exchange stopped, for the failure message. */
+    enum class Outcome { Answering, Dismissed, TimedOut, Flooded }
+
+    @Volatile
+    var outcome: Outcome = Outcome.Answering
+        private set
 
     private var name: String = ""
     private var instruction: String = ""
     private var rounds: Int = 0
-    private var dismissed: Boolean = false
+    private var promptsThisRound: Int = 0
+
+    private val stopped: Boolean get() = outcome != Outcome.Answering
 
     override fun init(resource: Resource<*>, name: String, instruction: String) {
         this.name = name
         this.instruction = instruction
         rounds++
+        promptsThisRound = 0
     }
 
     override fun getResponse(prompt: String, echo: Boolean): CharArray {
-        if (dismissed) return CharArray(0)
+        if (stopped) return CharArray(0)
+        // One request may carry any number of prompts, each costing the user a dialog; a server that
+        // sends hundreds isn't authenticating anyone, so stop answering rather than march the user
+        // through them.
+        if (++promptsThisRound > KEYBOARD_INTERACTIVE_MAX_PROMPTS_PER_ROUND) {
+            outcome = Outcome.Flooded
+            return CharArray(0)
+        }
         if (!echo && knownPassword != null &&
             PasswordResponseProvider.DEFAULT_PROMPT_PATTERN.matcher(prompt).matches()
         ) {
@@ -281,18 +325,26 @@ private class ResponderChallengeProvider(
             instruction = instruction,
             prompts = listOf(KeyboardInteractivePrompt(prompt, echo)),
             hop = hop,
+            endpoint = endpoint,
         )
-        val answers = runBlocking {
-            withTimeoutOrNull(KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS) { responder.respond(challenge) }
-        }
+        // The deadline the user experiences lives in the responder, which starts counting when the
+        // prompt is actually on screen; this one only catches a responder that never returns at all.
+        // Any other failure out of the responder is treated as a dismissal rather than thrown: it
+        // would escape through sshj's auth loop as an unhandled type, bypassing the exception
+        // translation above.
+        val answers = runCatching {
+            runBlocking {
+                withTimeoutOrNull(KEYBOARD_INTERACTIVE_RESPONDER_BACKSTOP_MILLIS) { responder.respond(challenge) }
+            }
+        }.getOrNull()
         if (answers == null) {
-            dismissed = true
+            outcome = Outcome.Dismissed
             return CharArray(0)
         }
         return answers.firstOrNull().orEmpty().toCharArray()
     }
 
-    override fun shouldRetry(): Boolean = !dismissed && rounds < KEYBOARD_INTERACTIVE_MAX_ROUNDS
+    override fun shouldRetry(): Boolean = !stopped && rounds < KEYBOARD_INTERACTIVE_MAX_ROUNDS
 
     /** No submethod hint: let the server pick whatever it has configured, like OpenSSH does. */
     override fun getSubmethods(): List<String> = emptyList()

@@ -116,4 +116,5 @@
     <string name="shell_kbdint_title">Дополнительная проверка</string>
     <string name="shell_kbdint_jump">Запрашивает промежуточный хост</string>
     <string name="shell_kbdint_continue">Продолжить</string>
+    <string name="shell_kbdint_asks">Запрос от сервера:</string>
 </resources>

@@ -23,6 +23,7 @@ import kotlin.test.assertTrue
 
 private const val USER = "skerry"
 private const val CODE = "424242"
+private const val PASSWORD = "correct horse battery staple"
 private const val PROMPT = "Verification code:"
 private const val NAME = "Two-factor authentication"
 private const val INSTRUCTION = "Enter the code from your authenticator app"
@@ -51,6 +52,8 @@ class SshjKeyboardInteractiveTest {
      */
     private fun startServer(
         multiFactor: Boolean = false,
+        prompt: String = PROMPT,
+        promptCount: Int = 1,
         accept: (List<String>) -> Boolean = { it == listOf(CODE) },
     ): SshServer = SshServer.setUpDefaultServer().apply {
         host = "127.0.0.1"
@@ -65,7 +68,7 @@ class SshjKeyboardInteractiveTest {
             ): InteractiveChallenge = InteractiveChallenge().apply {
                 interactionName = NAME
                 interactionInstruction = INSTRUCTION
-                addPrompt(PROMPT, false)
+                repeat(promptCount) { addPrompt(prompt, false) }
             }
 
             override fun authenticate(
@@ -129,25 +132,77 @@ class SshjKeyboardInteractiveTest {
         assertEquals(listOf(PROMPT), challenge.prompts.map { it.text })
         assertTrue(!challenge.prompts.single().echo, "a code prompt must not be echoed")
         assertTrue(!challenge.hop, "the target itself is not a jump host")
+        assertEquals("$USER@127.0.0.1:${server.port}", challenge.endpoint, "the dialog has to name who is asking")
     }
 
     @Test
-    fun `cancelling the prompt fails authentication`() = runTest {
+    fun `cancelling the prompt fails authentication and says so`() = runTest {
         val server = startServer()
         val transport = SshjTransport(trustAll) { null }
+
+        val failure = assertFailsWith<SshAuthenticationException> {
+            transport.connect(target(server), SshAuth.Password("unused"))
+        }
+        // "Server rejected the credentials" would send the user looking for a bad password when all
+        // they did was close the prompt.
+        assertTrue(
+            failure.message.orEmpty().contains("dismissed", ignoreCase = true),
+            "a dismissed prompt must not read as rejected credentials, got: ${'$'}{failure.message}",
+        )
+    }
+
+    @Test
+    fun `stops answering when one round carries a flood of prompts`() = runTest {
+        val server = startServer(promptCount = KEYBOARD_INTERACTIVE_MAX_PROMPTS_PER_ROUND + 40)
+        val asked = AtomicInteger()
+        val transport = SshjTransport(trustAll) { asked.incrementAndGet(); listOf(CODE) }
 
         assertFailsWith<SshAuthenticationException> {
             transport.connect(target(server), SshAuth.Password("unused"))
         }
+        assertTrue(
+            asked.get() <= KEYBOARD_INTERACTIVE_MAX_PROMPTS_PER_ROUND,
+            "a server must not be able to march the user through unlimited dialogs, got ${'$'}{asked.get()}",
+        )
     }
 
     @Test
-    fun `without a responder keyboard-interactive is not attempted`() = runTest {
+    fun `without a responder a code prompt goes unanswered`() = runTest {
         val server = startServer()
 
+        // Nothing can supply the code, and the transport must not pretend otherwise.
         assertFailsWith<SshAuthenticationException> {
             SshjTransport(trustAll).connect(target(server), SshAuth.Password("unused"))
         }
+    }
+
+    @Test
+    fun `without a responder the saved password still answers a password prompt`() = runTest {
+        // The PAM setup that only re-asks for the password over keyboard-interactive: this worked
+        // before the responder existed (sshj's authPassword installed its own fallback) and must
+        // keep working when no responder is supplied. Drop that fallback and this test fails.
+        val server = startServer(prompt = "Password:", accept = { it == listOf(PASSWORD) })
+
+        val connection = SshjTransport(trustAll).connect(target(server), SshAuth.Password(PASSWORD))
+
+        assertTrue(connection.isConnected)
+        connection.disconnect()
+    }
+
+    @Test
+    fun `the saved password answers its own prompt without asking the user`() = runTest {
+        // Same server, but with a responder installed: ours supersedes sshj's fallback, so it has to
+        // answer password-shaped prompts from the secret itself instead of prompting for what the
+        // vault already holds.
+        val server = startServer(prompt = "Password:", accept = { it == listOf(PASSWORD) })
+        val asked = AtomicInteger()
+        val transport = SshjTransport(trustAll) { asked.incrementAndGet(); listOf("should not be asked") }
+
+        val connection = transport.connect(target(server), SshAuth.Password(PASSWORD))
+
+        assertTrue(connection.isConnected)
+        assertEquals(0, asked.get(), "the user must not be asked for a password the vault already has")
+        connection.disconnect()
     }
 
     @Test
