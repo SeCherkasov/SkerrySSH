@@ -49,3 +49,6 @@ server/.env
 # Flatpak build outputs (the committed inputs are the manifest + flatpak-sources.json)
 composeApp/flatpak/.build/
 composeApp/flatpak/*.flatpak
+
+# Internal brainstorm draft, deliberately not part of the repository.
+docs/feature-ideas.md
