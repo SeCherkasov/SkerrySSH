@@ -1,5 +1,6 @@
 package app.skerry.ui.vault
 
+import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.ui.runbook.RunbookRunner
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
@@ -28,6 +29,11 @@ import app.skerry.ui.tunnel.TunnelManager
  * (a `${{vault}}` secret among them) and would otherwise keep typing them into a shell while the
  * vault is locked.
  *
+ * A keyboard-interactive prompt waiting for an answer is cancelled, which fails that connection
+ * attempt. The dialog is rendered inside the unlocked chrome, so a lock takes it off screen while the
+ * connection would go on waiting behind the lock screen for a code nobody can see — and then fail on
+ * its own timeout minutes later, looking like the credentials were wrong.
+ *
  * Shared by desktop and Android so the two can't drift apart on which of these gets forgotten.
  */
 fun tearDownForLock(
@@ -36,6 +42,7 @@ fun tearDownForLock(
     sync: SyncCoordinator?,
     snippets: SnippetManager?,
     runbooks: RunbookRunner? = null,
+    keyboardInteractive: KeyboardInteractivePromptController? = null,
 ) {
     tunnels?.closeAll()
     sessions?.tabs?.forEach { tab ->
@@ -44,4 +51,5 @@ fun tearDownForLock(
     sync?.pauseForLock()
     snippets?.dismissRun()
     runbooks?.close()
+    keyboardInteractive?.cancelPending()
 }

@@ -21,6 +21,7 @@ import app.skerry.shared.ssh.VaultKnownHostsStore
 import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshjTransport
+import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.snippet.VaultSnippetStore
 import app.skerry.shared.sync.FileSyncStateStore
@@ -89,6 +90,10 @@ class MainActivity : FragmentActivity() {
     // Tunnel manager scope, tied to Activity lifetime. Cancelled in onDestroy so a recreate (rotation)
     // doesn't leave the old polling scope orphaned; active tunnels are dropped in that case.
     private var tunnelScope: CoroutineScope? = null
+
+    // Prompt controller for keyboard-interactive challenges, created with the dependency graph and
+    // read back when the UI is composed.
+    private var keyboardInteractive: KeyboardInteractivePromptController? = null
 
     // External cleanup on irrecoverable vault reset. The vault itself is already wiped and locked by
     // the controller, so this only clears data outside the vault (host profiles, known_hosts, tunnels).
@@ -201,6 +206,7 @@ class MainActivity : FragmentActivity() {
                 SkerryTheme(mode = designState.themeMode) {
                     MobileDesignApp(
                         deps,
+                        keyboardInteractive = keyboardInteractive,
                         state = designState,
                         onVaultReset = onVaultReset,
                         // Secret migration + reload + sync session restore.
@@ -443,9 +449,13 @@ class MainActivity : FragmentActivity() {
         val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches").toPath())
         // Live session transport: routes by connection type (SSH/Telnet/Serial). SSH carries the
         // TOFU verifier/known-hosts; Telnet/Serial are stateless (serial unsupported on Android).
+        // Keyboard-interactive challenges (2FA codes) reach the UI through this controller; shared by
+        // every transport that authenticates, so a tunnel or container probe prompts like a session.
+        val keyboardInteractive = KeyboardInteractivePromptController().also { this.keyboardInteractive = it }
         val transport = RoutingTransport(
             ssh = SshjTransport(
                 TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+                keyboardInteractive.responder,
             ),
         )
         val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
@@ -472,7 +482,7 @@ class MainActivity : FragmentActivity() {
         // Probe transport (read-only verifier, no silent TOFU): activating a saved tunnel and
         // listing a host's containers from the connection form both ride it, so neither can
         // establish trust in a host key on their own.
-        val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
+        val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore), keyboardInteractive.responder)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { tunnelScope = it }
         val tunnels = TunnelManager(
             store = VaultTunnelStore(vault, trash),

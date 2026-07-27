@@ -28,6 +28,9 @@ fun resolveHostAuth(host: Host, credentials: CredentialManagerController?): Host
     // Telnet/Serial need no auth — connect right away, no password prompt (auth is ignored).
     // SSH and Mosh both authenticate over SSH and take the credential/prompt path below.
     !host.connectionType.usesSshAuth -> HostAuthResolution.Resolved(SshAuth.Password(""))
+    // The server does the asking: connect straight away and let it raise its own prompt, rather than
+    // demanding a password the profile deliberately doesn't have.
+    host.interactiveAuth -> HostAuthResolution.Resolved(SshAuth.Interactive)
     else ->
         credentials?.find(host.credentialId)?.let { HostAuthResolution.Resolved(it.toSshAuth()) }
             ?: HostAuthResolution.NeedsPassword

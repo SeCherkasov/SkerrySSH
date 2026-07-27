@@ -139,4 +139,6 @@
     <string name="conn_container_err_connection">连接失败</string>
     <string name="conn_container_incomplete">请先输入主机、用户名和凭据</string>
     <string name="conn_container_err_command">主机无法列出容器</string>
+    <string name="conn_auth_interactive">交互式（双因素）</string>
+    <string name="conn_auth_interactive_desc">连接时由服务器索取验证码</string>
 </resources>

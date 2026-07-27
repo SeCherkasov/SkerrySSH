@@ -109,6 +109,16 @@ val LocalKnownHosts: ProvidableCompositionLocal<KnownHostsController?> = staticC
  */
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
+/**
+ * Controller behind the keyboard-interactive prompt: a server asking for a second factor mid-connect
+ * (2FA code, SMS token, push confirmation). Supplied by the chrome root so any screen the prompt
+ * lands over keeps its own state; `null` — mock path/preview, nothing is connecting.
+ */
+val LocalKeyboardInteractive:
+    ProvidableCompositionLocal<app.skerry.ui.connection.KeyboardInteractivePromptController?> =
+    staticCompositionLocalOf { null }
+
+
 /** How a host row click connects: single click or double click. Desktop-only setting. */
 enum class HostClickConnectMode(val id: String) {
     SingleClick("single"),
