@@ -364,6 +364,44 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
+    // Three panes on purpose: with two, "the pane after it" and "the pane before it" are the same
+    // survivor, so the fallback order and the untouched-focus branch both look right either way.
+    @Test
+    fun `closePane hands the focus to the pane after it`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val second = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = second, hostId = "host-b")
+        val third = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = third, hostId = "host-c")
+        sessions.focusPane(a, second)
+
+        sessions.closePane(a, second)
+
+        assertEquals(third, sessions.tab(a)!!.focusedPaneId)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing a pane the keyboard is not in leaves the focus where it was`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val second = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = second, hostId = "host-b")
+        val third = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = third, hostId = "host-c")
+        // Focus sits on the first pane, while closing the middle one would otherwise move it to the
+        // third: picking any other pane here would pass with or without the guard on the focused id.
+        sessions.focusPane(a, a)
+
+        sessions.closePane(a, second)
+
+        assertEquals(a, sessions.tab(a)!!.focusedPaneId)
+        scope.cancel()
+    }
+
     @Test
     fun `closing the last pane closes its tab`() = runTest {
         val transport = FakeTransport()

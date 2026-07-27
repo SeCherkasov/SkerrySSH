@@ -146,6 +146,23 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `an MFA prompt reads as a secret, ordinary output does not`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        // SSH never reports echo suppression (only telnet does), so the prompt line is all there is
+        // to go by. Under synchronized input a miss no longer costs one host's history: the secret
+        // is mirrored in cleartext into every other connected pane and then run there.
+        session.emit("Verification token: ".encodeToByteArray())
+        assertEquals(true, state.awaitingSecret)
+
+        session.emit("\r\nroot@host:~# cat secrets.txt\r\n".encodeToByteArray())
+        assertEquals(false, state.awaitingSecret)
+        scope.cancel()
+    }
+
+    @Test
     fun `send forwards encoded input to session`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

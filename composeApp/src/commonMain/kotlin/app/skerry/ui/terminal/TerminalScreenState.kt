@@ -1187,10 +1187,13 @@ private sealed interface TerminalCommand {
 
 /**
  * Prompt-line keywords that mark input as secret and exempt it from history (see
- * [TerminalScreenState.atPasswordPrompt]). Covers typical sudo/ssh/passwd/su prompts.
+ * [TerminalScreenState.atPasswordPrompt]). Covers typical sudo/ssh/passwd/su prompts and the common
+ * MFA wordings: with synchronized panes a missed prompt mirrors the secret into every other pane of
+ * the tab, so the list errs wide — a false match only keeps an ordinary command out of history.
  */
 private val PASSWORD_PROMPT_HINTS = listOf(
     "password", "passphrase", "passcode", "verification code", "pin",
+    "otp", "one-time", "token", "2fa", "mfa", "authenticator", "challenge",
 )
 
 /**

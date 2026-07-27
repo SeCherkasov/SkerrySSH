@@ -769,9 +769,13 @@ private fun PaneCell(
     // tab chip and the snippet target move here while typing keeps going into a sibling's live shell.
     // The empty pane itself holds the focus (rather than it being cleared), so the grid's key handler
     // still sees the arrow chord and the user can move on to a pane that does have a shell.
+    // Keyed on takesKeyboard too: a focused pane whose session drops keeps its id and stays focused,
+    // but its live [TerminalScreen] is composed from another branch and dies with the keyboard focus,
+    // and the frozen one that replaces it never claims it back. Without this key nothing inside the
+    // grid holds focus after a drop, and the arrow chord goes dead until the user clicks a pane.
     val paneFocus = remember { FocusRequester() }
     val takesKeyboard = pane.controller.uiState is ConnectionUiState.Connected
-    LaunchedEffect(focused) { if (focused && !takesKeyboard) paneFocus.requestFocus() }
+    LaunchedEffect(focused, takesKeyboard) { if (focused && !takesKeyboard) paneFocus.requestFocus() }
     Column(
         modifier
             .paneBoundsAnchor(drag, pane.id, row, column)

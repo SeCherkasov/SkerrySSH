@@ -129,6 +129,16 @@ class DesktopDesignStateTest {
     }
 
     @Test
+    fun request_and_dismiss_pane_connect_confirmation() {
+        val s = DesktopDesignState()
+        assertNull(s.pendingPaneConnect)
+        s.requestPaneConnect("sess-2", "pane-9", sampleHost)
+        assertEquals(PendingPaneConnect("sess-2", "pane-9", sampleHost), s.pendingPaneConnect)
+        s.dismissPaneConnect()
+        assertNull(s.pendingPaneConnect)
+    }
+
+    @Test
     fun lock_clears_host_search_query() {
         val s = DesktopDesignState()
         s.onHostSearch("prod")

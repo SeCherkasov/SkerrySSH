@@ -123,7 +123,7 @@ fun MobileFilesScreen(onBack: (() -> Unit)? = null) {
     val connecting = uiState is ConnectionUiState.Connecting
     when (mobileFilesMode(hasSessions = sessions != null, connected = connected, connecting = connecting)) {
         MobileFilesMode.Preview -> MockMobileFilesView(mono)
-        // active?.let instead of !!: sessions.active is a derived getter over two snapshot fields,
+        // active?.let instead of !!: sessions.activeSession is a derived getter over two snapshot fields,
         // and a session-close race could leave it null even while connected — fall back to nothing.
         MobileFilesMode.Live -> active?.let { LiveMobileFilesView(it.controller, it.subtitle, mono, onBack) }
         // "Connecting…" with the host subtitle: after tapping SFTP/Connect the session is still
