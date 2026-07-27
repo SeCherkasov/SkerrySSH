@@ -25,6 +25,8 @@ data class HostDraft(
     val username: String,
     val group: String? = null,
     val credentialId: String? = null,
+    /** Answer the server's questions instead of using a stored secret (see [Host.interactiveAuth]). */
+    val interactiveAuth: Boolean = false,
     val tags: List<String> = emptyList(),
     val aiPolicy: AiPolicy = AiPolicy.Strict,
     val connectionType: ConnectionType = ConnectionType.SSH,
@@ -78,6 +80,7 @@ class HostManagerController(
                 username = draft.username,
                 group = draft.group,
                 credentialId = draft.credentialId,
+                interactiveAuth = draft.interactiveAuth,
                 tags = draft.tags,
                 aiPolicy = draft.aiPolicy,
                 connectionType = draft.connectionType,

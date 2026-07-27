@@ -24,6 +24,7 @@ import app.skerry.shared.ssh.ProbeHostKeyVerifier
 import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.ssh.SshjTransport
+import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileSecurityLog
@@ -138,6 +139,7 @@ private fun readTerminalScrollback(prefs: FilePrefs): Int =
  */
 private class DesktopGraph(
     val deps: AppDependencies,
+    val keyboardInteractive: KeyboardInteractivePromptController,
     val securityLog: FileSecurityLog,
     val probeTransport: SshTransport,
     val vncTransport: app.skerry.shared.vnc.VncTransport,
@@ -177,15 +179,20 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val mismatchStore = FileHostKeyMismatchStore(dir.resolve("known_hosts_mismatches"))
     // Live session transport: routes by connection type (SSH/Telnet/Serial). SSH carries the TOFU
     // verifier/known-hosts; Telnet/Serial are stateless (created internally with defaults).
+    // Keyboard-interactive challenges (2FA codes) travel from the transport to a dialog through this
+    // controller; it is shared by every transport that authenticates, so a code asked for while
+    // dialing a tunnel or probing a container prompts the same way a session does.
+    val keyboardInteractive = KeyboardInteractivePromptController()
     val transport = RoutingTransport(
         ssh = SshjTransport(
             TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+            keyboardInteractive.responder,
         ),
     )
     // "Test connection" from the form uses a separate transport with a read-only verifier: it
     // accepts a matching trusted key, rejects a key change on a known host, and accepts a new host
     // WITHOUT writing to known-hosts. Only a real connection (TOFU above) establishes trust.
-    val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
+    val probeTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore), keyboardInteractive.responder)
     val knownHosts = KnownHostsController(knownHostsStore, mismatchStore) { Instant.now().toString() }
     // Host manager: profiles are HOST records in the vault, tree order lives in the layout record
     // ([VaultHostStore]/[WorkspaceLayout]). The vault starts locked (empty list); the controller
@@ -260,7 +267,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // (read-only verifier): only an already-trusted host can be enabled — a tunnel opens without a
     // terminal, so silent TOFU must not happen here. Host/secret resolution goes through the graph
     // (hosts + credentials in the unlocked vault). Scope lives for the app's lifetime.
-    val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore))
+    val tunnelTransport = SshjTransport(ProbeHostKeyVerifier(knownHostsStore), keyboardInteractive.responder)
     val tunnelScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val tunnels = TunnelManager(
         store = VaultTunnelStore(vault, trash),
@@ -390,6 +397,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, localAi = localAi)
     return DesktopGraph(
         deps = deps,
+        keyboardInteractive = keyboardInteractive,
         securityLog = securityLog,
         probeTransport = probeTransport,
         vncTransport = app.skerry.shared.vnc.VncTcpTransport(),
@@ -451,6 +459,7 @@ fun main(args: Array<String>) {
             AppLocaleProvider(currentUiLanguage.value) {
               app.skerry.ui.theme.SkerryTheme(mode = currentThemeMode.value) {
                 app.skerry.ui.desktop.DesktopDesignApp(
+                    keyboardInteractive = graph.keyboardInteractive,
                     initialInfoPanel = prefs.bool("info_panel", true),
                     onInfoPanelChange = { prefs.set("info_panel", it) },
                     initialCollapsedGroups = prefs.lines("collapsed_groups").toSet(),

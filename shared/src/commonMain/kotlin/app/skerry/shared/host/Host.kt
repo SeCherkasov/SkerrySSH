@@ -67,6 +67,13 @@ data class Host(
     val username: String,
     val group: String? = null,
     val credentialId: String? = null,
+    /**
+     * Authenticate by answering the server's own questions (2FA code, push confirmation) instead of
+     * with a stored secret: no [credentialId], and no password attempt before the exchange. Older
+     * clients simply don't see the flag (vault payloads ignore unknown fields), so such a profile
+     * falls back to asking for a password there.
+     */
+    val interactiveAuth: Boolean = false,
     val tags: List<String> = emptyList(),
     val aiPolicy: AiPolicy = AiPolicy.Strict,
     val connectionType: ConnectionType = ConnectionType.SSH,

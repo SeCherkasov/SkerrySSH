@@ -98,6 +98,16 @@ sealed interface SshAuth {
     ) : SshAuth {
         override fun toString(): String = "Certificate(redacted)"
     }
+
+    /**
+     * No stored secret: the server drives the exchange and the user answers it
+     * ([KeyboardInteractiveResponder]) — a TOTP-only login, a push confirmation, an SMS token.
+     *
+     * Distinct from an empty [Password] on purpose: a password attempt would be offered and refused
+     * first, which costs a failed authentication in the server's log and, under fail2ban, a ban after
+     * a couple of connects.
+     */
+    data object Interactive : SshAuth
 }
 
 /**
@@ -107,6 +117,82 @@ sealed interface SshAuth {
 fun interface HostKeyVerifier {
     fun verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean
 }
+
+/**
+ * One prompt of a keyboard-interactive exchange (RFC 4256). [text] is the server's wording verbatim
+ * ("Verification code:", "Duo passcode:"); [echo] false marks a secret the UI must mask.
+ */
+data class KeyboardInteractivePrompt(val text: String, val echo: Boolean)
+
+/**
+ * One round of a keyboard-interactive exchange the user has to answer. [name] and [instruction] are
+ * the server's own headings (either may be empty). [hop] marks a challenge coming from a ProxyJump
+ * hop rather than the target, so the UI can say whose code is being asked for.
+ *
+ * The server may ask several times in a row (a wrong code, then another attempt); each round is a
+ * separate challenge. Prompts are a list because the protocol allows several per round, though the
+ * sshj transport surfaces them one at a time — see `ResponderChallengeProvider`.
+ */
+data class KeyboardInteractiveChallenge(
+    val name: String,
+    val instruction: String,
+    val prompts: List<KeyboardInteractivePrompt>,
+    val hop: Boolean = false,
+    /**
+     * Who is asking, as `user@host:port`. Shown in the prompt so the user can tell which machine
+     * wants the code — without it, a server's own wording is the only thing on screen, and any host
+     * you dial could pose as another. Empty when the transport doesn't report it.
+     *
+     * Display-only: this carries a host address, so it must not be logged or put into exception
+     * text, per the connect-metadata rule the transport's error messages already follow.
+     */
+    val endpoint: String = "",
+)
+
+/**
+ * Answers keyboard-interactive challenges, i.e. supplies what only the user has — a TOTP code, an
+ * SMS token, a push confirmation. Supplied to the transport like [HostKeyVerifier] is; a transport
+ * without one simply doesn't offer the method, which is the behavior of every release before this.
+ *
+ * Called off the UI thread from inside `connect`, and the connection waits for the answer, so an
+ * implementation must not block indefinitely — the transport applies its own timeout.
+ */
+fun interface KeyboardInteractiveResponder {
+    /**
+     * @return answers in [KeyboardInteractiveChallenge.prompts] order, or null to abort
+     *   authentication (the user dismissed the prompt).
+     */
+    suspend fun respond(challenge: KeyboardInteractiveChallenge): List<String>?
+}
+
+/**
+ * How many keyboard-interactive rounds we answer before giving up. A server that keeps rejecting
+ * (or keeps asking) must not turn into an endless sequence of prompts; OpenSSH's own default of
+ * three attempts is the familiar number.
+ */
+const val KEYBOARD_INTERACTIVE_MAX_ROUNDS: Int = 3
+
+/**
+ * How many prompts we answer within one round. The protocol lets the server put an arbitrary number
+ * of prompts in a single request, and each one costs the user a dialog; past a handful it isn't an
+ * authentication exchange any more, it's a machine wearing the user down.
+ */
+const val KEYBOARD_INTERACTIVE_MAX_PROMPTS_PER_ROUND: Int = 8
+
+/**
+ * How long a shown challenge waits for the user before it counts as dismissed. Timed from the moment
+ * the prompt is actually presented, not from when the server asked — a challenge queued behind
+ * another connection's prompt must not spend its budget waiting its turn.
+ */
+const val KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS: Long = 120_000
+
+/**
+ * Backstop for a responder that never returns at all (a UI that dropped the prompt on the floor).
+ * Deliberately far longer than [KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS], which is the deadline users
+ * actually experience: this one only exists so a broken implementation can't pin the transport
+ * thread for the lifetime of the process.
+ */
+const val KEYBOARD_INTERACTIVE_RESPONDER_BACKSTOP_MILLIS: Long = 600_000
 
 interface SshConnection {
     val isConnected: Boolean

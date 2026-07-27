@@ -81,6 +81,8 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.conn_auth_ask
 import app.skerry.ui.generated.resources.conn_auth_ask_desc
+import app.skerry.ui.generated.resources.conn_auth_interactive
+import app.skerry.ui.generated.resources.conn_auth_interactive_desc
 import app.skerry.ui.generated.resources.conn_auth_existing_saved
 import app.skerry.ui.generated.resources.conn_auth_key_desc
 import app.skerry.ui.generated.resources.conn_auth_key_option
@@ -229,6 +231,8 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
         AuthMode.NEW_KEY -> form.privateKeyPem.isNotBlank()
         AuthMode.EXISTING -> credentials?.credentials?.any { it.id == form.existingCredentialId } == true
         AuthMode.ASK -> false
+        // Testable: the probe connects and answers whatever the server asks, same as a real session.
+        AuthMode.INTERACTIVE -> true
     }
     // "Test connection" needs the SSH auth path (Telnet/Serial have no auth/cipher probe).
     // For Mosh it probes the SSH hop — the UDP leg is only exercised by a real connect.
@@ -629,6 +633,7 @@ private fun formSshAuth(form: NewConnectionFormState, credentials: CredentialMan
             ?.let { SshAuth.PublicKey(it, form.passphrase.ifBlank { null }) }
         AuthMode.EXISTING -> credentials?.credentials?.firstOrNull { it.id == form.existingCredentialId }?.toSshAuth()
         AuthMode.ASK -> null
+        AuthMode.INTERACTIVE -> SshAuth.Interactive
     }
 
 /**
@@ -801,6 +806,7 @@ private fun AuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
     var menuOpen by remember { mutableStateOf(false) }
     val selectedLabel = when (form.authMode) {
         AuthMode.ASK -> stringResource(Res.string.conn_auth_ask)
+        AuthMode.INTERACTIVE -> stringResource(Res.string.conn_auth_interactive)
         AuthMode.NEW_PASSWORD -> stringResource(Res.string.conn_auth_password)
         AuthMode.NEW_KEY -> stringResource(Res.string.conn_auth_private_key)
         AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingCredentialId }?.let { stringResource(Res.string.conn_auth_existing_saved, it.label) } ?: stringResource(Res.string.conn_auth_select_credential)
@@ -824,6 +830,10 @@ private fun AuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
                 Column(Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
                     AuthOption("vpn_key_off", stringResource(Res.string.conn_auth_ask), stringResource(Res.string.conn_auth_ask_desc), form.authMode == AuthMode.ASK) {
                         form.authMode = AuthMode.ASK; menuOpen = false
+                    }
+
+                    AuthOption("pin", stringResource(Res.string.conn_auth_interactive), stringResource(Res.string.conn_auth_interactive_desc), form.authMode == AuthMode.INTERACTIVE) {
+                        form.authMode = AuthMode.INTERACTIVE; menuOpen = false
                     }
                     AuthOption("password", stringResource(Res.string.conn_auth_password_option), stringResource(Res.string.conn_auth_password_desc), form.authMode == AuthMode.NEW_PASSWORD) {
                         form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false

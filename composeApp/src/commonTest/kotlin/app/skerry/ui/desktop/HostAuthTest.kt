@@ -26,10 +26,20 @@ class HostAuthTest {
     private fun host(
         credentialId: String? = null,
         type: ConnectionType = ConnectionType.SSH,
+        interactiveAuth: Boolean = false,
     ) = Host(
         id = "h1", label = "Prod", address = "10.0.0.1", username = "root",
-        credentialId = credentialId, connectionType = type,
+        credentialId = credentialId, connectionType = type, interactiveAuth = interactiveAuth,
     )
+
+    @Test
+    fun an_interactive_host_connects_without_a_password_prompt() {
+        // Asking for a password here would be asking for something the profile deliberately lacks —
+        // and the dialog refuses an empty one, so such a host could not be reached at all.
+        val resolution = resolveHostAuth(host(interactiveAuth = true), credentials = null)
+
+        assertEquals(HostAuthResolution.Resolved(SshAuth.Interactive), resolution)
+    }
 
     private fun credentials(id: String, password: String): CredentialManagerController {
         val controller = CredentialManagerController(CredentialStore(FakeAuthVault())) { id }

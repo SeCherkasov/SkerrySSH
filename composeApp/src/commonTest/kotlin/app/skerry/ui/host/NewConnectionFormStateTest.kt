@@ -10,6 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class NewConnectionFormStateTest {
 
@@ -532,5 +533,34 @@ class SectionFormStateTest {
         }
         assertEquals("", form.username)
         assertTrue(form.canSave)
+    }
+
+    @Test
+    fun an_interactive_profile_saves_without_any_secret() {
+        // The server does the asking, so there is nothing to fill in and nothing to store.
+        val form = NewConnectionFormState().apply {
+            name = "bastion"
+            address = "10.0.0.9"
+            username = "ops"
+            authMode = AuthMode.INTERACTIVE
+        }
+
+        assertTrue(form.canSave)
+        val credentialId = form.resolveCredentialId { fail("an interactive profile must not write a secret") }
+        assertNull(credentialId)
+        assertTrue(form.toDraft(credentialId = credentialId).interactiveAuth)
+    }
+
+    @Test
+    fun editing_an_interactive_profile_keeps_the_mode() {
+        val host = Host(
+            id = "h1",
+            label = "bastion",
+            address = "10.0.0.9",
+            username = "ops",
+            interactiveAuth = true,
+        )
+
+        assertEquals(AuthMode.INTERACTIVE, NewConnectionFormState.fromHost(host).authMode)
     }
 }
