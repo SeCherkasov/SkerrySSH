@@ -113,4 +113,7 @@
     <string name="shell_tip_disconnect">Отключить</string>
     <string name="shell_no_hosts_yet">Пока нет хостов</string>
     <string name="shell_add_first_host">Добавьте подключение, и оно появится здесь.</string>
+    <string name="shell_kbdint_title">Дополнительная проверка</string>
+    <string name="shell_kbdint_jump">Запрашивает промежуточный хост</string>
+    <string name="shell_kbdint_continue">Продолжить</string>
 </resources>

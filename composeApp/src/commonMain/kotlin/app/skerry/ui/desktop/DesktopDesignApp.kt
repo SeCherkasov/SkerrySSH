@@ -250,6 +250,9 @@ import app.skerry.ui.host.rememberProductionLookup
  */
 @Composable
 fun DesktopDesignApp(
+    // Keyboard-interactive prompts (2FA codes a server asks for mid-connect). null on the mock path:
+    // nothing is connecting, so nothing can ask.
+    keyboardInteractive: app.skerry.ui.connection.KeyboardInteractivePromptController? = null,
     // Info panel visibility is persisted externally (desktop main): starting value + write callback.
     initialInfoPanel: Boolean = true,
     onInfoPanelChange: (Boolean) -> Unit = {},
@@ -520,6 +523,7 @@ fun DesktopDesignApp(
         if (state.customTerminalTheme) state.terminalTheme
         else TerminalThemes.fromId(state.themeMode.terminalThemeId(termSystemDark))
     CompositionLocalProvider(
+        app.skerry.ui.app.LocalKeyboardInteractive provides keyboardInteractive,
         LocalFonts provides fonts,
         LocalHosts provides hosts,
         LocalSessions provides liveSessions,
@@ -825,6 +829,12 @@ private fun DesktopChrome(
             // "Link a device" dialog: shows a QR/code for quick pairing of a new device.
             LocalSync.current?.let { if (state.pairingOpen) PairingShowDialog(it, onDismiss = state::closePairing) }
             if (onLock == null && state.locked) LockScreen(state)
+            // A server asking for a second factor mid-connect. Sits above the other dialogs: the
+            // connection is blocked waiting for this answer, and it can appear over any of them
+            // (a snippet run reconnecting, a tunnel dialing) — whatever is underneath keeps its state.
+            app.skerry.ui.connection.KeyboardInteractiveHost(
+                app.skerry.ui.app.LocalKeyboardInteractive.current,
+            )
             // A single password-prompt dialog for all three connect paths; after submit the target
             // ([PendingAuth]) is dispatched through the same openResolved as the bound-secret path.
             pendingAuth?.let { pending ->

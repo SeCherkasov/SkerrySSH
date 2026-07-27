@@ -108,6 +108,54 @@ fun interface HostKeyVerifier {
     fun verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean
 }
 
+/**
+ * One prompt of a keyboard-interactive exchange (RFC 4256). [text] is the server's wording verbatim
+ * ("Verification code:", "Duo passcode:"); [echo] false marks a secret the UI must mask.
+ */
+data class KeyboardInteractivePrompt(val text: String, val echo: Boolean)
+
+/**
+ * One round of a keyboard-interactive exchange the user has to answer. [name] and [instruction] are
+ * the server's own headings (either may be empty). [hop] marks a challenge coming from a ProxyJump
+ * hop rather than the target, so the UI can say whose code is being asked for.
+ *
+ * The server may ask several times in a row (a wrong code, then another attempt); each round is a
+ * separate challenge. Prompts are a list because the protocol allows several per round, though the
+ * sshj transport surfaces them one at a time — see `ResponderChallengeProvider`.
+ */
+data class KeyboardInteractiveChallenge(
+    val name: String,
+    val instruction: String,
+    val prompts: List<KeyboardInteractivePrompt>,
+    val hop: Boolean = false,
+)
+
+/**
+ * Answers keyboard-interactive challenges, i.e. supplies what only the user has — a TOTP code, an
+ * SMS token, a push confirmation. Supplied to the transport like [HostKeyVerifier] is; a transport
+ * without one simply doesn't offer the method, which is the behavior of every release before this.
+ *
+ * Called off the UI thread from inside `connect`, and the connection waits for the answer, so an
+ * implementation must not block indefinitely — the transport applies its own timeout.
+ */
+fun interface KeyboardInteractiveResponder {
+    /**
+     * @return answers in [KeyboardInteractiveChallenge.prompts] order, or null to abort
+     *   authentication (the user dismissed the prompt).
+     */
+    suspend fun respond(challenge: KeyboardInteractiveChallenge): List<String>?
+}
+
+/**
+ * How many keyboard-interactive rounds we answer before giving up. A server that keeps rejecting
+ * (or keeps asking) must not turn into an endless sequence of prompts; OpenSSH's own default of
+ * three attempts is the familiar number.
+ */
+const val KEYBOARD_INTERACTIVE_MAX_ROUNDS: Int = 3
+
+/** How long a challenge waits for the user before it counts as dismissed. */
+const val KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS: Long = 120_000
+
 interface SshConnection {
     val isConnected: Boolean
 
