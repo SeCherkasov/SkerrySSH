@@ -39,6 +39,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -633,19 +634,21 @@ class TerminalScreenState(
     /**
      * Visible cursor row up to the cursor column — the shell line as the user sees it, prompt
      * included ([ProductionGuard.promptCandidates] strips it). Reads the published [screen]
-     * snapshot, like [atPasswordPrompt].
+     * snapshot, like [atPasswordPrompt]. [cursorRow] indexes that snapshot directly (the emulator
+     * counts scrollback into it), so it must NOT be offset by the screen's start — doing that ran
+     * off the end as soon as any history existed, and the guard then saw an empty line.
      */
     private fun screenLineToCursor(): String {
         val grid = screen
         if (grid.isEmpty() || rows <= 0) return ""
-        val line = grid.getOrNull(grid.size - rows + cursorRow) ?: return ""
+        val line = grid.getOrNull(cursorRow) ?: return ""
         return line.take(cursorCol.coerceIn(0, line.size)).joinToString("") { it.text }
     }
 
     /**
      * Whether the current cursor row looks like a password prompt (echo is usually off there).
-     * Reads the published [screen] snapshot (UI thread, no race with the emulator): the visible
-     * grid is the last [rows] rows, cursor row is [cursorRow] within it. A row is treated as a
+     * Reads the published [screen] snapshot (UI thread, no race with the emulator) at [cursorRow],
+     * which already addresses that snapshot including scrollback. A row is treated as a
      * prompt if it ends with ":" and contains one of the keyword hints, to avoid suppressing
      * history on plain text like `cat passwords.txt`. Heuristic: erring toward not saving a
      * command is safer than leaking a secret.
@@ -653,7 +656,7 @@ class TerminalScreenState(
     private fun atPasswordPrompt(): Boolean {
         val grid = screen
         if (grid.isEmpty() || rows <= 0) return false
-        val line = grid.getOrNull(grid.size - rows + cursorRow) ?: return false
+        val line = grid.getOrNull(cursorRow) ?: return false
         val text = line.joinToString("") { it.text }.trim().lowercase()
         if (!text.endsWith(":")) return false
         return PASSWORD_PROMPT_HINTS.any { it in text }
@@ -1031,6 +1034,25 @@ class TerminalScreenState(
      */
     fun sendBytes(bytes: ByteArray) {
         outbound.trySend(bytes)
+    }
+
+    /**
+     * Live PTY output of this session for a consumer beside the emulator — session sharing streams
+     * the same bytes to the team ([app.skerry.shared.share.SessionShareHost]). The session's output
+     * is a hot flow with any number of subscribers, so this observes it rather than tapping the
+     * emulator's own feed.
+     */
+    val ptyOutput: Flow<ByteArray> get() = session.output
+
+    /**
+     * Keystrokes from a viewer of this shared session. Delivered as raw bytes (a viewer sends key
+     * sequences, not text) and counted as user input, so the screen snaps back to the bottom exactly
+     * as it does when the owner types — otherwise the owner could be scrolled up in history while a
+     * colleague works, and never see what they are doing.
+     */
+    fun sendSharedInput(bytes: ByteArray) {
+        inputVersion++
+        sendBytes(bytes)
     }
 
     /**

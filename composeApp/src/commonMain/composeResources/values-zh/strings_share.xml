@@ -1,0 +1,32 @@
+<resources>
+    <string name="share_session">共享会话</string>
+    <string name="share_session_stop">停止共享</string>
+    <string name="share_title">共享此会话</string>
+    <string name="share_pick_team">共享给团队</string>
+    <string name="share_no_teams">加入或创建团队后才能共享会话。</string>
+    <string name="share_starting">正在连接中继…</string>
+    <string name="share_live">已共享给 %1$s</string>
+    <string name="share_viewers">%1$d 人观看</string>
+    <string name="share_allow_input">允许观看者输入</string>
+    <string name="share_input_locked">生产会话：观看者只能查看</string>
+    <string name="share_note">团队成员可以加入并观看此终端。中继只传输加密帧。</string>
+    <string name="share_live_sessions">实时会话</string>
+    <string name="share_none_live">当前没有人共享会话。</string>
+    <string name="share_join">加入</string>
+    <string name="share_started_by">%1$s · %2$d 人观看</string>
+    <string name="share_unnamed">共享会话</string>
+    <string name="share_watching">正在观看 %1$s</string>
+    <string name="share_fail_not_connected">未连接同步账户。</string>
+    <string name="share_fail_no_key">团队密钥尚未同步到本设备。</string>
+    <string name="share_fail_network">无法连接中继。</string>
+    <string name="share_fail_rejected">服务器拒绝了此共享。</string>
+    <string name="share_fail_server">服务器无法中继此会话。</string>
+    <string name="share_typing">%1$s 正在输入…</string>
+    <string name="share_control_wants">%1$s 请求输入权限</string>
+    <string name="share_grant">允许</string>
+    <string name="share_deny">拒绝</string>
+    <string name="share_read_only">仅查看</string>
+    <string name="share_control_request">请求控制权</string>
+    <string name="share_control_asked">已发送请求</string>
+    <string name="share_control_granted">可以输入</string>
+</resources>

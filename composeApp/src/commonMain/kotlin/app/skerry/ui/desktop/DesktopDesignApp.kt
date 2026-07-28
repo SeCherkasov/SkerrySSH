@@ -90,6 +90,7 @@ import app.skerry.shared.ssh.isVnc
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.connection.toVncAuth
+import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.app.GroupDialog
 import app.skerry.ui.host.GroupDialog as GroupEditDialog
 import app.skerry.ui.host.HostManagerController
@@ -169,6 +170,7 @@ import app.skerry.ui.host.DesktopDeleteHostDialog
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.SessionDot
 import app.skerry.ui.connection.DesktopPasswordDialog
+import app.skerry.ui.connection.connectableSecrets
 import app.skerry.ui.vault.DesktopResetScreen
 import app.skerry.ui.vault.DesktopUnlockScreen
 import app.skerry.ui.app.DesktopView
@@ -179,6 +181,7 @@ import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalConnectHost
+import app.skerry.ui.app.LocalShowTerminal
 import app.skerry.ui.app.LocalConnectPane
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalFeatures
@@ -200,6 +203,8 @@ import app.skerry.ui.app.LocalSecretFileReader
 import app.skerry.ui.app.LocalSshCertificateInspector
 import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.app.LocalSync
+import app.skerry.ui.app.LocalSessionShare
+import app.skerry.ui.app.LocalSharedSessions
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.app.LocalTestTransport
 import app.skerry.ui.app.LocalTunnels
@@ -387,6 +392,10 @@ fun DesktopDesignApp(
     sync: SyncCoordinator? = null,
     // Teams coordinator (cross-account sharing over sync). `null` — Teams screen in mock mode.
     teams: app.skerry.ui.teams.TeamsCoordinator? = null,
+    // Session sharing over the sync relay: the host side (one share at a time) and the directory of
+    // what the account's teams are sharing right now. Both null on the mock path / without sync.
+    sessionShare: app.skerry.ui.share.SessionShareController? = null,
+    sharedSessions: app.skerry.ui.share.SharedSessionsController? = null,
     // AI assistant controller (BYOK, external OpenAI-compatible provider). `null` — AI not connected: the
     // "AI" settings tab draws a static mock. Supplied behind the vault gate (the key is stored in the vault).
     ai: app.skerry.ui.ai.AiAssistantController? = null,
@@ -558,6 +567,8 @@ fun DesktopDesignApp(
         LocalSecurityLog provides securityLog,
         LocalSync provides sync,
         LocalTeams provides teams,
+        LocalSessionShare provides sessionShare,
+        LocalSharedSessions provides sharedSessions,
         LocalAi provides ai,
         LocalUpdates provides updates,
     ) {
@@ -729,12 +740,19 @@ private fun DesktopChrome(
         }
     }
 
+    // Same navigation step [openHostSession] takes after connecting, for sessions opened from
+    // another screen (joining a share from Teams). Stable, like the connect lambdas above.
+    val showTerminal = remember(state, sessions) {
+        { if (sessions != null) state.showSection(HostSection.Terminal) else state.showView(DesktopView.Terminal) }
+    }
+
     CompositionLocalProvider(
         LocalConnectHost provides connectHost,
         LocalConnectPane provides connectPaneHost,
         LocalRunSnippetOnHost provides runSnippetOnHost,
         LocalCredentials provides credentials,
         LocalHostClickConnectMode provides state.hostClickConnectMode,
+        LocalShowTerminal provides showTerminal,
     ) {
         // Global snippet hotkey: preview events flow from the root down to focus, so the root Box
         // intercepts the chord before the terminal does. If a saved shortcut matches and there's a
@@ -853,25 +871,38 @@ private fun DesktopChrome(
                         pendingAuth = null
                         openResolved(pending, SshAuth.Password(pw))
                     },
+                    // A team-shared host has no credential of its own (the link is stripped on
+                    // share), so our own keychain is offered here — otherwise a key-only server
+                    // could not be reached at all.
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), pending.host.connectionType),
+                    onUseSecret = { secret ->
+                        pendingAuth = null
+                        openResolved(pending, secret.toSshAuth())
+                    },
                 )
             }
             // VNC password prompt ("ask every time"): an empty entry means the server needs no password
             // (security type None); a non-empty one is the VNC-Auth password.
             pendingVncHost?.let { host ->
+                val openVncWith = { auth: app.skerry.shared.vnc.VncAuth ->
+                    pendingVncHost = null
+                    state.recordRecentHost(host.id)
+                    sessions?.openVnc(
+                        host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
+                        remoteResize = host.vncResizeToWindow,
+                        onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                    )
+                    state.showSection(HostSection.RemoteDesktops)
+                }
                 DesktopPasswordDialog(
                     host = host,
                     onDismiss = { pendingVncHost = null },
                     onConnect = { pw ->
-                        pendingVncHost = null
-                        val auth = if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw)
-                        state.recordRecentHost(host.id)
-                        sessions?.openVnc(
-                            host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
-                            remoteResize = host.vncResizeToWindow,
-                            onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
-                        )
-                        state.showSection(HostSection.RemoteDesktops)
+                        openVncWith(if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw))
                     },
+                    // Passwords only here ([connectableSecrets]) — VNC-Auth has no key.
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host.connectionType),
+                    onUseSecret = { secret -> openVncWith(secret.toVncAuth()) },
                 )
             }
             // Production guard: confirm before a #prod session opens. Sits in front of the password

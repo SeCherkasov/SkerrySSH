@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalDensity
 import app.skerry.shared.host.Host
+import app.skerry.shared.vault.Credential
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.ssh.usesSshAuth
@@ -42,6 +43,7 @@ import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.connection.toVncAuth
+import app.skerry.ui.connection.connectableSecrets
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.session.SessionsController
@@ -67,6 +69,7 @@ import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.app.FeatureFlags
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalConnectHost
+import app.skerry.ui.app.LocalShowTerminal
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalFeatures
 import app.skerry.ui.design.LocalFonts
@@ -304,6 +307,8 @@ fun MobileDesignApp(
         LocalSync provides deps.sync,
         // Teams — More → "Team" push screen (sharing hosts/snippets between accounts).
         LocalTeams provides deps.teams,
+        app.skerry.ui.app.LocalSessionShare provides deps.sessionShare,
+        app.skerry.ui.app.LocalSharedSessions provides deps.sharedSessions,
     ) {
         Box(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
             val vault = deps.vault
@@ -460,9 +465,14 @@ private fun MobileChrome(
     val connectHost = remember(connect) { { host: Host -> connect(host, MobileConnectDest.Terminal) } }
     val openSftp = remember(connect) { { host: Host -> connect(host, MobileConnectDest.Files) } }
 
+    // Where a session opened from another screen lands (joining a share from Teams): the same
+    // push-screen Connect navigates to.
+    val showTerminal = remember(state) { { navigateAfterConnect(state, MobileConnectDest.Terminal) } }
+
     CompositionLocalProvider(
         LocalConnectHost provides connectHost,
         LocalOpenSftp provides openSftp,
+        LocalShowTerminal provides showTerminal,
         // Keychain of the open vault — needed by the "New connection" sheet to pick/create a secret (desktop parity).
         LocalCredentials provides credentials,
     ) {
@@ -565,6 +575,13 @@ private fun MobileChrome(
                     host = host,
                     onDismiss = { pending = null },
                     onConnect = { pw -> pending = null; openMobileSession(sessions, state, host, SshAuth.Password(pw), jump, dest) },
+                    // Desktop parity: a team-shared host keeps no credential link, so our keychain
+                    // is the only way to reach one that doesn't take passwords.
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host.connectionType),
+                    onUseSecret = { secret ->
+                        pending = null
+                        openMobileSession(sessions, state, host, secret.toSshAuth(), jump, dest)
+                    },
                 )
             }
             // VNC password prompt ("ask every time"): empty = server needs no password (None), else VNC-Auth.
@@ -574,13 +591,13 @@ private fun MobileChrome(
                     onDismiss = { pendingVnc = null },
                     onConnect = { pw ->
                         pendingVnc = null
-                        val auth = if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw)
-                        sessions?.openVnc(
-                            host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
-                            remoteResize = host.vncResizeToWindow,
-                            onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
-                        )
-                        if (sessions != null) state.push(MobileRoute.Vnc)
+                        openMobileVnc(sessions, state, hostManager, host, if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw))
+                    },
+                    // Passwords only ([connectableSecrets]) — VNC-Auth has no key.
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host.connectionType),
+                    onUseSecret = { secret ->
+                        pendingVnc = null
+                        openMobileVnc(sessions, state, hostManager, host, secret.toVncAuth())
                     },
                 )
             }
@@ -623,6 +640,22 @@ private fun openMobileSession(
         auth = auth,
     )
     navigateAfterConnect(state, dest)
+}
+
+/** Open a VNC tab for [host] with [auth] and navigate to it. Shared by the typed-password and picked-secret paths. */
+private fun openMobileVnc(
+    sessions: SessionsController?,
+    state: MobileDesignState,
+    hostManager: app.skerry.ui.host.HostManagerController?,
+    host: Host,
+    auth: app.skerry.shared.vnc.VncAuth,
+) {
+    sessions?.openVnc(
+        host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
+        remoteResize = host.vncResizeToWindow,
+        onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+    )
+    if (sessions != null) state.push(MobileRoute.Vnc)
 }
 
 // Content: root tabs and push screens.

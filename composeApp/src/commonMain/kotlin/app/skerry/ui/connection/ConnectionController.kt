@@ -18,6 +18,7 @@ import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.ShellTerminalSession
+import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalHistoryStore
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.terminal.terminalHistoryKey
@@ -181,6 +182,15 @@ class ConnectionController(
     var supportsSftp: Boolean by mutableStateOf(false)
         private set
 
+    /**
+     * Whether this pane is watching a session it did not open ([attachSession]) — a colleague's
+     * shared terminal. Snapshot state for the same reason as [supportsSftp]: everything that reads
+     * a connection (info panel, host metrics, throughput) has nothing to read here, and the UI
+     * should say so by not offering it rather than by showing a column of dashes.
+     */
+    var isWatched: Boolean by mutableStateOf(false)
+        private set
+
     /** Asks the file view to reveal [path]; a newer request replaces one still waiting. */
     fun requestReveal(path: String) {
         pendingRevealPath = path
@@ -209,6 +219,9 @@ class ConnectionController(
     private var metrics: HostMetricsController? = null
     private var throughput: ThroughputController? = null
     private var ping: PingController? = null
+    // A session shown but not owned (see [attachSession]); released with the pane, since the pane
+    // holding it is the only thing keeping the relay socket open.
+    private var attached: TerminalSession? = null
 
     /**
      * Connect to [target]/[auth]. [onConnected] (if given) is called EXACTLY ONCE on the first
@@ -344,6 +357,36 @@ class ConnectionController(
     }
 
     /**
+     * Shows a session this controller did **not** open — a colleague's shared terminal being
+     * watched ([app.skerry.shared.share.SharedSessionViewer]). The pane gets a live
+     * [ConnectionUiState.Connected] and renders through the usual terminal UI, but nothing that
+     * needs a connection applies: no SFTP, no keep-alive, and no auto-reconnect (there is no target
+     * or credential to reconnect with — the session belongs to someone else's machine).
+     *
+     * Refused unless the controller is idle, for the same reason as [connect]: a pane must never
+     * hold two sessions, and the caller's would be silently orphaned.
+     */
+    fun attachSession(external: TerminalSession) {
+        if (uiState !is ConnectionUiState.Form) return
+        supportsSftp = false
+        isWatched = true
+        val sScope = newSessionScope()
+        sessionScope = sScope
+        attached = external
+        val prefs = terminalPrefs()
+        val terminal = TerminalScreenState(
+            external,
+            sScope,
+            scrollback = prefs.effectiveScrollback,
+            cursorShape = prefs.cursorStyle.shape,
+            cursorBlink = prefs.cursorStyle.blink,
+            clipboardWriteEnabled = prefs.clipboardWriteEnabled,
+        )
+        uiState = ConnectionUiState.Connected(terminal)
+        watchForSessionLoss(terminal, sScope)
+    }
+
+    /**
      * Opens an SFTP channel over this session's live connection. The channel is owned by the
      * caller (the SFTP screen): close it via [app.skerry.shared.sftp.SftpClient.close] in dispose.
      * The SSH connection itself stays with the controller and is closed by [disconnect].
@@ -406,9 +449,13 @@ class ConnectionController(
      * This session's live host-metrics controller — one per connection, created lazily and cached
      * (like [openPortForwards]/[openTransferCoordinator]); polling runs on the session's [scope]
      * and starts immediately. Stopped by [disconnect] along with the session.
+     *
+     * `null` for a session attached via [attachSession]: a colleague's shared terminal is Connected
+     * like any other, but there is no connection of ours to run `exec` on.
      * @throws IllegalStateException the session isn't connected (no live connection)
      */
-    fun openMetrics(): HostMetricsController {
+    fun openMetrics(): HostMetricsController? {
+        if (attached != null) return null
         val conn = connection ?: error("No active connection for metrics")
         return metrics ?: HostMetricsController(
             exec = { cmd -> conn.exec(cmd) },
@@ -421,9 +468,13 @@ class ConnectionController(
      * and cached (like [openMetrics]); polling runs on the session's [scope]. Samplers read the
      * channel's live counters; after [disconnect] (channel cleared) they'd return 0, but the
      * poller is stopped by then.
+     *
+     * `null` for a session attached via [attachSession]: the bytes of a colleague's channel are
+     * relayed, not ours to count, and that pane's status bar shows no rates.
      * @throws IllegalStateException the session isn't connected (no live channel)
      */
-    fun openThroughput(): ThroughputController {
+    fun openThroughput(): ThroughputController? {
+        if (attached != null) return null
         val channel = shellChannel ?: error("No active channel for throughput measurement")
         return throughput ?: ThroughputController(
             sampleUp = { channel.bytesUp },
@@ -572,6 +623,9 @@ class ConnectionController(
      */
     private fun releaseSessionResources() {
         val conn = connection
+        val watched = attached
+        attached = null
+        isWatched = false
         portForwards?.stop()
         portForwards?.closeAll()
         portForwards = null
@@ -593,6 +647,9 @@ class ConnectionController(
         serverVersion = null
         if (sftp != null) closeSftpQuietly(sftp, coordinator)
         if (conn != null) closeConnectionQuietly(conn)
+        // NonCancellable like the other teardown launches: the relay socket must be released even
+        // if the scope dies at this moment, or the share would keep a phantom viewer forever.
+        if (watched != null) scope.launch(NonCancellable) { runCatching { watched.close() } }
     }
 
     /** Closes the connection without letting scope cancellation break teardown, and swallows errors. */

@@ -127,6 +127,13 @@ val LocalTrustedCas: ProvidableCompositionLocal<TrustedCaController?> = staticCo
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
 /**
+ * "Bring the terminal forward" action — what [LocalConnectHost] does after connecting, for the paths
+ * that open a session from another screen (joining a colleague's shared session from Teams). Supplied
+ * by the chrome root on each platform, since the navigation state is theirs; default is a no-op.
+ */
+val LocalShowTerminal: ProvidableCompositionLocal<() -> Unit> = staticCompositionLocalOf { {} }
+
+/**
  * Controller behind the keyboard-interactive prompt: a server asking for a second factor mid-connect
  * (2FA code, SMS token, push confirmation). Supplied by the chrome root so any screen the prompt
  * lands over keeps its own state; `null` — mock path/preview, nothing is connecting.
@@ -263,6 +270,21 @@ val LocalSync: ProvidableCompositionLocal<SyncCoordinator?> = staticCompositionL
  * to set up sync. Supplied together with [LocalSync].
  */
 val LocalTeams: ProvidableCompositionLocal<app.skerry.ui.teams.TeamsCoordinator?> = staticCompositionLocalOf { null }
+
+/**
+ * Sharing the live session with a team (session sharing over the sync server's relay). `null` —
+ * mock path/preview or sync not connected: the toolbar's share toggle is dimmed. One controller per
+ * app: only one session is shared at a time.
+ */
+val LocalSessionShare: ProvidableCompositionLocal<app.skerry.ui.share.SessionShareController?> =
+    staticCompositionLocalOf { null }
+
+/**
+ * Directory of sessions the account's teams are sharing right now, and the way into one. `null` on
+ * the mock path/preview or without sync: the team screens simply show no live sessions.
+ */
+val LocalSharedSessions: ProvidableCompositionLocal<app.skerry.ui.share.SharedSessionsController?> =
+    staticCompositionLocalOf { null }
 
 /**
  * AI assistant controller (external OpenAI-compatible provider, BYOK). `null` — mock path/preview or

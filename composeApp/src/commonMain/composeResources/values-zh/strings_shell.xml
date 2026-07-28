@@ -61,6 +61,7 @@
     <string name="shell_password_caps">密码</string>
     <string name="shell_password_host_placeholder">此主机的主密码</string>
     <string name="shell_not_stored_once">未存储 · 仅使用一次</string>
+    <string name="shell_use_saved_secret">或使用已保存的凭据</string>
 
     <!-- 删除主机对话框 (DeleteHostDialog.kt) -->
     <string name="shell_delete_host_title">删除 \"%1$s\"？</string>

@@ -61,6 +61,7 @@
     <string name="shell_password_caps">ПАРОЛЬ</string>
     <string name="shell_password_host_placeholder">мастер-пароль для этого хоста</string>
     <string name="shell_not_stored_once">Не сохраняется · разовый</string>
+    <string name="shell_use_saved_secret">ИЛИ СОХРАНЁННЫЙ СЕКРЕТ</string>
 
     <!-- Delete host dialog (DeleteHostDialog.kt) -->
     <string name="shell_delete_host_title">Удалить «%1$s»?</string>

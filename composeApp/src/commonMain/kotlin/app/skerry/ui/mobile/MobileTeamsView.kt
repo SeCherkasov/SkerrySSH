@@ -83,7 +83,11 @@ import app.skerry.ui.generated.resources.lib_teams_invite
 import app.skerry.ui.generated.resources.lib_teams_invited_banner
 import app.skerry.ui.generated.resources.lib_teams_leave
 import app.skerry.ui.generated.resources.lib_teams_leave_message
+import app.skerry.ui.app.LocalSharedSessions
 import app.skerry.ui.generated.resources.lib_teams_members
+import app.skerry.ui.generated.resources.share_live_sessions
+import app.skerry.ui.share.SharedSessionsList
+import app.skerry.ui.share.rememberJoinSharedSession
 import app.skerry.ui.generated.resources.lib_teams_members_count
 import app.skerry.ui.generated.resources.lib_teams_need_sync
 import app.skerry.ui.generated.resources.lib_teams_no_key
@@ -515,6 +519,8 @@ private fun MobileTeamDetail(
         onDelete = { onConfirm(MobileTeamsConfirm.DeleteScope(team.id, it.id)) },
     )
 
+    MobileTeamsSectionLabel(stringResource(Res.string.share_live_sessions))
+    SharedSessionsList(team.id, LocalSharedSessions.current, onJoin = rememberJoinSharedSession(), modifier = Modifier.padding(bottom = 14.dp))
     MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_members))
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         members.forEach { m ->

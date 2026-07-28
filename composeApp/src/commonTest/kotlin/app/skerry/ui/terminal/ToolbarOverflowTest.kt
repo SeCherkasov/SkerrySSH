@@ -3,6 +3,7 @@ package app.skerry.ui.terminal
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ToolbarOverflowTest {
@@ -48,5 +49,31 @@ class ToolbarOverflowTest {
         val tight = overflowedActions(available = 400.dp, syncShown = false)
         assertTrue(roomy.isEmpty())
         assertTrue(tight.isNotEmpty())
+    }
+}
+
+/** Which panes the info panel is offered for (see [infoPanelAvailable]). */
+class InfoPanelAvailabilityTest {
+
+    @Test
+    fun `a session of our own gets the info panel`() {
+        assertTrue(infoPanelAvailable(hasSession = true, watched = false, mock = false))
+    }
+
+    @Test
+    fun `a pane watching a colleague's session does not`() {
+        // Host, cipher, uptime and metrics all come from a connection this app owns; a viewer has
+        // none of them, and the panel would be a column of dashes.
+        assertFalse(infoPanelAvailable(hasSession = true, watched = true, mock = false))
+    }
+
+    @Test
+    fun `with no session there is nothing to describe`() {
+        assertFalse(infoPanelAvailable(hasSession = false, watched = false, mock = false))
+    }
+
+    @Test
+    fun `the mock path keeps its static panel`() {
+        assertTrue(infoPanelAvailable(hasSession = false, watched = false, mock = true))
     }
 }

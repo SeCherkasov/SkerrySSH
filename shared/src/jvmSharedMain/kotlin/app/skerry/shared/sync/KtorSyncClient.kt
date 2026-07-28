@@ -96,7 +96,10 @@ import java.util.Base64
 class KtorSyncClient(
     private val serverUrl: String,
     private val http: HttpClient = defaultHttpClient(),
-) : SyncClient, TeamClient {
+) : SyncClient, TeamClient,
+    // Session sharing is its own protocol over the same server and the same HTTP client; delegated
+    // rather than inlined, so this file stays about sync and Teams.
+    app.skerry.shared.share.SessionShareClient by app.skerry.shared.share.KtorSessionShareClient(serverUrl, http) {
 
     private val params: SRP6CryptoParams = SRP6CryptoParams.getInstance(2048, "SHA-256")
     private val random = SecureRandom()
@@ -542,6 +545,10 @@ class KtorSyncClient(
     private fun parseSignal(text: String): SyncSignal? {
         text.toLongOrNull()?.let { return SyncSignal.Account(it) }
         if (text == "teams") return SyncSignal.Membership
+        if (text.startsWith("shares:")) {
+            val teamId = text.removePrefix("shares:")
+            return if (teamId.isEmpty()) null else SyncSignal.Shares(teamId)
+        }
         if (text.startsWith("team:")) {
             val teamId = text.substringAfter("team:").substringBeforeLast(':')
             val cursor = text.substringAfterLast(':').toLongOrNull() ?: return null

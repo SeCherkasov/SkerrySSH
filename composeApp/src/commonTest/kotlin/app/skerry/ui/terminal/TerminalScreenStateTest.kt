@@ -26,6 +26,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -1372,6 +1373,42 @@ class TerminalScreenStateTest {
 
         assertEquals(null, state.pendingGuarded)
         assertEquals(1, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a password is still recognised once the session has scrollback`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // A real session is never on its first screenful: output scrolls history in long before any
+        // sudo prompt appears. The prompt row must still be found then, or the secret typed into it
+        // is treated as a command — held in a dialog and saved to history.
+        repeat(state.rows + 5) { session.emit("filler line\r\n".encodeToByteArray()) }
+        session.emit("sudo password for root: ".encodeToByteArray())
+        state.typeInput("rm -rf /\r")
+
+        assertEquals(null, state.pendingGuarded, "the password was taken for a command once history existed")
+        assertEquals(1, session.sent.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a risky command recalled with arrow-up is still guarded after scrollback builds up`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // Arrow-up recall: nothing is typed, the command is only on the screen line. The guard reads
+        // that line, so it has to address it correctly with history in the snapshot.
+        repeat(state.rows + 5) { session.emit("filler line\r\n".encodeToByteArray()) }
+        session.emit("root@prod:~# rm -rf /var/lib".encodeToByteArray())
+        state.typeInput("\r")
+
+        assertNotNull(state.pendingGuarded, "a destructive command went through unconfirmed on a prod host")
         scope.cancel()
     }
 
