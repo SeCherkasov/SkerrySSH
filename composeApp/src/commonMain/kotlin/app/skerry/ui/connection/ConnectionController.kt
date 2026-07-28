@@ -182,6 +182,15 @@ class ConnectionController(
     var supportsSftp: Boolean by mutableStateOf(false)
         private set
 
+    /**
+     * Whether this pane is watching a session it did not open ([attachSession]) — a colleague's
+     * shared terminal. Snapshot state for the same reason as [supportsSftp]: everything that reads
+     * a connection (info panel, host metrics, throughput) has nothing to read here, and the UI
+     * should say so by not offering it rather than by showing a column of dashes.
+     */
+    var isWatched: Boolean by mutableStateOf(false)
+        private set
+
     /** Asks the file view to reveal [path]; a newer request replaces one still waiting. */
     fun requestReveal(path: String) {
         pendingRevealPath = path
@@ -360,6 +369,7 @@ class ConnectionController(
     fun attachSession(external: TerminalSession) {
         if (uiState !is ConnectionUiState.Form) return
         supportsSftp = false
+        isWatched = true
         val sScope = newSessionScope()
         sessionScope = sScope
         attached = external
@@ -439,9 +449,13 @@ class ConnectionController(
      * This session's live host-metrics controller — one per connection, created lazily and cached
      * (like [openPortForwards]/[openTransferCoordinator]); polling runs on the session's [scope]
      * and starts immediately. Stopped by [disconnect] along with the session.
+     *
+     * `null` for a session attached via [attachSession]: a colleague's shared terminal is Connected
+     * like any other, but there is no connection of ours to run `exec` on.
      * @throws IllegalStateException the session isn't connected (no live connection)
      */
-    fun openMetrics(): HostMetricsController {
+    fun openMetrics(): HostMetricsController? {
+        if (attached != null) return null
         val conn = connection ?: error("No active connection for metrics")
         return metrics ?: HostMetricsController(
             exec = { cmd -> conn.exec(cmd) },
@@ -454,9 +468,13 @@ class ConnectionController(
      * and cached (like [openMetrics]); polling runs on the session's [scope]. Samplers read the
      * channel's live counters; after [disconnect] (channel cleared) they'd return 0, but the
      * poller is stopped by then.
+     *
+     * `null` for a session attached via [attachSession]: the bytes of a colleague's channel are
+     * relayed, not ours to count, and that pane's status bar shows no rates.
      * @throws IllegalStateException the session isn't connected (no live channel)
      */
-    fun openThroughput(): ThroughputController {
+    fun openThroughput(): ThroughputController? {
+        if (attached != null) return null
         val channel = shellChannel ?: error("No active channel for throughput measurement")
         return throughput ?: ThroughputController(
             sampleUp = { channel.bytesUp },
@@ -607,6 +625,7 @@ class ConnectionController(
         val conn = connection
         val watched = attached
         attached = null
+        isWatched = false
         portForwards?.stop()
         portForwards?.closeAll()
         portForwards = null

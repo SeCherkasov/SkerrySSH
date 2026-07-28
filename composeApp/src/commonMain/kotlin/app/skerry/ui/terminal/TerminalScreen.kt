@@ -1287,7 +1287,6 @@ fun TerminalScreen(
               cursorRow = state.cursorRow,
               cursorCol = state.cursorCol,
               snapshotRows = state.screen.size,
-              gridRows = state.rows,
               metrics = metrics,
               scrollPx = scroll.value.toFloat(),
           )

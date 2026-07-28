@@ -64,6 +64,15 @@ import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
 /**
+ * Whether the team may only watch this session, never type into it: true for a production-tagged
+ * host, whose guard would otherwise be bypassed — a viewer's keys arrive past the confirmation
+ * dialog. Read off the session's live guard policy, whose [ProductionGuardPolicy.production] is the
+ * `#prod` tag itself; the user's "confirm warnings too" preference is also carried in that policy
+ * but says nothing about the host, so it must not lock a share down.
+ */
+internal fun viewersMayOnlyWatch(policy: ProductionGuardPolicy): Boolean = policy.production
+
+/**
  * Toolbar toggle for sharing the live session with a team: opens a small panel to pick the team,
  * then shows what the team sees (viewer count, whether they may type) and stops the share.
  *
@@ -91,12 +100,15 @@ fun ShareSessionButton(
     }
     LaunchedEffect(requests, terminal) { requests?.collect { if (live || terminal != null) open = true } }
     // A pane that is watching someone else's session gets the viewer's panel behind the same button:
-    // its only control is asking the host for permission to type.
+    // its only control is asking the host for permission to type. Relaying a colleague's stream on
+    // to a third team is never offered — the pane's own flag decides that, not the viewer registry,
+    // which is keyed by pane id and cleared the moment the watched session ends.
     val watched = LocalSharedSessions.current?.watching?.get(session?.id)
     if (watched != null) {
         WatchedSessionButton(watched, session?.subtitle.orEmpty(), requests)
         return
     }
+    if (session?.controller?.isWatched == true) return
     if (controller == null) return
     Box {
         IconBtn(
@@ -130,10 +142,10 @@ fun ShareSessionButton(
                                     output = terminal.ptyOutput,
                                     toShell = { bytes -> terminal.sendSharedInput(bytes) },
                                     geometry = { ShareFrame.Resize(terminal.cols, terminal.rows) },
+                                    // Ends the broadcast when the shell does — see [ShareSource].
+                                    sessionState = terminal.state,
                                 ),
-                                // A production-tagged session is watched, never typed into: a
-                                // viewer's keys would arrive past the guard's confirmation dialog.
-                                readOnlyOnly = terminal.guardPolicy != ProductionGuardPolicy.Off,
+                                readOnlyOnly = viewersMayOnlyWatch(terminal.guardPolicy),
                             )
                         }
                         open = false

@@ -6,6 +6,7 @@ import app.skerry.shared.share.ShareChannel
 import app.skerry.shared.share.ShareDirection
 import app.skerry.shared.share.ShareEvent
 import app.skerry.shared.share.ShareFrame
+import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.share.SharedSessionInfo
 import app.skerry.shared.share.shareMetaAad
 import app.skerry.shared.sync.SyncException
@@ -19,6 +20,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.TestResult
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -28,6 +31,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -99,8 +103,35 @@ class SessionShareControllerTest {
         ) to scope
     }
 
-    private fun source(output: MutableSharedFlow<ByteArray>, typed: MutableList<ByteArray> = mutableListOf()) =
-        ShareSource(output = output, toShell = { typed += it }, geometry = { ShareFrame.Resize(90, 30) })
+    private fun source(
+        output: MutableSharedFlow<ByteArray>,
+        typed: MutableList<ByteArray> = mutableListOf(),
+        sessionState: StateFlow<TerminalState> = MutableStateFlow(TerminalState.Open),
+    ) = ShareSource(
+        output = output,
+        toShell = { typed += it },
+        geometry = { ShareFrame.Resize(90, 30) },
+        sessionState = sessionState,
+    )
+
+    @Test
+    fun `the shell ending stops the broadcast`() = cryptoTest {
+        val client = FakeShareClient()
+        val shell = MutableStateFlow<TerminalState>(TerminalState.Open)
+        val (controller, scope) = controller(client)
+        controller.share("t1", "Platform", "pane-1", "root@prod-web", source(MutableSharedFlow(), sessionState = shell), readOnlyOnly = false)
+        advanceUntilIdle()
+        assertIs<ShareUiState.Live>(controller.state)
+
+        shell.value = TerminalState.Closed(cleanExit = true)
+        advanceUntilIdle()
+
+        // Otherwise the team keeps watching the last frame of a session that no longer exists, and
+        // the relay socket stays open until the app is closed.
+        assertEquals(ShareUiState.Off, controller.state)
+        assertNull(controller.sharedPaneId)
+        scope.cancel()
+    }
 
     @Test
     fun `sharing goes live and seals the session label with the team key`() = cryptoTest {

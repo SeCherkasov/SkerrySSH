@@ -8,6 +8,7 @@ import app.skerry.shared.share.SessionShareClient
 import app.skerry.shared.share.SessionShareCodec
 import app.skerry.shared.share.SessionShareHost
 import app.skerry.shared.share.ShareFrame
+import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.share.shareMetaAad
 import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncSession
@@ -16,6 +17,7 @@ import app.skerry.shared.vault.VaultCrypto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** What the share button shows about this session. */
@@ -168,7 +170,18 @@ class SessionShareController(
                         inputAllowed = false,
                         inputLocked = readOnlyOnly,
                     )
-                    host.run()
+                    // The shell can end while the socket is perfectly healthy (exit, dropped
+                    // connection): end the broadcast with it instead of streaming a dead screen.
+                    // Cancelled with the socket coroutine when the share stops for any other reason.
+                    val shellWatch = launch {
+                        source.sessionState.first { it is TerminalState.Closed }
+                        runCatching { host.stop() }
+                    }
+                    try {
+                        host.run()
+                    } finally {
+                        shellWatch.cancel()
+                    }
                 }
                 // The socket closed on its own (host stopped, session gone, server restart).
                 if (mine == generation && state !is ShareUiState.Failed) state = ShareUiState.Off
@@ -277,4 +290,10 @@ class ShareSource(
     val output: kotlinx.coroutines.flow.Flow<ByteArray>,
     val toShell: suspend (ByteArray) -> Unit,
     val geometry: () -> ShareFrame.Resize,
+    /**
+     * Liveness of the shell behind the share. [output] is a hot stream that never ends, so a shell
+     * that exits (or a connection that drops) is silent rather than finished: without this the
+     * broadcast would stay up, showing the team the last frame of a session that is gone.
+     */
+    val sessionState: kotlinx.coroutines.flow.StateFlow<app.skerry.shared.terminal.TerminalState>,
 )

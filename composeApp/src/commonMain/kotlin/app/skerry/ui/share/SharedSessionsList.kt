@@ -13,8 +13,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.terminal.TerminalSession
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSharedSessions
+import app.skerry.ui.app.LocalShowTerminal
+import app.skerry.ui.session.SessionsController
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.InitialsAvatar
 import app.skerry.ui.design.Txt
@@ -108,22 +111,43 @@ private fun SharedSessionRow(share: SharedSessionUi, onJoin: () -> Unit) {
 fun rememberJoinSharedSession(): (SharedSessionUi) -> Unit {
     val shares = LocalSharedSessions.current
     val sessions = LocalSessions.current
+    val showTerminal = LocalShowTerminal.current
     val unnamed = stringResource(Res.string.share_unnamed)
     return { share ->
         shares?.join(
             share,
             onOpened = { viewer ->
-                val paneId = sessions?.openShared(
+                showWatchedSession(
+                    sessions = sessions,
                     title = share.label.ifBlank { unnamed },
                     subtitle = share.hostAccountId,
                     viewer = viewer,
+                    // The pane and the viewer are the same session from here on: the terminal
+                    // overlay finds the viewer by the pane it is drawing.
+                    onPaneOpened = { paneId -> shares.trackWatching(paneId, viewer) },
+                    showTerminal = showTerminal,
                 )
-                // The pane and the viewer are the same session from here on: the terminal overlay
-                // finds the viewer by the pane it is drawing.
-                if (paneId != null) shares.trackWatching(paneId, viewer)
             },
             // The reason is left on the directory the user is looking at (see the controller).
             onFailed = {},
         )
     }
+}
+
+/**
+ * Puts a joined [viewer] on screen: a tab of its own, bound to the pane it landed in, with the
+ * terminal brought forward — joining happens from the team screen, so without that last step the
+ * session opens behind the screen the user is still looking at.
+ */
+internal fun showWatchedSession(
+    sessions: SessionsController?,
+    title: String,
+    subtitle: String,
+    viewer: TerminalSession,
+    onPaneOpened: (String) -> Unit,
+    showTerminal: () -> Unit,
+) {
+    val paneId = sessions?.openShared(title = title, subtitle = subtitle, viewer = viewer) ?: return
+    onPaneOpened(paneId)
+    showTerminal()
 }

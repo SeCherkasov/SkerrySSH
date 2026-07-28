@@ -191,7 +191,11 @@ private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: 
     val openSftp = {
         if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp)
     }
-    val infoAvailable = tab != null || sessions == null
+    val infoAvailable = infoPanelAvailable(
+        hasSession = tab != null,
+        watched = active?.controller?.isWatched == true,
+        mock = sessions == null,
+    )
     val playerTabTitle = stringResource(Res.string.term_player_title)
     val onCastOpened: (CastOpenResult) -> Unit = { result ->
         if (result is CastOpenResult.Loaded && sessions != null) {
@@ -304,6 +308,16 @@ private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: 
         }
     }
 }
+
+/**
+ * Whether the info panel has anything to say about the pane in focus. Everything it shows — host
+ * profile, cipher, uptime, live metrics — comes from a connection this app owns, so a pane merely
+ * watching a colleague's shared session ([watched]) gets the button dimmed and the panel hidden
+ * instead of a column of dashes. [mock] is the preview path with no session backend, where the
+ * static layout is the point.
+ */
+internal fun infoPanelAvailable(hasSession: Boolean, watched: Boolean, mock: Boolean): Boolean =
+    if (mock) true else hasSession && !watched
 
 /**
  * Which actions have to leave the row for it to fit beside the header of the pane it floats over.
@@ -484,7 +498,11 @@ fun TerminalView(state: DesktopDesignState) {
                     // no active session it would be a column of "—" placeholders next to the empty-state
                     // screen — hide it there, like the header and AI bar. Mock preview keeps it.
                     AnimatedVisibility(
-                        visible = state.infoPanel && (sessions == null || tab != null),
+                        visible = state.infoPanel && infoPanelAvailable(
+                            hasSession = tab != null,
+                            watched = tab?.focusedPane?.controller?.isWatched == true,
+                            mock = sessions == null,
+                        ),
                         enter = expandHorizontally(expandFrom = Alignment.Start),
                         exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
                     ) { InfoPanel() }

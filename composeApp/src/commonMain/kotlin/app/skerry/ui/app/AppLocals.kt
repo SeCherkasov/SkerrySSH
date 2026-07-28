@@ -127,6 +127,13 @@ val LocalTrustedCas: ProvidableCompositionLocal<TrustedCaController?> = staticCo
 val LocalConnectHost: ProvidableCompositionLocal<(Host) -> Unit> = staticCompositionLocalOf { {} }
 
 /**
+ * "Bring the terminal forward" action — what [LocalConnectHost] does after connecting, for the paths
+ * that open a session from another screen (joining a colleague's shared session from Teams). Supplied
+ * by the chrome root on each platform, since the navigation state is theirs; default is a no-op.
+ */
+val LocalShowTerminal: ProvidableCompositionLocal<() -> Unit> = staticCompositionLocalOf { {} }
+
+/**
  * Controller behind the keyboard-interactive prompt: a server asking for a second factor mid-connect
  * (2FA code, SMS token, push confirmation). Supplied by the chrome root so any screen the prompt
  * lands over keeps its own state; `null` — mock path/preview, nothing is connecting.

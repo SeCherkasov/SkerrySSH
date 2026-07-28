@@ -23,6 +23,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -108,6 +109,48 @@ class AttachedSessionTest {
 
         assertTrue(watched.closed, "the relay socket stayed open after the pane was closed")
         assertEquals(ConnectionUiState.Form, controller.uiState)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a watched pane is marked as watched until it is released`() = runTest {
+        val watched = WatchedSession()
+        val (controller, scope) = controller()
+        assertFalse(controller.isWatched)
+
+        controller.attachSession(watched)
+        advanceUntilIdle()
+        // What the toolbar reads to dim the info button: this pane shows a session it doesn't own.
+        assertTrue(controller.isWatched)
+
+        controller.disconnect()
+        advanceUntilIdle()
+        assertFalse(controller.isWatched, "the pane went back to the form still marked as watching")
+        scope.cancel()
+    }
+
+    @Test
+    fun `a watched session measures no throughput`() = runTest {
+        val watched = WatchedSession()
+        val (controller, scope) = controller()
+        controller.attachSession(watched)
+        advanceUntilIdle()
+
+        // The status bar polls the active pane on every Connected state; the bytes of a colleague's
+        // channel are not ours to count, so this asks for nothing instead of throwing at it.
+        assertNull(controller.openThroughput())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a watched session polls no host metrics`() = runTest {
+        val watched = WatchedSession()
+        val (controller, scope) = controller()
+        controller.attachSession(watched)
+        advanceUntilIdle()
+
+        // Same for the info panel / monitor sheet: there is no connection here to run `exec` on.
+        assertNull(controller.openMetrics())
         scope.cancel()
     }
 

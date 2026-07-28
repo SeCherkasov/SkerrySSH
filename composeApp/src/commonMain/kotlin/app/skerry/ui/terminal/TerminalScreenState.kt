@@ -634,19 +634,21 @@ class TerminalScreenState(
     /**
      * Visible cursor row up to the cursor column — the shell line as the user sees it, prompt
      * included ([ProductionGuard.promptCandidates] strips it). Reads the published [screen]
-     * snapshot, like [atPasswordPrompt].
+     * snapshot, like [atPasswordPrompt]. [cursorRow] indexes that snapshot directly (the emulator
+     * counts scrollback into it), so it must NOT be offset by the screen's start — doing that ran
+     * off the end as soon as any history existed, and the guard then saw an empty line.
      */
     private fun screenLineToCursor(): String {
         val grid = screen
         if (grid.isEmpty() || rows <= 0) return ""
-        val line = grid.getOrNull(grid.size - rows + cursorRow) ?: return ""
+        val line = grid.getOrNull(cursorRow) ?: return ""
         return line.take(cursorCol.coerceIn(0, line.size)).joinToString("") { it.text }
     }
 
     /**
      * Whether the current cursor row looks like a password prompt (echo is usually off there).
-     * Reads the published [screen] snapshot (UI thread, no race with the emulator): the visible
-     * grid is the last [rows] rows, cursor row is [cursorRow] within it. A row is treated as a
+     * Reads the published [screen] snapshot (UI thread, no race with the emulator) at [cursorRow],
+     * which already addresses that snapshot including scrollback. A row is treated as a
      * prompt if it ends with ":" and contains one of the keyword hints, to avoid suppressing
      * history on plain text like `cat passwords.txt`. Heuristic: erring toward not saving a
      * command is safer than leaking a secret.
@@ -654,7 +656,7 @@ class TerminalScreenState(
     private fun atPasswordPrompt(): Boolean {
         val grid = screen
         if (grid.isEmpty() || rows <= 0) return false
-        val line = grid.getOrNull(grid.size - rows + cursorRow) ?: return false
+        val line = grid.getOrNull(cursorRow) ?: return false
         val text = line.joinToString("") { it.text }.trim().lowercase()
         if (!text.endsWith(":")) return false
         return PASSWORD_PROMPT_HINTS.any { it in text }
