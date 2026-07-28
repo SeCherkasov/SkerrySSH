@@ -1,14 +1,16 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
+
 /**
  * RFB rectangle decoders. Each reads its encoding's bytes from [VncSource] and writes ARGB pixels
- * into [VncFramebuffer]. They assume the canonical 32bpp pixel format the codec forces
+ * into [RemoteFramebuffer]. They assume the canonical 32bpp pixel format the codec forces
  * ([CanonicalPixelFormat]), so pixel conversion is a single fixed operation. More encodings
  * (Hextile, ZRLE, Tight) are added in their own slices.
  */
 
 /** Raw: `width*height` pixels, row-major, 4 bytes each (our forced format). */
-internal suspend fun decodeRaw(source: VncSource, fb: VncFramebuffer, rect: VncRect) {
+internal suspend fun decodeRaw(source: VncSource, fb: RemoteFramebuffer, rect: VncRect) {
     if (rect.width <= 0 || rect.height <= 0) return
     val rowBytes = rect.width * CanonicalPixelFormat.PIXEL_BYTES
     val rowBuf = ByteArray(rowBytes)
@@ -29,7 +31,7 @@ internal suspend fun decodeRaw(source: VncSource, fb: VncFramebuffer, rect: VncR
 }
 
 /** CopyRect: a u16 source X/Y — move an existing block of the framebuffer to this rect. */
-internal suspend fun decodeCopyRect(source: VncSource, fb: VncFramebuffer, rect: VncRect) {
+internal suspend fun decodeCopyRect(source: VncSource, fb: RemoteFramebuffer, rect: VncRect) {
     val buf = ByteArray(4)
     source.readFully(buf, 0, 4)
     val srcX = ((buf[0].toInt() and 0xFF) shl 8) or (buf[1].toInt() and 0xFF)
@@ -54,7 +56,7 @@ private const val HEXTILE_SUBRECTS_COLOURED = 16
  * foreground subrectangles. Background/foreground colours persist across tiles unless re-specified.
  * All pixels are full 4-byte pixels (our canonical format), not CPIXELs.
  */
-internal suspend fun decodeHextile(source: VncSource, fb: VncFramebuffer, rect: VncRect) {
+internal suspend fun decodeHextile(source: VncSource, fb: RemoteFramebuffer, rect: VncRect) {
     val one = ByteArray(1)
     val px = ByteArray(CanonicalPixelFormat.PIXEL_BYTES)
     val rawBuf = ByteArray(16 * 16 * CanonicalPixelFormat.PIXEL_BYTES)
@@ -137,7 +139,7 @@ private class ByteCursor(private val d: ByteArray) {
  * subencoding: raw CPIXELs / solid colour / packed palette / plain RLE / palette RLE. Pixels are
  * CPIXELs (3 bytes for our format).
  */
-internal suspend fun decodeZrle(source: VncSource, fb: VncFramebuffer, rect: VncRect, inflater: Inflater) {
+internal suspend fun decodeZrle(source: VncSource, fb: RemoteFramebuffer, rect: VncRect, inflater: Inflater) {
     val lenBuf = ByteArray(4)
     source.readFully(lenBuf, 0, 4)
     val length = ((lenBuf[0].toInt() and 0xFF) shl 24) or ((lenBuf[1].toInt() and 0xFF) shl 16) or
@@ -163,7 +165,7 @@ internal suspend fun decodeZrle(source: VncSource, fb: VncFramebuffer, rect: Vnc
     }
 }
 
-private fun decodeZrleTile(c: ByteCursor, fb: VncFramebuffer, tileX: Int, tileY: Int, tw: Int, th: Int) {
+private fun decodeZrleTile(c: ByteCursor, fb: RemoteFramebuffer, tileX: Int, tileY: Int, tw: Int, th: Int) {
     val sub = c.u8()
     val rle = sub and 0x80 != 0
     val paletteSize = sub and 0x7F
@@ -246,7 +248,7 @@ private fun decodeZrleTile(c: ByteCursor, fb: VncFramebuffer, tileX: Int, tileY:
  */
 internal suspend fun decodeTight(
     source: VncSource,
-    fb: VncFramebuffer,
+    fb: RemoteFramebuffer,
     rect: VncRect,
     getStream: (Int) -> Inflater,
     resetStream: (Int) -> Unit,

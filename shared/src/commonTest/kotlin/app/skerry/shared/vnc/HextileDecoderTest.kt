@@ -1,5 +1,6 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,7 +32,7 @@ class HextileDecoderTest {
     fun background_only_tile_fills_solid() = runTest {
         // One 16x16 tile: subencoding = BackgroundSpecified, bg = red.
         val data = bytesOf(byteArrayOf(2), px(0xFF, 0, 0))
-        val fb = VncFramebuffer(16, 16)
+        val fb = RemoteFramebuffer(16, 16)
         decodeHextile(Bytes(data), fb, VncRect(0, 0, 16, 16))
         assertEquals(RED, fb.pixels[0])
         assertEquals(RED, fb.pixels[16 * 16 - 1])
@@ -48,7 +49,7 @@ class HextileDecoderTest {
             byteArrayOf(0x23),       // x=2, y=3
             byteArrayOf(0x10),       // w=2, h=1
         )
-        val fb = VncFramebuffer(16, 16)
+        val fb = RemoteFramebuffer(16, 16)
         decodeHextile(Bytes(data), fb, VncRect(0, 0, 16, 16))
         assertEquals(RED, fb.pixels[0])
         assertEquals(GREEN, fb.pixels[3 * 16 + 2]) // (2,3)
@@ -63,7 +64,7 @@ class HextileDecoderTest {
             byteArrayOf(1), // Raw
             px(0xFF, 0, 0), px(0, 0xFF, 0), px(0, 0, 0xFF), px(0xFF, 0xFF, 0xFF),
         )
-        val fb = VncFramebuffer(2, 2)
+        val fb = RemoteFramebuffer(2, 2)
         decodeHextile(Bytes(data), fb, VncRect(0, 0, 2, 2))
         assertEquals(RED, fb.pixels[0])
         assertEquals(GREEN, fb.pixels[1])
@@ -78,7 +79,7 @@ class HextileDecoderTest {
             byteArrayOf(2), px(0xFF, 0, 0), // tile 1: bg red
             byteArrayOf(0),                  // tile 2: no bits → fill with carried bg
         )
-        val fb = VncFramebuffer(32, 16)
+        val fb = RemoteFramebuffer(32, 16)
         decodeHextile(Bytes(data), fb, VncRect(0, 0, 32, 16))
         assertEquals(RED, fb.pixels[0])       // tile 1
         assertEquals(RED, fb.pixels[16])      // tile 2, x=16

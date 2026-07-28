@@ -26,7 +26,7 @@ import kotlinx.serialization.Serializable
  * compatibility; a missing field in old files defaults to [SSH].
  */
 @Serializable
-enum class ConnectionType { SSH, MOSH, TELNET, SERIAL, VNC, LOCAL, CONTAINER }
+enum class ConnectionType { SSH, MOSH, TELNET, SERIAL, VNC, LOCAL, CONTAINER, RDP }
 
 /**
  * Whether the profile authenticates over SSH: username/credentials/jump host apply. True for
@@ -64,13 +64,22 @@ val ConnectionType.isVnc: Boolean
  * shell navigates by: remote desktops have their own catalog, their own creation form and their own
  * rail item / bottom tab, while everything else lives under the terminal section.
  *
- * Currently VNC only; RDP joins it here, and the exhaustive `when`s over [ConnectionType] elsewhere
- * are what force each new transport to declare where it belongs.
+ * VNC and RDP; the exhaustive `when`s over [ConnectionType] elsewhere are what force each new
+ * transport to declare where it belongs.
  */
 val ConnectionType.isRemoteDesktop: Boolean
     get() = when (this) {
-        ConnectionType.VNC -> true
+        ConnectionType.VNC, ConnectionType.RDP -> true
         ConnectionType.SSH, ConnectionType.MOSH, ConnectionType.TELNET, ConnectionType.SERIAL,
         ConnectionType.LOCAL, ConnectionType.CONTAINER,
         -> false
     }
+
+/**
+ * Whether the profile is an RDP remote desktop. Unlike VNC it authenticates with a *user name* and
+ * password (and optionally a domain, written into the user name as `DOMAIN\user` rather than stored
+ * as its own field — that is the form every RDP client accepts and the one users already type), so
+ * the connection form shows the user field for it while hiding the SSH-only options.
+ */
+val ConnectionType.isRdp: Boolean
+    get() = this == ConnectionType.RDP

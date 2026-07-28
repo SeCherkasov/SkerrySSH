@@ -12,6 +12,7 @@ import app.skerry.ui.generated.resources.conn_type_serial
 import app.skerry.ui.generated.resources.conn_type_ssh
 import app.skerry.ui.generated.resources.conn_type_telnet
 import app.skerry.ui.generated.resources.conn_type_vnc
+import app.skerry.ui.generated.resources.conn_type_rdp
 import app.skerry.ui.generated.resources.shtail_ungrouped
 import org.jetbrains.compose.resources.stringResource
 
@@ -46,6 +47,26 @@ fun groupHostsByFolder(hosts: List<Host>, ungroupedLabel: String = UNGROUPED_LAB
 }
 
 /**
+ * Folders for one section's sidebar: the host-derived folders of [sectionHosts], then the user's
+ * [emptyGroups] that have no folder yet.
+ *
+ * A group name is global (it lives in [Host.group]), so an empty group is only a placeholder for a
+ * folder that has no host to carry it. It is dropped here as soon as any profile in [allHosts] uses
+ * the name: the folder then belongs to whichever section those hosts are in, and showing it as an
+ * empty folder in the other one is the bug this guards against.
+ */
+fun sidebarFolders(
+    sectionHosts: List<Host>,
+    allHosts: List<Host>,
+    emptyGroups: List<String>,
+): List<HostFolder> {
+    val folders = groupHostsByFolder(sectionHosts)
+    val taken = folders.mapTo(mutableSetOf()) { it.name }
+    allHosts.mapNotNullTo(taken) { it.group?.takeIf(String::isNotBlank) }
+    return folders + emptyGroups.distinct().filterNot { it in taken }.map { HostFolder(it, emptyList()) }
+}
+
+/**
  * Split hosts into connection-type sub-groups in [ConnectionType] order, keeping only types that are
  * present and each type's hosts in source order. Used to sub-group the no-group bucket by transport.
  */
@@ -63,6 +84,7 @@ fun connectionTypeLabel(type: ConnectionType): String = stringResource(
         ConnectionType.TELNET -> Res.string.conn_type_telnet
         ConnectionType.SERIAL -> Res.string.conn_type_serial
         ConnectionType.VNC -> Res.string.conn_type_vnc
+        ConnectionType.RDP -> Res.string.conn_type_rdp
         ConnectionType.LOCAL -> Res.string.conn_type_local
         ConnectionType.CONTAINER -> Res.string.conn_type_container
     },

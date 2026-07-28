@@ -229,6 +229,13 @@ compose.desktop {
     application {
         mainClass = "app.skerry.ui.MainKt"
 
+        // `run` starts the app in a process that inherits the Gradle daemon's environment, not the
+        // shell's, so a variable set on the command line never reaches it. Diagnostic switches have
+        // to be forwarded by hand or they read as "the feature printed nothing".
+        providers.environmentVariable("SKERRY_RDP_AUDIO_TRACE").orNull?.let {
+            jvmArgs("-Dskerry.rdp.audioTrace=$it")
+        }
+
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Dmg)
             // jlink drops modules loaded reflectively (jdk.unsupported, java.naming, GSSAPI, …),

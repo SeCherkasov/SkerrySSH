@@ -1,9 +1,10 @@
 package app.skerry.ui.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import app.skerry.shared.vnc.VncRect
+import app.skerry.shared.graphics.RemoteRect
 
 /**
  * Android pixel bridge (android.graphics). `Bitmap.setPixels` takes ARGB `Int`s directly (the
@@ -13,7 +14,7 @@ import app.skerry.shared.vnc.VncRect
 actual class FramebufferImage actual constructor(width: Int, height: Int) {
     // @Volatile: resize() swaps the Bitmap on the session's read loop (Dispatchers.Default) while the
     // Compose draw thread reads it — the new instance must publish safely. Same reasoning as
-    // VncFramebuffer's fields.
+    // RemoteFramebuffer's fields.
     @Volatile
     private var bmp = createBitmap(width, height)
 
@@ -24,7 +25,7 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
         bmp = createBitmap(width, height)
     }
 
-    actual fun writeRects(rects: List<VncRect>, src: IntArray, srcWidth: Int) {
+    actual fun writeRects(rects: List<RemoteRect>, src: IntArray, srcWidth: Int) {
         val bw = bmp.width
         val bh = bmp.height
         for (r in rects) {

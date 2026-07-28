@@ -1,5 +1,6 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.ssh.SshTarget
 import kotlinx.coroutines.flow.Flow
 
@@ -49,7 +50,7 @@ interface VncSession {
     val serverName: String
 
     /** The remote screen's pixels; read by the UI, written only by the read loop. */
-    val framebuffer: VncFramebuffer
+    val framebuffer: RemoteFramebuffer
 
     /** Cold, single-collector server→client message stream. Collecting it runs the session. */
     val updates: Flow<VncUpdate>
@@ -92,7 +93,7 @@ interface VncSession {
 }
 
 /**
- * A decoded server→client event surfaced to the UI. [Region] means [VncFramebuffer] changed in the
+ * A decoded server→client event surfaced to the UI. [Region] means [RemoteFramebuffer] changed in the
  * listed rectangles (upload them); [Resize] means the desktop size changed (reallocate the bitmap);
  * [CursorShape] is a new remote cursor sprite; [ClipboardText] is the server's cut buffer; [Bell] is
  * a beep; [Closed] ends the session ([cleanExit] true = the peer ended the stream in an orderly

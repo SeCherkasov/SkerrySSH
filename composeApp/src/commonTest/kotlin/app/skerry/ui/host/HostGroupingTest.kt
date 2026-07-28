@@ -48,6 +48,40 @@ class HostGroupingTest {
     }
 }
 
+class SidebarFoldersTest {
+
+    @Test
+    fun an_empty_user_group_is_appended_as_a_folder_without_hosts() {
+        val hosts = listOf(host("a", group = "Prod"))
+        val folders = sidebarFolders(hosts, hosts, emptyGroups = listOf("Lab"))
+        assertEquals(listOf("Prod", "Lab"), folders.map { it.name })
+        assertTrue(folders[1].hosts.isEmpty())
+    }
+
+    @Test
+    fun a_group_whose_hosts_live_in_the_other_section_is_not_an_empty_folder_here() {
+        // "Telnet" holds shells, so its folder belongs to the terminal section — the remote-desktop
+        // sidebar must not show it as an empty folder just because the name is in the group list.
+        val catalog = listOf(host("router", group = "Telnet", type = ConnectionType.TELNET))
+        val desktops = catalog.inSection(HostSection.RemoteDesktops)
+        assertEquals(emptyList(), sidebarFolders(desktops, catalog, emptyGroups = listOf("Telnet")))
+    }
+
+    @Test
+    fun a_group_the_section_already_shows_is_not_duplicated() {
+        val hosts = listOf(host("a", group = "Prod"))
+        assertEquals(listOf("Prod"), sidebarFolders(hosts, hosts, emptyGroups = listOf("Prod")).map { it.name })
+    }
+
+    @Test
+    fun an_empty_group_named_like_the_ungrouped_bucket_does_not_double_it() {
+        // Folder keys are names, so a second "Ungrouped" folder would collide in the sidebar.
+        val hosts = listOf(host("loose"))
+        val folders = sidebarFolders(hosts, hosts, emptyGroups = listOf(UNGROUPED_LABEL))
+        assertEquals(listOf(UNGROUPED_LABEL), folders.map { it.name })
+    }
+}
+
 class HostSectionTest {
 
     private val catalog = listOf(
@@ -79,7 +113,10 @@ class HostSectionTest {
 
     @Test
     fun the_creation_form_offers_only_its_section_protocols() {
-        assertEquals(listOf(ConnectionType.VNC), connectionTypesIn(HostSection.RemoteDesktops))
+        assertEquals(
+            listOf(ConnectionType.VNC, ConnectionType.RDP),
+            connectionTypesIn(HostSection.RemoteDesktops),
+        )
         assertEquals(
             listOf(
                 ConnectionType.SSH,

@@ -136,6 +136,10 @@ kotlin {
                 // MockEngine: TDD for HTTP clients (OpenAiProvider) without a real network — we verify
                 // the request (url/headers/body) and feed back canonical responses.
                 implementation(libs.ktor.client.mock)
+                // Self-signed server certificates for the RDP transport tests: an RDP host presents
+                // one it generated itself, and the TLS upgrade has to be exercised against that shape.
+                implementation(libs.bouncycastle.pkix)
+                implementation(libs.bouncycastle.prov)
             }
         }
     }

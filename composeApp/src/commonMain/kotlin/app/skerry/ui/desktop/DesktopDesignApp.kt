@@ -1,5 +1,8 @@
 package app.skerry.ui.desktop
 
+import app.skerry.ui.connection.toRdpPassword
+import app.skerry.shared.ssh.isRdp
+import app.skerry.ui.remote.RemoteDesktopController
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -91,6 +94,7 @@ import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.connection.toVncAuth
 import app.skerry.ui.connection.toSshAuth
+import app.skerry.ui.app.CustomGroup
 import app.skerry.ui.app.GroupDialog
 import app.skerry.ui.host.GroupDialog as GroupEditDialog
 import app.skerry.ui.host.HostManagerController
@@ -272,8 +276,8 @@ fun DesktopDesignApp(
     initialRecentHostIds: List<String> = emptyList(),
     onRecentHostIdsChange: (List<String>) -> Unit = {},
     // User-defined (empty) host groups — also persisted externally (desktop main): starting list + write callback.
-    initialCustomGroups: List<String> = emptyList(),
-    onCustomGroupsChange: (List<String>) -> Unit = {},
+    initialCustomGroups: List<CustomGroup> = emptyList(),
+    onCustomGroupsChange: (List<CustomGroup>) -> Unit = {},
     // Show hidden files in SFTP (Ctrl+H) — persisted externally (desktop main): starting value + write callback.
     initialSftpShowHidden: Boolean = true,
     onSftpShowHiddenChange: (Boolean) -> Unit = {},
@@ -371,6 +375,10 @@ fun DesktopDesignApp(
     // VNC (RFB) transport for remote-desktop tabs — separate from the SSH-shaped [transport] because
     // VNC is a framebuffer protocol (see VncTransport). `null` in mock/preview (no VNC tabs).
     vncTransport: app.skerry.shared.vnc.VncTransport? = null,
+    rdpTransport: app.skerry.shared.rdp.RdpTransport? = null,
+    // Playback devices offered by the RDP form when the profile asks for the session's sound.
+    // `null` in mock/preview: the form keeps the toggle and plays through the system default.
+    audioOutputs: app.skerry.shared.audio.AudioOutputs? = null,
     // Transport for the one-off "Test connection": separate from [transport] (live sessions), because a
     // probe must not add the host key to known_hosts (read-only verifier). `null` — use [transport]
     // (offscreen render/preview, where there's no enroll side effect). See main.kt.
@@ -408,7 +416,7 @@ fun DesktopDesignApp(
     onVaultUnlocked: () -> Unit = {},
     // Empty host folders sync in the vault layout record: at startup the vault is locked, so after
     // unlock (and [onVaultUnlocked]) reread them into state from here. No-op in mock/preview.
-    customGroupsProvider: () -> List<String> = { emptyList() },
+    customGroupsProvider: () -> List<CustomGroup> = { emptyList() },
     // External cleanup on vault reset (hosts/known_hosts/settings per [ResetScope]). Called after the
     // vault file is erased; the real implementation is supplied by desktop `main`. No-op in mock/preview.
     onVaultReset: (ResetScope) -> Unit = {},
@@ -458,12 +466,39 @@ fun DesktopDesignApp(
     // Per-host terminal command history persistence (autocomplete + the command palette) on top of
     // the encrypted vault. Hoisted out of the sessions factory: the palette reads it directly.
     val termHistory = remember(vault) { vault?.let { VaultTerminalHistoryStore(it) } }
-    val liveSessions = sessions ?: remember(transport, vncTransport, scope, vault, teams) {
+    val liveSessions = sessions ?: remember(transport, vncTransport, rdpTransport, scope, vault, teams) {
         transport?.let { t ->
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
-                vncControllerFactory = vncTransport?.let { vt -> { app.skerry.ui.vnc.VncSessionController(vt, scope) } },
+                vncControllerFactory = vncTransport?.let { { app.skerry.ui.remote.RemoteDesktopController(scope) } },
+                openVncSession = vncTransport?.let { vt ->
+                    { target, auth -> app.skerry.shared.vnc.VncRemoteDesktop(vt.connect(target, auth)) }
+                },
+                openRdpSession = rdpTransport?.let { rt ->
+                    { request ->
+                        app.skerry.shared.rdp.RdpRemoteDesktop(
+                            rt.connect(
+                                app.skerry.shared.rdp.RdpTarget(
+                                    host = request.host,
+                                    port = request.port,
+                                    desktopWidth = request.width,
+                                    desktopHeight = request.height,
+                                    clientName = request.clientName,
+                                    loadBalanceInfo = request.loadBalanceInfo,
+                                    audioOutput = request.audioOutput,
+                                    audioDeviceId = request.audioDeviceId,
+                                    clipboard = request.clipboard,
+                                ),
+                                app.skerry.shared.rdp.RdpCredentials(
+                                    username = request.user,
+                                    password = request.password,
+                                    domain = request.domain,
+                                ),
+                            ),
+                        )
+                    }
+                },
                 // Session half of the Teams activity feed. Both privacy rules (the setting, and
                 // "never a host of our own") live in the coordinator, not here.
                 onHostSessionOpened = { hostId -> teams?.reportSessionOpened(hostId) },
@@ -547,6 +582,7 @@ fun DesktopDesignApp(
         LocalSshKeyGenerator provides keyGenerator,
         LocalSshCertificateInspector provides certificateInspector,
         LocalSecretFileReader provides secretFiles,
+        app.skerry.ui.app.LocalAudioOutputs provides audioOutputs,
         LocalCredentials provides credentials,
         LocalTestTransport provides (testTransport ?: transport),
         LocalTunnels provides tunnels,
@@ -617,7 +653,7 @@ private fun DesktopChrome(
     sessions: SessionsController?,
     credentials: CredentialManagerController?,
     onVaultUnlocked: () -> Unit,
-    customGroupsProvider: () -> List<String>,
+    customGroupsProvider: () -> List<CustomGroup>,
     windowChrome: WindowChrome? = null,
 ) {
     val termHistory = LocalTerminalHistory.current
@@ -636,6 +672,9 @@ private fun DesktopChrome(
     var pendingAuth by remember { mutableStateOf<PendingAuth?>(null) }
     // VNC "ask every time": a host with no stored password prompts before opening the framebuffer tab.
     var pendingVncHost by remember { mutableStateOf<Host?>(null) }
+    // Same for RDP, for the profiles that carry a user name but no stored password (an imported
+    // `.rdp` file never carries credentials).
+    var pendingRdpHost by remember { mutableStateOf<Host?>(null) }
 
     // Production guard: a connection to a #prod host is held here until confirmed. It wraps ALL
     // connect paths (new tab / pane / VNC / snippet), so the confirmation can't be walked around by
@@ -665,6 +704,32 @@ private fun DesktopChrome(
         }
     }
 
+    // Opens an RDP tab with the password in hand — from the profile's secret or from the prompt.
+    fun openRdpWith(host: Host, password: String) {
+        state.recordRecentHost(host.id)
+        sessions?.openRdp(
+            host.id,
+            host.label,
+            host.connectionSubtitle(),
+            app.skerry.ui.remote.RdpConnectRequest(
+                host = host.address,
+                port = host.port,
+                username = host.username,
+                password = password,
+                width = RDP_DEFAULT_WIDTH,
+                height = RDP_DEFAULT_HEIGHT,
+                clientName = RDP_CLIENT_NAME,
+                loadBalanceInfo = host.rdp?.loadBalanceInfo.orEmpty(),
+                audioOutput = host.rdp?.audioOutput == true,
+                audioDeviceId = host.rdp?.audioOutputDeviceId.orEmpty(),
+                clipboard = host.rdp?.clipboard != false,
+            ),
+            remoteResize = host.vncResizeToWindow,
+            onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+        )
+        state.showSection(HostSection.RemoteDesktops)
+    }
+
     // Shared step for all three paths: resolve auth ([resolveHostAuth]) → connect right away, or ask
     // for a password while remembering the target.
     fun connectOrAsk(target: PendingAuth) {
@@ -679,7 +744,20 @@ private fun DesktopChrome(
     val connectHost = remember(sessions, credentials, hostManager, state) {
         { host: Host ->
             prodConnect = prodConnectGate(host) {
-                if (host.connectionType.isVnc) {
+                if (host.connectionType.isRdp) {
+                    // RDP logs on as a Windows user: the profile carries the name (optionally
+                    // `DOMAIN\\user`) and the vault the password. A stored password connects
+                    // straight away; without one the prompt asks for it, exactly as VNC does. A
+                    // profile with no user name at all (what an imported `.rdp` file usually is)
+                    // has nothing to prompt for, so its form opens instead.
+                    val password = credentials?.find(host.credentialId)?.toRdpPassword()
+                    when {
+                        password != null -> openRdpWith(host, password)
+                        host.username.isBlank() -> state.openEditModal(host)
+                        else -> pendingRdpHost = host
+                    }
+                    Unit
+                } else if (host.connectionType.isVnc) {
                     // VNC opens a framebuffer tab (not a terminal). A stored password is used directly;
                     // "ask every time" (no bound secret) prompts for one first. No ProxyJump/host-key path.
                     val cred = credentials?.find(host.credentialId)
@@ -730,6 +808,8 @@ private fun DesktopChrome(
     val onLockWithTunnels: (() -> Unit)? = if (onLock == null) null else remember(onLock, state) {
         {
             pendingAuth = null
+            pendingVncHost = null
+            pendingRdpHost = null
             // Same for a held-back production connect: after unlock it must be re-initiated, not
             // waiting behind the lock screen with its "Connect" button armed.
             prodConnect = null
@@ -775,6 +855,7 @@ private fun DesktopChrome(
                 else if (
                     state.appOverlay != null || state.modalOpen || state.settingsOpen ||
                     state.sshImportOpen ||
+                    state.rdpImportOpen ||
                     state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null ||
                     // The snippet-variable confirmation dialog is modal too: a hotkey firing over it
                     // would type into the terminal under the dialog or race the pending run.
@@ -848,6 +929,7 @@ private fun DesktopChrome(
             }
             if (state.modalOpen) NewConnectionModal(state, editHost = state.editingHost, duplicateOf = state.duplicatingHost)
             state.sshImport?.let { SshConfigImportModal(state, it) }
+            state.rdpImport?.let { app.skerry.ui.host.RdpFileImportModal(state, it) }
             if (state.settingsOpen) SettingsPanel(state)
             // Sync onboarding modal over settings: appears via "Set up sync", closes itself on a
             // successful connect. Only when the coordinator is supplied (the mock path with no backend has none).
@@ -871,10 +953,10 @@ private fun DesktopChrome(
                         pendingAuth = null
                         openResolved(pending, SshAuth.Password(pw))
                     },
-                    // A team-shared host has no credential of its own (the link is stripped on
-                    // share), so our own keychain is offered here — otherwise a key-only server
-                    // could not be reached at all.
-                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), pending.host.connectionType),
+                    // Only a team-shared host is offered our keychain here (its credential link is
+                    // stripped on share, so a key-only server would be unreachable); a profile of our
+                    // own asked for this prompt, so it gets the password field alone.
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), pending.host, hostManager?.hosts.orEmpty()),
                     onUseSecret = { secret ->
                         pendingAuth = null
                         openResolved(pending, secret.toSshAuth())
@@ -900,9 +982,30 @@ private fun DesktopChrome(
                     onConnect = { pw ->
                         openVncWith(if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw))
                     },
-                    // Passwords only here ([connectableSecrets]) — VNC-Auth has no key.
-                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host.connectionType),
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host, hostManager?.hosts.orEmpty()),
                     onUseSecret = { secret -> openVncWith(secret.toVncAuth()) },
+                )
+            }
+            // RDP password prompt: the profile names the user, this supplies the password for this
+            // session only. An empty entry is refused by the dialog — RDP has no anonymous logon.
+            pendingRdpHost?.let { host ->
+                DesktopPasswordDialog(
+                    host = host,
+                    onDismiss = { pendingRdpHost = null },
+                    onConnect = { pw ->
+                        pendingRdpHost = null
+                        openRdpWith(host, pw)
+                    },
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host, hostManager?.hosts.orEmpty()),
+                    onUseSecret = { secret ->
+                        // A secret an RDP logon cannot use leaves the prompt where it is: closing it
+                        // on a click that opens no session is a dead end with nothing said.
+                        val password = secret.toRdpPassword()
+                        if (password != null) {
+                            pendingRdpHost = null
+                            openRdpWith(host, password)
+                        }
+                    },
                 )
             }
             // Production guard: confirm before a #prod session opens. Sits in front of the password
@@ -954,10 +1057,10 @@ private fun DesktopChrome(
             // both rewrites Host.group through the controller and updates the side-channel of
             // empty/collapsed groups in state; delete ungroups the hosts (profiles are untouched).
             when (val gd = state.groupDialog) {
-                GroupDialog.Create -> GroupEditDialog(
+                is GroupDialog.Create -> GroupEditDialog(
                     initialName = "",
                     onDismiss = state::dismissGroupDialog,
-                    onSave = { name -> state.addCustomGroup(name); state.dismissGroupDialog() },
+                    onSave = { name -> state.addCustomGroup(name, gd.section); state.dismissGroupDialog() },
                     onDelete = null,
                 )
                 is GroupDialog.Rename -> GroupEditDialog(
@@ -1690,3 +1793,14 @@ private fun StatusItem(
         Txt(text, color = color, size = 10.5.sp, font = mono)
     }
 }
+
+/**
+ * The desktop size an RDP session asks for. RDP fixes it at connect time, and the Display Control
+ * channel that would let it follow the window is not implemented yet, so a common resolution is
+ * requested and the view scales it to fit.
+ */
+private const val RDP_DEFAULT_WIDTH = 1920
+private const val RDP_DEFAULT_HEIGHT = 1080
+
+/** Name this client reports to the server; it shows up in the session list on the remote machine. */
+private const val RDP_CLIENT_NAME = "Skerry"

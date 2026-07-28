@@ -1,8 +1,9 @@
 package app.skerry.ui.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asComposeImageBitmap
-import app.skerry.shared.vnc.VncRect
+import app.skerry.shared.graphics.RemoteRect
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.jetbrains.skia.Bitmap
@@ -16,7 +17,7 @@ import org.jetbrains.skia.ImageInfo
  * order B,G,R,A — exactly [ColorType.BGRA_8888] — so the copy is a straight int→byte reinterpret.
  */
 actual class FramebufferImage actual constructor(width: Int, height: Int) {
-    // @Volatile for the same reason as VncFramebuffer's fields: writes happen on the session's read
+    // @Volatile for the same reason as RemoteFramebuffer's fields: writes happen on the session's read
     // loop (Dispatchers.Default) while the Compose draw thread reads them, and resize() swaps whole
     // objects that must publish safely. A torn dirty rect self-corrects on the next update.
     @Volatile
@@ -42,7 +43,7 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
         dirty = true
     }
 
-    actual fun writeRects(rects: List<VncRect>, src: IntArray, srcWidth: Int) {
+    actual fun writeRects(rects: List<RemoteRect>, src: IntArray, srcWidth: Int) {
         for (r in rects) {
             var row = 0
             while (row < r.height) {

@@ -34,9 +34,12 @@ class RoutingTransport(
             ConnectionType.SERIAL -> serial.connect(target, auth)
             ConnectionType.LOCAL -> local.connect(target, auth)
             ConnectionType.CONTAINER -> container.connect(target, auth)
-            // VNC is a framebuffer protocol, not a shell/terminal one — it has its own transport
-            // (app.skerry.shared.vnc.VncTransport) and never reaches this SSH-shaped router.
+            // The remote-desktop protocols are framebuffer-and-input, not shell/terminal — each has
+            // its own transport and never reaches this SSH-shaped router.
             ConnectionType.VNC ->
                 throw IllegalArgumentException("VNC is not an SSH transport; use VncTransport")
+
+            ConnectionType.RDP ->
+                throw IllegalArgumentException("RDP is not an SSH transport; use RdpTransport")
         }
 }
