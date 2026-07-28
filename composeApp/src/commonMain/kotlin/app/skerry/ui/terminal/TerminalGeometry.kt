@@ -188,3 +188,30 @@ fun hitTestSelectionHandle(
         else -> null
     }
 }
+
+/**
+ * Where a collaborator's caret goes, in pixels inside the terminal's padded content — the same
+ * layout the canvas uses (row `r` is drawn at `r * cellHeight`, scrolled by [scrollPx]).
+ *
+ * [cursorRow] is a row of the *snapshot*, which is what [TerminalScreenState.cursorRow] carries:
+ * the emulator reports `scrollback.size + cy`, already counting history. Mapping it a second time
+ * (screen row → snapshot row) is what left the caret stranded at the bottom of the scrollback after
+ * `clear`, which pushes a screenful of rows into history in one step.
+ *
+ * The result is the top-left of the marker: the row *under* the cursor's, so its bar reaches up into
+ * the cursor's cell while its name tag hangs below the line being typed.
+ */
+fun caretOffsetPx(
+    cursorRow: Int,
+    cursorCol: Int,
+    snapshotRows: Int,
+    metrics: TerminalMetrics,
+    scrollPx: Float,
+): Pair<Float, Float> {
+    val row = cursorRow.coerceIn(0, (snapshotRows - 1).coerceAtLeast(0))
+    val x = metrics.cellWidth * cursorCol.coerceAtLeast(0)
+    // Clamped at 0: a marker pushed above the viewport's top edge would be drawn over the pane's own
+    // chrome instead of the terminal.
+    val y = (metrics.cellHeight * (row + 1) - scrollPx).coerceAtLeast(0f)
+    return x to y
+}

@@ -1,0 +1,32 @@
+<resources>
+    <string name="share_session">Share session</string>
+    <string name="share_session_stop">Stop sharing</string>
+    <string name="share_title">Share this session</string>
+    <string name="share_pick_team">Team to share with</string>
+    <string name="share_no_teams">Join or create a team to share a session with it.</string>
+    <string name="share_starting">Connecting to the relay…</string>
+    <string name="share_live">Shared with %1$s</string>
+    <string name="share_viewers">%1$d watching</string>
+    <string name="share_allow_input">Let viewers type</string>
+    <string name="share_input_locked">Production session: viewers can only watch</string>
+    <string name="share_note">Members of the team can join and watch this terminal. The relay only carries encrypted frames.</string>
+    <string name="share_live_sessions">Live sessions</string>
+    <string name="share_none_live">Nobody is sharing a session right now.</string>
+    <string name="share_join">Join</string>
+    <string name="share_started_by">%1$s · %2$d watching</string>
+    <string name="share_unnamed">Shared session</string>
+    <string name="share_watching">Watching %1$s</string>
+    <string name="share_fail_not_connected">Sync account not connected.</string>
+    <string name="share_fail_no_key">The team key hasn\'t arrived on this device yet.</string>
+    <string name="share_fail_network">The relay is unreachable.</string>
+    <string name="share_fail_rejected">The server refused the share.</string>
+    <string name="share_fail_server">The server failed to relay the session.</string>
+    <string name="share_typing">%1$s is typing…</string>
+    <string name="share_control_wants">%1$s wants to type</string>
+    <string name="share_grant">Allow</string>
+    <string name="share_deny">Deny</string>
+    <string name="share_read_only">View only</string>
+    <string name="share_control_request">Request control</string>
+    <string name="share_control_asked">Requested…</string>
+    <string name="share_control_granted">You can type</string>
+</resources>

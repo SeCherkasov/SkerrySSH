@@ -34,12 +34,17 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
+import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.isVnc
+import app.skerry.shared.vault.Credential
+import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_connect_to
 import app.skerry.ui.generated.resources.shell_password_caps
 import app.skerry.ui.generated.resources.shell_password_host_placeholder
 import app.skerry.ui.generated.resources.shell_not_stored_once
+import app.skerry.ui.generated.resources.shell_use_saved_secret
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_connect
 import org.jetbrains.compose.resources.stringResource
@@ -49,14 +54,26 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.vault.VaultPresentation
 
 /**
  * Password-entry dialog for connecting to a host with no bound identity (parity with the mobile
  * `PasswordSheet`). The password isn't saved: it goes straight into [onConnect] as a one-shot
  * session secret. Style — scrim + card layout, like [NewConnectionModal].
+ *
+ * [secrets] are the keychain entries offered as an alternative to typing one: a host shared by a
+ * team arrives with its credential link stripped, so without this a member could only reach a
+ * password-authenticated box — a key-only server would have no way in at all. Picking one connects
+ * with it directly and does not bind it to the profile (the shared profile isn't ours to edit).
  */
 @Composable
-fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String) -> Unit) {
+fun DesktopPasswordDialog(
+    host: Host,
+    onDismiss: () -> Unit,
+    onConnect: (String) -> Unit,
+    secrets: List<Credential> = emptyList(),
+    onUseSecret: (Credential) -> Unit = {},
+) {
     val noop = remember { MutableInteractionSource() }
     var password by remember { mutableStateOf("") }
     val submit = { if (password.isNotEmpty()) onConnect(password) }
@@ -109,6 +126,34 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
                 },
             )
 
+            if (secrets.isNotEmpty()) {
+                Txt(
+                    stringResource(Res.string.shell_use_saved_secret),
+                    color = Skerry.colors.faint,
+                    size = 10.5.sp,
+                    weight = FontWeight.SemiBold,
+                    letterSpacing = 0.6.sp,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 5.dp),
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    secrets.forEach { secret ->
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(Skerry.colors.bg)
+                                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
+                                .clickable { onUseSecret(secret) }
+                                .padding(horizontal = 11.dp, vertical = 9.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Sym(VaultPresentation.secretIcon(secret.secret), size = 15.sp, color = Skerry.colors.cyan)
+                            Txt(secret.label, color = Skerry.colors.text, size = 12.5.sp)
+                        }
+                    }
+                }
+            }
+
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -124,3 +169,14 @@ fun DesktopPasswordDialog(host: Host, onDismiss: () -> Unit, onConnect: (String)
         }
     }
 }
+
+/**
+ * Keychain entries worth offering when connecting to [type] with nothing bound to the profile —
+ * the situation every team-shared host is in, since sharing strips the credential link.
+ *
+ * SSH (and Mosh over it) authenticates with any of them; VNC-Auth knows only a password, so a key
+ * there would be a row that cannot work. Order is the keychain's own, so the list reads the same as
+ * the vault screen.
+ */
+fun connectableSecrets(credentials: List<Credential>, type: ConnectionType): List<Credential> =
+    if (type.isVnc) credentials.filter { it.secret is CredentialSecret.Password } else credentials

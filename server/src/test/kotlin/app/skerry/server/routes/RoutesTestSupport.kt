@@ -38,6 +38,7 @@ fun testServices(
     adminToken: String = "",
     extraEnv: Map<String, String> = emptyMap(),
     dbCheck: (suspend () -> Unit)? = null,
+    shareAccessRecheckMillis: Long = 30_000,
 ): Services {
     val file = Files.createTempFile("skerry-routes-", ".db")
     file.toFile().deleteOnExit()
@@ -48,7 +49,7 @@ fun testServices(
     // nothing to publish into and hikaricp_* silently disappears from the exposition.
     val metrics = ServerMetrics(config, version = SERVER_VERSION)
     val database: Database = Db.connect(config, metrics.registry)
-    return Services(config, database, metrics, dbCheck)
+    return Services(config, database, metrics, dbCheck, shareAccessRecheckMillis)
 }
 
 /** SRP registration material, as the client would compute it before /auth/register. */

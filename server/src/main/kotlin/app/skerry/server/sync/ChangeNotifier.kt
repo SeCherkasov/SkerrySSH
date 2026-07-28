@@ -50,6 +50,20 @@ class ChangeNotifier(private val metrics: ServerMetrics? = null) {
         metrics?.notificationPublished(NotifyKind.MEMBERSHIP)
     }
 
+    /**
+     * Signals "the team's directory of live shared sessions changed" (one started or ended);
+     * members re-read `GET /teams/{id}/shares`. Carries no cursor — the directory is in-memory
+     * state, not a synced record log.
+     */
+    fun publishShares(teamId: String) {
+        flow.tryEmit(Change("shares:$teamId", 0))
+        metrics?.notificationPublished(NotifyKind.TEAM)
+    }
+
+    /** All share-directory signals; membership filtering happens on the WS session side. */
+    fun shareChanges(): Flow<String> =
+        flow.filter { it.channel.startsWith("shares:") }.map { it.channel.removePrefix("shares:") }
+
     /** Cursor stream for a specific account (one WS session). */
     fun forAccount(accountId: String): Flow<Long> =
         flow.filter { it.channel == "acc:$accountId" }.map { it.cursor }

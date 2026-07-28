@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.shared.ai.CommandRisk
 import app.skerry.shared.host.Host
+import app.skerry.shared.vault.Credential
 import app.skerry.ui.ai.AiNotice
 import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.ai.aiBlockedMessage
@@ -70,6 +71,16 @@ import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.terminal.TerminalScreen
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.terminal.RecordingOutcome
+import app.skerry.shared.share.ShareFrame
+import app.skerry.ui.app.LocalSessionShare
+import app.skerry.ui.generated.resources.share_session
+import app.skerry.ui.generated.resources.share_session_stop
+import app.skerry.ui.share.ShareSource
+import app.skerry.ui.share.ShareUiState
+import app.skerry.ui.share.shareableTeams
+import app.skerry.ui.share.viewersMayOnlyWatch
+import app.skerry.ui.vault.VaultPresentation
+import app.skerry.ui.generated.resources.shell_use_saved_secret
 import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
@@ -203,6 +214,9 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     var menuOpen by remember(active?.id) { mutableStateOf(false) }
     // Host monitor sheet (desktop info-panel parity) — raised from the same menu, connected only.
     var monitorOpen by remember(active?.id) { mutableStateOf(false) }
+    // Session sharing (the "Share session" item below); null without sync — the item stays hidden.
+    val share = LocalSessionShare.current
+    val shareTeams = shareableTeams()
     // Outcome of the last finished recording, shown as a notice (desktop parity). null = nothing to say.
     var recordingNotice by remember(active?.id) { mutableStateOf<RecordingOutcome?>(null) }
     val scope = rememberCoroutineScope()
@@ -365,13 +379,17 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 Spacer(Modifier.height(14.dp))
                 Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                     if (activeTerminal != null) {
-                        MobileSheetButton(
-                            label = stringResource(Res.string.term_monitor_title),
-                            onClick = { menuOpen = false; monitorOpen = true },
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            icon = "monitoring",
-                            filled = false,
-                        )
+                        // Desktop parity ([infoPanelAvailable]): a pane watching a colleague's shared
+                        // session has no connection to poll, so the monitor isn't offered at all.
+                        if (active?.controller?.isWatched != true) {
+                            MobileSheetButton(
+                                label = stringResource(Res.string.term_monitor_title),
+                                onClick = { menuOpen = false; monitorOpen = true },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                icon = "monitoring",
+                                filled = false,
+                            )
+                        }
                         MobileSheetButton(
                             label = stringResource(Res.string.term_palette_title),
                             onClick = { menuOpen = false; historyOpen = true },
@@ -402,6 +420,39 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                         )
                     }
                     if (activeTerminal != null) {
+                        // Share this session with a team (desktop parity: the toolbar's cast toggle).
+                        // Starting picks the first team with a key; stopping needs no choice at all.
+                        val shareState = share?.state
+                        val sharing = shareState is ShareUiState.Live
+                        val target = shareTeams.firstOrNull()
+                        if (sharing || target != null) {
+                            MobileSheetButton(
+                                label = stringResource(if (sharing) Res.string.share_session_stop else Res.string.share_session),
+                                onClick = {
+                                    menuOpen = false
+                                    if (sharing) {
+                                        share?.stop()
+                                    } else if (target != null && active != null) {
+                                        share?.share(
+                                            teamId = target.first,
+                                            teamName = target.second,
+                                            paneId = active.id,
+                                            label = active.displayTitle.ifBlank { active.subtitle },
+                                            source = ShareSource(
+                                                output = activeTerminal.ptyOutput,
+                                                toShell = { bytes -> activeTerminal.sendSharedInput(bytes) },
+                                                geometry = { ShareFrame.Resize(activeTerminal.cols, activeTerminal.rows) },
+                                                sessionState = activeTerminal.state,
+                                            ),
+                                            readOnlyOnly = viewersMayOnlyWatch(activeTerminal.guardPolicy),
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                icon = if (sharing) "cast_connected" else "cast",
+                                filled = false,
+                            )
+                        }
                         // Recording toggle: stopping opens a Save-As for the .cast; nothing is
                         // written until the user picks a file.
                         val recording = activeTerminal.recording
@@ -862,9 +913,18 @@ private fun KeyCapIcon(icon: String, accent: Boolean = false, onClick: () -> Uni
  * Bottom password-prompt sheet on Connect to a host with no bound identity (styled like the
  * `New connection` sheet). The password goes to [onConnect] as a string and is used right away in
  * `SshAuth.Password`; the buffer lives only in this composable. A tap outside the sheet — [onDismiss].
+ *
+ * [secrets] mirror the desktop dialog: a team-shared host arrives without its credential link, so
+ * the keychain is offered here too — a key-only server has no other way in.
  */
 @Composable
-fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -> Unit) {
+fun MobilePasswordSheet(
+    host: Host,
+    onDismiss: () -> Unit,
+    onConnect: (String) -> Unit,
+    secrets: List<Credential> = emptyList(),
+    onUseSecret: (Credential) -> Unit = {},
+) {
     var password by remember { mutableStateOf("") }
     val submit = { if (password.isNotEmpty()) onConnect(password) }
     // Protect SSH password entry on connect from screenshots/Recent Apps previews (Android; desktop no-op).
@@ -887,6 +947,22 @@ fun MobilePasswordSheet(host: Host, onDismiss: () -> Unit, onConnect: (String) -
                 imeAction = ImeAction.Go,
                 onSubmit = { submit() },
             )
+            if (secrets.isNotEmpty()) {
+                Spacer(Modifier.height(18.dp))
+                Txt(stringResource(Res.string.shell_use_saved_secret), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
+                Spacer(Modifier.height(6.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    secrets.forEach { secret ->
+                        MobileSheetButton(
+                            label = secret.label,
+                            onClick = { onUseSecret(secret) },
+                            modifier = Modifier.fillMaxWidth(),
+                            icon = VaultPresentation.secretIcon(secret.secret),
+                            filled = false,
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(20.dp))
             Box(
                 Modifier

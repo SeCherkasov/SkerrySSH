@@ -428,7 +428,28 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         // on a locked vault); the list rereads when a new vault is created and unlocked.
         credentials.reload()
     }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, localAi = localAi)
+    // Session sharing (relay on the sync server): the host side and the directory of what the
+    // account's teams are sharing right now. Both ride the same sync session and team keys.
+    val sessionShare = app.skerry.ui.share.SessionShareController(
+        client = { sync.currentShareClient() },
+        session = { sync.currentSession() },
+        teamKey = { teamId -> teams.teamKey(teamId) },
+        crypto = IonspinVaultCrypto(),
+        newShareId = { UUID.randomUUID().toString().lowercase() },
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    )
+    val sharedSessions = app.skerry.ui.share.SharedSessionsController(
+        client = { sync.currentShareClient() },
+        session = { sync.currentSession() },
+        teams = { teams.teams.value.filter { it.hasKey }.map { t -> t.id to t.name } },
+        teamKey = { teamId -> teams.teamKey(teamId) },
+        crypto = IonspinVaultCrypto(),
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    )
+    // A share started or ended somewhere in the team: re-read the directory rather than wait for
+    // the user to reopen the screen.
+    teams.onSharesChanged = { sharedSessions.refresh() }
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi)
     return DesktopGraph(
         deps = deps,
         keyboardInteractive = keyboardInteractive,
@@ -494,6 +515,8 @@ fun main(args: Array<String>) {
               app.skerry.ui.theme.SkerryTheme(mode = currentThemeMode.value) {
                 app.skerry.ui.desktop.DesktopDesignApp(
                     keyboardInteractive = graph.keyboardInteractive,
+                    sessionShare = graph.deps.sessionShare,
+                    sharedSessions = graph.deps.sharedSessions,
                     initialInfoPanel = prefs.bool("info_panel", true),
                     onInfoPanelChange = { prefs.set("info_panel", it) },
                     initialCollapsedGroups = prefs.lines("collapsed_groups").toSet(),

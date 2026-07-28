@@ -300,6 +300,10 @@ class SyncCoordinator(
     /** Team API of the current client; null when sync isn't connected (or transport lacks Teams). */
     fun currentTeamClient(): TeamClient? = client as? TeamClient
 
+    /** Session-sharing relay of the current client; null when sync isn't connected. */
+    fun currentShareClient(): app.skerry.shared.share.SessionShareClient? =
+        client as? app.skerry.shared.share.SessionShareClient
+
     // Own scope: network operations must not depend on a composable's lifecycle. On mobile the form
     // recomposes on [status]: as soon as connect() sets Busy the form leaves composition, and if the
     // launch used its rememberCoroutineScope the operation would cancel mid-flight. Launching here
@@ -1342,8 +1346,10 @@ class SyncCoordinator(
                                 // would trigger a redundant sync — the second push→WS→push loop breaker
                                 // (defense-in-depth to the server guard).
                                 if (signalAdvancesCursor(s.accountId, signal.cursor)) runSync()
-                            // Team signals are TeamsCoordinator's job (its own cursor guard is there).
-                            is SyncSignal.Team, SyncSignal.Membership -> onTeamSignal?.invoke(signal)
+                            // Team signals are TeamsCoordinator's job (its own cursor guard is there);
+                            // the share directory rides the same channel, since it is team-scoped too.
+                            is SyncSignal.Team, is SyncSignal.Shares, SyncSignal.Membership ->
+                                onTeamSignal?.invoke(signal)
                         }
                     }
                     // collect finished without an exception = server closed the stream cleanly; reconnect below.

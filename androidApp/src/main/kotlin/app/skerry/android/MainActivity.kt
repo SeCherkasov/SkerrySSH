@@ -599,6 +599,25 @@ class MainActivity : FragmentActivity() {
             },
         )
         teamsForSync = teams
+        // Session sharing (relay on the sync server): the host side and the directory of the teams'
+        // live sessions. Desktop parity — same controllers over the same sync session and team keys.
+        val sessionShare = app.skerry.ui.share.SessionShareController(
+            client = { sync.currentShareClient() },
+            session = { sync.currentSession() },
+            teamKey = { teamId -> teams.teamKey(teamId) },
+            crypto = IonspinVaultCrypto(),
+            newShareId = { UUID.randomUUID().toString().lowercase() },
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        )
+        val sharedSessions = app.skerry.ui.share.SharedSessionsController(
+            client = { sync.currentShareClient() },
+            session = { sync.currentSession() },
+            teams = { teams.teams.value.filter { it.hasKey }.map { t -> t.id to t.name } },
+            teamKey = { teamId -> teams.teamKey(teamId) },
+            crypto = IonspinVaultCrypto(),
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        )
+        teams.onSharesChanged = { sharedSessions.refresh() }
         // A missing team key (dropped by an older client's delta sync) is only fixed by a full re-pull.
         teams.onKeyMissing = { sync.recoverFullPull() }
         sync.onTeamSignal = teams::onSignal
@@ -689,6 +708,8 @@ class MainActivity : FragmentActivity() {
             runbookRunner = runbookRunner,
             sync = sync,
             teams = teams,
+            sessionShare = sessionShare,
+            sharedSessions = sharedSessions,
             securityLog = securityLog,
             localAi = localAi,
         )

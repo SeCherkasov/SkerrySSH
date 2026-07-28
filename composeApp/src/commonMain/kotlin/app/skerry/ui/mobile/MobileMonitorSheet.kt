@@ -30,13 +30,13 @@ import app.skerry.ui.theme.Skerry
  * sparklines, network rates, filesystems, top processes) in a bottom sheet raised from the
  * terminal's `more_horiz` menu — a phone has no room for a permanent side panel.
  *
- * The caller only opens this for a connected session, so [ConnectionController.openMetrics] (which
- * requires a live connection) is safe here. The poller is shared with the desktop panel and cached
- * per session, so opening and closing the sheet doesn't restart polling or lose the history.
+ * The poller is shared with the desktop panel and cached per session, so opening and closing the
+ * sheet doesn't restart polling or lose the history. A pane watching a colleague's shared session
+ * has no connection to poll ([ConnectionController.openMetrics] is null): nothing is shown.
  */
 @Composable
 fun MobileHostMonitorSheet(controller: ConnectionController, onDismiss: () -> Unit) {
-    val monitor = remember(controller) { controller.openMetrics() }
+    val monitor = remember(controller) { controller.openMetrics() } ?: return
     MobileHostMonitorSheet(
         metrics = monitor.metrics,
         history = monitor.history,

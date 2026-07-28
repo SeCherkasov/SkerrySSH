@@ -17,8 +17,8 @@ import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** A single WS session holds three notifier subscriptions: account channel, teams, membership. */
-private const val WS_SUBSCRIPTIONS = 3
+/** A single WS session subscribes to account, team records, share directory and membership. */
+private const val WS_SUBSCRIPTIONS = 4
 
 class SyncWebSocketTest {
 
