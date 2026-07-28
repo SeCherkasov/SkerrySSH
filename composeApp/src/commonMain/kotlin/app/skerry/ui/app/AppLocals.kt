@@ -3,6 +3,7 @@ package app.skerry.ui.app
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
+import app.skerry.shared.audio.AudioOutputs
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.TerminalHistoryStore
@@ -99,6 +100,13 @@ val LocalSshCertificateInspector: ProvidableCompositionLocal<SshCertificateInspe
  * without a status. Supplied behind the vault gate.
  */
 val LocalSecretFileReader: ProvidableCompositionLocal<SecretFileReader?> = staticCompositionLocalOf { null }
+
+/**
+ * The platform's audio output devices, for the RDP profile form to offer a place to play the remote
+ * session's sound. `null` — no audio backend on this platform (or preview): the form offers the
+ * toggle without a device picker, and the session plays through the system default.
+ */
+val LocalAudioOutputs: ProvidableCompositionLocal<AudioOutputs?> = staticCompositionLocalOf { null }
 
 /**
  * Manager for open sessions (tabs + live connections). `null` — mock path without a connection

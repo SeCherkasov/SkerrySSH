@@ -1,10 +1,11 @@
 package app.skerry.ui.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import androidx.compose.ui.graphics.ImageBitmap
-import app.skerry.shared.vnc.VncRect
+import app.skerry.shared.graphics.RemoteRect
 
 /**
- * Platform bridge from the codec's raw ARGB [app.skerry.shared.vnc.VncFramebuffer] pixels to a
+ * Platform bridge from the codec's raw ARGB [app.skerry.shared.vnc.RemoteFramebuffer] pixels to a
  * Compose [ImageBitmap] the UI can draw. It's `expect`/`actual` because Compose Multiplatform is
  * Skia-backed on desktop and android.graphics-backed on Android, with no common raw-pixel writer.
  *
@@ -19,7 +20,7 @@ expect class FramebufferImage(width: Int, height: Int) {
      * Copy the given [rects] from [src] (a row-major ARGB buffer [srcWidth] px wide — the shared
      * framebuffer's pixels) into the platform bitmap.
      */
-    fun writeRects(rects: List<VncRect>, src: IntArray, srcWidth: Int)
+    fun writeRects(rects: List<RemoteRect>, src: IntArray, srcWidth: Int)
 
     /** The current image for drawing. May be re-created on [resize]. */
     val bitmap: ImageBitmap

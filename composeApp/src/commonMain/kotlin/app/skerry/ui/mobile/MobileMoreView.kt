@@ -143,11 +143,11 @@ import app.skerry.ui.settings.ChangeAccountPasswordDialog
 import app.skerry.ui.settings.ChangeMasterPasswordDialog
 import app.skerry.ui.generated.resources.term_player_open
 import app.skerry.ui.generated.resources.conn_import_action
+import app.skerry.ui.generated.resources.conn_rdp_import_action
 import app.skerry.ui.app.LocalHosts
+import app.skerry.ui.host.pickAndParseRdpFile
 import app.skerry.ui.host.pickAndParseSshConfig
 import app.skerry.ui.terminal.openCastFile
-import androidx.compose.runtime.rememberCoroutineScope
-import kotlinx.coroutines.launch
 import app.skerry.ui.app.AppVersion
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalUpdates
@@ -243,6 +243,16 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
                 "download", Skerry.colors.cyanBright, stringResource(Res.string.conn_import_action), null, Skerry.colors.dim,
                 onClick = if (hostsForImport != null) {
                     { playerScope.launch { pickAndParseSshConfig()?.let(state::beginSshImport) } }
+                } else {
+                    null
+                },
+            )
+            // Import a Remote Desktop Connection file (.rdp): one file is one profile, so the sheet
+            // only confirms what it will create (desktop parity).
+            MoreRow(
+                "download", Skerry.colors.cyanBright, stringResource(Res.string.conn_rdp_import_action), null, Skerry.colors.dim,
+                onClick = if (hostsForImport != null) {
+                    { playerScope.launch { pickAndParseRdpFile()?.let(state::beginRdpImport) } }
                 } else {
                     null
                 },

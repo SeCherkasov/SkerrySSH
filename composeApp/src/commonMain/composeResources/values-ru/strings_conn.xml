@@ -14,6 +14,7 @@
     <string name="conn_field_port">Порт</string>
     <string name="conn_field_baud">Скорость</string>
     <string name="conn_field_username">Пользователь</string>
+    <string name="conn_field_domain">Домен</string>
     <string name="conn_field_authentication">Аутентификация</string>
     <string name="conn_field_group">Группа</string>
     <string name="conn_field_tags">Теги</string>
@@ -42,6 +43,7 @@
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">Serial</string>
     <string name="conn_protocol_vnc">VNC</string>
+    <string name="conn_protocol_rdp">RDP</string>
     <string name="conn_protocol_local">Локальный</string>
     <string name="conn_telnet_plaintext_warning">Telnet не шифруется — учётные данные и содержимое сессии идут открытым текстом. Используйте SSH вне доверенной сети.</string>
     <string name="conn_vnc_plaintext_warning">VNC (RFB) не шифруется — экран и ввод идут открытым текстом. Используйте доверенную сеть или SSH-туннель.</string>
@@ -109,6 +111,7 @@
     <string name="conn_type_telnet">Telnet</string>
     <string name="conn_type_serial">Serial</string>
     <string name="conn_type_vnc">VNC</string>
+    <string name="conn_type_rdp">RDP</string>
     <string name="conn_type_local">Локальная оболочка</string>
 
     <string name="conn_import_action">Импорт из ssh_config</string>
@@ -118,6 +121,13 @@
     <string name="conn_import_empty">В этом файле не найдено хостов.</string>
     <string name="conn_import_button">Импортировать (%1$d)</string>
     <string name="conn_import_skipped">Некоторые строки были пропущены при импорте.</string>
+    <string name="conn_rdp_import_farm">Ферма: %1$s</string>
+    <string name="conn_rdp_import_gateway">RD Gateway не поддерживается: подключение идёт напрямую к хосту.</string>
+    <string name="conn_rdp_import_empty">В файле не указан адрес подключения.</string>
+    <string name="conn_rdp_import_button">Импортировать</string>
+    <string name="conn_rdp_import_subtitle">Из файла создаётся профиль. Пароли не импортируются — аутентификацию укажете при подключении.</string>
+    <string name="conn_rdp_import_title">Импорт файла .rdp</string>
+    <string name="conn_rdp_import_action">Импорт файла .rdp</string>
 
     <!-- Container profiles (Docker / Kubernetes exec) -->
     <string name="conn_protocol_container">Контейнер</string>
@@ -142,4 +152,17 @@
     <string name="conn_auth_interactive">Интерактивная (2FA)</string>
     <string name="conn_auth_interactive_desc">сервер сам спросит код при подключении</string>
     <string name="conn_import_keys_note">IdentityFile и CertificateFile связываются по пути — ключи не копируются в волт.</string>
+
+    <!-- RDP audio redirection -->
+    <string name="conn_field_audio">Аудио</string>
+    <string name="conn_audio_redirect">Проигрывать звук сессии здесь</string>
+    <string name="conn_audio_redirect_desc">Звук удалённого рабочего стола идёт на это устройство, а не остаётся на сервере.</string>
+    <string name="conn_field_clipboard">Буфер обмена</string>
+    <string name="conn_rdp_import_no_address">В файле нет адреса для подключения.</string>
+    <string name="conn_rdp_import_port">Порт в файле вне диапазона, используется порт по умолчанию.</string>
+    <string name="conn_rdp_import_malformed">Часть файла прочитать не удалось, она пропущена.</string>
+    <string name="conn_clipboard_share">Общий буфер обмена</string>
+    <string name="conn_clipboard_share_desc">Текст, скопированный на любой стороне, доступен на другой, пока открыта сессия.</string>
+    <string name="conn_audio_output_device">Устройство вывода</string>
+    <string name="conn_audio_device_default">Системное по умолчанию</string>
 </resources>

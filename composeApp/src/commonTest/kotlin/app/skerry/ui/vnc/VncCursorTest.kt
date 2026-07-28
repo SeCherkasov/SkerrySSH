@@ -1,6 +1,7 @@
 package app.skerry.ui.vnc
 
-import app.skerry.shared.vnc.VncUpdate
+import app.skerry.ui.remote.RemoteDesktopScreenState
+import app.skerry.shared.graphics.RemoteDesktopUpdate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -26,7 +27,7 @@ class VncCursorTest {
     @Test
     fun keeps_the_local_pointer_in_view_only() {
         // View-only sends no pointer events, so the remote cursor doesn't follow the mouse; there the
-        // server paints it into the framebuffer instead (see VncScreenState.toggleViewOnly).
+        // server paints it into the framebuffer instead (see RemoteDesktopScreenState.toggleViewOnly).
         assertFalse(shouldHideLocalCursor(interactive = true, viewOnly = true, pointerOverImage = true))
     }
 
@@ -72,12 +73,12 @@ class VncCursorTest {
     @Test
     fun empty_shape_means_no_sprite() {
         // A 0x0 shape is the server saying the cursor is hidden right now.
-        assertNull(VncCursorImage.of(VncUpdate.CursorShape(IntArray(0), 0, 0, 0, 0)))
+        assertNull(VncCursorImage.of(RemoteDesktopUpdate.CursorShape(IntArray(0), 0, 0, 0, 0)))
     }
 
     @Test
     fun shape_becomes_a_sprite_carrying_its_hotspot() {
-        val shape = VncUpdate.CursorShape(IntArray(6) { 0xFF00FF00.toInt() }, width = 3, height = 2, hotspotX = 1, hotspotY = 1)
+        val shape = RemoteDesktopUpdate.CursorShape(IntArray(6) { 0xFF00FF00.toInt() }, width = 3, height = 2, hotspotX = 1, hotspotY = 1)
         val sprite = assertNotNull(VncCursorImage.of(shape))
         assertEquals(3, sprite.width)
         assertEquals(2, sprite.height)

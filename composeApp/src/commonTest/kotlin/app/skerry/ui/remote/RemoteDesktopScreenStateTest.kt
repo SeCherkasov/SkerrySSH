@@ -1,11 +1,11 @@
-package app.skerry.ui.vnc
+package app.skerry.ui.remote
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import androidx.compose.ui.unit.IntSize
-import app.skerry.shared.vnc.VncFramebuffer
-import app.skerry.shared.vnc.VncPointerEvent
-import app.skerry.shared.vnc.VncQuality
-import app.skerry.shared.vnc.VncRect
-import app.skerry.shared.vnc.VncUpdate
+import app.skerry.shared.graphics.RemoteKeyEvent
+import app.skerry.shared.graphics.RemoteDesktopQuality
+import app.skerry.shared.graphics.RemoteRect
+import app.skerry.shared.graphics.RemoteDesktopUpdate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -18,17 +18,17 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class VncScreenStateTest {
+class RemoteDesktopScreenStateTest {
 
     @Test
     fun region_update_bumps_the_frame_counter() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(framebuffer = VncFramebuffer(2, 1), updates = updates)
-        val screen = VncScreenState(session, scope)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(framebuffer = RemoteFramebuffer(2, 1), updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
 
         assertEquals(0, screen.frame)
-        updates.emit(VncUpdate.Region(listOf(VncRect(0, 0, 2, 1))))
+        updates.emit(RemoteDesktopUpdate.Region(listOf(RemoteRect(0, 0, 2, 1))))
         assertEquals(1, screen.frame)
         scope.cancel()
     }
@@ -36,11 +36,11 @@ class VncScreenStateTest {
     @Test
     fun resize_update_tracks_the_new_desktop_size() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(framebuffer = VncFramebuffer(2, 1), updates = updates)
-        val screen = VncScreenState(session, scope)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(framebuffer = RemoteFramebuffer(2, 1), updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
 
-        updates.emit(VncUpdate.Resize(800, 600))
+        updates.emit(RemoteDesktopUpdate.Resize(800, 600))
         assertEquals(800, screen.desktopSize.width)
         assertEquals(600, screen.desktopSize.height)
         scope.cancel()
@@ -49,11 +49,11 @@ class VncScreenStateTest {
     @Test
     fun close_update_marks_closed() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(updates = updates)
-        val screen = VncScreenState(session, scope)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
 
-        updates.emit(VncUpdate.Closed(cleanExit = true))
+        updates.emit(RemoteDesktopUpdate.Closed(cleanExit = true))
         assertTrue(screen.closed)
         assertTrue(screen.cleanExit)
         scope.cancel()
@@ -62,31 +62,32 @@ class VncScreenStateTest {
     @Test
     fun pointer_key_and_clipboard_are_forwarded() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val session = FakeVncSession()
-        val screen = VncScreenState(session, scope)
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
 
         screen.onPointer(5, 7, 0b001)
-        screen.onKey(0xFF0DL, down = true)
+        screen.onKey(RemoteKeyEvent(keySym = 0xFF0DL, scancode = 0x1C), down = true)
         screen.onLocalClipboard("hello")
 
-        assertEquals(VncPointerEvent(5, 7, 0b001), session.pointers.single())
-        assertEquals(0xFF0DL to true, session.keys.single())
-        assertEquals("hello", session.cutText.single())
+        assertEquals(Triple(5, 7, 0b001), session.pointers.single())
+        assertEquals(0xFF0DL, session.keys.single().first.keySym)
+        assertEquals(0x1C, session.keys.single().first.scancode)
+        assertEquals("hello", session.clipboard.single())
         scope.cancel()
     }
 
     @Test
     fun cursor_shape_becomes_a_sprite_and_an_empty_one_clears_it() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val screen = VncScreenState(FakeVncSession(updates = updates), scope)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val screen = RemoteDesktopScreenState(FakeRemoteDesktop(updates = updates), scope)
 
         assertNull(screen.cursor)
-        updates.emit(VncUpdate.CursorShape(IntArray(4) { 0xFFFFFFFF.toInt() }, 2, 2, 1, 1))
+        updates.emit(RemoteDesktopUpdate.CursorShape(IntArray(4) { 0xFFFFFFFF.toInt() }, 2, 2, 1, 1))
         assertEquals(1, screen.cursor?.hotspotX)
 
         // The server hides the cursor by sending a 0x0 shape — the sprite has to go with it.
-        updates.emit(VncUpdate.CursorShape(IntArray(0), 0, 0, 0, 0))
+        updates.emit(RemoteDesktopUpdate.CursorShape(IntArray(0), 0, 0, 0, 0))
         assertNull(screen.cursor)
         scope.cancel()
     }
@@ -94,8 +95,8 @@ class VncScreenStateTest {
     @Test
     fun view_only_hands_the_cursor_back_to_the_server_and_repaints() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val session = FakeVncSession()
-        val screen = VncScreenState(session, scope)
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
 
         screen.toggleViewOnly()
         // Nothing drives our pointer now, so the server must paint the cursor where it really is; the
@@ -116,15 +117,16 @@ class VncScreenStateTest {
         // of a bare launch reaches the default handler and kills the process on Android — the dropped
         // session has to surface through `closed` instead.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val session = object : FakeVncSession() {
-            override suspend fun sendPointer(event: VncPointerEvent): Unit = throw IllegalStateException("Socket closed")
-            override suspend fun setQuality(quality: VncQuality): Unit = throw IllegalStateException("Socket closed")
+        val session = object : FakeRemoteDesktop() {
+            override suspend fun sendPointer(x: Int, y: Int, buttonMask: Int): Unit =
+                throw IllegalStateException("Socket closed")
+            override suspend fun setQuality(quality: RemoteDesktopQuality): Unit = throw IllegalStateException("Socket closed")
             override suspend fun setLocalCursor(enabled: Boolean): Unit = throw IllegalStateException("Socket closed")
         }
-        val screen = VncScreenState(session, scope)
+        val screen = RemoteDesktopScreenState(session, scope)
 
         screen.onPointer(1, 1, 0)
-        screen.applyQuality(VncQuality.High)
+        screen.applyQuality(RemoteDesktopQuality.High)
         screen.toggleViewOnly()
 
         // Reaching here at all is the assertion: an escaping exception would have failed the test.
@@ -135,12 +137,12 @@ class VncScreenStateTest {
     @Test
     fun remote_resize_follows_the_viewport_after_a_debounce() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(updates = updates)
-        val screen = VncScreenState(session, scope)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
 
         assertFalse(screen.canResizeRemote)
-        updates.emit(VncUpdate.SetDesktopSizeSupported)
+        updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
         assertTrue(screen.canResizeRemote)
 
         screen.onViewportSize(IntSize(1280, 720))
@@ -155,10 +157,10 @@ class VncScreenStateTest {
     fun rapid_viewport_changes_collapse_into_the_last_request() = runTest {
         // A window drag-resize spews sizes; only the one the user settles on may reach the server.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(updates = updates)
-        val screen = VncScreenState(session, scope)
-        updates.emit(VncUpdate.SetDesktopSizeSupported)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
+        updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
         screen.toggleRemoteResize()
 
         screen.onViewportSize(IntSize(100, 100))
@@ -172,10 +174,10 @@ class VncScreenStateTest {
     @Test
     fun no_request_when_the_viewport_already_matches_the_desktop() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(framebuffer = VncFramebuffer(2, 1), updates = updates)
-        val screen = VncScreenState(session, scope)
-        updates.emit(VncUpdate.SetDesktopSizeSupported)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(framebuffer = RemoteFramebuffer(2, 1), updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
+        updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
 
         screen.onViewportSize(IntSize(2, 1))
         screen.toggleRemoteResize()
@@ -189,17 +191,17 @@ class VncScreenStateTest {
         // Many servers clamp a requested size to a supported mode. The answer arriving as a Resize
         // must not bounce back as another SetDesktopSize — that would be a client↔server resize loop.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(updates = updates)
-        val screen = VncScreenState(session, scope)
-        updates.emit(VncUpdate.SetDesktopSizeSupported)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
+        updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
 
         screen.onViewportSize(IntSize(1000, 700))
         screen.toggleRemoteResize()
         advanceUntilIdle()
         assertEquals(listOf(1000 to 700), session.desktopSizes)
 
-        updates.emit(VncUpdate.Resize(1024, 704))
+        updates.emit(RemoteDesktopUpdate.Resize(1024, 704))
         advanceUntilIdle()
         assertEquals(listOf(1000 to 700), session.desktopSizes)
         scope.cancel()
@@ -210,12 +212,12 @@ class VncScreenStateTest {
         // Restoring the saved per-host flag: the session starts with the toggle on, and the resize
         // must fire as soon as the server turns out to support it — without any user interaction.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(updates = updates)
-        val screen = VncScreenState(session, scope, remoteResizeInitial = true)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope, remoteResizeInitial = true)
 
         screen.onViewportSize(IntSize(1280, 720))
-        updates.emit(VncUpdate.SetDesktopSizeSupported)
+        updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
         advanceUntilIdle()
         assertEquals(listOf(1280 to 720), session.desktopSizes)
         scope.cancel()
@@ -225,7 +227,7 @@ class VncScreenStateTest {
     fun toggling_remote_resize_reports_to_the_callback() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val reported = mutableListOf<Boolean>()
-        val screen = VncScreenState(FakeVncSession(), scope, onRemoteResizeChanged = { reported += it })
+        val screen = RemoteDesktopScreenState(FakeRemoteDesktop(), scope, onRemoteResizeChanged = { reported += it })
 
         screen.toggleRemoteResize()
         screen.toggleRemoteResize()
@@ -236,10 +238,10 @@ class VncScreenStateTest {
     @Test
     fun turning_remote_resize_off_cancels_the_pending_request() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(updates = updates)
-        val screen = VncScreenState(session, scope)
-        updates.emit(VncUpdate.SetDesktopSizeSupported)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
+        updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
 
         screen.toggleRemoteResize()
         screen.onViewportSize(IntSize(1280, 720))
@@ -252,12 +254,12 @@ class VncScreenStateTest {
     @Test
     fun server_clipboard_reaches_the_callback() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val updates = MutableSharedFlow<VncUpdate>(extraBufferCapacity = 8)
-        val session = FakeVncSession(updates = updates)
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
         val received = mutableListOf<String>()
-        VncScreenState(session, scope, onClipboard = { received += it })
+        RemoteDesktopScreenState(session, scope, onClipboard = { received += it })
 
-        updates.emit(VncUpdate.ClipboardText("copied"))
+        updates.emit(RemoteDesktopUpdate.ClipboardText("copied"))
         assertEquals("copied", received.single())
         scope.cancel()
     }

@@ -2,6 +2,7 @@ package app.skerry.shared.host
 
 import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.container.ContainerSpec
+import app.skerry.shared.rdp.RdpSpec
 import app.skerry.shared.ssh.ConnectionType
 import kotlinx.serialization.Serializable
 
@@ -48,7 +49,8 @@ import kotlinx.serialization.Serializable
  * or pod, namespace, shell); the SSH fields above then describe the host running the
  * `docker`/`kubectl` CLI. `null` on every other type.
  *
- * [vncResizeToWindow] remembers the VNC session's "Resize to window" toggle across restarts.
+ * [vncResizeToWindow] remembers a remote desktop's "Resize to window" toggle across restarts — for
+ * RDP as well as VNC; the name is the one the field was saved under before RDP could resize.
  * VNC-only; toggled from the live session's graphics menu, not the edit form (which preserves it).
  *
  * [notes] is an optional free-form remark about the profile (maintenance window, who owns the box),
@@ -57,6 +59,9 @@ import kotlinx.serialization.Serializable
  * predating this field silently drops it when it re-saves the profile (unknown keys are ignored on
  * read, the record is rebuilt without them and LWW propagates that), same as an unknown
  * `connectionType`.
+ *
+ * [rdp] holds the RDP-only settings the fields above have no place for (a farm's routing token);
+ * `null` on every other type and on an ordinary RDP host.
  */
 @Serializable
 data class Host(
@@ -82,4 +87,5 @@ data class Host(
     val vncResizeToWindow: Boolean = false,
     val notes: String? = null,
     val container: ContainerSpec? = null,
+    val rdp: RdpSpec? = null,
 )

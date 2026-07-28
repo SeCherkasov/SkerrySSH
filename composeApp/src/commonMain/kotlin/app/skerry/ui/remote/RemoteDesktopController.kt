@@ -1,14 +1,13 @@
-package app.skerry.ui.vnc
+package app.skerry.ui.remote
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import app.skerry.shared.ssh.SshTarget
-import app.skerry.shared.vnc.VncAuth
-import app.skerry.shared.vnc.VncSession
-import app.skerry.shared.vnc.VncTransport
+import app.skerry.shared.graphics.RemoteDesktopSession
+import app.skerry.ui.vnc.VncFailure
+import app.skerry.ui.vnc.vncFailureOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,98 +18,106 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
-/** State of a VNC session tab — the framebuffer sibling of `ConnectionUiState`. */
-sealed interface VncUiState {
+/** State of a remote-desktop tab — the framebuffer sibling of `ConnectionUiState`. */
+sealed interface RemoteDesktopUiState {
     /** Connect/handshake in progress. */
-    data object Connecting : VncUiState
+    data object Connecting : RemoteDesktopUiState
 
     /** Session is live; [screen] is the framebuffer + input bridge. */
-    data class Connected(val screen: VncScreenState) : VncUiState
+    data class Connected(val screen: RemoteDesktopScreenState) : RemoteDesktopUiState
 
     /**
      * Connect failed. [failure] is the localization contract — the raw [detail] (wire diagnostics,
      * always English) is for logs, never the message shown on its own.
      */
-    data class Error(val failure: VncFailure, val detail: String = "") : VncUiState
+    data class Error(val failure: VncFailure, val detail: String = "") : RemoteDesktopUiState
 
     /**
      * The session closed not on our initiative (server drop / EOF). [screen] is the frozen last
-     * frame; [cleanExit] true = the peer closed cleanly ("Session closed"), false = a transport drop.
-     * The user reconnects manually (no silent auto-reconnect in v1).
+     * frame; [cleanExit] true = the peer closed cleanly ("Session closed"), false = a transport
+     * drop. [reason] carries the server's own words where it gave any. The user reconnects manually
+     * (no silent auto-reconnect in v1).
      */
-    data class Disconnected(val screen: VncScreenState, val cleanExit: Boolean) : VncUiState
+    data class Disconnected(
+        val screen: RemoteDesktopScreenState,
+        val cleanExit: Boolean,
+        val reason: String = "",
+    ) : RemoteDesktopUiState
 }
 
 /**
- * Binds a VNC tab to [VncTransport]: [connect] opens the session and assembles a [VncScreenState];
- * a watcher moves to [VncUiState.Disconnected] when the session closes on its own. The framebuffer
- * sibling of `ConnectionController`, reusing its lifecycle discipline (separate session scope,
- * teardown under [NonCancellable], secret reference dropped on disconnect), but without the
- * terminal/SFTP/forward machinery.
+ * Binds a remote-desktop tab to a live session: [connect] opens one through [openSession] and
+ * assembles a [RemoteDesktopScreenState]; a watcher moves to [RemoteDesktopUiState.Disconnected]
+ * when the session closes on its own.
+ *
+ * The protocol arrives as a lambda rather than a transport type: VNC and RDP need different things
+ * to dial (an optional password versus a user, a domain and a desktop size), and neither call
+ * belongs in a controller shared by both. The framebuffer sibling of `ConnectionController`,
+ * reusing its lifecycle discipline — separate session scope, teardown under [NonCancellable],
+ * session reference dropped on disconnect.
  */
 @Stable
-class VncSessionController(
-    private val transport: VncTransport,
+class RemoteDesktopController(
     private val scope: CoroutineScope,
     private val newSessionScope: () -> CoroutineScope = {
         CoroutineScope(SupervisorJob(scope.coroutineContext[Job]) + Dispatchers.Default)
     },
 ) {
-    var uiState: VncUiState by mutableStateOf(VncUiState.Connecting)
+    var uiState: RemoteDesktopUiState by mutableStateOf(RemoteDesktopUiState.Connecting)
         private set
 
     private var connectJob: Job? = null
     private var sessionScope: CoroutineScope? = null
-    private var session: VncSession? = null
+    private var session: RemoteDesktopSession? = null
 
     /**
-     * Connect to [target] with [auth]. Ignored if a connect is already in progress or live.
+     * Open a session through [openSession]. Ignored if one is already live.
      * [remoteResize] seeds the "Resize to window" toggle from the host profile;
      * [onRemoteResizeChanged] reports the user changing it (so the profile can be updated).
      */
     fun connect(
-        target: SshTarget,
-        auth: VncAuth,
         remoteResize: Boolean = false,
         onRemoteResizeChanged: (Boolean) -> Unit = {},
+        openSession: suspend () -> RemoteDesktopSession,
     ) {
-        if (uiState is VncUiState.Connected) return
-        uiState = VncUiState.Connecting
+        if (uiState is RemoteDesktopUiState.Connected) return
+        uiState = RemoteDesktopUiState.Connecting
         connectJob = scope.launch {
             try {
-                val opened = transport.connect(target, auth)
+                val opened = openSession()
                 val sScope = newSessionScope()
                 session = opened
                 sessionScope = sScope
-                val screen = VncScreenState(
-                    opened, sScope,
+                val screen = RemoteDesktopScreenState(
+                    opened,
+                    sScope,
                     remoteResizeInitial = remoteResize,
                     onRemoteResizeChanged = onRemoteResizeChanged,
                 )
-                uiState = VncUiState.Connected(screen)
+                uiState = RemoteDesktopUiState.Connected(screen)
                 watchForClose(screen, sScope)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 releaseSession()
                 // Typed reason for the UI; the wire text stays as diagnostics only.
-                uiState = VncUiState.Error(vncFailureOf(e), e.message.orEmpty())
+                uiState = RemoteDesktopUiState.Error(vncFailureOf(e), e.message.orEmpty())
             }
         }
     }
 
     /**
-     * Watches [screen] for closure (server drop / EOF): moves to [VncUiState.Disconnected] with the
-     * frozen frame. Lives on the session scope, so our own [disconnect] (which cancels that scope)
-     * kills it before it fires — this path is reached only on a server-side close.
+     * Watches [screen] for closure (server drop / EOF): moves to [RemoteDesktopUiState.Disconnected]
+     * with the frozen frame. Lives on the session scope, so our own [disconnect] (which cancels that
+     * scope) kills it before it fires — this path is reached only on a server-side close.
      */
-    private fun watchForClose(screen: VncScreenState, sScope: CoroutineScope) {
+    private fun watchForClose(screen: RemoteDesktopScreenState, sScope: CoroutineScope) {
         sScope.launch {
             snapshotFlow { screen.closed }.first { it }
             // Dispatch onto the main scope (like ConnectionController) so the transition doesn't race disconnect.
             scope.launch {
-                if (uiState is VncUiState.Connected) {
-                    uiState = VncUiState.Disconnected(screen, screen.cleanExit)
+                if (uiState is RemoteDesktopUiState.Connected) {
+                    uiState = RemoteDesktopUiState.Disconnected(screen, screen.cleanExit, screen.closeReason)
                     releaseSession()
                 }
             }
@@ -122,7 +129,7 @@ class VncSessionController(
         connectJob?.cancel()
         connectJob = null
         releaseSession()
-        uiState = VncUiState.Connecting
+        uiState = RemoteDesktopUiState.Connecting
     }
 
     private fun releaseSession() {

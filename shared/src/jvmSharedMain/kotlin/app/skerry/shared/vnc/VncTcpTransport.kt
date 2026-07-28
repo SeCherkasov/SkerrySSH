@@ -1,5 +1,6 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.ssh.SshTarget
 import java.io.BufferedOutputStream
 import java.io.DataInputStream
@@ -71,7 +72,7 @@ class VncSocketSession(
     private val out = BufferedOutputStream(socket.getOutputStream())
     private val writeLock = Mutex()
 
-    override val framebuffer = VncFramebuffer(1, 1)
+    override val framebuffer = RemoteFramebuffer(1, 1)
 
     private val source = VncSource { dst, offset, len -> input.readFully(dst, offset, len) }
     private val sink = VncSink { bytes -> writeRaw(bytes) }

@@ -52,6 +52,7 @@ import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
+import app.skerry.shared.ssh.isRdp
 import app.skerry.shared.ssh.isVnc
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.connectionTypesIn
@@ -82,6 +83,7 @@ import app.skerry.ui.generated.resources.conn_container_hint
 import app.skerry.ui.generated.resources.conn_container_loading
 import app.skerry.ui.generated.resources.conn_create
 import app.skerry.ui.generated.resources.conn_field_ai_policy_short
+import app.skerry.ui.generated.resources.conn_field_audio
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
@@ -102,6 +104,7 @@ import app.skerry.ui.generated.resources.conn_field_protocol
 import app.skerry.ui.generated.resources.conn_field_notes
 import app.skerry.ui.generated.resources.conn_field_tags
 import app.skerry.ui.generated.resources.conn_notes_placeholder
+import app.skerry.ui.generated.resources.conn_field_domain
 import app.skerry.ui.generated.resources.conn_field_username
 import app.skerry.ui.generated.resources.conn_group_delete
 import app.skerry.ui.generated.resources.conn_group_new
@@ -117,6 +120,7 @@ import app.skerry.ui.generated.resources.conn_runtime_docker
 import app.skerry.ui.generated.resources.conn_runtime_kubernetes
 import app.skerry.ui.generated.resources.conn_protocol_telnet
 import app.skerry.ui.generated.resources.conn_protocol_vnc
+import app.skerry.ui.generated.resources.conn_protocol_rdp
 import app.skerry.ui.generated.resources.conn_save
 import app.skerry.ui.generated.resources.conn_save_changes
 import app.skerry.ui.generated.resources.conn_save_connection
@@ -328,6 +332,30 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     MobileFormField(stringResource(Res.string.conn_field_keep_alive)) { MobileKeepAlivePicker(form) }
                     Spacer(Modifier.height(14.dp))
                 }
+            } else if (form.connectionType.isRdp) {
+                // RDP: a Windows logon (name plus optional domain, stored as `DOMAIN\user`) and a
+                // password. Desktop parity; no key auth, no jump host, no keep-alive.
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    MobileFormField(stringResource(Res.string.conn_field_username), Modifier.weight(1f)) {
+                        MobileFormInput(form.username, { form.username = it }, "Administrator")
+                    }
+                    MobileFormField(stringResource(Res.string.conn_field_port), Modifier.width(84.dp)) {
+                        MobileFormInput(form.port, { form.port = it }, "3389", keyboardType = KeyboardType.Number)
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                MobileFormField(stringResource(Res.string.conn_field_domain)) {
+                    MobileFormInput(form.domain, { form.domain = it }, "CORP")
+                }
+                Spacer(Modifier.height(14.dp))
+                MobileFormField(stringResource(Res.string.conn_field_authentication)) { MobileAuthPicker(form, allowKey = false) }
+                Spacer(Modifier.height(14.dp))
+                // The session's sound, played on this device (MS-RDPEA), and where to play it.
+                MobileFormField(stringResource(Res.string.conn_field_audio)) {
+                    app.skerry.ui.host.RdpAudioSection(form)
+                    app.skerry.ui.host.RdpClipboardSection(form)
+                }
+                Spacer(Modifier.height(14.dp))
             } else if (form.connectionType.isVnc) {
                 // VNC: a password (no username), plus the RFB port. No jump host / keep-alive.
                 MobileFormField(stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
@@ -497,6 +525,7 @@ private val ConnectionType.protocolLabel: org.jetbrains.compose.resources.String
         ConnectionType.TELNET -> Res.string.conn_protocol_telnet
         ConnectionType.SERIAL -> Res.string.conn_protocol_serial
         ConnectionType.VNC -> Res.string.conn_protocol_vnc
+        ConnectionType.RDP -> Res.string.conn_protocol_rdp
         ConnectionType.CONTAINER -> Res.string.conn_protocol_container
         ConnectionType.LOCAL -> Res.string.conn_protocol_local
     }

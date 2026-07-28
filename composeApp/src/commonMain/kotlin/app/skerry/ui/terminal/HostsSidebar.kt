@@ -86,8 +86,10 @@ import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.host.pickAndParseRdpFile
 import app.skerry.ui.host.pickAndParseSshConfig
 import app.skerry.ui.generated.resources.conn_import_action
+import app.skerry.ui.generated.resources.conn_rdp_import_action
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SIDEBAR_WIDTH
@@ -130,6 +132,7 @@ import app.skerry.ui.host.folderRangeAnchor
 import app.skerry.ui.host.connectionTypeLabel
 import app.skerry.ui.host.groupHostsByConnectionType
 import app.skerry.ui.host.groupHostsByFolder
+import app.skerry.ui.host.sidebarFolders
 import app.skerry.ui.host.ungroupedLabel
 import app.skerry.ui.host.hostBoundsAnchor
 import app.skerry.ui.host.hostChipLabel
@@ -329,9 +332,9 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
                     ),
                 )
                 // Create a new (initially empty) group in the live catalog; decorative on the mock path.
-                // Groups are shared by both sections (one catalog), so the button belongs to either.
+                // The folder is remembered for this section's sidebar (see [CustomGroup]).
                 if (liveHosts != null) {
-                    IconBtn("create_new_folder", onClick = state::openCreateGroup, box = 20, icon = 14.sp, tint = Skerry.colors.faint)
+                    IconBtn("create_new_folder", onClick = { state.openCreateGroup(section) }, box = 20, icon = 14.sp, tint = Skerry.colors.faint)
                 } else {
                     Sym("create_new_folder", size = 14.sp, color = Skerry.colors.faint)
                 }
@@ -340,18 +343,16 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
             // mock data (offscreen render/preview path). Folders are grouped and narrowed by the active tag.
             if (liveHosts != null) {
                 val query = state.hostSearchQuery
-                val folders = remember(sectionHosts, effectiveChip, query, state.customGroups, section) {
-                    val base = groupHostsByFolder(filterHosts(sectionHosts, effectiveChip, query))
+                val folders = remember(sectionHosts, liveHosts.hosts, effectiveChip, query, state.customGroups, section) {
+                    val filtered = filterHosts(sectionHosts, effectiveChip, query)
                     // Empty user groups are shown as folders with no hosts, but only outside a filter
-                    // (search/tag narrow by host, and an empty folder has nothing to match). Both
-                    // sections show them: a folder has no section of its own, and the "+folder"
-                    // button sits in both sidebars — hiding it in one would make the folder just
-                    // created there vanish, with nothing to drop a host onto.
+                    // (search/tag narrow by host, and an empty folder has nothing to match) and only
+                    // in the sidebar they were created in — [sidebarFolders] also drops the ones that
+                    // meanwhile got hosts, wherever those hosts landed.
                     if (query.isNotBlank() || effectiveChip != ALL_HOSTS_CHIP) {
-                        base
+                        groupHostsByFolder(filtered)
                     } else {
-                        val present = base.map { it.name }.toSet()
-                        base + state.customGroups.filter { it !in present }.map { HostFolder(it, emptyList()) }
+                        sidebarFolders(filtered, liveHosts.hosts, state.customGroupsIn(section))
                     }
                 }
                 // An empty remote-desktop catalog says so, instead of leaving a blank column above
@@ -447,6 +448,15 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
                         "download",
                         onClick = { importScope.launch { pickAndParseSshConfig()?.let(state::beginSshImport) } },
                         tooltip = stringResource(Res.string.conn_import_action),
+                    )
+                }
+                // The desktops section imports the format its own clients write: one `.rdp` file is
+                // one connection, so this opens a confirm modal rather than a selection list.
+                if (liveHosts != null && section == HostSection.RemoteDesktops) {
+                    IconBtn(
+                        "download",
+                        onClick = { importScope.launch { pickAndParseRdpFile()?.let(state::beginRdpImport) } },
+                        tooltip = stringResource(Res.string.conn_rdp_import_action),
                     )
                 }
             }

@@ -14,6 +14,7 @@
     <string name="conn_field_port">端口</string>
     <string name="conn_field_baud">波特率</string>
     <string name="conn_field_username">用户名</string>
+    <string name="conn_field_domain">域</string>
     <string name="conn_field_authentication">认证方式</string>
     <string name="conn_field_group">分组</string>
     <string name="conn_field_tags">标签</string>
@@ -42,6 +43,7 @@
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">串口</string>
     <string name="conn_protocol_vnc">VNC</string>
+    <string name="conn_protocol_rdp">RDP</string>
     <string name="conn_protocol_local">本地</string>
     <string name="conn_telnet_plaintext_warning">Telnet 未加密 — 凭据和会话数据以明文传输。非可信网络请使用 SSH。</string>
     <string name="conn_vnc_plaintext_warning">VNC (RFB) 未加密 — 屏幕和输入以明文传输。请使用可信网络或 SSH 隧道。</string>
@@ -109,6 +111,7 @@
     <string name="conn_type_telnet">Telnet</string>
     <string name="conn_type_serial">串口</string>
     <string name="conn_type_vnc">VNC</string>
+    <string name="conn_type_rdp">RDP</string>
     <string name="conn_type_local">本地 Shell</string>
 
     <string name="conn_import_action">从 ssh_config 导入</string>
@@ -118,6 +121,13 @@
     <string name="conn_import_empty">此文件中未找到主机。</string>
     <string name="conn_import_button">导入 (%1$d)</string>
     <string name="conn_import_skipped">导入时跳过了部分行。</string>
+    <string name="conn_rdp_import_farm">场：%1$s</string>
+    <string name="conn_rdp_import_gateway">不支持 RD 网关：连接将直接指向主机。</string>
+    <string name="conn_rdp_import_empty">此文件未指定要连接的地址。</string>
+    <string name="conn_rdp_import_button">导入</string>
+    <string name="conn_rdp_import_subtitle">将根据文件创建配置。不会导入密码 — 连接时再设置身份验证。</string>
+    <string name="conn_rdp_import_title">导入 .rdp 文件</string>
+    <string name="conn_rdp_import_action">导入 .rdp 文件</string>
 
     <!-- Container profiles (Docker / Kubernetes exec) -->
     <string name="conn_protocol_container">容器</string>
@@ -142,4 +152,17 @@
     <string name="conn_auth_interactive">交互式（双因素）</string>
     <string name="conn_auth_interactive_desc">连接时由服务器索取验证码</string>
     <string name="conn_import_keys_note">IdentityFile 和 CertificateFile 按路径关联 — 密钥不会复制到保险库。</string>
+
+    <!-- RDP audio redirection -->
+    <string name="conn_field_audio">音频</string>
+    <string name="conn_audio_redirect">在本机播放会话声音</string>
+    <string name="conn_audio_redirect_desc">远程桌面的声音将通过本设备播放，而不是留在服务器上。</string>
+    <string name="conn_field_clipboard">剪贴板</string>
+    <string name="conn_rdp_import_no_address">文件中没有可连接的地址。</string>
+    <string name="conn_rdp_import_port">文件中的端口超出范围，使用默认端口。</string>
+    <string name="conn_rdp_import_malformed">文件的部分内容无法读取，已跳过。</string>
+    <string name="conn_clipboard_share">共享剪贴板</string>
+    <string name="conn_clipboard_share_desc">会话打开期间，任一侧复制的文本都可在另一侧使用。</string>
+    <string name="conn_audio_output_device">输出设备</string>
+    <string name="conn_audio_device_default">系统默认</string>
 </resources>

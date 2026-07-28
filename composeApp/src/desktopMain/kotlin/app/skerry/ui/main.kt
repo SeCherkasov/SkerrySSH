@@ -56,8 +56,10 @@ import app.skerry.ui.ai.LocalAiDeps
 import app.skerry.ui.ai.aiProviderFactory
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.sync.SyncCoordinator
+import app.skerry.ui.app.CustomGroup
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.HostSection
 import app.skerry.ui.i18n.AppLocaleProvider
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.identity.CredentialManagerController
@@ -149,6 +151,7 @@ private class DesktopGraph(
     val securityLog: FileSecurityLog,
     val probeTransport: SshTransport,
     val vncTransport: app.skerry.shared.vnc.VncTransport,
+    val rdpTransport: app.skerry.shared.rdp.RdpTransport,
     val workspaceLayout: WorkspaceLayoutStore,
     val ai: AiAssistantController,
     val updates: app.skerry.ui.update.UpdateNoticeController,
@@ -449,13 +452,25 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // A share started or ended somewhere in the team: re-read the directory rather than wait for
     // the user to reopen the screen.
     teams.onSharesChanged = { sharedSessions.refresh() }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi)
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi, audioOutputs = app.skerry.shared.audio.JavaSoundOutputs())
     return DesktopGraph(
         deps = deps,
         keyboardInteractive = keyboardInteractive,
         securityLog = securityLog,
         probeTransport = probeTransport,
         vncTransport = app.skerry.shared.vnc.VncTcpTransport(),
+        rdpTransport = app.skerry.shared.rdp.RdpTcpTransport(
+            // Trust on first use, hardened to 0600 like known_hosts: an RDP host signs its own
+            // certificate unless an enterprise CA issued one, so the platform trust store would
+            // refuse nearly every server.
+            app.skerry.shared.rdp.FileRdpCertificateStore(
+                dir.resolve("rdp_known_certs").toString().toPath(),
+                FileSystem.SYSTEM,
+                harden = { PrivateConfig.harden(Path.of(it.toString())) },
+            ),
+            // Playback for a profile that asks for the session's sound (MS-RDPEA).
+            audioPlayers = app.skerry.shared.audio.JavaSoundPlayers(),
+        ),
         workspaceLayout = workspaceLayout,
         ai = ai,
         updates = updates,
@@ -526,8 +541,20 @@ fun main(args: Array<String>) {
                     // Empty folders sync via the vault: starts empty (vault is locked), reads through
                     // customGroupsProvider after unlock, writes changes to the layout record.
                     initialCustomGroups = emptyList(),
-                    onCustomGroupsChange = { groups -> workspaceLayout.write(workspaceLayout.read().copy(groups = groups)) },
-                    customGroupsProvider = { workspaceLayout.read().groups },
+                    onCustomGroupsChange = { groups ->
+                        workspaceLayout.write(
+                            workspaceLayout.read().copy(
+                                groups = groups.filter { it.section == HostSection.Terminal }.map { it.name },
+                                remoteDesktopGroups = groups.filter { it.section == HostSection.RemoteDesktops }.map { it.name },
+                            ),
+                        )
+                    },
+                    customGroupsProvider = {
+                        workspaceLayout.read().let { layout ->
+                            layout.groups.map { CustomGroup(it, HostSection.Terminal) } +
+                                layout.remoteDesktopGroups.map { CustomGroup(it, HostSection.RemoteDesktops) }
+                        }
+                    },
                     initialSftpShowHidden = prefs.bool("sftp_show_hidden", true),
                     onSftpShowHiddenChange = { prefs.set("sftp_show_hidden", it) },
                     initialSftpShowModified = prefs.bool("sftp_show_modified", true),
@@ -580,6 +607,8 @@ fun main(args: Array<String>) {
                     hosts = deps.hosts,
                     transport = deps.transport,
                     vncTransport = graph.vncTransport,
+                    rdpTransport = graph.rdpTransport,
+                    audioOutputs = deps.audioOutputs,
                     testTransport = graph.probeTransport,
                     credentials = deps.credentials,
                     knownHosts = deps.knownHosts,

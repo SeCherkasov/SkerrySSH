@@ -36,6 +36,14 @@ data class AppDependencies(
     val probeTransport: SshTransport? = null,
     /** VNC/RFB transport for remote-desktop tabs; `null` if VNC isn't wired up on this platform. */
     val vncTransport: VncTransport? = null,
+    /** RDP transport for remote-desktop tabs; `null` if RDP isn't wired up on this platform. */
+    val rdpTransport: app.skerry.shared.rdp.RdpTransport? = null,
+    /**
+     * The platform's audio output devices, offered by the RDP profile form when audio redirection is
+     * turned on; `null` where there is no audio backend (preview), and the session then plays
+     * through whatever the system uses.
+     */
+    val audioOutputs: app.skerry.shared.audio.AudioOutputs? = null,
     val hosts: HostManagerController? = null,
     val vault: Vault? = null,
     /** Manager for keychain secrets (keys/passwords/certificates); `null` if not wired up. */

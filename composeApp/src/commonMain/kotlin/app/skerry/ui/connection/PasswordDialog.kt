@@ -34,7 +34,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
-import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.isRdp
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
@@ -171,12 +171,21 @@ fun DesktopPasswordDialog(
 }
 
 /**
- * Keychain entries worth offering when connecting to [type] with nothing bound to the profile —
- * the situation every team-shared host is in, since sharing strips the credential link.
+ * Keychain entries worth offering when connecting to [host] with nothing bound to the profile.
  *
- * SSH (and Mosh over it) authenticates with any of them; VNC-Auth knows only a password, so a key
- * there would be a row that cannot work. Order is the keychain's own, so the list reads the same as
- * the vault screen.
+ * Only for a host outside [ownCatalog] — that is, a team-shared one, which arrives with its
+ * credential link stripped and can't be edited to carry a secret; without the list a key-only server
+ * would have no way in. A profile of our own is prompting because we set it to ("ask every time"),
+ * so the dialog stays a bare password field and binding a secret is left to the edit form.
+ *
+ * SSH (and Mosh over it) authenticates with any kind of secret; VNC-Auth and an RDP logon know only
+ * a password, so a key there would be a row that cannot work. Order is the keychain's own, so the
+ * list reads the same as the vault screen.
  */
-fun connectableSecrets(credentials: List<Credential>, type: ConnectionType): List<Credential> =
-    if (type.isVnc) credentials.filter { it.secret is CredentialSecret.Password } else credentials
+fun connectableSecrets(credentials: List<Credential>, host: Host, ownCatalog: List<Host>): List<Credential> = when {
+    ownCatalog.any { it.id == host.id } -> emptyList()
+    host.connectionType.isVnc || host.connectionType.isRdp ->
+        credentials.filter { it.secret is CredentialSecret.Password }
+
+    else -> credentials
+}

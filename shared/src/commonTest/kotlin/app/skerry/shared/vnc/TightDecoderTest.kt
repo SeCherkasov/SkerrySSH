@@ -1,5 +1,6 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,7 +32,7 @@ class TightDecoderTest {
     @Test
     fun fill_paints_solid() = runTest {
         val data = join(byteArrayOf(0x80.toByte()), tp(0xFF, 0, 0)) // mode 8 = fill, red
-        val fb = VncFramebuffer(2, 2)
+        val fb = RemoteFramebuffer(2, 2)
         decodeTight(TightBytes(data), fb, VncRect(0, 0, 2, 2), noStream, noReset, null)
         assertEquals(R, fb.pixels[0])
         assertEquals(R, fb.pixels[3])
@@ -41,7 +42,7 @@ class TightDecoderTest {
     fun basic_copy_raw_below_threshold() = runTest {
         // 1x2 copy = 6 bytes < 12 → raw. mode 0 (basic, no filter flag → copy, stream 0).
         val data = join(byteArrayOf(0x00), tp(0xFF, 0, 0), tp(0, 0xFF, 0))
-        val fb = VncFramebuffer(1, 2)
+        val fb = RemoteFramebuffer(1, 2)
         decodeTight(TightBytes(data), fb, VncRect(0, 0, 1, 2), noStream, noReset, null)
         assertEquals(R, fb.pixels[0])
         assertEquals(G, fb.pixels[1])
@@ -58,7 +59,7 @@ class TightDecoderTest {
             byteArrayOf(0x50.toByte()),     // row0: 0,1,0,1
             byteArrayOf(0xA0.toByte()),     // row1: 1,0,1,0
         )
-        val fb = VncFramebuffer(4, 2)
+        val fb = RemoteFramebuffer(4, 2)
         decodeTight(TightBytes(data), fb, VncRect(0, 0, 4, 2), noStream, noReset, null)
         assertEquals(R, fb.pixels[0]) // (0,0)
         assertEquals(G, fb.pixels[1]) // (1,0)
@@ -75,7 +76,7 @@ class TightDecoderTest {
             byteArrayOf(0, 0, 0),              // pixel (0,1): pred = up → same
             byteArrayOf(0, 0, 0),              // pixel (0,2): pred = up → same
         )
-        val fb = VncFramebuffer(1, 3)
+        val fb = RemoteFramebuffer(1, 3)
         decodeTight(TightBytes(data), fb, VncRect(0, 0, 1, 3), noStream, noReset, null)
         val expected = (0xFF shl 24) or (10 shl 16) or (20 shl 8) or 30
         assertEquals(expected, fb.pixels[0])
@@ -88,7 +89,7 @@ class TightDecoderTest {
         val decoded = DecodedImage(intArrayOf(R, G, B, 0xFFFFFFFF.toInt()), 2, 2)
         val decoder = VncImageDecoder { decoded }
         val data = join(byteArrayOf(0x90.toByte()), byteArrayOf(4), byteArrayOf(1, 2, 3, 4)) // mode 9, len 4, dummy jpeg
-        val fb = VncFramebuffer(2, 2)
+        val fb = RemoteFramebuffer(2, 2)
         decodeTight(TightBytes(data), fb, VncRect(0, 0, 2, 2), noStream, noReset, decoder)
         assertEquals(R, fb.pixels[0])
         assertEquals(G, fb.pixels[1])

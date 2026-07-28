@@ -149,6 +149,57 @@ class NewConnectionFormStateTest {
     }
 
     @Test
+    fun rdp_audio_choice_travels_into_the_draft_and_back_out_of_the_profile() {
+        val f = NewConnectionFormState().apply { name = "desk"; address = "10.0.0.9"; username = "admin" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.RDP)
+        // Off by default: a profile that never asked for sound must not start opening a device.
+        assertNull(f.toDraft().rdp)
+
+        f.rdpAudioOutput = true
+        f.rdpAudioDeviceId = "USB Headset"
+        val draft = f.toDraft()
+        assertTrue(checkNotNull(draft.rdp).audioOutput)
+        assertEquals("USB Headset", draft.rdp?.audioOutputDeviceId)
+
+        val host = Host(
+            "1", "desk", "10.0.0.9", 3389, "admin",
+            connectionType = app.skerry.shared.ssh.ConnectionType.RDP,
+            rdp = app.skerry.shared.rdp.RdpSpec(audioOutput = true, audioOutputDeviceId = "USB Headset"),
+        )
+        assertTrue(NewConnectionFormState.fromHost(host).rdpAudioOutput)
+        assertEquals("USB Headset", NewConnectionFormState.fromHost(host).rdpAudioDeviceId)
+    }
+
+    @Test
+    fun rdp_form_carries_the_farm_routing_token_it_was_prefilled_with() {
+        // The token isn't editable (it comes from an imported .rdp file), but the form is what hands
+        // the profile's RDP settings back on save — dropping it would send the next connection to an
+        // arbitrary host of the farm.
+        val host = Host(
+            "1", "rds", "rds.example.com", 3389, "CORP\\alice",
+            connectionType = app.skerry.shared.ssh.ConnectionType.RDP,
+            rdp = app.skerry.shared.rdp.RdpSpec(loadBalanceInfo = "tsv://x"),
+        )
+        val f = NewConnectionFormState.fromHost(host)
+        f.rdpAudioOutput = true
+
+        val rdp = checkNotNull(f.toDraft(id = "1").rdp)
+        assertEquals("tsv://x", rdp.loadBalanceInfo)
+        assertTrue(rdp.audioOutput)
+    }
+
+    @Test
+    fun turning_rdp_audio_off_forgets_the_device_it_played_on() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "a"; username = "u" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.RDP)
+        f.rdpAudioOutput = true
+        f.rdpAudioDeviceId = "USB Headset"
+        f.rdpAudioOutput = false
+
+        assertNull(f.toDraft().rdp)
+    }
+
+    @Test
     fun vnc_out_of_range_port_blocks_save() {
         val f = NewConnectionFormState().apply { name = "d"; address = "a" }
         f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.VNC)
@@ -168,6 +219,30 @@ class NewConnectionFormStateTest {
         assertEquals("cred-id", f.resolveCredentialId(cap.saveCredential))
         assertEquals(CredentialKind.PASSWORD, cap.credentialDraft?.kind)
         assertEquals("sekret", cap.credentialDraft?.password)
+    }
+
+    @Test
+    fun rdp_stores_the_password_typed_in_the_form() {
+        // RDP has no anonymous logon: dropping the password here left the profile secretless and the
+        // connect prompt asking for it every time.
+        val f = NewConnectionFormState().apply { name = "d"; address = "10.0.0.9"; username = "Administrator" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.RDP)
+        f.authMode = AuthMode.NEW_PASSWORD
+        f.password = "sekret"
+        assertTrue(f.canSave)
+        val cap = Captures()
+        assertEquals("cred-id", f.resolveCredentialId(cap.saveCredential))
+        assertEquals(CredentialKind.PASSWORD, cap.credentialDraft?.kind)
+        assertEquals("sekret", cap.credentialDraft?.password)
+    }
+
+    @Test
+    fun rdp_keeps_a_selected_saved_secret() {
+        val f = NewConnectionFormState().apply { name = "d"; address = "a"; username = "u" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.RDP)
+        f.authMode = AuthMode.EXISTING
+        f.existingCredentialId = "saved-1"
+        assertEquals("saved-1", f.resolveCredentialId { error("an existing secret must not be rewritten") })
     }
 
     @Test
@@ -562,5 +637,50 @@ class SectionFormStateTest {
         )
 
         assertEquals(AuthMode.INTERACTIVE, NewConnectionFormState.fromHost(host).authMode)
+    }
+
+    @Test
+    fun an_rdp_domain_is_saved_as_part_of_the_user_name() {
+        val form = NewConnectionFormState().apply {
+            chooseConnectionType(ConnectionType.RDP)
+            name = "rds"
+            address = "rds.example.com"
+            username = "alice"
+            domain = "CORP"
+            authMode = AuthMode.NEW_PASSWORD
+            password = "s3cret"
+        }
+
+        // `DOMAIN\user` is what the transport splits apart again, so the profile keeps one field.
+        assertEquals("CORP\\alice", form.toDraft().username)
+    }
+
+    @Test
+    fun editing_an_rdp_profile_splits_the_domain_back_out() {
+        val host = Host(
+            id = "h1",
+            label = "rds",
+            address = "rds.example.com",
+            username = "CORP\\alice",
+            connectionType = ConnectionType.RDP,
+        )
+
+        val form = NewConnectionFormState.fromHost(host)
+
+        assertEquals("CORP", form.domain)
+        assertEquals("alice", form.username)
+        assertEquals("CORP\\alice", form.toDraft(id = "h1").username)
+    }
+
+    @Test
+    fun a_domain_typed_for_a_non_rdp_profile_is_not_glued_onto_the_user_name() {
+        val form = NewConnectionFormState().apply {
+            name = "web"
+            address = "10.0.0.1"
+            username = "root"
+            domain = "CORP"
+        }
+
+        assertEquals("root", form.toDraft().username)
     }
 }

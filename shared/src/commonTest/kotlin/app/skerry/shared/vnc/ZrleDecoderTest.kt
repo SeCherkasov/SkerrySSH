@@ -1,5 +1,6 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,7 +37,7 @@ class ZrleDecoderTest {
     @Test
     fun solid_tile_fills_the_rect() = runTest {
         val inflated = cat(byteArrayOf(1), cp(0xFF, 0, 0)) // subencoding 1 = solid red
-        val fb = VncFramebuffer(2, 2)
+        val fb = RemoteFramebuffer(2, 2)
         decodeZrle(ZeroLengthSource(), fb, VncRect(0, 0, 2, 2), fakeInflaterYielding(inflated))
         assertEquals(RED, fb.pixels[0])
         assertEquals(RED, fb.pixels[3])
@@ -45,7 +46,7 @@ class ZrleDecoderTest {
     @Test
     fun raw_tile_decodes_cpixels() = runTest {
         val inflated = cat(byteArrayOf(0), cp(0xFF, 0, 0), cp(0, 0xFF, 0), cp(0, 0, 0xFF), cp(0xFF, 0xFF, 0xFF))
-        val fb = VncFramebuffer(2, 2)
+        val fb = RemoteFramebuffer(2, 2)
         decodeZrle(ZeroLengthSource(), fb, VncRect(0, 0, 2, 2), fakeInflaterYielding(inflated))
         assertEquals(RED, fb.pixels[0])
         assertEquals(GREEN, fb.pixels[1])
@@ -57,7 +58,7 @@ class ZrleDecoderTest {
     fun plain_rle_fills_a_run() = runTest {
         // subencoding 128 (plain RLE): one run of red covering all 4 pixels (length byte 3 → run 4).
         val inflated = cat(byteArrayOf(128.toByte()), cp(0xFF, 0, 0), byteArrayOf(3))
-        val fb = VncFramebuffer(2, 2)
+        val fb = RemoteFramebuffer(2, 2)
         decodeZrle(ZeroLengthSource(), fb, VncRect(0, 0, 2, 2), fakeInflaterYielding(inflated))
         assertEquals(RED, fb.pixels[0])
         assertEquals(RED, fb.pixels[3])
@@ -72,7 +73,7 @@ class ZrleDecoderTest {
             byteArrayOf(0x40.toByte()),        // row0: 0,1
             byteArrayOf(0x80.toByte()),        // row1: 1,0
         )
-        val fb = VncFramebuffer(2, 2)
+        val fb = RemoteFramebuffer(2, 2)
         decodeZrle(ZeroLengthSource(), fb, VncRect(0, 0, 2, 2), fakeInflaterYielding(inflated))
         assertEquals(RED, fb.pixels[0])   // (0,0)
         assertEquals(GREEN, fb.pixels[1]) // (1,0)
@@ -89,7 +90,7 @@ class ZrleDecoderTest {
             byteArrayOf(0),                    // single red at pixel 0
             byteArrayOf(129.toByte(), 2),      // green run of 3 for the remaining pixels
         )
-        val fb = VncFramebuffer(2, 2)
+        val fb = RemoteFramebuffer(2, 2)
         decodeZrle(ZeroLengthSource(), fb, VncRect(0, 0, 2, 2), fakeInflaterYielding(inflated))
         assertEquals(RED, fb.pixels[0])
         assertEquals(GREEN, fb.pixels[1])

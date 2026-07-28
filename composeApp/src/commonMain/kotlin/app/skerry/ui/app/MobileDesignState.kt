@@ -173,6 +173,9 @@ class MobileDesignState(
      */
     var sshImport: app.skerry.shared.ssh.SshConfigParseResult? by mutableStateOf(null); private set
 
+    /** `.rdp` import: the profile read from a picked file, awaiting confirmation; `null` = closed. */
+    var rdpImport: app.skerry.shared.rdp.RdpFileImportResult? by mutableStateOf(null); private set
+
     /**
      * Whether a tab's modal overlay is open (e.g. a vault Generate/Import dialog) — hides the tab
      * bar, otherwise it floats over the dialog and covers input fields above the keyboard. Mutated
@@ -309,6 +312,8 @@ class MobileDesignState(
 
     fun beginSshImport(result: app.skerry.shared.ssh.SshConfigParseResult) { sshImport = result }
     fun closeSshImport() { sshImport = null }
+    fun beginRdpImport(result: app.skerry.shared.rdp.RdpFileImportResult) { rdpImport = result }
+    fun closeRdpImport() { rdpImport = null }
 
     /** Selected terminal font (More -> Appearance -> Font). Threaded to the terminal via [app.skerry.ui.terminal.LocalTerminalAppearance]. */
     var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set

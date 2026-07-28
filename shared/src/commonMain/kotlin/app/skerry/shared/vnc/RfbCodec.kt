@@ -1,5 +1,7 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
+
 /**
  * Pure RFB (VNC) protocol state machine — no sockets, no threads. It pulls bytes through [VncSource]
  * and pushes replies through [VncSink]; both are injected, so the whole codec runs in `commonMain`
@@ -17,7 +19,7 @@ package app.skerry.shared.vnc
 class RfbCodec(
     private val source: VncSource,
     private val sink: VncSink,
-    private val fb: VncFramebuffer,
+    private val fb: RemoteFramebuffer,
     private val inflaterFactory: InflaterFactory,
     private val challengeResponder: VncChallengeResponder,
     private val imageDecoder: VncImageDecoder? = null,
@@ -29,7 +31,7 @@ class RfbCodec(
     // Whether we advertise the Cursor pseudo-encoding — i.e. whether the client draws the cursor.
     private var localCursor = true
 
-    // ExtendedDesktopSize state. @Volatile like VncFramebuffer's fields: written by the read loop,
+    // ExtendedDesktopSize state. @Volatile like RemoteFramebuffer's fields: written by the read loop,
     // read by writeSetDesktopSize on a UI-driven coroutine. The screen id/flags are echoed back in
     // SetDesktopSize so the server recognises its own layout.
     @Volatile

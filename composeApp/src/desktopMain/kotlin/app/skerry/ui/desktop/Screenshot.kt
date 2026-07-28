@@ -97,7 +97,6 @@ import app.skerry.ui.vault.DesktopResetScreen
 import app.skerry.ui.vault.DesktopUnlockScreen
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.mobile.MOBILE_PREVIEW_HOSTS
-import androidx.compose.runtime.CompositionLocalProvider
 import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.metrics.MetricsAvailability

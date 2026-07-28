@@ -1,5 +1,8 @@
 package app.skerry.ui.mobile
 
+import app.skerry.ui.remote.remoteKeyEvent
+import app.skerry.ui.remote.RemoteDesktopScreenState
+import app.skerry.ui.remote.RemoteDesktopUiState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
@@ -41,7 +44,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.vnc.VncQuality
+import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.AnchoredDropdown
@@ -58,9 +61,7 @@ import app.skerry.ui.generated.resources.vnc_session_closed
 import app.skerry.ui.generated.resources.vnc_view_only
 import app.skerry.ui.immersive.ImmersiveScreen
 import app.skerry.ui.immersive.hiddenSystemBarsPadding
-import app.skerry.ui.vnc.VncScreenState
 import app.skerry.ui.vnc.VncTouchSurface
-import app.skerry.ui.vnc.VncUiState
 import app.skerry.ui.vnc.keySymFor
 import app.skerry.ui.vnc.label
 import androidx.compose.ui.input.key.Key
@@ -104,9 +105,9 @@ fun MobileVncScreen(state: MobileDesignState) {
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (val ui = vnc?.uiState) {
-            is VncUiState.Connected -> VncTouchSurface(ui.screen)
-            is VncUiState.Error -> CenterText(vncFailureText(ui.failure), Skerry.colors.sunset)
-            is VncUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
+            is RemoteDesktopUiState.Connected -> VncTouchSurface(ui.screen)
+            is RemoteDesktopUiState.Error -> CenterText(vncFailureText(ui.failure), Skerry.colors.sunset)
+            is RemoteDesktopUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 VncTouchSurface(ui.screen, interactive = false)
                 CenterText(
                     stringResource(if (ui.cleanExit) Res.string.vnc_session_closed else Res.string.vnc_connection_lost),
@@ -139,7 +140,7 @@ fun MobileVncScreen(state: MobileDesignState) {
         ) {
             MobileVncBar(
                 state = state,
-                screen = (vnc?.uiState as? VncUiState.Connected)?.screen,
+                screen = (vnc?.uiState as? RemoteDesktopUiState.Connected)?.screen,
                 title = sessions?.activeSession?.title ?: "VNC",
                 keyboardOn = keyboardOn,
                 menuOpen = menuOpen,
@@ -152,7 +153,7 @@ fun MobileVncScreen(state: MobileDesignState) {
             )
         }
 
-        val connected = (vnc?.uiState as? VncUiState.Connected)?.screen
+        val connected = (vnc?.uiState as? RemoteDesktopUiState.Connected)?.screen
         if (keyboardOn && connected != null) VncImeField(connected) { keyboardOn = false }
     }
 }
@@ -161,7 +162,7 @@ fun MobileVncScreen(state: MobileDesignState) {
 @Composable
 private fun MobileVncBar(
     state: MobileDesignState,
-    screen: VncScreenState?,
+    screen: RemoteDesktopScreenState?,
     title: String,
     keyboardOn: Boolean,
     menuOpen: Boolean,
@@ -198,7 +199,7 @@ private fun MobileVncBar(
  * before (requestFocus on an already-focused field is a no-op, so the keyboard would never return).
  */
 @Composable
-private fun VncImeField(screen: VncScreenState, onClosed: () -> Unit) {
+private fun VncImeField(screen: RemoteDesktopScreenState, onClosed: () -> Unit) {
     var value by remember { mutableStateOf(TextFieldValue("")) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -208,11 +209,13 @@ private fun VncImeField(screen: VncScreenState, onClosed: () -> Unit) {
             val old = value.text
             when {
                 new.text.length > old.length -> new.text.substring(old.length).forEach { c ->
-                    val sym = if (c == '\n') 0xFF0DL else keySymFor(Key.Unknown, c.code)
-                    if (sym != 0L) { screen.onKey(sym, true); screen.onKey(sym, false) }
+                    val event = if (c == '\n') remoteKeyEvent(Key.Enter, 0) else remoteKeyEvent(Key.Unknown, c.code)
+                    if (event != null) { screen.onKey(event, true); screen.onKey(event, false) }
                 }
                 new.text.length < old.length -> repeat(old.length - new.text.length) {
-                    screen.onKey(0xFF08L, true); screen.onKey(0xFF08L, false) // Backspace
+                    val backspace = remoteKeyEvent(Key.Backspace, 0) ?: return@repeat
+                    screen.onKey(backspace, true)
+                    screen.onKey(backspace, false)
                 }
             }
             // Keep a small buffer so the field doesn't grow unbounded; reset when it gets long.
@@ -244,7 +247,7 @@ private fun CenterText(text: String, color: Color) {
 
 /** Graphics settings dropdown for the mobile VNC bar: quality, view-only, reset zoom. */
 @Composable
-private fun MobileVncGraphics(screen: VncScreenState, open: Boolean, onOpenChange: (Boolean) -> Unit) {
+private fun MobileVncGraphics(screen: RemoteDesktopScreenState, open: Boolean, onOpenChange: (Boolean) -> Unit) {
     AnchoredDropdown(
         expanded = open,
         onDismiss = { onOpenChange(false) },
@@ -257,7 +260,7 @@ private fun MobileVncGraphics(screen: VncScreenState, open: Boolean, onOpenChang
                     .background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(vertical = 4.dp),
             ) {
                 Txt(stringResource(Res.string.vnc_quality), color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 2.dp))
-                VncQuality.entries.forEach { q ->
+                RemoteDesktopQuality.entries.forEach { q ->
                     MobileVncMenuRow(q.label(), selected = screen.quality == q) { screen.applyQuality(q) }
                 }
                 HLine(modifier = Modifier.padding(vertical = 4.dp))

@@ -691,6 +691,17 @@ class MainActivity : FragmentActivity() {
             transport = transport,
             probeTransport = probeTransport,
             vncTransport = app.skerry.shared.vnc.VncTcpTransport(),
+            rdpTransport = app.skerry.shared.rdp.RdpTcpTransport(
+                app.skerry.shared.rdp.FileRdpCertificateStore(
+                    // The app's private files directory is already 0700 to other UIDs, so the
+                    // store needs no extra hardening here (unlike the desktop's config directory).
+                    okio.Path.Companion.run { filesDir.resolve("rdp_known_certs").absolutePath.toPath() },
+                ),
+                // Playback for a profile that asks for the session's sound (MS-RDPEA).
+                audioPlayers = app.skerry.shared.audio.AndroidAudioPlayers(applicationContext),
+            ),
+            // Speaker, headset, Bluetooth — what the RDP profile form offers to play on.
+            audioOutputs = app.skerry.shared.audio.AndroidAudioOutputs(applicationContext),
             hosts = hosts,
             vault = vault,
             credentials = credentials,

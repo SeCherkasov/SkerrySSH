@@ -8,7 +8,10 @@ import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.HostStore
+import app.skerry.shared.rdp.RdpFileHost
+import app.skerry.shared.rdp.RdpFileImport
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.isRdp
 import app.skerry.shared.ssh.SshConfigHost
 import app.skerry.shared.ssh.SshConfigImport
 import app.skerry.shared.vault.Credential
@@ -36,6 +39,11 @@ data class HostDraft(
     val notes: String? = null,
     /** Container/pod to exec into; only set for [ConnectionType.CONTAINER] profiles. */
     val container: ContainerSpec? = null,
+    /**
+     * RDP-only settings (audio redirection, a farm's routing token); only meaningful on an
+     * [ConnectionType.RDP] profile, where the form is what owns them — see [HostManagerController.save].
+     */
+    val rdp: app.skerry.shared.rdp.RdpSpec? = null,
 )
 
 /**
@@ -91,6 +99,10 @@ class HostManagerController(
                 container = draft.container,
                 // Not a form field — toggled from the live VNC session; a form save must not reset it.
                 vncResizeToWindow = find(id)?.vncResizeToWindow ?: false,
+                // On an RDP profile the draft owns these: the form was prefilled from the stored
+                // spec, so it carries the farm routing token back even though nobody edits it.
+                // Any other profile type keeps what is stored — it has no RDP fields to speak with.
+                rdp = if (draft.connectionType.isRdp) draft.rdp else find(id)?.rdp,
             ),
         )
         hosts = store.all()
@@ -105,6 +117,17 @@ class HostManagerController(
     fun importHosts(imported: List<Host>) {
         for (host in imported) store.put(host)
         hosts = store.all()
+    }
+
+    /**
+     * Create a profile from a parsed `.rdp` file and return its id. Unlike an `ssh_config` import
+     * this is always a single profile — one file describes one connection.
+     */
+    fun importRdpFile(entry: RdpFileHost): String {
+        val id = newId()
+        store.put(RdpFileImport.toHost(entry, id))
+        hosts = store.all()
+        return id
     }
 
     /**

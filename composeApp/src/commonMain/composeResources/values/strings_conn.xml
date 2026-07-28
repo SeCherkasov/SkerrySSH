@@ -14,6 +14,7 @@
     <string name="conn_field_port">Port</string>
     <string name="conn_field_baud">Baud</string>
     <string name="conn_field_username">Username</string>
+    <string name="conn_field_domain">Domain</string>
     <string name="conn_field_authentication">Authentication</string>
     <string name="conn_field_group">Group</string>
     <string name="conn_field_tags">Tags</string>
@@ -42,6 +43,7 @@
     <string name="conn_protocol_telnet">Telnet</string>
     <string name="conn_protocol_serial">Serial</string>
     <string name="conn_protocol_vnc">VNC</string>
+    <string name="conn_protocol_rdp">RDP</string>
     <string name="conn_protocol_local">Local</string>
     <string name="conn_telnet_plaintext_warning">Telnet is unencrypted — credentials and session data travel in the clear. Use SSH unless the network is trusted.</string>
     <string name="conn_vnc_plaintext_warning">VNC (RFB) is unencrypted — screen and input travel in the clear. Use a trusted network or tunnel through SSH.</string>
@@ -109,6 +111,7 @@
     <string name="conn_type_telnet">Telnet</string>
     <string name="conn_type_serial">Serial</string>
     <string name="conn_type_vnc">VNC</string>
+    <string name="conn_type_rdp">RDP</string>
     <string name="conn_type_local">Local shell</string>
 
     <string name="conn_import_action">Import from ssh_config</string>
@@ -118,6 +121,13 @@
     <string name="conn_import_empty">No hosts found in this file.</string>
     <string name="conn_import_button">Import (%1$d)</string>
     <string name="conn_import_skipped">Some lines were skipped during import.</string>
+    <string name="conn_rdp_import_farm">Farm: %1$s</string>
+    <string name="conn_rdp_import_gateway">RD Gateway is not supported: the connection goes straight to the host.</string>
+    <string name="conn_rdp_import_empty">This file names no address to connect to.</string>
+    <string name="conn_rdp_import_button">Import</string>
+    <string name="conn_rdp_import_subtitle">A profile is created from the file. Passwords are not imported — you set authentication when you connect.</string>
+    <string name="conn_rdp_import_title">Import an .rdp file</string>
+    <string name="conn_rdp_import_action">Import an .rdp file</string>
 
     <!-- Container profiles (Docker / Kubernetes exec) -->
     <string name="conn_protocol_container">Container</string>
@@ -142,4 +152,17 @@
     <string name="conn_auth_interactive">Interactive (2FA)</string>
     <string name="conn_auth_interactive_desc">the server asks for a code at connect time</string>
     <string name="conn_import_keys_note">IdentityFile and CertificateFile are linked by location — no key material is copied into the vault.</string>
+
+    <!-- RDP audio redirection -->
+    <string name="conn_field_audio">Audio</string>
+    <string name="conn_audio_redirect">Play the session\'s sound here</string>
+    <string name="conn_audio_redirect_desc">The remote desktop plays through this device instead of staying on the server.</string>
+    <string name="conn_field_clipboard">Clipboard</string>
+    <string name="conn_rdp_import_no_address">The file names no address to connect to.</string>
+    <string name="conn_rdp_import_port">The port in the file is out of range; the default is used.</string>
+    <string name="conn_rdp_import_malformed">Parts of the file could not be read and were skipped.</string>
+    <string name="conn_clipboard_share">Share the clipboard</string>
+    <string name="conn_clipboard_share_desc">Text copied on either side becomes available on the other, for as long as the session is open.</string>
+    <string name="conn_audio_output_device">Output device</string>
+    <string name="conn_audio_device_default">System default</string>
 </resources>

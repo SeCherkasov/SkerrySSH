@@ -75,6 +75,13 @@ fun Credential.toVncAuth(): VncAuth = when (val s = secret) {
 }
 
 /**
+ * Keychain secret → the RDP logon password. RDP authenticates a Windows user with a password, so a
+ * stored password is the only secret shape that means anything here; a key or certificate belongs to
+ * SSH and yields no password, which the caller turns into a prompt rather than a silent failure.
+ */
+fun Credential.toRdpPassword(): String? = (secret as? CredentialSecret.Password)?.password
+
+/**
  * Cipher name for the compact info panel: drops the vendor suffix `@…` (`chacha20-poly1305@openssh.com`
  * → `chacha20-poly1305`) so the string fits. An empty/`null` string returns `null` (nothing to
  * show). The algorithm name itself is unchanged — the suffix is just an OpenSSH vendor marker.

@@ -9,10 +9,12 @@ import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.normalizeNotes
+import app.skerry.shared.rdp.RdpSpec
 import app.skerry.shared.tag.MAX_TAGS_PER_RECORD
 import app.skerry.shared.tag.normalizeTag
 import app.skerry.shared.tag.orderTagsProdFirst
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.isRdp
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.ui.identity.CredentialDraft
@@ -48,6 +50,14 @@ class NewConnectionFormState {
     var address: String by mutableStateOf("")
     var port: String by mutableStateOf("22")
     var username: String by mutableStateOf("")
+
+    /**
+     * Windows domain of an RDP logon, edited on its own but stored inside [Host.username] as
+     * `DOMAIN\user` — the form every RDP client accepts and the transport splits apart again.
+     * Ignored by every other transport.
+     */
+    var domain: String by mutableStateOf("")
+
     var group: String by mutableStateOf("")
 
     /**
@@ -123,6 +133,26 @@ class NewConnectionFormState {
         podContainer = containerPodContainer,
         shell = containerShell,
     ).normalized()
+
+    // RDP-only settings ([app.skerry.shared.rdp.RdpSpec]). Kept as separate fields for the same
+    // reason as the container ones: each is its own snapshot state, and they are assembled on the
+    // way into the draft.
+
+    /** Play the remote session's sound on this machine (MS-RDPEA). */
+    var rdpAudioOutput: Boolean by mutableStateOf(false)
+
+    /** Output device the sound goes to; blank is the system default. */
+    var rdpAudioDeviceId: String by mutableStateOf("")
+
+    /** Share the clipboard with the session, both ways (MS-RDPECLIP). On, as every client has it. */
+    var rdpClipboard: Boolean by mutableStateOf(true)
+
+    /**
+     * The farm routing token of an imported `.rdp` profile. Not editable — no user types one — but
+     * carried through the form all the same: the draft owns a profile's RDP settings on save, and a
+     * token dropped here would send the next connection to an arbitrary host of the farm.
+     */
+    var rdpLoadBalanceInfo: String by mutableStateOf("")
 
     /** Saved SSH profile to tunnel through (ProxyJump), `null` — connect directly. */
     var jumpHostId: String? by mutableStateOf(null)
@@ -201,10 +231,25 @@ class NewConnectionFormState {
                 // VNC authenticates with an optional password (no username): base + a valid auth
                 // choice (Ask / a stored password), same secret resolution as SSH minus the username.
                 ConnectionType.VNC -> base && authValid
+                // RDP logs on as a Windows user, so it needs a name (optionally `DOMAIN\user`) and
+                // a password — the same requirements as SSH, without the SSH-only key material.
+                ConnectionType.RDP -> base && username.isNotBlank() && authValid
                 // Local shell: no address (blank = default shell), no port, no auth — only a name.
                 ConnectionType.LOCAL -> name.isNotBlank()
             }
         }
+
+    /**
+     * The user name as it is stored: an RDP profile with a [domain] keeps it as `DOMAIN\user`. A
+     * name that already spells out a domain wins — joining both would produce `A\B\user`.
+     */
+    private fun qualifiedUsername(): String {
+        val user = username.trim()
+        val prefix = domain.trim()
+        val qualifies = connectionType == ConnectionType.RDP &&
+            prefix.isNotEmpty() && user.isNotEmpty() && !user.contains('\\')
+        return if (qualifies) "$prefix\\$user" else user
+    }
 
     /** Label for the auto-created secret, `user@address`, so it's recognizable in the Vault tab. */
     private fun identityLabel(): String = "${username.trim()}@${address.trim()}"
@@ -216,9 +261,9 @@ class NewConnectionFormState {
      * (writes to the vault); if it returns `null`, there's no attachment.
      */
     fun resolveCredentialId(saveCredential: (CredentialDraft) -> String?): String? = when {
-        // Telnet/Serial have no auth, no secret gets attached. VNC does authenticate (password),
-        // so it takes the same secret-resolution path as SSH below (the UI just hides the key option).
-        !connectionType.usesSshAuth && !connectionType.isVnc -> null
+        // Telnet/Serial have no auth, no secret gets attached. VNC and RDP do authenticate (password),
+        // so they take the same secret-resolution path as SSH below (the UI just hides the key option).
+        !connectionType.usesSshAuth && !connectionType.isVnc && !connectionType.isRdp -> null
         else -> when (authMode) {
             AuthMode.ASK -> null
             AuthMode.INTERACTIVE -> null
@@ -243,7 +288,7 @@ class NewConnectionFormState {
         label = name.trim(),
         address = address.trim(),
         port = portOrNull ?: defaultPortFor(connectionType),
-        username = username.trim(),
+        username = qualifiedUsername(),
         group = group.trim().ifBlank { null },
         credentialId = credentialId,
         interactiveAuth = authMode == AuthMode.INTERACTIVE,
@@ -256,6 +301,18 @@ class NewConnectionFormState {
         // Only a container profile stores a spec: on another type the (possibly leftover) fields
         // would be dead weight that a later edit could silently resurrect.
         container = containerSpec().takeIf { connectionType == ConnectionType.CONTAINER },
+        rdp = rdpSpec().takeIf { connectionType.isRdp && !it.isEmpty },
+    )
+
+    /**
+     * RDP settings as the profile stores them. The device is forgotten when audio is off, so a
+     * profile does not keep pointing at a headset it no longer plays through.
+     */
+    private fun rdpSpec(): RdpSpec = RdpSpec(
+        loadBalanceInfo = rdpLoadBalanceInfo,
+        audioOutput = rdpAudioOutput,
+        audioOutputDeviceId = if (rdpAudioOutput) rdpAudioDeviceId else "",
+        clipboard = rdpClipboard,
     )
 
     companion object {
@@ -275,6 +332,7 @@ class NewConnectionFormState {
             ConnectionType.TELNET -> 23
             ConnectionType.SERIAL -> 9600
             ConnectionType.VNC -> 5900
+            ConnectionType.RDP -> 3389
             ConnectionType.LOCAL -> 0 // no port — a local shell isn't networked
         }
 
@@ -290,13 +348,20 @@ class NewConnectionFormState {
             name = host.label
             address = host.address
             port = host.port.toString()
-            username = host.username
+            username = host.username.substringAfterLast('\\')
+            domain = host.username.substringBeforeLast('\\', missingDelimiterValue = "")
             group = host.group ?: ""
             notes = host.notes ?: ""
             tags = orderTagsProdFirst(host.tags) // records saved before the rule keep their old order
             aiPolicy = host.aiPolicy
             jumpHostId = host.jumpHostId
             keepAliveSeconds = host.keepAliveSeconds
+            host.rdp?.let { spec ->
+                rdpLoadBalanceInfo = spec.loadBalanceInfo
+                rdpAudioOutput = spec.audioOutput
+                rdpAudioDeviceId = spec.audioOutputDeviceId
+                rdpClipboard = spec.clipboard
+            }
             host.container?.let { spec ->
                 containerRuntime = spec.runtime
                 containerTarget = spec.target

@@ -14,6 +14,7 @@ val ConnectionType.icon: String
         ConnectionType.TELNET -> "terminal"
         ConnectionType.SERIAL -> "cable"
         ConnectionType.VNC -> "desktop_windows"
+        ConnectionType.RDP -> "computer"
         ConnectionType.LOCAL -> "keyboard_command_key"
         ConnectionType.CONTAINER -> "deployed_code"
     }
