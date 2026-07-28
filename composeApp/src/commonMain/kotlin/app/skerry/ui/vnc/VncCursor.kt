@@ -5,8 +5,8 @@ import androidx.compose.runtime.Stable
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.PointerIcon
-import app.skerry.shared.vnc.VncRect
-import app.skerry.shared.vnc.VncUpdate
+import app.skerry.shared.graphics.RemoteRect
+import app.skerry.shared.graphics.RemoteDesktopUpdate
 
 /**
  * The remote cursor sprite from the Cursor pseudo-encoding, ready to draw. Backed by
@@ -25,10 +25,10 @@ class VncCursorImage private constructor(
 
     companion object {
         /** Build a sprite from a decoded [shape], or null for the server's "no cursor" (a 0×0 shape). */
-        fun of(shape: VncUpdate.CursorShape): VncCursorImage? {
+        fun of(shape: RemoteDesktopUpdate.CursorShape): VncCursorImage? {
             if (shape.width <= 0 || shape.height <= 0) return null
             val image = FramebufferImage(shape.width, shape.height)
-            image.writeRects(listOf(VncRect(0, 0, shape.width, shape.height)), shape.argb, shape.width)
+            image.writeRects(listOf(RemoteRect(0, 0, shape.width, shape.height)), shape.argb, shape.width)
             return VncCursorImage(image, shape.width, shape.height, shape.hotspotX, shape.hotspotY)
         }
     }

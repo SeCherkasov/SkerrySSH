@@ -18,6 +18,14 @@ data class WorkspaceLayout(
     val hostOrder: List<String> = emptyList(),
     /** Group names in display order, including empty folders. Empty → order derived from hosts. */
     val groups: List<String> = emptyList(),
+    /**
+     * Empty folders of the remote-desktop list, kept apart from [groups] (the terminal list) so a
+     * folder created in one section doesn't show up in the other. Only empty folders have a section
+     * of their own here — a folder with hosts is derived from `Host.group` and follows its hosts.
+     * Records written before the split have every empty folder in [groups], i.e. under the terminal
+     * list.
+     */
+    val remoteDesktopGroups: List<String> = emptyList(),
 )
 
 /**

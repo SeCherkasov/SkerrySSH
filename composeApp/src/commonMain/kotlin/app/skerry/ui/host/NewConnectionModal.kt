@@ -60,6 +60,7 @@ import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
+import app.skerry.shared.ssh.isRdp
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.ContainerBrowseController
@@ -101,6 +102,8 @@ import app.skerry.ui.generated.resources.conn_container_loading
 import app.skerry.ui.generated.resources.conn_create
 import app.skerry.ui.generated.resources.conn_duplicate_name
 import app.skerry.ui.generated.resources.conn_field_ai_policy
+import app.skerry.ui.generated.resources.conn_field_audio
+import app.skerry.ui.generated.resources.conn_field_clipboard
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
@@ -119,6 +122,7 @@ import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_protocol
 import app.skerry.ui.generated.resources.conn_field_runtime
 import app.skerry.ui.generated.resources.conn_field_tags
+import app.skerry.ui.generated.resources.conn_field_domain
 import app.skerry.ui.generated.resources.conn_field_username
 import app.skerry.ui.generated.resources.conn_footer_encrypted
 import app.skerry.ui.generated.resources.conn_group_new
@@ -135,6 +139,7 @@ import app.skerry.ui.generated.resources.conn_runtime_docker
 import app.skerry.ui.generated.resources.conn_runtime_kubernetes
 import app.skerry.ui.generated.resources.conn_protocol_telnet
 import app.skerry.ui.generated.resources.conn_protocol_vnc
+import app.skerry.ui.generated.resources.conn_protocol_rdp
 import app.skerry.ui.generated.resources.conn_telnet_plaintext_warning
 import app.skerry.ui.generated.resources.conn_vnc_plaintext_warning
 import app.skerry.ui.generated.resources.conn_save
@@ -343,6 +348,25 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                 if (form.connectionType.isVnc) {
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form, allowKey = false) }
+                }
+                // RDP logs on as a Windows user: a name, an optional domain (stored as `DOMAIN\user`)
+                // and a password. No private key — RDP has no key authentication.
+                if (form.connectionType.isRdp) {
+                    Spacer14()
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Field(stringResource(Res.string.conn_field_username), Modifier.weight(1f)) {
+                            ModalTextField(form.username, { form.username = it }, "Administrator", icon = "person")
+                        }
+                        Field(stringResource(Res.string.conn_field_domain), Modifier.weight(1f)) {
+                            ModalTextField(form.domain, { form.domain = it }, "CORP", icon = "domain")
+                        }
+                    }
+                    Spacer14()
+                    Field(stringResource(Res.string.conn_field_authentication)) { AuthPicker(form, allowKey = false) }
+                    Spacer14()
+                    // The session's sound, played on this machine (MS-RDPEA), and where to play it.
+                    Field(stringResource(Res.string.conn_field_audio)) { RdpAudioSection(form) }
+                    Field(stringResource(Res.string.conn_field_clipboard)) { RdpClipboardSection(form) }
                 }
                 // Container profiles: which container/pod on that host to enter. Sits after auth
                 // because "Browse" dials the host with exactly these credentials.
@@ -774,6 +798,7 @@ private val ConnectionType.labelRes: StringResource
         ConnectionType.TELNET -> Res.string.conn_protocol_telnet
         ConnectionType.SERIAL -> Res.string.conn_protocol_serial
         ConnectionType.VNC -> Res.string.conn_protocol_vnc
+        ConnectionType.RDP -> Res.string.conn_protocol_rdp
         ConnectionType.LOCAL -> Res.string.conn_protocol_local
         ConnectionType.CONTAINER -> Res.string.conn_protocol_container
     }

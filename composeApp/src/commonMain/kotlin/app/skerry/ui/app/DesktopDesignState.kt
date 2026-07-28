@@ -107,12 +107,19 @@ data class PendingPaneConnect(val tabId: String, val paneId: String, val host: H
  * existing one by name ([Rename]). `null` in [DesktopDesignState.groupDialog] means no dialog.
  */
 sealed interface GroupDialog {
-    /** Creating a new (still empty) group. */
-    data object Create : GroupDialog
+    /** Creating a new (still empty) group in the sidebar of [section]. */
+    data class Create(val section: HostSection) : GroupDialog
 
     /** Editing group [name]: rename or delete (ungroups its hosts). */
     data class Rename(val name: String) : GroupDialog
 }
+
+/**
+ * An empty host folder: a group [name] the user created that no profile carries yet, remembered for
+ * the sidebar of [section]. Once a profile joins the group its folder is derived from the hosts
+ * (in whichever section those hosts belong to), so this side channel only holds the empty ones.
+ */
+data class CustomGroup(val name: String, val section: HostSection)
 
 /** Demo-tab status dot; resolved to a theme color at render time (state must stay theme-agnostic). */
 enum class SessionDot { On, Warn, Off }
@@ -150,8 +157,8 @@ class DesktopDesignState(
     // Custom host groups without profiles yet (created via the "+folder" button before a host is
     // dragged in). Groups with hosts are derived from [Host.group]; empty groups can't live there, so
     // they're kept by name here and persisted. Defaults (empty, no-op) are for mock/preview/tests.
-    initialCustomGroups: List<String> = emptyList(),
-    private val onCustomGroupsChange: (List<String>) -> Unit = {},
+    initialCustomGroups: List<CustomGroup> = emptyList(),
+    private val onCustomGroupsChange: (List<CustomGroup>) -> Unit = {},
     // Terminal font (Appearance → Font) and its size. Read from persistence at startup, written back
     // via the callbacks. Defaults (Hack 13px, no-op) are for mock/preview/tests.
     initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
@@ -305,8 +312,12 @@ class DesktopDesignState(
     /** How many recent hosts to display (1..[MAX_RECENT_HOSTS]); trims display only, not storage. */
     var recentLimit: Int by mutableStateOf(initialRecentLimit.coerceIn(1, MAX_RECENT_HOSTS)); private set
 
-    /** Names of custom (still empty) host groups, shown as folders alongside host-derived ones. */
-    var customGroups: List<String> by mutableStateOf(initialCustomGroups); private set
+    /** Custom (still empty) host groups, shown as folders alongside host-derived ones. */
+    var customGroups: List<CustomGroup> by mutableStateOf(initialCustomGroups); private set
+
+    /** Names of the empty folders belonging to [section]'s sidebar, in creation order. */
+    fun customGroupsIn(section: HostSection): List<String> =
+        customGroups.filter { it.section == section }.map { it.name }
 
     /**
      * Replace the empty-folder list wholesale without writing back ([onCustomGroupsChange]). This is
@@ -314,7 +325,7 @@ class DesktopDesignState(
      * the synced layout record ([app.skerry.shared.vault.WorkspaceLayout]) — the list starts empty
      * while the vault is locked. Must not write back here, or it would clobber the synced value.
      */
-    fun loadCustomGroups(groups: List<String>) {
+    fun loadCustomGroups(groups: List<CustomGroup>) {
         customGroups = groups
     }
 
@@ -421,6 +432,10 @@ class DesktopDesignState(
     var sshImport: app.skerry.shared.ssh.SshConfigParseResult? by mutableStateOf(null); private set
     val sshImportOpen: Boolean get() = sshImport != null
 
+    /** `.rdp` import: the profile read from a picked file, awaiting confirmation; `null` = closed. */
+    var rdpImport: app.skerry.shared.rdp.RdpFileImportResult? by mutableStateOf(null); private set
+    val rdpImportOpen: Boolean get() = rdpImport != null
+
     /** Host for which the delete-confirmation dialog is shown (null means no dialog). */
     var pendingDeleteHost: Host? by mutableStateOf(null); private set
 
@@ -516,6 +531,8 @@ class DesktopDesignState(
     fun closeModal() { modalOpen = false; editingHost = null; duplicatingHost = null }
     fun beginSshImport(result: app.skerry.shared.ssh.SshConfigParseResult) { sshImport = result }
     fun closeSshImport() { sshImport = null }
+    fun beginRdpImport(result: app.skerry.shared.rdp.RdpFileImportResult) { rdpImport = result }
+    fun closeRdpImport() { rdpImport = null }
     fun requestDeleteHost(host: Host) { pendingDeleteHost = host }
     fun dismissDeleteHost() { pendingDeleteHost = null }
     fun requestCloseSession(id: String) { pendingClose = PendingClose.Session(id) }
@@ -624,21 +641,23 @@ class DesktopDesignState(
         onRecentLimitChange(next)
     }
 
-    fun openCreateGroup() { groupDialog = GroupDialog.Create }
+    fun openCreateGroup(section: HostSection) { groupDialog = GroupDialog.Create(section) }
     fun openRenameGroup(name: String) { groupDialog = GroupDialog.Rename(name) }
     fun dismissGroupDialog() { groupDialog = null }
 
     /**
-     * Create a new (initially empty) group. Name is trimmed and stripped of newlines (not storable
-     * line-by-line in persistence). Empty or exactly matching an existing custom group is ignored.
+     * Create a new (initially empty) group in [section]'s sidebar — the one section it shows in until
+     * a profile joins it. Name is trimmed and stripped of newlines (not storable line-by-line in
+     * persistence). Empty or exactly matching an existing custom group of that section is ignored.
      * Case-exact matching, consistent with `Host.group`/[groupHostsByFolder]/[collapsedGroups]
      * throughout the system; a duplicate of a group derived from hosts (exact name) is deduplicated at
      * render by folder merging. Persisted via callback.
      */
-    fun addCustomGroup(name: String) {
+    fun addCustomGroup(name: String, section: HostSection) {
         val n = name.trim().filterNot { it == '\n' || it == '\r' }
-        if (n.isEmpty() || n in customGroups) return
-        customGroups = customGroups + n
+        val group = CustomGroup(n, section)
+        if (n.isEmpty() || group in customGroups) return
+        customGroups = customGroups + group
         onCustomGroupsChange(customGroups)
     }
 
@@ -653,8 +672,9 @@ class DesktopDesignState(
     fun renameGroupName(old: String, new: String) {
         val n = new.trim().filterNot { it == '\n' || it == '\r' }
         if (n.isEmpty() || n == old) return
-        if (old in customGroups) {
-            customGroups = customGroups.map { if (it == old) n else it }.distinct()
+        // A group name is global (Host.group), so the rename reaches the empty folders of both sections.
+        if (customGroups.any { it.name == old }) {
+            customGroups = customGroups.map { if (it.name == old) it.copy(name = n) else it }.distinct()
             onCustomGroupsChange(customGroups)
         }
         if (old in collapsedGroups) {
@@ -665,8 +685,8 @@ class DesktopDesignState(
 
     /** Remove custom group [name] from the side channel (empty-group list + collapsed set). */
     fun removeCustomGroup(name: String) {
-        if (name in customGroups) {
-            customGroups = customGroups.filterNot { it == name }
+        if (customGroups.any { it.name == name }) {
+            customGroups = customGroups.filterNot { it.name == name }
             onCustomGroupsChange(customGroups)
         }
         if (name in collapsedGroups) {

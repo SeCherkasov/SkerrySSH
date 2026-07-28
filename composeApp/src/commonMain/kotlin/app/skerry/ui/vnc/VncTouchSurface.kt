@@ -1,5 +1,6 @@
 package app.skerry.ui.vnc
 
+import app.skerry.ui.remote.RemoteDesktopScreenState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -46,7 +47,7 @@ import kotlin.time.TimeSource
  * above, and stealing focus on every touch is exactly what closes the soft keyboard.
  */
 @Composable
-fun VncTouchSurface(screen: VncScreenState, modifier: Modifier = Modifier, interactive: Boolean = true) {
+fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modifier, interactive: Boolean = true) {
     val frame = screen.frame
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val pad = remember(screen) { VncTrackpad(screen.desktopSize) }
@@ -74,7 +75,7 @@ fun VncTouchSurface(screen: VncScreenState, modifier: Modifier = Modifier, inter
 }
 
 /** The remote cursor at the trackpad's position: the server's sprite, or our own arrow if it sent none. */
-private fun DrawScope.drawTouchCursor(screen: VncScreenState, pad: VncTrackpad) {
+private fun DrawScope.drawTouchCursor(screen: RemoteDesktopScreenState, pad: VncTrackpad) {
     // View-only sends no pointer events, so nothing follows our cursor — the server paints the real
     // one into the framebuffer instead, and a second one here would only lie about where it is.
     if (screen.viewOnly) return
@@ -122,7 +123,7 @@ private fun DrawScope.drawFallbackCursor(at: Offset) {
  * reads as one piece; [canvasSize] is a lambda because the loop outlives any single layout pass.
  */
 private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.vncTouchGestures(
-    screen: VncScreenState,
+    screen: RemoteDesktopScreenState,
     pad: VncTrackpad,
     canvasSize: () -> IntSize,
 ) {
@@ -207,7 +208,7 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.vncTouch
 }
 
 /** Press and release [button] where the cursor is. */
-private fun click(screen: VncScreenState, pad: VncTrackpad, button: Int) {
+private fun click(screen: RemoteDesktopScreenState, pad: VncTrackpad, button: Int) {
     screen.onPointer(pad.pixel.x, pad.pixel.y, button)
     screen.onPointer(pad.pixel.x, pad.pixel.y, 0)
 }
@@ -216,7 +217,7 @@ private fun click(screen: VncScreenState, pad: VncTrackpad, button: Int) {
  * Turn accumulated vertical finger travel into wheel clicks (RFB has no continuous scrolling —
  * a wheel step is a button press+release), returning the remainder to carry into the next event.
  */
-private fun sendWheel(screen: VncScreenState, pad: VncTrackpad, carry: Float): Float {
+private fun sendWheel(screen: RemoteDesktopScreenState, pad: VncTrackpad, carry: Float): Float {
     var left = carry
     while (abs(left) >= WHEEL_STEP_PX) {
         // Finger down = content down = wheel up, matching the direction of a touch scroll.
@@ -228,7 +229,7 @@ private fun sendWheel(screen: VncScreenState, pad: VncTrackpad, carry: Float): F
 }
 
 /** Pan the view when the cursor is pushed against a viewport edge (only possible when zoomed in). */
-private fun keepCursorVisible(screen: VncScreenState, pad: VncTrackpad, canvas: IntSize) {
+private fun keepCursorVisible(screen: RemoteDesktopScreenState, pad: VncTrackpad, canvas: IntSize) {
     if (screen.userScale <= 1f || canvas.width <= 0 || canvas.height <= 0) return
     val geom = fitGeometry(
         canvas.width.toFloat(), canvas.height.toFloat(),
@@ -240,7 +241,7 @@ private fun keepCursorVisible(screen: VncScreenState, pad: VncTrackpad, canvas: 
 }
 
 /** The scale the framebuffer is currently drawn at — what canvas deltas divide by to become pixels. */
-private fun currentScale(screen: VncScreenState, canvas: IntSize): Float {
+private fun currentScale(screen: RemoteDesktopScreenState, canvas: IntSize): Float {
     if (canvas.width <= 0 || canvas.height <= 0) return 0f
     return fitGeometry(
         canvas.width.toFloat(), canvas.height.toFloat(),

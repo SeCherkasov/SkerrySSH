@@ -3,6 +3,8 @@ package app.skerry.ui.host
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.host.HostStore
+import app.skerry.shared.rdp.RdpFileImport
+import app.skerry.shared.rdp.RdpSpec
 import app.skerry.shared.ssh.SshConfigHost
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -173,6 +175,70 @@ class HostManagerControllerTest {
         assertEquals(listOf("1", "i1", "i2"), controller.hosts.map { it.id })
         assertEquals("i1", controller.find("i2")?.jumpHostId)
         assertEquals(controller.hosts, store.all())
+    }
+
+    @Test
+    fun `an RDP profile stores the settings the draft carries, token included`() {
+        // The form is what owns a profile's RDP settings: it was prefilled from the stored spec and
+        // hands back the farm routing token nobody edits, alongside the audio choice somebody did.
+        val store = FakeHostStore(
+            Host(
+                "1", "rds", "rds.example.com", 3389, "CORP\\alice",
+                connectionType = ConnectionType.RDP,
+                rdp = RdpSpec(loadBalanceInfo = "tsv://x"),
+            ),
+        )
+        val controller = HostManagerController(store) { error("editing needs no new id") }
+
+        controller.save(
+            HostDraft(
+                id = "1",
+                label = "rds",
+                address = "rds.example.com",
+                port = 3389,
+                username = "CORP\\bob",
+                connectionType = ConnectionType.RDP,
+                rdp = RdpSpec(loadBalanceInfo = "tsv://x", audioOutput = true),
+            ),
+        )
+
+        assertEquals("tsv://x", controller.find("1")?.rdp?.loadBalanceInfo)
+        assertTrue(controller.find("1")?.rdp?.audioOutput == true)
+    }
+
+    @Test
+    fun `a profile that is not RDP keeps the spec it was imported with`() {
+        // Only an RDP draft speaks for these fields; another type's save has no RDP form behind it,
+        // so dropping the stored spec would lose settings the user never saw.
+        val store = FakeHostStore(
+            Host("1", "h", "h.example.com", 22, "root", rdp = RdpSpec(loadBalanceInfo = "tsv://x")),
+        )
+        val controller = HostManagerController(store) { error("editing needs no new id") }
+
+        controller.save(HostDraft(id = "1", label = "h", address = "h.example.com", port = 22, username = "root"))
+
+        assertEquals("tsv://x", controller.find("1")?.rdp?.loadBalanceInfo)
+    }
+
+    @Test
+    fun `importRdpFile creates a profile from the file contents`() {
+        val store = FakeHostStore()
+        var n = 0
+        val controller = HostManagerController(store) { "gen-${++n}" }
+
+        val result = RdpFileImport.read(
+            "full address:s:rds.example.com\nusername:s:alice\ndomain:s:CORP\nloadbalanceinfo:s:tsv://x",
+            fileName = "prod.rdp",
+        )
+        val id = controller.importRdpFile(checkNotNull(result.host))
+
+        val host = checkNotNull(controller.find(id))
+        assertEquals("prod", host.label)
+        assertEquals("rds.example.com", host.address)
+        assertEquals(3389, host.port)
+        assertEquals("CORP\\alice", host.username)
+        assertEquals(ConnectionType.RDP, host.connectionType)
+        assertEquals("tsv://x", host.rdp?.loadBalanceInfo)
     }
 
     @Test

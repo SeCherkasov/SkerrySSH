@@ -1,5 +1,9 @@
 package app.skerry.ui.vnc
 
+import app.skerry.ui.remote.remoteKeyEvent
+import app.skerry.ui.remote.RemoteDesktopScreenState
+import app.skerry.ui.remote.RemoteDesktopController
+import app.skerry.ui.remote.RemoteDesktopUiState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -52,7 +56,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.vnc.VncQuality
+import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.design.AnchoredDropdown
@@ -118,7 +122,7 @@ fun RemoteDesktopsView(state: DesktopDesignState) {
 }
 
 /**
- * The VNC tab's work area. Renders the active session's [VncSessionController] state: connecting /
+ * The VNC tab's work area. Renders the active session's [RemoteDesktopController] state: connecting /
  * live framebuffer / error / disconnected. The framebuffer sibling of `TerminalView`, rendered by
  * [RemoteDesktopsView] beside the desktops sidebar.
  */
@@ -128,17 +132,17 @@ fun VncView(state: DesktopDesignState) {
     val vnc = sessions?.activeDesktop?.focusedPane?.vncController ?: return
     Box(Modifier.fillMaxSize()) {
         when (val ui = vnc.uiState) {
-            is VncUiState.Connecting -> CenterNotice("hourglass_empty", stringResource(Res.string.vnc_connecting))
-            is VncUiState.Connected -> Box(Modifier.fillMaxSize()) {
+            is RemoteDesktopUiState.Connecting -> CenterNotice("hourglass_empty", stringResource(Res.string.vnc_connecting))
+            is RemoteDesktopUiState.Connected -> Box(Modifier.fillMaxSize()) {
                 VncSurface(ui.screen)
                 Box(Modifier.align(Alignment.TopEnd)) { VncGraphicsBar(ui.screen) }
             }
-            is VncUiState.Error -> CenterNotice(
+            is RemoteDesktopUiState.Error -> CenterNotice(
                 "error",
                 vncFailureText(ui.failure),
                 color = Skerry.colors.sunset,
             )
-            is VncUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
+            is RemoteDesktopUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 VncSurface(ui.screen, interactive = false)
                 CenterNotice(
                     "link_off",
@@ -152,11 +156,11 @@ fun VncView(state: DesktopDesignState) {
 
 /**
  * Draws the remote framebuffer scaled to fit and, when [interactive], forwards pointer and keyboard
- * input. Reads [VncScreenState.frame] so it redraws on every applied update. Pointer coordinates are
+ * input. Reads [RemoteDesktopScreenState.frame] so it redraws on every applied update. Pointer coordinates are
  * mapped back through the same [fitGeometry] the draw uses.
  */
 @Composable
-fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
+fun VncSurface(screen: RemoteDesktopScreenState, interactive: Boolean = true) {
     val frame = screen.frame
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val focus = remember { FocusRequester() }
@@ -239,16 +243,16 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
                     KeyEventType.KeyUp -> false
                     else -> return@onPreviewKeyEvent false
                 }
-                val sym = keySymFor(ev.key, ev.utf16CodePoint)
-                if (sym == 0L) return@onPreviewKeyEvent false
-                screen.onKey(sym, down)
+                val event = remoteKeyEvent(ev.key, ev.utf16CodePoint)
+                if (event == null) return@onPreviewKeyEvent false
+                screen.onKey(event, down)
                 true
             }
             .focusable()
     }
 
     // The sprite is ours to draw only while we're the ones moving the remote cursor; in view-only the
-    // server paints it into the framebuffer instead. See [VncScreenState.toggleViewOnly].
+    // server paints it into the framebuffer instead. See [RemoteDesktopScreenState.toggleViewOnly].
     val sprite = if (interactive && !screen.viewOnly) screen.cursor else null
 
     Box(mod) {
@@ -279,7 +283,7 @@ fun VncSurface(screen: VncScreenState, interactive: Boolean = true) {
  * needs it up front), and every ServerCutText is mirrored back.
  */
 @Composable
-internal fun VncClipboardBridge(screen: VncScreenState) {
+internal fun VncClipboardBridge(screen: RemoteDesktopScreenState) {
     val clipboard = LocalClipboard.current
     LaunchedEffect(screen) {
         runCatching { clipboard.getClipEntry()?.readPlainText() }.getOrNull()
@@ -295,7 +299,7 @@ internal fun VncClipboardBridge(screen: VncScreenState) {
  * Fit-to-window draw: preserve aspect ratio, center, filter per [framebufferFilterQuality] — crisp
  * nearest-neighbor at 1:1/integer zoom, bilinear at fractional scales.
  */
-internal fun DrawScope.drawFramebuffer(screen: VncScreenState) {
+internal fun DrawScope.drawFramebuffer(screen: RemoteDesktopScreenState) {
     val image = screen.imageBitmap
     val geom = fitGeometry(
         size.width, size.height, image.width, image.height,
@@ -312,10 +316,10 @@ internal fun DrawScope.drawFramebuffer(screen: VncScreenState) {
 
 /**
  * The remote cursor [sprite] at [pointerPos], on the cursor-only layer. Geometry comes from
- * [VncScreenState.desktopSize] (not the bitmap) so this layer never touches — and never invalidates
+ * [RemoteDesktopScreenState.desktopSize] (not the bitmap) so this layer never touches — and never invalidates
  * on — the framebuffer image itself.
  */
-private fun DrawScope.drawCursor(screen: VncScreenState, sprite: VncCursorImage, pointerPos: Offset) {
+private fun DrawScope.drawCursor(screen: RemoteDesktopScreenState, sprite: VncCursorImage, pointerPos: Offset) {
     val geom = fitGeometry(
         size.width, size.height, screen.desktopSize.width, screen.desktopSize.height,
         screen.userScale, screen.userOffset.x, screen.userOffset.y,
@@ -334,10 +338,10 @@ private fun DrawScope.drawCursor(screen: VncScreenState, sprite: VncCursorImage,
 
 /**
  * Compact graphics-settings control in the corner of a live VNC tab: a gear that opens a menu for
- * image quality (Auto/Low/Medium/High → [VncScreenState.setQuality]), view-only, and reset zoom.
+ * image quality (Auto/Low/Medium/High → [RemoteDesktopScreenState.setQuality]), view-only, and reset zoom.
  */
 @Composable
-private fun VncGraphicsBar(screen: VncScreenState) {
+private fun VncGraphicsBar(screen: RemoteDesktopScreenState) {
     var open by remember { mutableStateOf(false) }
     Box(Modifier.padding(8.dp)) {
         AnchoredDropdown(
@@ -358,7 +362,7 @@ private fun VncGraphicsBar(screen: VncScreenState) {
                         .background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(9.dp)).padding(vertical = 4.dp),
                 ) {
                     Txt(stringResource(Res.string.vnc_quality), color = Skerry.colors.faint, size = 10.5.sp, modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp))
-                    VncQuality.entries.forEach { q ->
+                    RemoteDesktopQuality.entries.forEach { q ->
                         VncMenuRow(q.label(), selected = screen.quality == q) { screen.applyQuality(q) }
                     }
                     HLine(modifier = Modifier.padding(vertical = 4.dp))
@@ -378,12 +382,12 @@ private fun VncGraphicsBar(screen: VncScreenState) {
 
 /** Localized label for a quality level in the graphics menu (shared with the mobile VNC screen). */
 @Composable
-internal fun VncQuality.label(): String = stringResource(
+internal fun RemoteDesktopQuality.label(): String = stringResource(
     when (this) {
-        VncQuality.Auto -> Res.string.vnc_quality_auto
-        VncQuality.Low -> Res.string.vnc_quality_low
-        VncQuality.Medium -> Res.string.vnc_quality_medium
-        VncQuality.High -> Res.string.vnc_quality_high
+        RemoteDesktopQuality.Auto -> Res.string.vnc_quality_auto
+        RemoteDesktopQuality.Low -> Res.string.vnc_quality_low
+        RemoteDesktopQuality.Medium -> Res.string.vnc_quality_medium
+        RemoteDesktopQuality.High -> Res.string.vnc_quality_high
     },
 )
 

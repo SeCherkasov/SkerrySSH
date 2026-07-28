@@ -1,5 +1,7 @@
 package app.skerry.ui.session
 
+import app.skerry.ui.remote.RdpConnectRequest
+import app.skerry.ui.remote.RemoteDesktopController
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -8,12 +10,12 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.terminal.Asciicast
 import app.skerry.shared.terminal.TerminalSession
+import app.skerry.shared.graphics.RemoteDesktopSession
 import app.skerry.shared.vnc.VncAuth
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.terminal.CastPlayback
 import app.skerry.ui.terminal.TerminalScreenState
-import app.skerry.ui.vnc.VncSessionController
 
 /**
  * Sub-view of a session (tab-scoped): what's shown in its work area. Tunnels are not included here;
@@ -46,7 +48,7 @@ class Session(
      * instead of a terminal, and [controller] is an idle, unused terminal controller kept so the
      * many `session.controller` read-sites (status/close) stay total. See [isVnc].
      */
-    val vncController: VncSessionController? = null,
+    val vncController: RemoteDesktopController? = null,
     /**
      * Set only for a player session (a recording being watched): when non-null, the pane replays a
      * `.cast` instead of holding a connection, and [controller] is an idle, unused terminal
@@ -246,10 +248,14 @@ fun effectiveTabTitle(liveTitle: String?, fallback: String): String =
 class SessionsController(
     private val newId: () -> String,
     private val controllerFactory: () -> ConnectionController,
-    // VNC tabs use their own controller. Defaulted to a no-op factory so tests and non-VNC entry
-    // points that don't wire a VNC transport keep compiling; the desktop/Android entry points pass a
-    // real one (VncSessionController over VncTcpTransport).
-    private val vncControllerFactory: (() -> VncSessionController)? = null,
+    // Remote-desktop tabs use their own controller. Defaulted to null so tests and entry points
+    // that wire no remote-desktop transport keep compiling; the desktop/Android entry points pass a
+    // real one.
+    private val vncControllerFactory: (() -> RemoteDesktopController)? = null,
+    /** Opens a VNC session for a target; null when no RFB transport is wired. */
+    private val openVncSession: (suspend (SshTarget, VncAuth) -> RemoteDesktopSession)? = null,
+    /** Opens an RDP session for a host profile; null when no RDP transport is wired. */
+    private val openRdpSession: (suspend (RdpConnectRequest) -> RemoteDesktopSession)? = null,
     /**
      * Called with the catalog host id whenever a session to it actually starts — every path here
      * that opens a connection, and no others (a blank tab, a player, or an ad-hoc target typed into
@@ -374,14 +380,46 @@ class SessionsController(
         remoteResize: Boolean = false,
         onRemoteResizeChanged: (Boolean) -> Unit = {},
     ): String? {
-        val vncFactory = vncControllerFactory ?: return null
-        val vnc = vncFactory()
+        val open = openVncSession ?: return null
+        return openRemoteDesktop(hostId, title, subtitle, remoteResize, onRemoteResizeChanged) {
+            open(target, auth)
+        }
+    }
+
+    /**
+     * Open an RDP tab for [request]. Same shape as [openVnc] — the protocols differ only in what
+     * they need to dial, which is why the session itself is opened by an injected lambda.
+     */
+    fun openRdp(
+        hostId: String?,
+        title: String,
+        subtitle: String,
+        request: RdpConnectRequest,
+        remoteResize: Boolean = false,
+        onRemoteResizeChanged: (Boolean) -> Unit = {},
+    ): String? {
+        val open = openRdpSession ?: return null
+        return openRemoteDesktop(hostId, title, subtitle, remoteResize, onRemoteResizeChanged) {
+            open(request)
+        }
+    }
+
+    /** Shared tab bookkeeping for both remote-desktop protocols. */
+    private fun openRemoteDesktop(
+        hostId: String?,
+        title: String,
+        subtitle: String,
+        remoteResize: Boolean = false,
+        onRemoteResizeChanged: (Boolean) -> Unit = {},
+        openSession: suspend () -> RemoteDesktopSession,
+    ): String? {
+        val controller = vncControllerFactory?.invoke() ?: return null
         // An idle terminal controller keeps `session.controller` non-null for the shared read-sites.
-        val session = Session(newId(), hostId, title, subtitle, controllerFactory(), vncController = vnc)
+        val session = Session(newId(), hostId, title, subtitle, controllerFactory(), vncController = controller)
         val tab = openTab(session)
         tab.setView(SessionView.Vnc)
         reportHostSession(hostId)
-        vnc.connect(target, auth, remoteResize, onRemoteResizeChanged)
+        controller.connect(remoteResize, onRemoteResizeChanged, openSession)
         return tab.id
     }
 

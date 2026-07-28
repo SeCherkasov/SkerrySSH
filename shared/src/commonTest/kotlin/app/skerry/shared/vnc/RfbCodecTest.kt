@@ -1,5 +1,6 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteFramebuffer
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -66,7 +67,7 @@ private fun Wire.serverInit(width: Int, height: Int, name: String) = apply {
 
 class RfbCodecTest {
 
-    private fun codec(source: VncSource, sink: VncSink, fb: VncFramebuffer, responder: VncChallengeResponder = VncChallengeResponder { _, _ -> ByteArray(16) }) =
+    private fun codec(source: VncSource, sink: VncSink, fb: RemoteFramebuffer, responder: VncChallengeResponder = VncChallengeResponder { _, _ -> ByteArray(16) }) =
         RfbCodec(source, sink, fb, fakeInflaters, responder)
 
     @Test
@@ -78,7 +79,7 @@ class RfbCodecTest {
             .serverInit(4, 2, "desktop")
             .build()
         val sink = CapturingSink()
-        val fb = VncFramebuffer(1, 1)
+        val fb = RemoteFramebuffer(1, 1)
         val name = codec(FixtureSource(server), sink, fb).handshake(VncAuth.None)
 
         assertEquals("desktop", name)
@@ -110,7 +111,7 @@ class RfbCodecTest {
             assertContentEquals(challenge, ch)
             response
         }
-        codec(FixtureSource(server), sink, VncFramebuffer(1, 1), responder).handshake(VncAuth.Password("hunter2"))
+        codec(FixtureSource(server), sink, RemoteFramebuffer(1, 1), responder).handshake(VncAuth.Password("hunter2"))
 
         assertEquals("hunter2", seenPassword)
         val client = sink.bytes()
@@ -127,7 +128,7 @@ class RfbCodecTest {
             .s32(4).str("nope")                // reason string (3.8)
             .build()
         val ex = assertFailsWith<VncAuthException> {
-            codec(FixtureSource(server), CapturingSink(), VncFramebuffer(1, 1)).handshake(VncAuth.None)
+            codec(FixtureSource(server), CapturingSink(), RemoteFramebuffer(1, 1)).handshake(VncAuth.None)
         }
         assertTrue(ex.message!!.contains("nope"))
     }
@@ -139,7 +140,7 @@ class RfbCodecTest {
             .u8(0).s32(6).str("locked")        // count 0 -> failure reason
             .build()
         val ex = assertFailsWith<VncAuthException> {
-            codec(FixtureSource(server), CapturingSink(), VncFramebuffer(1, 1)).handshake(VncAuth.None)
+            codec(FixtureSource(server), CapturingSink(), RemoteFramebuffer(1, 1)).handshake(VncAuth.None)
         }
         assertTrue(ex.message!!.contains("locked"))
     }
@@ -160,7 +161,7 @@ class RfbCodecTest {
             .u16(0).u16(0).u16(2).u16(1).s32(RfbCodec.ENC_RAW)  // rect 2x1 at (0,0), Raw
             .bytes(byteArrayOf(0, 0xFF.toByte(), 0, 0, 0, 0, 0xFF.toByte(), 0))
             .build()
-        val fb = VncFramebuffer(2, 1)
+        val fb = RemoteFramebuffer(2, 1)
         val c = codec(FixtureSource(update), CapturingSink(), fb)
         val msg = c.readMessage().single()
 
@@ -178,7 +179,7 @@ class RfbCodecTest {
             .u16(1).u16(0).u16(1).u16(1).s32(RfbCodec.ENC_RAW)  // 1x1 at (1,0)
             .bytes(byteArrayOf(0, 0, 0, 0xFF.toByte()))          // blue
             .build()
-        val fb = VncFramebuffer(2, 1)
+        val fb = RemoteFramebuffer(2, 1)
         val c = codec(FixtureSource(update, chunk = 1), CapturingSink(), fb)
         val msg = c.readMessage().single()
 
@@ -204,7 +205,7 @@ class RfbCodecTest {
             .u16(0).u16(0).u16(2).u16(2).s32(RfbCodec.ENC_ZRLE) // 2x2 rect, ZRLE
             .s32(1).u8(0)                                        // compressed length 1 + dummy byte
             .build()
-        val fb = VncFramebuffer(2, 2)
+        val fb = RemoteFramebuffer(2, 2)
         val c = RfbCodec(FixtureSource(update), CapturingSink(), fb, factory, VncChallengeResponder { _, _ -> ByteArray(16) })
         c.readMessage()
 
@@ -219,7 +220,7 @@ class RfbCodecTest {
 
     @Test
     fun close_before_any_zlib_stream_is_a_no_op() {
-        val c = codec(FixtureSource(ByteArray(0)), CapturingSink(), VncFramebuffer(1, 1))
+        val c = codec(FixtureSource(ByteArray(0)), CapturingSink(), RemoteFramebuffer(1, 1))
         c.close() // nothing created yet — must not throw
     }
 
@@ -234,7 +235,7 @@ class RfbCodecTest {
             .s32(Int.MAX_VALUE)
             .build()
         assertFailsWith<VncProtocolException> {
-            codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage()
+            codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
         }
     }
 
@@ -248,7 +249,7 @@ class RfbCodecTest {
             .serverInit(65535, 65535, "huge")
             .build()
         assertFailsWith<VncProtocolException> {
-            codec(FixtureSource(server), CapturingSink(), VncFramebuffer(1, 1)).handshake(VncAuth.None)
+            codec(FixtureSource(server), CapturingSink(), RemoteFramebuffer(1, 1)).handshake(VncAuth.None)
         }
     }
 
@@ -259,7 +260,7 @@ class RfbCodecTest {
             .u16(0).u16(0).u16(65535).u16(65535).s32(RfbCodec.ENC_RAW)
             .build()
         assertFailsWith<VncProtocolException> {
-            codec(FixtureSource(update), CapturingSink(), VncFramebuffer(2, 1)).readMessage()
+            codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(2, 1)).readMessage()
         }
     }
 
@@ -271,7 +272,7 @@ class RfbCodecTest {
         repeat(10_000) { w.u8(RfbCodec.MSG_SET_COLOUR_MAP).u8(0).u16(0).u16(0) }
         val update = w.u8(RfbCodec.MSG_BELL).build()
 
-        val msg = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage().single()
+        val msg = codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage().single()
         assertEquals(VncUpdate.Bell, msg)
     }
 
@@ -282,7 +283,7 @@ class RfbCodecTest {
             .u8(RfbCodec.MSG_SERVER_CUT_TEXT).u8(0).u8(0).u8(0)
             .s32(3).bytes(byteArrayOf(0xE9.toByte(), 0x61, 0x62))
             .build()
-        val msg = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage().single()
+        val msg = codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage().single()
 
         assertTrue(msg is VncUpdate.ClipboardText)
         assertEquals("éab", msg.text)
@@ -300,7 +301,7 @@ class RfbCodecTest {
             .bytes(byteArrayOf(0, 0xFF.toByte(), 0, 0, 0, 0, 0xFF.toByte(), 0)) // red, green
             .bytes(byteArrayOf(0b1000_0000.toByte()))                // one mask row, MSB = x0
             .build()
-        val fb = VncFramebuffer(2, 1)
+        val fb = RemoteFramebuffer(2, 1)
         val updates = codec(FixtureSource(update), CapturingSink(), fb).readMessage()
 
         val cursor = updates.filterIsInstance<VncUpdate.CursorShape>().single()
@@ -325,7 +326,7 @@ class RfbCodecTest {
             .u16(0).u16(0).u16(2).u16(1).s32(RfbCodec.ENC_RAW)       // then a Raw rect
             .bytes(byteArrayOf(0, 0xFF.toByte(), 0, 0, 0, 0, 0xFF.toByte(), 0))
             .build()
-        val fb = VncFramebuffer(2, 1)
+        val fb = RemoteFramebuffer(2, 1)
         val updates = codec(FixtureSource(update), CapturingSink(), fb).readMessage()
 
         assertEquals(1, updates.filterIsInstance<VncUpdate.CursorShape>().size)
@@ -341,7 +342,7 @@ class RfbCodecTest {
             .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
             .u16(0).u16(0).u16(0).u16(0).s32(RfbCodec.ENC_CURSOR)
             .build()
-        val updates = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage()
+        val updates = codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
 
         val cursor = updates.filterIsInstance<VncUpdate.CursorShape>().single()
         assertEquals(0, cursor.width)
@@ -356,7 +357,7 @@ class RfbCodecTest {
             .u16(0).u16(0).u16(65535).u16(65535).s32(RfbCodec.ENC_CURSOR)
             .build()
         assertFailsWith<VncProtocolException> {
-            codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage()
+            codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
         }
     }
 
@@ -369,7 +370,7 @@ class RfbCodecTest {
             .u16(0).u16(0).u16(1).u16(1).s32(RfbCodec.ENC_RAW)
             .bytes(byteArrayOf(0, 0, 0, 0xFF.toByte()))
             .build()
-        val updates = codec(FixtureSource(update), CapturingSink(), VncFramebuffer(1, 1)).readMessage()
+        val updates = codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
 
         assertEquals(VncUpdate.Resize(4, 2), updates.filterIsInstance<VncUpdate.Resize>().single())
         assertEquals(listOf(VncRect(0, 0, 1, 1)), updates.filterIsInstance<VncUpdate.Region>().single().rects)
@@ -383,7 +384,7 @@ class RfbCodecTest {
             .str("RFB 003.008\n").u8(1).u8(RfbCodec.SEC_NONE).s32(0).serverInit(2, 1, "x")
             .build()
         val sink = CapturingSink()
-        val c = codec(FixtureSource(server), sink, VncFramebuffer(1, 1))
+        val c = codec(FixtureSource(server), sink, RemoteFramebuffer(1, 1))
         c.handshake(VncAuth.None)
         assertTrue(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR))
 
@@ -405,7 +406,7 @@ class RfbCodecTest {
 
     @Test
     fun extended_desktop_size_resizes_and_reports_capability() = runTest {
-        val fb = VncFramebuffer(1, 1)
+        val fb = RemoteFramebuffer(1, 1)
         val updates = codec(FixtureSource(extendedSizeUpdate(0, 0, 4, 2)), CapturingSink(), fb).readMessage()
 
         assertEquals(VncUpdate.Resize(4, 2), updates.filterIsInstance<VncUpdate.Resize>().single())
@@ -416,7 +417,7 @@ class RfbCodecTest {
 
     @Test
     fun extended_desktop_size_with_unchanged_size_does_not_clear_the_framebuffer() = runTest {
-        val fb = VncFramebuffer(2, 1)
+        val fb = RemoteFramebuffer(2, 1)
         fb.setPixel(0, 0, 0xFF123456.toInt())
         val stream = extendedSizeUpdate(0, 0, 2, 1) + extendedSizeUpdate(2, 0, 2, 1)
         val c = codec(FixtureSource(stream), CapturingSink(), fb)
@@ -433,7 +434,7 @@ class RfbCodecTest {
 
     @Test
     fun failed_own_resize_request_does_not_resize() = runTest {
-        val fb = VncFramebuffer(2, 1)
+        val fb = RemoteFramebuffer(2, 1)
         // reason=1 (our SetDesktopSize), status=1 (prohibited). Dimensions deliberately differ from
         // the current size to prove the status guard (not a same-size comparison) blocks the resize.
         val updates = codec(FixtureSource(extendedSizeUpdate(1, 1, 9, 9)), CapturingSink(), fb).readMessage()
@@ -446,7 +447,7 @@ class RfbCodecTest {
     @Test
     fun set_desktop_size_echoes_the_server_screen_layout() = runTest {
         val sink = CapturingSink()
-        val c = codec(FixtureSource(extendedSizeUpdate(0, 0, 4, 2, screenId = 0x11223344, flags = 5)), sink, VncFramebuffer(1, 1))
+        val c = codec(FixtureSource(extendedSizeUpdate(0, 0, 4, 2, screenId = 0x11223344, flags = 5)), sink, RemoteFramebuffer(1, 1))
         c.readMessage()
         c.writeSetDesktopSize(640, 480)
 
@@ -468,7 +469,7 @@ class RfbCodecTest {
     fun set_desktop_size_before_server_support_is_a_noop() = runTest {
         // The spec forbids SetDesktopSize until the server has sent an ExtendedDesktopSize rect.
         val sink = CapturingSink()
-        codec(FixtureSource(ByteArray(0)), sink, VncFramebuffer(1, 1)).writeSetDesktopSize(640, 480)
+        codec(FixtureSource(ByteArray(0)), sink, RemoteFramebuffer(1, 1)).writeSetDesktopSize(640, 480)
         assertTrue(sink.messages.isEmpty())
     }
 }

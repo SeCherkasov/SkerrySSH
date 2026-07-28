@@ -59,7 +59,7 @@
     <!-- Password dialog (PasswordDialog.kt) -->
     <string name="shell_connect_to">Connect to %1$s</string>
     <string name="shell_password_caps">PASSWORD</string>
-    <string name="shell_password_host_placeholder">master password for this host</string>
+    <string name="shell_password_host_placeholder">connection password</string>
     <string name="shell_not_stored_once">Not stored · used once</string>
     <string name="shell_use_saved_secret">OR USE A SAVED SECRET</string>
 

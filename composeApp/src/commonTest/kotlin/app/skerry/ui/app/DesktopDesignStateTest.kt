@@ -449,69 +449,98 @@ class DesktopDesignStateTest {
 
     @Test
     fun addCustomGroup_appends_trimmed_and_reports() {
-        val seen = mutableListOf<List<String>>()
+        val seen = mutableListOf<List<CustomGroup>>()
         val s = DesktopDesignState(onCustomGroupsChange = { seen += it })
-        s.addCustomGroup("  Prod  ")
-        s.addCustomGroup("Dev")
-        assertEquals(listOf("Prod", "Dev"), s.customGroups)
-        assertEquals(listOf(listOf("Prod"), listOf("Prod", "Dev")), seen)
+        s.addCustomGroup("  Prod  ", HostSection.Terminal)
+        s.addCustomGroup("Dev", HostSection.Terminal)
+        assertEquals(listOf("Prod", "Dev"), s.customGroupsIn(HostSection.Terminal))
+        assertEquals(2, seen.size)
+        assertEquals(listOf("Prod", "Dev"), seen.last().map { it.name })
+    }
+
+    @Test
+    fun a_new_group_belongs_to_the_section_it_was_created_in() {
+        // A folder created in the remote-desktop sidebar must not show up among the shells (and back).
+        val s = DesktopDesignState()
+        s.addCustomGroup("Screens", HostSection.RemoteDesktops)
+        assertEquals(listOf("Screens"), s.customGroupsIn(HostSection.RemoteDesktops))
+        assertEquals(emptyList(), s.customGroupsIn(HostSection.Terminal))
     }
 
     @Test
     fun addCustomGroup_ignores_blank_and_exact_duplicate_but_allows_other_case() {
-        val seen = mutableListOf<List<String>>()
+        val seen = mutableListOf<List<CustomGroup>>()
         val s = DesktopDesignState(onCustomGroupsChange = { seen += it })
-        s.addCustomGroup("Prod")
-        s.addCustomGroup("   ")
-        s.addCustomGroup("Prod") // exact duplicate — ignored
+        s.addCustomGroup("Prod", HostSection.Terminal)
+        s.addCustomGroup("   ", HostSection.Terminal)
+        s.addCustomGroup("Prod", HostSection.Terminal) // exact duplicate — ignored
         // Different case is a different group (Host.group/folders match case-sensitively), so it's added.
-        s.addCustomGroup("prod")
-        assertEquals(listOf("Prod", "prod"), s.customGroups)
-        assertEquals(listOf(listOf("Prod"), listOf("Prod", "prod")), seen)
+        s.addCustomGroup("prod", HostSection.Terminal)
+        assertEquals(listOf("Prod", "prod"), s.customGroupsIn(HostSection.Terminal))
+        assertEquals(2, seen.size)
     }
 
     @Test
     fun renameGroupName_updates_custom_and_collapsed() {
-        val groups = mutableListOf<List<String>>()
+        val groups = mutableListOf<List<CustomGroup>>()
         val collapsed = mutableListOf<Set<String>>()
         val s = DesktopDesignState(
             initialCollapsedGroups = setOf("Prod"),
             onCollapsedGroupsChange = { collapsed += it },
-            initialCustomGroups = listOf("Prod"),
+            initialCustomGroups = listOf(CustomGroup("Prod", HostSection.Terminal)),
             onCustomGroupsChange = { groups += it },
         )
         s.renameGroupName("Prod", "Production")
-        assertEquals(listOf("Production"), s.customGroups)
+        assertEquals(listOf("Production"), s.customGroupsIn(HostSection.Terminal))
         assertTrue(s.isGroupCollapsed("Production"))
         assertFalse(s.isGroupCollapsed("Prod"))
-        assertEquals(listOf(listOf("Production")), groups)
+        assertEquals(listOf(listOf(CustomGroup("Production", HostSection.Terminal))), groups)
         assertEquals(listOf(setOf("Production")), collapsed)
     }
 
     @Test
     fun renameGroupName_ignores_blank_or_unchanged() {
-        val s = DesktopDesignState(initialCustomGroups = listOf("Prod"))
+        val s = DesktopDesignState(initialCustomGroups = listOf(CustomGroup("Prod", HostSection.Terminal)))
         s.renameGroupName("Prod", "  ")
         s.renameGroupName("Prod", "Prod") // exact same name — no-op
-        assertEquals(listOf("Prod"), s.customGroups)
+        assertEquals(listOf("Prod"), s.customGroupsIn(HostSection.Terminal))
     }
 
     @Test
     fun renameGroupName_applies_case_only_change() {
-        val s = DesktopDesignState(initialCustomGroups = listOf("Prod"))
+        val s = DesktopDesignState(initialCustomGroups = listOf(CustomGroup("Prod", HostSection.Terminal)))
         s.renameGroupName("Prod", "prod") // case-only edit is a real rename
-        assertEquals(listOf("prod"), s.customGroups)
+        assertEquals(listOf("prod"), s.customGroupsIn(HostSection.Terminal))
     }
 
     @Test
     fun removeCustomGroup_drops_from_custom_and_collapsed() {
         val s = DesktopDesignState(
             initialCollapsedGroups = setOf("Prod"),
-            initialCustomGroups = listOf("Prod", "Dev"),
+            initialCustomGroups = listOf(
+                CustomGroup("Prod", HostSection.Terminal),
+                CustomGroup("Dev", HostSection.Terminal),
+            ),
         )
         s.removeCustomGroup("Prod")
-        assertEquals(listOf("Dev"), s.customGroups)
+        assertEquals(listOf("Dev"), s.customGroupsIn(HostSection.Terminal))
         assertFalse(s.isGroupCollapsed("Prod"))
+    }
+
+    @Test
+    fun renaming_and_deleting_reach_every_section() {
+        // Host.group is a plain name: the same folder can hold shells and remote desktops, so the
+        // side channel of empty folders must follow a rename/delete in both sections.
+        val s = DesktopDesignState(
+            initialCustomGroups = listOf(
+                CustomGroup("Prod", HostSection.Terminal),
+                CustomGroup("Prod", HostSection.RemoteDesktops),
+            ),
+        )
+        s.renameGroupName("Prod", "Production")
+        assertEquals(listOf("Production"), s.customGroupsIn(HostSection.RemoteDesktops))
+        s.removeCustomGroup("Production")
+        assertTrue(s.customGroups.isEmpty())
     }
 
     // Terminal font and size (Appearance → Font / Font size)
@@ -656,8 +685,8 @@ class DesktopDesignStateTest {
     fun group_dialog_open_and_dismiss() {
         val s = DesktopDesignState()
         assertEquals(null, s.groupDialog)
-        s.openCreateGroup()
-        assertEquals(GroupDialog.Create, s.groupDialog)
+        s.openCreateGroup(HostSection.RemoteDesktops)
+        assertEquals(GroupDialog.Create(HostSection.RemoteDesktops), s.groupDialog)
         s.openRenameGroup("Prod")
         assertEquals(GroupDialog.Rename("Prod"), s.groupDialog)
         s.dismissGroupDialog()

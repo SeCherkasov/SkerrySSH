@@ -1,5 +1,10 @@
 package app.skerry.ui.session
 
+import app.skerry.shared.vnc.VncRemoteDesktop
+import app.skerry.shared.vnc.VncQuality
+import app.skerry.shared.vnc.VncUpdate
+import app.skerry.ui.remote.RemoteDesktopController
+import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
@@ -15,12 +20,11 @@ import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.Asciicast
 import app.skerry.shared.terminal.CastEvent
 import app.skerry.shared.vnc.VncAuth
-import app.skerry.shared.vnc.VncFramebuffer
 import app.skerry.shared.vnc.VncPointerEvent
-import app.skerry.shared.vnc.VncQuality
+import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.vnc.VncSession
 import app.skerry.shared.vnc.VncTransport
-import app.skerry.shared.vnc.VncUpdate
+import app.skerry.shared.graphics.RemoteDesktopUpdate
 import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
@@ -35,7 +39,6 @@ import app.skerry.ui.desktop.openRailSection
 import app.skerry.ui.desktop.railItemActive
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.prodGuardDialogOpen
-import app.skerry.ui.vnc.VncSessionController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -860,7 +863,8 @@ class SessionsControllerTest {
                     newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
                 )
             },
-            vncControllerFactory = { VncSessionController(vncTransport, scope) },
+            vncControllerFactory = { RemoteDesktopController(scope) },
+            openVncSession = { target, auth -> VncRemoteDesktop(vncTransport.connect(target, auth)) },
             onHostSessionOpened = { opened += it },
         )
 
@@ -964,7 +968,8 @@ class SessionsControllerTest {
                     newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
                 )
             },
-            vncControllerFactory = { VncSessionController(vncTransport, scope) },
+            vncControllerFactory = { RemoteDesktopController(scope) },
+            openVncSession = { target, auth -> VncRemoteDesktop(vncTransport.connect(target, auth)) },
         )
         return controller to scope
     }
@@ -1178,7 +1183,7 @@ private class FakeVncSession : VncSession {
         private set
 
     override val serverName = "desk"
-    override val framebuffer = VncFramebuffer(1, 1)
+    override val framebuffer = RemoteFramebuffer(1, 1)
 
     // Never emits: keeps the read loop parked (like a quiet server) until the scope is cancelled.
     override val updates: Flow<VncUpdate> = flow { awaitCancellation() }
@@ -1250,7 +1255,8 @@ class DesktopSectionNavigationTest {
                     newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
                 )
             },
-            vncControllerFactory = { VncSessionController(FakeVncTransport(), scope) },
+            vncControllerFactory = { RemoteDesktopController(scope) },
+            openVncSession = { target, auth -> VncRemoteDesktop(FakeVncTransport().connect(target, auth)) },
         )
         return controller to scope
     }

@@ -1,4 +1,4 @@
-package app.skerry.ui.vnc
+package app.skerry.ui.remote
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -7,10 +7,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.IntSize
-import app.skerry.shared.vnc.VncPointerEvent
-import app.skerry.shared.vnc.VncQuality
-import app.skerry.shared.vnc.VncSession
-import app.skerry.shared.vnc.VncUpdate
+import app.skerry.shared.graphics.RemoteDesktopQuality
+import app.skerry.shared.graphics.RemoteDesktopSession
+import app.skerry.shared.graphics.RemoteDesktopUpdate
+import app.skerry.shared.graphics.RemoteKeyEvent
+import app.skerry.ui.vnc.FramebufferImage
+import app.skerry.ui.vnc.VncCursorImage
+import app.skerry.ui.vnc.clampPan
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -18,17 +21,17 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
- * UI-side state for one live VNC session: bridges the codec's raw framebuffer into a Compose
- * [ImageBitmap] and forwards input to the session. Collecting [VncSession.updates] runs the
- * session's read loop, so this owns that collection on [scope] (the session's scope, cancelled by
- * the controller on disconnect).
+ * UI-side state for one live remote desktop, whichever protocol serves it: bridges the raw
+ * framebuffer into a Compose [ImageBitmap] and forwards input to the session. Collecting
+ * [RemoteDesktopSession.updates] runs the session's read loop, so this owns that collection on
+ * [scope] (the session's scope, cancelled by the controller on disconnect).
  *
  * [frame] is a snapshot counter bumped on every applied update; a composable that reads it redraws
  * with the latest [imageBitmap]. [desktopSize] tracks the remote resolution for coordinate mapping.
  */
 @Stable
-class VncScreenState(
-    private val session: VncSession,
+class RemoteDesktopScreenState(
+    private val session: RemoteDesktopSession,
     private val scope: CoroutineScope,
     private val onClipboard: (String) -> Unit = {},
     remoteResizeInitial: Boolean = false,
@@ -55,6 +58,9 @@ class VncScreenState(
     var userOffset by mutableStateOf(Offset.Zero)
         private set
 
+    /** Which optional controls the underlying protocol has, so the UI hides the rest. */
+    val capabilities = session.capabilities
+
     /**
      * Apply a zoom+pan (from touch gestures); clamps the zoom to a sane range and the pan to what
      * still keeps the picture over the viewport (see [clampPan]).
@@ -71,10 +77,10 @@ class VncScreenState(
     }
 
     /** Current image quality/compression preference (Graphics settings). */
-    var quality by mutableStateOf(VncQuality.Auto)
+    var quality by mutableStateOf(RemoteDesktopQuality.Auto)
         private set
 
-    /** True once the server has advertised SetDesktopSize support (ExtendedDesktopSize). */
+    /** True once the server has said it accepts resize requests. */
     var canResizeRemote by mutableStateOf(false)
         private set
 
@@ -109,9 +115,9 @@ class VncScreenState(
     }
 
     /**
-     * Debounced SetDesktopSize: a window drag-resize spews sizes many times a second, and each
-     * server-side resize costs a full-screen retransmit — so only the size the user settles on is
-     * sent. Same swallow-the-write discipline as [send].
+     * Debounced resize request: a window drag spews sizes many times a second, and each server-side
+     * resize costs a full-screen retransmit — so only the size the user settles on is sent. Same
+     * swallow-the-write discipline as [send].
      */
     private fun scheduleRemoteResize() {
         val target = viewport
@@ -129,16 +135,15 @@ class VncScreenState(
         }
     }
 
-    /** Change the quality preference; the server applies it on the next framebuffer update. */
-    fun applyQuality(newQuality: VncQuality) {
+    /** Change the quality preference; the server applies it on the next update. */
+    fun applyQuality(newQuality: RemoteDesktopQuality) {
         quality = newQuality
         send { session.setQuality(newQuality) }
     }
 
     /**
-     * The remote cursor sprite (Cursor pseudo-encoding), drawn at our own pointer. Null while the
-     * server hasn't sent a shape — either it ignores the encoding and paints the cursor into the
-     * framebuffer, or it is telling us the cursor is hidden.
+     * The remote cursor sprite, drawn at our own pointer. Null while the server hasn't sent a shape
+     * — either it paints the cursor into the framebuffer, or it is telling us the cursor is hidden.
      */
     var cursor: VncCursorImage? by mutableStateOf(null)
         private set
@@ -159,7 +164,7 @@ class VncScreenState(
         val localCursor = !viewOnly
         send {
             session.setLocalCursor(localCursor)
-            session.requestUpdate(incremental = false)
+            session.requestFullUpdate()
         }
     }
 
@@ -171,21 +176,28 @@ class VncScreenState(
     var cleanExit: Boolean = false
         private set
 
-    /** Latest ServerCutText from the remote host; the view mirrors it into the system clipboard. */
+    /**
+     * The server's own explanation of the close, where it gave one ("the account may not log on
+     * remotely"). Empty when the session simply dropped.
+     */
+    var closeReason: String = ""
+        private set
+
+    /** Latest clipboard text from the remote host; the view mirrors it into the system clipboard. */
     var serverClipboard: String? by mutableStateOf(null)
         private set
 
-    val serverName: String get() = session.serverName
+    val serverName: String get() = session.title
 
     /** The current frame image for drawing. */
     val imageBitmap: ImageBitmap get() = image.bitmap
 
     init {
         scope.launch {
-            // The transport already turns any decode failure into VncUpdate.Closed; this is the
-            // belt-and-braces net, so a throwing session implementation surfaces as a dropped
-            // session (UI shows "Connection lost") instead of an uncaught exception that would kill
-            // the collector silently on desktop and the whole process on Android.
+            // The transports already turn a decode failure into a Closed update; this is the
+            // belt-and-braces net, so a throwing session surfaces as a dropped session (the UI shows
+            // "Connection lost") instead of an uncaught exception that would kill the collector
+            // silently on desktop and the whole process on Android.
             try {
                 session.updates.collect { onUpdate(it) }
             } catch (e: CancellationException) {
@@ -197,50 +209,64 @@ class VncScreenState(
         }
     }
 
-    private fun onUpdate(update: VncUpdate) {
+    private fun onUpdate(update: RemoteDesktopUpdate) {
         when (update) {
-            is VncUpdate.Region -> {
-                image.writeRects(update.rects, session.framebuffer.pixels, session.framebuffer.width)
-                frame++
+            is RemoteDesktopUpdate.Region -> {
+                // An empty region is a protocol event with no pixels behind it (an RDP frame
+                // marker); redrawing on it would burn a frame for nothing.
+                if (update.rects.isNotEmpty()) {
+                    image.writeRects(update.rects, session.framebuffer.pixels, session.framebuffer.width)
+                    frame++
+                }
             }
-            is VncUpdate.Resize -> {
+
+            is RemoteDesktopUpdate.Resize -> {
                 image.resize(update.width, update.height)
                 desktopSize = IntSize(update.width, update.height)
                 frame++
             }
-            is VncUpdate.SetDesktopSizeSupported -> {
+
+            is RemoteDesktopUpdate.RemoteResizeSupported -> {
                 canResizeRemote = true
                 // A restored-from-profile flag is already on before support is known — apply it now.
                 if (remoteResize) scheduleRemoteResize()
             }
-            is VncUpdate.CursorShape -> cursor = VncCursorImage.of(update)
-            is VncUpdate.ClipboardText -> {
+
+            is RemoteDesktopUpdate.CursorShape -> cursor = VncCursorImage.of(update)
+            // The pointer the server warps is not ours to move: the sprite tracks the local pointer,
+            // and jumping it would desynchronise the two. The position is still applied by the
+            // server to its own screen, which is what the user sees.
+            is RemoteDesktopUpdate.CursorPosition -> Unit
+            is RemoteDesktopUpdate.CursorVisible -> if (!update.visible) cursor = null
+            is RemoteDesktopUpdate.ClipboardText -> {
                 serverClipboard = update.text
                 onClipboard(update.text)
             }
-            is VncUpdate.Bell -> {}
-            is VncUpdate.Closed -> {
+
+            is RemoteDesktopUpdate.Bell -> {}
+            is RemoteDesktopUpdate.Closed -> {
                 cleanExit = update.cleanExit
+                closeReason = update.reason
                 closed = true
             }
         }
     }
 
-    /** Forward a pointer event (framebuffer coordinates + RFB button mask). No-op in view-only mode. */
+    /** Forward a pointer event (framebuffer coordinates + button mask). No-op in view-only mode. */
     fun onPointer(x: Int, y: Int, buttonMask: Int) {
         if (viewOnly) return
-        send { session.sendPointer(VncPointerEvent(x, y, buttonMask)) }
+        send { session.sendPointer(x, y, buttonMask) }
     }
 
-    /** Forward a key event (X11 keysym). No-op in view-only mode. */
-    fun onKey(keySym: Long, down: Boolean) {
+    /** Forward a key event. No-op in view-only mode. */
+    fun onKey(event: RemoteKeyEvent, down: Boolean) {
         if (viewOnly) return
-        send { session.sendKey(keySym, down) }
+        send { session.sendKey(event, down) }
     }
 
     /** Send local clipboard text to the server. */
     fun onLocalClipboard(text: String) {
-        send { session.sendClientCutText(text) }
+        send { session.sendClipboardText(text) }
     }
 
     /**

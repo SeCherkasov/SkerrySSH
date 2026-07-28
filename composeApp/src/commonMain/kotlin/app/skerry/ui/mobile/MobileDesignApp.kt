@@ -1,5 +1,8 @@
 package app.skerry.ui.mobile
 
+import app.skerry.ui.connection.toRdpPassword
+import app.skerry.shared.ssh.isRdp
+import app.skerry.ui.remote.RemoteDesktopController
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -164,7 +167,34 @@ fun MobileDesignApp(
             var counter = 0
             SessionsController(
                 newId = { "sess-${counter++}" },
-                vncControllerFactory = deps.vncTransport?.let { vt -> { app.skerry.ui.vnc.VncSessionController(vt, scope) } },
+                vncControllerFactory = deps.vncTransport?.let { { app.skerry.ui.remote.RemoteDesktopController(scope) } },
+        openVncSession = deps.vncTransport?.let { vt ->
+            { target, auth -> app.skerry.shared.vnc.VncRemoteDesktop(vt.connect(target, auth)) }
+        },
+        openRdpSession = deps.rdpTransport?.let { rt ->
+            { request ->
+                app.skerry.shared.rdp.RdpRemoteDesktop(
+                    rt.connect(
+                        app.skerry.shared.rdp.RdpTarget(
+                            host = request.host,
+                            port = request.port,
+                            desktopWidth = request.width,
+                            desktopHeight = request.height,
+                            clientName = request.clientName,
+                            loadBalanceInfo = request.loadBalanceInfo,
+                            audioOutput = request.audioOutput,
+                            audioDeviceId = request.audioDeviceId,
+                            clipboard = request.clipboard,
+                        ),
+                        app.skerry.shared.rdp.RdpCredentials(
+                            username = request.user,
+                            password = request.password,
+                            domain = request.domain,
+                        ),
+                    ),
+                )
+            }
+        },
                 // Desktop parity: the session half of the Teams activity feed (the coordinator holds
                 // the privacy gates).
                 onHostSessionOpened = { hostId -> deps.teams?.reportSessionOpened(hostId) },
@@ -293,6 +323,8 @@ fun MobileDesignApp(
         LocalSshKeyGenerator provides deps.keyGenerator,
         LocalSshCertificateInspector provides deps.certificateInspector,
         LocalSecretFileReader provides deps.secretFiles,
+        // Playback devices for an RDP profile that plays the session's sound on this device.
+        app.skerry.ui.app.LocalAudioOutputs provides deps.audioOutputs,
         LocalTunnels provides deps.tunnels,
         // Saved snippets — Snippets tab (command library + run into the active terminal).
         LocalSnippets provides deps.snippets,
@@ -380,6 +412,7 @@ private fun MobileChrome(
     var pending by remember { mutableStateOf<PendingConnect?>(null) }
     // VNC "ask every time": a host with no stored password prompts before opening the framebuffer screen.
     var pendingVnc by remember { mutableStateOf<Host?>(null) }
+    var pendingRdp by remember { mutableStateOf<Host?>(null) }
     // Production guard: a session about to open on a #prod host waits here for confirmation
     // (desktop parity — the gate wraps every connect path, terminal / files / VNC).
     var prodConnect by remember { mutableStateOf<ProdConnectRequest?>(null) }
@@ -410,7 +443,19 @@ private fun MobileChrome(
                 action = planned,
             )
             val open = {
-                if (host.connectionType.isVnc) {
+                if (host.connectionType.isRdp) {
+                    // Same rule as the desktop: a stored password connects straight away; a profile
+                    // with no user name at all (what an imported `.rdp` file usually is) has nothing
+                    // to prompt for and opens its form; anything else asks. A team-shared profile
+                    // arrives with its credential link stripped and has no other way in.
+                    val password = credentials?.find(host.credentialId)?.toRdpPassword()
+                    when {
+                        password != null -> openMobileRdp(sessions, state, hostManager, host, password)
+                        host.username.isBlank() -> state.openEditConn(host)
+                        else -> pendingRdp = host
+                    }
+                    Unit
+                } else if (host.connectionType.isVnc) {
                     // VNC opens a framebuffer screen (not a terminal). A stored password is used directly;
                     // "ask every time" (no bound secret) prompts for one first.
                     val cred = credentials?.find(host.credentialId)
@@ -483,7 +528,7 @@ private fun MobileChrome(
         // → intercept first per the dispatcher's LIFO), so while an overlay is open the navigation
         // intercept is kept disabled to avoid firing afterward. Registered before the content, making
         // it the lowest-priority handler in the back stack.
-        val overlayOpen = pending != null || state.sheetNewConn || state.renamingGroup != null || state.modalOpen || state.sshImport != null
+        val overlayOpen = pending != null || state.sheetNewConn || state.renamingGroup != null || state.modalOpen || state.sshImport != null || state.rdpImport != null
         val backAction = if (overlayOpen) null else mobileBackAction(state.route, state.tab)
         PlatformBackHandler(enabled = backAction != null) {
             when (backAction) {
@@ -518,6 +563,7 @@ private fun MobileChrome(
                 MobileNewConnectionSheet(state)
             }
             state.sshImport?.let { MobileSshImportSheet(state, it) }
+            state.rdpImport?.let { MobileRdpImportSheet(state, it) }
             // Confirmation for a snippet with ${{…}} variables — every launch path (terminal
             // palette, Snippets tab) parks such a run in SnippetManager.pendingRun. Desktop parity.
             LocalSnippets.current?.let { SnippetRunDialog(it) }
@@ -575,9 +621,9 @@ private fun MobileChrome(
                     host = host,
                     onDismiss = { pending = null },
                     onConnect = { pw -> pending = null; openMobileSession(sessions, state, host, SshAuth.Password(pw), jump, dest) },
-                    // Desktop parity: a team-shared host keeps no credential link, so our keychain
-                    // is the only way to reach one that doesn't take passwords.
-                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host.connectionType),
+                    // Desktop parity: only a team-shared host is offered our keychain (it keeps no
+                    // credential link), a profile of our own gets the password field alone.
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host, hostManager?.hosts.orEmpty()),
                     onUseSecret = { secret ->
                         pending = null
                         openMobileSession(sessions, state, host, secret.toSshAuth(), jump, dest)
@@ -593,11 +639,32 @@ private fun MobileChrome(
                         pendingVnc = null
                         openMobileVnc(sessions, state, hostManager, host, if (pw.isEmpty()) app.skerry.shared.vnc.VncAuth.None else app.skerry.shared.vnc.VncAuth.Password(pw))
                     },
-                    // Passwords only ([connectableSecrets]) — VNC-Auth has no key.
-                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host.connectionType),
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host, hostManager?.hosts.orEmpty()),
                     onUseSecret = { secret ->
                         pendingVnc = null
                         openMobileVnc(sessions, state, hostManager, host, secret.toVncAuth())
+                    },
+                )
+            }
+            // RDP password prompt: "ask every time", or a team-shared profile that arrived without
+            // a secret. Unlike VNC there is no anonymous mode, so an empty answer connects as one.
+            pendingRdp?.let { host ->
+                MobilePasswordSheet(
+                    host = host,
+                    onDismiss = { pendingRdp = null },
+                    onConnect = { pw ->
+                        pendingRdp = null
+                        openMobileRdp(sessions, state, hostManager, host, pw)
+                    },
+                    secrets = connectableSecrets(credentials?.credentials.orEmpty(), host, hostManager?.hosts.orEmpty()),
+                    onUseSecret = { secret ->
+                        // A secret an RDP logon cannot use leaves the sheet where it is rather than
+                        // closing it on a tap that opens nothing.
+                        val password = secret.toRdpPassword()
+                        if (password != null) {
+                            pendingRdp = null
+                            openMobileRdp(sessions, state, hostManager, host, password)
+                        }
                     },
                 )
             }
@@ -643,6 +710,36 @@ private fun openMobileSession(
 }
 
 /** Open a VNC tab for [host] with [auth] and navigate to it. Shared by the typed-password and picked-secret paths. */
+private fun openMobileRdp(
+    sessions: SessionsController?,
+    state: MobileDesignState,
+    hostManager: app.skerry.ui.host.HostManagerController?,
+    host: Host,
+    password: String,
+) {
+    sessions?.openRdp(
+        host.id,
+        host.label,
+        host.connectionSubtitle(),
+        app.skerry.ui.remote.RdpConnectRequest(
+            host = host.address,
+            port = host.port,
+            username = host.username,
+            password = password,
+            width = MOBILE_RDP_WIDTH,
+            height = MOBILE_RDP_HEIGHT,
+            clientName = "Skerry",
+            loadBalanceInfo = host.rdp?.loadBalanceInfo.orEmpty(),
+            audioOutput = host.rdp?.audioOutput == true,
+            audioDeviceId = host.rdp?.audioOutputDeviceId.orEmpty(),
+            clipboard = host.rdp?.clipboard != false,
+        ),
+        remoteResize = host.vncResizeToWindow,
+        onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+    )
+    if (sessions != null) state.push(MobileRoute.Vnc)
+}
+
 private fun openMobileVnc(
     sessions: SessionsController?,
     state: MobileDesignState,
@@ -705,3 +802,11 @@ private fun MobileRoutePlaceholder(state: MobileDesignState, title: String) {
         MobilePushHeader(title, onBack = state::pop)
     }
 }
+
+/**
+ * Desktop size an RDP session asks for on a phone. Smaller than the desktop default on purpose: the
+ * session is fixed at connect time and then scaled to the screen, and a 1080p desktop on a handset
+ * is unreadable before the user zooms.
+ */
+private const val MOBILE_RDP_WIDTH = 1280
+private const val MOBILE_RDP_HEIGHT = 720

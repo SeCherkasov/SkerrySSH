@@ -3,6 +3,8 @@ package app.skerry.ui.host
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.rdp.RdpFileHost
+import app.skerry.shared.rdp.RdpTarget
 import app.skerry.shared.ssh.SshConfigHost
 import app.skerry.ui.design.Sym
 import app.skerry.ui.theme.Skerry
@@ -27,4 +29,11 @@ internal fun sshImportHostSummary(host: SshConfigHost): String = buildString {
     host.user?.let { append(it); append('@') }
     append(host.hostName)
     if (host.port != 22) { append(':'); append(host.port) }
+}
+
+/** Same line for a `.rdp` import: `DOMAIN\user@host[:port]`, port shown only when non-default. */
+internal fun rdpImportSummary(host: RdpFileHost): String = buildString {
+    if (host.username.isNotBlank()) { append(host.username); append('@') }
+    append(host.address)
+    if (host.port != RdpTarget.DEFAULT_PORT) { append(':'); append(host.port) }
 }

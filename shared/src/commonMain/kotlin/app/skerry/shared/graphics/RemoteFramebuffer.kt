@@ -1,4 +1,4 @@
-package app.skerry.shared.vnc
+package app.skerry.shared.graphics
 
 /**
  * The remote screen's pixel buffer: ARGB_8888, row-major, `pixels[y * width + x]`. Owned by the
@@ -15,7 +15,7 @@ package app.skerry.shared.vnc
  * on a dirty rect is harmless and self-corrects on the next update (same reasoning as the
  * `@Volatile` window size in `TelnetCodec`).
  */
-class VncFramebuffer(width: Int, height: Int) {
+class RemoteFramebuffer(width: Int, height: Int) {
     @Volatile
     var width: Int = width
         private set
