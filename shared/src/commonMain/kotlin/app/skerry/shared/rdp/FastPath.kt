@@ -15,6 +15,11 @@ class FastPathDecoder(
      * copies would decode half the bitmaps against a stale table and simply show wrong colours.
      */
     private val palette: SessionPalette,
+    /**
+     * Where updates this client cannot draw are recorded. Shared with the session codec, which turns
+     * a raised flag into a repaint request; a decoder used on its own simply drops them.
+     */
+    private val dropped: DroppedGraphics = DroppedGraphics(),
 ) {
     private var fragmentType = -1
     private val fragments = mutableListOf<ByteArray>()
@@ -135,11 +140,14 @@ class FastPathDecoder(
             // cache beyond the minimum, so the honest answer is to leave the cursor as it is.
             UPDATETYPE_CACHED_POINTER -> emptyList()
             UPDATETYPE_SYNCHRONIZE -> emptyList()
-            UPDATETYPE_ORDERS ->
-                // Orders were never claimed in the capability exchange; a server sending them anyway
-                // is drawing something this client cannot execute, and silently dropping them would
-                // leave a screen that is wrong rather than merely stale.
-                throw RdpProtocolException("server sent drawing orders, which this client does not support")
+            // Orders were never claimed in the capability exchange (MS-RDPEGDI), so a server sending
+            // them anyway is drawing something nothing here can execute. Skipping the one update
+            // costs the pixels it drew, which the session codec then asks the server to repaint —
+            // the same trade as a bitmap rectangle that fails to decode.
+            UPDATETYPE_ORDERS -> {
+                dropped.record()
+                emptyList()
+            }
 
             else -> emptyList()
         }
@@ -306,4 +314,21 @@ object BitmapUpdate {
  */
 class SessionPalette {
     var colors: IntArray? = null
+}
+
+/**
+ * Graphics that arrived but were not drawn, because the client cannot execute what they describe.
+ * A holder for the same reason as [SessionPalette]: either decode path can meet them, and one of
+ * the two lives in [FastPathDecoder] while the repaint is asked for from the session codec.
+ */
+class DroppedGraphics {
+    private var pending = false
+
+    /** Note that an update was received and not drawn. */
+    fun record() {
+        pending = true
+    }
+
+    /** Whether anything was dropped since the last call; reading clears the flag. */
+    fun take(): Boolean = pending.also { pending = false }
 }

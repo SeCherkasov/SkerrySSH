@@ -21,8 +21,12 @@ class RdpSessionCodec(
     remoteFx: RemoteFxDecoder? = null,
 ) {
     private val palette = SessionPalette()
-    private val fastPath = FastPathDecoder(framebuffer, palette)
+    private val dropped = DroppedGraphics()
+    private val fastPath = FastPathDecoder(framebuffer, palette, dropped)
     private val surfaces = SurfaceDecoder(RdpCodecs(remoteFx))
+
+    /** Whether a repaint asked for after dropped graphics is still unanswered; see [repaintDropped]. */
+    private var repaintPending = false
 
     /** The desktop size the server is currently serving. */
     val desktopWidth: Int get() = state.capabilities.desktopWidth
@@ -42,8 +46,22 @@ class RdpSessionCodec(
         // Acknowledge completed frames before returning: the server paces itself on these.
         for (update in updates) {
             if (update is RdpUpdate.Frame && !update.begin) acknowledgeFrame(update.frameId)
+            // Pixels landed, so a repaint that was asked for has been answered.
+            if (update is RdpUpdate.Region && update.rects.isNotEmpty()) repaintPending = false
         }
+        if (dropped.take()) repaintDropped()
         return updates
+    }
+
+    /**
+     * Ask the server to send, as bitmaps, what it drew with an update this client had to skip.
+     * One repaint is asked for at a time: a server that ignores the negotiation once tends to do it
+     * every frame, and a full-screen repaint per dropped update is a traffic storm rather than a fix.
+     */
+    private suspend fun repaintDropped() {
+        if (repaintPending) return
+        repaintPending = true
+        requestRefresh(listOf(RdpRect(0, 0, desktopWidth, desktopHeight)))
     }
 
     private suspend fun slowPath(packet: ByteArray): List<RdpUpdate> {
@@ -94,8 +112,11 @@ class RdpSessionCodec(
             emptyList()
         }
 
-        UPDATETYPE_ORDERS ->
-            throw RdpProtocolException("server sent drawing orders, which this client does not support")
+        // Skipped and repainted rather than fatal, for the reason spelled out in [FastPathDecoder].
+        UPDATETYPE_ORDERS -> {
+            dropped.record()
+            emptyList()
+        }
 
         else -> emptyList()
     }

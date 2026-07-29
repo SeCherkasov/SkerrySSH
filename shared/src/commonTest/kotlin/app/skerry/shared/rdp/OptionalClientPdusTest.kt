@@ -28,19 +28,45 @@ class OptionalClientPdusTest {
         supportedCodecs = emptyList(),
     )
 
-    private fun codec(caps: ServerCapabilities, written: MutableList<ByteArray>) = RdpSessionCodec(
-        source = { _, _, _ -> error("no reads in this test") },
-        sink = { bytes -> written += bytes },
-        framebuffer = RemoteFramebuffer(caps.desktopWidth, caps.desktopHeight),
-        state = RdpSessionState(userId = 1007, ioChannelId = 1003, channels = emptyMap(), capabilities = caps),
-        settings = RdpClientSettings(
-            desktopWidth = caps.desktopWidth,
-            desktopHeight = caps.desktopHeight,
-            clientName = "Skerry",
-            selectedProtocol = 1,
-        ),
-        logon = RdpLogonInfo(domain = "", username = "u"),
-    )
+    private fun codec(
+        caps: ServerCapabilities,
+        written: MutableList<ByteArray>,
+        incoming: ByteArray = ByteArray(0),
+    ): RdpSessionCodec {
+        var offset = 0
+        return RdpSessionCodec(
+            source = { dst, dstOffset, len ->
+                if (offset + len > incoming.size) error("the test fixture ran out of bytes")
+                incoming.copyInto(dst, dstOffset, offset, offset + len)
+                offset += len
+            },
+            sink = { bytes -> written += bytes },
+            framebuffer = RemoteFramebuffer(caps.desktopWidth, caps.desktopHeight),
+            state = RdpSessionState(userId = 1007, ioChannelId = 1003, channels = emptyMap(), capabilities = caps),
+            settings = RdpClientSettings(
+                desktopWidth = caps.desktopWidth,
+                desktopHeight = caps.desktopHeight,
+                clientName = "Skerry",
+                selectedProtocol = 1,
+            ),
+            logon = RdpLogonInfo(domain = "", username = "u"),
+        )
+    }
+
+    /** A fast-path packet carrying one drawing-orders update, which this client cannot execute. */
+    private fun ordersPacket(): ByteArray {
+        val update = RdpWriter(8).apply {
+            u8(0) // updateCode 0 = orders, single fragment, uncompressed
+            u16le(1)
+            u8(1) // numberOrders, and nothing this client reads past it
+        }.toByteArray()
+        val total = update.size + 3
+        return RdpWriter(total).apply {
+            u8(0) // action = fast-path output
+            u16be(total or 0x8000)
+            bytes(update)
+        }.toByteArray()
+    }
 
     @Test
     fun a_refresh_declares_the_length_of_the_whole_packet() = runTest {
@@ -76,6 +102,36 @@ class OptionalClientPdusTest {
         val written = mutableListOf<ByteArray>()
         codec(capabilities(refreshRect = true, suppressOutput = true), written)
             .requestRefresh(listOf(RdpRect(0, 0, 1024, 768)))
+
+        assertEquals(1, written.size)
+    }
+
+    @Test
+    fun drawing_orders_are_skipped_and_the_screen_asked_for_again() = runTest {
+        val written = mutableListOf<ByteArray>()
+        val session = codec(capabilities(refreshRect = true, suppressOutput = true), written, ordersPacket())
+
+        assertTrue(session.readMessage().isEmpty(), "orders carry nothing the UI can act on")
+        assertEquals(1, written.size, "the pixels the orders drew have to be asked for as bitmaps")
+        // The refresh covers the whole desktop, as inclusive right/bottom coordinates.
+        val pdu = written.single()
+        val rect = RdpReader(pdu, pdu.size - 8)
+        assertEquals(listOf(0, 0, 1023, 767), listOf(rect.u16le(), rect.u16le(), rect.u16le(), rect.u16le()))
+    }
+
+    @Test
+    fun a_second_orders_update_does_not_pile_up_another_repaint() = runTest {
+        // A server that ignores the negotiation once will do it every frame; one full-screen repaint
+        // may be outstanding at a time, or the answer to a broken server is a traffic storm.
+        val written = mutableListOf<ByteArray>()
+        val session = codec(
+            capabilities(refreshRect = true, suppressOutput = true),
+            written,
+            ordersPacket() + ordersPacket(),
+        )
+
+        session.readMessage()
+        session.readMessage()
 
         assertEquals(1, written.size)
     }

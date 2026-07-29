@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val WHITE = 0xFFFFFFFF.toInt()
@@ -230,12 +231,44 @@ class GraphicsTest {
     }
 
     @Test
-    fun `drawing orders are refused because none were ever claimed`() {
-        val decoder = FastPathDecoder(RemoteFramebuffer(4, 4), SessionPalette())
+    fun `drawing orders are skipped rather than ending the session`() {
+        val dropped = DroppedGraphics()
+        val decoder = FastPathDecoder(RemoteFramebuffer(4, 4), SessionPalette(), dropped)
 
-        assertFailsWith<RdpProtocolException> {
+        val updates =
             decoder.decode(fastPathPacket(updateCode = 0, fragmentation = 0, body = byteArrayOf(1)), SurfaceDecoder())
-        }
+
+        assertTrue(updates.isEmpty())
+        assertTrue(dropped.take(), "the skipped orders have to be reported so the pixels can be asked for again")
+        assertFalse(dropped.take(), "taking the flag clears it")
+    }
+
+    @Test
+    fun `an update after skipped orders in the same packet still paints`() {
+        val framebuffer = RemoteFramebuffer(4, 4)
+        val decoder = FastPathDecoder(framebuffer, SessionPalette())
+        val bitmap = RdpWriter(64).apply {
+            u16le(0x0001) // updateType, repeated inside the payload
+            u16le(1) // one rectangle
+            u16le(0).u16le(0).u16le(1).u16le(1)
+            u16le(2).u16le(2)
+            u16le(16) // bitsPerPixel
+            u16le(0) // flags: uncompressed
+            u16le(8)
+            u16le(0xF800).u16le(0xF800)
+            u16le(0xFFFF).u16le(0xFFFF)
+        }.toByteArray()
+
+        val updates = decoder.decode(
+            fastPathPacket(
+                fastPathUpdate(updateCode = 0, fragmentation = 0, body = byteArrayOf(1)),
+                fastPathUpdate(updateCode = 1, fragmentation = 0, body = bitmap),
+            ),
+            SurfaceDecoder(),
+        )
+
+        assertTrue(updates.single() is RdpUpdate.Region)
+        assertEquals(WHITE, framebuffer.pixels[0])
     }
 
     @Test
@@ -294,17 +327,23 @@ class GraphicsTest {
     }
 
     /** Wrap [body] in a fast-path output packet with one update of [updateCode]. */
-    private fun fastPathPacket(updateCode: Int, fragmentation: Int, body: ByteArray): ByteArray {
-        val payload = RdpWriter(body.size + 8).apply {
+    private fun fastPathPacket(updateCode: Int, fragmentation: Int, body: ByteArray): ByteArray =
+        fastPathPacket(fastPathUpdate(updateCode, fragmentation, body))
+
+    /** One update record: the header a fast-path packet carries a run of. */
+    private fun fastPathUpdate(updateCode: Int, fragmentation: Int, body: ByteArray): ByteArray =
+        RdpWriter(body.size + 8).apply {
             u8(updateCode or (fragmentation shl 4))
             u16le(body.size)
             bytes(body)
         }.toByteArray()
-        val total = payload.size + 3
+
+    private fun fastPathPacket(vararg updates: ByteArray): ByteArray {
+        val total = updates.sumOf { it.size } + 3
         return RdpWriter(total).apply {
             u8(0) // action = fast-path output, no flags
             u16be(total or 0x8000) // two-byte length form
-            bytes(payload)
+            for (update in updates) bytes(update)
         }.toByteArray()
     }
 }
