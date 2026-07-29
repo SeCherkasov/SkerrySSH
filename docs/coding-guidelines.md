@@ -1,130 +1,160 @@
-# Skerry — правила написания кода
+# Skerry — coding guidelines
 
-Документ для ассистента (и людей): **читать перед написанием любого кода**. Каждое правило
-здесь — не теория, а класс проблем, который реально пришлось массово исправлять в предрелизном
-ревью 2026-07-02 и глобальном рефакторинге 2026-07-03/04 (~115 файлов, −7646 строк). Цель —
-писать сразу так, чтобы третий такой проход не понадобился.
+Rules for the code itself. `CLAUDE.md` owns the *process* (TDD loop, build gate, review fan-out,
+hand-off); this file owns *what the code must look like once you're writing it*. Read it before
+writing code — every rule here is a class of defect we already paid for in the 2026-07-02
+pre-release review and the 2026-07-03/04 refactor (~115 files, −7646 lines). The goal is to write it
+right the first time so a third such pass isn't needed.
 
-## 1. Сначала поиск, потом код
+## 1. Search before you write
 
-Перед тем как писать новый класс/функцию/паттерн — **найти существующее**. Девять копий
-vault-backed JSON store и девять копий admin-token guard появились потому, что каждая новая фича
-писалась «с нуля рядом». Грепать по ключевым словам задачи; если похожий код есть в двух местах —
-значит, нужна общая абстракция, а не третья копия.
+Before adding a class, function, or pattern — **look for the existing one**. Nine copies of a
+vault-backed JSON store and nine copies of an admin-token guard exist because every new feature was
+written "from scratch, next to the old one". Grep for the keywords of the task; if similar code
+already lives in two places, the answer is a shared abstraction, not a third copy.
 
-Готовые абстракции (использовать, не переизобретать):
+Duplication rule: **the second repetition is already a signal**, at the third extraction is
+mandatory. Tests included (see `RoutesTestSupport` on the server).
 
-| Задача | Абстракция |
+### Core (`shared/`)
+
+| Task | Abstraction |
 |---|---|
-| Vault-backed JSON-стор (список записей) | `shared/vault/VaultRecordCodec` |
-| Атомарная запись файла с правами 0600 | `shared/vault/atomicWriteUtf8` (vault/log/bio) |
-| Состояние port-forward | `shared/ssh/ForwardState` |
-| Транспорт «просто поток» (telnet/serial) | `shared/ssh/StreamOnlyConnection` (jvmShared) |
-| Стриминг AI-ответа / парсинг реплики | `ui/ai/AiStreamRunner`, `AiReplyParser` |
-| Sealed-токен sync, health-мониторинг | `ui/sync/SealedTokenCodec`, `ServerHealthMonitor` |
-| Модальные подложки, дропдауны, чипы, лейблы | `ui/design`: `ModalScrim`, `DropdownField`, `ChipButton`, `FieldLabel` |
-| Мобильный хром | `MobilePushHeader`, `MobileScreenTitle`, `MobileFabButton`, `MobileTagsEditor` |
-| Состояние форм туннелей/сниппетов (desktop и mobile) | `TunnelFormState`, `SnippetFormState` |
-| Отображение секретов | `VaultPresentation.secretStyle` |
-| Блокирующий read-цикл shell-канала (ssh/telnet/serial) | `shared/ssh/StreamShellChannel` |
-| Wire-DTO клиент⇆сервер sync | модуль `:sync-wire` (`app.skerry.sync.wire`) — НЕ зеркалить вручную |
-| Разбор/применение SGR, метрики символов, reflow | `shared/terminal`: `SgrParser`, `CharMetrics`, `TerminalReflow` |
-| Constant-time сравнение секретов | `shared/vault/constantTimeEquals` |
-| Мобильные поля форм (лейбл-капс + текстовое поле) | `ui/mobile/MobileForm.kt`: `MobileFormField`/`MobileFormInput` |
-| Причина сбоя sync → локализованный текст | `SyncFailureReason` + `ui/sync/syncFailureText` (строки не строить в контроллере) |
-| Server: guard админ-токена | route-scoped plugin (один, в Routes) — не инлайнить проверку в каждый маршрут |
-| Server: rate-limit, path-id, лимиты параметров | хелперы `requiredPathId`/`limitParam`/rate-limit-helper |
+| Vault-backed JSON store (list of records) | `vault/VaultRecordCodec` |
+| Atomic file write with 0600 permissions | `vault/atomicWriteUtf8` (vault / log / bio) |
+| Constant-time secret comparison | `vault/constantTimeEquals` |
+| Port-forward state | `ssh/ForwardState` |
+| "Just a stream" transport (telnet/serial) | `ssh/StreamOnlyConnection` (jvmShared) |
+| Blocking read loop of a shell channel (ssh/telnet/serial) | `ssh/StreamShellChannel` |
+| SGR parsing, glyph metrics, reflow | `terminal/SgrParser`, `CharMetrics`, `TerminalReflow` |
+| Sync client⇆server wire DTO | module `:sync-wire` (`app.skerry.sync.wire`) — never mirror by hand |
+| Remote-desktop session as the UI sees it (pixels, updates, input) | `graphics/RemoteDesktopSession`, `RemoteDesktopUpdate`, `RemoteKeyEvent`, `RemoteDesktopQuality`, `RemoteDesktopCapabilities` — RDP and VNC adapters both implement this, protocol types stay behind it |
+| ARGB pixel buffer (resize/blit/fill/copyRect) | `graphics/RemoteFramebuffer` |
+| PCM playback and output-device enumeration | `audio/RemoteAudio`: `AudioOutputs`, `RemoteAudioPlayerFactory`, `RemoteAudioFormat` |
+| Reading/writing a protocol PDU with bounds checks | `rdp/RdpIo`: `RdpReader`, `RdpWriter`, `RdpSource`, `RdpSink`; malformed input → `rdp/RdpProtocolException` |
+| RDP connection entry point and live session | `rdp/RdpTransport`: `RdpTransport`, `RdpSession`, `RdpUpdate` |
+| MS-RDPEDYC dynamic channel (clipboard/display/audio/graphics) | `rdp/egfx/DynamicChannelHandler` |
+| Platform crypto injected into RDP (NLA, licensing) | `rdp/nla/NtlmCrypto`, `rdp/LicenseCrypto/RdpLicenseCrypto` |
+| Server-certificate trust decision (TOFU by fingerprint) | `rdp/RdpCertificate/RdpCertificateVerifier` |
+| VNC connection entry point, session, auth | `vnc/VncTransport`: `VncTransport`, `VncSession`, `VncUpdate`, `VncAuth` |
+| Platform codecs injected into VNC (zlib, JPEG, DES challenge) | `vnc/VncCodecPorts`: `InflaterFactory`, `VncImageDecoder`, `VncChallengeResponder` |
+| Shared-session wire protocol and its encryption | `share/SessionShareFrame` (`ShareFrame`, `ShareDirection`), `share/SessionShareCodec`, `share/ShareChannel` |
+| Shared-session orchestration | `share/SessionShareHost` (host), `share/SharedSessionViewer` (viewer) |
+| Runbook model, text format, storage | `runbook/Runbook`, `RunbookScript`, `RunbookMarker`, `RunbookStore` (+ `VaultRunbookStore`) |
+| docker/k8s exec target and command building | `container/ContainerSpec`, `ContainerCommands`, `ContainerListing`; tunnelling a session through it — `container/ContainerTransport` |
+| Mosh session key, framing, timing, wire messages | `mosh/MoshKey`, `MoshFragment`, `MoshTiming`, `MoshSync`, `MoshWire` (codec in jvmShared) |
+| Host tag normalisation and prod-first ordering | `tag/Tags`: `normalizeTag`, `orderTagsProdFirst` |
+| Risk scoring of a production command | `guard/ProductionGuard` + `ProductionGuardPolicy` |
+| App version compare, release lookup, update settings | `update/UpdateVersion`, `ReleaseInfo`, `UpdateChecker`, `UpdateSettings` |
+| Server: admin-token guard | route-scoped plugin (one, in Routes) — don't inline the check per route |
+| Server: rate limit, path id, parameter limits | helpers `requiredPathId` / `limitParam` / the rate-limit helper |
 
-Правило дублирования: **второй повтор — уже сигнал**, при третьем экстракция обязательна.
-Это касается и тестов (см. `RoutesTestSupport` на сервере).
+### UI (`composeApp/`)
 
-## 2. Размер и декомпозиция — при создании, не потом
+| Task | Abstraction |
+|---|---|
+| Any text on screen | `ui/design/DesignPrimitives.Txt` — never a raw `Text()` |
+| Any icon | `ui/design/Sym` (Material Symbols glyph) + `DesignFonts` |
+| Fonts | `ui/design/DesignFoundation`: `rememberUiFont`, `rememberMono`, `rememberMaterialSymbols` |
+| Buttons | `PrimaryButton`, `GhostButton`, `CancelButton`, `IconBtn` |
+| Small controls | `Toggle`, `Badge`, `Dot`, `MeterBar`, `NumberStepper`, `HoverTooltip` |
+| Chips | `Chip` (label, active/inactive) vs `ChipButton` (action chip: colour, outline/filled, enabled) — pick one, don't add a third |
+| Rules and separators | `HLine`, `VLine` |
+| Dropdowns and modals | `AnchoredDropdown`, `DropdownField`, `ModalScrim` |
+| Confirming a destructive action / informing | `ui/design/ConfirmActionDialog`, `NoticeDialog` |
+| Sidebar and section chrome | `ui/design/SectionChrome`: `SidebarSectionTitle`, `SectionHeader`, `EmptyState`, `SidebarSearchField` |
+| Field labels, caps, avatars | `FieldLabel`, `LabelCase.labelUppercase`, `InitialsAvatar` |
+| Mobile chrome | `MobilePushHeader`, `MobileScreenTitle`, `MobileFabButton`, `MobileTagsEditor` |
+| Mobile form fields (label caps + input) | `ui/mobile/MobileForm.kt`: `MobileFormField` / `MobileFormInput` |
+| Tunnel/snippet form state (desktop and mobile) | `TunnelFormState`, `SnippetFormState` |
+| Secret display | `VaultPresentation.secretStyle` |
+| Terminal screen state (incl. scrollback search) | `ui/terminal/TerminalScreenState` |
+| Tiled session panes (split/resize/navigate) | `ui/session/PaneLayout` |
+| Remote-desktop screen | `ui/remote/RemoteDesktopController`, `RemoteDesktopScreenState`, `RemoteDesktopPanel` |
+| Streaming an AI reply / parsing it | `ui/ai/AiStreamRunner`, `AiReplyParser` |
+| Sealed sync token, health monitoring | `ui/sync/SealedTokenCodec`, `ServerHealthMonitor` |
+| Sync failure reason → localised text | `SyncFailureReason` + `ui/sync/syncFailureText` (don't build strings in the controller) |
 
-`TerminalView` дорос до 1587 строк, `SettingsPanel` до 1465, `SshjTransport` до 719 — каждый
-пришлось резать отдельным заходом.
+## 2. Size and decomposition — when you create it, not later
 
-- **Файл, приближающийся к ~400–500 строк, делить сразу**: по секциям экрана, по подсистемам
-  (connection / channel / forwards), по вкладкам настроек. Новую секцию/фичу — в новый файл
-  своего пакета, а не «допишу в конец существующего».
-- Один Compose-файл = один экран или один переиспользуемый блок. Панели/диалоги/сайдбары экрана —
-  отдельными файлами рядом.
-- Логика (парсинг, стейт-машины, протоколы) — **не внутри composable и не внутри контроллера UI**,
-  а отдельным классом в `shared/` или рядом с UI, но чистым и тестируемым напрямую
-  (образец: `AiStreamRunner`/`AiReplyParser` с прямыми security-тестами).
+`TerminalView` grew to 1587 lines, `SettingsPanel` to 1465, `SshjTransport` to 719 — each had to be
+cut apart in its own pass.
 
-## 3. Корутины и конкурентность
+- **A file approaching ~400–500 lines gets split right away**: by screen section, by subsystem
+  (connection / channel / forwards), by settings tab. A new section or feature goes into a new file
+  in its own package, not appended to the end of an existing one.
+- One Compose file = one screen or one reusable block. A screen's panels, dialogs and sidebars go
+  into their own files next to it.
+- Logic (parsing, state machines, protocols) does **not** live inside a composable or a UI
+  controller. It belongs in a separate class in `shared/`, or next to the UI but pure and directly
+  testable (the model: `AiStreamRunner` / `AiReplyParser` with direct security tests).
 
-Самый дорогой класс багов рефакторинга. Правила без исключений:
+## 3. Coroutines and concurrency
 
-- **`CancellationException` не глотать никогда.** Любой `catch (e: Exception)` вокруг
-  suspend-кода обязан пробрасывать её (`if (e is CancellationException) throw e`) — иначе отмена
-  маскируется под сетевую ошибку (грабли: serial/telnet каналы, `KtorSyncClient`,
-  `SecretCopyAuthorizer`).
-- **Тяжёлое/блокирующее — не на UI-потоке.** Argon2id (64 MiB), файловый IO, чтение логов —
-  через инжектированный dispatcher (`kdfDispatcher`-паттерн из `VaultGateController`). На Android
-  это ANR, на desktop — фриз.
-- **Guard-флаги и «занято»-состояния сбрасывать в `finally`**, иначе отменённая корутина
-  заклинивает фичу навсегда (грабли: биометрия в `SecretCopyAuthorizer`, `syncNow` в Busy).
-- **Read-modify-write по vault — только под `vault.transaction`** (грабли: `VaultHostStore`
-  vs фоновый merge). Общее правило: присваивание разделяемого состояния — под тем же mutex,
-  что и проверка (грабли: двойной connect в `SyncCoordinator` тёк Ktor-клиентом).
-- **Долгоживущее соединение обязано читать входящие фреймы** — WebSocket-хендлер, который только
-  пишет, не заметит Close и повиснет до следующего publish.
-- **TOCTOU в UI**: параметры операции захватывать в момент открытия подтверждающего диалога, а не
-  перечитывать при нажатии OK (грабли: SFTP overwrite перенаправлялся навигацией панели).
+The most expensive defect class of the refactor. No exceptions to these:
 
-## 4. Безопасность — по умолчанию, не «допилим потом»
+- **Never swallow `CancellationException`.** Any `catch (e: Exception)` around suspend code must
+  rethrow it (`if (e is CancellationException) throw e`) — otherwise cancellation masquerades as a
+  network error (bitten by: serial/telnet channels, `KtorSyncClient`, `SecretCopyAuthorizer`).
+- **Nothing heavy or blocking on the UI thread.** Argon2id (64 MiB), file IO, log reading — through
+  an injected dispatcher (the `kdfDispatcher` pattern from `VaultGateController`). On Android that's
+  an ANR, on desktop a freeze.
+- **Reset guard flags and "busy" state in `finally`**, or a cancelled coroutine wedges the feature
+  forever (bitten by: biometrics in `SecretCopyAuthorizer`, `syncNow` stuck in Busy).
+- **Read-modify-write on the vault only under `vault.transaction`** (bitten by: `VaultHostStore` vs
+  the background merge). General form: assignment to shared state happens under the same mutex as
+  the check that guarded it (bitten by: a double connect in `SyncCoordinator` leaking a Ktor client).
+- **A long-lived connection must read incoming frames** — a WebSocket handler that only writes will
+  miss Close and hang until the next publish.
+- **TOCTOU in the UI**: capture the operation's parameters when the confirmation dialog opens, don't
+  re-read them when OK is pressed (bitten by: SFTP overwrite being redirected by panel navigation).
 
-- Секретосодержащие файлы: **только `atomicWriteUtf8`** (атомарность + 0600). Обычный
-  `writeText` ломал TOFU known_hosts и оставлял world-readable vault-файлы.
-- **Валидация входа — до побочных эффектов**: длину/формат `deviceId`, кодов, id проверять до
-  того, как потрачен одноразовый код или сделан запрос в БД (400, а не 500 + сожжённый код).
-- Промежуточные копии ключей зануляются; сравнение секретов — constant-time, где есть примитив.
-- Невидимые управляющие байты в коде — только escaped-литералами (`""`, `Char(0x1F)`),
-  никогда сырым байтом в строке: он не виден в Read/grep и молча теряется при правках.
-- Вывод сервера/AI — недоверенный источник (политики, подтверждение, редактирование bidi).
+## 4. Security by default, not "we'll harden it later"
 
-## 5. UI: токены, ресурсы, паритет
+- Files holding secrets: **`atomicWriteUtf8` only** (atomic + 0600). A plain `writeText` broke TOFU
+  `known_hosts` and left world-readable vault files.
+- **Validate input before side effects**: check the length and format of `deviceId`, codes and ids
+  *before* a one-time code is spent or a DB query is made (400, not 500 plus a burned code).
+- Intermediate key copies are zeroed; secret comparison is constant-time where a primitive exists.
+- Invisible control bytes in source: escaped literals only (`""`, `Char(0x1F)`), never a raw
+  byte inside a string — it is invisible in Read/grep and silently lost on edit.
+- Server and AI output is an untrusted source (policies, confirmation, bidi sanitising).
 
-- **Никаких hex-цветов в экранах** — только токены `D.*` (в рефакторинге заменили ~70 захардкоженных
-  цветов; понадобился новый оттенок — добавить токен, сверив с `:root` прототипа).
-- **Никаких строк-литералов в UI** — всё через ресурсы (en+ru сразу).
-- Desktop и mobile **делят state и логику форм** (`*FormState`), расходится только layout.
-  Новая форма = сначала общий state-класс, потом два тонких view.
-- Хром — строго 1:1 по прототипам `docs/design/` (см. память template-fidelity): не изобретать
-  кнопок/тулбаров/меню, которых нет в моке.
-- Геометрия, зависящая от настроек (размер шрифта → hit-testing мыши), пересчитывается при смене
-  настройки, а не кэшируется навсегда; объекты не аллоцируются на каждую рекомпозицию
-  (`remember` с правильными ключами).
+## 5. UI: tokens, resources, parity
 
-## 6. Архитектура и тестируемость
+- **No hex colours in screens** — `D.*` tokens only (the refactor replaced ~70 hardcoded colours).
+  Need a new shade? Add a token, checked against the prototype's `:root` block.
+- **No string literals in the UI** — everything through resources, en + ru + zh at once.
+- **No raw Compose Material components** where a design primitive exists (§1, UI table). `Txt` and
+  `Sym` are used by 100+ and 70+ files respectively; a raw `Text()` or a stray icon is a bug.
+- Desktop and mobile **share form state and logic** (`*FormState`); only the layout differs. A new
+  form starts as a shared state class, then two thin views.
+- Chrome follows the `docs/design/` prototypes 1:1 — don't invent buttons, toolbars or menus that
+  aren't in the mock.
+- Geometry derived from settings (font size → mouse hit-testing) is recomputed when the setting
+  changes rather than cached forever; objects are not allocated on every recomposition (`remember`
+  with correct keys).
 
-- Контракты и доменные типы — в `commonMain`; платформенные библиотеки — за `expect/actual`.
-  UI видит только common-контракты (см. память tdd-and-architecture).
-- **Зависимости контроллеров инжектируются** (пример: `SyncEngine` в `SyncCoordinator`) — если
-  класс нельзя протестировать без сети/диска/UI, конструктор спроектирован неправильно.
-- TDD обязателен: тест → красный → реализация → зелёный. Для конкурентных контроллеров — тесты на
-  отмену и повторный вход (именно их не хватало для багов из §3).
-- **Мёртвый код удалять в том же коммите**, который его осиротил: старые сторы, экраны,
-  контроллеры и их тесты, неиспользуемые gradle-зависимости. «Пусть полежит» = будущий рефакторинг.
-- Зависимости — только через version catalog (`libs.versions.toml`), не сырыми координатами.
+## 6. Architecture and testability
 
-## 7. Проверка перед сдачей шага
+- Contracts and domain types live in `commonMain`; platform libraries sit behind `expect`/`actual`.
+  The UI sees common contracts only.
+- **Controller dependencies are injected** (example: `SyncEngine` into `SyncCoordinator`). If a
+  class can't be tested without network, disk or UI, its constructor is designed wrong.
+- Concurrent controllers need tests for cancellation and re-entry — exactly what was missing for the
+  bugs in §3. The TDD loop itself is in `CLAUDE.md` → *How we work*.
+- **Delete dead code in the same commit that orphaned it**: old stores, screens, controllers and
+  their tests, unused Gradle dependencies. "Leave it for now" is a future refactor.
+- Dependencies only through the version catalog (`libs.versions.toml`), never raw coordinates.
 
-- Сборку гонять **без `| tail`/`| grep`** (пайп маскирует exit-код) — вывод в файл + `echo $?`.
-- Полный гейт — `./gradlew build` **с включённым lint** (Android lint/NewApi ловит API-мины вроде
-  `Path.of`); Android-компиляция UI — `:androidApp:compileDebugKotlin`.
-- Остальные платформенные грабли (рендер терминала, локаль, ProGuard off, od для control-байтов) —
-  в памяти platform-gotchas: **выглядящие «поправимыми» странности кода намеренны**, не откатывать.
-- В конце шага сказать пользователю, как проверить результат глазами (экран/сценарий).
+## Self-review checklist before finishing a task
 
-## Чек-лист самопроверки перед завершением задачи
-
-1. Не создал ли я копию существующего паттерна? (грепнуть похожее)
-2. Нет ли файла, переросшего ~500 строк из-за моих правок?
-3. Все `catch` вокруг suspend пробрасывают `CancellationException`? Guard-флаги — в `finally`?
-4. Ничего блокирующего на UI-потоке? Разделяемое состояние — под mutex/transaction?
-5. Цвета — токенами, строки — ресурсами (en+ru), формы — через общий state?
-6. Файлы с секретами — через `atomicWriteUtf8`? Валидация — до побочных эффектов?
-7. Новый код покрыт тестами (включая отмену/гонки), мёртвый — удалён?
-8. Сборка прогнана без пайпа, с lint, на обоих таргетах?
+1. Did I create a copy of an existing pattern? (grep for something similar)
+2. Did any file grow past ~500 lines because of my edits?
+3. Does every `catch` around suspend code rethrow `CancellationException`? Guard flags in `finally`?
+4. Nothing blocking on the UI thread? Shared state under a mutex/transaction?
+5. Colours via tokens, strings via resources (en + ru + zh), text via `Txt`, icons via `Sym`,
+   forms via shared state?
+6. Secret-bearing files through `atomicWriteUtf8`? Validation before side effects?
+7. Is the new code covered by tests (cancellation and races included), and is the dead code gone?
+8. Build, test and review gates from `CLAUDE.md` → *How we work* all run?

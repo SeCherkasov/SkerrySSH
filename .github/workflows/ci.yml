@@ -55,6 +55,12 @@ jobs:
         # inside a coroutine and surfaces as a test that never reaches its final state.
         run: xvfb-run --auto-servernum ./gradlew test allTests --stacktrace
 
+      # Static analysis. Runs after the tests so a red suite is reported first — detekt findings are
+      # cheaper to read once the behaviour is known good. Existing findings sit in
+      # gradle/detekt-baseline-*.xml; this step fails only on NEW ones.
+      - name: Detekt
+        run: ./gradlew detektAll --stacktrace
+
       # Gradle prints only the assertion's file and line; the values it compared live in the report.
       - name: Upload test reports
         if: failure()
@@ -64,4 +70,5 @@ jobs:
           path: |
             **/build/reports/tests/
             **/build/test-results/
+            **/build/reports/detekt/
           retention-days: 7

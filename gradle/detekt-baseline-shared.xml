@@ -1,0 +1,154 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:CharMetrics.kt$CharMetrics$cp in 0x1100..0x115F || // Hangul Jamo cp in 0x2E80..0x303E || // CJK radicals, Kangxi, punctuation cp in 0x3041..0x33FF || // Hiragana/Katakana, CJK symbols cp in 0x3400..0x4DBF || // CJK Ext A cp in 0x4E00..0x9FFF || // CJK Unified cp in 0xA000..0xA4CF || // Yi cp in 0xAC00..0xD7A3 || // Hangul syllables cp in 0xF900..0xFAFF || // CJK compatibility cp in 0xFE10..0xFE19 || // vertical forms cp in 0xFE30..0xFE6F || // CJK compat forms cp in 0xFF00..0xFF60 || // fullwidth forms cp in 0xFFE0..0xFFE6 || // fullwidth signs cp in 0x1F300..0x1FAFF || // emoji, symbols, pictographs cp in 0x20000..0x3FFFD</ID>
+    <ID>ComplexCondition:Der.kt$Der$(lead == 0x00 &amp;&amp; !nextHasHighBit) || (lead == 0xFF &amp;&amp; nextHasHighBit)</ID>
+    <ID>ComplexCondition:MoshSync.kt$MoshOutgoing$!forceAck &amp;&amp; !freshDue &amp;&amp; !retransmitDue &amp;&amp; !heartbeatDue</ID>
+    <ID>ComplexCondition:NsCodec.kt$NsCodec$lumaByteCount &lt; 0 || orangeByteCount &lt; 0 || greenByteCount &lt; 0 || alphaByteCount &lt; 0</ID>
+    <ID>ComplexCondition:Progressive.kt$Progressive.SurfaceTiles$xIdx &lt; 0 || yIdx &lt; 0 || xIdx &gt;= gridWidth || yIdx &gt;= gridHeight</ID>
+    <ID>ComplexCondition:RdpImageBounds.kt$RdpImageBounds$width &lt;= 0 || height &lt;= 0 || width &gt; MAX_DIMENSION || height &gt; MAX_DIMENSION || width.toLong() * height &gt; MAX_PIXELS</ID>
+    <ID>ComplexCondition:RemoteFramebuffer.kt$RemoteFramebuffer$x &lt; 0 || y &lt; 0 || x &gt;= width || y &gt;= height</ID>
+    <ID>ComplexCondition:TerminalEmulator.kt$TerminalEmulator$last &gt;= 0 &amp;&amp; grid[last].all { it.text == " " &amp;&amp; it.style.bg == TermColor.Default &amp;&amp; !it.style.inverse }</ID>
+    <ID>CyclomaticComplexMethod:AutocompleteEngine.kt$AutocompleteEngine$fun onUserInput(data: ByteArray): String?</ID>
+    <ID>CyclomaticComplexMethod:CharMetrics.kt$CharMetrics$fun charWidth(cp: Int): Int</ID>
+    <ID>CyclomaticComplexMethod:CharMetrics.kt$CharMetrics$fun isCombining(cp: Int): Boolean</ID>
+    <ID>CyclomaticComplexMethod:ClearCodec.kt$ClearCodec$private fun subcodecs(reader: RdpReader, image: IntArray, width: Int, height: Int)</ID>
+    <ID>CyclomaticComplexMethod:CommandRisk.kt$CommandRiskClassifier$fun assess(command: String): CommandAssessment</ID>
+    <ID>CyclomaticComplexMethod:GraphicsChannel.kt$GraphicsChannel$private suspend fun handle(commandId: Int, body: RdpReader)</ID>
+    <ID>CyclomaticComplexMethod:HostPattern.kt$HostPattern$fun matches(patterns: String, host: String, port: Int): Boolean</ID>
+    <ID>CyclomaticComplexMethod:InterleavedRle.kt$InterleavedRle.Decoder$private fun operation(code: Int)</ID>
+    <ID>CyclomaticComplexMethod:ModelDownloader.kt$ModelDownloader$fun download(model: LocalModel): Flow&lt;ModelDownloadEvent&gt;</ID>
+    <ID>CyclomaticComplexMethod:MoshShellChannel.kt$MoshShellChannel$private suspend fun processDatagram(datagram: ByteArray): ByteArray?</ID>
+    <ID>CyclomaticComplexMethod:MoshWire.kt$fun decodeHostMessage(payload: ByteArray): List&lt;MoshHostUpdate&gt;</ID>
+    <ID>CyclomaticComplexMethod:RdpConnect.kt$RdpConnectionSequence$private suspend fun awaitLicensing(userId: Int, ioChannelId: Int)</ID>
+    <ID>CyclomaticComplexMethod:RdpConnect.kt$RdpConnectionSequence$private suspend fun finalize(userId: Int, ioChannelId: Int, shareId: Int)</ID>
+    <ID>CyclomaticComplexMethod:RdpFile.kt$RdpFileParser$fun parse(text: String): RdpFileParseResult</ID>
+    <ID>CyclomaticComplexMethod:RfbEncodings.kt$internal suspend fun decodeTight( source: VncSource, fb: RemoteFramebuffer, rect: VncRect, getStream: (Int) -&gt; Inflater, resetStream: (Int) -&gt; Unit, imageDecoder: VncImageDecoder?, )</ID>
+    <ID>CyclomaticComplexMethod:RfbEncodings.kt$private fun decodeZrleTile(c: ByteCursor, fb: RemoteFramebuffer, tileX: Int, tileY: Int, tw: Int, th: Int)</ID>
+    <ID>CyclomaticComplexMethod:SessionShareFrame.kt$internal fun decodeShareFrame(plaintext: ByteArray): ShareFrame?</ID>
+    <ID>CyclomaticComplexMethod:SessionShareHost.kt$SessionShareHost$private suspend fun readFromViewers()</ID>
+    <ID>CyclomaticComplexMethod:SgrParser.kt$SgrParser$fun apply(params: List&lt;IntArray&gt;, start: TermStyle): TermStyle</ID>
+    <ID>CyclomaticComplexMethod:SshConfigParser.kt$SshConfigParser$fun parse(text: String): SshConfigParseResult</ID>
+    <ID>CyclomaticComplexMethod:SshjTransport.kt$SshjTransport$private fun authenticate( client: SSHClient, username: String, requested: SshAuth, hop: Boolean, host: String, port: Int, )</ID>
+    <ID>CyclomaticComplexMethod:TelnetCodec.kt$TelnetCodec$fun consume(input: ByteArray): Decoded</ID>
+    <ID>CyclomaticComplexMethod:TelnetCodec.kt$TelnetCodec$private fun negotiate(cmd: Int, option: Int, reply: ArrayList&lt;Byte&gt;)</ID>
+    <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun dispatchCsi(final: Char)</ID>
+    <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun esc(b: Int)</ID>
+    <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun ground(b: Int)</ID>
+    <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun privateMode(final: Char, codes: List&lt;Int&gt;)</ID>
+    <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun privateModeSet(code: Int): Boolean?</ID>
+    <ID>CyclomaticComplexMethod:TerminalMouse.kt$fun encodeMouseReport( tracking: MouseTracking, sgr: Boolean, button: MouseButton, type: MouseEventType, col: Int, row: Int, shift: Boolean = false, alt: Boolean = false, ctrl: Boolean = false, pixels: Boolean = false, pixelX: Int = 0, pixelY: Int = 0, ): ByteArray?</ID>
+    <ID>CyclomaticComplexMethod:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;TermRow&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
+    <ID>CyclomaticComplexMethod:TerminalSearch.kt$fun searchTerminal( screen: List&lt;List&lt;TermCell&gt;&gt;, query: String, caseSensitive: Boolean = false, regex: Boolean = false, limit: Int = DEFAULT_SEARCH_MATCH_LIMIT, stepBudget: Int = DEFAULT_REGEX_STEP_BUDGET, fromRow: Int = 0, toRow: Int = screen.size, cancelled: () -&gt; Boolean = { false }, ): TerminalSearchResult</ID>
+    <ID>CyclomaticComplexMethod:TerminalSearch.kt$private fun findSubstringInCells( row: List&lt;TermCell&gt;, rowIndex: Int, query: String, caseSensitive: Boolean, remaining: Int, ): List&lt;TerminalMatch&gt;?</ID>
+    <ID>CyclomaticComplexMethod:TerminalSearch.kt$private fun rowText(row: List&lt;TermCell&gt;): RowText?</ID>
+    <ID>CyclomaticComplexMethod:Zgfx.kt$Zgfx$private fun decompressSegment(data: ByteArray): ByteArray</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:KnownHosts.kt$ProbeHostKeyVerifier$val (host, port, keyType, fingerprint, _) = offer.bareKey()</ID>
+    <ID>DestructuringDeclarationWithTooManyEntries:KnownHosts.kt$TofuHostKeyVerifier$val (host, port, keyType, fingerprint, _) = offer.bareKey()</ID>
+    <ID>EmptyElseBlock:RfbEncodings.kt$if (n &gt; 0) source.readFully(b, 0, n)</ID>
+    <ID>EmptyElseBlock:TelnetCodec.kt$TelnetCodec$if (reply.size &lt; MAX_REPLY_BYTES) handleSubnegotiation(subneg, reply)</ID>
+    <ID>EmptyElseBlock:TerminalEmulator.kt$TerminalEmulator$if (cx &gt; 0) cx--</ID>
+    <ID>EmptyFunctionBlock:KnownHosts.kt$NoopHostKeyMismatchStore${}</ID>
+    <ID>EmptyFunctionBlock:LlamatikRuntime.kt$LlamatikRuntime.&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:LocalAiProvider.kt$LocalAiProvider${}</ID>
+    <ID>ExceptionRaisedInUnexpectedLocation:RdpConnect.kt$RdpConnectionSequence$private suspend fun finalize(userId: Int, ioChannelId: Int, shareId: Int)</ID>
+    <ID>InstanceOfCheckForException:UpdateChecker.kt$UpdateChecker$e is CancellationException</ID>
+    <ID>LargeClass:FileVaultTest.kt$FileVaultTest</ID>
+    <ID>LargeClass:TerminalEmulator.kt$TerminalEmulator</ID>
+    <ID>LargeClass:TerminalEmulatorTest.kt$TerminalEmulatorTest</ID>
+    <ID>LongMethod:Capabilities.kt$Capabilities$fun parseDemandActive(reader: RdpReader): ServerCapabilities</ID>
+    <ID>LongMethod:CommandRisk.kt$CommandRiskClassifier$fun assess(command: String): CommandAssessment</ID>
+    <ID>LongMethod:RdpTcpTransport.kt$RdpTcpTransport$private suspend fun connectOnce(target: RdpTarget, credentials: RdpCredentials): RdpSession</ID>
+    <ID>LongMethod:RfbEncodings.kt$internal suspend fun decodeTight( source: VncSource, fb: RemoteFramebuffer, rect: VncRect, getStream: (Int) -&gt; Inflater, resetStream: (Int) -&gt; Unit, imageDecoder: VncImageDecoder?, )</ID>
+    <ID>LongMethod:RfbEncodings.kt$private fun decodeZrleTile(c: ByteCursor, fb: RemoteFramebuffer, tileX: Int, tileY: Int, tw: Int, th: Int)</ID>
+    <ID>LongMethod:SessionShareE2eTest.kt$SessionShareE2eTest$@Test fun `a viewer watches the host's terminal and types back into it`()</ID>
+    <ID>LongMethod:SshConfigParser.kt$SshConfigParser$fun parse(text: String): SshConfigParseResult</ID>
+    <ID>LongMethod:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;TermRow&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
+    <ID>LongParameterList:ClearCodecTest.kt$ClearCodecTest$( xStart: Int, xEnd: Int, yStart: Int, yEnd: Int, bkg: Int, vBars: List&lt;ByteArray&gt;, )</ID>
+    <ID>LongParameterList:ClearCodecTest.kt$ClearCodecTest$( xStart: Int, yStart: Int, width: Int, height: Int, subCodecId: Int, data: ByteArray, )</ID>
+    <ID>LongParameterList:DynamicChannels.kt$DynamicChannels$( command: Int, channelId: Int, idWidth: Int, payload: ByteArray, offset: Int, length: Int, )</ID>
+    <ID>LongParameterList:FastPath.kt$BitmapUpdate$( data: ByteArray, width: Int, height: Int, bitsPerPixel: Int, bytesPerPixel: Int, flags: Int, palette: IntArray?, )</ID>
+    <ID>LongParameterList:FastPath.kt$BitmapUpdate$(framebuffer: RemoteFramebuffer, pixels: IntArray, x: Int, y: Int, width: Int, height: Int)</ID>
+    <ID>LongParameterList:FileVault.kt$( id: String, type: RecordType, version: Long, deviceId: String, deleted: Boolean, updatedAt: String, )</ID>
+    <ID>LongParameterList:McsConnect.kt$McsConnect$( maxChannelIds: Int, maxUserIds: Int, maxTokenIds: Int, numPriorities: Int, minThroughput: Int, maxHeight: Int, maxMcsPduSize: Int, protocolVersion: Int, )</ID>
+    <ID>LongParameterList:Progressive.kt$Progressive$( block: RdpReader, region: Region, tiles: SurfaceTiles, surface: GraphicsSurface, destination: RdpRect, damaged: MutableList&lt;RdpRect&gt;, )</ID>
+    <ID>LongParameterList:Progressive.kt$Progressive$( block: RdpReader, simple: Boolean, region: Region, tiles: SurfaceTiles, surface: GraphicsSurface, destination: RdpRect, damaged: MutableList&lt;RdpRect&gt;, )</ID>
+    <ID>LongParameterList:Progressive.kt$Progressive$( components: Array&lt;IntArray&gt;, state: TileState, surface: GraphicsSurface, region: Region, destination: RdpRect, xIdx: Int, yIdx: Int, damaged: MutableList&lt;RdpRect&gt;, )</ID>
+    <ID>LongParameterList:Progressive.kt$Progressive$( state: UpgradeState, current: ShortArray, sign: ShortArray, band: Band, shift: Int, numBits: Int, )</ID>
+    <ID>LongParameterList:Progressive.kt$Progressive$( tile: TileState, component: Int, numBits: IntArray, shift: IntArray, srlData: ByteArray, rawData: ByteArray, )</ID>
+    <ID>LongParameterList:ProgressiveDwt.kt$ProgressiveDwt$( lowBuffer: IntArray, lowOffset: Int, lowStride: Int, highBuffer: IntArray, highOffset: Int, highStride: Int, out: IntArray, outOffset: Int, outStride: Int, lowCount: Int, highCount: Int, )</ID>
+    <ID>LongParameterList:RemoteFramebuffer.kt$RemoteFramebuffer$(srcX: Int, srcY: Int, dstX: Int, dstY: Int, w: Int, h: Int)</ID>
+    <ID>LongParameterList:RemoteFx.kt$RemoteFx$( reader: RdpReader, quants: Array&lt;ByteArray&gt;, mode: Rlgr.Mode, out: IntArray, width: Int, height: Int, )</ID>
+    <ID>LongParameterList:RfbEncodings.kt$( source: VncSource, fb: RemoteFramebuffer, rect: VncRect, getStream: (Int) -&gt; Inflater, resetStream: (Int) -&gt; Unit, imageDecoder: VncImageDecoder?, )</ID>
+    <ID>LongParameterList:RfbEncodings.kt$(c: ByteCursor, fb: RemoteFramebuffer, tileX: Int, tileY: Int, tw: Int, th: Int)</ID>
+    <ID>LongParameterList:RfxDwt.kt$RfxDwt$( lowBuffer: IntArray, lowOffset: Int, highBuffer: IntArray, highOffset: Int, sourceStride: Int, out: IntArray, outOffset: Int, outStride: Int, side: Int, )</ID>
+    <ID>LongParameterList:RfxForwardTransform.kt$RfxForwardTransform$( source: IntArray, sourceOffset: Int, out: IntArray, highOffset: Int, lowOffset: Int, side: Int, )</ID>
+    <ID>LongParameterList:SessionShareHost.kt$SessionShareHost$( private val codec: SessionShareCodec, private val teamKey: DataKey, private val channel: ShareChannel, private val output: Flow&lt;ByteArray&gt;, private val toShell: suspend (ByteArray) -&gt; Unit, private val geometry: () -&gt; ShareFrame.Resize, private val allowInput: () -&gt; Boolean, /** Called with who is watching, whenever that changes (empty list = nobody). */ private val onViewers: (List&lt;String&gt;) -&gt; Unit, /** A viewer typed into this session; the account it named itself with, for the "typing" hint. */ private val onTyping: (String) -&gt; Unit = {}, /** A viewer asked to be allowed to type; the host answers with [announceControl]. */ private val onControlRequest: (String) -&gt; Unit = {}, )</ID>
+    <ID>LongParameterList:SshjTransport.kt$SshjTransport$( client: SSHClient, username: String, requested: SshAuth, hop: Boolean, host: String, port: Int, )</ID>
+    <ID>LongParameterList:TeamClient.kt$TeamSummary$( val id: String, val ownerAccountId: String, val role: TeamRole, val status: TeamMemberStatus, val createdAt: Long, val memberCount: Int, val envelope: ByteArray?, /** Current teamKey generation; a rotation bumps it (see [TeamKeyEntry.epoch]). */ val keyEpoch: Long = 0, /** Signed sealed current-epoch key from a rotation; the client adopts it when its epoch is newer. */ val keyEnvelope: ByteArray? = null, )</ID>
+    <ID>LongParameterList:TeamInvite.kt$TeamInviteCodec$( recipientPublicKey: ByteArray, inviter: SigningKeyPair, inviterId: String, inviteeId: String, teamId: String, teamKey: DataKey, teamName: String, epoch: Int, scopeId: String = "", )</ID>
+    <ID>LongParameterList:TeamInvite.kt$TeamInviteCodec$( teamId: String, inviterId: String, inviteeId: String, teamKey: DataKey, teamName: String, epoch: Int, scopeId: String, )</ID>
+    <ID>LongParameterList:TeamInvite.kt$TeamInvitePayload$( val teamKey: DataKey, val teamName: String, val teamId: String, val inviterAccountId: String, val inviteeAccountId: String, val epoch: Int, /** Scope this key belongs to; empty for the team-wide key. See [TeamInviteCodec] on why it's signed. */ val scopeId: String = "", /** Detached signature over the canonical binding; checked by [TeamInviteCodec.verify]. */ internal val signature: ByteArray, )</ID>
+    <ID>LongParameterList:TerminalMouse.kt$( tracking: MouseTracking, sgr: Boolean, button: MouseButton, type: MouseEventType, col: Int, row: Int, shift: Boolean = false, alt: Boolean = false, ctrl: Boolean = false, pixels: Boolean = false, pixelX: Int = 0, pixelY: Int = 0, )</ID>
+    <ID>LongParameterList:TerminalReflow.kt$TerminalReflow$( src: List&lt;TermRow&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, )</ID>
+    <ID>NestedBlockDepth:ClearCodec.kt$ClearCodec$private fun bands(reader: RdpReader, image: IntArray, width: Int, height: Int)</ID>
+    <ID>NestedBlockDepth:ClearCodec.kt$ClearCodec$private fun subcodecs(reader: RdpReader, image: IntArray, width: Int, height: Int)</ID>
+    <ID>NestedBlockDepth:MoshCompression.kt$fun moshInflate(data: ByteArray, maxSize: Int = 8 * 1024 * 1024): ByteArray?</ID>
+    <ID>NestedBlockDepth:MoshShellChannel.kt$MoshShellChannel$suspend fun handshake()</ID>
+    <ID>NestedBlockDepth:MoshWire.kt$fun decodeHostMessage(payload: ByteArray): List&lt;MoshHostUpdate&gt;</ID>
+    <ID>NestedBlockDepth:RfbEncodings.kt$internal suspend fun decodeHextile(source: VncSource, fb: RemoteFramebuffer, rect: VncRect)</ID>
+    <ID>NestedBlockDepth:RfbEncodings.kt$internal suspend fun decodeTight( source: VncSource, fb: RemoteFramebuffer, rect: VncRect, getStream: (Int) -&gt; Inflater, resetStream: (Int) -&gt; Unit, imageDecoder: VncImageDecoder?, )</ID>
+    <ID>NestedBlockDepth:RfbEncodings.kt$private fun decodeZrleTile(c: ByteCursor, fb: RemoteFramebuffer, tileX: Int, tileY: Int, tw: Int, th: Int)</ID>
+    <ID>NestedBlockDepth:SessionShareHost.kt$SessionShareHost$private suspend fun readFromViewers()</ID>
+    <ID>NestedBlockDepth:SshConfigParser.kt$SshConfigParser$fun parse(text: String): SshConfigParseResult</ID>
+    <ID>NestedBlockDepth:TelnetCodec.kt$TelnetCodec$fun consume(input: ByteArray): Decoded</ID>
+    <ID>NestedBlockDepth:TelnetCodec.kt$TelnetCodec$private fun negotiate(cmd: Int, option: Int, reply: ArrayList&lt;Byte&gt;)</ID>
+    <ID>NestedBlockDepth:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;TermRow&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
+    <ID>NestedBlockDepth:TerminalSearch.kt$fun searchTerminal( screen: List&lt;List&lt;TermCell&gt;&gt;, query: String, caseSensitive: Boolean = false, regex: Boolean = false, limit: Int = DEFAULT_SEARCH_MATCH_LIMIT, stepBudget: Int = DEFAULT_REGEX_STEP_BUDGET, fromRow: Int = 0, toRow: Int = screen.size, cancelled: () -&gt; Boolean = { false }, ): TerminalSearchResult</ID>
+    <ID>SwallowedException:AndroidBiometricKeyStore.kt$AndroidBiometricKeyStore$e: AEADBadTagException</ID>
+    <ID>SwallowedException:AndroidBiometricKeyStore.kt$AndroidBiometricKeyStore$e: Exception</ID>
+    <ID>SwallowedException:AndroidBiometricKeyStore.kt$AndroidBiometricKeyStore$e: KeyPermanentlyInvalidatedException</ID>
+    <ID>SwallowedException:AndroidBiometricKeyStore.kt$AndroidBiometricKeyStore$e: StrongBoxUnavailableException</ID>
+    <ID>SwallowedException:CredSsp.kt$CredSspClient$e: RdpProtocolException</ID>
+    <ID>SwallowedException:FastPath.kt$BitmapUpdate$e: RdpProtocolException</ID>
+    <ID>SwallowedException:IonspinVaultCrypto.kt$IonspinVaultCrypto$e: BoxCorruptedOrTamperedDataException</ID>
+    <ID>SwallowedException:IonspinVaultCrypto.kt$IonspinVaultCrypto$e: InvalidSignatureException</ID>
+    <ID>SwallowedException:KtorSyncClient.kt$KtorSyncClient$e: Exception</ID>
+    <ID>SwallowedException:MoshSync.kt$MoshIncoming$e: MoshWireException</ID>
+    <ID>SwallowedException:SecretFileReader.kt$OkioSecretFileReader$e: IOException</ID>
+    <ID>SwallowedException:SshjConnection.kt$SshjConnection$e: ConnectionException</ID>
+    <ID>SwallowedException:SshjConnection.kt$SshjConnection$e: TransportException</ID>
+    <ID>SwallowedException:SshjForwards.kt$AcceptingForward$e: IOException</ID>
+    <ID>SwallowedException:SshjForwards.kt$SshjDynamicForward$e: Exception</ID>
+    <ID>SwallowedException:SshjForwards.kt$SshjDynamicForward$e: IOException</ID>
+    <ID>SwallowedException:SshjForwards.kt$SshjLocalForward$e: Exception</ID>
+    <ID>SwallowedException:SshjForwards.kt$SshjRemoteForward$e: Exception</ID>
+    <ID>SwallowedException:SshjForwards.kt$SshjRemoteForward$e: IOException</ID>
+    <ID>SwallowedException:TeamInvite.kt$TeamInviteCodec$e: kotlinx.serialization.SerializationException</ID>
+    <ID>SwallowedException:TeamShare.kt$e: IllegalArgumentException</ID>
+    <ID>SwallowedException:TeamShare.kt$e: SerializationException</ID>
+    <ID>SwallowedException:TeamStores.kt$TeamIdentityStore$e: IllegalArgumentException</ID>
+    <ID>SwallowedException:VncTcpTransport.kt$VncSocketSession$e: EOFException</ID>
+    <ID>SwallowedException:VncTcpTransport.kt$VncSocketSession$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:AtomicWrite.kt$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:FileVault.kt$FileVault$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:MoshTransport.kt$MoshConnection$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:PrivateConfig.kt$PrivateConfig$t: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ProcessLlmHostLauncher.kt$ProcessLlmHostLauncher$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:RdpTcpConnector.kt$RdpTcpConnector$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:RdpTcpTransport.kt$RdpTcpTransport$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:ServiceLlmHostLauncher.kt$ServiceLlmHostLauncher$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:VaultBiometrics.kt$VaultBiometrics$e: Throwable</ID>
+    <ID>TooGenericExceptionCaught:VncTcpTransport.kt$VncTcpTransport$e: Throwable</ID>
+    <ID>TooGenericExceptionThrown:UpdateCheckerTest.kt$UpdateCheckerTest$throw RuntimeException("offline")</ID>
+    <ID>UnusedParameter:FastPath.kt$BitmapUpdate$bitsPerPixel: Int</ID>
+    <ID>UnusedPrivateProperty:ClientInfo.kt$ClientInfo$/** ANSI code page 0 means "use the one implied by the Unicode flag". */ private const val CODE_PAGE_DEFAULT = 0</ID>
+    <ID>UnusedPrivateProperty:FastPath.kt$BitmapUpdate$val bottom = reader.u16le()</ID>
+    <ID>UnusedPrivateProperty:FastPath.kt$BitmapUpdate$val right = reader.u16le()</ID>
+    <ID>UnusedPrivateProperty:TelnetCodecTest.kt$private const val DONT = 254</ID>
+    <ID>UseCheckOrError:FileVault.kt$FileVault$throw IllegalStateException("vault is locked")</ID>
+    <ID>VariableNaming:ProductionGuardTest.kt$ProductionGuardTest$// A production session with warnings on, so these tests exercise classification rather than the // threshold — the threshold has its own tests in [ProductionGuardPolicyTest]. private val GUARDING = ProductionGuardPolicy(production = true, confirmWarnings = true)</ID>
+    <ID>VariableNaming:TelnetCodecTest.kt$TelnetCodecTest$val NOP = 241</ID>
+  </CurrentIssues>
+</SmellBaseline>
