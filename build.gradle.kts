@@ -14,6 +14,8 @@ buildscript {
             // Compose Hot Reload (dev-only live reload) rides the same online-only gate as Kover: a
             // plugins {} entry would be resolved even with `apply false` and break the offline build.
             classpath("org.jetbrains.compose.hot-reload:hot-reload-gradle-plugin:" + libs.versions.composeHotReload.get())
+            // detekt (static analysis) rides the same online-only gate for the same reason.
+            classpath("io.gitlab.arturbosch.detekt:detekt-gradle-plugin:" + libs.versions.detekt.get())
         }
     }
 }
@@ -42,4 +44,6 @@ plugins {
 // script header. buildscript{} above already gates the classpath the same way.
 if (System.getProperty("skerry.offlineRepo") == null) {
     apply(from = rootProject.file("gradle/kover.gradle.kts"))
+    // Static analysis, wired the same way and for the same offline reason. Run: ./gradlew detekt
+    apply(from = rootProject.file("gradle/detekt.gradle.kts"))
 }

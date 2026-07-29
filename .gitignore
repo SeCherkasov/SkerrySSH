@@ -46,6 +46,12 @@ server/.env
 *.db-journal
 .tokensave
 
+# Claude Code: the shared harness (agents, /gate, hooks, settings.json) IS committed; per-machine
+# state is not.
+.claude/settings.local.json
+.claude/worktrees/
+.claude/*.lock
+
 # Flatpak build outputs (the committed inputs are the manifest + flatpak-sources.json)
 composeApp/flatpak/.build/
 composeApp/flatpak/*.flatpak
