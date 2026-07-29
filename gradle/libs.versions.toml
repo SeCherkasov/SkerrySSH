@@ -83,6 +83,10 @@ jna = "5.19.1"
 # 0.9.8+ is required: earlier releases can't handle the com.android.kotlin.multiplatform.library
 # target used by :shared and :composeApp (they demand a legacy `android` extension). See kover #747/#772.
 kover = "0.9.8"
+# detekt — static analysis for Kotlin. Rides the same online-only buildscript gate as Kover: a
+# plugins {} entry would be resolved even with `apply false` and break the hermetic offline Flatpak
+# build (-Dskerry.offlineRepo). 1.23.8 is the last stable line (2.0.x is still alpha).
+detekt = "1.23.8"
 # Compose Hot Reload — dev-only live UI reload (./gradlew :composeApp:hotRunJvm). Like Kover it is
 # loaded via the root buildscript classpath and applied by id only in online builds, so the hermetic
 # offline Flatpak build (-Dskerry.offlineRepo) never resolves it. Pinned to 1.1.1: it is the last

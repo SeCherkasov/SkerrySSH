@@ -1,0 +1,128 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:AiReplyParser.kt$AiReplyParser$firstTok.isNotEmpty() &amp;&amp; firstTok.none { it.isWhitespace() } &amp;&amp; firstTok.all { it.isLetterOrDigit() || it == '-' }</ID>
+    <ID>ComplexCondition:DesktopDesignApp.kt$state.appOverlay != null || state.modalOpen || state.settingsOpen || state.sshImportOpen || state.rdpImportOpen || state.commandPaletteOpen || state.broadcastOpen || state.castRecording != null || // The snippet-variable confirmation dialog is modal too: a hotkey firing over it // would type into the terminal under the dialog or race the pending run. snippets?.pendingRun != null || // Same for both production-guard dialogs. This handler runs on the root's // preview pass, above the focus their scrim takes, so a snippet chord would // otherwise reach the production shell while the user is reading the question. prodConnect != null || prodGuardDialogOpen(sessions?.active)</ID>
+    <ID>ComplexCondition:DesktopShortcuts.kt$alt &amp;&amp; !ctrl &amp;&amp; !meta &amp;&amp; !shift</ID>
+    <ID>ComplexCondition:DesktopShortcuts.kt$ctrl &amp;&amp; !alt &amp;&amp; !meta &amp;&amp; key == Key.Tab</ID>
+    <ID>ComplexCondition:FramebufferImage.desktop.kt$FramebufferImage$srcOff &gt;= 0 &amp;&amp; dstOff &gt;= 0 &amp;&amp; dstOff + r.width &lt;= pixels.size &amp;&amp; srcOff + r.width &lt;= src.size</ID>
+    <ID>ComplexCondition:HostsSidebar.kt$e.type != PointerEventType.Press || !e.buttons.isPrimaryPressed || e.buttons.isSecondaryPressed || e.buttons.isTertiaryPressed</ID>
+    <ID>ComplexCondition:HostsSidebar.kt$folders.isEmpty() &amp;&amp; section == HostSection.RemoteDesktops &amp;&amp; query.isBlank() &amp;&amp; effectiveChip == ALL_HOSTS_CHIP</ID>
+    <ID>ComplexCondition:HostsSidebar.kt$noteVisible &amp;&amp; !note.isNullOrBlank() &amp;&amp; !menuOpen &amp;&amp; !snippetPickerOpen</ID>
+    <ID>ComplexCondition:MobileTeamsView.kt$!invited &amp;&amp; team.hasKey &amp;&amp; (scopeId.isEmpty() || activeScope?.hasKey == true)</ID>
+    <ID>ComplexCondition:RemoteScreenshot.kt$it.isLetterOrDigit() || it == '-' || it == '_' || it == '.'</ID>
+    <ID>ComplexCondition:RunbookPalette.kt$open &amp;&amp; enabled &amp;&amp; terminal != null &amp;&amp; active != null</ID>
+    <ID>ComplexCondition:TeamsView.kt$!invited &amp;&amp; team.hasKey &amp;&amp; (scopeId.isEmpty() || activeScope?.hasKey == true)</ID>
+    <ID>ComplexCondition:TerminalGeometry.kt$cols &lt;= 0 || rows &lt;= 0 || metrics.cellWidth &lt;= 0f || metrics.cellHeight &lt;= 0f</ID>
+    <ID>ComplexCondition:TerminalScreen.kt$focused &amp;&amp; !closed &amp;&amp; !imeInput &amp;&amp; modalsOpen == 0 &amp;&amp; !searchOpen</ID>
+    <ID>ComplexCondition:TerminalScreen.kt$g &lt; row.size &amp;&amp; row[g].width == CellWidth.Single &amp;&amp; row[g].style == st &amp;&amp; row[g].isPlainAscii()</ID>
+    <ID>ComplexCondition:TerminalScreenState.kt$TerminalScreenState$guardPolicy.production &amp;&amp; !awaitingSecret &amp;&amp; text.any { it == '\n' || it == '\r' }</ID>
+    <ID>ComplexCondition:TerminalSearchRenderTest.kt$TerminalSearchRenderTest$close(p shr 16 and 0xFF, argb shr 16 and 0xFF) &amp;&amp; close(p shr 8 and 0xFF, argb shr 8 and 0xFF) &amp;&amp; close(p and 0xFF, argb and 0xFF) &amp;&amp; (p ushr 24) == 0xFF</ID>
+    <ID>ComplexCondition:TerminalView.kt$sessions == null || !state.openFilePathsInSftp || controller == null || !controller.supportsSftp</ID>
+    <ID>ComplexCondition:VaultGateScreen.kt$event == Lifecycle.Event.ON_STOP &amp;&amp; controller.state == VaultGateState.Unlocked &amp;&amp; !controller.biometricInFlight &amp;&amp; deviceMandatesAutoLock()</ID>
+    <ID>ComplexCondition:VncCoordinates.kt$FitGeometry$fx &lt; 0f || fy &lt; 0f || fx &gt;= fbWidth || fy &gt;= fbHeight</ID>
+    <ID>ComplexCondition:VncCoordinates.kt$canvas.width &lt;= 0 || canvas.height &lt;= 0 || fbWidth &lt;= 0 || fbHeight &lt;= 0</ID>
+    <ID>ComplexCondition:VncCoordinates.kt$fbWidth &lt;= 0 || fbHeight &lt;= 0 || canvasWidth &lt;= 0f || canvasHeight &lt;= 0f</ID>
+    <ID>CyclomaticComplexMethod:DesktopDesignApp.kt$private fun runDesktopShortcut( shortcut: DesktopShortcut, state: DesktopDesignState, sessions: SessionsController?, onLock: () -&gt; Unit, ): Boolean</ID>
+    <ID>CyclomaticComplexMethod:DesktopShortcuts.kt$fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Boolean, key: Key): DesktopShortcut?</ID>
+    <ID>CyclomaticComplexMethod:HostSidebarDnd.kt$internal suspend fun PointerInputScope.detectDeadZoneDragGestures( onStart: (Offset) -&gt; Unit, onMove: (PointerInputChange, Offset) -&gt; Unit, onEnd: () -&gt; Unit, onCancel: () -&gt; Unit, )</ID>
+    <ID>CyclomaticComplexMethod:KeyboardInteractiveDialog.kt$internal fun sanitizeServerText(text: String, maxChars: Int): String</ID>
+    <ID>CyclomaticComplexMethod:RemoteScreenshot.android.kt$actual suspend fun saveRemoteScreenshot(image: ImageBitmap, baseName: String): String?</ID>
+    <ID>CyclomaticComplexMethod:Screenshot.kt$@OptIn(ExperimentalComposeUiApi::class) fun main()</ID>
+    <ID>CyclomaticComplexMethod:Screenshot.kt$@OptIn(ExperimentalComposeUiApi::class) private fun renderMobile(out: String, viewName: String, overlay: String, live: Boolean)</ID>
+    <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doChangeAccountPassword(cfg: SyncConfig, current: CharArray, next: CharArray): AccountPasswordChange</ID>
+    <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean)</ID>
+    <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false)</ID>
+    <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun runSyncLocked(c: SyncClient, s: SyncSession)</ID>
+    <ID>CyclomaticComplexMethod:SyncFailureText.kt$internal fun syncFailureResource(reason: SyncFailureReason): StringResource</ID>
+    <ID>CyclomaticComplexMethod:TeamActivityFeedView.kt$private fun rowIcon(kind: TeamActivityKind): String</ID>
+    <ID>CyclomaticComplexMethod:TeamSpaces.kt$TeamSpaces$suspend fun refreshScopes(s: SyncSession, c: TeamClient, teamId: String, identity: AccountIdentity?): List&lt;TeamScopeUi&gt;</ID>
+    <ID>CyclomaticComplexMethod:TeamsCoordinator.kt$TeamsCoordinator$private suspend fun adoptRotatedKeys(s: SyncSession, c: TeamClient, remote: List&lt;TeamSummary&gt;, identity: AccountIdentity)</ID>
+    <ID>CyclomaticComplexMethod:TerminalFilePaths.kt$internal fun detectFilePaths(text: String): List&lt;TextLinkSpan&gt;</ID>
+    <ID>CyclomaticComplexMethod:TerminalFilePaths.kt$private fun cutLineSuffix(token: String): String</ID>
+    <ID>CyclomaticComplexMethod:TerminalInput.kt$private fun keypadSequence(key: Key): String?</ID>
+    <ID>CyclomaticComplexMethod:TerminalInput.kt$private fun letterIndex(key: Key): Int?</ID>
+    <ID>CyclomaticComplexMethod:TerminalInput.kt$private fun navKeySequence(key: Key, applicationCursor: Boolean, shift: Boolean, alt: Boolean, ctrl: Boolean): String?</ID>
+    <ID>CyclomaticComplexMethod:VncTouchSurface.kt$private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.vncTouchGestures( screen: RemoteDesktopScreenState, pad: VncTrackpad, canvasSize: () -&gt; IntSize, )</ID>
+    <ID>EmptyFunctionBlock:PlatformBackHandler.desktop.kt${ }</ID>
+    <ID>EmptyFunctionBlock:QrScanner.desktop.kt${ }</ID>
+    <ID>EmptyFunctionBlock:Screenshot.kt$&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:Screenshot.kt$FakeChannel${}</ID>
+    <ID>EmptyFunctionBlock:Screenshot.kt$FakeConnection${}</ID>
+    <ID>EmptyFunctionBlock:SecureScreen.desktop.kt${}</ID>
+    <ID>ExceptionRaisedInUnexpectedLocation:FilePicker.android.kt$SafDownloadTarget$override suspend fun finalize(): Unit</ID>
+    <ID>ExceptionRaisedInUnexpectedLocation:TransferCoordinatorTest.kt$TransferCoordinatorTest.FakeDownloadTarget$override suspend fun finalize()</ID>
+    <ID>LargeClass:FilePaneControllerTest.kt$FilePaneControllerTest</ID>
+    <ID>LargeClass:SessionsControllerTest.kt$SessionsControllerTest</ID>
+    <ID>LargeClass:SyncCoordinator.kt$SyncCoordinator</ID>
+    <ID>LargeClass:TerminalScreenStateTest.kt$TerminalScreenStateTest</ID>
+    <ID>LongMethod:FullAppThemeSwitchRenderTest.kt$FullAppThemeSwitchRenderTest$@Test fun themeSwitchRepaintsLiveTerminalInFullApp()</ID>
+    <ID>LongMethod:Screenshot.kt$@OptIn(ExperimentalComposeUiApi::class) fun main()</ID>
+    <ID>LongMethod:SessionShareController.kt$SessionShareController$fun share(teamId: String, teamName: String, paneId: String, label: String, source: ShareSource, readOnlyOnly: Boolean)</ID>
+    <ID>LongMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doChangeAccountPassword(cfg: SyncConfig, current: CharArray, next: CharArray): AccountPasswordChange</ID>
+    <ID>LongMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean)</ID>
+    <ID>LongMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false)</ID>
+    <ID>LongMethod:TerminalThemeTest.kt$TerminalThemeTest$@Test fun every_theme_matches_its_golden_palette()</ID>
+    <ID>LongMethod:VncTouchSurface.kt$private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.vncTouchGestures( screen: RemoteDesktopScreenState, pad: VncTrackpad, canvasSize: () -&gt; IntSize, )</ID>
+    <ID>LongMethod:main.kt$fun main(args: Array&lt;String&gt;)</ID>
+    <ID>LongMethod:main.kt$private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph</ID>
+    <ID>LongParameterList:AiStreamRunner.kt$AiStreamRunner$( endpoint: AiEndpoint, messages: List&lt;AiMessage&gt;, onDelta: (String) -&gt; Unit, onComplete: (String) -&gt; Unit, onError: (AiFailure) -&gt; Unit, onFinally: () -&gt; Unit, // null uses the provider default; the terminal bar requests a low value (command, not creative). temperature: Double? = null, )</ID>
+    <ID>LongParameterList:DesktopDesignApp.kt$( sessions: SessionsController?, state: DesktopDesignState, tabId: String?, paneId: String, host: Host, auth: SshAuth, jump: SshJump? = null, )</ID>
+    <ID>LongParameterList:MobileDesignApp.kt$( sessions: SessionsController?, state: MobileDesignState, host: Host, auth: SshAuth, jump: SshJump?, dest: MobileConnectDest, )</ID>
+    <ID>LongParameterList:SessionShareController.kt$SessionShareController$(teamId: String, teamName: String, paneId: String, label: String, source: ShareSource, readOnlyOnly: Boolean)</ID>
+    <ID>LongParameterList:SessionsController.kt$SessionsController$( tabId: String, paneId: String, hostId: String?, title: String, subtitle: String, target: SshTarget, auth: SshAuth, )</ID>
+    <ID>LongParameterList:SharedSessionsList.kt$( sessions: SessionsController?, title: String, subtitle: String, viewer: TerminalSession, onPaneOpened: (String) -&gt; Unit, showTerminal: () -&gt; Unit, )</ID>
+    <ID>LongParameterList:TeamSpaces.kt$TeamSpaces$( private val keyStore: TeamKeyStore, private val teamVaults: TeamVaults, private val crypto: VaultCrypto, private val inviteCodec: TeamInviteCodec, private val accountVaultUnlocked: () -&gt; Boolean, private val markError: (TeamsFailure) -&gt; Unit, private val syncSpace: suspend (TeamScopeRef) -&gt; Unit, )</ID>
+    <ID>LongParameterList:TeamSpaces.kt$TeamSpaces$( recipientPublicKey: ByteArray, identity: AccountIdentity, senderId: String, recipientId: String, teamId: String, scopeId: String, key: DataKey, name: String, epoch: Int, )</ID>
+    <ID>LongParameterList:TeamSpaces.kt$TeamSpaces$(s: SyncSession, c: TeamClient, teamId: String, scopeId: String, accountId: String, identity: AccountIdentity)</ID>
+    <ID>LongParameterList:TeamSpaces.kt$TeamSpaces$(s: SyncSession, c: TeamClient, teamId: String, scopeId: String, name: String, identity: AccountIdentity)</ID>
+    <ID>LongParameterList:TeamsCoordinator.kt$TeamsCoordinator$( private val session: () -&gt; SyncSession?, private val client: () -&gt; TeamClient?, private val vault: Vault, private val crypto: VaultCrypto, private val teamVaults: TeamVaults, private val teamState: SyncStateStore, /** Generator of client-side ids (teams and scopes) — a UUID in production. */ private val newId: () -&gt; String, private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default), private val onTeamsChanged: () -&gt; Unit = {}, )</ID>
+    <ID>LongParameterList:TerminalGeometry.kt$( viewportWidthPx: Float, viewportHeightPx: Float, paddingPx: Float, metrics: TerminalMetrics, cols: Int, rows: Int, )</ID>
+    <ID>LongParameterList:TerminalScreen.kt$(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette, effects: UnderlineEffects, theme: TerminalTheme)</ID>
+    <ID>LongParameterList:TransferCoordinator.kt$TransferCoordinator$( name: String, localPath: String, type: FileItemType, size: Long, remoteDir: String, plan: UploadPlan, )</ID>
+    <ID>LongParameterList:TransferCoordinator.kt$TransferCoordinator$( name: String, remotePath: String, type: FileItemType, size: Long, localDir: String, plan: DownloadPlan, )</ID>
+    <ID>LongParameterList:TunnelForm.kt$( id: String?, label: String, hostId: String?, direction: TunnelDirection, bindHost: String, bindPort: String, destHost: String, destPort: String, )</ID>
+    <ID>LongParameterList:WindowResize.kt$( start: Rectangle, edge: ResizeEdge, deltaX: Int, deltaY: Int, minWidth: Int, minHeight: Int, )</ID>
+    <ID>LongParameterList:main.kt$DesktopGraph$( val deps: AppDependencies, val keyboardInteractive: KeyboardInteractivePromptController, val securityLog: FileSecurityLog, val probeTransport: SshTransport, val vncTransport: app.skerry.shared.vnc.VncTransport, val rdpTransport: app.skerry.shared.rdp.RdpTransport, val workspaceLayout: WorkspaceLayoutStore, val ai: AiAssistantController, val updates: app.skerry.ui.update.UpdateNoticeController, val onVaultUnlocked: () -&gt; Unit, val onVaultReset: (ResetScope) -&gt; Unit, )</ID>
+    <ID>NestedBlockDepth:AndroidSecretFileReader.kt$AndroidSecretFileReader$override fun read(ref: String): SecretFileResult</ID>
+    <ID>NestedBlockDepth:HostMenuWidthTest.kt$HostMenuWidthTest$@Test fun `the row menu never renders narrower than its floor`()</ID>
+    <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doChangeAccountPassword(cfg: SyncConfig, current: CharArray, next: CharArray): AccountPasswordChange</ID>
+    <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean)</ID>
+    <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false)</ID>
+    <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun runSyncLocked(c: SyncClient, s: SyncSession)</ID>
+    <ID>NestedBlockDepth:TerminalScreen.kt$private fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette, effects: UnderlineEffects, theme: TerminalTheme)</ID>
+    <ID>SpreadOperator:KeyboardInteractiveDialog.kt$(*Array(challenge.prompts.size) { "" })</ID>
+    <ID>SwallowedException:AndroidSecretFileReader.kt$AndroidSecretFileReader$e: FileNotFoundException</ID>
+    <ID>SwallowedException:AndroidSecretFileReader.kt$AndroidSecretFileReader$e: SecurityException</ID>
+    <ID>SwallowedException:ConnectionController.kt$ConnectionController$e: Exception</ID>
+    <ID>SwallowedException:ConnectionTest.kt$e: Exception</ID>
+    <ID>SwallowedException:ConnectionTest.kt$e: SshAuthenticationException</ID>
+    <ID>SwallowedException:ConnectionTest.kt$e: SshConnectionException</ID>
+    <ID>SwallowedException:ConnectionTest.kt$e: SshHostKeyRejectedException</ID>
+    <ID>SwallowedException:ContainerBrowse.kt$e: Exception</ID>
+    <ID>SwallowedException:ContainerBrowse.kt$e: SshAuthenticationException</ID>
+    <ID>SwallowedException:ContainerBrowse.kt$e: SshConnectionException</ID>
+    <ID>SwallowedException:ContainerBrowse.kt$e: SshHostKeyRejectedException</ID>
+    <ID>SwallowedException:FilePicker.android.kt$e: Exception</ID>
+    <ID>SwallowedException:QrScanner.android.kt$e: Exception</ID>
+    <ID>SwallowedException:SecretCopyAuthorizer.kt$SecretCopyAuthorizer$e: Exception</ID>
+    <ID>SwallowedException:ServerHealthMonitor.kt$ServerHealthMonitor$e: Exception</ID>
+    <ID>SwallowedException:ServiceScanController.kt$ServiceScanController$e: UnsupportedOperationException</ID>
+    <ID>SwallowedException:SyncCoordinator.kt$SyncCoordinator$e: Exception</ID>
+    <ID>SwallowedException:TeamsCoordinator.kt$TeamsCoordinator$e: Exception</ID>
+    <ID>TooGenericExceptionThrown:HostMetricsControllerTest.kt$HostMetricsControllerTest$throw RuntimeException("boom")</ID>
+    <ID>TooGenericExceptionThrown:HostMetricsMonitorControllerTest.kt$HostMetricsMonitorControllerTest$throw RuntimeException("channel dropped")</ID>
+    <ID>TooGenericExceptionThrown:PingControllerTest.kt$PingControllerTest$throw RuntimeException("boom")</ID>
+    <ID>TooGenericExceptionThrown:TransferCoordinatorTest.kt$TransferCoordinatorTest.FakeDownloadTarget$throw RuntimeException(it)</ID>
+    <ID>UnusedParameter:MobileFilesView.kt$mono: FontFamily</ID>
+    <ID>UnusedParameter:MobileSnippetsView.kt$mono: FontFamily</ID>
+    <ID>UnusedPrivateMember:DesktopDesignApp.kt$@Composable private fun SidebarToggle(hidden: Boolean, onToggle: () -&gt; Unit)</ID>
+    <ID>UnusedPrivateMember:MobileDesignApp.kt$@Composable private fun MobileRoutePlaceholder(state: MobileDesignState, title: String)</ID>
+    <ID>UnusedPrivateProperty:Screenshot.kt$FakeConnection$val tick = polls++</ID>
+    <ID>UseCheckOrError:RemoteDesktopScreenStateTest.kt$RemoteDesktopScreenStateTest.&lt;no name provided&gt;$throw IllegalStateException("Socket closed")</ID>
+    <ID>UseCheckOrError:SyncCoordinatorNetworkRecoveryTest.kt$SyncCoordinatorNetworkRecoveryTest$throw IllegalStateException("vault is locked")</ID>
+    <ID>VariableNaming:AttachedSessionTest.kt$AttachedSessionTest.WatchedSession$val _state = MutableStateFlow&lt;TerminalState&gt;(TerminalState.Open)</ID>
+    <ID>VariableNaming:HostMenuWidthTest.kt$HostMenuWidthTest$/** The trailing "⋮" IconBtn's box size in HostEntryRow, at density 1. */ private val MENU_BUTTON_BOX = 22f</ID>
+  </CurrentIssues>
+</SmellBaseline>

@@ -1,0 +1,34 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>ComplexCondition:AuthRoutes.kt$decoded == null || deviceId == null || accountId == null || services.devices.isRevoked(accountId, deviceId)</ID>
+    <ID>CyclomaticComplexMethod:AdminCliParser.kt$fun parseCli(args: List&lt;String&gt;, env: Map&lt;String, String&gt; = System.getenv()): ParsedCli</ID>
+    <ID>CyclomaticComplexMethod:AdminCliRunner.kt$private suspend fun execute( command: AdminCommand, options: CliOptions, token: String?, out: Appendable, err: Appendable, now: Long, clientFactory: (CliOptions) -&gt; HttpClient, ): Int</ID>
+    <ID>CyclomaticComplexMethod:AdminRoutes.kt$fun Route.adminRoutes(services: Services)</ID>
+    <ID>CyclomaticComplexMethod:AuthRoutes.kt$fun Route.authRoutes(services: Services)</ID>
+    <ID>CyclomaticComplexMethod:Plugins.kt$fun Application.configureServer(services: Services)</ID>
+    <ID>CyclomaticComplexMethod:TeamRecordRepository.kt$TeamRecordRepository$suspend fun upsert(teamId: String, scopeId: String, incoming: List&lt;IncomingRecord&gt;): TeamUpsertResult</ID>
+    <ID>CyclomaticComplexMethod:TeamRoutes.kt$fun Route.teamRoutes(services: Services)</ID>
+    <ID>CyclomaticComplexMethod:TeamScopeRoutes.kt$fun Route.teamScopeRoutes(services: Services)</ID>
+    <ID>EmptyForBlock:SyncWebSocket.kt${ }</ID>
+    <ID>LongMethod:AdminCliParser.kt$fun parseCli(args: List&lt;String&gt;, env: Map&lt;String, String&gt; = System.getenv()): ParsedCli</ID>
+    <ID>LongMethod:AdminCliRunner.kt$private suspend fun execute( command: AdminCommand, options: CliOptions, token: String?, out: Appendable, err: Appendable, now: Long, clientFactory: (CliOptions) -&gt; HttpClient, ): Int</ID>
+    <ID>LongMethod:AdminRoutes.kt$fun Route.adminRoutes(services: Services)</ID>
+    <ID>LongMethod:AuthRoutes.kt$fun Route.authRoutes(services: Services)</ID>
+    <ID>LongMethod:Plugins.kt$fun Application.configureServer(services: Services)</ID>
+    <ID>LongMethod:SyncWebSocket.kt$fun Route.syncWebSocket(services: Services)</ID>
+    <ID>LongMethod:TeamRoutes.kt$fun Route.teamRoutes(services: Services)</ID>
+    <ID>LongMethod:TeamScopeRoutes.kt$fun Route.teamScopeRoutes(services: Services)</ID>
+    <ID>LongParameterList:ActivityRepository.kt$ActivityRepository$( accountId: String, teamId: String, event: String, recordId: String, recordType: String?, scopeId: String, durationSec: Long?, now: Long = System.currentTimeMillis(), )</ID>
+    <ID>LongParameterList:AdminCliRunner.kt$( command: AdminCommand, options: CliOptions, token: String?, out: Appendable, err: Appendable, now: Long, clientFactory: (CliOptions) -&gt; HttpClient, )</ID>
+    <ID>LongParameterList:AdminCliRunner.kt$AdminApi$( out: Appendable, err: Appendable, json: Boolean, path: String, done: String, missing: String, )</ID>
+    <ID>LongParameterList:RecordRepository.kt$IncomingRecord$( val id: String, val type: String, val version: Long, val updatedAt: String, val deviceId: String, val deleted: Boolean, val blob: ByteArray, )</ID>
+    <ID>LongParameterList:ShareRelay.kt$HostShareSession$( private val relay: ShareRelay, val teamId: String, val shareId: String, val hostAccountId: String, val meta: String, val startedAt: Long, private val replayBytes: Int, private val maxGuests: Int, private val guestQueueFrames: Int, )</ID>
+    <ID>LongParameterList:TeamRepository.kt$TeamRepository$(teamId: String, accountId: String, role: String, envelope: ByteArray, invitedBy: String, now: Long)</ID>
+    <ID>SpreadOperator:ServerMetrics.kt$ServerMetrics.HistogramBuckets$( *doubleArrayOf(1.0, 10.0, 60.0, 300.0, 1_800.0, 7_200.0) .map { it * 1_000_000_000 }.toDoubleArray(), )</ID>
+    <ID>SpreadOperator:ServerMetrics.kt$ServerMetrics.HistogramBuckets$(*SLO_SECONDS.map { it * 1_000_000_000 }.toDoubleArray())</ID>
+    <ID>TooGenericExceptionCaught:SyncWebSocket.kt$error: Throwable</ID>
+    <ID>UnusedPrivateProperty:SyncWebSocket.kt$frame</ID>
+  </CurrentIssues>
+</SmellBaseline>

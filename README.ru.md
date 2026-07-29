@@ -23,7 +23,7 @@ macOS)** и **Android**, паритет фич между платформами
 |---|---|---|---|---|
 | **Open source** | ✅ GPL-3.0 · AGPL-3.0 | ❌ | ✅ MIT | ✅ MIT |
 | **Платформы** | Linux · Windows · macOS · Android | Windows · macOS · Linux · iOS · Android | Windows · Unix | Windows · macOS · Linux |
-| **Первый релиз** | 2026 (v0.1.x) | 2011 | 1999 | 2017 |
+| **Первый релиз** | 2026 (v0.2.x) | 2011 | 1999 | 2017 |
 | **Цена** | бесплатно | free-тариф · платно от $10/мес | бесплатно | бесплатно |
 | **Работает без аккаунта** | ✅ | ⚠️ только локально <sup>1</sup> | ✅ | ✅ |
 | **Шифрованный vault** | ✅ всегда включён <sup>2</sup> | ✅ | ❌ | ⚠️ по желанию |
@@ -33,7 +33,8 @@ macOS)** и **Android**, паритет фич между платформами
 | **Port forwarding** | ✅ local · remote · dynamic | ✅ | ✅ | ✅ |
 | **Serial / Telnet** | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
 | **Mosh** | ✅ | ✅ | ❌ | ❌ |
-| **Удалённый рабочий стол VNC** | ✅ встроенный | ❌ | ❌ | ❌ |
+| **Удалённый рабочий стол VNC / RDP** | ✅ встроенные оба | ❌ | ❌ | ❌ |
+| **Совместные сессии** | ✅ end-to-end | ⚠️ платный тариф | ❌ | ❌ |
 | **AI-ассистент** | ✅ локальный или BYOK-облако <sup>4</sup> | ⚠️ облако, нужен аккаунт | ❌ | ❌ |
 
 **Обозначения:** ✅ есть · ⚠️ частично / с оговорками · ❌ нет
@@ -49,7 +50,7 @@ macOS)** и **Android**, паритет фич между платформами
 ## Статус
 
 В активной разработке под **Linux**, **Windows**, **macOS** и **Android**. **iOS/iPadOS**
-— в планах.
+отложены — таргетов iOS в сборке нет.
 
 ## Установка
 
@@ -97,15 +98,25 @@ macOS)** и **Android**, паритет фич между платформами
 
 ## Возможности
 
-- **Подключения** — SSH с jump-хостами (ProxyJump) и SSH-сертификатами; Mosh; SFTP
-  (двухпанельный commander со встроенным просмотром/редактированием файлов); port
-  forwarding: local, remote, dynamic/SOCKS, плюс обнаружение слушающих сервисов с пробросом
-  в один тап; удалённый рабочий стол VNC; exec в Docker и Kubernetes (выбор контейнера или
-  пода на хосте и вход в его shell); Telnet; serial (desktop и Android USB-OTG).
+- **Подключения** — SSH с jump-хостами (ProxyJump), SSH-сертификатами (из vault или прямо с
+  диска — файл перечитывается при каждом подключении), сертификатами хост-ключей от CA и
+  ответами на keyboard-interactive 2FA; Mosh; SFTP (двухпанельный commander со встроенным
+  просмотром/редактированием файлов, настраиваемыми колонками и быстрым фильтром по имени);
+  port forwarding: local, remote, dynamic/SOCKS, плюс обнаружение слушающих сервисов с
+  пробросом в один тап; exec в Docker и Kubernetes (выбор контейнера или пода на хосте и вход
+  в его shell); Telnet; serial (desktop и Android USB-OTG); локальный shell во вкладке — вообще
+  без подключения. Хосты можно импортировать из `~/.ssh/config`.
+- **Удалённые рабочие столы** — VNC и RDP в отдельном разделе, оба на собственном клиентском
+  стеке. Панель сессии даёт скриншот, Ctrl+Alt+Del, обмен буфером обмена и настройки,
+  применяемые прямо посреди сессии.
 - **Терминал** — своя grid-эмуляция, вкладки с тайловой раскладкой до четырёх панелей и
   синхронным вводом, авто-реконнект SSH, поиск по scrollback, живые метрики хоста, палитра
-  команд по истории, трансляция ввода в несколько сессий и запись сессий (asciinema v2)
-  со встроенным проигрывателем.
+  команд по истории, трансляция ввода в несколько сессий, открытие файловых путей из вывода
+  сразу в панели SFTP и запись сессий (asciinema v2) со встроенным проигрывателем.
+- **Совместные сессии** — трансляция живого терминала коллеге по E2E-шифрованному каналу:
+  только просмотр или с передачей клавиатуры.
+- **Production guard** — на хостах с тегом `prod` каждая команда оценивается по риску, опасные
+  требуют явного подтверждения.
 - **Темы** — тёмные и светлые темы приложения с каталогом-карточками; терминал следует теме
   приложения, режим «Системная» отслеживает ОС на лету.
 - **Vault** — всегда включённое шифрование (Argon2id + XChaCha20-Poly1305) для ключей,
@@ -114,7 +125,8 @@ macOS)** и **Android**, паритет фич между платформами
   синхронизированном устройстве.
 - **Sync** — опциональная и self-hosted, zero-knowledge, live push через WebSocket, паринг
   устройств по QR. См. [Sync-сервер](#sync-сервер).
-- **Teams** — E2E-шифрованный шаринг хостов и сниппетов внутри команды.
+- **Teams** — E2E-шифрованный шаринг хостов и сниппетов внутри команды, с областями доступа для
+  каждого участника и лентой активности: кто менял какой хост и кто открывал сессию.
 - **Сниппеты и AI** — библиотека команд с type-ahead в терминале; динамические переменные
   `${{…}}` (дата/время, uuid, random, буфер обмена, секреты хранилища, запрашиваемые
   параметры), разворачиваемые при запуске за диалогом подтверждения; AI-ассистент с per-host
@@ -151,20 +163,23 @@ macOS)** и **Android**, паритет фич между платформами
 
 ## Технологии
 
-- **Язык/UI**: Kotlin 2.x, Compose Multiplatform 1.11.1
-- **Сборка**: Gradle 9.3.1, Android Gradle Plugin 9.0.1
+- **Язык/UI**: Kotlin 2.4.10, Compose Multiplatform 1.9.3
+- **Сборка**: Gradle 9.6.1, Android Gradle Plugin 9.1.1
 - **JVM-таргет**: JDK 21 (`jvmToolchain(21)` во всех модулях, `JVM_21`)
-- **Android**: minSdk 26 (Android 8.0), compileSdk/targetSdk 36
-- **Ядро**: sshj 0.40.0, BouncyCastle 1.80.2, libsodium (ionspin KMP), okio, atomicfu
-- **Serial**: jSerialComm 2.11.0 (desktop), usb-serial-for-android 3.9.0 (Android, jitpack)
-- **Sync**: Ktor 3.4.3 (клиент+сервер), Exposed 0.58.0, SQLite/PostgreSQL, HikariCP,
+- **Android**: minSdk 26 (Android 8.0), compileSdk 37, targetSdk 36
+- **Ядро**: sshj 0.40.0, BouncyCastle 1.85, libsodium (ionspin KMP), okio 3.18.0, atomicfu
+- **Удалённый рабочий стол**: собственные стеки VNC (RFB) и RDP, без сторонних клиентов
+- **Serial**: jSerialComm 2.11.4 (desktop), usb-serial-for-android (Android, jitpack)
+- **Sync**: Ktor 3.5.1 (клиент+сервер), Exposed 1.3.1, SQLite/PostgreSQL, HikariCP,
   Nimbus SRP-6a
+- **Качество**: JUnit 5, покрытие Kover, статанализ detekt
 
 ## Структура репозитория
 
 ```
-shared/       # ядро KMP: ssh/, sftp/, vault/, sync/, team/, terminal/, ai/ (+ai/local),
-              # telnet/, serial/, tunnel/, snippet/, host/, files/
+shared/       # ядро KMP: ssh/, sftp/, vault/, sync/, team/, share/, terminal/, ai/ (+ai/local),
+              # telnet/, serial/, mosh/, rdp/, vnc/, graphics/, audio/, tunnel/, container/,
+              # snippet/, runbook/, host/, tag/, files/, guard/, update/
 composeApp/   # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
 androidApp/   # Android-приложение (MainActivity, манифест); applicationId app.skerry
 server/       # self-hosted sync-сервер (Ktor, AGPL-3.0)
@@ -200,10 +215,11 @@ Android:
 ANDROID_HOME=$HOME/Android/Sdk ./gradlew :androidApp:installDebug
 ```
 
-Тесты (JUnit 5):
+Тесты (JUnit 5) и статанализ:
 
 ```bash
-./gradlew test
+./gradlew test allTests    # один `test` пропускает мультиплатформенные модули
+./gradlew detektAll        # detekt; накопленные замечания лежат в gradle/detekt-baseline-*.xml
 ```
 
 ## Sync-сервер

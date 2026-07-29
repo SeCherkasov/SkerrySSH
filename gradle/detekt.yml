@@ -1,0 +1,118 @@
+# detekt overrides on top of the shipped defaults (buildUponDefaultConfig = true in
+# gradle/detekt.gradle.kts). Only deviations live here; everything unmentioned keeps detekt's default.
+#
+# Two goals: catch the defect classes docs/coding-guidelines.md was written for (swallowed
+# exceptions, generic catches, dead code), and stay quiet about idioms that are correct here
+# (backtick test names, capitalised @Composable functions, injected-dependency constructors).
+#
+# LIMIT — no type resolution. The detekt tasks run over source files without a compile classpath
+# (see gradle/detekt.gradle.kts: the Gradle plugin's KMP integration can't be used here), so every
+# rule that needs type information silently finds nothing. Verified: a fresh `input!!` is NOT
+# reported, while a swallowed exception in the same file IS. The rules below marked
+# "needs type resolution" are kept for the day that changes; don't rely on them today —
+# `!!`, unsafe casts and blocking calls are caught by review (skerry-reviewer), not by detekt.
+
+build:
+  maxIssues: 0
+
+comments:
+  UndocumentedPublicClass:
+    active: false
+  UndocumentedPublicFunction:
+    active: false
+  UndocumentedPublicProperty:
+    active: false
+
+# KMP test source sets. detekt's built-in test excludes assume src/test/**, which doesn't exist
+# here, so every rule that only makes sense for production code repeats this list.
+# (YAML anchors aren't supported by detekt's config loader — hence the repetition.)
+
+complexity:
+  LongMethod:
+    ignoreAnnotated: ['Composable']
+  LongParameterList:
+    ignoreAnnotated: ['Composable']
+    # Controllers take their dependencies through the constructor with test defaults — that is
+    # guidelines §6, not a smell. Only parameters without a default count here.
+    ignoreDefaultParameters: true
+  CyclomaticComplexMethod:
+    ignoreAnnotated: ['Composable']
+  TooManyFunctions:
+    # A Compose screen file legitimately holds many small composables; §2 of the coding guidelines
+    # governs file size instead, by line count and by cohesion.
+    active: false
+  LargeClass:
+    threshold: 600
+
+exceptions:
+  # The core of coding-guidelines §3: a swallowed exception is how CancellationException gets
+  # masked as a network error. These stay loud.
+  SwallowedException:
+    active: true
+    ignoredExceptionTypes:
+      - 'InterruptedException'
+      - 'NumberFormatException'
+      - 'ParseException'
+  TooGenericExceptionCaught:
+    active: true
+    exceptionNames:
+      - 'Error'
+      - 'Throwable'
+  ThrowingExceptionInMain:
+    active: true
+  PrintStackTrace:
+    active: true
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
+    # Test names are backtick sentences on purpose — that's the project's test style, not a defect.
+    excludes: ['**/commonTest/**', '**/jvmTest/**', '**/desktopTest/**', '**/androidTest/**', '**/androidUnitTest/**', '**/test/**']
+  TopLevelPropertyNaming:
+    constantPattern: '[A-Z][_A-Za-z0-9]*'
+  MatchingDeclarationName:
+    # A Compose file holds a screen plus its private composables; the guidelines govern file
+    # cohesion (§2) instead of forcing one declaration per file name.
+    active: false
+
+style:
+  MagicNumber:
+    # Protocol code (RDP/VNC/mosh PDU offsets, SGR codes) is nothing but numeric literals; naming
+    # each one would hurt readability more than it helps.
+    active: false
+  ReturnCount:
+    active: false
+  UnusedPrivateMember:
+    active: true
+  ForbiddenComment:
+    active: true
+    comments:
+      - reason: 'Unfinished work must not reach main.'
+        value: 'FIXME:'
+  MaxLineLength:
+    # Off deliberately. There is no formatter in this repo (no ktlint), the settled style runs long
+    # in protocol and Compose code, and every threshold tried (120/140/160) produced hundreds of
+    # baseline entries and zero defects. Line length is a review comment, not a build failure.
+    active: false
+  UnnecessaryAbstractClass:
+    active: false
+  LoopWithTooManyJumpStatements:
+    # Protocol decoders (RDP/VNC/mosh) are loops full of early continue/break by nature.
+    active: false
+  ThrowsCount:
+    active: false
+
+empty-blocks:
+  EmptyFunctionBlock:
+    # Hand-written fakes legitimately implement an interface method as a no-op.
+    excludes: ['**/commonTest/**', '**/jvmTest/**', '**/desktopTest/**', '**/androidTest/**', '**/androidUnitTest/**', '**/test/**']
+
+potential-bugs:
+  UnsafeCallOnNullableType:
+    active: true # needs type resolution — inert today, see the header
+  UnsafeCast:
+    active: true # needs type resolution — inert today, see the header
+  IgnoredReturnValue:
+    active: true # needs type resolution — inert today, see the header
+  ExplicitGarbageCollectionCall:
+    active: true
