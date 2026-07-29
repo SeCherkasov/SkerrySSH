@@ -6,7 +6,8 @@ package app.skerry.shared.rdp
  *
  * - No drawing orders are claimed (`orderSupport` is all zeros). This client paints from bitmap
  *   updates and surface commands, and a server told otherwise would send GDI primitives nothing
- *   here can execute — a blank screen rather than a slow one.
+ *   here can execute. One that sends them regardless has its orders skipped and the desktop
+ *   repainted (see `FastPathDecoder` and `RdpSessionCodec.repaintDropped`).
  * - Surface commands plus RemoteFX are claimed, which is what makes a modern server stream tiles
  *   instead of legacy bitmaps.
  * - Fast-path input and output are claimed in both directions: it is the low-latency framing, and
