@@ -43,94 +43,33 @@ class JavaSoundOutputs : AudioOutputs {
     }
 }
 
-/** Opens [JavaSoundPlayer]s; the device is resolved per session, when the sound actually starts. */
+/** Opens the desktop's players; the device is resolved per session, when the sound actually starts. */
 class JavaSoundPlayers : RemoteAudioPlayerFactory {
-    override fun open(deviceId: String): RemoteAudioPlayer = JavaSoundPlayer(deviceId)
+    override fun open(deviceId: String): RemoteAudioPlayer =
+        PcmPlayer(JavaSoundSinks(deviceId), trace = audioTrace)
 }
 
 /**
- * Plays PCM through a [SourceDataLine] on the mixer named [deviceId] (the system default when it is
- * blank or no longer there).
- *
- * The line is opened on the first block rather than at connect time: the format is the server's to
- * choose, and a line opened for the wrong one would have to be torn down again. A format change
- * reopens it, which is what happens when the remote session switches from a 22 kHz notification
- * sound to 44 kHz media.
+ * Opens a [SourceDataLine] on the mixer named [deviceId] — the system default when it is blank or no
+ * longer there, since an unplugged headset must not cost the sound. When to open one, and what a
+ * refusal costs, is [PcmPlayer]'s.
  */
-class JavaSoundPlayer(private val deviceId: String) : RemoteAudioPlayer {
+internal class JavaSoundSinks(private val deviceId: String) : PcmSinkOpener {
 
-    /**
-     * Written by the playback thread, read by whoever closes the session. Volatile rather than
-     * synchronized: [play] blocks inside the line for as long as the device takes to drain, and a
-     * lock around it would make [close] wait exactly when it is trying to cut the sound short.
-     */
-    @Volatile
-    private var line: SourceDataLine? = null
-
-    @Volatile
-    private var current: RemoteAudioFormat? = null
-
-    @Volatile
-    private var closed = false
-
-    override fun play(format: RemoteAudioFormat, pcm: ByteArray) {
-        if (closed) return
-        if (format != current) reopen(format)
-        val open = line ?: return
-        // A short write is what the line reports when it was stopped mid-block; there is nothing to
-        // retry, since whoever stopped it wanted the rest dropped.
-        runCatching { open.write(pcm, 0, pcm.size) }
-    }
-
-    override fun flush() {
-        runCatching { line?.flush() }
-    }
-
-    override fun close() {
-        closed = true
-        release()
-    }
-
-    /**
-     * Give the device back. stop() comes before close(): it releases a write parked on a full
-     * buffer, which is what lets the playback loop finish instead of holding the session open.
-     */
-    private fun release() {
-        val open = line ?: return
-        line = null
-        current = null
-        runCatching {
-            open.stop()
-            open.flush()
-            open.close()
-        }
-    }
-
-    private fun reopen(format: RemoteAudioFormat) {
-        release()
-        if (closed) return
-        val audioFormat = AudioFormat(
-            format.sampleRate.toFloat(),
-            format.bitsPerSample,
-            format.channels,
-            // 8-bit PCM is unsigned and everything wider is signed — that is what WAVE_FORMAT_PCM means.
-            format.bitsPerSample > 8,
-            false, // little-endian, as RDP sends it
-        )
+    override fun open(format: RemoteAudioFormat): PcmSink? {
+        val audioFormat = lineFormat(format)
         val info = DataLine.Info(SourceDataLine::class.java, audioFormat)
-        val opened = mixerLine(info) ?: runCatching { AudioSystem.getLine(info) as SourceDataLine }.getOrNull()
-        line = opened?.also { target ->
-            runCatching {
-                // A buffer of a fifth of a second: enough that a scheduling hiccup does not become an
-                // audible gap, short enough that the sound stays with the picture.
-                target.open(audioFormat, bufferBytes(format))
-                target.start()
-            }.onFailure {
-                runCatching { target.close() }
-                line = null
-            }
+        val line = mixerLine(info)
+            ?: runCatching { AudioSystem.getLine(info) as SourceDataLine }.getOrNull()
+            ?: return null
+        return runCatching {
+            line.open(audioFormat, format.bufferBytes())
+            line.start()
+            JavaSoundSink(line)
+        }.getOrElse {
+            runCatching { line.close() }
+            null
         }
-        current = if (line != null) format else null
     }
 
     /** The line on the profile's chosen mixer, or null when it is gone or cannot take this format. */
@@ -140,10 +79,45 @@ class JavaSoundPlayer(private val deviceId: String) : RemoteAudioPlayer {
             ?.firstOrNull { it.name.trim() == deviceId } ?: return null
         return runCatching { AudioSystem.getMixer(mixerInfo).getLine(info) as SourceDataLine }.getOrNull()
     }
-
-    private fun bufferBytes(format: RemoteAudioFormat): Int =
-        format.sampleRate * format.channels * (format.bitsPerSample / 8) / 5
 }
+
+/** One open line. Writes block while it drains, which is the back-pressure [PcmPlayer] relies on. */
+internal class JavaSoundSink(private val line: SourceDataLine) : PcmSink {
+
+    // A short write is what the line reports when it was stopped mid-block; there is nothing to
+    // retry, since whoever stopped it wanted the rest dropped.
+    override fun write(pcm: ByteArray) {
+        line.write(pcm, 0, pcm.size)
+    }
+
+    override fun flush() {
+        line.flush()
+    }
+
+    /**
+     * Give the device back. stop() comes before close(): it releases a write parked on a full
+     * buffer, which is what lets the playback loop finish instead of holding the session open. Each
+     * step stands alone — a line that fails to stop still has to be closed, or it holds the device
+     * for the rest of the process.
+     */
+    override fun close() {
+        runCatching { line.stop() }
+        runCatching { line.flush() }
+        runCatching { line.close() }
+    }
+}
+
+/**
+ * The RDP format as `javax.sound.sampled` takes it. 8-bit PCM is unsigned and everything wider is
+ * signed — that is what `WAVE_FORMAT_PCM` means — and the samples arrive little-endian.
+ */
+internal fun lineFormat(format: RemoteAudioFormat): AudioFormat = AudioFormat(
+    format.sampleRate.toFloat(),
+    format.bitsPerSample,
+    format.channels,
+    format.bitsPerSample > 8,
+    false,
+)
 
 private val Mixer.supportsPlayback: Boolean
     get() = isLineSupported(Line.Info(SourceDataLine::class.java))

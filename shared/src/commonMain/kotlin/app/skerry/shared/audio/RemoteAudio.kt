@@ -11,6 +11,15 @@ data class RemoteAudioFormat(
 )
 
 /**
+ * What a platform device should hold: a fifth of a second of this format. Enough that a scheduling
+ * hiccup does not become an audible gap, short enough that the sound stays with the picture.
+ */
+internal fun RemoteAudioFormat.bufferBytes(): Int =
+    sampleRate * channels * (bitsPerSample / 8) / BUFFER_FRACTION
+
+private const val BUFFER_FRACTION = 5
+
+/**
  * A playback device the platform offers. [id] is what a host profile stores, so it has to survive a
  * reboot and a reconnected device; [name] is what the user picks from.
  */
