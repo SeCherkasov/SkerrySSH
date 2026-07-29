@@ -78,6 +78,23 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.2.0" date="2026-07-29">
+      <description>
+        <p>Feature release:</p>
+        <ul>
+          <li>RDP: connect to a Windows desktop with a built-in client — clipboard, audio, dynamic resize</li>
+          <li>Split panes: up to four tiled sessions in one tab, with synchronized input</li>
+          <li>Session sharing: stream a live terminal to a teammate and hand over the keyboard</li>
+          <li>Runbooks: ordered checklists of commands with confirmation pauses and exit-code checks</li>
+          <li>Docker and Kubernetes exec as a connection type; local shell in a tab</li>
+          <li>Keyboard-interactive (2FA) authentication, certificates from file, host-key certificates</li>
+          <li>Import hosts from ~/.ssh/config; notes on a connection profile; production guard for prod hosts</li>
+          <li>Terminal: scrollback search, open file paths from output in the SFTP panel</li>
+          <li>SFTP: modified/permissions columns and a quick name filter</li>
+          <li>Vault trash with 30-day restore; Teams access scopes and an activity feed</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.4" date="2026-07-23">
       <description>
         <p>Feature release:</p>
