@@ -23,7 +23,7 @@ hood, Compose Multiplatform UI on top. One core codebase and one UI across
 |---|---|---|---|---|
 | **Open source** | ✅ GPL-3.0 · AGPL-3.0 | ❌ | ✅ MIT | ✅ MIT |
 | **Platforms** | Linux · Windows · macOS · Android | Windows · macOS · Linux · iOS · Android | Windows · Unix | Windows · macOS · Linux |
-| **First release** | 2026 (v0.1.x) | 2011 | 1999 | 2017 |
+| **First release** | 2026 (v0.2.x) | 2011 | 1999 | 2017 |
 | **Price** | free | free tier · paid from $10/mo | free | free |
 | **Works without an account** | ✅ | ⚠️ local only <sup>1</sup> | ✅ | ✅ |
 | **Encrypted vault** | ✅ always on <sup>2</sup> | ✅ | ❌ | ⚠️ opt-in |
@@ -33,7 +33,8 @@ hood, Compose Multiplatform UI on top. One core codebase and one UI across
 | **Port forwarding** | ✅ local · remote · dynamic | ✅ | ✅ | ✅ |
 | **Serial / Telnet** | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
 | **Mosh** | ✅ | ✅ | ❌ | ❌ |
-| **VNC remote desktop** | ✅ built-in | ❌ | ❌ | ❌ |
+| **VNC / RDP remote desktop** | ✅ built-in, both | ❌ | ❌ | ❌ |
+| **Live session sharing** | ✅ end-to-end encrypted | ⚠️ paid tier | ❌ | ❌ |
 | **AI assistant** | ✅ local or BYOK cloud <sup>4</sup> | ⚠️ cloud, account required | ❌ | ❌ |
 
 **Legend:** ✅ yes · ⚠️ partial / with caveats · ❌ no
@@ -49,7 +50,7 @@ Spotted an error? Please open a PR.*
 ## Status
 
 Actively developed for **Linux**, **Windows**, **macOS**, and **Android**. **iOS/iPadOS** is
-planned.
+deferred — there are no iOS targets in the build.
 
 ## Install
 
@@ -97,15 +98,25 @@ Building it yourself is also easy — see [Building from source](#building-from-
 
 ## Features
 
-- **Connections** — SSH with jump hosts (ProxyJump) and SSH certificates; Mosh; SFTP
-  (dual-pane commander with a built-in file viewer/editor); port forwarding: local, remote,
-  dynamic/SOCKS, plus discovery of listening services with one-tap forwarding; VNC remote
-  desktop; Docker and Kubernetes exec (pick a container/pod on the host and drop into its
-  shell); Telnet; serial (desktop and Android USB-OTG).
+- **Connections** — SSH with jump hosts (ProxyJump), SSH certificates (loaded from the vault or
+  read from disk on every connection), host-key certificates signed by a CA, and
+  keyboard-interactive 2FA challenges; Mosh; SFTP (dual-pane commander with a built-in file
+  viewer/editor, sortable columns and a quick name filter); port forwarding: local, remote,
+  dynamic/SOCKS, plus discovery of listening services with one-tap forwarding; Docker and
+  Kubernetes exec (pick a container/pod on the host and drop into its shell); Telnet; serial
+  (desktop and Android USB-OTG); a local shell in a tab, without any connection at all.
+  Existing hosts can be imported from `~/.ssh/config`.
+- **Remote desktops** — VNC and RDP in a section of their own, both on a client stack written
+  for this project. A session panel carries screenshots, Ctrl+Alt+Del, clipboard exchange and
+  settings that apply mid-session.
 - **Terminal** — custom grid emulation, session tabs with up to four tiled panes and
   synchronized input, SSH auto-reconnect, scrollback search, live host metrics, a command
-  palette over the history, broadcast input to several sessions, and session recording
-  (asciinema v2) with in-app playback.
+  palette over the history, broadcast input to several sessions, file paths from the output
+  opened straight in the SFTP panel, and session recording (asciinema v2) with in-app playback.
+- **Session sharing** — stream a live terminal to a teammate end-to-end encrypted, read-only or
+  with the keyboard handed over.
+- **Production guard** — hosts tagged `prod` score every command for risk and stop the dangerous
+  ones behind an explicit confirmation.
 - **Themes** — dark and light app themes with a card-based catalog; the terminal follows
   the app theme, and the System mode tracks the OS live.
 - **Vault** — always-on encryption (Argon2id + XChaCha20-Poly1305) for keys, passwords,
@@ -113,7 +124,8 @@ Building it yourself is also easy — see [Building from source](#building-from-
   and tunnels stay restorable in the trash for 30 days, on every synced device.
 - **Sync** — optional and self-hosted, zero-knowledge, live push over WebSocket, device
   pairing via QR. See [Sync server](#sync-server).
-- **Teams** — end-to-end encrypted sharing of hosts and snippets within a team.
+- **Teams** — end-to-end encrypted sharing of hosts and snippets within a team, with access
+  scopes per member and an activity feed of who changed which host and who opened a session.
 - **Snippets & AI** — command library with type-ahead in the terminal; dynamic `${{…}}`
   variables (date/time, uuid, random, clipboard, vault secrets, prompted parameters) resolved
   at run time behind a confirmation preview; AI assistant with
@@ -149,20 +161,23 @@ only coexist under explicit rules:
 
 ## Tech stack
 
-- **Language/UI**: Kotlin 2.x, Compose Multiplatform 1.11.1
-- **Build**: Gradle 9.3.1, Android Gradle Plugin 9.0.1
+- **Language/UI**: Kotlin 2.4.10, Compose Multiplatform 1.9.3
+- **Build**: Gradle 9.6.1, Android Gradle Plugin 9.1.1
 - **JVM target**: JDK 21 (`jvmToolchain(21)` in all modules, `JVM_21`)
-- **Android**: minSdk 26 (Android 8.0), compileSdk/targetSdk 36
-- **Core**: sshj 0.40.0, BouncyCastle 1.80.2, libsodium (ionspin KMP), okio, atomicfu
-- **Serial**: jSerialComm 2.11.0 (desktop), usb-serial-for-android 3.9.0 (Android, jitpack)
-- **Sync**: Ktor 3.4.3 (client+server), Exposed 0.58.0, SQLite/PostgreSQL, HikariCP,
+- **Android**: minSdk 26 (Android 8.0), compileSdk 37, targetSdk 36
+- **Core**: sshj 0.40.0, BouncyCastle 1.85, libsodium (ionspin KMP), okio 3.18.0, atomicfu
+- **Remote desktop**: VNC (RFB) and RDP stacks written for this project, no third-party client
+- **Serial**: jSerialComm 2.11.4 (desktop), usb-serial-for-android (Android, jitpack)
+- **Sync**: Ktor 3.5.1 (client+server), Exposed 1.3.1, SQLite/PostgreSQL, HikariCP,
   Nimbus SRP-6a
+- **Quality**: JUnit 5, Kover coverage, detekt static analysis
 
 ## Repository layout
 
 ```
-shared/       # KMP core: ssh/, sftp/, vault/, sync/, team/, terminal/, ai/ (+ai/local),
-              # telnet/, serial/, tunnel/, snippet/, host/, files/
+shared/       # KMP core: ssh/, sftp/, vault/, sync/, team/, share/, terminal/, ai/ (+ai/local),
+              # telnet/, serial/, mosh/, rdp/, vnc/, graphics/, audio/, tunnel/, container/,
+              # snippet/, runbook/, host/, tag/, files/, guard/, update/
 composeApp/   # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
 androidApp/   # Android app (MainActivity, manifest); applicationId app.skerry
 server/       # self-hosted sync server (Ktor, AGPL-3.0)
@@ -198,10 +213,11 @@ Android:
 ANDROID_HOME=$HOME/Android/Sdk ./gradlew :androidApp:installDebug
 ```
 
-Tests (JUnit 5):
+Tests (JUnit 5) and static analysis:
 
 ```bash
-./gradlew test
+./gradlew test allTests    # `test` alone skips the multiplatform modules
+./gradlew detektAll        # detekt; existing findings sit in gradle/detekt-baseline-*.xml
 ```
 
 ## Sync server
