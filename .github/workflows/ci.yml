@@ -49,7 +49,11 @@ jobs:
         # `allTests` as well as `test`: :shared and :composeApp are Kotlin Multiplatform modules
         # whose test tasks are named after their targets (desktopTest), so a bare `test` matched
         # nothing in them and only :server was ever tested here.
-        run: ./gradlew test allTests --stacktrace
+        #
+        # Under xvfb-run because compose-resources asks AWT for the screen resolution when it loads
+        # a string, which throws HeadlessException on a runner with no display — the failure lands
+        # inside a coroutine and surfaces as a test that never reaches its final state.
+        run: xvfb-run --auto-servernum ./gradlew test allTests --stacktrace
 
       # Gradle prints only the assertion's file and line; the values it compared live in the report.
       - name: Upload test reports

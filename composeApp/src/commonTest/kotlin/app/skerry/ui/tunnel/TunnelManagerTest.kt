@@ -22,11 +22,7 @@ import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.shared.tunnel.TunnelStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -34,7 +30,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
-import kotlin.time.Duration.Companion.seconds
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -48,34 +43,11 @@ class TunnelManagerTest {
         store: TunnelStore = FakeTunnelStore(),
         resolve: (String) -> TunnelResolution = { TunnelResolution.Ready(target, auth) },
         ids: List<String> = List(20) { "id-$it" },
-        /**
-         * An unconfined test dispatcher runs activation to its end inside `activate` itself, which
-         * is what lets most tests assert on the status as soon as the call returns. It only holds
-         * while nothing really suspends: a continuation resumed from another thread goes into this
-         * scheduler's queue, and nothing here ever advances it. A path that reads a resource needs
-         * [realScope] instead — see the failure-message test.
-         */
-        scope: CoroutineScope = TestScope(UnconfinedTestDispatcher()),
     ): TunnelManager {
+        val scope = TestScope(UnconfinedTestDispatcher())
         val it = ids.iterator()
         return TunnelManager(store, transport, resolve, scope) { it.next() }
     }
-
-    /** A scope on real threads, for activation whose end depends on something that actually suspends. */
-    private fun realScope() = CoroutineScope(Dispatchers.Default)
-
-    /** Wait, in real time, for a tunnel activating on [realScope] to leave [TunnelStatus.Connecting]. */
-    private suspend fun awaitSettled(manager: TunnelManager): TunnelStatus =
-        withContext(Dispatchers.Default) {
-            withTimeout(10.seconds) {
-                var status = manager.tunnels.single().status
-                while (status is TunnelStatus.Connecting) {
-                    delay(5)
-                    status = manager.tunnels.single().status
-                }
-                status
-            }
-        }
 
     private fun localDraft(label: String = "web", hostId: String = "h1") = TunnelDraft(
         label = label, hostId = hostId, direction = TunnelDirection.Local,
@@ -169,14 +141,12 @@ class TunnelManagerTest {
     fun `activate maps a rejected host key to a clear message and closes the connection`() = runTest {
         val conn = FakeTunnelConnection(localError = SshHostKeyRejectedException("bad"))
         val transport = FakeTunnelTransport(conn)
-        // Real threads: this path ends in a localized message, and reading that resource suspends
-        // the first time it is asked for, which a test scheduler nobody advances never resumes.
-        val manager = managerWith(transport, scope = realScope())
+        val manager = managerWith(transport)
         val id = manager.save(localDraft())
 
         manager.activate(id)
 
-        val status = assertIs<TunnelStatus.Failed>(awaitSettled(manager))
+        val status = assertIs<TunnelStatus.Failed>(manager.tunnels.single().status)
         // Message is localized (strings_ptail); compare against the resource itself so the test
         // doesn't depend on the machine locale.
         assertEquals(getString(Res.string.ptail_err_host_not_trusted), status.message)
