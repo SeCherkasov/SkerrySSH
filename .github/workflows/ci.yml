@@ -50,3 +50,14 @@ jobs:
         # whose test tasks are named after their targets (desktopTest), so a bare `test` matched
         # nothing in them and only :server was ever tested here.
         run: ./gradlew test allTests --stacktrace
+
+      # Gradle prints only the assertion's file and line; the values it compared live in the report.
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            **/build/reports/tests/
+            **/build/test-results/
+          retention-days: 7
