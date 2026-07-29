@@ -22,7 +22,11 @@ import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.shared.tunnel.TunnelStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -30,6 +34,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.time.Duration.Companion.seconds
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -48,6 +53,28 @@ class TunnelManagerTest {
         val it = ids.iterator()
         return TunnelManager(store, transport, resolve, scope) { it.next() }
     }
+
+    /**
+     * Wait for the tunnel to leave [TunnelStatus.Connecting].
+     *
+     * activate() hands the work to the manager's own scope, and an unconfined dispatcher carries it
+     * to the end of the call only while nothing really suspends. The failure path ends in a
+     * localized message, and compose-resources does suspend to read a resource it has not cached
+     * yet — so on a cold JVM the status is still Connecting when activate() returns, while a warm
+     * one gets there in time. Waiting in real time (the test scheduler cannot advance the
+     * dispatcher that resource read lands on) is what makes the outcome the same either way.
+     */
+    private suspend fun awaitSettled(manager: TunnelManager): TunnelStatus =
+        withContext(Dispatchers.Default) {
+            withTimeout(10.seconds) {
+                var status = manager.tunnels.single().status
+                while (status is TunnelStatus.Connecting) {
+                    delay(5)
+                    status = manager.tunnels.single().status
+                }
+                status
+            }
+        }
 
     private fun localDraft(label: String = "web", hostId: String = "h1") = TunnelDraft(
         label = label, hostId = hostId, direction = TunnelDirection.Local,
@@ -146,7 +173,7 @@ class TunnelManagerTest {
 
         manager.activate(id)
 
-        val status = assertIs<TunnelStatus.Failed>(manager.tunnels.single().status)
+        val status = assertIs<TunnelStatus.Failed>(awaitSettled(manager))
         // Message is localized (strings_ptail); compare against the resource itself so the test
         // doesn't depend on the machine locale.
         assertEquals(getString(Res.string.ptail_err_host_not_trusted), status.message)

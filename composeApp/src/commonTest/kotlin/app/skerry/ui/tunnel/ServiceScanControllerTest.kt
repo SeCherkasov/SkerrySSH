@@ -16,7 +16,11 @@ import app.skerry.shared.ssh.SshTransport
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ptail_err_auth_failed
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -25,6 +29,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ServiceScanControllerTest {
@@ -36,6 +41,28 @@ class ServiceScanControllerTest {
         transport: SshTransport,
         resolve: (String) -> TunnelResolution = { TunnelResolution.Ready(target, auth) },
     ) = ServiceScanController(transport, resolve, TestScope(UnconfinedTestDispatcher()))
+
+    /**
+     * Wait for the scan to leave [ServiceScanState.Scanning].
+     *
+     * A scan runs in the controller's own scope, and an unconfined dispatcher carries it to the end
+     * of `scan` only while nothing really suspends. The failure path ends in a localized message,
+     * and compose-resources does suspend to read a resource it has not cached yet — so on a cold
+     * JVM the state is still Scanning when `scan` returns, while a warm one gets there in time.
+     * Waiting in real time (the test scheduler cannot advance the dispatcher that resource read
+     * lands on) is what makes the outcome the same either way.
+     */
+    private suspend fun awaitScanned(controller: ServiceScanController): ServiceScanState =
+        withContext(Dispatchers.Default) {
+            withTimeout(10.seconds) {
+                var state = controller.state
+                while (state is ServiceScanState.Scanning) {
+                    delay(5)
+                    state = controller.state
+                }
+                state
+            }
+        }
 
     @Test
     fun `scan lists the listening services of the host`() = runTest {
@@ -124,7 +151,7 @@ class ServiceScanControllerTest {
 
         controller.scan("h1")
 
-        val failed = assertIs<ServiceScanState.Failed>(controller.state)
+        val failed = assertIs<ServiceScanState.Failed>(awaitScanned(controller))
         // Localized from the resource, so the test doesn't depend on the machine locale.
         assertEquals(getString(Res.string.ptail_err_auth_failed), failed.message)
     }
