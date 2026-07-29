@@ -12,7 +12,7 @@ Requires **JDK 21** (`foojay-resolver` fetches one if needed); Android needs `AN
 ./gradlew :composeApp:run                                   # desktop
 ./gradlew :composeApp:packageDistributionForCurrentOS       # .deb / .rpm / .msi / .dmg
 ANDROID_HOME=$HOME/Android/Sdk ./gradlew :androidApp:installDebug
-./gradlew test                                              # JUnit 5
+./gradlew test allTests                                     # JUnit 5; `test` alone skips shared/composeApp
 docker compose up -d --build                                # sync server; set SKERRY_JWT_SECRET
 ./gradlew :server:run -PserverOnly                          # server-only build, no Android SDK
 ```

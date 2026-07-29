@@ -46,4 +46,7 @@ jobs:
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
       - name: Test
-        run: ./gradlew test --stacktrace
+        # `allTests` as well as `test`: :shared and :composeApp are Kotlin Multiplatform modules
+        # whose test tasks are named after their targets (desktopTest), so a bare `test` matched
+        # nothing in them and only :server was ever tested here.
+        run: ./gradlew test allTests --stacktrace
