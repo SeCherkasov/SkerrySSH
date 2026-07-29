@@ -1,6 +1,7 @@
 package app.skerry.shared.rdp.nla
 
 import app.skerry.shared.rdp.RdpProtocolException
+import app.skerry.shared.rdp.constantTimeEquals
 
 /** Which end of the exchange a session speaks as; it decides which key pair seals and which verifies. */
 enum class NtlmRole { Client, Server }
@@ -73,13 +74,6 @@ class NtlmSession(
         // With key exchange negotiated the checksum rides the same keystream as the payload.
         val sealedChecksum = seal.process(checksum)
         return byteArrayOf(1, 0, 0, 0) + sealedChecksum + sequenceBytes
-    }
-
-    private fun constantTimeEquals(a: ByteArray, b: ByteArray): Boolean {
-        if (a.size != b.size) return false
-        var diff = 0
-        for (i in a.indices) diff = diff or (a[i].toInt() xor b[i].toInt())
-        return diff == 0
     }
 
     private companion object {
