@@ -16,10 +16,11 @@ class FastPathDecoder(
      */
     private val palette: SessionPalette,
     /**
-     * Where updates this client cannot draw are recorded. Shared with the session codec, which turns
-     * a raised flag into a repaint request; a decoder used on its own simply drops them.
+     * Where graphics that did not reach the framebuffer are recorded. Shared with the session codec,
+     * which is the half that can ask the server to repaint them — no default, because a decoder
+     * wired to a holder nobody reads would drop pixels and never get them back.
      */
-    private val dropped: DroppedGraphics = DroppedGraphics(),
+    private val dropped: DroppedGraphics,
 ) {
     private var fragmentType = -1
     private val fragments = mutableListOf<ByteArray>()
@@ -120,7 +121,7 @@ class FastPathDecoder(
         when (updateCode) {
             UPDATETYPE_BITMAP -> {
                 reader.u16le() // updateType, repeated inside the payload
-                listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors))
+                listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors, dropped))
             }
 
             UPDATETYPE_PALETTE -> {
@@ -185,7 +186,12 @@ object BitmapUpdate {
     private const val NO_BITMAP_COMPRESSION_HDR = 0x0400
 
     /** Apply a bitmap update to [framebuffer] and report the rectangles it changed. */
-    fun apply(reader: RdpReader, framebuffer: RemoteFramebuffer, palette: IntArray?): RdpUpdate.Region {
+    fun apply(
+        reader: RdpReader,
+        framebuffer: RemoteFramebuffer,
+        palette: IntArray?,
+        dropped: DroppedGraphics,
+    ): RdpUpdate.Region {
         val count = reader.u16le()
         val rects = mutableListOf<RdpRect>()
         repeat(count) {
@@ -215,8 +221,9 @@ object BitmapUpdate {
                 decodeBitmap(data, width, height, bitsPerPixel, bytesPerPixel, flags, palette)
             } catch (e: RdpProtocolException) {
                 // One rectangle this client cannot read is not worth the whole session: the pixels
-                // under it stay as they were and the server repaints them on the next refresh,
-                // which is a scarred screen instead of a dropped connection.
+                // under it stay as they were until the repaint the recorded drop asks for, which is
+                // a briefly scarred screen instead of a dropped connection.
+                dropped.record()
                 return@repeat
             }
             blit(framebuffer, pixels, left, top, width, height)
@@ -317,9 +324,10 @@ class SessionPalette {
 }
 
 /**
- * Graphics that arrived but were not drawn, because the client cannot execute what they describe.
- * A holder for the same reason as [SessionPalette]: either decode path can meet them, and one of
- * the two lives in [FastPathDecoder] while the repaint is asked for from the session codec.
+ * Graphics that arrived but never reached the framebuffer — orders this client cannot execute, a
+ * rectangle it cannot decode. A holder for the same reason as [SessionPalette]: either decode path
+ * can meet them, one of the two lives in [FastPathDecoder], and the repaint that brings the pixels
+ * back is asked for from the session codec.
  */
 class DroppedGraphics {
     private var pending = false

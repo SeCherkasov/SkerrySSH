@@ -1,6 +1,9 @@
 package app.skerry.shared.rdp
 
 import app.skerry.shared.graphics.RemoteFramebuffer
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 
 /**
  * The live session's protocol loop: reads server PDUs (fast-path updates and slow-path share PDUs),
@@ -19,14 +22,16 @@ class RdpSessionCodec(
     private val settings: RdpClientSettings,
     private val logon: RdpLogonInfo,
     remoteFx: RemoteFxDecoder? = null,
+    /** Injected so a test can hold the clock still while it drives [readMessage]. */
+    private val timeSource: TimeSource = TimeSource.Monotonic,
 ) {
     private val palette = SessionPalette()
     private val dropped = DroppedGraphics()
     private val fastPath = FastPathDecoder(framebuffer, palette, dropped)
     private val surfaces = SurfaceDecoder(RdpCodecs(remoteFx))
 
-    /** Whether a repaint asked for after dropped graphics is still unanswered; see [repaintDropped]. */
-    private var repaintPending = false
+    /** When the last repaint was asked for, or null if none has been; see [repaintDropped]. */
+    private var lastRepaint: TimeMark? = null
 
     /** The desktop size the server is currently serving. */
     val desktopWidth: Int get() = state.capabilities.desktopWidth
@@ -46,21 +51,24 @@ class RdpSessionCodec(
         // Acknowledge completed frames before returning: the server paces itself on these.
         for (update in updates) {
             if (update is RdpUpdate.Frame && !update.begin) acknowledgeFrame(update.frameId)
-            // Pixels landed, so a repaint that was asked for has been answered.
-            if (update is RdpUpdate.Region && update.rects.isNotEmpty()) repaintPending = false
         }
         if (dropped.take()) repaintDropped()
         return updates
     }
 
     /**
-     * Ask the server to send, as bitmaps, what it drew with an update this client had to skip.
-     * One repaint is asked for at a time: a server that ignores the negotiation once tends to do it
-     * every frame, and a full-screen repaint per dropped update is a traffic storm rather than a fix.
+     * Ask the server to send, as bitmaps, what it drew with something this client had to skip.
+     *
+     * Rate-limited rather than sent per dropped update: whatever makes a server drop graphics on us
+     * — orders we never claimed, a rectangle in a codec we misread — tends to repeat every frame,
+     * and a full-desktop repaint per occurrence is a traffic storm rather than a fix. The interval
+     * is measured from the request, not from an answer, because a Refresh Rect PDU is not
+     * acknowledged: its bitmaps are indistinguishable from the ones the server would have sent anyway.
      */
     private suspend fun repaintDropped() {
-        if (repaintPending) return
-        repaintPending = true
+        if (!state.capabilities.refreshRectSupported) return
+        if (lastRepaint?.elapsedNow()?.let { it < MIN_REPAINT_INTERVAL } == true) return
+        lastRepaint = timeSource.markNow()
         requestRefresh(listOf(RdpRect(0, 0, desktopWidth, desktopHeight)))
     }
 
@@ -106,7 +114,7 @@ class RdpSessionCodec(
 
     /** Slow-path graphics: the same payloads as fast-path, wrapped in a share data PDU. */
     private fun slowPathUpdate(reader: RdpReader): List<RdpUpdate> = when (reader.u16le()) {
-        UPDATETYPE_BITMAP -> listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors))
+        UPDATETYPE_BITMAP -> listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors, dropped))
         UPDATETYPE_PALETTE -> {
             palette.colors = BitmapUpdate.readPalette(reader)
             emptyList()
@@ -291,6 +299,9 @@ class RdpSessionCodec(
         const val SYSPTR_NULL = 0x00000000
 
         const val COMPRESSION_USED = 0x20
+
+        /** How rarely a repaint of the whole desktop may be asked for; see [repaintDropped]. */
+        val MIN_REPAINT_INTERVAL = 1.seconds
 
         const val CHANNEL_FLAG_FIRST = 0x00000001
         const val CHANNEL_FLAG_LAST = 0x00000002

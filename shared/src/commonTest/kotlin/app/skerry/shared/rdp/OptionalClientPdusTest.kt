@@ -5,6 +5,9 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
+import kotlin.time.TimeSource
 
 /**
  * Client PDUs the server has to opt into (MS-RDPBCGR 2.2.11.2 / 2.2.11.3): sending one that was not
@@ -32,6 +35,7 @@ class OptionalClientPdusTest {
         caps: ServerCapabilities,
         written: MutableList<ByteArray>,
         incoming: ByteArray = ByteArray(0),
+        timeSource: TimeSource = TimeSource.Monotonic,
     ): RdpSessionCodec {
         var offset = 0
         return RdpSessionCodec(
@@ -50,6 +54,7 @@ class OptionalClientPdusTest {
                 selectedProtocol = 1,
             ),
             logon = RdpLogonInfo(domain = "", username = "u"),
+            timeSource = timeSource,
         )
     }
 
@@ -66,6 +71,13 @@ class OptionalClientPdusTest {
             u16be(total or 0x8000)
             bytes(update)
         }.toByteArray()
+    }
+
+    /** The same orders update on the slow path: a Share Data PDU inside an MCS domain PDU. */
+    private fun slowPathOrdersPacket(caps: ServerCapabilities): ByteArray {
+        val body = RdpWriter(4).u16le(0).u8(1).toByteArray() // updateType 0 = orders, numberOrders
+        val share = RdpShare.dataPdu(caps.shareId, userId = 1002, pduType2 = RdpShare.PDUTYPE2_UPDATE, body = body)
+        return Mcs.sendDataRequest(userId = 1002, channelId = 1003, payload = share)
     }
 
     @Test
@@ -120,12 +132,45 @@ class OptionalClientPdusTest {
     }
 
     @Test
-    fun a_second_orders_update_does_not_pile_up_another_repaint() = runTest {
-        // A server that ignores the negotiation once will do it every frame; one full-screen repaint
-        // may be outstanding at a time, or the answer to a broken server is a traffic storm.
+    fun slow_path_orders_are_skipped_the_same_way() = runTest {
+        val caps = capabilities(refreshRect = true, suppressOutput = true)
         val written = mutableListOf<ByteArray>()
+        val session = codec(caps, written, slowPathOrdersPacket(caps))
+
+        assertTrue(session.readMessage().isEmpty())
+        assertEquals(1, written.size, "the slow path drops orders too, and owes the same repaint")
+    }
+
+    @Test
+    fun repaints_after_dropped_graphics_are_rate_limited() = runTest {
+        // A server that ignores the negotiation once will do it every frame, and a full-desktop
+        // repaint per dropped update is a traffic storm rather than a fix.
+        val written = mutableListOf<ByteArray>()
+        val clock = TestTimeSource()
         val session = codec(
             capabilities(refreshRect = true, suppressOutput = true),
+            written,
+            ordersPacket() + ordersPacket() + ordersPacket(),
+            timeSource = clock,
+        )
+
+        session.readMessage()
+        session.readMessage()
+        assertEquals(1, written.size, "a second drop in the same second repaints again")
+
+        clock += 2.seconds
+        session.readMessage()
+        assertEquals(2, written.size, "a drop after the interval is worth another repaint")
+    }
+
+    @Test
+    fun no_repaint_is_asked_of_a_server_that_cannot_refresh() = runTest {
+        // The capability is checked before the rate limiter records a request, so a request that
+        // never went out cannot mute a later one. Nothing reaches the wire either way; this pins
+        // the half that is observable.
+        val written = mutableListOf<ByteArray>()
+        val session = codec(
+            capabilities(refreshRect = false, suppressOutput = true),
             written,
             ordersPacket() + ordersPacket(),
         )
@@ -133,7 +178,7 @@ class OptionalClientPdusTest {
         session.readMessage()
         session.readMessage()
 
-        assertEquals(1, written.size)
+        assertTrue(written.isEmpty())
     }
 
     @Test

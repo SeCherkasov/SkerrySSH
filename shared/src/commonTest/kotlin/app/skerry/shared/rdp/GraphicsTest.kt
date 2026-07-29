@@ -101,7 +101,7 @@ class GraphicsTest {
             u16le(0xFFFF).u16le(0xFFFF)
         }.toByteArray()
 
-        val update = BitmapUpdate.apply(RdpReader(body), framebuffer, null) as RdpUpdate.Region
+        val update = BitmapUpdate.apply(RdpReader(body), framebuffer, null, DroppedGraphics()) as RdpUpdate.Region
 
         assertEquals(1, update.rects.size)
         assertEquals(WHITE, framebuffer.pixels[0]) // top row of the image
@@ -122,9 +122,11 @@ class GraphicsTest {
             u16le(0) // bitmapLength
         }.toByteArray()
 
-        val update = BitmapUpdate.apply(RdpReader(body), framebuffer, null) as RdpUpdate.Region
+        val dropped = DroppedGraphics()
+        val update = BitmapUpdate.apply(RdpReader(body), framebuffer, null, dropped) as RdpUpdate.Region
 
         assertEquals(emptyList(), update.rects, "an impossible rectangle reached the framebuffer")
+        assertTrue(dropped.take(), "a rectangle that never reached the screen has to be repainted")
     }
 
     @Test
@@ -197,7 +199,7 @@ class GraphicsTest {
     @Test
     fun `fast-path reassembles an update split across packets`() {
         val framebuffer = RemoteFramebuffer(4, 4)
-        val decoder = FastPathDecoder(framebuffer, SessionPalette())
+        val decoder = FastPathDecoder(framebuffer, SessionPalette(), DroppedGraphics())
         val bitmap = RdpWriter(64).apply {
             u16le(0x0001) // updateType inside the payload
             u16le(1)
@@ -222,7 +224,7 @@ class GraphicsTest {
 
     @Test
     fun `a fragment run of the wrong type is refused`() {
-        val decoder = FastPathDecoder(RemoteFramebuffer(4, 4), SessionPalette())
+        val decoder = FastPathDecoder(RemoteFramebuffer(4, 4), SessionPalette(), DroppedGraphics())
         decoder.decode(fastPathPacket(updateCode = 1, fragmentation = 2, body = byteArrayOf(0, 0)), SurfaceDecoder())
 
         assertFailsWith<RdpProtocolException> {
@@ -246,7 +248,7 @@ class GraphicsTest {
     @Test
     fun `an update after skipped orders in the same packet still paints`() {
         val framebuffer = RemoteFramebuffer(4, 4)
-        val decoder = FastPathDecoder(framebuffer, SessionPalette())
+        val decoder = FastPathDecoder(framebuffer, SessionPalette(), DroppedGraphics())
         val bitmap = RdpWriter(64).apply {
             u16le(0x0001) // updateType, repeated inside the payload
             u16le(1) // one rectangle
