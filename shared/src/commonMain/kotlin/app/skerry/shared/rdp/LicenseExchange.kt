@@ -63,7 +63,8 @@ class LicenseExchange(
      * Answer a Server Platform Challenge. The challenge itself is opaque — it is decrypted only to
      * be handed back inside the response, which is what proves the client derived the same keys.
      *
-     * @throws RdpProtocolException the challenge arrived before the licence request that keys it
+     * @throws RdpProtocolException the challenge arrived before the licence request that keys it,
+     *   or its MAC does not cover the challenge that arrived with it
      */
     fun platformChallengeResponse(reader: RdpReader): ByteArray {
         if (licensingEncryptionKey.isEmpty()) {
@@ -71,9 +72,15 @@ class LicenseExchange(
         }
         reader.u32le() // ConnectFlags, reserved
         val encryptedChallenge = readBlob(reader)
-        // MACData follows; the server's own MAC is not verified — it protects against a tampered
-        // challenge, and a wrong one already fails the exchange one message later.
+        val serverMac = reader.bytes(MAC_SIZE)
         val challenge = Rc4(licensingEncryptionKey).process(encryptedChallenge)
+        // MS-RDPELE 2.2.2.4: the MAC covers the decrypted challenge. Nothing an attacker who can
+        // reach these bytes gains by flipping them — they are already inside the TLS tunnel — but a
+        // mismatch is the one signal that says the tunnel, or our own key schedule, is not what we
+        // think it is, and answering a challenge we cannot authenticate would hide it.
+        if (!constantTimeEquals(mac(challenge), serverMac)) {
+            throw RdpProtocolException("the platform challenge's MAC does not match the challenge")
+        }
 
         val responseData = RdpWriter(challenge.size + 8).apply {
             u16le(PLATFORM_CHALLENGE_VERSION)
@@ -116,17 +123,20 @@ class LicenseExchange(
         if (certificate.isEmpty()) return null
         val reader = RdpReader(certificate)
         return when (val version = reader.u32le() and CERT_CHAIN_VERSION_MASK) {
-            CERT_CHAIN_VERSION_1 -> proprietaryPublicKey(reader)
+            CERT_CHAIN_VERSION_1 -> proprietaryPublicKey(certificate, reader)
             CERT_CHAIN_VERSION_2 -> x509ChainPublicKey(reader)
             else -> throw RdpProtocolException("unknown server certificate version $version")
         }
     }
 
-    private fun proprietaryPublicKey(reader: RdpReader): RdpRsaPublicKey? {
+    private fun proprietaryPublicKey(certificate: ByteArray, reader: RdpReader): RdpRsaPublicKey? {
         reader.u32le() // dwSigAlgId
         reader.u32le() // dwKeyAlgId
         reader.u16le() // wPublicKeyBlobType
         val keyBlob = reader.slice(reader.u16le().boundedLength())
+        // Everything read so far is what the signature covers, and it is checked before the key it
+        // carries is used for anything.
+        verifyProprietarySignature(certificate.copyOfRange(0, reader.position), reader)
         if (keyBlob.u32le() != RSA1_MAGIC) return null
         val keyLength = keyBlob.u32le().boundedLength()
         keyBlob.u32le() // bitlen
@@ -138,6 +148,32 @@ class LicenseExchange(
             modulus = modulus.copyOfRange(0, (modulus.size - RSA_PADDING).coerceAtLeast(1)).reversedArray(),
             exponent = exponent.reversedArray(),
         )
+    }
+
+    /**
+     * The signature of a proprietary certificate (MS-RDPBCGR 5.3.3.1.1): MD5 over [signed], wrapped
+     * in fixed padding and RSA-signed with the Terminal Services key. Microsoft published that key's
+     * private half, so this says nothing about who the server is — it says the key blob is the one
+     * whoever wrote the certificate meant to send, which is the bit worth keeping.
+     *
+     * @throws RdpProtocolException the signature is absent, the wrong size, or over other bytes
+     */
+    private fun verifyProprietarySignature(signed: ByteArray, reader: RdpReader) {
+        reader.u16le() // wSignatureBlobType
+        val blob = reader.bytes(reader.u16le().boundedLength())
+        if (blob.size != TSSK_KEY_SIZE + RSA_PADDING || blob.copyOfRange(TSSK_KEY_SIZE, blob.size).any { it != ZERO }) {
+            throw RdpProtocolException("proprietary certificate signature of ${blob.size} bytes")
+        }
+        val value = crypto.modPow(blob.copyOfRange(0, TSSK_KEY_SIZE).reversedArray(), TSSK_EXPONENT, TSSK_MODULUS)
+            .toLittleEndianField(TSSK_KEY_SIZE)
+        // The signed value is the hash, then 0x00, then 0xFF up to a trailing 0x01 — a fixed shape
+        // that leaves an attacker who cannot produce it nowhere to hide a second hash.
+        val wellFormed = value[HASH_SIZE] == ZERO && value[SIGNATURE_TAIL] == 1.toByte() &&
+            (HASH_SIZE + 1 until SIGNATURE_TAIL).all { value[it] == 0xFF.toByte() } &&
+            constantTimeEquals(value.copyOfRange(0, HASH_SIZE), crypto.md5(signed))
+        if (!wellFormed) {
+            throw RdpProtocolException("the proprietary certificate is not signed by the Terminal Services key")
+        }
     }
 
     private fun x509ChainPublicKey(reader: RdpReader): RdpRsaPublicKey? {
@@ -154,13 +190,19 @@ class LicenseExchange(
      * reversed back into a field of the modulus' width — followed by the eight zero bytes every RDP
      * client appends.
      */
-    private fun encryptPremaster(key: RdpRsaPublicKey): ByteArray {
-        val encrypted = crypto.modPow(premasterSecret.reversedArray(), key.exponent, key.modulus)
-        val field = ByteArray(key.modulus.size)
-        // Left-pad to the modulus width (a product with leading zero bytes comes back short), then
-        // flip to little-endian.
-        encrypted.copyInto(field, (field.size - encrypted.size).coerceAtLeast(0))
-        return field.reversedArray() + ByteArray(RSA_PADDING)
+    private fun encryptPremaster(key: RdpRsaPublicKey): ByteArray =
+        crypto.modPow(premasterSecret.reversedArray(), key.exponent, key.modulus)
+            .toLittleEndianField(key.modulus.size) + ByteArray(RSA_PADDING)
+
+    /**
+     * A big-endian RSA result as the little-endian field of [width] bytes the wire carries: left-pad
+     * (a product with leading zero bytes comes back short), then flip.
+     */
+    private fun ByteArray.toLittleEndianField(width: Int): ByteArray {
+        val field = ByteArray(width)
+        val count = minOf(size, width)
+        copyInto(field, width - count, size - count, size)
+        return field.reversedArray()
     }
 
     /**
@@ -277,5 +319,31 @@ class LicenseExchange(
 
         /** Generous next to any real licensing field (a certificate chain is the largest). */
         private const val MAX_FIELD_SIZE = 16384
+
+        private const val MAC_SIZE = 16
+        private const val HASH_SIZE = 16
+        private const val ZERO = 0.toByte()
+
+        /** Width of the Terminal Services key, and so of the signature it produces. */
+        private const val TSSK_KEY_SIZE = 64
+
+        /** Where the 0x01 that closes a proprietary certificate's signature sits. */
+        private const val SIGNATURE_TAIL = 62
+
+        /**
+         * The Terminal Services signing key (MS-RDPBCGR 5.3.3.1.1), big-endian as [RdpLicenseCrypto]
+         * takes it. Its private half is published in the same section — see
+         * [verifyProprietarySignature] for what the signature is and is not worth.
+         */
+        private val TSSK_MODULUS = hex(
+            "87EA6D05 5F099320 BB61F51A 09065E6C 7D5CF63D FEBFE77C EFFE3A58 6B6563CE" +
+                "954552F2 9A6BB7D7 E2C1F5EF 8720883E CB5FBA4A 1EC1BB4D C93E4372 BD5E3A3D",
+        )
+        private val TSSK_EXPONENT = hex("C0887B5B")
+
+        private fun hex(text: String): ByteArray {
+            val digits = text.filterNot { it == ' ' }
+            return ByteArray(digits.length / 2) { digits.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+        }
     }
 }
