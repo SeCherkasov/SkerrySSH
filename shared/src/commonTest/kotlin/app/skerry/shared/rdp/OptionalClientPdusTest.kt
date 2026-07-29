@@ -5,6 +5,9 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TestTimeSource
+import kotlin.time.TimeSource
 
 /**
  * Client PDUs the server has to opt into (MS-RDPBCGR 2.2.11.2 / 2.2.11.3): sending one that was not
@@ -28,19 +31,54 @@ class OptionalClientPdusTest {
         supportedCodecs = emptyList(),
     )
 
-    private fun codec(caps: ServerCapabilities, written: MutableList<ByteArray>) = RdpSessionCodec(
-        source = { _, _, _ -> error("no reads in this test") },
-        sink = { bytes -> written += bytes },
-        framebuffer = RemoteFramebuffer(caps.desktopWidth, caps.desktopHeight),
-        state = RdpSessionState(userId = 1007, ioChannelId = 1003, channels = emptyMap(), capabilities = caps),
-        settings = RdpClientSettings(
-            desktopWidth = caps.desktopWidth,
-            desktopHeight = caps.desktopHeight,
-            clientName = "Skerry",
-            selectedProtocol = 1,
-        ),
-        logon = RdpLogonInfo(domain = "", username = "u"),
-    )
+    private fun codec(
+        caps: ServerCapabilities,
+        written: MutableList<ByteArray>,
+        incoming: ByteArray = ByteArray(0),
+        timeSource: TimeSource = TimeSource.Monotonic,
+    ): RdpSessionCodec {
+        var offset = 0
+        return RdpSessionCodec(
+            source = { dst, dstOffset, len ->
+                if (offset + len > incoming.size) error("the test fixture ran out of bytes")
+                incoming.copyInto(dst, dstOffset, offset, offset + len)
+                offset += len
+            },
+            sink = { bytes -> written += bytes },
+            framebuffer = RemoteFramebuffer(caps.desktopWidth, caps.desktopHeight),
+            state = RdpSessionState(userId = 1007, ioChannelId = 1003, channels = emptyMap(), capabilities = caps),
+            settings = RdpClientSettings(
+                desktopWidth = caps.desktopWidth,
+                desktopHeight = caps.desktopHeight,
+                clientName = "Skerry",
+                selectedProtocol = 1,
+            ),
+            logon = RdpLogonInfo(domain = "", username = "u"),
+            timeSource = timeSource,
+        )
+    }
+
+    /** A fast-path packet carrying one drawing-orders update, which this client cannot execute. */
+    private fun ordersPacket(): ByteArray {
+        val update = RdpWriter(8).apply {
+            u8(0) // updateCode 0 = orders, single fragment, uncompressed
+            u16le(1)
+            u8(1) // numberOrders, and nothing this client reads past it
+        }.toByteArray()
+        val total = update.size + 3
+        return RdpWriter(total).apply {
+            u8(0) // action = fast-path output
+            u16be(total or 0x8000)
+            bytes(update)
+        }.toByteArray()
+    }
+
+    /** The same orders update on the slow path: a Share Data PDU inside an MCS domain PDU. */
+    private fun slowPathOrdersPacket(caps: ServerCapabilities): ByteArray {
+        val body = RdpWriter(4).u16le(0).u8(1).toByteArray() // updateType 0 = orders, numberOrders
+        val share = RdpShare.dataPdu(caps.shareId, userId = 1002, pduType2 = RdpShare.PDUTYPE2_UPDATE, body = body)
+        return Mcs.sendDataRequest(userId = 1002, channelId = 1003, payload = share)
+    }
 
     @Test
     fun a_refresh_declares_the_length_of_the_whole_packet() = runTest {
@@ -78,6 +116,69 @@ class OptionalClientPdusTest {
             .requestRefresh(listOf(RdpRect(0, 0, 1024, 768)))
 
         assertEquals(1, written.size)
+    }
+
+    @Test
+    fun drawing_orders_are_skipped_and_the_screen_asked_for_again() = runTest {
+        val written = mutableListOf<ByteArray>()
+        val session = codec(capabilities(refreshRect = true, suppressOutput = true), written, ordersPacket())
+
+        assertTrue(session.readMessage().isEmpty(), "orders carry nothing the UI can act on")
+        assertEquals(1, written.size, "the pixels the orders drew have to be asked for as bitmaps")
+        // The refresh covers the whole desktop, as inclusive right/bottom coordinates.
+        val pdu = written.single()
+        val rect = RdpReader(pdu, pdu.size - 8)
+        assertEquals(listOf(0, 0, 1023, 767), listOf(rect.u16le(), rect.u16le(), rect.u16le(), rect.u16le()))
+    }
+
+    @Test
+    fun slow_path_orders_are_skipped_the_same_way() = runTest {
+        val caps = capabilities(refreshRect = true, suppressOutput = true)
+        val written = mutableListOf<ByteArray>()
+        val session = codec(caps, written, slowPathOrdersPacket(caps))
+
+        assertTrue(session.readMessage().isEmpty())
+        assertEquals(1, written.size, "the slow path drops orders too, and owes the same repaint")
+    }
+
+    @Test
+    fun repaints_after_dropped_graphics_are_rate_limited() = runTest {
+        // A server that ignores the negotiation once will do it every frame, and a full-desktop
+        // repaint per dropped update is a traffic storm rather than a fix.
+        val written = mutableListOf<ByteArray>()
+        val clock = TestTimeSource()
+        val session = codec(
+            capabilities(refreshRect = true, suppressOutput = true),
+            written,
+            ordersPacket() + ordersPacket() + ordersPacket(),
+            timeSource = clock,
+        )
+
+        session.readMessage()
+        session.readMessage()
+        assertEquals(1, written.size, "a second drop in the same second repaints again")
+
+        clock += 2.seconds
+        session.readMessage()
+        assertEquals(2, written.size, "a drop after the interval is worth another repaint")
+    }
+
+    @Test
+    fun no_repaint_is_asked_of_a_server_that_cannot_refresh() = runTest {
+        // The capability is checked before the rate limiter records a request, so a request that
+        // never went out cannot mute a later one. Nothing reaches the wire either way; this pins
+        // the half that is observable.
+        val written = mutableListOf<ByteArray>()
+        val session = codec(
+            capabilities(refreshRect = false, suppressOutput = true),
+            written,
+            ordersPacket() + ordersPacket(),
+        )
+
+        session.readMessage()
+        session.readMessage()
+
+        assertTrue(written.isEmpty())
     }
 
     @Test
