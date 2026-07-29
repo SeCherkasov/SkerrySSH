@@ -31,6 +31,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Remote-desktop session as the UI sees it (pixels, updates, input) | `graphics/RemoteDesktopSession`, `RemoteDesktopUpdate`, `RemoteKeyEvent`, `RemoteDesktopQuality`, `RemoteDesktopCapabilities` — RDP and VNC adapters both implement this, protocol types stay behind it |
 | ARGB pixel buffer (resize/blit/fill/copyRect) | `graphics/RemoteFramebuffer` |
 | PCM playback and output-device enumeration | `audio/RemoteAudio`: `AudioOutputs`, `RemoteAudioPlayerFactory`, `RemoteAudioFormat` |
+| Open/reopen/teardown of a playback device | `audio/PcmPlayer`: `PcmPlayer` over `PcmSink` + `PcmSinkOpener` — a platform sink answers for the device only, never for when to open it |
 | Reading/writing a protocol PDU with bounds checks | `rdp/RdpIo`: `RdpReader`, `RdpWriter`, `RdpSource`, `RdpSink`; malformed input → `rdp/RdpProtocolException` |
 | RDP connection entry point and live session | `rdp/RdpTransport`: `RdpTransport`, `RdpSession`, `RdpUpdate` |
 | MS-RDPEDYC dynamic channel (clipboard/display/audio/graphics) | `rdp/egfx/DynamicChannelHandler` |

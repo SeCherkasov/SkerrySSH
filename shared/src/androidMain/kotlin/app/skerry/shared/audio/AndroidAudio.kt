@@ -27,85 +27,30 @@ class AndroidAudioOutputs(context: Context) : AudioOutputs {
     }
 }
 
-/** Opens [AndroidAudioTrackPlayer]s on the device an RDP profile named. */
+/** Opens the Android players on the device an RDP profile named. */
 class AndroidAudioPlayers(context: Context) : RemoteAudioPlayerFactory {
 
     private val appContext = context.applicationContext
 
-    override fun open(deviceId: String): RemoteAudioPlayer = AndroidAudioTrackPlayer(appContext, deviceId)
+    override fun open(deviceId: String): RemoteAudioPlayer =
+        PcmPlayer(AndroidTrackSinks(appContext, deviceId), trace = audioTrace)
 }
 
 /**
- * Plays PCM through an [AudioTrack] routed to [deviceId] (the system's own routing when it is blank
- * or the device is gone).
- *
- * Like the desktop player, the track is built on the first block — the server picks the format — and
- * rebuilt when the format changes. Writes are blocking, so the session keeps this off its read loop.
+ * Opens an [AudioTrack] routed to [deviceId] (the system's own routing when it is blank or the
+ * device is gone). When to open one, and what a refusal costs, is [PcmPlayer]'s.
  */
-class AndroidAudioTrackPlayer(
+internal class AndroidTrackSinks(
     private val context: Context,
     private val deviceId: String,
-) : RemoteAudioPlayer {
+) : PcmSinkOpener {
 
-    @Volatile
-    private var track: AudioTrack? = null
-
-    @Volatile
-    private var current: RemoteAudioFormat? = null
-
-    @Volatile
-    private var closed = false
-
-    override fun play(format: RemoteAudioFormat, pcm: ByteArray) {
-        if (closed) return
-        if (format != current) reopen(format)
-        val open = track ?: return
-        runCatching { open.write(pcm, 0, pcm.size) }
-    }
-
-    override fun flush() {
-        // The track has to be paused before its buffer can be dropped; it resumes on the next write.
-        runCatching {
-            track?.let { open ->
-                open.pause()
-                open.flush()
-                open.play()
-            }
-        }
-    }
-
-    override fun close() {
-        closed = true
-        release()
-    }
-
-    private fun release() {
-        val open = track ?: return
-        track = null
-        current = null
-        // pause() first: it unblocks a write parked on a full buffer, which is what ends the
-        // playback loop instead of leaving it stuck on a track nobody listens to.
-        runCatching {
-            open.pause()
-            open.flush()
-            open.stop()
-        }
-        runCatching { open.release() }
-    }
-
-    private fun reopen(format: RemoteAudioFormat) {
-        release()
-        if (closed) return
-        val encoding = when (format.bitsPerSample) {
-            8 -> AudioFormat.ENCODING_PCM_8BIT
-            16 -> AudioFormat.ENCODING_PCM_16BIT
-            else -> return
-        }
-        val channelMask =
-            if (format.channels >= 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
+    override fun open(format: RemoteAudioFormat): PcmSink? {
+        val encoding = AndroidAudioMapping.encoding(format.bitsPerSample) ?: return null
+        val channelMask = AndroidAudioMapping.channelMask(format.channels)
         val built = runCatching {
             val minimum = AudioTrack.getMinBufferSize(format.sampleRate, channelMask, encoding)
-                .coerceAtLeast(format.sampleRate * format.channels * (format.bitsPerSample / 8) / 5)
+                .coerceAtLeast(format.bufferBytes())
             AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
@@ -123,14 +68,18 @@ class AndroidAudioTrackPlayer(
                 .setBufferSizeInBytes(minimum)
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
-        }.getOrNull() ?: return
-        built.preferredDevice = preferredDevice()
-        runCatching { built.play() }.onFailure {
+        }.getOrNull() ?: return null
+        return runCatching {
+            // The setter shares play()'s guard: the sink the profile named can go stale between the
+            // lookup and the assignment (a Bluetooth headset dropping), and a track built but never
+            // released holds the output for the rest of the process.
+            built.preferredDevice = preferredDevice()
+            built.play()
+            AndroidTrackSink(AudioTrackHandle(built))
+        }.getOrElse {
             runCatching { built.release() }
-            return
+            null
         }
-        track = built
-        current = format
     }
 
     private fun preferredDevice(): AudioDeviceInfo? {
@@ -141,12 +90,100 @@ class AndroidAudioTrackPlayer(
     }
 }
 
-/** Type plus product name: the same headset gets the same id across reconnects. */
-private val AudioDeviceInfo.stableId: String get() = "$type:${productName ?: ""}"
+/**
+ * The calls a sink makes on an [AudioTrack], as an interface.
+ *
+ * A track cannot be built off a real device, so without this seam the teardown sequence below —
+ * which is what a session's sound hangs on when it ends — could only be read, never run. Public for
+ * the same reason as [AndroidAudioMapping]: its tests live in `:androidApp`.
+ */
+interface AndroidPlaybackTrack {
+    fun write(pcm: ByteArray)
+    fun pause()
+    fun flush()
+    fun play()
+    fun stop()
+    fun release()
+}
 
-private val AudioDeviceInfo.label: String
-    get() {
-        val product = productName?.toString()?.trim().orEmpty()
+/** One playing track. Writes block while it drains, which is the back-pressure [PcmPlayer] relies on. */
+class AndroidTrackSink(private val track: AndroidPlaybackTrack) : PcmSink {
+
+    override fun write(pcm: ByteArray) {
+        track.write(pcm)
+    }
+
+    /**
+     * The track has to be paused before its buffer can be dropped; it resumes on the next write.
+     * Each step stands alone, and play() runs whatever happened before it: a track left paused takes
+     * every block the session hands it and plays none, and nothing reopens it until the server
+     * changes format.
+     */
+    override fun flush() {
+        runCatching { track.pause() }
+        runCatching { track.flush() }
+        runCatching { track.play() }
+    }
+
+    /**
+     * Give the device back. pause() comes first: it unblocks a write parked on a full buffer, which
+     * is what ends the playback loop instead of leaving it stuck on a track nobody listens to. Each
+     * step stands alone — a track that fails to stop still has to be released.
+     */
+    override fun close() {
+        runCatching { track.pause() }
+        runCatching { track.flush() }
+        runCatching { track.stop() }
+        runCatching { track.release() }
+    }
+}
+
+/** The real thing behind [AndroidPlaybackTrack]; nothing here has a decision of its own. */
+private class AudioTrackHandle(private val track: AudioTrack) : AndroidPlaybackTrack {
+
+    override fun write(pcm: ByteArray) {
+        track.write(pcm, 0, pcm.size)
+    }
+
+    override fun pause() = track.pause()
+
+    override fun flush() = track.flush()
+
+    override fun play() = track.play()
+
+    override fun stop() = track.stop()
+
+    override fun release() = track.release()
+}
+
+/**
+ * How an RDP format and a platform output are read into `android.media`.
+ *
+ * Separate from the sinks it serves, and public rather than internal, because this is the part of
+ * the Android audio path a test can hold: an [AudioTrack] or an [AudioDeviceInfo] cannot be built
+ * off a real device, while the mapping decides what a profile stores and what the server is told
+ * this client can play. Its tests live in `:androidApp` — the only module here with an Android host
+ * test source set (see that module's build file).
+ */
+object AndroidAudioMapping {
+
+    /** `null` for a depth `AudioTrack` has no encoding for, which is a device that will not open. */
+    fun encoding(bitsPerSample: Int): Int? = when (bitsPerSample) {
+        8 -> AudioFormat.ENCODING_PCM_8BIT
+        16 -> AudioFormat.ENCODING_PCM_16BIT
+        else -> null
+    }
+
+    /** Anything the server calls multi-channel is played as stereo — the track takes no more. */
+    fun channelMask(channels: Int): Int =
+        if (channels >= 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
+
+    /** Type plus product name: the same headset gets the same id across reconnects. */
+    fun outputId(type: Int, productName: String?): String = "$type:${productName.orEmpty()}"
+
+    /** What the device picker shows: the kind of sink, named after its product when it has one. */
+    fun outputLabel(type: Int, productName: String?): String {
+        val product = productName?.trim().orEmpty()
         val kind = when (type) {
             AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Speaker"
             AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Wired headset"
@@ -157,3 +194,10 @@ private val AudioDeviceInfo.label: String
         }
         return if (product.isEmpty() || product == kind) kind else "$kind — $product"
     }
+}
+
+private val AudioDeviceInfo.stableId: String
+    get() = AndroidAudioMapping.outputId(type, productName?.toString())
+
+private val AudioDeviceInfo.label: String
+    get() = AndroidAudioMapping.outputLabel(type, productName?.toString())
