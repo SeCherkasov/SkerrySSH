@@ -77,6 +77,108 @@ class RemoteDesktopScreenStateTest {
     }
 
     @Test
+    fun muting_the_session_reaches_the_protocol() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        assertFalse(screen.audioMuted)
+        screen.toggleAudioMuted()
+        assertTrue(screen.audioMuted)
+        screen.toggleAudioMuted()
+
+        assertEquals(listOf(true, false), session.audioMutes)
+        scope.cancel()
+    }
+
+    @Test
+    fun unshared_clipboard_moves_in_neither_direction() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val pasted = mutableListOf<String>()
+        val screen = RemoteDesktopScreenState(session, scope, onClipboard = { pasted += it })
+
+        screen.toggleClipboardShared()
+        screen.onLocalClipboard("secret")
+        updates.emit(RemoteDesktopUpdate.ClipboardText("from the server"))
+
+        assertTrue(session.clipboard.isEmpty())
+        assertTrue(pasted.isEmpty())
+        // Nothing of the remote clipboard is kept either — the panel would otherwise show text the
+        // user has just said should not leave the remote machine.
+        assertNull(screen.serverClipboard)
+        scope.cancel()
+    }
+
+    @Test
+    fun ctrl_alt_del_presses_all_three_and_releases_them_in_reverse() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        screen.sendCtrlAltDel()
+
+        assertEquals(6, session.keys.size)
+        assertEquals(listOf(true, true, true, false, false, false), session.keys.map { it.second })
+        val down = session.keys.take(3).map { it.first.scancode }
+        assertEquals(down, session.keys.drop(3).map { it.first.scancode }.reversed())
+        // The delete key is the extended one on the keypad-less block; without the flag the remote
+        // driver reads it as the keypad's period and the secure attention sequence never fires.
+        assertTrue(session.keys.first { it.first.scancode == DELETE_SCANCODE }.first.extended)
+        scope.cancel()
+    }
+
+    @Test
+    fun view_only_swallows_ctrl_alt_del() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        screen.toggleViewOnly()
+        screen.sendCtrlAltDel()
+
+        assertTrue(session.keys.isEmpty())
+        scope.cancel()
+    }
+
+    @Test
+    fun sharing_the_clipboard_again_lets_text_cross_once_more() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val pasted = mutableListOf<String>()
+        val screen = RemoteDesktopScreenState(session, scope, onClipboard = { pasted += it })
+
+        screen.toggleClipboardShared()
+        screen.toggleClipboardShared()
+        screen.onLocalClipboard("mine")
+        updates.emit(RemoteDesktopUpdate.ClipboardText("theirs"))
+
+        assertEquals("mine", session.clipboard.single())
+        assertEquals("theirs", pasted.single())
+        assertEquals("theirs", screen.serverClipboard)
+        scope.cancel()
+    }
+
+    @Test
+    fun turning_sharing_off_retracts_the_text_that_already_crossed() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val screen = RemoteDesktopScreenState(FakeRemoteDesktop(updates = updates), scope)
+
+        updates.emit(RemoteDesktopUpdate.ClipboardText("from the server"))
+        assertEquals("from the server", screen.serverClipboard)
+
+        screen.toggleClipboardShared()
+
+        // Otherwise the panel keeps offering the remote machine's clipboard after the user said it
+        // should stay there.
+        assertNull(screen.serverClipboard)
+        scope.cancel()
+    }
+
+    @Test
     fun cursor_shape_becomes_a_sprite_and_an_empty_one_clears_it() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
@@ -262,5 +364,9 @@ class RemoteDesktopScreenStateTest {
         updates.emit(RemoteDesktopUpdate.ClipboardText("copied"))
         assertEquals("copied", received.single())
         scope.cancel()
+    }
+
+    private companion object {
+        const val DELETE_SCANCODE = 0x53
     }
 }

@@ -285,6 +285,9 @@ class DesktopDesignState(
     /** Whether the terminal's left host sidebar is hidden (toggled from the icon rail). */
     var sidebarHidden: Boolean by mutableStateOf(false); private set
 
+    /** Whether the session panel beside a live remote desktop is hidden. */
+    var remotePanelHidden: Boolean by mutableStateOf(false); private set
+
     /**
      * Which catalog the work area is showing: terminal-style connections or remote desktops (the
      * rail's two session-level items). Each section has its own host sidebar, its own "New
@@ -569,6 +572,8 @@ class DesktopDesignState(
     fun showSettingsTab(t: SettingsTab) { settingsTab = t }
     fun toggleSplit() { split = !split }
     fun toggleSidebar() { sidebarHidden = !sidebarHidden }
+
+    fun toggleRemotePanel() { remotePanelHidden = !remotePanelHidden }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
 
     // Signal to focus the AI bar's input (hotkey Cmd// Ctrl+Shift+/). SharedFlow rather than a counter

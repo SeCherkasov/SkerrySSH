@@ -55,6 +55,9 @@ interface RemoteDesktopSession {
     /** Tell the server whether anyone is looking; a hidden window need not be rendered. */
     suspend fun setOutputVisible(visible: Boolean)
 
+    /** Silence the sound coming from the remote machine, or let it through; no-op without audio. */
+    suspend fun setAudioMuted(muted: Boolean)
+
     /** Close the session. Idempotent. */
     suspend fun close()
 }
@@ -70,6 +73,10 @@ data class RemoteDesktopCapabilities(
     val remoteResize: Boolean,
     /** The cursor can be handed back and forth between client and server. */
     val cursorHandover: Boolean,
+    /** The session carries sound, so muting it means something (RDP with a device; never RFB). */
+    val audio: Boolean = false,
+    /** The session carries a clipboard, so sharing it can be turned off mid-session. */
+    val clipboard: Boolean = true,
 )
 
 /** Quality preference, where the protocol has one. */

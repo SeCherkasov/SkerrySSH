@@ -162,6 +162,53 @@ class AudioChannelTest {
         assertEquals(PCM_44_STEREO, player.played.single().first)
     }
 
+    @Test
+    fun `muted sound never reaches the device, and what was queued is dropped`() = runTest {
+        negotiate()
+        val playback = launch { channel.play() }
+
+        channel.setMuted(true)
+        channel.receive(wave2(timestamp = 3, formatNo = 0, blockNo = 1, samples = ByteArray(8) { 1 }))
+        advanceUntilIdle()
+        playback.cancel()
+
+        assertTrue(player.played.isEmpty())
+        assertEquals(1, player.flushes)
+        // The server allows only a few unconfirmed blocks: a muted client that stopped confirming
+        // would be a client the server stops sending to, and unmuting would then stay silent.
+        assertEquals(SNDC_WAVECONFIRM, typeOf(sent.single()))
+    }
+
+    @Test
+    fun `unmuting lets the next block through`() = runTest {
+        negotiate()
+        val playback = launch { channel.play() }
+
+        channel.setMuted(true)
+        channel.receive(wave2(timestamp = 3, formatNo = 0, blockNo = 1, samples = ByteArray(8) { 1 }))
+        channel.setMuted(false)
+        channel.receive(wave2(timestamp = 4, formatNo = 0, blockNo = 2, samples = ByteArray(8) { 2 }))
+        advanceUntilIdle()
+        playback.cancel()
+
+        assertContentEquals(ByteArray(8) { 2 }, player.played.single().second)
+    }
+
+    @Test
+    fun `muting drops what was already queued, or the mute would play out first`() = runTest {
+        negotiate()
+
+        // Queued while unmuted and not yet handed to the device: playback starts after the mute.
+        channel.receive(wave2(timestamp = 1, formatNo = 0, blockNo = 1, samples = ByteArray(8) { 1 }))
+        channel.setMuted(true)
+        val playback = launch { channel.play() }
+        advanceUntilIdle()
+        playback.cancel()
+
+        assertTrue(player.played.isEmpty())
+        assertEquals(1, player.flushes)
+    }
+
     /** Settle on the two formats the wave tests index into. */
     private suspend fun negotiate() {
         channel.receive(serverFormats(version = 6, formats = listOf(PCM_44_STEREO, PCM_22_MONO_8BIT)))

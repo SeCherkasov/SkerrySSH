@@ -24,4 +24,19 @@
     <string name="conn_subtitle_new_desktop">Add a remote desktop. Its password is encrypted with your master password.</string>
     <string name="nav_tab_desktops">Desktops</string>
     <string name="rd_screen_title">Remote desktops</string>
+    <string name="rd_panel_title">Session</string>
+    <string name="rd_panel_hide">Hide the panel</string>
+    <string name="rd_panel_show">Show the panel</string>
+    <string name="rd_screenshot">Screenshot</string>
+    <string name="rd_screenshot_saved">Saved to %s</string>
+    <string name="rd_screenshot_failed">Could not write the file</string>
+    <string name="rd_settings">Settings</string>
+    <string name="rd_ctrl_alt_del">Send Ctrl+Alt+Del</string>
+    <string name="rd_clipboard">Clipboard</string>
+    <string name="rd_clipboard_from_remote">From the remote machine</string>
+    <string name="rd_clipboard_empty">Nothing copied yet</string>
+    <string name="rd_clipboard_copy_here">Copy here</string>
+    <string name="rd_clipboard_send">Send mine</string>
+    <string name="rd_audio">Sound</string>
+    <string name="rd_clipboard_share">Share the clipboard</string>
 </resources>

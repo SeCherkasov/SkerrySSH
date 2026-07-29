@@ -24,11 +24,19 @@ open class FakeRemoteDesktop(
     val visibility = mutableListOf<Boolean>()
     var closed = false
 
+    val audioMutes = mutableListOf<Boolean>()
+
     override val capabilities = RemoteDesktopCapabilities(
         adjustableQuality = true,
         remoteResize = true,
         cursorHandover = true,
+        audio = true,
+        clipboard = true,
     )
+
+    override suspend fun setAudioMuted(muted: Boolean) {
+        audioMutes += muted
+    }
 
     override suspend fun sendPointer(x: Int, y: Int, buttonMask: Int) {
         pointers += Triple(x, y, buttonMask)
