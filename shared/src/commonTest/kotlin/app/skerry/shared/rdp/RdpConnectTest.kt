@@ -295,23 +295,18 @@ class RdpConnectTest {
             return X224.dataHeader(body.size) + body
         }
 
-        /** A Server Licence Request with a proprietary certificate wrapped around a fake RSA key. */
+        /**
+         * A Server Licence Request with an X.509 chain around a stand-in server key. The other
+         * certificate format a server may send, the proprietary one, has to carry a real Terminal
+         * Services signature, which [FakeLicenseCrypto] cannot produce — `LicenseExchangeTest`
+         * covers that form with real crypto.
+         */
         private fun licenseRequestPdu(): ByteArray {
-            val modulus = ByteArray(64) { (it + 1).toByte() }
-            val keyBlob = RdpWriter(modulus.size + 32).apply {
-                u32le(0x31415352) // "RSA1"
-                u32le(modulus.size + 8) // keylen counts the trailing padding
-                u32le(modulus.size * 8)
-                u32le(modulus.size)
-                bytes(byteArrayOf(1, 0, 1, 0)) // exponent, little-endian
-                bytes(modulus)
-                zeros(8)
-            }.toByteArray()
-            val certificate = RdpWriter(keyBlob.size + 32).apply {
-                u32le(1) // CERT_CHAIN_VERSION_1
-                u32le(0).u32le(0) // signature and key algorithm ids
-                u16le(0x0006).u16le(keyBlob.size).bytes(keyBlob)
-                u16le(0x0008).u16le(0) // empty signature blob
+            val leaf = ByteArray(48) { (it + 1).toByte() } // any bytes: the fake crypto reads a key out of them
+            val certificate = RdpWriter(leaf.size + 16).apply {
+                u32le(2) // CERT_CHAIN_VERSION_2
+                u32le(1) // one certificate in the chain: the server's own
+                u32le(leaf.size).bytes(leaf)
             }.toByteArray()
             val body = RdpWriter(certificate.size + 96).apply {
                 zeros(32) // ServerRandom
