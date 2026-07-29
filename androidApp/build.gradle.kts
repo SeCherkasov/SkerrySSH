@@ -10,6 +10,14 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     // FragmentActivity — host of the biometric prompt (androidx.biometric)
     implementation(libs.androidx.fragment)
+    // Host tests for the Android side of :shared. They live here rather than in :shared because that
+    // module's androidHostTest would inherit commonTest, whose vault suite needs libsodium's natives
+    // — absent on a host JVM. What runs here is the pure Android mapping (see AndroidAudioMapping):
+    // an AudioTrack or an AudioDeviceInfo cannot be built off a device at all.
+    // -junit5 spelled out: the Kotlin plugin picks kotlin("test")'s backend from the Test task only
+    // for its own JVM targets, and an AGP unit-test task is not one — a bare kotlin("test") here
+    // resolves to the JUnit 4 variant and `kotlin.test.Test` does not compile.
+    testImplementation(kotlin("test-junit5"))
 }
 
 android {
@@ -65,6 +73,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
+    }
+    testOptions {
+        // The same JUnit 5 backend the multiplatform modules run kotlin("test") on.
+        unitTests.all { it.useJUnitPlatform() }
     }
 }
 

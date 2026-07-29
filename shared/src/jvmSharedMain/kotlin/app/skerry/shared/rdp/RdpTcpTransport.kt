@@ -1,6 +1,7 @@
 package app.skerry.shared.rdp
 
 import app.skerry.shared.audio.RemoteAudioPlayer
+import app.skerry.shared.audio.audioTrace
 import app.skerry.shared.audio.RemoteAudioPlayerFactory
 import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.rdp.egfx.ClearCodec
@@ -81,7 +82,7 @@ class RdpTcpTransport(
             // the session bandwidth for every sound the server sends.
             val audio: RemoteAudioPlayer? =
                 if (target.audioOutput) audioPlayers?.open(target.audioDeviceId) else null
-            rdpAudioTrace(
+            audioTrace(
                 "connect: audioOutput=${target.audioOutput} device='${target.audioDeviceId}' " +
                     "factory=${audioPlayers != null} player=${audio != null}",
             )
@@ -125,7 +126,7 @@ class RdpTcpTransport(
                     username = credentials.username,
                     password = if (networkLevelAuth) "" else credentials.password,
                 )
-                rdpAudioTrace(
+                audioTrace(
                     "connect: requesting static channels ${settings.channels}, " +
                         "client info says audio playback is wanted=" +
                         settings.channels.contains(RdpClientSettings.CHANNEL_AUDIO),
@@ -181,22 +182,6 @@ class RdpTcpTransport(
 }
 
 /**
- * Diagnostics for the audio path, from what the connection asked for to the blocks that reach the
- * device: `SKERRY_RDP_AUDIO_TRACE=1` writes it to stderr.
- *
- * A session with no sound has to be diagnosed on the machine where it happens, against the server
- * that does it, and the interesting part is what the *server* does — whether it opens an audio
- * channel at all. Note that `./gradlew run` starts the app in a process that inherits the Gradle
- * daemon's environment rather than the shell's, so the run task forwards the variable as the system
- * property this also reads (see composeApp/build.gradle.kts); a packaged build reads the variable
- * itself.
- */
-private val audioTracing = System.getenv("SKERRY_RDP_AUDIO_TRACE") == "1" ||
-    System.getProperty("skerry.rdp.audioTrace") == "1"
-
-internal val rdpAudioTrace: (String) -> Unit = { line -> if (audioTracing) System.err.println("rdp audio: $line") }
-
-/**
  * A live session over a connected [connection].
  *
  * Cancellation follows the VNC session's pattern: the blocking socket read does not respond to
@@ -236,7 +221,7 @@ class RdpSocketSession(
 
     private val dynamicChannels = DynamicChannels(
         send = { data -> codec.sendChannelData(RdpClientSettings.CHANNEL_DYNAMIC, data) },
-        trace = rdpAudioTrace,
+        trace = audioTrace,
     )
 
     /**
@@ -245,7 +230,7 @@ class RdpSocketSession(
      * because the connection request named them, so a channel with nowhere to play would receive
      * audio and drop it.
      */
-    private val audio = audioPlayer?.let { player -> AudioChannel(player, trace = rdpAudioTrace) }
+    private val audio = audioPlayer?.let { player -> AudioChannel(player, trace = audioTrace) }
 
     /**
      * Playback runs on a thread of its own: writing into the device blocks until it has room, and on
@@ -293,10 +278,10 @@ class RdpSocketSession(
                 }
                 // Nothing else should arrive on a static channel this session asked for; if it
                 // does, the audio was routed past its handler rather than never sent.
-                else -> rdpAudioTrace("channel data on $channelId (${data.size} bytes), no handler")
+                else -> audioTrace("channel data on $channelId (${data.size} bytes), no handler")
             }
         }
-        rdpAudioTrace("session: channels granted by the server ${state.channels}, audio=${audio != null}")
+        audioTrace("session: channels granted by the server ${state.channels}, audio=${audio != null}")
         audio?.let { channel ->
             // Both transports of MS-RDPEA, because the server picks: a Windows host with drdynvc
             // open sends the sound over the dynamic channel and leaves the static one silent.
