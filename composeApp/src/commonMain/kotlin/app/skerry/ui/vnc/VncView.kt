@@ -1,6 +1,8 @@
 package app.skerry.ui.vnc
 
 import app.skerry.ui.remote.remoteKeyEvent
+import app.skerry.ui.remote.PanelReopenHandle
+import app.skerry.ui.remote.RemoteDesktopPanel
 import app.skerry.ui.remote.RemoteDesktopScreenState
 import app.skerry.ui.remote.RemoteDesktopController
 import app.skerry.ui.remote.RemoteDesktopUiState
@@ -133,9 +135,18 @@ fun VncView(state: DesktopDesignState) {
     Box(Modifier.fillMaxSize()) {
         when (val ui = vnc.uiState) {
             is RemoteDesktopUiState.Connecting -> CenterNotice("hourglass_empty", stringResource(Res.string.vnc_connecting))
-            is RemoteDesktopUiState.Connected -> Box(Modifier.fillMaxSize()) {
-                VncSurface(ui.screen)
-                Box(Modifier.align(Alignment.TopEnd)) { VncGraphicsBar(ui.screen) }
+            is RemoteDesktopUiState.Connected -> Row(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f).fillMaxHeight()) { VncSurface(ui.screen) }
+                AnimatedVisibility(
+                    visible = !state.remotePanelHidden,
+                    enter = expandHorizontally(expandFrom = Alignment.Start),
+                    exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
+                ) { RemoteDesktopPanel(ui.screen, onHide = state::toggleRemotePanel) }
+                AnimatedVisibility(
+                    visible = state.remotePanelHidden,
+                    enter = fadeIn() + expandHorizontally(expandFrom = Alignment.End),
+                    exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.End),
+                ) { PanelReopenHandle(onClick = state::toggleRemotePanel) }
             }
             is RemoteDesktopUiState.Error -> CenterNotice(
                 "error",
@@ -336,50 +347,6 @@ private fun DrawScope.drawCursor(screen: RemoteDesktopScreenState, sprite: VncCu
     )
 }
 
-/**
- * Compact graphics-settings control in the corner of a live VNC tab: a gear that opens a menu for
- * image quality (Auto/Low/Medium/High → [RemoteDesktopScreenState.setQuality]), view-only, and reset zoom.
- */
-@Composable
-private fun VncGraphicsBar(screen: RemoteDesktopScreenState) {
-    var open by remember { mutableStateOf(false) }
-    Box(Modifier.padding(8.dp)) {
-        AnchoredDropdown(
-            expanded = open,
-            onDismiss = { open = false },
-            // The menu must not steal the keyboard from the VNC surface — remote typing would die
-            // until the user clicks the picture again.
-            focusable = false,
-            trigger = {
-                Box(
-                    Modifier.clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.45f))
-                        .clickable { open = !open }.padding(7.dp),
-                ) { Sym("tune", size = 18.sp, color = Skerry.colors.text) }
-            },
-            menu = { width ->
-                Column(
-                    Modifier.width(width.coerceAtLeast(180.dp)).clip(RoundedCornerShape(9.dp))
-                        .background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(9.dp)).padding(vertical = 4.dp),
-                ) {
-                    Txt(stringResource(Res.string.vnc_quality), color = Skerry.colors.faint, size = 10.5.sp, modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp))
-                    RemoteDesktopQuality.entries.forEach { q ->
-                        VncMenuRow(q.label(), selected = screen.quality == q) { screen.applyQuality(q) }
-                    }
-                    HLine(modifier = Modifier.padding(vertical = 4.dp))
-                    // No "Reset zoom" here: desktop has no local zoom (the wheel scrolls the remote
-                    // desktop instead), so the fit is always 1:1 and the control would be a no-op.
-                    // Mobile keeps it — pinch-zoom is real there.
-                    VncMenuRow(stringResource(Res.string.vnc_view_only), selected = screen.viewOnly, icon = if (screen.viewOnly) "check_box" else "check_box_outline_blank") { screen.toggleViewOnly() }
-                    // Only offered once the server has said it accepts SetDesktopSize.
-                    if (screen.canResizeRemote) {
-                        VncMenuRow(stringResource(Res.string.vnc_resize_to_window), selected = screen.remoteResize, icon = if (screen.remoteResize) "check_box" else "check_box_outline_blank") { screen.toggleRemoteResize() }
-                    }
-                }
-            },
-        )
-    }
-}
-
 /** Localized label for a quality level in the graphics menu (shared with the mobile VNC screen). */
 @Composable
 internal fun RemoteDesktopQuality.label(): String = stringResource(
@@ -390,20 +357,6 @@ internal fun RemoteDesktopQuality.label(): String = stringResource(
         RemoteDesktopQuality.High -> Res.string.vnc_quality_high
     },
 )
-
-@Composable
-private fun VncMenuRow(label: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (icon != null) Sym(icon, size = 15.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
-        Txt(label, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 12.5.sp, modifier = Modifier.weight(1f))
-        if (selected && icon == null) Sym("check", size = 14.sp, color = Skerry.colors.cyanBright)
-    }
-}
 
 @Composable
 private fun CenterNotice(icon: String, message: String, color: Color = Skerry.colors.dim) {

@@ -1,10 +1,13 @@
 package app.skerry.ui.mobile
 
 import app.skerry.ui.remote.remoteKeyEvent
+import app.skerry.ui.remote.RemoteDesktopPanel
 import app.skerry.ui.remote.RemoteDesktopScreenState
 import app.skerry.ui.remote.RemoteDesktopUiState
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -84,9 +87,9 @@ fun MobileVncScreen(state: MobileDesignState) {
     var keyboardOn by remember { mutableStateOf(false) }
     // The bar starts visible so the screen still explains itself on arrival, then gets out of the way.
     var barVisible by remember { mutableStateOf(true) }
-    // The graphics menu hangs off the bar, so the bar has to outlive it — auto-hiding underneath would
-    // take the open menu down with it mid-choice.
-    var menuOpen by remember { mutableStateOf(false) }
+    // The session panel is opened from the bar, so the bar has to outlive it — auto-hiding underneath
+    // would take the panel's own way back with it.
+    var panelOpen by remember { mutableStateOf(false) }
     // Bumped by every reveal, and part of the auto-hide effect's key: re-setting an already-true
     // `barVisible` is not a state change and would leave the running timer to expire on its old
     // schedule — a swipe would then be answered by the bar vanishing a moment later.
@@ -96,8 +99,8 @@ fun MobileVncScreen(state: MobileDesignState) {
 
     // Auto-hide, restarted by every reveal. Held open while the keyboard is up: the button that puts
     // it away lives on the bar, and hiding the bar under the user's hands would strand them.
-    LaunchedEffect(barVisible, keyboardOn, menuOpen, revealNonce) {
-        if (barVisible && !keyboardOn && !menuOpen) {
+    LaunchedEffect(barVisible, keyboardOn, panelOpen, revealNonce) {
+        if (barVisible && !keyboardOn && !panelOpen) {
             delay(BAR_AUTO_HIDE_MS)
             barVisible = false
         }
@@ -143,8 +146,8 @@ fun MobileVncScreen(state: MobileDesignState) {
                 screen = (vnc?.uiState as? RemoteDesktopUiState.Connected)?.screen,
                 title = sessions?.activeSession?.title ?: "VNC",
                 keyboardOn = keyboardOn,
-                menuOpen = menuOpen,
-                onMenuOpenChange = { menuOpen = it },
+                panelOpen = panelOpen,
+                onPanelOpenChange = { panelOpen = it },
                 onToggleKeyboard = { keyboardOn = !keyboardOn },
                 onClose = {
                     sessions?.active?.let { sessions.close(it.id) }
@@ -154,6 +157,29 @@ fun MobileVncScreen(state: MobileDesignState) {
         }
 
         val connected = (vnc?.uiState as? RemoteDesktopUiState.Connected)?.screen
+        // Kept across the frame the session drops on: the exit animation still has to draw the panel
+        // it is sliding away, and a content lambda reading `connected` would compose nothing there —
+        // the panel would vanish rather than leave.
+        var lastScreen by remember { mutableStateOf(connected) }
+        if (connected != null) lastScreen = connected
+        // The panel slides over the picture rather than beside it: on a phone a column of its width
+        // would leave the desktop a strip.
+        AnimatedVisibility(
+            visible = panelOpen && connected != null,
+            modifier = Modifier.align(Alignment.CenterEnd),
+            enter = slideInHorizontally { it },
+            exit = slideOutHorizontally { it },
+        ) {
+            lastScreen?.let {
+                RemoteDesktopPanel(
+                    it,
+                    onHide = { panelOpen = false },
+                    modifier = Modifier.hiddenSystemBarsPadding(),
+                    // Pinch-zoom is real here, so the fit can be off and worth resetting.
+                    showResetZoom = true,
+                )
+            }
+        }
         if (keyboardOn && connected != null) VncImeField(connected) { keyboardOn = false }
     }
 }
@@ -165,8 +191,8 @@ private fun MobileVncBar(
     screen: RemoteDesktopScreenState?,
     title: String,
     keyboardOn: Boolean,
-    menuOpen: Boolean,
-    onMenuOpenChange: (Boolean) -> Unit,
+    panelOpen: Boolean,
+    onPanelOpenChange: (Boolean) -> Unit,
     onToggleKeyboard: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -186,7 +212,7 @@ private fun MobileVncBar(
             screen?.serverName ?: title,
             color = Skerry.colors.text, size = 13.sp, modifier = Modifier.weight(1f).padding(start = 4.dp),
         )
-        if (screen != null) MobileVncGraphics(screen, menuOpen, onMenuOpenChange)
+        if (screen != null) MobileVncIcon("tune") { onPanelOpenChange(!panelOpen) }
         MobileVncIcon(if (keyboardOn) "keyboard_hide" else "keyboard", onClick = onToggleKeyboard)
         MobileVncIcon("close", onClick = onClose)
     }
@@ -242,50 +268,6 @@ private fun VncImeField(screen: RemoteDesktopScreenState, onClosed: () -> Unit) 
 private fun CenterText(text: String, color: Color) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Txt(text, color = color, size = 13.sp)
-    }
-}
-
-/** Graphics settings dropdown for the mobile VNC bar: quality, view-only, reset zoom. */
-@Composable
-private fun MobileVncGraphics(screen: RemoteDesktopScreenState, open: Boolean, onOpenChange: (Boolean) -> Unit) {
-    AnchoredDropdown(
-        expanded = open,
-        onDismiss = { onOpenChange(false) },
-        // Must not steal focus: with the IME field open, a focusable popup would drop the keyboard.
-        focusable = false,
-        trigger = { MobileVncIcon("tune") { onOpenChange(!open) } },
-        menu = { width ->
-            Column(
-                Modifier.width(width.coerceAtLeast(200.dp)).clip(RoundedCornerShape(11.dp))
-                    .background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(vertical = 4.dp),
-            ) {
-                Txt(stringResource(Res.string.vnc_quality), color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 2.dp))
-                RemoteDesktopQuality.entries.forEach { q ->
-                    MobileVncMenuRow(q.label(), selected = screen.quality == q) { screen.applyQuality(q) }
-                }
-                HLine(modifier = Modifier.padding(vertical = 4.dp))
-                MobileVncMenuRow(stringResource(Res.string.vnc_view_only), selected = screen.viewOnly, icon = if (screen.viewOnly) "check_box" else "check_box_outline_blank") { screen.toggleViewOnly() }
-                // Only offered once the server has said it accepts SetDesktopSize.
-                if (screen.canResizeRemote) {
-                    MobileVncMenuRow(stringResource(Res.string.vnc_resize_to_window), selected = screen.remoteResize, icon = if (screen.remoteResize) "check_box" else "check_box_outline_blank") { screen.toggleRemoteResize() }
-                }
-                MobileVncMenuRow(stringResource(Res.string.vnc_reset_zoom), selected = false, icon = "fit_screen") { screen.resetZoom(); onOpenChange(false) }
-            }
-        },
-    )
-}
-
-@Composable
-private fun MobileVncMenuRow(label: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        if (icon != null) Sym(icon, size = 17.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
-        Txt(label, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 14.sp, modifier = Modifier.weight(1f))
-        if (selected && icon == null) Sym("check", size = 16.sp, color = Skerry.colors.cyanBright)
     }
 }
 

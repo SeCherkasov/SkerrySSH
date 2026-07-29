@@ -104,6 +104,18 @@ class AudioChannel(
         for (block in queue) player.play(block.format, block.pcm)
     }
 
+    /**
+     * Silence the session's sound without touching the channel: blocks keep being parsed and
+     * confirmed, they just never reach the device. Dropping the channel instead would be a one-way
+     * door — the server opens `rdpsnd` from the connection request, so a session that closed it
+     * could not get its sound back without reconnecting.
+     */
+    fun setMuted(value: Boolean) {
+        muted = value
+        // What is already queued was recorded before the mute and would play after it.
+        if (value) stop()
+    }
+
     /** Stop playback and release the device; [play] returns. Idempotent. */
     fun close() {
         queue.close()
@@ -213,6 +225,7 @@ class AudioChannel(
     }
 
     private fun enqueue(format: RemoteAudioFormat?, pcm: ByteArray) {
+        if (muted) return
         if (format == null || pcm.isEmpty()) {
             trace("dropped a block of ${pcm.size} bytes in an unknown format")
             return
@@ -222,6 +235,10 @@ class AudioChannel(
     }
 
     private var blocksQueued = 0
+
+    // Set from the UI thread, read on the read loop.
+    @kotlin.concurrent.Volatile
+    private var muted = false
 
     /** The server closed the stream: what is still queued belongs to sound nobody will hear. */
     private fun stop() {

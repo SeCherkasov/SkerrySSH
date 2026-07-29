@@ -41,6 +41,10 @@ class RdpRemoteDesktop(
         adjustableQuality = false,
         remoteResize = true,
         cursorHandover = false,
+        // Both were settled by the connection request: a session that did not ask for sound has no
+        // device to mute, and one that did not ask for the clipboard has no channel to share.
+        audio = session.audioAvailable,
+        clipboard = session.clipboardAvailable,
     )
 
     override val updates: Flow<RemoteDesktopUpdate> = session.updates.map { update ->
@@ -126,6 +130,8 @@ class RdpRemoteDesktop(
     override suspend fun setLocalCursor(enabled: Boolean) = Unit
 
     override suspend fun setOutputVisible(visible: Boolean) = session.setOutputVisible(visible)
+
+    override suspend fun setAudioMuted(muted: Boolean) = session.setAudioMuted(muted)
 
     override suspend fun close() = session.close()
 

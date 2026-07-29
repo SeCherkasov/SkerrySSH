@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.IntSize
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
@@ -168,6 +169,44 @@ class RemoteDesktopScreenState(
         }
     }
 
+    /** Sound from the remote machine is silenced locally; the channel itself stays open. */
+    var audioMuted by mutableStateOf(false)
+        private set
+
+    fun toggleAudioMuted() {
+        audioMuted = !audioMuted
+        send { session.setAudioMuted(audioMuted) }
+    }
+
+    /**
+     * Whether the clipboard travels at all. Enforced here rather than on the channel: both protocols
+     * settle their clipboard at connect time, so this is the only place a running session can stop
+     * text from crossing — in either direction, since the risk is symmetric.
+     */
+    var clipboardShared by mutableStateOf(true)
+        private set
+
+    fun toggleClipboardShared() {
+        clipboardShared = !clipboardShared
+        // Text that crossed while sharing was on is retracted with the switch: leaving it on screen
+        // would keep offering the remote machine's clipboard after the user said it should stay there.
+        if (!clipboardShared) serverClipboard = null
+    }
+
+    /**
+     * The secure attention sequence. It cannot be typed: the local OS takes Ctrl+Alt+Del for itself
+     * before any application sees it, which is the entire point of the sequence — so on the remote
+     * machine it can only arrive as keys the client synthesizes.
+     */
+    fun sendCtrlAltDel() {
+        if (viewOnly) return
+        val keys = CTRL_ALT_DEL.mapNotNull { remoteKeyEvent(it, 0) }
+        send {
+            keys.forEach { session.sendKey(it, down = true) }
+            keys.asReversed().forEach { session.sendKey(it, down = false) }
+        }
+    }
+
     /** True once the session has closed (server drop / EOF); the controller reacts to this. */
     var closed by mutableStateOf(false)
         private set
@@ -238,7 +277,7 @@ class RemoteDesktopScreenState(
             // server to its own screen, which is what the user sees.
             is RemoteDesktopUpdate.CursorPosition -> Unit
             is RemoteDesktopUpdate.CursorVisible -> if (!update.visible) cursor = null
-            is RemoteDesktopUpdate.ClipboardText -> {
+            is RemoteDesktopUpdate.ClipboardText -> if (clipboardShared) {
                 serverClipboard = update.text
                 onClipboard(update.text)
             }
@@ -266,6 +305,7 @@ class RemoteDesktopScreenState(
 
     /** Send local clipboard text to the server. */
     fun onLocalClipboard(text: String) {
+        if (!clipboardShared) return
         send { session.sendClipboardText(text) }
     }
 
@@ -290,5 +330,7 @@ class RemoteDesktopScreenState(
 
     private companion object {
         const val RESIZE_DEBOUNCE_MS = 400L
+
+        val CTRL_ALT_DEL = listOf(Key.CtrlLeft, Key.AltLeft, Key.Delete)
     }
 }

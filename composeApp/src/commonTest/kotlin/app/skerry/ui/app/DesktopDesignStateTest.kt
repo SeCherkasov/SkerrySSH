@@ -692,4 +692,16 @@ class DesktopDesignStateTest {
         s.dismissGroupDialog()
         assertEquals(null, s.groupDialog)
     }
+    @Test
+    fun the_remote_desktop_panel_hides_and_comes_back() {
+        val s = DesktopDesignState()
+
+        assertFalse(s.remotePanelHidden)
+        s.toggleRemotePanel()
+        assertTrue(s.remotePanelHidden)
+        // Independent of the hosts sidebar: they are different edges of the same screen.
+        assertFalse(s.sidebarHidden)
+        s.toggleRemotePanel()
+        assertFalse(s.remotePanelHidden)
+    }
 }

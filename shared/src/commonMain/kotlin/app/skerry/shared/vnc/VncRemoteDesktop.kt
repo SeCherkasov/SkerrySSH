@@ -25,6 +25,9 @@ class VncRemoteDesktop(private val session: VncSession) : RemoteDesktopSession {
         adjustableQuality = true,
         remoteResize = true,
         cursorHandover = true,
+        // RFB carries no sound.
+        audio = false,
+        clipboard = true,
     )
 
     override val updates: Flow<RemoteDesktopUpdate> = session.updates.map { update ->
@@ -75,6 +78,9 @@ class VncRemoteDesktop(private val session: VncSession) : RemoteDesktopSession {
 
     /** RFB has no way to say "nobody is looking"; an idle client simply stops asking for updates. */
     override suspend fun setOutputVisible(visible: Boolean) = Unit
+
+    /** RFB has no audio channel; there is nothing to silence. */
+    override suspend fun setAudioMuted(muted: Boolean) = Unit
 
     override suspend fun close() = session.close()
 }

@@ -137,6 +137,18 @@ interface RdpSession {
     /** Send text to the remote clipboard. */
     suspend fun sendClipboardText(text: String)
 
+    /** Whether this session has sound at all: false when no device was opened for it. */
+    val audioAvailable: Boolean
+
+    /** Whether the clipboard channel was asked for at connect time. */
+    val clipboardAvailable: Boolean
+
+    /**
+     * Silence the session's sound, or let it through again. The channel stays open either way — the
+     * server opens it from the connection request, so closing it could not be undone mid-session.
+     */
+    fun setAudioMuted(muted: Boolean)
+
     /** Close the connection. Idempotent. */
     suspend fun close()
 }
