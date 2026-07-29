@@ -48,22 +48,23 @@ class TunnelManagerTest {
         store: TunnelStore = FakeTunnelStore(),
         resolve: (String) -> TunnelResolution = { TunnelResolution.Ready(target, auth) },
         ids: List<String> = List(20) { "id-$it" },
+        /**
+         * An unconfined test dispatcher runs activation to its end inside `activate` itself, which
+         * is what lets most tests assert on the status as soon as the call returns. It only holds
+         * while nothing really suspends: a continuation resumed from another thread goes into this
+         * scheduler's queue, and nothing here ever advances it. A path that reads a resource needs
+         * [realScope] instead — see the failure-message test.
+         */
+        scope: CoroutineScope = TestScope(UnconfinedTestDispatcher()),
     ): TunnelManager {
-        val scope = TestScope(UnconfinedTestDispatcher())
         val it = ids.iterator()
         return TunnelManager(store, transport, resolve, scope) { it.next() }
     }
 
-    /**
-     * Wait for the tunnel to leave [TunnelStatus.Connecting].
-     *
-     * activate() hands the work to the manager's own scope, and an unconfined dispatcher carries it
-     * to the end of the call only while nothing really suspends. The failure path ends in a
-     * localized message, and compose-resources does suspend to read a resource it has not cached
-     * yet — so on a cold JVM the status is still Connecting when activate() returns, while a warm
-     * one gets there in time. Waiting in real time (the test scheduler cannot advance the
-     * dispatcher that resource read lands on) is what makes the outcome the same either way.
-     */
+    /** A scope on real threads, for activation whose end depends on something that actually suspends. */
+    private fun realScope() = CoroutineScope(Dispatchers.Default)
+
+    /** Wait, in real time, for a tunnel activating on [realScope] to leave [TunnelStatus.Connecting]. */
     private suspend fun awaitSettled(manager: TunnelManager): TunnelStatus =
         withContext(Dispatchers.Default) {
             withTimeout(10.seconds) {
@@ -168,7 +169,9 @@ class TunnelManagerTest {
     fun `activate maps a rejected host key to a clear message and closes the connection`() = runTest {
         val conn = FakeTunnelConnection(localError = SshHostKeyRejectedException("bad"))
         val transport = FakeTunnelTransport(conn)
-        val manager = managerWith(transport)
+        // Real threads: this path ends in a localized message, and reading that resource suspends
+        // the first time it is asked for, which a test scheduler nobody advances never resumes.
+        val manager = managerWith(transport, scope = realScope())
         val id = manager.save(localDraft())
 
         manager.activate(id)

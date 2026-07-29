@@ -16,6 +16,7 @@ import app.skerry.shared.ssh.SshTransport
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ptail_err_auth_failed
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -40,18 +41,20 @@ class ServiceScanControllerTest {
     private fun controllerWith(
         transport: SshTransport,
         resolve: (String) -> TunnelResolution = { TunnelResolution.Ready(target, auth) },
-    ) = ServiceScanController(transport, resolve, TestScope(UnconfinedTestDispatcher()))
+        /**
+         * An unconfined test dispatcher runs the scan to its end inside `scan` itself, which is what
+         * lets most tests assert on the state as soon as the call returns. It only holds while
+         * nothing really suspends: a continuation resumed from another thread goes into this
+         * scheduler's queue, and nothing here ever advances it. A path that reads a resource needs
+         * [realScope] instead — see the failure-message test.
+         */
+        scope: CoroutineScope = TestScope(UnconfinedTestDispatcher()),
+    ) = ServiceScanController(transport, resolve, scope)
 
-    /**
-     * Wait for the scan to leave [ServiceScanState.Scanning].
-     *
-     * A scan runs in the controller's own scope, and an unconfined dispatcher carries it to the end
-     * of `scan` only while nothing really suspends. The failure path ends in a localized message,
-     * and compose-resources does suspend to read a resource it has not cached yet — so on a cold
-     * JVM the state is still Scanning when `scan` returns, while a warm one gets there in time.
-     * Waiting in real time (the test scheduler cannot advance the dispatcher that resource read
-     * lands on) is what makes the outcome the same either way.
-     */
+    /** A scope on real threads, for a scan whose end depends on something that actually suspends. */
+    private fun realScope() = CoroutineScope(Dispatchers.Default)
+
+    /** Wait, in real time, for a scan running on [realScope] to leave [ServiceScanState.Scanning]. */
     private suspend fun awaitScanned(controller: ServiceScanController): ServiceScanState =
         withContext(Dispatchers.Default) {
             withTimeout(10.seconds) {
@@ -147,7 +150,9 @@ class ServiceScanControllerTest {
     @Test
     fun `a rejected login is reported with a friendly message`() = runTest {
         val transport = FakeScanTransport(FakeScanConnection(), connectError = SshAuthenticationException("nope"))
-        val controller = controllerWith(transport)
+        // Real threads: this path ends in a localized message, and reading that resource suspends
+        // the first time it is asked for, which a test scheduler nobody advances never resumes.
+        val controller = controllerWith(transport, scope = realScope())
 
         controller.scan("h1")
 
