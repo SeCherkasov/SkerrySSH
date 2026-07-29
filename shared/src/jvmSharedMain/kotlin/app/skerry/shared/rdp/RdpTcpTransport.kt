@@ -396,6 +396,18 @@ class RdpSocketSession(
     override suspend fun sendClipboardText(text: String) =
         withContext(Dispatchers.IO) { clipboard.offerText(text) }
 
+    // Both halves have to hold: a device opened here, and a channel the server granted. Either one
+    // alone leaves a switch with nothing behind it.
+    override val audioAvailable: Boolean = audioPlayer != null && state.channels[RdpClientSettings.CHANNEL_AUDIO] != null
+
+    // What the server actually granted, not what was asked for: a host that refused the channel
+    // leaves a toggle that could only ever report "off".
+    override val clipboardAvailable: Boolean = state.channels[RdpClientSettings.CHANNEL_CLIPBOARD] != null
+
+    override fun setAudioMuted(muted: Boolean) {
+        audio?.setMuted(muted)
+    }
+
     override suspend fun close() = withContext(Dispatchers.IO) {
         // Ask the server to end the session before dropping the socket, so it tears the session
         // down instead of leaving it disconnected-but-alive for the next logon to inherit.

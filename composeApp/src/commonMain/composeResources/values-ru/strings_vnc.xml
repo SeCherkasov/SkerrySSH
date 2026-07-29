@@ -24,4 +24,19 @@
     <string name="conn_subtitle_new_desktop">Добавьте удалённый рабочий стол. Пароль шифруется мастер-паролем.</string>
     <string name="nav_tab_desktops">Столы</string>
     <string name="rd_screen_title">Рабочие столы</string>
+    <string name="rd_panel_title">Сессия</string>
+    <string name="rd_panel_hide">Скрыть панель</string>
+    <string name="rd_panel_show">Показать панель</string>
+    <string name="rd_screenshot">Снимок экрана</string>
+    <string name="rd_screenshot_saved">Сохранено в %s</string>
+    <string name="rd_screenshot_failed">Не удалось записать файл</string>
+    <string name="rd_settings">Настройки</string>
+    <string name="rd_ctrl_alt_del">Отправить Ctrl+Alt+Del</string>
+    <string name="rd_clipboard">Буфер обмена</string>
+    <string name="rd_clipboard_from_remote">С удалённой машины</string>
+    <string name="rd_clipboard_empty">Пока ничего не копировали</string>
+    <string name="rd_clipboard_copy_here">Скопировать сюда</string>
+    <string name="rd_clipboard_send">Отправить свой</string>
+    <string name="rd_audio">Звук</string>
+    <string name="rd_clipboard_share">Общий буфер обмена</string>
 </resources>
