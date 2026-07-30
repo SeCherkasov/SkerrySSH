@@ -38,5 +38,6 @@
     <string name="rd_clipboard_copy_here">Скопировать сюда</string>
     <string name="rd_clipboard_send">Отправить свой</string>
     <string name="rd_audio">Звук</string>
+    <string name="rd_audio_device_lost">Аудиоустройство перестало принимать звук. Выберите другой вывод в профиле и переподключитесь.</string>
     <string name="rd_clipboard_share">Общий буфер обмена</string>
 </resources>

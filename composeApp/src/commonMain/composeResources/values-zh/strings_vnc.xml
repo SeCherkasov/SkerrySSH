@@ -38,5 +38,6 @@
     <string name="rd_clipboard_copy_here">复制到本机</string>
     <string name="rd_clipboard_send">发送本机内容</string>
     <string name="rd_audio">声音</string>
+    <string name="rd_audio_device_lost">音频设备已停止接收声音。请在配置中改选输出设备后重新连接。</string>
     <string name="rd_clipboard_share">共享剪贴板</string>
 </resources>

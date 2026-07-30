@@ -12,6 +12,13 @@ sealed interface RdpUpdate {
     data class Resize(val width: Int, val height: Int) : RdpUpdate
 
     /**
+     * The device playing the session's sound stopped taking blocks ([failing] true), or started
+     * again. Not a session failure: the picture and the input are unaffected, only the sound is
+     * gone, so it is reported rather than thrown.
+     */
+    data class AudioPlayback(val failing: Boolean) : RdpUpdate
+
+    /**
      * The server opened the display control channel and stated its limits, so resolution requests
      * are worth making (MS-RDPEDISP). A server without that channel never emits this, and the
      * session keeps the size it connected with.

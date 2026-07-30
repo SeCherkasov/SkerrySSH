@@ -54,6 +54,12 @@ interface RemoteAudioPlayer {
     /** Drop whatever has not been played yet (the server closed the stream). */
     fun flush()
 
+    /**
+     * Whether the device this player opened has stopped taking blocks. Default false: a player that
+     * cannot tell reports nothing rather than a permanent alarm.
+     */
+    val playbackFailed: Boolean get() = false
+
     /** Release the device. Idempotent. */
     fun close()
 }

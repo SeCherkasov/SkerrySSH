@@ -336,6 +336,8 @@ class RdpSocketSession(
             for (update in display.drainUpdates()) emit(update)
             if (batch.any { it is RdpUpdate.Closed }) break
             for (text in clipboard.drainIncoming()) emit(RdpUpdate.ClipboardText(text))
+            // Playback runs on its own scope and cannot emit; the read loop asks it instead.
+            audio?.drainPlaybackChange()?.let { emit(RdpUpdate.AudioPlayback(it)) }
         }
     }.flowOn(Dispatchers.IO)
         // Runs on the collector side, so it fires even while the read loop is parked in a blocking
