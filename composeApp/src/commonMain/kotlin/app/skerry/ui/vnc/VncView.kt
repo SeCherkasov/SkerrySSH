@@ -193,7 +193,14 @@ fun VncSurface(screen: RemoteDesktopScreenState, interactive: Boolean = true) {
     }
     // Something remote already tracks the mouse — our sprite, or a cursor the server painted into the
     // framebuffer — so the OS pointer on top would be a second one. See [shouldHideLocalCursor].
-    if (shouldHideLocalCursor(interactive, screen.viewOnly, pointerOverImage)) {
+    if (
+        shouldHideLocalCursor(
+            interactive = interactive,
+            viewOnly = screen.viewOnly,
+            pointerOverImage = pointerOverImage,
+            systemCursor = screen.systemCursor,
+        )
+    ) {
         hiddenPointerIcon()?.let { mod = mod.pointerHoverIcon(it) }
     }
     if (interactive) {

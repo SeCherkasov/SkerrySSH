@@ -14,22 +14,31 @@ object PointerUpdate {
     /** Largest cursor accepted; the large-pointer capability caps shapes at 384×384. */
     private const val MAX_DIMENSION = 384
 
-    fun colorPointer(reader: RdpReader): RdpUpdate.PointerShape = shape(reader, xorBitsPerPixel = 24, wide = false)
+    fun colorPointer(reader: RdpReader, cache: PointerCache): RdpUpdate.PointerShape =
+        shape(reader, xorBitsPerPixel = 24, wide = false, cache)
 
     /** A new-style pointer: the same structure with an explicit colour depth in front. */
-    fun newPointer(reader: RdpReader): RdpUpdate.PointerShape {
+    fun newPointer(reader: RdpReader, cache: PointerCache): RdpUpdate.PointerShape {
         val xorBpp = reader.u16le()
-        return shape(reader, xorBpp, wide = false)
+        return shape(reader, xorBpp, wide = false, cache)
     }
 
     /** A large pointer: same again, with 16-bit dimensions and 32-bit mask lengths. */
-    fun largePointer(reader: RdpReader): RdpUpdate.PointerShape {
+    fun largePointer(reader: RdpReader, cache: PointerCache): RdpUpdate.PointerShape {
         val xorBpp = reader.u16le()
-        return shape(reader, xorBpp, wide = true)
+        return shape(reader, xorBpp, wide = true, cache)
     }
 
-    private fun shape(reader: RdpReader, xorBitsPerPixel: Int, wide: Boolean): RdpUpdate.PointerShape {
-        reader.u16le() // cacheIndex
+    /**
+     * A Cached Pointer Update (MS-RDPBCGR 2.2.9.1.1.4.6): a slot index, and the shape to show is the
+     * one filed there. An empty slot is the one case with nothing to draw — the server named a shape
+     * it never sent us — and the cursor stays as it is rather than being cleared.
+     */
+    fun cachedPointer(reader: RdpReader, cache: PointerCache): List<RdpUpdate> =
+        cache.get(reader.u16le())?.let { listOf(it) } ?: emptyList()
+
+    private fun shape(reader: RdpReader, xorBitsPerPixel: Int, wide: Boolean, cache: PointerCache): RdpUpdate.PointerShape {
+        val cacheIndex = reader.u16le()
         val hotspotX = reader.u16le()
         val hotspotY = reader.u16le()
         val width = reader.u16le()
@@ -64,7 +73,11 @@ object PointerUpdate {
                 }
             }
         }
-        return RdpUpdate.PointerShape(argb, width, height, hotspotX.coerceIn(0, width - 1), hotspotY.coerceIn(0, height - 1))
+        val pointer =
+            RdpUpdate.PointerShape(argb, width, height, hotspotX.coerceIn(0, width - 1), hotspotY.coerceIn(0, height - 1))
+        // Filed before it is returned: the server switches back to this shape by index alone.
+        cache.put(cacheIndex, pointer)
+        return pointer
     }
 
     private fun maskBit(mask: ByteArray, rowOffset: Int, column: Int): Boolean {

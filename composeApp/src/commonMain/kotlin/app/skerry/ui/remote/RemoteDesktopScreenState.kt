@@ -149,6 +149,14 @@ class RemoteDesktopScreenState(
     var cursor: VncCursorImage? by mutableStateOf(null)
         private set
 
+    /**
+     * The server asked for the ordinary system pointer instead of a shape of its own (RDP's
+     * SYSPTR_DEFAULT). There is nothing to draw, so the local pointer is shown rather than hidden —
+     * distinct from a hidden cursor, where neither is drawn.
+     */
+    var systemCursor by mutableStateOf(false)
+        private set
+
     /** View-only: when true, pointer/key input is not forwarded (look, don't touch). */
     var viewOnly by mutableStateOf(false)
         private set
@@ -329,12 +337,22 @@ class RemoteDesktopScreenState(
      */
     private fun onPeripheralUpdate(update: RemoteDesktopUpdate) {
         when (update) {
-            is RemoteDesktopUpdate.CursorShape -> cursor = VncCursorImage.of(update)
+            is RemoteDesktopUpdate.CursorShape -> {
+                cursor = VncCursorImage.of(update)
+                systemCursor = false
+            }
+
             // The pointer the server warps is not ours to move: the sprite tracks the local pointer,
             // and jumping it would desynchronise the two. The position is still applied by the
             // server to its own screen, which is what the user sees.
             is RemoteDesktopUpdate.CursorPosition -> Unit
-            is RemoteDesktopUpdate.CursorVisible -> if (!update.visible) cursor = null
+            // "Visible" here is the server asking for its default pointer, not for the shape it sent
+            // last: the sprite goes, and the local pointer takes over. Hidden drops both.
+            is RemoteDesktopUpdate.CursorVisible -> {
+                cursor = null
+                systemCursor = update.visible
+            }
+
             is RemoteDesktopUpdate.ClipboardText -> if (clipboardShared) {
                 serverClipboard = update.text
                 onClipboard(update.text)

@@ -161,6 +161,7 @@ import app.skerry.ui.host.groupSuggestions
 import app.skerry.ui.host.keepAliveLabel
 import app.skerry.ui.i18n.label
 import app.skerry.ui.host.listSerialPorts
+import app.skerry.ui.host.serialPortOptions
 import app.skerry.ui.host.tagSuggestions
 import app.skerry.ui.host.pickerIcon
 import app.skerry.ui.host.pickerTypeLabel
@@ -476,7 +477,8 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
  */
 @Composable
 private fun MobileSerialPortPicker(form: NewConnectionFormState) {
-    val ports = remember { listSerialPorts() }
+    // Same order as the desktop form: adapters first, the kernel's legacy UARTs last, no duplicates.
+    val ports = remember { serialPortOptions(listSerialPorts()) }
     if (ports.isEmpty()) return
     FlowRow(
         Modifier.fillMaxWidth().padding(top = 8.dp),

@@ -21,6 +21,11 @@ class FastPathDecoder(
      * wired to a holder nobody reads would drop pixels and never get them back.
      */
     private val dropped: DroppedGraphics,
+    /**
+     * The session's pointer cache, owned by the caller for the same reason as [palette]: a shape can
+     * arrive on this path and be recalled by a Cached Pointer Update on the other.
+     */
+    private val pointerCache: PointerCache,
 ) {
     private var fragmentType = -1
     private val fragments = mutableListOf<ByteArray>()
@@ -134,12 +139,10 @@ class FastPathDecoder(
             UPDATETYPE_PTR_NULL -> listOf(RdpUpdate.PointerVisible(false))
             UPDATETYPE_PTR_DEFAULT -> listOf(RdpUpdate.PointerVisible(true))
             UPDATETYPE_PTR_POSITION -> listOf(RdpUpdate.PointerPosition(reader.u16le(), reader.u16le()))
-            UPDATETYPE_COLOR_POINTER -> listOf(PointerUpdate.colorPointer(reader))
-            UPDATETYPE_POINTER -> listOf(PointerUpdate.newPointer(reader))
-            UPDATETYPE_LARGE_POINTER -> listOf(PointerUpdate.largePointer(reader))
-            // Cached pointers reference a slot this client never fills: it does not claim a pointer
-            // cache beyond the minimum, so the honest answer is to leave the cursor as it is.
-            UPDATETYPE_CACHED_POINTER -> emptyList()
+            UPDATETYPE_COLOR_POINTER -> listOf(PointerUpdate.colorPointer(reader, pointerCache))
+            UPDATETYPE_POINTER -> listOf(PointerUpdate.newPointer(reader, pointerCache))
+            UPDATETYPE_LARGE_POINTER -> listOf(PointerUpdate.largePointer(reader, pointerCache))
+            UPDATETYPE_CACHED_POINTER -> PointerUpdate.cachedPointer(reader, pointerCache)
             UPDATETYPE_SYNCHRONIZE -> emptyList()
             // Orders were never claimed in the capability exchange (MS-RDPEGDI), so a server sending
             // them anyway is drawing something nothing here can execute. Skipping the one update

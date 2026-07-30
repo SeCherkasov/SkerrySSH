@@ -45,6 +45,17 @@ class ConnectionTypeTest {
     }
 
     @Test
+    fun `only the SSH-authenticated transports offer a connection test`() {
+        // The test is an SSH probe: it dials the SSH auth path and reports a round-trip. Named one by
+        // one rather than derived from usesSshAuth, so a transport that changes its auth story has to
+        // face this list instead of silently gaining or losing the button.
+        assertEquals(
+            setOf(ConnectionType.SSH, ConnectionType.MOSH, ConnectionType.CONTAINER),
+            ConnectionType.entries.filter { it.hasConnectionTest }.toSet(),
+        )
+    }
+
+    @Test
     fun `a remote desktop never authenticates over ssh`() {
         // Remote-desktop profiles have no username/key/jump host; the forms gate on this.
         ConnectionType.entries.filter { it.isRemoteDesktop }.forEach {

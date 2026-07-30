@@ -181,8 +181,8 @@ object ClientCapabilities {
 
     private fun pointerCapabilities(): ByteArray = RdpWriter(6).apply {
         u16le(1) // colorPointerFlag
-        u16le(25) // colorPointerCacheSize
-        u16le(25) // pointerCacheSize
+        u16le(PointerCache.CAPACITY) // colorPointerCacheSize
+        u16le(PointerCache.CAPACITY) // pointerCacheSize
     }.toByteArray()
 
     private fun inputCapabilities(): ByteArray = RdpWriter(84).apply {
