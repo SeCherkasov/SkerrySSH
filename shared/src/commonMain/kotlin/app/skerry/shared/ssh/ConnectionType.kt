@@ -84,6 +84,15 @@ val ConnectionType.hasAiPolicy: Boolean
     get() = !isRemoteDesktop
 
 /**
+ * Whether the connection form offers "Test connection". The test is an SSH probe — it dials the
+ * profile's SSH auth path and reports a round-trip — so it only means something where [usesSshAuth]
+ * holds. Everywhere else (remote desktops, Telnet, Serial, a local shell) there is nothing for it to
+ * try, and the form leaves the button out instead of showing one stuck disabled.
+ */
+val ConnectionType.hasConnectionTest: Boolean
+    get() = usesSshAuth
+
+/**
  * Whether the profile is an RDP remote desktop. Unlike VNC it authenticates with a *user name* and
  * password (and optionally a domain, written into the user name as `DOMAIN\user` rather than stored
  * as its own field — that is the form every RDP client accepts and the one users already type), so

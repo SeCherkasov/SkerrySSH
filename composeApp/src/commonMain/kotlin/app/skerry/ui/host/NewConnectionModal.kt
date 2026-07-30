@@ -61,7 +61,9 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isRdp
+import app.skerry.shared.serial.SerialPortInfo
 import app.skerry.shared.ssh.hasAiPolicy
+import app.skerry.shared.ssh.hasConnectionTest
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.ContainerBrowseController
@@ -224,7 +226,13 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
     // (behind the vault gate); in mock/preview tester == null and the button is disabled.
     val transport = LocalTestTransport.current
     val testScope = rememberCoroutineScope()
-    val tester = remember(transport, testScope) { transport?.let { ConnectionTestController(it, testScope) } }
+    // The probe is an SSH connect, so the controller exists only where there is one to make: a remote
+    // desktop, Telnet, Serial or a local shell has no test, and with no controller there is no status
+    // to leave stale under a button the form doesn't draw.
+    val showsTest = form.connectionType.hasConnectionTest
+    val tester = remember(transport, testScope, showsTest) {
+        if (showsTest) transport?.let { ConnectionTestController(it, testScope) } else null
+    }
     // On transport change (new tester) or modal close, cancel the old tester's in-flight check,
     // otherwise an orphaned connection probe would keep the network busy until its own timeout.
     DisposableEffect(tester) { onDispose { tester?.reset() } }
@@ -241,9 +249,9 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
         // Testable: the probe connects and answers whatever the server asks, same as a real session.
         AuthMode.INTERACTIVE -> true
     }
-    // "Test connection" needs the SSH auth path (Telnet/Serial have no auth/cipher probe).
-    // For Mosh it probes the SSH hop — the UDP leg is only exercised by a real connect.
-    val canTest = tester != null && form.connectionType.usesSshAuth && hasTestSecret &&
+    // Whether the button can fire: the form still has to name a host, a user and a secret. For Mosh
+    // the probe rides the SSH hop — the UDP leg is only exercised by a real connect.
+    val canTest = tester != null && hasTestSecret &&
         form.address.isNotBlank() && form.username.isNotBlank() && form.portOrNull != null
     // Editing connection/auth fields invalidates the previous test result, it's no longer relevant.
     // A listing belongs to one host/runtime/namespace too — the same edits make it stale.
@@ -325,19 +333,16 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                 val serial = form.connectionType == ConnectionType.SERIAL
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Field(if (serial) stringResource(Res.string.conn_field_device) else stringResource(Res.string.conn_field_host_address), Modifier.weight(1f)) {
-                        ModalTextField(
-                            form.address, { form.address = it },
-                            if (serial) "/dev/ttyUSB0 or COM3" else "192.168.1.45 or example.com",
-                            icon = if (serial) "usb" else "dns",
-                        )
+                        if (serial) {
+                            SerialDeviceField(form)
+                        } else {
+                            ModalTextField(form.address, { form.address = it }, "192.168.1.45 or example.com", icon = "dns")
+                        }
                     }
                     Field(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(110.dp)) {
                         ModalTextField(form.port, { form.port = it }, if (serial) "9600" else "22", keyboardType = KeyboardType.Number)
                     }
                 }
-                // Picker of discovered ports (desktop: jSerialComm, Android: USB-OTG): tapping fills
-                // the Device field. Empty (no adapter / no USB Host) means no chips, manual input remains.
-                if (serial) SerialPortPicker(form)
                 // Auth follows the SSH path (SSH and Mosh): Telnet enters login/password in the
                 // terminal itself, Serial has no auth at all.
                 if (form.connectionType.usesSshAuth) {
@@ -491,26 +496,28 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                     }
                 }
                 CancelButton(stringResource(Res.string.conn_cancel), onClick = state::closeModal)
-                GhostButton(
-                    stringResource(Res.string.conn_test),
-                    onClick = {
-                        // Secret is materialized here (only for the connect's duration), target from form fields.
-                        val auth = formSshAuth(form, credentials)
-                        if (canTest && auth != null) {
-                            when (testJump) {
-                                is JumpChainResolution.Unavailable -> tester.fail(ConnectionTestProblem.Jump(testJump.problem))
-                                is JumpChainResolution.Resolved ->
-                                    tester.test(SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim(), jump = testJump.jump), auth)
+                if (showsTest) {
+                    GhostButton(
+                        stringResource(Res.string.conn_test),
+                        onClick = {
+                            // Secret is materialized here (only for the connect's duration), target from form fields.
+                            val auth = formSshAuth(form, credentials)
+                            if (canTest && auth != null) {
+                                when (testJump) {
+                                    is JumpChainResolution.Unavailable -> tester.fail(ConnectionTestProblem.Jump(testJump.problem))
+                                    is JumpChainResolution.Resolved ->
+                                        tester.test(SshTarget(form.address.trim(), form.portOrNull ?: 22, form.username.trim(), jump = testJump.jump), auth)
+                                }
+                            } else {
+                                // Form isn't ready to dial (missing host/username/credentials): report it as a
+                                // failure so the click isn't a silent no-op.
+                                tester?.fail(ConnectionTestProblem.IncompleteForm)
                             }
-                        } else {
-                            // Form isn't ready to dial (missing host/username/credentials): report it as a
-                            // failure so the click isn't a silent no-op.
-                            tester?.fail(ConnectionTestProblem.IncompleteForm)
-                        }
-                    },
-                    fg = if (canTest) Skerry.colors.text else Skerry.colors.faint,
-                    border = if (canTest) Skerry.colors.lineStrong else Skerry.colors.line,
-                )
+                        },
+                        fg = if (canTest) Skerry.colors.text else Skerry.colors.faint,
+                        border = if (canTest) Skerry.colors.lineStrong else Skerry.colors.line,
+                    )
+                }
                 PrimaryButton(
                     if (editHost != null) stringResource(Res.string.conn_save_changes) else stringResource(Res.string.conn_save),
                     onClick = {
@@ -575,6 +582,8 @@ private fun ModalTextField(
     singleLine: Boolean = true,
     mono: Boolean = false,
     minHeightDp: Int? = null,
+    /** Drawn at the right edge, inside the border — the serial device field hangs its menu arrow here. */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     val fonts = LocalFonts.current
     val family = if (mono) fonts.mono else fonts.ui
@@ -608,44 +617,72 @@ private fun ModalTextField(
                     if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = fontSize, font = if (mono) fonts.mono else null)
                     inner()
                 }
+                trailing?.invoke()
             }
         },
     )
 }
 
 /**
- * Segmented transport picker (SSH / Telnet / Serial): writes [NewConnectionFormState.connectionType]
- * via [NewConnectionFormState.chooseConnectionType] (which substitutes the default port/speed). Changing
- * the type rebuilds the form (hides auth, changes the address/port labels).
+ * The Serial "Device" field: the port path, typed by hand or picked from the ports discovered on this
+ * machine (desktop: jSerialComm, Android: USB-OTG). Both, rather than either — a port that appeared
+ * after the form opened has to be typeable, and a path nobody remembers has to be pickable. Writes
+ * [NewConnectionFormState.address]; with no ports discovered it is an ordinary text field.
  */
 @Composable
-private fun SerialPortPicker(form: NewConnectionFormState) {
-    // Enumerated once when the form opens (cheap, no permission needed). Empty means nothing rendered.
-    val ports = remember { listSerialPorts() }
-    if (ports.isEmpty()) return
-    FlowRow(
-        Modifier.fillMaxWidth().padding(top = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        ports.forEach { port ->
-            key(port.systemName) {
-                val selected = form.address == port.systemName
-                Row(
-                    Modifier
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(if (selected) Skerry.colors.cyan14 else Skerry.colors.bg)
-                        .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                        .clickable { form.address = port.systemName }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Sym("usb", size = 14.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.faint)
-                    Txt(port.description, color = if (selected) Skerry.colors.text else Skerry.colors.dim, size = 12.sp)
+private fun SerialDeviceField(form: NewConnectionFormState) {
+    // Enumerated once when the form opens (cheap, no permission needed). A machine with no ports —
+    // or a platform without serial support — gets a plain text field, with no arrow to open.
+    val ports = remember { serialPortOptions(listSerialPorts()) }
+    var menuOpen by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = menuOpen && ports.isNotEmpty(),
+        onDismiss = { menuOpen = false },
+        // Focusable so a click anywhere else closes the list: unlike the tag picker this menu is not
+        // typed into, and a non-focusable Popup never gets onDismissRequest — it would hang over the
+        // form while the user moved on to the baud rate. Passed explicitly, not left to the default.
+        focusable = true,
+        trigger = {
+            ModalTextField(
+                form.address, { form.address = it }, "/dev/ttyUSB0 or COM3", icon = "usb",
+                trailing = if (ports.isEmpty()) {
+                    null
+                } else {
+                    {
+                        Sym(
+                            if (menuOpen) "expand_less" else "expand_more",
+                            size = 16.sp,
+                            color = Skerry.colors.faint,
+                            modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable { menuOpen = !menuOpen },
+                        )
+                    }
+                },
+            )
+        },
+        menu = { width ->
+            SuggestionMenu(width) {
+                ports.forEach { port ->
+                    key(port.systemName) {
+                        SerialPortRow(port, selected = form.address == port.systemName) {
+                            form.address = port.systemName
+                            menuOpen = false
+                        }
+                    }
                 }
             }
-        }
+        },
+    )
+}
+
+/** One row of the device menu: the port path, with the driver's description under it. */
+@Composable
+private fun SerialPortRow(port: SerialPortInfo, selected: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
+            .clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 7.dp),
+    ) {
+        Txt(port.systemName, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 12.5.sp)
+        Txt(port.description, color = Skerry.colors.faint, size = 11.sp)
     }
 }
 

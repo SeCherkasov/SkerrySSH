@@ -42,15 +42,21 @@ class VncCursorImage private constructor(
  * cursor; the same is true of a server that ignores the encoding and paints the cursor into the
  * framebuffer instead. Either way something already tracks the mouse, so ours goes away.
  *
- * Only where a remote cursor actually exists, hence all three conditions:
+ * Only where a remote cursor actually exists, hence all four conditions:
  * - [pointerOverImage]: the fitted image, NOT the whole tab. Over the letterbox around it (or a tab
  *   with no frame yet) nothing tracks the mouse, so hiding ours would leave no pointer at all.
  * - not [viewOnly]: there we send no pointer events, so nothing follows the mouse — the server paints
  *   the cursor wherever it really is instead, and our own pointer is just our own pointer.
  * - [interactive]: a frozen last frame after a drop tracks nothing either.
+ * - not [systemCursor]: the server asked for the default system pointer (RDP's SYSPTR_DEFAULT), which
+ *   is a shape it never sends — ours is the one that stands in for it.
  */
-fun shouldHideLocalCursor(interactive: Boolean, viewOnly: Boolean, pointerOverImage: Boolean): Boolean =
-    interactive && !viewOnly && pointerOverImage
+fun shouldHideLocalCursor(
+    interactive: Boolean,
+    viewOnly: Boolean,
+    pointerOverImage: Boolean,
+    systemCursor: Boolean,
+): Boolean = interactive && !viewOnly && pointerOverImage && !systemCursor
 
 /**
  * Where to draw the cursor sprite's top-left corner, in canvas coordinates, for a pointer at

@@ -214,6 +214,40 @@ class RemoteDesktopScreenStateTest {
     }
 
     @Test
+    fun the_default_system_pointer_drops_the_sprite_and_gives_the_local_one_back() = runTest {
+        // RDP's System Pointer Update (SYSPTR_DEFAULT) means "back to the ordinary arrow". Keeping the
+        // last sprite there is how an I-beam gets stuck on screen after leaving a text field.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val screen = RemoteDesktopScreenState(FakeRemoteDesktop(updates = updates), scope)
+
+        updates.emit(RemoteDesktopUpdate.CursorShape(IntArray(4) { 0xFFFFFFFF.toInt() }, 2, 2, 1, 1))
+        updates.emit(RemoteDesktopUpdate.CursorVisible(true))
+
+        assertNull(screen.cursor)
+        assertTrue(screen.systemCursor, "the OS pointer stands in for the shape we no longer have")
+
+        // A shape of its own takes the job back.
+        updates.emit(RemoteDesktopUpdate.CursorShape(IntArray(4) { 0xFFFFFFFF.toInt() }, 2, 2, 1, 1))
+        assertFalse(screen.systemCursor)
+        scope.cancel()
+    }
+
+    @Test
+    fun a_hidden_cursor_shows_neither_sprite_nor_local_pointer() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val screen = RemoteDesktopScreenState(FakeRemoteDesktop(updates = updates), scope)
+
+        updates.emit(RemoteDesktopUpdate.CursorVisible(true))
+        updates.emit(RemoteDesktopUpdate.CursorVisible(false))
+
+        assertNull(screen.cursor)
+        assertFalse(screen.systemCursor, "the server asked for no cursor at all, not for ours")
+        scope.cancel()
+    }
+
+    @Test
     fun view_only_hands_the_cursor_back_to_the_server_and_repaints() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeRemoteDesktop()

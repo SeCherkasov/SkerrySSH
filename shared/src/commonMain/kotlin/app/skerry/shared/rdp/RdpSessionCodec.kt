@@ -27,7 +27,8 @@ class RdpSessionCodec(
 ) {
     private val palette = SessionPalette()
     private val dropped = DroppedGraphics()
-    private val fastPath = FastPathDecoder(framebuffer, palette, dropped)
+    private val pointerCache = PointerCache()
+    private val fastPath = FastPathDecoder(framebuffer, palette, dropped, pointerCache)
     private val surfaces = SurfaceDecoder(RdpCodecs(remoteFx))
 
     /** When the last repaint was asked for, or null if none has been; see [repaintDropped]. */
@@ -135,9 +136,10 @@ class RdpSessionCodec(
         return when (messageType) {
             PTR_MSGTYPE_SYSTEM -> listOf(RdpUpdate.PointerVisible(reader.u32le() != SYSPTR_NULL))
             PTR_MSGTYPE_POSITION -> listOf(RdpUpdate.PointerPosition(reader.u16le(), reader.u16le()))
-            PTR_MSGTYPE_COLOR -> listOf(PointerUpdate.colorPointer(reader))
-            PTR_MSGTYPE_POINTER -> listOf(PointerUpdate.newPointer(reader))
-            PTR_MSGTYPE_LARGE_POINTER -> listOf(PointerUpdate.largePointer(reader))
+            PTR_MSGTYPE_COLOR -> listOf(PointerUpdate.colorPointer(reader, pointerCache))
+            PTR_MSGTYPE_CACHED -> PointerUpdate.cachedPointer(reader, pointerCache)
+            PTR_MSGTYPE_POINTER -> listOf(PointerUpdate.newPointer(reader, pointerCache))
+            PTR_MSGTYPE_LARGE_POINTER -> listOf(PointerUpdate.largePointer(reader, pointerCache))
             else -> emptyList()
         }
     }
@@ -294,6 +296,7 @@ class RdpSessionCodec(
         const val PTR_MSGTYPE_SYSTEM = 0x0001
         const val PTR_MSGTYPE_POSITION = 0x0003
         const val PTR_MSGTYPE_COLOR = 0x0006
+        const val PTR_MSGTYPE_CACHED = 0x0007
         const val PTR_MSGTYPE_POINTER = 0x0008
         const val PTR_MSGTYPE_LARGE_POINTER = 0x0009
         const val SYSPTR_NULL = 0x00000000

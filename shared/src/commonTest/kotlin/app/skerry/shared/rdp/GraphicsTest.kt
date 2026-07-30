@@ -176,7 +176,7 @@ class GraphicsTest {
             u8(0x7F).u8(0x00)
         }.toByteArray()
 
-        val shape = PointerUpdate.colorPointer(RdpReader(body))
+        val shape = PointerUpdate.colorPointer(RdpReader(body), PointerCache())
 
         assertEquals(2, shape.width)
         assertEquals(RED, shape.argb[0]) // opaque red where the AND bit is clear
@@ -193,13 +193,13 @@ class GraphicsTest {
             u16le(0).u16le(0)
         }.toByteArray()
 
-        assertFailsWith<RdpProtocolException> { PointerUpdate.colorPointer(RdpReader(body)) }
+        assertFailsWith<RdpProtocolException> { PointerUpdate.colorPointer(RdpReader(body), PointerCache()) }
     }
 
     @Test
     fun `fast-path reassembles an update split across packets`() {
         val framebuffer = RemoteFramebuffer(4, 4)
-        val decoder = FastPathDecoder(framebuffer, SessionPalette(), DroppedGraphics())
+        val decoder = FastPathDecoder(framebuffer, SessionPalette(), DroppedGraphics(), PointerCache())
         val bitmap = RdpWriter(64).apply {
             u16le(0x0001) // updateType inside the payload
             u16le(1)
@@ -224,7 +224,7 @@ class GraphicsTest {
 
     @Test
     fun `a fragment run of the wrong type is refused`() {
-        val decoder = FastPathDecoder(RemoteFramebuffer(4, 4), SessionPalette(), DroppedGraphics())
+        val decoder = FastPathDecoder(RemoteFramebuffer(4, 4), SessionPalette(), DroppedGraphics(), PointerCache())
         decoder.decode(fastPathPacket(updateCode = 1, fragmentation = 2, body = byteArrayOf(0, 0)), SurfaceDecoder())
 
         assertFailsWith<RdpProtocolException> {
@@ -235,7 +235,7 @@ class GraphicsTest {
     @Test
     fun `drawing orders are skipped rather than ending the session`() {
         val dropped = DroppedGraphics()
-        val decoder = FastPathDecoder(RemoteFramebuffer(4, 4), SessionPalette(), dropped)
+        val decoder = FastPathDecoder(RemoteFramebuffer(4, 4), SessionPalette(), dropped, PointerCache())
 
         val updates =
             decoder.decode(fastPathPacket(updateCode = 0, fragmentation = 0, body = byteArrayOf(1)), SurfaceDecoder())
@@ -248,7 +248,7 @@ class GraphicsTest {
     @Test
     fun `an update after skipped orders in the same packet still paints`() {
         val framebuffer = RemoteFramebuffer(4, 4)
-        val decoder = FastPathDecoder(framebuffer, SessionPalette(), DroppedGraphics())
+        val decoder = FastPathDecoder(framebuffer, SessionPalette(), DroppedGraphics(), PointerCache())
         val bitmap = RdpWriter(64).apply {
             u16le(0x0001) // updateType, repeated inside the payload
             u16le(1) // one rectangle
