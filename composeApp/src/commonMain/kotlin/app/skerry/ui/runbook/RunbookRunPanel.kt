@@ -38,6 +38,7 @@ import app.skerry.ui.generated.resources.runbook_panel_failed
 import app.skerry.ui.generated.resources.runbook_panel_progress
 import app.skerry.ui.generated.resources.runbook_panel_run_step
 import app.skerry.ui.generated.resources.runbook_panel_running
+import app.skerry.ui.generated.resources.runbook_panel_stalled
 import app.skerry.ui.generated.resources.runbook_panel_skip_step
 import app.skerry.ui.generated.resources.runbook_panel_stop
 import app.skerry.ui.generated.resources.runbook_panel_stopped
@@ -134,6 +135,14 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
                 Txt(
                     stripUnsafeFormatChars(state.step.command), color = Skerry.colors.faint, size = 10.5.sp,
                     font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+            // The step is not ended on this — it may be a legitimate `sleep` — but a run that will
+            // never finish looks exactly like one still working, and only the terminal can tell.
+            if (state.stalled) {
+                Txt(
+                    stringResource(Res.string.runbook_panel_stalled),
+                    color = Skerry.colors.amber, size = 10.5.sp,
                 )
             }
         }

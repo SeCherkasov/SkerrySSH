@@ -37,6 +37,7 @@
 
     <!-- Run panel -->
     <string name="runbook_panel_running">执行中</string>
+    <string name="runbook_panel_stalled">既无输出也无状态——外壳可能在等待输入。请查看终端。</string>
     <string name="runbook_panel_waiting">等待确认</string>
     <string name="runbook_panel_done">已完成</string>
     <string name="runbook_panel_done_with_failures">完成，但有失败</string>
