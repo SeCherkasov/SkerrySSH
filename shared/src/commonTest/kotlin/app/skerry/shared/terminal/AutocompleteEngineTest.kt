@@ -206,4 +206,67 @@ class AutocompleteEngineTest {
         assertEquals("vim /etc/nginx/nginx.conf", e.suggestion())
         assertEquals("inx/nginx.conf", e.suggestionTail())
     }
+
+    @Test
+    fun `a screen-only control byte leaves the line trustworthy`() {
+        // Ctrl-L redraws the prompt; the line itself is untouched, so the command it ends up running
+        // still belongs in history.
+        val e = AutocompleteEngine()
+        e.onUserInput("systemctl restart nginx".encodeToByteArray())
+        e.onUserInput(byteArrayOf(12)) // Ctrl-L
+        assertEquals(false, e.lineSuspect)
+
+        e.onUserInput("\r".encodeToByteArray())
+        assertEquals(listOf("systemctl restart nginx"), e.commandHistory.commands)
+    }
+
+    @Test
+    fun `history recall on the host makes the line suspect`() {
+        // Ctrl-P replaces the whole line with a recalled command; recording what this engine still
+        // holds would file a command that never ran and offer it back next session.
+        val e = AutocompleteEngine()
+        e.onUserInput("git s".encodeToByteArray())
+        e.onUserInput(byteArrayOf(16)) // Ctrl-P
+        assertEquals(true, e.lineSuspect)
+
+        e.onUserInput("\r".encodeToByteArray())
+        assertTrue(e.commandHistory.commands.isEmpty())
+    }
+
+    @Test
+    fun `a yank into an empty line makes it suspect too`() {
+        // Ctrl-Y pastes the kill ring: the host's line grows while this one stays empty.
+        val e = AutocompleteEngine()
+        e.onUserInput(byteArrayOf(25)) // Ctrl-Y on a fresh prompt
+        e.onUserInput(" --now\r".encodeToByteArray())
+
+        assertTrue(e.commandHistory.commands.isEmpty())
+    }
+
+    @Test
+    fun `a suspect line is not completed either`() {
+        val e = AutocompleteEngine(CommandHistory().apply { record("git push origin main") })
+        e.onUserInput("git pu".encodeToByteArray())
+        e.onUserInput(byteArrayOf(23)) // Ctrl-W
+
+        assertEquals(null, e.suggestion())
+        assertEquals(null, e.acceptSuggestion())
+    }
+
+    @Test
+    fun `a line a control byte may have edited is neither suggested nor recorded`() {
+        // Ctrl-W kills a word on the host; this engine does not track that, so from there its line
+        // and the host's can disagree — offering a completion for it, or filing it as a command that
+        // ran, would both be wrong.
+        val e = AutocompleteEngine(CommandHistory().apply { record("git push origin main") })
+        e.onUserInput("git pu".encodeToByteArray())
+        assertEquals(false, e.lineSuspect)
+
+        e.onUserInput(byteArrayOf(23)) // Ctrl-W
+        assertEquals(true, e.lineSuspect)
+
+        e.onUserInput("\r".encodeToByteArray())
+        assertEquals(false, e.lineSuspect) // a fresh line is trustworthy again
+        assertEquals(listOf("git push origin main"), e.commandHistory.commands)
+    }
 }

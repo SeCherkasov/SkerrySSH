@@ -806,7 +806,10 @@ private fun MobileKeybar(
     val plain = { seq: String -> terminal.sendUserInput(seq); onCtrlArmedChange(false) }
     val char = { c: String ->
         if (ctrlArmed && c.length == 1) {
-            terminal.sendUserInput(controlByte(c[0]))
+            // typeInput for the same reason as below: the ctrl forms of these keys edit or run the
+            // shell line (ctrl + "-" is CR, ctrl + "/" is accept-line-and-down-history), so they owe
+            // the engine and the production guard the same visibility as anything else typed here.
+            terminal.typeInput(controlByte(c[0]))
             onCtrlArmedChange(false)
         } else {
             // typeInput, not sendUserInput: a character from the panel is typing, and it has to reach
@@ -843,10 +846,12 @@ private fun MobileKeybar(
         KeyCap("esc") { plain(ESC) }
         // Tab with an autocomplete suggestion — accept it; otherwise a normal tab to the PTY.
         KeyCap("tab") {
-            if (terminal.suggestionTail != null) { terminal.acceptSuggestion(); onCtrlArmedChange(false) } else plain("\t")
+            if (terminal.hasSuggestion) { terminal.acceptSuggestion(); onCtrlArmedChange(false) } else plain("\t")
         }
-        // With a suggestion shown — cycle alternatives (like Shift+Tab on desktop).
-        if (terminal.suggestionTail != null) {
+        // With a suggestion available — cycle alternatives (like Shift+Tab on desktop). Keyed on the
+        // engine, not on the drawn ghost: the ghost blinks off for the echo round trip, and the row
+        // would reflow under the finger on every keystroke.
+        if (terminal.hasSuggestion) {
             KeyCapIcon("autorenew") { terminal.cycleSuggestion() }
         }
         // Reverse history search (Ctrl-R): open the search overlay (query typed on the soft keyboard).

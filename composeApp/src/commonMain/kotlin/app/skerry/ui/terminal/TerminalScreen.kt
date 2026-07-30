@@ -836,8 +836,11 @@ fun TerminalScreen(
                     state.openReverseSearch()
                     return@onPreviewKeyEvent true
                 }
-                // Shift+Tab — cycle autocomplete suggestion alternatives (only if one exists).
-                if (event.isShiftPressed && event.key == Key.Tab && state.suggestionTail != null) {
+                // Shift+Tab — cycle autocomplete suggestion alternatives. Swallowed whenever a ghost
+                // is on screen, even one that cannot be accepted yet: letting it through sends ESC[Z,
+                // which the engine reads as navigation and drops the line it is tracking.
+                val ghostOnScreen = state.hasSuggestion || state.suggestionTail != null
+                if (event.isShiftPressed && event.key == Key.Tab && ghostOnScreen) {
                     state.cycleSuggestion()
                     return@onPreviewKeyEvent true
                 }
@@ -871,7 +874,7 @@ fun TerminalScreen(
                     textToolbar.hide()
                     // Tab with an autocomplete suggestion — accept it (fish-style), don't send to the shell.
                     // Without a suggestion Tab goes to the PTY as usual (server-side completion isn't broken).
-                    if (bytes == "\t" && state.suggestionTail != null) {
+                    if (bytes == "\t" && state.hasSuggestion) {
                         state.acceptSuggestion()
                     } else {
                         state.typeInput(bytes)
@@ -1177,13 +1180,18 @@ fun TerminalScreen(
       }
 
       // Autocomplete "ghost": draw the suggestion tail in gray from the cursor position (fish/zsh-style).
-      // Same monospace geometry as the cursor; Tab (desktop) / chip (mobile) accept it. In alt-screen
-      // (vim/htop) there's no suggestion — [suggestionTail] is already cleared there.
-      val ghost = state.suggestionTail
-      if (ghost != null && !closed && screen.isNotEmpty()) {
+      // Same monospace geometry as the cursor; Tab (desktop) and the `tab` keycap (mobile) accept it.
+      // It continues what the cursor row shows, so text and ghost always read as one command. In
+      // alt-screen (vim/htop) there's no suggestion — [suggestionTail] is already cleared there.
+      if (!closed && screen.isNotEmpty()) {
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp).clipToBounds()) {
-              val x = cursorCol * metrics.cellWidth
-              val y = cursorRow * metrics.cellHeight - scroll.value.toFloat()
+              // Tail and cursor are read here, in the draw phase, rather than in composition: the tail
+              // changes on each published snapshot and on Shift+Tab, and reading it above would
+              // recompose the whole terminal to repaint one overlay. Reading the cursor alongside it
+              // keeps both from the same snapshot even if one lands between composition and draw.
+              val ghost = state.suggestionTail ?: return@Canvas
+              val x = state.cursorCol * metrics.cellWidth
+              val y = state.cursorRow * metrics.cellHeight - scroll.value.toFloat()
               drawGlyphText(measurer, ghost, Offset(x, y), ghostStyle)
           }
       }

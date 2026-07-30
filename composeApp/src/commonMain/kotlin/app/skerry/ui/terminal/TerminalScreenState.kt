@@ -398,8 +398,10 @@ class TerminalScreenState(
         bracketedPaste = emulator.bracketedPaste
         focusReporting = emulator.focusReporting
         altScreen = emulator.altScreen
-        // Entering a fullscreen TUI (vim/htop) clears the autocomplete suggestion — no "line" there.
-        if (altScreen && suggestionTail != null) suggestionTail = null
+        // The echo of what was typed arrives here, and the ghost continues what this snapshot shows —
+        // so this is where it is recomputed. Also clears it on entering a fullscreen TUI (vim/htop):
+        // there is no "line" there.
+        refreshSuggestion()
         title = emulator.title
         palette = emulator.paletteSnapshot()
         // The buffer changed under an open search panel: rebuild the match list (throttled — see
@@ -493,8 +495,25 @@ class TerminalScreenState(
         CommandHistory().apply { if (initialHistory.isNotEmpty()) preload(initialHistory) },
     )
 
-    /** Tail of the current autocomplete suggestion (shown grayed after typed text) or `null`. */
+    /**
+     * What to draw in gray at the cursor of the published snapshot: the rest of the suggested command
+     * after the part the host has echoed back. `null` when there is nothing to continue there — the
+     * echo has not started, the line wrapped onto the next row, or the shell redrew it. The
+     * suggestion may exist anyway; [hasSuggestion] is what decides whether Tab has something to
+     * accept, and it always accepts the command this tail belongs to.
+     */
     var suggestionTail: String? by mutableStateOf(null)
+        private set
+
+    /**
+     * Whether there is a suggestion to accept, drawable or not. Tab (accept), Shift+Tab (cycle) and
+     * the mobile keycaps key off this: the completion exists the moment the key is typed, and gating
+     * them on [suggestionTail] would send a raw Tab to the shell — or, on Shift+Tab, an ESC[Z that
+     * the engine reads as navigation and drops the tracked line — while the echo is in flight. False
+     * once the screen and the tracked line have genuinely diverged (a wrapped or shell-redrawn line),
+     * where completing would edit a line the user is no longer on.
+     */
+    var hasSuggestion: Boolean by mutableStateOf(false)
         private set
 
     /**
@@ -533,7 +552,7 @@ class TerminalScreenState(
         // and parking it in a confirmation dialog would put it on screen in clear text.
         if (awaitingSecret) {
             autocomplete.reset()
-            if (suggestionTail != null) suggestionTail = null
+            refreshSuggestion()
             send(text)
             // A secret is mirrored like anything else typed: entering one sudo password across
             // synchronized panes is the case people turn the toggle on for. Each pane decides on its
@@ -549,7 +568,7 @@ class TerminalScreenState(
 
     private fun deliverTypedInput(text: String, mirror: Boolean = true) {
         val committed = autocomplete.onUserInput(text.encodeToByteArray())
-        refreshSuggestion()
+        refreshSuggestion(lineChanged = true)
         send(text)
         // Mirrored from here, not from typeInput: input held by the production guard must reach the
         // other panes only once it is confirmed (this runs again on confirm), never on the hold.
@@ -566,6 +585,10 @@ class TerminalScreenState(
     // The hold/confirm/dismiss rules live in [ProductionGuardHold]; what belongs here is only what
     // is terminal-specific — which candidates a path offers, and how a held block is replayed.
     private val guard = ProductionGuardHold()
+
+    // What can make the shell run the line it is holding: Enter in both forms, plus readline's
+    // accept-line-and-down-history (Ctrl-O), which the mobile keybar reaches as ctrl + "/".
+    private val runLineControls = charArrayOf('\r', '\n', '\u000F')
 
     /**
      * What the production guard asks about in this session (host tag, root login, the
@@ -592,7 +615,7 @@ class TerminalScreenState(
      */
     private fun holdForProductionGuard(text: String): Boolean {
         if (altScreen) return false
-        if (text.none { it == '\r' || it == '\n' }) return false
+        if (text.none { it in runLineControls }) return false
         return guard.hold(text, HeldInputSource.Typed) {
             // The first line continues whatever is already on the shell line; the rest of the block
             // stands on its own. A soft-keyboard delta or an IME clipboard insert arrives whole, so
@@ -665,11 +688,16 @@ class TerminalScreenState(
     /**
      * Accept the current autocomplete suggestion: sends its tail to the PTY (the shell echoes it).
      * Returns `true` if there was something to accept, else `false`.
+     *
+     * The tail comes from the tracked line, while the ghost is drawn from what the screen has echoed
+     * ([refreshSuggestion]) — so while the echo lags, what is sent completes what was typed, not the
+     * older line the ghost is still continuing. Completing the visible line instead would drop the
+     * characters already in flight.
      */
     fun acceptSuggestion(): Boolean {
         if (altScreen) return false
         val tail = autocomplete.acceptSuggestion() ?: return false
-        refreshSuggestion()
+        refreshSuggestion(lineChanged = true)
         sendBytes(tail)
         return true
     }
@@ -681,7 +709,7 @@ class TerminalScreenState(
     fun cycleSuggestion() {
         if (altScreen) return
         autocomplete.cycleSuggestion()
-        suggestionTail = autocomplete.suggestionTail()
+        refreshSuggestion()
     }
 
     // --- Reverse search (Ctrl-R): overlay state lives here so desktop keys and the mobile
@@ -782,8 +810,64 @@ class TerminalScreenState(
         typeInput(command)
     }
 
-    private fun refreshSuggestion() {
-        suggestionTail = if (altScreen) null else autocomplete.suggestionTail()
+    /**
+     * Recomputes what the ghost shows and whether Tab has anything to accept.
+     *
+     * The ghost is drawn at the cursor of the published snapshot, so its text must continue what that
+     * snapshot shows — [echoedLine], the part of the tracked line the host has echoed back. Deriving
+     * it from the tracked line instead makes it jump a cell per keystroke (the cursor has not moved
+     * yet); hiding it until the echo lands makes it blink off for the round trip instead. Following
+     * the screen does neither: the completed command stands still while the typed part grows into it.
+     *
+     * [lineChanged] only opens the window in which Tab still works while the echo is in flight. What
+     * leaves an already-drawn ghost alone is a line that just got SHORTER: the erased characters are
+     * still on screen, so the ghost of the longer line is what belongs there — and nothing may be
+     * accepted in that window either, or Tab would insert a command other than the visible one.
+     */
+    private fun refreshSuggestion(lineChanged: Boolean = false) {
+        val line = autocomplete.currentLine
+        val echoed = echoedLine(line)
+        val caughtUp = line.isNotEmpty() && echoed == line
+        // A local edit opens the window Tab must survive; a snapshot closes it once the screen either
+        // confirms the whole line or shows none of it. A snapshot confirming just a prefix means the
+        // echo is still arriving, so the window stays open.
+        echoPending = if (lineChanged) true else echoed.isNotEmpty() && !caughtUp
+        val shrank = line.length < trackedLength
+        trackedLength = line.length
+        // One candidate for both jobs: what Tab inserts is what the ghost shows, so the key never does
+        // something other than what is on screen. It is chosen for the tracked line — the line Tab
+        // completes — and only its rendering is cut back to the echoed prefix below.
+        val chosen = if (altScreen) null else autocomplete.suggestion()
+        hasSuggestion = chosen != null && !shrank && (echoPending || caughtUp)
+        if (chosen == null) {
+            suggestionTail = null
+            return
+        }
+        if (shrank) return
+        suggestionTail = if (echoed.isNotEmpty() && chosen.startsWith(echoed)) chosen.substring(echoed.length) else null
+    }
+
+    // Whether the tracked line moved since the last published snapshot, i.e. the screen has not seen
+    // the latest keystroke/paste yet.
+    private var echoPending = false
+
+    // Tracked line length at the last refresh, to tell a local erase from anything else.
+    private var trackedLength = 0
+
+    /**
+     * The longest prefix of the tracked line the screen confirms — the cursor row up to the cursor
+     * ends with it, so it is exactly what a ghost drawn at the cursor continues. Empty when nothing
+     * of the line is on screen: the echo has not started, the line wrapped onto the next row, or the
+     * shell redrew it (Ctrl-W, its own Tab completion) — in all three there is nothing to continue.
+     */
+    private fun echoedLine(line: String): String {
+        if (line.isEmpty()) return ""
+        val onScreen = screenLineToCursor()
+        // Compared in place: this runs on every published snapshot, and a substring per candidate
+        // length would allocate through the whole line on each batch of output.
+        var length = minOf(onScreen.length, line.length)
+        while (length > 0 && !onScreen.regionMatches(onScreen.length - length, line, 0, length)) length--
+        return line.substring(0, length)
     }
 
     // --- Output search (find in scrollback): the panel's whole state lives here so desktop keys and
@@ -1112,7 +1196,7 @@ class TerminalScreenState(
         // multi-line paste commits, same as if they had been typed.
         if (!awaitingSecret) {
             autocomplete.onUserInput(text.encodeToByteArray())
-            refreshSuggestion()
+            refreshSuggestion(lineChanged = true) // the paste moved the line; the screen has not seen it yet
         }
         send(bracketedPasteWrap(text, bracketedPaste))
         // Mirrored as a paste, not as typing: each pane wraps it for its own bracketed-paste mode,
