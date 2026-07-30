@@ -9,6 +9,7 @@ import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.normalizeNotes
+import app.skerry.shared.rdp.RdpImageQuality
 import app.skerry.shared.rdp.RdpSpec
 import app.skerry.shared.tag.MAX_TAGS_PER_RECORD
 import app.skerry.shared.tag.normalizeTag
@@ -146,6 +147,12 @@ class NewConnectionFormState {
 
     /** Share the clipboard with the session, both ways (MS-RDPECLIP). On, as every client has it. */
     var rdpClipboard: Boolean by mutableStateOf(true)
+
+    /**
+     * How much of the remote desktop the server is asked to draw. A profile setting because RDP
+     * settles the picture at connect time (see [app.skerry.shared.rdp.RdpImageQuality]).
+     */
+    var rdpQuality: RdpImageQuality by mutableStateOf(RdpImageQuality.DEFAULT)
 
     /**
      * The farm routing token of an imported `.rdp` profile. Not editable — no user types one — but
@@ -313,6 +320,7 @@ class NewConnectionFormState {
         audioOutput = rdpAudioOutput,
         audioOutputDeviceId = if (rdpAudioOutput) rdpAudioDeviceId else "",
         clipboard = rdpClipboard,
+        quality = rdpQuality,
     )
 
     companion object {
@@ -361,6 +369,7 @@ class NewConnectionFormState {
                 rdpAudioOutput = spec.audioOutput
                 rdpAudioDeviceId = spec.audioOutputDeviceId
                 rdpClipboard = spec.clipboard
+                rdpQuality = spec.quality
             }
             host.container?.let { spec ->
                 containerRuntime = spec.runtime

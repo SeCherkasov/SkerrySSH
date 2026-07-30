@@ -108,26 +108,7 @@ class RdpTcpTransport(
                 val networkLevelAuth = connection.selectedProtocol == RdpSecurityProtocol.HYBRID
                 if (networkLevelAuth) authenticate(connection, target, credentials)
 
-                val settings = RdpClientSettings(
-                    desktopWidth = target.desktopWidth,
-                    desktopHeight = target.desktopHeight,
-                    clientName = target.clientName,
-                    selectedProtocol = connection.selectedProtocol,
-                    keyboardLayout = target.keyboardLayout,
-                    redirectedSessionId = target.redirectedSessionId,
-                    wantsGraphicsPipeline = target.graphicsPipeline,
-                    channels = buildList {
-                        if (target.clipboard) add(RdpClientSettings.CHANNEL_CLIPBOARD)
-                        if (audio != null) add(RdpClientSettings.CHANNEL_AUDIO)
-                        // The dynamic channel carries the graphics pipeline, the display control
-                        // channel and the audio a modern host prefers to send that way; without it
-                        // the server has no way to open any of them, which is the point of leaving
-                        // it out.
-                        if (target.graphicsPipeline || target.dynamicResize || audio != null) {
-                            add(RdpClientSettings.CHANNEL_DYNAMIC)
-                        }
-                    },
-                )
+                val settings = target.clientSettings(connection.selectedProtocol, audioOpened = audio != null)
                 // With NLA the user is already authenticated; sending the password again in the
                 // Client Info PDU would put it on a second path for no gain.
                 val logon = RdpLogonInfo(

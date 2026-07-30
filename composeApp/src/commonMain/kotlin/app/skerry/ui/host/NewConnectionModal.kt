@@ -61,6 +61,7 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isRdp
+import app.skerry.shared.ssh.hasAiPolicy
 import app.skerry.shared.ssh.isVnc
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.ContainerBrowseController
@@ -104,6 +105,7 @@ import app.skerry.ui.generated.resources.conn_duplicate_name
 import app.skerry.ui.generated.resources.conn_field_ai_policy
 import app.skerry.ui.generated.resources.conn_field_audio
 import app.skerry.ui.generated.resources.conn_field_clipboard
+import app.skerry.ui.generated.resources.conn_field_image_quality
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
@@ -367,6 +369,8 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                     // The session's sound, played on this machine (MS-RDPEA), and where to play it.
                     Field(stringResource(Res.string.conn_field_audio)) { RdpAudioSection(form) }
                     Field(stringResource(Res.string.conn_field_clipboard)) { RdpClipboardSection(form) }
+                    Spacer14()
+                    Field(stringResource(Res.string.conn_field_image_quality)) { RdpQualitySection(form) }
                 }
                 // Container profiles: which container/pod on that host to enter. Sits after auth
                 // because "Browse" dials the host with exactly these credentials.
@@ -457,9 +461,9 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                     )
                 }
                 // AI policy selection is visible when AI is actually available (live controller or feature flag).
-                // Written directly into the form -> host profile (Host.aiPolicy). Not for VNC: a remote
-                // desktop has no shell/terminal for AI to act on.
-                if (!form.connectionType.isVnc && (LocalFeatures.current.ai || LocalAi.current != null)) {
+                // Written directly into the form -> host profile (Host.aiPolicy). Not for a remote
+                // desktop: VNC and RDP have no shell/terminal for AI to act on (see [hasAiPolicy]).
+                if (form.connectionType.hasAiPolicy && (LocalFeatures.current.ai || LocalAi.current != null)) {
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_ai_policy)) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

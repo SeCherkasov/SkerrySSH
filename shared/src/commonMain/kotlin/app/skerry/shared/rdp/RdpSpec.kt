@@ -18,6 +18,10 @@ import kotlinx.serialization.Serializable
  * no use for it. [audioOutputDeviceId] names the device to play on, as
  * [app.skerry.shared.audio.AudioOutputs] lists them; empty means the system default, and so does a
  * device that has since been unplugged.
+ *
+ * [quality] is how much of the remote desktop the server is asked to draw. It lives on the profile
+ * rather than in the live session's panel because RDP settles the picture in the Client Info PDU and
+ * keeps it for the whole session (see [RdpImageQuality]).
  */
 @Serializable
 data class RdpSpec(
@@ -25,8 +29,10 @@ data class RdpSpec(
     val audioOutput: Boolean = false,
     val audioOutputDeviceId: String = "",
     val clipboard: Boolean = true,
+    val quality: RdpImageQuality = RdpImageQuality.DEFAULT,
 ) {
     /** Whether anything here is worth storing; an all-default spec is dropped to `null`. */
     val isEmpty: Boolean
-        get() = loadBalanceInfo.isBlank() && !audioOutput && audioOutputDeviceId.isBlank() && clipboard
+        get() = loadBalanceInfo.isBlank() && !audioOutput && audioOutputDeviceId.isBlank() &&
+            clipboard && quality == RdpImageQuality.DEFAULT
 }
