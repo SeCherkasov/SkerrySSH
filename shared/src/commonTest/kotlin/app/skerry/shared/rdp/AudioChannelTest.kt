@@ -5,6 +5,7 @@ import app.skerry.shared.audio.RemoteAudioPlayer
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -288,9 +289,26 @@ class AudioChannelTest {
         }
     }
 
+    @Test
+    fun `a device that stops taking blocks is reported once, and so is its recovery`() {
+        // The read loop drains this on every pass, so a state that hasn't moved must produce no
+        // update — otherwise the session would report the same dead device sixty times a second.
+        val channel = AudioChannel(player)
+        assertNull(channel.drainPlaybackChange())
+
+        player.playbackFailed = true
+        assertEquals(true, channel.drainPlaybackChange())
+        assertNull(channel.drainPlaybackChange())
+
+        player.playbackFailed = false
+        assertEquals(false, channel.drainPlaybackChange())
+        assertNull(channel.drainPlaybackChange())
+    }
+
     private class RecordingPlayer : RemoteAudioPlayer {
         val played = mutableListOf<Pair<RemoteAudioFormat, ByteArray>>()
         var flushes = 0
+        override var playbackFailed = false
 
         override fun play(format: RemoteAudioFormat, pcm: ByteArray) {
             played.add(format to pcm)

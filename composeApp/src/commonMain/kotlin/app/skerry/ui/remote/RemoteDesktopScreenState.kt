@@ -208,6 +208,14 @@ class RemoteDesktopScreenState(
     }
 
     /**
+     * The local device stopped taking sound: the session is mute for a reason that has nothing to do
+     * with [audioMuted] and that nothing else on screen would show. Cleared by the same report when
+     * a device takes blocks again.
+     */
+    var audioFailed by mutableStateOf(false)
+        private set
+
+    /**
      * Whether the clipboard travels at all. Enforced here rather than on the channel: both protocols
      * settle their clipboard at connect time, so this is the only place a running session can stop
      * text from crossing — in either direction, since the risk is symmetric.
@@ -300,6 +308,19 @@ class RemoteDesktopScreenState(
                 if (remoteResize) scheduleRemoteResize()
             }
 
+            is RemoteDesktopUpdate.Closed -> {
+                cleanExit = update.cleanExit
+                closeReason = update.reason
+                closed = true
+            }
+
+            else -> onPeripheralUpdate(update)
+        }
+    }
+
+    /** Everything that touches neither the picture nor the session's life: cursor, clipboard, sound. */
+    private fun onPeripheralUpdate(update: RemoteDesktopUpdate) {
+        when (update) {
             is RemoteDesktopUpdate.CursorShape -> cursor = VncCursorImage.of(update)
             // The pointer the server warps is not ours to move: the sprite tracks the local pointer,
             // and jumping it would desynchronise the two. The position is still applied by the
@@ -311,12 +332,9 @@ class RemoteDesktopScreenState(
                 onClipboard(update.text)
             }
 
+            is RemoteDesktopUpdate.AudioPlaybackFailing -> audioFailed = update.failing
             is RemoteDesktopUpdate.Bell -> {}
-            is RemoteDesktopUpdate.Closed -> {
-                cleanExit = update.cleanExit
-                closeReason = update.reason
-                closed = true
-            }
+            else -> Unit // handled by the caller
         }
     }
 
