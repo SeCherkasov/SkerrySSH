@@ -22,6 +22,9 @@ import time
 # `rtk` transparently prefixes shell commands in this environment, so match through it.
 GIT_WRITE = re.compile(r"(?:^|[;&|]|\s)(?:rtk\s+)?git\s+(?:-\S+\s+)*(commit|push)(?![\w-])")
 PR_CREATE = re.compile(r"(?:^|[;&|]|\s)(?:rtk\s+)?gh\s+pr\s+create\b")
+# A hook reads the environment of the process that spawned it, not the one the command will run in,
+# so the documented escape hatch is recognised in the command text as well.
+OVERRIDE = re.compile(r"\bSKERRY_GATE_OVERRIDE=1\b")
 
 
 def current_branch() -> str:
@@ -92,7 +95,8 @@ def main() -> None:
         )
         sys.exit(2)
 
-    if (match or PR_CREATE.search(command)) and os.environ.get("SKERRY_GATE_OVERRIDE") != "1":
+    overridden = os.environ.get("SKERRY_GATE_OVERRIDE") == "1" or OVERRIDE.search(command)
+    if (match or PR_CREATE.search(command)) and not overridden:
         stale = gate_debt()
         if stale:
             sys.stderr.write(
