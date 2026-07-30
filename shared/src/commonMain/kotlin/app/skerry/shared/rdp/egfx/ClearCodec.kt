@@ -181,6 +181,10 @@ class ClearCodec {
             }
             val body = reader.slice(byteCount)
             if (tileWidth <= 0 || tileHeight <= 0) continue
+            // A tile's size is its own two fields, not the image's, so bounding the image on the way
+            // in does not bound this. All three branches below allocate from the product before a
+            // byte of the body is read.
+            RdpImageBounds.requireSize(tileWidth, tileHeight, "a ClearCodec subcodec tile")
             val tile = when (subCodecId) {
                 SUBCODEC_RAW -> IntArray(tileWidth * tileHeight) { if (body.remaining >= 3) body.bgr() else OPAQUE }
                 SUBCODEC_NSCODEC -> NsCodec.decode(body, tileWidth, tileHeight)
