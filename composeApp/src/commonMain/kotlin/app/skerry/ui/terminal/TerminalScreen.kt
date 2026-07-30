@@ -785,22 +785,17 @@ fun TerminalScreen(
               }
           }
       }
-      Text(
-        text = structural,
-        style = structuralStyle,
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            // bottom += bottomSlack — an empty gap below the content so the live grid sticks to the
-            // viewport top rather than leaving a peeked scrollback row above (see bottomSlack).
-            .padding(start = PADDING_DP.dp, top = PADDING_DP.dp, end = PADDING_DP.dp, bottom = PADDING_DP.dp + bottomSlack)
-            // Scroll height is set explicitly (contentHeight) from cellHeight, not the Text font metrics.
-            .height(contentHeight)
-            .fillMaxWidth()
-            .focusRequester(focusRequester)
-            // Focus reporting (DEC 1004): vim/tmux get ESC[I/ESC[O on terminal window focus.
-            .onFocusChanged { state.notifyFocus(it.isFocused) }
-            .onPreviewKeyEvent { event ->
+      // Keyboard focus sits on this wrapper rather than on the scrolling text inside it: a focusable
+      // node within its own verticalScroll makes Compose scroll that container to "reveal" the node
+      // when it takes focus, and clicking the pane back into focus slid the whole screen up by a
+      // couple of rows. Nothing scrollable wraps this Box, so taking focus moves nothing.
+      Box(
+          Modifier
+              .fillMaxSize()
+              .focusRequester(focusRequester)
+              // Focus reporting (DEC 1004): vim/tmux get ESC[I/ESC[O on terminal window focus.
+              .onFocusChanged { state.notifyFocus(it.isFocused) }
+              .onPreviewKeyEvent { event ->
                 // Toggle the link (hand) cursor as Ctrl is pressed/released without moving the mouse.
                 // Runs before the KeyDown guard so a Ctrl KeyUp also clears it. Never consumes the event.
                 hoverPos?.let { updateHoverAffordance(it, event.isCtrlPressed) }
@@ -883,8 +878,21 @@ fun TerminalScreen(
                 } else {
                     false
                 }
-            }
-            .focusable()
+              }
+              .focusable()
+      ) {
+      Text(
+        text = structural,
+        style = structuralStyle,
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scroll)
+            // bottom += bottomSlack — an empty gap below the content so the live grid sticks to the
+            // viewport top rather than leaving a peeked scrollback row above (see bottomSlack).
+            .padding(start = PADDING_DP.dp, top = PADDING_DP.dp, end = PADDING_DP.dp, bottom = PADDING_DP.dp + bottomSlack)
+            // Scroll height is set explicitly (contentHeight) from cellHeight, not the Text font metrics.
+            .height(contentHeight)
+            .fillMaxWidth()
             .onGloballyPositioned { layoutCoords = it }
             // Mouse wheel: when the app listens for the mouse — send a wheel report; in alt-screen without
             // mouse tracking (less/man) — arrows (3 rows per "tick"), since there's no own scrollback.
@@ -1148,6 +1156,7 @@ fun TerminalScreen(
                 }
             },
       )
+      }
 
       // Cursor overlay over the text per the DECSCUSR shape. Block — fill the cell + redraw the char in
       // a contrasting color; Underline — a bar at the bottom; Bar — a vertical line on the left. Geometry
