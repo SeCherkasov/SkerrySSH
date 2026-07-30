@@ -6,6 +6,7 @@ import app.skerry.ui.remote.RemoteDesktopPanel
 import app.skerry.ui.remote.RemoteDesktopScreenState
 import app.skerry.ui.remote.RemoteDesktopController
 import app.skerry.ui.remote.RemoteDesktopUiState
+import app.skerry.ui.remote.ReportOutputVisibility
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -136,6 +137,8 @@ fun VncView(state: DesktopDesignState) {
         when (val ui = vnc.uiState) {
             is RemoteDesktopUiState.Connecting -> CenterNotice("hourglass_empty", stringResource(Res.string.vnc_connecting))
             is RemoteDesktopUiState.Connected -> Row(Modifier.fillMaxSize()) {
+                // A minimised window, or another tab taking the screen, stops the server drawing.
+                ReportOutputVisibility(ui.screen)
                 Box(Modifier.weight(1f).fillMaxHeight()) { VncSurface(ui.screen) }
                 AnimatedVisibility(
                     visible = !state.remotePanelHidden,
