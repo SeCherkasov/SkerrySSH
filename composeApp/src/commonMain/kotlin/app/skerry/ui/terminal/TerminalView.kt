@@ -458,7 +458,13 @@ fun TerminalView(state: DesktopDesignState) {
             val aiTerminal = (aiSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
             // liveAi.enabled is in the key: toggling the global OFF setting shows/hides the bar
             // without recreating the screen (settings is Compose state, so it recomposes).
-            val aiController = key(liveAi, aiPolicy, liveAi?.enabled) {
+            // The pane's id is in it too. terminalController() builds a fresh controller holding the
+            // proposed command, and most hosts sit on the same policy, so without the id one
+            // controller was shared across panes while `aiTerminal` below followed the focus: a
+            // command proposed for one pane would run on whichever pane was focused when Run was
+            // pressed. Switching focus now discards an unconfirmed proposal, which is the cheap side
+            // of that trade.
+            val aiController = key(liveAi, aiPolicy, liveAi?.enabled, aiSession?.id) {
                 remember {
                     if (liveAi != null && liveAi.enabled && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
                 }
