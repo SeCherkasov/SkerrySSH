@@ -146,6 +146,33 @@ class RunbookRunnerTest {
     }
 
     @Test
+    fun stopping_a_flagged_step_clears_the_flag_and_a_late_poll_cannot_bring_it_back() = runnerTest { r, term ->
+        r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
+        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+        assertTrue(r.steps[0].stalled)
+
+        r.stop()
+        // A poll that passed its staleness check just before Stop must not re-flag a run that is
+        // over — the same race the generation guard exists for, now on this flag too.
+        testScheduler.advanceTimeBy(stallAfter * 2); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.STOPPED, r.steps[0].status)
+        assertFalse(r.steps[0].stalled)
+    }
+
+    @Test
+    fun a_new_run_after_a_stalled_one_starts_unflagged() = runnerTest { r, term ->
+        r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
+        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+        assertTrue(r.steps[0].stalled)
+        r.stop()
+
+        r.startNow(runbook(step("s1", "uptime")), term.target()) { "" }
+
+        assertFalse(r.steps[0].stalled)
+    }
+
+    @Test
     fun sends_the_command_with_the_exit_code_probe() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "systemctl restart nginx")), term.target()) { "" }
 

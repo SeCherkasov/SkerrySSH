@@ -244,16 +244,19 @@ class RunbookRunner(
      */
     fun stop() {
         if (!active) return
+        // The step's own state is settled inside the same critical section as the generation bump:
+        // markStalled re-reads the generation under this lock, so a poll racing Stop is refused
+        // rather than allowed to re-flag a step this call has just finished with.
         synchronized(lock) {
             generation++
             watchJob?.cancel()
             watchJob = null
-        }
-        steps.getOrNull(currentIndex)?.let {
-            if (it.status == RunbookStepStatus.RUNNING || it.status == RunbookStepStatus.AWAITING_CONFIRM) {
-                it.status = RunbookStepStatus.STOPPED
+            steps.getOrNull(currentIndex)?.let {
+                if (it.status == RunbookStepStatus.RUNNING || it.status == RunbookStepStatus.AWAITING_CONFIRM) {
+                    it.status = RunbookStepStatus.STOPPED
+                }
+                it.stalled = false // the run is over; nothing is waiting on this step any more
             }
-            it.stalled = false // the run is over; nothing is waiting on this step any more
         }
         phase = RunbookPhase.STOPPED
     }

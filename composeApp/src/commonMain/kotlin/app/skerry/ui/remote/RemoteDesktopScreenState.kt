@@ -318,7 +318,15 @@ class RemoteDesktopScreenState(
         }
     }
 
-    /** Everything that touches neither the picture nor the session's life: cursor, clipboard, sound. */
+    /**
+     * Everything that touches neither the picture nor the session's life: cursor, clipboard, sound.
+     *
+     * Exhaustive on purpose — the members [onUpdate] handles are listed here as no-ops rather than
+     * swept up by an `else`. The compiler refusing to build until a new [RemoteDesktopUpdate] is
+     * handled somewhere is the only thing that kept every update reaching the screen; an `else` in
+     * both halves would have let the next one be dropped in silence, which is exactly the bug this
+     * split was made to accommodate.
+     */
     private fun onPeripheralUpdate(update: RemoteDesktopUpdate) {
         when (update) {
             is RemoteDesktopUpdate.CursorShape -> cursor = VncCursorImage.of(update)
@@ -334,7 +342,13 @@ class RemoteDesktopScreenState(
 
             is RemoteDesktopUpdate.AudioPlaybackFailing -> audioFailed = update.failing
             is RemoteDesktopUpdate.Bell -> {}
-            else -> Unit // handled by the caller
+
+            // Handled by the caller; named so this `when` stays exhaustive.
+            is RemoteDesktopUpdate.Region,
+            is RemoteDesktopUpdate.Resize,
+            is RemoteDesktopUpdate.RemoteResizeSupported,
+            is RemoteDesktopUpdate.Closed,
+            -> Unit
         }
     }
 

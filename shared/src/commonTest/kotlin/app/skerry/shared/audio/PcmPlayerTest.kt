@@ -177,6 +177,22 @@ class PcmPlayerTest {
     }
 
     @Test
+    fun `a device that was playing and will not reopen is a playback failure`() {
+        // The same silence as a write that stops being taken, reached through the other door: sound
+        // was working, the server switched format, and the device is gone by the time we ask for it
+        // again. Reporting this as healthy would leave a mute session with nothing on screen.
+        val devices = FakeSinks()
+        val player = PcmPlayer(devices)
+        player.play(stereo, ByteArray(320))
+        assertFalse(player.playbackFailed)
+
+        devices.refuse = { true }
+        player.play(notification, ByteArray(160))
+
+        assertTrue(player.playbackFailed)
+    }
+
+    @Test
     fun `a device that will not open is not a playback failure`() {
         // Nothing was ever taking blocks, so there is no device that stopped: the player retries on
         // every block, and reporting it as a dead device would be a false alarm on the first one.
