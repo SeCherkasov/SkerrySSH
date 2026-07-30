@@ -6,6 +6,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import java.io.IOException
 
 /**
  * The device's audio outputs (speaker, wired headset, a Bluetooth headset, an HDMI sink).
@@ -98,7 +99,12 @@ internal class AndroidTrackSinks(
  * the same reason as [AndroidAudioMapping]: its tests live in `:androidApp`.
  */
 interface AndroidPlaybackTrack {
-    fun write(pcm: ByteArray)
+    /**
+     * Hands [pcm] to the device and returns what it answered: the byte count on success, or one of
+     * `AudioTrack`'s negative `ERROR_*` codes. `AudioTrack.write` reports a dead or reclaimed device
+     * by return value rather than by throwing, so the code has to travel to whoever can act on it.
+     */
+    fun write(pcm: ByteArray): Int
     fun pause()
     fun flush()
     fun play()
@@ -110,7 +116,12 @@ interface AndroidPlaybackTrack {
 class AndroidTrackSink(private val track: AndroidPlaybackTrack) : PcmSink {
 
     override fun write(pcm: ByteArray) {
-        track.write(pcm)
+        // A negative code means the device is gone (unplugged, reclaimed, mediaserver restarted).
+        // It has to become an exception here: [PcmPlayer] tells a dead device from a quiet server by
+        // a failing write, and a code returned quietly reads as a block that played. The desktop
+        // sink reaches the same state by throwing, so both platforms report it the same way.
+        val written = track.write(pcm)
+        if (written < 0) throw IOException("the audio device rejected a block of ${pcm.size} bytes: $written")
     }
 
     /**
@@ -141,9 +152,7 @@ class AndroidTrackSink(private val track: AndroidPlaybackTrack) : PcmSink {
 /** The real thing behind [AndroidPlaybackTrack]; nothing here has a decision of its own. */
 private class AudioTrackHandle(private val track: AudioTrack) : AndroidPlaybackTrack {
 
-    override fun write(pcm: ByteArray) {
-        track.write(pcm, 0, pcm.size)
-    }
+    override fun write(pcm: ByteArray): Int = track.write(pcm, 0, pcm.size)
 
     override fun pause() = track.pause()
 
