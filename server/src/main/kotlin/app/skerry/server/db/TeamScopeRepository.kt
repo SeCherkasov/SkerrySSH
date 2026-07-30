@@ -8,6 +8,7 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
+import org.jetbrains.exposed.v1.jdbc.upsert
 
 /** A scope as reported to one account: [envelope] is that account's sealed key, null without a grant. */
 data class TeamScopeRow(
@@ -60,10 +61,34 @@ class TeamScopeRepository(private val db: Database) {
         }
 
     /** Deletes the scope with its grants and its records. */
-    suspend fun delete(teamId: String, scopeId: String): Boolean = dbTransaction(db) {
+    /**
+     * Deletes the scope with its records and grants, and returns the accounts whose grant went with
+     * it — `null` when there was no such scope.
+     *
+     * The grantees are read inside the transaction that removes them, and returned rather than fetched
+     * by the caller beforehand: a grant added between a separate read and this delete is revoked in
+     * the database but never announced, so that client keeps offering a scope it no longer holds until
+     * something unrelated refreshes it. That closed a window as wide as an HTTP round trip.
+     *
+     * A narrow one is left, and deliberately: under PostgreSQL's default READ COMMITTED each statement
+     * takes a fresh snapshot, so a [grant] committing between the SELECT below and the delete that
+     * follows it is removed without appearing in the returned list. Locking does not help — the row is
+     * inserted, not updated, so there is nothing to lock — and `DELETE ... RETURNING` is Postgres-only
+     * in Exposed while SQLite is the default deployment. The consequence is bounded: access is revoked
+     * either way (fail closed), only the live membership push is missed, and that client corrects
+     * itself on its next refresh. On SQLite it cannot happen at all, though only because the pool is
+     * capped at one connection.
+     */
+    suspend fun deleteReturningGrantees(teamId: String, scopeId: String): List<String>? = dbTransaction(db) {
+        val grantees = TeamScopeGrants.selectAll()
+            .where { (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) }
+            .map { it[TeamScopeGrants.accountId] }
         TeamRecords.deleteWhere { (TeamRecords.teamId eq teamId) and (TeamRecords.scopeId eq scopeId) }
         TeamScopeGrants.deleteWhere { (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) }
-        TeamScopes.deleteWhere { (TeamScopes.teamId eq teamId) and (TeamScopes.scopeId eq scopeId) } > 0
+        val removed = TeamScopes.deleteWhere {
+            (TeamScopes.teamId eq teamId) and (TeamScopes.scopeId eq scopeId)
+        } > 0
+        if (removed) grantees else null
     }
 
     /**
@@ -168,22 +193,28 @@ class TeamScopeRepository(private val db: Database) {
                 (TeamScopeGrants.accountId eq accountId)
         }.any()
 
-    /** Upsert of a grant: re-granting replaces the sealed key instead of failing on the primary key. */
+    /**
+     * Upsert of a grant: re-granting replaces the sealed key instead of failing on the primary key.
+     *
+     * One statement rather than an UPDATE followed by an INSERT: two requests granting the same
+     * (team, scope, account) for the first time — a second click, or a grant racing a rekey that also
+     * lands here — would both see no row and both insert, and the loser hit the primary key and became
+     * a 500. Retrying around the collision is not an option on Postgres, where a failed statement
+     * aborts the transaction; `ON CONFLICT` avoids the collision instead of recovering from it, and
+     * Exposed emits it for both SQLite and Postgres.
+     *
+     * Only the envelope is rewritten: [createdAt] is when the grant first appeared, and re-sealing a
+     * key for someone who already holds the grant is not a new grant.
+     */
     private fun insertGrant(teamId: String, scopeId: String, accountId: String, envelope: ByteArray, now: Long) {
-        val updated = TeamScopeGrants.update({
-            (TeamScopeGrants.teamId eq teamId) and (TeamScopeGrants.scopeId eq scopeId) and
-                (TeamScopeGrants.accountId eq accountId)
-        }) {
+        TeamScopeGrants.upsert(
+            onUpdate = { it[TeamScopeGrants.envelope] = ExposedBlob(envelope) },
+        ) {
+            it[TeamScopeGrants.teamId] = teamId
+            it[TeamScopeGrants.scopeId] = scopeId
+            it[TeamScopeGrants.accountId] = accountId
             it[TeamScopeGrants.envelope] = ExposedBlob(envelope)
-        }
-        if (updated == 0) {
-            TeamScopeGrants.insert {
-                it[TeamScopeGrants.teamId] = teamId
-                it[TeamScopeGrants.scopeId] = scopeId
-                it[TeamScopeGrants.accountId] = accountId
-                it[TeamScopeGrants.envelope] = ExposedBlob(envelope)
-                it[createdAt] = now
-            }
+            it[createdAt] = now
         }
     }
 }

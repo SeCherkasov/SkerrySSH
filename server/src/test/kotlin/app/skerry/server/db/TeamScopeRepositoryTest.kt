@@ -96,6 +96,26 @@ class TeamScopeRepositoryTest {
     }
 
     @Test
+    fun `regranting keeps the moment the grant first appeared`() = withTestDb { db ->
+        // createdAt says when this account was let into the scope; re-sealing the key for someone
+        // already in it is not a new grant, and letting it move would rewrite the audit answer to
+        // "who has had this since when".
+        //
+        // This guards the property, not the race the upsert was written for: the update-then-insert
+        // it replaced also touched only the envelope, so a sequential re-grant preserved createdAt
+        // before that change too. The double-insert race itself is not covered — reproducing it needs
+        // two concurrent transactions, and the test pool is capped at one connection.
+        val scopes = seed(db)
+        scopes.create("team-1", "prod", alice, byteArrayOf(1), now = 20)
+        scopes.grant("team-1", "prod", bob, byteArrayOf(2), now = 21)
+
+        scopes.grant("team-1", "prod", bob, byteArrayOf(3), now = 99)
+
+        val bobsGrant = scopes.grants("team-1", "prod").single { it.accountId == bob }
+        assertEquals(21, bobsGrant.createdAt)
+    }
+
+    @Test
     fun `rekey is a monotonic compare-and-set and re-seals the key to grantees`() = withTestDb { db ->
         val scopes = seed(db)
         scopes.create("team-1", "prod", alice, byteArrayOf(1), now = 20)
@@ -136,13 +156,30 @@ class TeamScopeRepositoryTest {
         records.upsert("team-1", "prod", listOf(incoming("r1")))
         records.upsert("team-1", "", listOf(incoming("r2")))
 
-        assertTrue(scopes.delete("team-1", "prod"))
+        // The grantees come back from the delete itself — the route needs them to tell those clients
+        // their scope is gone, and reading them separately beforehand races a concurrent grant.
+        assertEquals(listOf(alice), scopes.deleteReturningGrantees("team-1", "prod"))
 
         assertTrue(scopes.scopesFor("team-1", alice, all = true).isEmpty())
         assertTrue(scopes.grants("team-1", "prod").isEmpty())
         assertTrue(records.delta("team-1", "prod", 0).records.isEmpty())
         // Team-wide records are untouched.
         assertEquals(listOf("r2"), records.delta("team-1", "", 0).records.map { it.id })
+    }
+
+    @Test
+    fun `deleting a scope reports every grantee, and null when there was no scope`() = withTestDb { db ->
+        val scopes = seed(db)
+        scopes.create("team-1", "prod", alice, byteArrayOf(1), now = 20)
+        scopes.grant("team-1", "prod", bob, byteArrayOf(2), now = 21)
+
+        val grantees = scopes.deleteReturningGrantees("team-1", "prod")
+
+        assertEquals(setOf(alice, bob), grantees?.toSet())
+        // Absent rather than empty: the route answers 404 on the first, 200 on a scope that had no
+        // grants left, and an empty list cannot tell those apart.
+        assertNull(scopes.deleteReturningGrantees("team-1", "prod"))
+        assertNull(scopes.deleteReturningGrantees("team-1", "never-existed"))
     }
 
     @Test

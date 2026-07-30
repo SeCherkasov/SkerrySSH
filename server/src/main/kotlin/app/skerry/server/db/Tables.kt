@@ -184,6 +184,10 @@ object TeamRecords : Table("team_records") {
 
     init {
         index("idx_team_records_delta", false, teamId, teamSeq)
+        // A scoped pull filters (teamId, scopeId, teamSeq). The index above narrows only by teamId and
+        // the teamSeq range, so every row of every OTHER scope that changed inside that window is read
+        // and discarded in process: the cost of one scope's pull grows with the whole team's churn.
+        index("idx_team_records_scope_delta", false, teamId, scopeId, teamSeq)
     }
 }
 
