@@ -15,7 +15,7 @@ import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-private val acceptAllHostKeys = HostKeyVerifier { true }
+private val acceptAllHostKeys = HostKeyVerifier { null }
 
 /**
  * Integration tests for SSH certificate auth ([SshAuth.Certificate]) against an embedded

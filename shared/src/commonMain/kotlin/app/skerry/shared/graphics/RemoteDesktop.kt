@@ -139,6 +139,12 @@ sealed interface RemoteDesktopUpdate {
     data object Bell : RemoteDesktopUpdate
 
     /**
+     * The local device playing the session's sound stopped taking blocks ([failing] true), or
+     * started again. Only protocols that carry audio ever emit it.
+     */
+    data class AudioPlaybackFailing(val failing: Boolean) : RemoteDesktopUpdate
+
+    /**
      * The session ended. [cleanExit] true = the peer closed it in an orderly way; [reason] carries
      * the server's own explanation where it gave one (a refused logon, an idle timeout).
      */

@@ -104,30 +104,27 @@ class TofuHostKeyVerifier(
     private val mismatches: HostKeyMismatchStore = NoopHostKeyMismatchStore,
     private val now: () -> String = { "" },
 ) : HostKeyVerifier {
-    override fun verify(offer: HostKeyOffer): Boolean {
+    override fun check(offer: HostKeyOffer): HostKeyRefusal? {
         // A certificate is remembered by the key inside it: the certificate blob is re-issued on a
         // schedule, so trusting its fingerprint would report "host key changed" on every rotation.
         // Done here rather than only in [HostCertificateVerifier] so the rule holds even where this
         // verifier is wired up on its own.
         val (host, port, keyType, fingerprint, _) = offer.bareKey()
-        val known = store.allOrNull() ?: return false
+        val known = store.allOrNull() ?: return HostKeyRefusal.TrustStoreUnreadable
         val existing = known.firstOrNull {
             it.host == host && it.port == port && it.keyType == keyType
         }
-        return when (existing) {
-            null -> {
+        return when {
+            existing == null -> {
                 store.add(KnownHost(host, port, keyType, fingerprint, now()))
-                true
+                null
             }
+            existing.fingerprint == fingerprint -> null
             else -> {
-                if (existing.fingerprint == fingerprint) {
-                    true
-                } else {
-                    mismatches.record(
-                        HostKeyMismatch(host, port, keyType, existing.fingerprint, fingerprint, now()),
-                    )
-                    false
-                }
+                mismatches.record(
+                    HostKeyMismatch(host, port, keyType, existing.fingerprint, fingerprint, now()),
+                )
+                HostKeyRefusal.KeyChanged
             }
         }
     }
@@ -170,13 +167,17 @@ class ReadOnlyHostKeyVerifier(
     private val store: KnownHostsStore,
     private val unknownHost: UnknownHost,
 ) : HostKeyVerifier {
-    override fun verify(offer: HostKeyOffer): Boolean {
+    override fun check(offer: HostKeyOffer): HostKeyRefusal? {
         // Compared by the key inside a certificate, for the same reason as in [TofuHostKeyVerifier].
         val bare = offer.bareKey()
-        val known = store.allOrNull() ?: return false
+        val known = store.allOrNull() ?: return HostKeyRefusal.TrustStoreUnreadable
         val existing = known.firstOrNull {
             it.host == bare.host && it.port == bare.port && it.keyType == bare.keyType
         }
-        return if (existing == null) unknownHost == UnknownHost.Accept else existing.fingerprint == bare.fingerprint
+        return when {
+            existing == null -> HostKeyRefusal.NotTrustedYet.takeIf { unknownHost == UnknownHost.Refuse }
+            existing.fingerprint == bare.fingerprint -> null
+            else -> HostKeyRefusal.KeyChanged
+        }
     }
 }

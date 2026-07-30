@@ -9,6 +9,7 @@ import app.skerry.shared.sftp.SftpProgress
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
+import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.LocalForwardSpec
 import app.skerry.shared.ssh.PortForward
 import app.skerry.shared.ssh.PtySize
@@ -17,6 +18,7 @@ import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshAuthenticationException
 import app.skerry.shared.ssh.SshConnection
+import app.skerry.shared.ssh.SshHostKeyRejectedException
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
 import kotlinx.coroutines.CompletableDeferred
@@ -152,6 +154,23 @@ class ConnectionControllerTest {
         val state = controller.uiState
         assertIs<ConnectionUiState.Error>(state)
         assertEquals(MoshSetupException.Reason.SERVER_NOT_INSTALLED, state.moshReason)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a rejected host key carries its reason into Error`() = runTest {
+        // The English transport text is diagnostics; what the view needs to explain the refusal in
+        // the user's language is the typed reason, same rule as the Mosh case above.
+        val transport = FakeSshTransport(
+            error = SshHostKeyRejectedException("Host key rejected by verifier", HostKeyRefusal.KeyChanged),
+        )
+        val (controller, scope) = controllerWith(transport)
+
+        controller.connect(target, SshAuth.Password("pw"))
+
+        val state = controller.uiState
+        assertIs<ConnectionUiState.Error>(state)
+        assertEquals(HostKeyRefusal.KeyChanged, state.hostKeyRefusal)
         scope.cancel()
     }
 

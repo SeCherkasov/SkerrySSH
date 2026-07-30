@@ -72,6 +72,19 @@ class PcmPlayer(
 
     private var writesFailing = false
 
+    /**
+     * A device took blocks and then stopped: the session is mute and stays that way until a format
+     * change reopens the device. Read from outside so the session can say so — a device that dies
+     * mid-stream is otherwise indistinguishable from a server that went quiet.
+     *
+     * False while no device would open *at all*: nothing was playing, every block retries, and
+     * calling that a dead device would raise the alarm on the first block of a session that has
+     * none. A device that was playing and then would not reopen for a new format is a different
+     * story and does count — see [device].
+     */
+    override val playbackFailed: Boolean
+        get() = synchronized(lock) { writesFailing }
+
     /** Formats already announced to the trace; a session alternates between two or three of them. */
     private val traced = mutableSetOf<RemoteAudioFormat>()
 
@@ -80,8 +93,8 @@ class PcmPlayer(
         // A device that fails mid-block was unplugged or reclaimed; there is nothing to retry, and
         // the block it swallowed is 20 ms of a stream that keeps arriving.
         runCatching { open.write(pcm) }.onFailure { failure ->
-            if (!writesFailing) trace("the device stopped taking blocks: $failure")
-            writesFailing = true
+            val first = synchronized(lock) { (!writesFailing).also { writesFailing = true } }
+            if (first) trace("the device stopped taking blocks: $failure")
         }
     }
 
@@ -113,6 +126,10 @@ class PcmPlayer(
         if (opened == null) {
             if (!refused) trace("no device would open for $format")
             refused = true
+            // A reopen that fails is a device that was playing and now isn't — the same silence as a
+            // write that stops being taken, one step earlier in the state machine. Only a session
+            // that never had a device at all ([previous] null) is left unreported.
+            if (previous != null) synchronized(lock) { writesFailing = true }
             return null
         }
         val published = synchronized(lock) {

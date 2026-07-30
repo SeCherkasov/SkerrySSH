@@ -2,6 +2,7 @@ package app.skerry.shared.audio
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -153,6 +154,54 @@ class PcmPlayerTest {
             listOf("open#1 $stereo", "write#1 320", "write#1 320", "write#1 160"),
             devices.events,
         )
+    }
+
+    @Test
+    fun `a device that stopped taking blocks says so, and stops saying it once one is open again`() {
+        // The session goes mute with nothing on screen to explain it: the block is swallowed, the
+        // server keeps sending, and the trace that used to be the only witness is off by default.
+        val devices = FakeSinks()
+        val player = PcmPlayer(devices)
+        player.play(stereo, ByteArray(320))
+        assertFalse(player.playbackFailed)
+
+        devices.failWrite = true
+        player.play(stereo, ByteArray(320))
+        assertTrue(player.playbackFailed)
+
+        // A format change is the one thing that reopens the device (see the class doc), so it is
+        // also the only way back to sound.
+        devices.failWrite = false
+        player.play(notification, ByteArray(160))
+        assertFalse(player.playbackFailed)
+    }
+
+    @Test
+    fun `a device that was playing and will not reopen is a playback failure`() {
+        // The same silence as a write that stops being taken, reached through the other door: sound
+        // was working, the server switched format, and the device is gone by the time we ask for it
+        // again. Reporting this as healthy would leave a mute session with nothing on screen.
+        val devices = FakeSinks()
+        val player = PcmPlayer(devices)
+        player.play(stereo, ByteArray(320))
+        assertFalse(player.playbackFailed)
+
+        devices.refuse = { true }
+        player.play(notification, ByteArray(160))
+
+        assertTrue(player.playbackFailed)
+    }
+
+    @Test
+    fun `a device that will not open is not a playback failure`() {
+        // Nothing was ever taking blocks, so there is no device that stopped: the player retries on
+        // every block, and reporting it as a dead device would be a false alarm on the first one.
+        val devices = FakeSinks(refuse = { true })
+        val player = PcmPlayer(devices)
+
+        player.play(stereo, ByteArray(320))
+
+        assertFalse(player.playbackFailed)
     }
 
     @Test

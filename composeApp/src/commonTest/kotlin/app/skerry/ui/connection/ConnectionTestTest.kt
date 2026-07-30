@@ -2,6 +2,7 @@ package app.skerry.ui.connection
 
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
+import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.LocalForwardSpec
 import app.skerry.shared.ssh.PortForward
 import app.skerry.shared.ssh.PtySize
@@ -64,7 +65,19 @@ class ConnectionTestTest {
     @Test
     fun `host key rejection maps to a typed reason`() = runTest {
         val status = runConnectionTest(ProbeTransport(error = SshHostKeyRejectedException("bad key")), target, auth)
-        assertEquals(ConnectionTestStatus.Failure(ConnectionTestProblem.HostKeyRejected), status)
+        assertEquals(ConnectionTestStatus.Failure(ConnectionTestProblem.HostKeyRejected()), status)
+    }
+
+    @Test
+    fun `host key rejection keeps why it was refused`() = runTest {
+        // "Test connection" dials with UnknownHost.Accept, so what lands here is a key that changed,
+        // a certificate that didn't hold up, or a locked vault — three different fixes.
+        val error = SshHostKeyRejectedException("bad key", HostKeyRefusal.CertificateRejected)
+        val status = runConnectionTest(ProbeTransport(error = error), target, auth)
+        assertEquals(
+            ConnectionTestStatus.Failure(ConnectionTestProblem.HostKeyRejected(HostKeyRefusal.CertificateRejected)),
+            status,
+        )
     }
 
     @Test
