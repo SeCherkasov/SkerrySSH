@@ -78,6 +78,19 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.2.1" date="2026-07-30">
+      <description>
+        <p>Feature and fix release:</p>
+        <ul>
+          <li>RDP: H.264 in the graphics pipeline, picture quality in the connection profile</li>
+          <li>Remote desktops: a session panel with screenshot, Ctrl+Alt+Del, clipboard and live sound</li>
+          <li>Terminal: a steady autocomplete ghost, clear that drops the output, no jump on focus</li>
+          <li>Connections state why they were refused: host key reasons, dead audio devices, stalled runbook steps</li>
+          <li>Serial: pick the port from a list of discovered devices</li>
+          <li>Security fixes in host key trust, RDP licensing and CredSSP</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-07-29">
       <description>
         <p>Feature release:</p>
