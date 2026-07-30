@@ -23,6 +23,11 @@ REVIEWERS = re.compile(
 )
 GATE_TASKS = re.compile(r"detektAll|allTests")
 CODE_FILE = re.compile(r"\.kts?$")
+# `> file`, `2> file`, `>> file`, `&> file` — where a gate run puts gradle's output.
+REDIRECT = re.compile(r"(?:\d?>>?|&>)\s*\"?([^\s\"|;&]+)")
+# A log older than this belongs to an earlier run: the command was rerun and this time wrote nothing.
+LOG_MAX_AGE_S = 30 * 60
+LOG_TAIL_BYTES = 64 * 1024
 
 
 def state_path() -> str:
@@ -53,6 +58,35 @@ def mark(key: str) -> None:
         pass  # a hook must never break the session
 
 
+def log_tail(path: str) -> str:
+    """The end of a log the command redirected into, or empty if there is no usable one."""
+    path = os.path.expanduser(path)
+    try:
+        if time.time() - os.path.getmtime(path) > LOG_MAX_AGE_S:
+            return ""
+        with open(path, errors="replace") as fh:
+            fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, fh.tell() - LOG_TAIL_BYTES))
+            return fh.read()
+    except OSError:
+        return ""
+
+
+def gradle_was_green(command: str, response_text: str) -> bool:
+    """
+    Whether a gate run passed. The verdict is not always in what the tool returned: `/gate` sends
+    gradle's output to a file (a pipe would mask the exit code), and then the tool answers with
+    nothing but an exit code — which used to read as "not green" and blocked the commit that a
+    fully green gate had just earned.
+    """
+    outputs = [response_text] + [log_tail(target) for target in REDIRECT.findall(command)]
+    # A failure anywhere in the run outweighs a success beside it: one command can hold several
+    # gradle invocations, and the gate is what all of them together say.
+    if any("BUILD FAILED" in text for text in outputs):
+        return False
+    return any("BUILD SUCCESSFUL" in text for text in outputs)
+
+
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -69,8 +103,8 @@ def main() -> None:
             mark("code")
     elif tool == "Bash":
         command = tool_input.get("command") or ""
-        # A green gate run: the gradle tasks that matter, and no failure in the output.
-        if GATE_TASKS.search(command) and "BUILD SUCCESSFUL" in response_text:
+        # A green gate run: the gradle tasks that matter, and no failure in what it wrote.
+        if GATE_TASKS.search(command) and gradle_was_green(command, response_text):
             mark("build")
     elif tool in ("Agent", "Task"):
         subagent = tool_input.get("subagent_type") or ""
