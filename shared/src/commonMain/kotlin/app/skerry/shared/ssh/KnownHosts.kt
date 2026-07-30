@@ -134,23 +134,49 @@ class TofuHostKeyVerifier(
 }
 
 /**
- * Host key verifier for a one-off "test connection" check: read-only with respect to [store]. A
- * matching trusted key is accepted; a mismatch for an already-known host is rejected (MITM
- * protection); a previously unknown host is accepted but not written to [store] — a probe must not
- * leave traces in known_hosts or establish permanent trust. Permanent trust is only established on a
- * real connection ([TofuHostKeyVerifier]). An unreadable store rejects — fail closed, same rule as
- * [TofuHostKeyVerifier].
+ * What a [ReadOnlyHostKeyVerifier] does with a host it holds no key for.
+ *
+ * Neither answer establishes trust — that is the whole point of the verifier this belongs to — so the
+ * question is only whether *this* connection may proceed on a key nobody has vouched for. The answer
+ * turns on whether a person is waiting for the result.
  */
-class ProbeHostKeyVerifier(
+enum class UnknownHost {
+    /**
+     * Connect, and remember nothing. For a check the user asked for and is reading the answer to: a
+     * "test connection" from the form names a host that is usually not saved yet, and refusing it
+     * would make the button useless for the case it exists to serve.
+     */
+    Accept,
+
+    /**
+     * Refuse. For a connection that runs with nobody watching — activating a saved tunnel opens a
+     * forward with no terminal and no prompt, so it must not be the connection that settles a host's
+     * identity. The host has to be reached once by a real session (or covered by a trusted CA) first.
+     */
+    Refuse,
+}
+
+/**
+ * Host key verifier that never writes to [store], and so can never establish trust: that is reserved
+ * for a real session ([TofuHostKeyVerifier]).
+ *
+ * A matching stored key is accepted; a mismatch for an already-known host is rejected (MITM
+ * protection); a host with no entry is decided by [unknownHost], which every call site states
+ * explicitly because the two answers are not interchangeable — see [UnknownHost]. An unreadable store
+ * rejects everything — fail closed, the same rule as [TofuHostKeyVerifier], since a locked vault must
+ * not read as "host never seen".
+ */
+class ReadOnlyHostKeyVerifier(
     private val store: KnownHostsStore,
+    private val unknownHost: UnknownHost,
 ) : HostKeyVerifier {
     override fun verify(offer: HostKeyOffer): Boolean {
         // Compared by the key inside a certificate, for the same reason as in [TofuHostKeyVerifier].
-        val (host, port, keyType, fingerprint, _) = offer.bareKey()
+        val bare = offer.bareKey()
         val known = store.allOrNull() ?: return false
         val existing = known.firstOrNull {
-            it.host == host && it.port == port && it.keyType == keyType
+            it.host == bare.host && it.port == bare.port && it.keyType == bare.keyType
         }
-        return existing == null || existing.fingerprint == fingerprint
+        return if (existing == null) unknownHost == UnknownHost.Accept else existing.fingerprint == bare.fingerprint
     }
 }

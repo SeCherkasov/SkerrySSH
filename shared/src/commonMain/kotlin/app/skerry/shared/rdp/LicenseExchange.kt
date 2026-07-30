@@ -144,8 +144,15 @@ class LicenseExchange(
         val exponent = keyBlob.bytes(4)
         // The modulus field ends with eight bytes of padding, and both values are little-endian.
         val modulus = keyBlob.bytes(keyLength)
+        // keylen counts the eight trailing padding bytes, and it is only ever bounded from above, so
+        // a server may declare a length that leaves no modulus at all. Trimming the padding off that
+        // reads past the array, and a modulus shorter than its own padding is not a key anything can
+        // be sealed with — both are protocol errors rather than arithmetic to paper over.
+        if (modulus.size <= RSA_PADDING) {
+            throw RdpProtocolException("a licensing RSA modulus of ${modulus.size} bytes")
+        }
         return RdpRsaPublicKey(
-            modulus = modulus.copyOfRange(0, (modulus.size - RSA_PADDING).coerceAtLeast(1)).reversedArray(),
+            modulus = modulus.copyOfRange(0, modulus.size - RSA_PADDING).reversedArray(),
             exponent = exponent.reversedArray(),
         )
     }

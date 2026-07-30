@@ -4,6 +4,7 @@ import app.skerry.shared.rdp.RdpAuthException
 import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpSink
 import app.skerry.shared.rdp.RdpSource
+import app.skerry.shared.rdp.constantTimeEquals
 
 /**
  * CredSSP (MS-CSSP) over an established TLS channel: runs NTLM inside TSRequest messages, binds the
@@ -67,7 +68,7 @@ class CredSspClient(
             // NTLM exchange is not the peer holding the TLS key.
             throw RdpAuthException("server failed the CredSSP binding check (${e.message})")
         }
-        if (!answer.contentEquals(serverBinding(version, publicKey, nonce))) {
+        if (!constantTimeEquals(answer, serverBinding(version, publicKey, nonce))) {
             throw RdpAuthException("server returned a public key that does not match the TLS session")
         }
 

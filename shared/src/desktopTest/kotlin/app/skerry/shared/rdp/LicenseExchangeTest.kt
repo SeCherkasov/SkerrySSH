@@ -111,6 +111,22 @@ class LicenseExchangeTest {
     }
 
     @Test
+    fun `rejects a proprietary certificate whose modulus is too short to hold its padding`() {
+        // keylen is the server's to choose and only ever bounded from above. At 0 the modulus is
+        // empty and the trailing-padding trim reads past it; anything up to the 8 padding bytes
+        // leaves no modulus at all. Both have to be protocol errors, not an exception from the
+        // arithmetic, and not a one-byte modulus quietly handed to modPow.
+        val exchange = LicenseExchange(crypto, logon)
+
+        for (keyLength in listOf(0, 4, 8)) {
+            val certificate = proprietaryCertificate(keyBlob = rsaKeyBlob(keyLength = keyLength))
+            assertFailsWith<RdpProtocolException>("keylen $keyLength") {
+                exchange.newLicenseRequest(RdpReader(licenseRequest(ByteArray(32), certificate)))
+            }
+        }
+    }
+
+    @Test
     fun `the hardware id is stable across connections from the same client`() {
         // A licence server indexes issued licences by this; a random one would ask for a new licence
         // on every connect and drain the pool.
@@ -196,18 +212,8 @@ class LicenseExchangeTest {
      */
     private fun proprietaryCertificate(
         signature: (ByteArray) -> ByteArray = ::terminalServicesSignature,
+        keyBlob: ByteArray = rsaKeyBlob(),
     ): ByteArray {
-        val modulusLe = publicKey.modulus.toByteArray().dropSign().reversedArray()
-        val exponentLe = publicKey.publicExponent.toByteArray().dropSign().reversedArray().copyOf(4)
-        val keyBlob = RdpWriter(modulusLe.size + 32).apply {
-            u32le(0x31415352) // "RSA1"
-            u32le(modulusLe.size + 8) // keylen counts the trailing padding
-            u32le(modulusLe.size * 8)
-            u32le(modulusLe.size)
-            bytes(exponentLe)
-            bytes(modulusLe)
-            zeros(8)
-        }.toByteArray()
         // The signature covers everything from dwVersion to the end of the public key blob.
         val signed = RdpWriter(keyBlob.size + 32).apply {
             u32le(1) // CERT_CHAIN_VERSION_1
@@ -222,6 +228,25 @@ class LicenseExchangeTest {
             u16le(0x0008) // wSignatureBlobType
             u16le(signatureBlob.size)
             bytes(signatureBlob)
+        }.toByteArray()
+    }
+
+    /**
+     * An RSA1 public key blob around the test's key. [keyLength] overrides the `keylen` field, which
+     * is the hook for the degenerate lengths a server is free to declare — the blob stays correctly
+     * signed, because the Terminal Services private key is public and signs whatever it is given.
+     */
+    private fun rsaKeyBlob(keyLength: Int? = null): ByteArray {
+        val modulusLe = publicKey.modulus.toByteArray().dropSign().reversedArray()
+        val exponentLe = publicKey.publicExponent.toByteArray().dropSign().reversedArray().copyOf(4)
+        return RdpWriter(modulusLe.size + 32).apply {
+            u32le(0x31415352) // "RSA1"
+            u32le(keyLength ?: (modulusLe.size + 8)) // keylen counts the trailing padding
+            u32le(modulusLe.size * 8)
+            u32le(modulusLe.size)
+            bytes(exponentLe)
+            bytes(modulusLe)
+            zeros(8)
         }.toByteArray()
     }
 

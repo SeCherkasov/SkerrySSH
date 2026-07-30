@@ -36,10 +36,14 @@ class HostCertificateVerifierTest {
         caSignatureVerified = caSignatureVerified,
     )
 
-    private fun offer(cert: OfferedHostCertificate? = certificate(), host: String = "web-01.prod.example.com") =
+    private fun offer(
+        cert: OfferedHostCertificate? = certificate(),
+        host: String = "web-01.prod.example.com",
+        port: Int = 22,
+    ) =
         HostKeyOffer(
             host = host,
-            port = 22,
+            port = port,
             keyType = if (cert == null) "ssh-ed25519" else "ssh-ed25519-cert-v01@openssh.com",
             fingerprint = if (cert == null) HOST_KEY_FP else CERT_FP,
             certificate = cert,
@@ -55,18 +59,33 @@ class HostCertificateVerifierTest {
         TrustedCa(id = "ca-1", hostPattern = pattern, keyType = "ssh-ed25519", publicKey = "AAAA", fingerprint = fingerprint)
 
     @Test
-    fun `a bare host key is left to the fallback verifier`() {
+    fun `a bare host key is refused for a host a trusted CA covers`() {
+        // The downgrade this rule exists for. A CA-verified connection deliberately writes nothing
+        // to known_hosts, so such a host never accumulates a TOFU record and stays a "first
+        // contact" forever. Handing a bare key to TOFU would let an on-path server that simply
+        // omits its certificate be adopted silently, with no mismatch to report.
         val fallback = RecordingVerifier(answer = true)
         val verifier = HostCertificateVerifier(InMemoryTrustedCaStore(listOf(trustedCa())), fallback) { NOW }
+
+        assertFalse(verifier.verify(offer(cert = null)))
+        assertTrue(fallback.seen.isEmpty(), "TOFU must never see a key for a CA-protected host")
+    }
+
+    @Test
+    fun `a bare host key for a host no CA covers is left to the fallback verifier`() {
+        val fallback = RecordingVerifier(answer = true)
+        val cas = InMemoryTrustedCaStore(listOf(trustedCa(pattern = "*.staging.example.com")))
+        val verifier = HostCertificateVerifier(cas, fallback) { NOW }
 
         assertTrue(verifier.verify(offer(cert = null)))
         assertEquals(offer(cert = null), fallback.seen.single())
     }
 
     @Test
-    fun `the fallback decides for a bare key`() {
+    fun `the fallback decides for a bare key no CA covers`() {
         val fallback = RecordingVerifier(answer = false)
-        val verifier = HostCertificateVerifier(InMemoryTrustedCaStore(listOf(trustedCa())), fallback) { NOW }
+        val cas = InMemoryTrustedCaStore(listOf(trustedCa(pattern = "*.staging.example.com")))
+        val verifier = HostCertificateVerifier(cas, fallback) { NOW }
 
         assertFalse(verifier.verify(offer(cert = null)))
     }
@@ -121,12 +140,15 @@ class HostCertificateVerifierTest {
     }
 
     @Test
-    fun `a certificate from a different CA does not match a trusted one`() {
+    fun `a certificate from a different CA is refused for a host a trusted CA covers`() {
+        // The same downgrade as a bare key, wearing a certificate: an attacker signs one with a CA
+        // of their own. Matching on the CA fingerprint alone would leave this "uncovered" and send
+        // it to TOFU, which has no record for a CA-protected host and would adopt it.
         val fallback = RecordingVerifier(answer = true)
         val verifier = HostCertificateVerifier(InMemoryTrustedCaStore(listOf(trustedCa())), fallback) { NOW }
 
-        assertTrue(verifier.verify(offer(cert = certificate(caFingerprint = OTHER_CA_FP))))
-        assertEquals(1, fallback.seen.size)
+        assertFalse(verifier.verify(offer(cert = certificate(caFingerprint = OTHER_CA_FP))))
+        assertTrue(fallback.seen.isEmpty())
     }
 
     @Test
@@ -204,25 +226,78 @@ class HostCertificateVerifierTest {
     }
 
     @Test
-    fun `an unreadable CA store still lets a bare key through to the fallback`() {
-        // A bare key never consults the CA list, so its own fail-closed rule is the one that counts.
+    fun `an unreadable CA store refuses a bare key instead of falling back to TOFU`() {
+        // Deciding a bare key now needs the trusted set too: without it we cannot tell an ordinary
+        // host from a CA-protected one, and guessing "ordinary" is the downgrade. Fail closed, the
+        // same rule the certificate path above already follows.
         val fallback = RecordingVerifier(answer = true)
         val cas = InMemoryTrustedCaStore(listOf(trustedCa())).apply { readable = false }
         val verifier = HostCertificateVerifier(cas, fallback) { NOW }
 
-        assertTrue(verifier.verify(offer(cert = null)))
+        assertFalse(verifier.verify(offer(cert = null)))
+        assertTrue(fallback.seen.isEmpty())
     }
 
     @Test
-    fun `a certificate whose CA key did not parse never matches a stored authority`() {
+    fun `a certificate whose CA key did not parse is refused for a covered host`() {
         // Both fingerprints blank must not read as "the same CA": a corrupt synced record with an
-        // empty fingerprint would otherwise vouch for every unparsable certificate.
+        // empty fingerprint would otherwise vouch for every unparsable certificate. And since a CA
+        // does claim this host, an unusable certificate for it is a refusal, not a TOFU question.
         val fallback = RecordingVerifier(answer = true)
         val cas = InMemoryTrustedCaStore(listOf(trustedCa(fingerprint = "")))
         val verifier = HostCertificateVerifier(cas, fallback) { NOW }
 
+        assertFalse(verifier.verify(offer(cert = certificate(caFingerprint = ""))))
+        assertTrue(fallback.seen.isEmpty(), "must not be trusted, and must not reach TOFU either")
+    }
+
+    @Test
+    fun `a certificate whose CA key did not parse still reaches TOFU for an uncovered host`() {
+        val fallback = RecordingVerifier(answer = true)
+        val cas = InMemoryTrustedCaStore(listOf(trustedCa(pattern = "*.staging.example.com", fingerprint = "")))
+        val verifier = HostCertificateVerifier(cas, fallback) { NOW }
+
         assertTrue(verifier.verify(offer(cert = certificate(caFingerprint = ""))))
-        assertEquals(1, fallback.seen.size, "must fall through to TOFU, not be trusted")
+        assertEquals(1, fallback.seen.size)
+    }
+
+    @Test
+    fun `a CA pattern of a bare star claims every host`() {
+        // The most consequential thing a user can put in that field: every host becomes
+        // certificate-only, including ones they never had in mind.
+        val fallback = RecordingVerifier(answer = true)
+        val cas = InMemoryTrustedCaStore(listOf(trustedCa(pattern = "*")))
+        val verifier = HostCertificateVerifier(cas, fallback) { NOW }
+
+        assertFalse(verifier.verify(offer(cert = null, host = "unrelated.example.org")))
+        assertTrue(fallback.seen.isEmpty())
+    }
+
+    @Test
+    fun `a port-scoped CA pattern claims only the port it names`() {
+        // A bare pattern covers any port by design; the bracketed form pins one. The port has to take
+        // part in "claiming", or the same host reached on another port drops to TOFU unnoticed.
+        val fallback = RecordingVerifier(answer = true)
+        val cas = InMemoryTrustedCaStore(listOf(trustedCa(pattern = "[web-01.prod.example.com]:2222")))
+        val verifier = HostCertificateVerifier(cas, fallback) { NOW }
+
+        assertFalse(verifier.verify(offer(cert = null, port = 2222)), "claimed on the port the pattern names")
+        assertTrue(fallback.seen.isEmpty())
+
+        assertTrue(verifier.verify(offer(cert = null, port = 22)), "not claimed on any other port")
+        assertEquals(1, fallback.seen.size)
+    }
+
+    @Test
+    fun `a host the CA pattern excludes still reaches TOFU`() {
+        // `*.prod.example.com,!admin.prod.example.com` is the user saying that one box is not
+        // CA-backed. Refusing it would make the exclusion syntax unusable.
+        val fallback = RecordingVerifier(answer = true)
+        val cas = InMemoryTrustedCaStore(listOf(trustedCa(pattern = "*.prod.example.com,!admin.prod.example.com")))
+        val verifier = HostCertificateVerifier(cas, fallback) { NOW }
+
+        assertTrue(verifier.verify(offer(cert = null, host = "admin.prod.example.com")))
+        assertEquals(1, fallback.seen.size)
     }
 
     @Test
