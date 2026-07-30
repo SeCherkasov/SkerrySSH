@@ -66,6 +66,7 @@ class RdpRemoteDesktop(
             is RdpUpdate.PointerPosition -> RemoteDesktopUpdate.CursorPosition(update.x, update.y)
             is RdpUpdate.PointerVisible -> RemoteDesktopUpdate.CursorVisible(update.visible)
             is RdpUpdate.ClipboardText -> RemoteDesktopUpdate.ClipboardText(update.text)
+            is RdpUpdate.AudioPlayback -> RemoteDesktopUpdate.AudioPlaybackFailing(update.failing)
             is RdpUpdate.Bell -> RemoteDesktopUpdate.Bell
             is RdpUpdate.Closed -> RemoteDesktopUpdate.Closed(update.cleanExit, update.reason)
             // Frame markers pace the protocol and are acknowledged inside the codec; the screen has

@@ -3,6 +3,7 @@ package app.skerry.shared.ssh
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TofuHostKeyVerifierTest {
@@ -109,6 +110,32 @@ class TofuHostKeyVerifierTest {
 
         assertFalse(verifier.verify("example.com", 22, ed25519, fpA))
         assertEquals(emptyList(), store.all())
+    }
+
+    @Test
+    fun `names a changed key as such, so the UI can point at the known-hosts manager`() {
+        val store = InMemoryKnownHostsStore()
+        val verifier = TofuHostKeyVerifier(store)
+        verifier.verify("example.com", 22, ed25519, fpA)
+
+        assertEquals(HostKeyRefusal.KeyChanged, verifier.check("example.com", 22, ed25519, fpB))
+    }
+
+    @Test
+    fun `an unreadable store is not reported as a changed key`() {
+        // "Unlock the vault and retry" and "the host's key changed" are opposite conclusions; a
+        // locked vault must not read as the MITM signal.
+        val store = InMemoryKnownHostsStore().apply { readable = false }
+        val verifier = TofuHostKeyVerifier(store)
+
+        assertEquals(HostKeyRefusal.TrustStoreUnreadable, verifier.check("example.com", 22, ed25519, fpA))
+    }
+
+    @Test
+    fun `an accepted key has no refusal`() {
+        val verifier = TofuHostKeyVerifier(InMemoryKnownHostsStore())
+
+        assertNull(verifier.check("example.com", 22, ed25519, fpA))
     }
 
     @Test

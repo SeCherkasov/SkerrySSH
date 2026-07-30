@@ -12,8 +12,10 @@ import app.skerry.shared.serial.SerialUnavailableException
 import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.carriedBySsh
+import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
+import app.skerry.shared.ssh.SshHostKeyRejectedException
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.ShellChannel
 import app.skerry.shared.ssh.SshTransport
@@ -59,11 +61,12 @@ sealed interface ConnectionUiState {
     data class Connected(val terminal: TerminalScreenState) : ConnectionUiState
 
     /**
-     * Connect failed; [message] is shown to the user. [moshReason]/[moshDetail] and
-     * [serialProblem]/[serialDetail] are set when the failure is a typed Mosh setup or serial port
-     * problem — the view then renders a localized explanation (missing server package, locale,
-     * blocked UDP; port missing, permission denied) instead of the raw English [message]
-     * (see `connectionErrorText`); building the text here would bake in one language
+     * Connect failed; [message] is shown to the user. [moshReason]/[moshDetail],
+     * [serialProblem]/[serialDetail] and [hostKeyRefusal] are set when the failure is a typed Mosh
+     * setup, serial port or host key problem — the view then renders a localized explanation
+     * (missing server package, locale, blocked UDP; port missing, permission denied; key changed,
+     * host not trusted yet) instead of the raw English [message] (see `connectionErrorText`);
+     * building the text here would bake in one language
      * (same rule as [app.skerry.shared.sync.SyncFailureReason]).
      */
     data class Error(
@@ -72,6 +75,8 @@ sealed interface ConnectionUiState {
         val moshDetail: String? = null,
         val serialProblem: SerialProblem? = null,
         val serialDetail: String? = null,
+        val hostKeyRefusal: HostKeyRefusal? = null,
+        val hostKeyRefusalOnHop: Boolean = false,
     ) : ConnectionUiState
 
     /**
@@ -257,6 +262,8 @@ class ConnectionController(
                     moshDetail = (e as? MoshSetupException)?.detail,
                     serialProblem = serial?.problem,
                     serialDetail = serial?.detail,
+                    hostKeyRefusal = (e as? SshHostKeyRejectedException)?.refusal,
+                    hostKeyRefusalOnHop = (e as? SshHostKeyRejectedException)?.hop == true,
                 )
             }
         }

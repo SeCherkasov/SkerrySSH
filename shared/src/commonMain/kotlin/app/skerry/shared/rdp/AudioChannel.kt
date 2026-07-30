@@ -104,6 +104,22 @@ class AudioChannel(
         for (block in queue) player.play(block.format, block.pcm)
     }
 
+    /** What was last reported, so a state that hasn't moved produces no update. */
+    private var reportedFailure = false
+
+    /**
+     * The playback state, if it changed since the last call: true = the device stopped taking
+     * blocks, false = it is taking them again, null = no news. Drained by the session's read loop
+     * the way incoming clipboard text is — playback runs on its own thread and has no way to reach
+     * the update stream itself.
+     */
+    fun drainPlaybackChange(): Boolean? {
+        val failing = player.playbackFailed
+        if (failing == reportedFailure) return null
+        reportedFailure = failing
+        return failing
+    }
+
     /**
      * Silence the session's sound without touching the channel: blocks keep being parsed and
      * confirmed, they just never reach the device. Dropping the channel instead would be a one-way

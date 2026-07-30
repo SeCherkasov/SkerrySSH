@@ -146,10 +146,13 @@ class SshjHostCertificateTest {
     fun `rejects a certificate issued for a different host`() = runTest {
         startServer(hostCertificate(principals = listOf("other.example.com")))
 
-        assertFailsWith<SshHostKeyRejectedException> {
+        val rejection = assertFailsWith<SshHostKeyRejectedException> {
             SshjTransport(verifier(listOf(trustedCa()), RecordingKnownHosts()))
                 .connect(target(), SshAuth.Password(CERT_PASSWORD))
         }
+        // sshj fails the certificate during KEX, so our verifier never runs and the reason is the
+        // transport's own — the one path no unit test on the verifiers can reach.
+        assertEquals(HostKeyRefusal.CertificateRejected, rejection.refusal)
     }
 
     @Test
@@ -161,10 +164,11 @@ class SshjHostCertificateTest {
             ),
         )
 
-        assertFailsWith<SshHostKeyRejectedException> {
+        val rejection = assertFailsWith<SshHostKeyRejectedException> {
             SshjTransport(verifier(listOf(trustedCa()), RecordingKnownHosts()))
                 .connect(target(), SshAuth.Password(CERT_PASSWORD))
         }
+        assertEquals(HostKeyRefusal.CertificateRejected, rejection.refusal)
     }
 
     @Test

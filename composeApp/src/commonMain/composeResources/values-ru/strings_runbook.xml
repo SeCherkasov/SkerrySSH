@@ -37,6 +37,7 @@
 
     <!-- Run panel -->
     <string name="runbook_panel_running">Выполняется</string>
+    <string name="runbook_panel_stalled">Ни вывода, ни статуса — оболочка может ждать ввода. Посмотрите в терминал.</string>
     <string name="runbook_panel_waiting">Ждёт вас</string>
     <string name="runbook_panel_done">Завершён</string>
     <string name="runbook_panel_done_with_failures">Завершён с ошибками</string>

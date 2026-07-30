@@ -75,6 +75,18 @@ class RunbookStepState internal constructor(val index: Int, val step: RunbookSte
     /** Exit code the shell reported, once it has; `null` while the step hasn't finished. */
     var exitCode: Int? by mutableStateOf(null)
         internal set
+
+    /**
+     * The step has printed nothing for a long while and still hasn't reported a status — the shape
+     * a step takes when nothing will ever print its marker: an unterminated here-doc or quote leaves
+     * the shell at its continuation prompt, `exec` replaces the shell that would have printed it, a
+     * non-POSIX shell never had `$?` to print.
+     *
+     * A guess, deliberately: `sleep 3600` and a silent migration look identical from here. So it
+     * only marks the step, never ends it — see [RunbookRunner.watch].
+     */
+    var stalled: Boolean by mutableStateOf(false)
+        internal set
 }
 
 /**
@@ -104,6 +116,12 @@ class RunbookRunner(
      * quick step doesn't feel stalled, large enough that scanning the tail is free in comparison.
      */
     private val pollIntervalMillis: Long = 120L,
+    /**
+     * How long a running step may print nothing before it is marked as possibly stuck
+     * ([RunbookStepState.stalled]). Long enough that an ordinary quiet stretch — a package download,
+     * a `sleep`, a compile that only speaks at the end — passes unremarked.
+     */
+    private val stallAfterMillis: Long = 120_000L,
 ) {
     var runbook: Runbook? by mutableStateOf(null)
         private set
@@ -226,14 +244,18 @@ class RunbookRunner(
      */
     fun stop() {
         if (!active) return
+        // The step's own state is settled inside the same critical section as the generation bump:
+        // markStalled re-reads the generation under this lock, so a poll racing Stop is refused
+        // rather than allowed to re-flag a step this call has just finished with.
         synchronized(lock) {
             generation++
             watchJob?.cancel()
             watchJob = null
-        }
-        steps.getOrNull(currentIndex)?.let {
-            if (it.status == RunbookStepStatus.RUNNING || it.status == RunbookStepStatus.AWAITING_CONFIRM) {
-                it.status = RunbookStepStatus.STOPPED
+            steps.getOrNull(currentIndex)?.let {
+                if (it.status == RunbookStepStatus.RUNNING || it.status == RunbookStepStatus.AWAITING_CONFIRM) {
+                    it.status = RunbookStepStatus.STOPPED
+                }
+                it.stalled = false // the run is over; nothing is waiting on this step any more
             }
         }
         phase = RunbookPhase.STOPPED
@@ -299,11 +321,16 @@ class RunbookRunner(
      * There is deliberately no per-step timeout — a migration or a package build legitimately takes
      * an hour, and killing the procedure on a guess would be worse than waiting. A step that can
      * never report (a shell without `$?`, a command still waiting on stdin) is ended by the user
-     * with [stop].
+     * with [stop] — so the run says when a step looks like that one
+     * ([RunbookStepState.stalled]) instead of waiting silently forever: no output for
+     * [stallAfterMillis] and no marker. Only the terminal's size and hash are kept between polls,
+     * never its text — a step's resolved line can carry a `${'$'}{{vault}}` secret and the run stores none.
      */
     private fun watch(index: Int, token: String, target: RunbookTarget) {
         val generationAtStart = synchronized(lock) { generation }
         val job = scope.launch {
+            var lastPrint: Pair<Int, Int>? = null
+            var quietMillis = 0L
             while (true) {
                 delay(pollIntervalMillis)
                 if (stale(generationAtStart)) return@launch
@@ -311,7 +338,15 @@ class RunbookRunner(
                     stop()
                     return@launch
                 }
-                val code = RunbookMarker.exitCodeIn(target.readOutput(), token) ?: continue
+                val text = target.readOutput()
+                val print = text.length to text.hashCode()
+                if (print == lastPrint) quietMillis += pollIntervalMillis else quietMillis = 0
+                lastPrint = print
+                val code = RunbookMarker.exitCodeIn(text, token)
+                if (code == null) {
+                    markStalled(index, generationAtStart, quietMillis >= stallAfterMillis)
+                    continue
+                }
                 // Check-then-act under the lock: without it a Stop landing between the check and
                 // finishStep would still let the run advance and send the next command.
                 synchronized(lock) {
@@ -330,9 +365,21 @@ class RunbookRunner(
 
     private fun stale(generationAtStart: Int): Boolean = synchronized(lock) { generationAtStart != generation }
 
+    /**
+     * Marks (or unmarks) step [index] as possibly stuck, under the same generation guard as
+     * [finishStep]: a poll landing just after Stop must not put a warning on a run that is over.
+     */
+    private fun markStalled(index: Int, generationAtStart: Int, stalled: Boolean) = synchronized(lock) {
+        if (generationAtStart != generation) return@synchronized
+        val state = steps.getOrNull(index) ?: return@synchronized
+        if (state.stalled != stalled) state.stalled = stalled
+    }
+
     private fun finishStep(index: Int, exitCode: Int) {
         val state = steps.getOrNull(index) ?: return
         state.exitCode = exitCode
+        // It reported after all: whatever the warning said, the step was only slow.
+        state.stalled = false
         if (exitCode == 0) {
             state.status = RunbookStepStatus.SUCCEEDED
             advance(index + 1)

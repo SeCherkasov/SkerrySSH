@@ -60,7 +60,7 @@ class ShellCommandChannelTest {
     }
 
     private suspend fun connect(target: SshTarget): SshConnection =
-        SshjTransport(HostKeyVerifier { true }).connect(target, SshAuth.Password(PASSWORD))
+        SshjTransport(HostKeyVerifier { null }).connect(target, SshAuth.Password(PASSWORD))
 
     private fun target(command: List<String>? = null) = SshTarget(
         host = "127.0.0.1",
@@ -101,7 +101,7 @@ class ShellCommandChannelTest {
 
     @Test
     fun `a container profile execs into the container over ssh`() = runBlocking {
-        val transport = ContainerTransport(SshjTransport(HostKeyVerifier { true }))
+        val transport = ContainerTransport(SshjTransport(HostKeyVerifier { null }))
         val connection = transport.connect(
             SshTarget(
                 host = "127.0.0.1",

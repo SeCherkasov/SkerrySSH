@@ -180,14 +180,49 @@ data class OfferedHostCertificate(
     val criticalOptions: List<String> = emptyList(),
 )
 
+/**
+ * Why a host key was refused. Four situations that a yes/no verdict collapses into one
+ * "host key rejected", though what the user has to do about them could not differ more: resolve a
+ * key change, connect once from a terminal, unlock the vault, or fix the certificate.
+ *
+ * Coarse on purpose — this crosses into the UI, and a reason exists only where it changes the
+ * advice given. [CertificateRejected] covers every way a certificate can fail for that reason:
+ * naming them (expired / wrong principal / unknown CA) would tell an on-path server which lie
+ * came closest.
+ */
+enum class HostKeyRefusal {
+    /** A key is trusted for this host and the server offered a different one — the MITM signal. */
+    KeyChanged,
+
+    /**
+     * No key is trusted for this host yet, and this connection is not allowed to establish trust
+     * (see [UnknownHost.Refuse]) — a tunnel activating with nobody watching.
+     */
+    NotTrustedYet,
+
+    /** The trusted set could not be read (locked vault): fail closed, decide nothing. */
+    TrustStoreUnreadable,
+
+    /** A trusted CA claims this host, and what the server offered is not a certificate that holds up. */
+    CertificateRejected,
+}
+
 /** Trust decision for a host key. See [HostKeyOffer]. */
 fun interface HostKeyVerifier {
-    fun verify(offer: HostKeyOffer): Boolean
+    /** @return `null` when the key may be used, otherwise why it was refused. */
+    fun check(offer: HostKeyOffer): HostKeyRefusal?
+
+    /** [check] as a yes/no, for call sites that only branch on the outcome. */
+    fun verify(offer: HostKeyOffer): Boolean = check(offer) == null
 }
 
 /** Trust decision for a plain (non-certificate) host key — the shorthand used by tests and probes. */
 fun HostKeyVerifier.verify(host: String, port: Int, keyType: String, fingerprint: String): Boolean =
     verify(HostKeyOffer(host, port, keyType, fingerprint))
+
+/** [check] for a plain (non-certificate) host key. */
+fun HostKeyVerifier.check(host: String, port: Int, keyType: String, fingerprint: String): HostKeyRefusal? =
+    check(HostKeyOffer(host, port, keyType, fingerprint))
 
 /**
  * One prompt of a keyboard-interactive exchange (RFC 4256). [text] is the server's wording verbatim
@@ -395,6 +430,21 @@ open class SshException(message: String, cause: Throwable? = null) : Exception(m
 
 class SshConnectionException(message: String, cause: Throwable? = null) : SshException(message, cause)
 
-class SshHostKeyRejectedException(message: String, cause: Throwable? = null) : SshException(message, cause)
+/**
+ * The host key was not trusted. [refusal] is why, when the transport could tell — the UI turns it
+ * into advice the user can act on; null where the rejection came from somewhere without a reason to
+ * report. [message] stays English diagnostics, as everywhere in the transport.
+ */
+class SshHostKeyRejectedException(
+    message: String,
+    val refusal: HostKeyRefusal? = null,
+    /**
+     * The key belonged to a ProxyJump hop, not to the host being dialed. Kept apart from [refusal]
+     * because the advice is useless without it: told only "host key changed", the user inspects the
+     * target's fingerprint and finds it untouched while the bastion is the one that rotated.
+     */
+    val hop: Boolean = false,
+    cause: Throwable? = null,
+) : SshException(message, cause)
 
 class SshAuthenticationException(message: String, cause: Throwable? = null) : SshException(message, cause)

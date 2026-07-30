@@ -22,6 +22,24 @@ import kotlin.test.assertTrue
 class RemoteDesktopScreenStateTest {
 
     @Test
+    fun a_dead_audio_device_is_visible_on_the_screen_state() = runTest {
+        // The mute switch stays on while nothing comes out: only this flag separates "you silenced
+        // it" from "the device died", and the panel has nothing else to show.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val screen = RemoteDesktopScreenState(FakeRemoteDesktop(updates = updates), scope)
+
+        assertFalse(screen.audioFailed)
+        updates.emit(RemoteDesktopUpdate.AudioPlaybackFailing(failing = true))
+        assertTrue(screen.audioFailed)
+        assertFalse(screen.audioMuted) // the user never touched the switch
+
+        updates.emit(RemoteDesktopUpdate.AudioPlaybackFailing(failing = false))
+        assertFalse(screen.audioFailed)
+        scope.cancel()
+    }
+
+    @Test
     fun region_update_bumps_the_frame_counter() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)

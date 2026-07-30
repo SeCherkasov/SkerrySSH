@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
 private const val USER = "skerry"
 private const val PASSWORD = "correct horse battery staple"
 
-private val acceptAllKeys = HostKeyVerifier { true }
+private val acceptAllKeys = HostKeyVerifier { null }
 
 /** Integration tests for SshjTransport against an embedded Apache MINA SSHD. */
 class SshjTransportTest {
@@ -167,12 +167,15 @@ class SshjTransportTest {
         val rejecting = HostKeyVerifier { offer ->
             seenKeyType = offer.keyType
             seenFingerprint = offer.fingerprint
-            false
+            HostKeyRefusal.KeyChanged
         }
 
-        assertFailsWith<SshHostKeyRejectedException> {
+        val rejection = assertFailsWith<SshHostKeyRejectedException> {
             SshjTransport(rejecting).connect(target(), SshAuth.Password(PASSWORD))
         }
+        // The verifier runs on sshj's IO thread and the reason is read back here: without this the
+        // transport could drop it and every other assertion would still hold.
+        assertEquals(HostKeyRefusal.KeyChanged, rejection.refusal)
         assertTrue(!seenKeyType.isNullOrBlank(), "verifier should receive the key type")
         assertTrue(
             seenFingerprint.orEmpty().startsWith("SHA256:"),

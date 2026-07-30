@@ -38,5 +38,6 @@
     <string name="rd_clipboard_copy_here">Copy here</string>
     <string name="rd_clipboard_send">Send mine</string>
     <string name="rd_audio">Sound</string>
+    <string name="rd_audio_device_lost">The audio device stopped taking sound. Pick another output in the profile, then reconnect.</string>
     <string name="rd_clipboard_share">Share the clipboard</string>
 </resources>

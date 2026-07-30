@@ -106,41 +106,46 @@ class HostCertificateVerifier(
     private val nowEpochSeconds: () -> Long,
 ) : HostKeyVerifier {
 
-    override fun verify(offer: HostKeyOffer): Boolean {
+    override fun check(offer: HostKeyOffer): HostKeyRefusal? {
         // Read before anything else: deciding a bare key needs the trusted set too, now that a CA
         // claiming the host is what makes that key inadmissible.
-        val trusted = cas.allOrNull() ?: return false
+        val trusted = cas.allOrNull() ?: return HostKeyRefusal.TrustStoreUnreadable
         val claiming = trusted.filter { HostPattern.matches(it.hostPattern, offer.host, offer.port) }
         val certificate = offer.certificate
-            ?: return if (claiming.isEmpty()) fallback.verify(offer) else false
+            ?: return if (claiming.isEmpty()) fallback.check(offer) else HostKeyRefusal.CertificateRejected
         // A blank fingerprint means the CA key didn't parse; it must not match a stored entry whose
         // own fingerprint is blank (a corrupt or hand-edited synced record).
         if (certificate.caFingerprint.isBlank()) return unclaimedFallback(claiming, offer)
         if (claiming.none { it.fingerprint == certificate.caFingerprint }) return unclaimedFallback(claiming, offer)
 
-        if (!certificate.caSignatureVerified) return false
-        if (!certificate.hostCertificate) return false
-        if (certificate.criticalOptions.isNotEmpty()) return false
+        // One reason for every failed check below, on purpose: which one it was is a hint to whoever
+        // offered the certificate, and the user's move — inspect what the host serves — is the same.
+        if (!certificate.caSignatureVerified) return HostKeyRefusal.CertificateRejected
+        if (!certificate.hostCertificate) return HostKeyRefusal.CertificateRejected
+        if (certificate.criticalOptions.isNotEmpty()) return HostKeyRefusal.CertificateRejected
         val now = nowEpochSeconds()
-        if (now < certificate.validAfterEpochSeconds || now >= certificate.validBeforeEpochSeconds) return false
+        if (now < certificate.validAfterEpochSeconds || now >= certificate.validBeforeEpochSeconds) {
+            return HostKeyRefusal.CertificateRejected
+        }
         // Bound the work a hostile server can ask for: an offered certificate can list any number
         // of principals, each matched against the host.
         if (certificate.principals.isNotEmpty() &&
             certificate.principals.asSequence().take(MAX_PRINCIPALS).none { principalMatches(it, offer.host) }
         ) {
-            return false
+            return HostKeyRefusal.CertificateRejected
         }
         // Deliberately no store write: see the class doc — certificates rotate, trust is in the CA.
-        return true
+        return null
     }
 
     /**
      * A certificate this class cannot use: TOFU decides only if no CA claims the host, and then on
      * the key inside the certificate rather than the certificate itself, whose fingerprint changes
-     * on every re-issue.
+     * on every re-issue. TOFU's own reason is passed through — the host it refused is not a
+     * certificate host, and saying so would send the user after the wrong thing.
      */
-    private fun unclaimedFallback(claiming: List<TrustedCa>, offer: HostKeyOffer): Boolean =
-        if (claiming.isEmpty()) fallback.verify(offer.bareKey()) else false
+    private fun unclaimedFallback(claiming: List<TrustedCa>, offer: HostKeyOffer): HostKeyRefusal? =
+        if (claiming.isEmpty()) fallback.check(offer.bareKey()) else HostKeyRefusal.CertificateRejected
 
     private fun principalMatches(principal: String, host: String): Boolean =
         principal.length <= HostPattern.MAX_PATTERN_LENGTH && globMatches(principal.lowercase(), host.lowercase())

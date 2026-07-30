@@ -13,14 +13,16 @@ import app.skerry.ui.generated.resources.mosh_err_udp
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * User-facing text for a connect error, localized for typed Mosh and serial failures. Mosh problems
- * are almost always server-side and fixable — Skerry ships only the client, so the message must
- * say what to do on the server (install the package, generate a locale, open UDP) instead of
- * leaking a raw exception string; serial problems say what to do with the device. Everything else
- * keeps the transport's message as before.
+ * User-facing text for a connect error, localized for typed Mosh, serial and host key failures.
+ * Mosh problems are almost always server-side and fixable — Skerry ships only the client, so the
+ * message must say what to do on the server (install the package, generate a locale, open UDP)
+ * instead of leaking a raw exception string; serial problems say what to do with the device, and a
+ * refused host key what to do about the trust. Everything else keeps the transport's message as
+ * before.
  */
 @Composable
 fun connectionErrorText(error: ConnectionUiState.Error): String {
+    error.hostKeyRefusal?.let { return hostKeyRefusalLine(it, error.hostKeyRefusalOnHop) }
     error.serialProblem?.let { return serialProblemText(it, error.serialDetail) }
     val reason = error.moshReason ?: return error.message.takeIf { it.isNotBlank() }
         ?.let { stringResource(Res.string.conn_error_failed_detail, it) }

@@ -28,7 +28,7 @@ private const val PROMPT = "Verification code:"
 private const val NAME = "Two-factor authentication"
 private const val INSTRUCTION = "Enter the code from your authenticator app"
 
-private val trustAll = HostKeyVerifier { true }
+private val trustAll = HostKeyVerifier { null }
 
 /**
  * Integration tests for keyboard-interactive authentication against an embedded Apache MINA SSHD:
