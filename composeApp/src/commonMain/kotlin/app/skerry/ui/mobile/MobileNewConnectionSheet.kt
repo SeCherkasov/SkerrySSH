@@ -385,9 +385,9 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                         )
                         when {
                             auth == null || form.address.isBlank() || form.username.isBlank() || form.portOrNull == null ->
-                                browser?.fail(ContainerBrowseProblem.INCOMPLETE_FORM)
+                                browser?.fail(ContainerBrowseProblem.IncompleteForm)
                             jump is JumpChainResolution.Unavailable ->
-                                browser?.fail(ContainerBrowseProblem.CONNECTION_FAILED)
+                                browser?.fail(ContainerBrowseProblem.ConnectionFailed)
                             else -> browser?.load(
                                 SshTarget(
                                     form.address.trim(), form.portOrNull ?: 22, form.username.trim(),

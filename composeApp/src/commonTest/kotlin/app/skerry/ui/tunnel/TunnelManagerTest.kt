@@ -1,9 +1,12 @@
 package app.skerry.ui.tunnel
 
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.conn_err_hostkey_changed
+import app.skerry.ui.generated.resources.conn_err_hostkey_untrusted
 import app.skerry.ui.generated.resources.ptail_err_host_not_trusted
 import org.jetbrains.compose.resources.getString
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
 import app.skerry.shared.ssh.LocalForwardSpec
@@ -168,6 +171,37 @@ class TunnelManagerTest {
         // doesn't depend on the machine locale.
         assertEquals(getString(Res.string.ptail_err_host_not_trusted), status.message)
         assertTrue(conn.disconnected) // connection not leaked
+    }
+
+    @Test
+    fun `a host with no known key tells the user how to make it known`() = runTest {
+        // The refusal a tunnel actually hits: it dials with UnknownHost.Refuse, so a host nobody
+        // has ever opened a terminal to is turned away. Without the hint the failure is unreadable —
+        // the tunnel form never asked about host keys.
+        val conn = FakeTunnelConnection(
+            localError = SshHostKeyRejectedException("no", HostKeyRefusal.NotTrustedYet),
+        )
+        val manager = managerWith(FakeTunnelTransport(conn))
+        val id = manager.save(localDraft())
+
+        manager.activate(id)
+
+        val status = assertIs<TunnelStatus.Failed>(manager.tunnels.single().status)
+        assertEquals(getString(Res.string.conn_err_hostkey_untrusted), status.message)
+    }
+
+    @Test
+    fun `a changed host key is not reported as an untrusted one`() = runTest {
+        val conn = FakeTunnelConnection(
+            localError = SshHostKeyRejectedException("changed", HostKeyRefusal.KeyChanged),
+        )
+        val manager = managerWith(FakeTunnelTransport(conn))
+        val id = manager.save(localDraft())
+
+        manager.activate(id)
+
+        val status = assertIs<TunnelStatus.Failed>(manager.tunnels.single().status)
+        assertEquals(getString(Res.string.conn_err_hostkey_changed), status.message)
     }
 
     @Test

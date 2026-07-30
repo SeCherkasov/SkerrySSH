@@ -301,6 +301,56 @@ class HostCertificateVerifierTest {
     }
 
     @Test
+    fun `every way a claimed host fails its certificate reports the same reason`() {
+        // Deliberately one reason for all of them: naming which check failed would tell an on-path
+        // server how close its forgery came. The user's move is the same in every case — look at
+        // the certificate the host serves.
+        val cas = { InMemoryTrustedCaStore(listOf(trustedCa())) }
+        val refused = listOf(
+            "bare key" to offer(cert = null),
+            "another CA" to offer(certificate(caFingerprint = OTHER_CA_FP)),
+            "signature unchecked" to offer(certificate(caSignatureVerified = false)),
+            "user certificate" to offer(certificate(hostCertificate = false)),
+            "critical option" to offer(certificate(criticalOptions = listOf("force-command"))),
+            "expired" to offer(certificate(validBefore = NOW - 1)),
+            "wrong principal" to offer(certificate(principals = listOf("db-01.prod.example.com"))),
+        )
+
+        for ((case, refusedOffer) in refused) {
+            val verifier = HostCertificateVerifier(cas(), RecordingVerifier()) { NOW }
+            assertEquals(HostKeyRefusal.CertificateRejected, verifier.check(refusedOffer), case)
+        }
+    }
+
+    @Test
+    fun `an unreadable CA store is named as such, not as a certificate problem`() {
+        // The vault locked mid-handshake: nothing about the certificate is known yet, and the fix
+        // is to unlock and retry.
+        val cas = InMemoryTrustedCaStore(listOf(trustedCa())).apply { readable = false }
+        val verifier = HostCertificateVerifier(cas, RecordingVerifier()) { NOW }
+
+        assertEquals(HostKeyRefusal.TrustStoreUnreadable, verifier.check(offer()))
+    }
+
+    @Test
+    fun `the fallback's reason is passed through for a host no CA claims`() {
+        // TOFU decided, so its verdict — "this host's key changed" — is what the user must see,
+        // not a certificate story about a host that has nothing to do with certificates.
+        val fallback = RecordingVerifier(answer = false, refusal = HostKeyRefusal.KeyChanged)
+        val cas = InMemoryTrustedCaStore(listOf(trustedCa(pattern = "*.staging.example.com")))
+        val verifier = HostCertificateVerifier(cas, fallback) { NOW }
+
+        assertEquals(HostKeyRefusal.KeyChanged, verifier.check(offer(cert = null)))
+    }
+
+    @Test
+    fun `an accepted certificate has no refusal`() {
+        val verifier = HostCertificateVerifier(InMemoryTrustedCaStore(listOf(trustedCa())), RecordingVerifier()) { NOW }
+
+        assertNull(verifier.check(offer()))
+    }
+
+    @Test
     fun `picks the CA that covers the host among several`() {
         val fallback = RecordingVerifier(answer = true)
         val cas = InMemoryTrustedCaStore(
@@ -316,12 +366,15 @@ class HostCertificateVerifierTest {
     }
 }
 
-/** Records what it was asked about; answers [answer]. */
-private class RecordingVerifier(private val answer: Boolean = true) : HostKeyVerifier {
+/** Records what it was asked about; accepts when [answer], otherwise refuses with [refusal]. */
+private class RecordingVerifier(
+    private val answer: Boolean = true,
+    private val refusal: HostKeyRefusal = HostKeyRefusal.KeyChanged,
+) : HostKeyVerifier {
     val seen = mutableListOf<HostKeyOffer>()
-    override fun verify(offer: HostKeyOffer): Boolean {
+    override fun check(offer: HostKeyOffer): HostKeyRefusal? {
         seen += offer
-        return answer
+        return if (answer) null else refusal
     }
 }
 

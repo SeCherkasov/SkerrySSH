@@ -29,7 +29,7 @@ private const val USER = "skerry"
 private const val PASSWORD = "correct horse battery staple"
 private const val README_BODY = "hello sftp\n"
 
-private val acceptAllKeys = HostKeyVerifier { true }
+private val acceptAllKeys = HostKeyVerifier { null }
 
 /**
  * Integration tests for [SshjSftpClient] against an embedded Apache MINA SSHD with an SFTP subsystem.

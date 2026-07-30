@@ -15,6 +15,7 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshAuthenticationException
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshConnectionException
+import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.SshHostKeyRejectedException
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
@@ -77,7 +78,7 @@ class ContainerBrowseTest {
             FakeConnection(stdout = "", stderr = "docker: command not found", exitCode = 127),
         )
         val result = listContainers(transport, target, auth, ContainerSpec())
-        assertEquals(ContainerBrowseStatus.Failure(ContainerBrowseProblem.COMMAND_FAILED), result)
+        assertEquals(ContainerBrowseStatus.Failure(ContainerBrowseProblem.CommandFailed), result)
         assertTrue(transport.connection.disconnected)
     }
 
@@ -93,10 +94,23 @@ class ContainerBrowseTest {
             val status = listContainers(FailingTransport(error), target, auth, ContainerSpec())
             return (status as ContainerBrowseStatus.Failure).problem
         }
-        assertEquals(ContainerBrowseProblem.AUTHENTICATION_FAILED, problemFor(SshAuthenticationException("no")))
-        assertEquals(ContainerBrowseProblem.HOST_KEY_REJECTED, problemFor(SshHostKeyRejectedException("no")))
-        assertEquals(ContainerBrowseProblem.CONNECTION_FAILED, problemFor(SshConnectionException("no")))
-        assertEquals(ContainerBrowseProblem.CONNECTION_FAILED, problemFor(IllegalStateException("boom")))
+        assertEquals(ContainerBrowseProblem.AuthenticationFailed, problemFor(SshAuthenticationException("no")))
+        assertEquals(ContainerBrowseProblem.HostKeyRejected(), problemFor(SshHostKeyRejectedException("no")))
+        assertEquals(ContainerBrowseProblem.ConnectionFailed, problemFor(SshConnectionException("no")))
+        assertEquals(ContainerBrowseProblem.ConnectionFailed, problemFor(IllegalStateException("boom")))
+    }
+
+    @Test
+    fun a_rejected_host_key_keeps_why_it_was_refused() = runTest {
+        // The probe reconnects to a host the user already has a trusted session with, so the two
+        // reasons it can really hit — the key changed since, or the vault locked in between — have
+        // different fixes and must not collapse into one line.
+        val error = SshHostKeyRejectedException("no", HostKeyRefusal.KeyChanged)
+        val status = listContainers(FailingTransport(error), target, auth, ContainerSpec())
+        assertEquals(
+            ContainerBrowseStatus.Failure(ContainerBrowseProblem.HostKeyRejected(HostKeyRefusal.KeyChanged)),
+            status,
+        )
     }
 }
 

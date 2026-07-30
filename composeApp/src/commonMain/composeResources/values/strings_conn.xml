@@ -165,4 +165,10 @@
     <string name="conn_clipboard_share_desc">Text copied on either side becomes available on the other, for as long as the session is open.</string>
     <string name="conn_audio_output_device">Output device</string>
     <string name="conn_audio_device_default">System default</string>
+    <!-- Host key refusals (HostKeyRefusal) — one line each, ending in what to do -->
+    <string name="conn_err_hostkey_changed">Host key changed. Resolve it in Known hosts.</string>
+    <string name="conn_err_hostkey_untrusted">Host key not trusted yet. Connect once from a terminal, or add its CA in Known hosts.</string>
+    <string name="conn_err_hostkey_locked">Vault locked: host key trust can\'t be read. Unlock and retry.</string>
+    <string name="conn_err_hostkey_cert">This host must present a certificate from a trusted CA; what it offered was refused.</string>
+    <string name="conn_err_hostkey_jump">Jump host — %1$s</string>
 </resources>
