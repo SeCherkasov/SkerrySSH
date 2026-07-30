@@ -336,7 +336,10 @@ private fun SettingsMenu(screen: RemoteDesktopScreenState, showResetZoom: Boolea
             CheckRow(stringResource(Res.string.rd_audio), !screen.audioMuted, screen::toggleAudioMuted)
             // The switch says sound is on while nothing comes out: without this line the only
             // witness to a device that died mid-session is a trace nobody has turned on.
-            if (screen.audioFailed) {
+            // Hidden while muted: muting stops the writes, so the player can never see a device
+            // take blocks again, and the line would sit under an off switch for the rest of the
+            // session telling the user to reconnect.
+            if (screen.audioFailed && !screen.audioMuted) {
                 Txt(
                     stringResource(Res.string.rd_audio_device_lost),
                     color = Skerry.colors.sunset,
