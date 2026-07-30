@@ -52,6 +52,7 @@ import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
+import app.skerry.shared.ssh.hasAiPolicy
 import app.skerry.shared.ssh.isRdp
 import app.skerry.shared.ssh.isVnc
 import app.skerry.ui.host.HostSection
@@ -105,6 +106,7 @@ import app.skerry.ui.generated.resources.conn_field_notes
 import app.skerry.ui.generated.resources.conn_field_tags
 import app.skerry.ui.generated.resources.conn_notes_placeholder
 import app.skerry.ui.generated.resources.conn_field_domain
+import app.skerry.ui.generated.resources.conn_field_image_quality
 import app.skerry.ui.generated.resources.conn_field_username
 import app.skerry.ui.generated.resources.conn_group_delete
 import app.skerry.ui.generated.resources.conn_group_new
@@ -356,6 +358,10 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     app.skerry.ui.host.RdpClipboardSection(form)
                 }
                 Spacer(Modifier.height(14.dp))
+                MobileFormField(stringResource(Res.string.conn_field_image_quality)) {
+                    app.skerry.ui.host.RdpQualitySection(form)
+                }
+                Spacer(Modifier.height(14.dp))
             } else if (form.connectionType.isVnc) {
                 // VNC: a password (no username), plus the RFB port. No jump host / keep-alive.
                 MobileFormField(stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
@@ -435,8 +441,8 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 )
             }
 
-            // AI policy: not for VNC (a remote desktop has no shell for AI to act on).
-            if (!form.connectionType.isVnc && (LocalFeatures.current.ai || LocalAi.current != null)) {
+            // AI policy: not for a remote desktop (VNC and RDP have no shell for AI to act on).
+            if (form.connectionType.hasAiPolicy && (LocalFeatures.current.ai || LocalAi.current != null)) {
                 Spacer(Modifier.height(14.dp))
                 MobileFormField(stringResource(Res.string.conn_field_ai_policy_short)) { AiPolicyPills(form) }
             }

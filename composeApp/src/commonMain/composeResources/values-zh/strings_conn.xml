@@ -165,6 +165,12 @@
     <string name="conn_clipboard_share_desc">会话打开期间，任一侧复制的文本都可在另一侧使用。</string>
     <string name="conn_audio_output_device">输出设备</string>
     <string name="conn_audio_device_default">系统默认</string>
+    <!-- RDP image quality (profile setting: RDP settles the picture at connect time) -->
+    <string name="conn_field_image_quality">画质</string>
+    <string name="conn_image_quality_low_desc">无壁纸、主题、动画和光标效果。</string>
+    <string name="conn_image_quality_medium_desc">无壁纸、主题和动画。</string>
+    <string name="conn_image_quality_high_desc">完整桌面、字体平滑与桌面合成。</string>
+    <string name="conn_image_quality_note">在连接时生效，RDP 会将其固定为整个会话的设置。</string>
     <!-- Host key refusals (HostKeyRefusal) — one line each, ending in what to do -->
     <string name="conn_err_hostkey_changed">主机密钥已更改。请在「已知主机」中处理。</string>
     <string name="conn_err_hostkey_untrusted">主机密钥尚未受信任。请先用终端连接一次，或在「已知主机」中添加其 CA。</string>

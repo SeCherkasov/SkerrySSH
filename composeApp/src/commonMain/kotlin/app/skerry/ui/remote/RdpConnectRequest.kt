@@ -1,5 +1,7 @@
 package app.skerry.ui.remote
 
+import app.skerry.shared.rdp.RdpImageQuality
+
 /**
  * What an RDP tab needs to dial, resolved from the host profile and the vault before the tab opens.
  *
@@ -24,6 +26,8 @@ data class RdpConnectRequest(
     val audioDeviceId: String = "",
     /** Share the clipboard with the session, in both directions (the profile's setting). */
     val clipboard: Boolean = true,
+    /** How much of the desktop to ask for; fixed for the session once the connection is made. */
+    val imageQuality: RdpImageQuality = RdpImageQuality.DEFAULT,
 ) {
     /** The domain half of `DOMAIN\user`, or empty when the name carries none. */
     val domain: String get() = username.substringBefore('\\', missingDelimiterValue = "")

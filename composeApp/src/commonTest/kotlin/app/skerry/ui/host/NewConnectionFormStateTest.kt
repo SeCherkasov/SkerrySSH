@@ -171,6 +171,26 @@ class NewConnectionFormStateTest {
     }
 
     @Test
+    fun rdp_image_quality_travels_into_the_draft_and_back_out_of_the_profile() {
+        val f = NewConnectionFormState().apply { name = "desk"; address = "10.0.0.9"; username = "admin" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.RDP)
+        // The default is the picture every RDP session had before the profile could choose, so an
+        // untouched form still saves no RDP settings at all.
+        assertEquals(app.skerry.shared.rdp.RdpImageQuality.Medium, f.rdpQuality)
+        assertNull(f.toDraft().rdp)
+
+        f.rdpQuality = app.skerry.shared.rdp.RdpImageQuality.High
+        assertEquals(app.skerry.shared.rdp.RdpImageQuality.High, checkNotNull(f.toDraft().rdp).quality)
+
+        val host = Host(
+            "1", "desk", "10.0.0.9", 3389, "admin",
+            connectionType = app.skerry.shared.ssh.ConnectionType.RDP,
+            rdp = app.skerry.shared.rdp.RdpSpec(quality = app.skerry.shared.rdp.RdpImageQuality.Low),
+        )
+        assertEquals(app.skerry.shared.rdp.RdpImageQuality.Low, NewConnectionFormState.fromHost(host).rdpQuality)
+    }
+
+    @Test
     fun rdp_form_carries_the_farm_routing_token_it_was_prefilled_with() {
         // The token isn't editable (it comes from an imported .rdp file), but the form is what hands
         // the profile's RDP settings back on save — dropping it would send the next connection to an

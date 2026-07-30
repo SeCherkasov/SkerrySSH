@@ -165,6 +165,12 @@
     <string name="conn_clipboard_share_desc">Text copied on either side becomes available on the other, for as long as the session is open.</string>
     <string name="conn_audio_output_device">Output device</string>
     <string name="conn_audio_device_default">System default</string>
+    <!-- RDP image quality (profile setting: RDP settles the picture at connect time) -->
+    <string name="conn_field_image_quality">Image quality</string>
+    <string name="conn_image_quality_low_desc">No wallpaper, themes, animations or cursor effects.</string>
+    <string name="conn_image_quality_medium_desc">No wallpaper, themes or animations.</string>
+    <string name="conn_image_quality_high_desc">Full desktop, font smoothing and composition.</string>
+    <string name="conn_image_quality_note">Applied when the session connects; RDP fixes it for the whole session.</string>
     <!-- Host key refusals (HostKeyRefusal) — one line each, ending in what to do -->
     <string name="conn_err_hostkey_changed">Host key changed. Resolve it in Known hosts.</string>
     <string name="conn_err_hostkey_untrusted">Host key not trusted yet. Connect once from a terminal, or add its CA in Known hosts.</string>

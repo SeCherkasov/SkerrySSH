@@ -26,6 +26,8 @@ data class RdpClientSettings(
     val wantsGraphicsPipeline: Boolean = true,
     /** Session a redirection told us to rejoin (see [RdpTarget.redirectedSessionId]); 0 if none. */
     val redirectedSessionId: Int = 0,
+    /** How much of the desktop the server is asked to draw; goes into the Client Info PDU. */
+    val imageQuality: RdpImageQuality = RdpImageQuality.DEFAULT,
 ) {
     init {
         require(desktopWidth in MIN_DIMENSION..MAX_DIMENSION) { "desktop width out of range" }
@@ -56,3 +58,31 @@ data class RdpClientSettings(
         const val CHANNEL_AUDIO = "rdpsnd"
     }
 }
+
+/**
+ * The settings a connection to this target asks for, once the negotiation has settled
+ * [selectedProtocol] and the platform has said whether it managed to open an output device
+ * ([audioOpened]).
+ *
+ * Lives here rather than inside the transport because it is a field-by-field copy of everything the
+ * profile can decide — the one place where a forgotten line would ship a default nobody chose.
+ */
+fun RdpTarget.clientSettings(selectedProtocol: Int, audioOpened: Boolean): RdpClientSettings =
+    RdpClientSettings(
+        desktopWidth = desktopWidth,
+        desktopHeight = desktopHeight,
+        clientName = clientName,
+        selectedProtocol = selectedProtocol,
+        keyboardLayout = keyboardLayout,
+        redirectedSessionId = redirectedSessionId,
+        wantsGraphicsPipeline = graphicsPipeline,
+        imageQuality = imageQuality,
+        channels = buildList {
+            if (clipboard) add(RdpClientSettings.CHANNEL_CLIPBOARD)
+            if (audioOpened) add(RdpClientSettings.CHANNEL_AUDIO)
+            // The dynamic channel carries the graphics pipeline, the display control channel and the
+            // audio a modern host prefers to send that way; without it the server has no way to open
+            // any of them, which is the point of leaving it out.
+            if (graphicsPipeline || dynamicResize || audioOpened) add(RdpClientSettings.CHANNEL_DYNAMIC)
+        },
+    )

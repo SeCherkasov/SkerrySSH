@@ -49,7 +49,11 @@ class RdpConnectionSequence(
                 serverData.ioChannelId,
                 // The sound channel being in the request is what makes audio wanted; the flag inside
                 // the Client Info PDU has to agree, or the server keeps the channel shut.
-                ClientInfo.pdu(logon, audioPlayback = settings.channels.contains(RdpClientSettings.CHANNEL_AUDIO)),
+                ClientInfo.pdu(
+                    logon,
+                    audioPlayback = settings.channels.contains(RdpClientSettings.CHANNEL_AUDIO),
+                    quality = settings.imageQuality,
+                ),
             ),
         )
         awaitLicensing(userId, serverData.ioChannelId)

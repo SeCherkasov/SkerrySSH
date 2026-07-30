@@ -34,6 +34,17 @@ class ConnectionTypeTest {
     }
 
     @Test
+    fun `VNC and RDP are exactly the transports without an AI policy`() {
+        // Both connection forms gate the policy picker on this; a remote desktop has no shell for
+        // the assistant to read or act on. Named rather than derived from isRemoteDesktop, so a
+        // rewrite that forgets RDP fails here instead of restating itself.
+        assertEquals(
+            setOf(ConnectionType.VNC, ConnectionType.RDP),
+            ConnectionType.entries.filterNot { it.hasAiPolicy }.toSet(),
+        )
+    }
+
+    @Test
     fun `a remote desktop never authenticates over ssh`() {
         // Remote-desktop profiles have no username/key/jump host; the forms gate on this.
         ConnectionType.entries.filter { it.isRemoteDesktop }.forEach {

@@ -76,6 +76,14 @@ val ConnectionType.isRemoteDesktop: Boolean
     }
 
 /**
+ * Whether a per-profile AI policy applies. The assistant reads a terminal and writes commands into
+ * it; a remote desktop has neither, so both connection forms leave the policy picker out rather than
+ * store a choice that decides nothing.
+ */
+val ConnectionType.hasAiPolicy: Boolean
+    get() = !isRemoteDesktop
+
+/**
  * Whether the profile is an RDP remote desktop. Unlike VNC it authenticates with a *user name* and
  * password (and optionally a domain, written into the user name as `DOMAIN\user` rather than stored
  * as its own field — that is the form every RDP client accepts and the one users already type), so

@@ -24,3 +24,19 @@ fun RdpReader.utf16le(byteCount: Int): String = buildString {
 /** Read [byteCount] bytes of a fixed-size ASCII field (virtual channel names) without its padding. */
 fun RdpReader.ascii(byteCount: Int): String =
     bytes(byteCount).takeWhile { it.toInt() != 0 }.toByteArray().decodeToString()
+
+/**
+ * TS_EXTENDED_INFO_PACKET::performanceFlags of a Client Info PDU, from a reader standing on the code
+ * page field — that is, right after the security header. Every field before the flags is variable
+ * length, so this walks them rather than counting a fixed offset.
+ */
+fun readPerformanceFlags(reader: RdpReader): Int {
+    reader.skip(8) // codePage, flags
+    val lengths = List(5) { reader.u16le() } // domain, username, password, shell, working directory
+    lengths.forEach { reader.skip(it + 2) } // each cb* excludes the terminator the string carries
+    reader.skip(2) // clientAddressFamily
+    repeat(2) { reader.skip(reader.u16le()) } // clientAddress, clientDir, each behind its own length
+    reader.skip(172) // TS_TIME_ZONE_INFORMATION
+    reader.skip(4) // clientSessionId
+    return reader.u32le()
+}

@@ -185,6 +185,7 @@ fun MobileDesignApp(
                             audioOutput = request.audioOutput,
                             audioDeviceId = request.audioDeviceId,
                             clipboard = request.clipboard,
+                            imageQuality = request.imageQuality,
                         ),
                         app.skerry.shared.rdp.RdpCredentials(
                             username = request.user,
@@ -733,6 +734,7 @@ private fun openMobileRdp(
             audioOutput = host.rdp?.audioOutput == true,
             audioDeviceId = host.rdp?.audioOutputDeviceId.orEmpty(),
             clipboard = host.rdp?.clipboard != false,
+            imageQuality = host.rdp?.quality ?: app.skerry.shared.rdp.RdpImageQuality.DEFAULT,
         ),
         remoteResize = host.vncResizeToWindow,
         onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
