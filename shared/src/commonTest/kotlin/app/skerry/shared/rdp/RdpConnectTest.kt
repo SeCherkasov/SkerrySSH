@@ -107,6 +107,23 @@ class RdpConnectTest {
     }
 
     @Test
+    fun `the profile's image quality reaches the server in the Client Info PDU`() = runTest {
+        // The picture is settled here and nowhere else: a quality that stops at the settings object
+        // would leave the profile's choice with nothing to act on.
+        val server = ModelServer()
+
+        RdpConnectionSequence(
+            server.source,
+            server.sink,
+            settings.copy(imageQuality = RdpImageQuality.High),
+            logon,
+            FakeLicenseCrypto,
+        ).run()
+
+        assertEquals(PERF_ENABLE_FONT_SMOOTHING or PERF_ENABLE_DESKTOP_COMPOSITION, server.clientInfoPerformanceFlags)
+    }
+
+    @Test
     fun `a channel the server confirms as a different id fails the connection`() = runTest {
         val server = ModelServer(misconfirmChannel = true)
 
@@ -144,6 +161,10 @@ class RdpConnectTest {
         var confirmedShareId = 0
             private set
         var sawLicenseRequest = false
+            private set
+
+        /** What the client asked the session to look like (TS_EXTENDED_INFO_PACKET). */
+        var clientInfoPerformanceFlags = 0
             private set
 
         val source = RdpSource { dst, offset, len ->
@@ -193,6 +214,7 @@ class RdpConnectTest {
             // tell them apart, exactly as they do for the client reading the other direction.
             if (first == 0x40 || first == 0x80) {
                 body.skip(4)
+                if (first == 0x40) clientInfoPerformanceFlags = readPerformanceFlags(body)
                 if (first == 0x80) {
                     // The client's new-licence request: answer as a server with nothing to license.
                     sawLicenseRequest = true
@@ -427,6 +449,8 @@ class RdpConnectTest {
         const val LICENSE_ERROR_TYPE = 0xFF
         const val LICENSE_REQUEST_TYPE = 0x01
         const val REDIRECTED_SESSION_ID = 0x0000002A
+        const val PERF_ENABLE_FONT_SMOOTHING = 0x00000080
+        const val PERF_ENABLE_DESKTOP_COMPOSITION = 0x00000100
 
         /** The order the client joins: user channel, I/O channel, then the virtual channels. */
         val CHANNELS = intArrayOf(1007, 1003, 1004, 1005)

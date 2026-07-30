@@ -39,12 +39,6 @@ object ClientInfo {
     /** Extended info is mandatory for RDP 5+ servers; the address family says which form it takes. */
     private const val ADDRESS_FAMILY_INET = 0x0002
 
-    /** TS_EXTENDED_INFO_PACKET::performanceFlags (2.2.1.11.1.1.1). */
-    private const val PERF_DISABLE_WALLPAPER = 0x00000001
-    private const val PERF_DISABLE_FULLWINDOWDRAG = 0x00000002
-    private const val PERF_DISABLE_MENUANIMATIONS = 0x00000004
-    private const val PERF_DISABLE_THEMING = 0x00000008
-
     /** ANSI code page 0 means "use the one implied by the Unicode flag". */
     private const val CODE_PAGE_DEFAULT = 0
 
@@ -56,14 +50,14 @@ object ClientInfo {
      * render audio at all — a server that hears that flag keeps the sound channel shut whatever the
      * client asked for, which is exactly what a session nobody listens to should cost.
      *
-     * [performanceOptimizations] turns off wallpaper, drag rendering, menu animations and theming —
-     * everything that costs bandwidth without carrying information. It is on by default because the
-     * alternative is a client that feels slow on exactly the links people use RDP over.
+     * [quality] is the profile's picture: which of the desktop's decoration the server is asked to
+     * draw ([RdpImageQuality.performanceFlags]). It is settled here and nowhere else — the server
+     * holds it for the life of the session.
      */
     fun pdu(
         logon: RdpLogonInfo,
         audioPlayback: Boolean = false,
-        performanceOptimizations: Boolean = true,
+        quality: RdpImageQuality = RdpImageQuality.DEFAULT,
     ): ByteArray {
         val writer = RdpWriter(512)
         RdpSecurityHeader.write(writer, RdpSecurityHeader.SEC_INFO_PKT)
@@ -94,14 +88,7 @@ object ClientInfo {
         writer.u16le(2).u16le(0) // cbClientDir + terminator
         writeTimeZone(writer)
         writer.u32le(0) // clientSessionId, ignored by the server
-        writer.u32le(
-            if (performanceOptimizations) {
-                PERF_DISABLE_WALLPAPER or PERF_DISABLE_FULLWINDOWDRAG or
-                    PERF_DISABLE_MENUANIMATIONS or PERF_DISABLE_THEMING
-            } else {
-                0
-            },
-        )
+        writer.u32le(quality.performanceFlags)
         writer.u16le(0) // cbAutoReconnectCookie
         return writer.toByteArray()
     }

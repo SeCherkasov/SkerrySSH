@@ -56,6 +56,11 @@ data class RdpTarget(
      */
     val audioDeviceId: String = "",
     /**
+     * How much of the desktop to ask the server to draw (see [RdpSpec.quality]). Part of the target
+     * because RDP settles it during the connection sequence and never revisits it.
+     */
+    val imageQuality: RdpImageQuality = RdpImageQuality.DEFAULT,
+    /**
      * A Remote Desktop farm's routing token (see [RdpSpec.loadBalanceInfo]); empty for a plain host.
      * It goes into the X.224 Connection Request, before anything is encrypted, so the connection
      * broker can route this connection to the collection the profile came from.
