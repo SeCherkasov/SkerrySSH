@@ -42,6 +42,13 @@ object RunbookMarker {
         val probe = probe(token)
         val trimmed = command.trimEnd()
         if (trimmed.isEmpty()) return probe
+        // A trailing backslash continues the line and swallows whichever separator comes next, so
+        // both `cmd \; probe` and `cmd \` + newline + probe hand the probe to `cmd` as arguments and
+        // no marker is ever printed. A blank line is what ends such a command: the continuation
+        // joins with the empty line, and the newline after that terminates it. Checked before the
+        // multi-line branch below, because what matters is how the text ends, not whether it already
+        // spans lines.
+        if (endsInLineContinuation(trimmed)) return "$trimmed\n\n$probe"
         if (trimmed.contains('\n')) return "$trimmed\n$probe"
         // Anything the probe cannot legally follow on the same line goes onto the next one, exactly
         // as if the step had been pasted as a two-line script. Both cases are silent killers when
@@ -98,6 +105,21 @@ object RunbookMarker {
             at = text.indexOf(needle, at + needle.length)
         }
         return found
+    }
+
+    /**
+     * Whether [text] ends in an unescaped `\`, which continues the line onto the next one. Only an
+     * odd number of trailing backslashes does: `cmd \\` ends in a literal backslash and is a
+     * complete command.
+     */
+    private fun endsInLineContinuation(text: String): Boolean {
+        var backslashes = 0
+        var at = text.length - 1
+        while (at >= 0 && text[at] == '\\') {
+            backslashes++
+            at--
+        }
+        return backslashes % 2 == 1
     }
 
     private val DANGLING_OPERATORS = listOf("&&", "||", "|", ";;")

@@ -20,7 +20,8 @@ import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.io.PrivateConfig
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.VaultKnownHostsStore
-import app.skerry.shared.ssh.ProbeHostKeyVerifier
+import app.skerry.shared.ssh.ReadOnlyHostKeyVerifier
+import app.skerry.shared.ssh.UnknownHost
 import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.ssh.SshjTransport
@@ -213,11 +214,14 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
             keyboardInteractiveResponder = keyboardInteractive.responder,
         ),
     )
-    // "Test connection" from the form uses a separate transport with a read-only verifier: it
-    // accepts a matching trusted key, rejects a key change on a known host, and accepts a new host
-    // WITHOUT writing to known-hosts. Only a real connection (TOFU above) establishes trust.
+    // "Test connection" and the container listing in the form: read-only verifier, so neither can
+    // establish trust — only a real connection (TOFU above) does. A host with no entry is accepted,
+    // because the form names a host that is usually not saved yet and the user is reading the answer.
     val probeTransport = SshjTransport(
-        HostCertificateVerifier(trustedCaStore, ProbeHostKeyVerifier(knownHostsStore)) { Instant.now().epochSecond },
+        HostCertificateVerifier(
+            trustedCaStore,
+            ReadOnlyHostKeyVerifier(knownHostsStore, UnknownHost.Accept),
+        ) { Instant.now().epochSecond },
         keyFiles = keyFileResolver,
         keyboardInteractiveResponder = keyboardInteractive.responder,
     )
@@ -296,12 +300,18 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // SSH key generation in the Vault section: BouncyCastle over the sshj format (the same one the transport reads).
     val keyGenerator = BouncyCastleSshKeyGenerator()
     // Parses imported SSH certificates (Vault -> Certificates section) via sshj over the ssh-wire format.
-    // Global tunnels: saved forwards in tunnels.json. Activation uses a SEPARATE probe transport
-    // (read-only verifier): only an already-trusted host can be enabled — a tunnel opens without a
-    // terminal, so silent TOFU must not happen here. Host/secret resolution goes through the graph
-    // (hosts + credentials in the unlocked vault). Scope lives for the app's lifetime.
+    // Global tunnels: saved forwards in tunnels.json. Its own transport, not [probeTransport]: a
+    // tunnel opens with no terminal and no prompt, so an unknown host is refused rather than accepted
+    // — this connection must not be the one that settles a host's identity. CA-aware for the same
+    // reason the real transport is: a host claimed by a trusted CA has to present a valid certificate
+    // here too, or the CA is trusted everywhere except where nobody is looking. Host/secret resolution
+    // goes through the graph (hosts + credentials in the unlocked vault). Scope lives for the app's
+    // lifetime.
     val tunnelTransport = SshjTransport(
-        ProbeHostKeyVerifier(knownHostsStore),
+        HostCertificateVerifier(
+            trustedCaStore,
+            ReadOnlyHostKeyVerifier(knownHostsStore, UnknownHost.Refuse),
+        ) { Instant.now().epochSecond },
         keyFiles = keyFileResolver,
         keyboardInteractiveResponder = keyboardInteractive.responder,
     )
@@ -311,6 +321,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         transport = tunnelTransport,
         resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::find) },
         scope = tunnelScope,
+        scanTransport = probeTransport,
     ) { UUID.randomUUID().toString() }
     // Saved snippets: the command library is SNIPPET records in the vault (commands may contain
     // inline credentials, so they share encryption and E2E sync). Run targets the active terminal.

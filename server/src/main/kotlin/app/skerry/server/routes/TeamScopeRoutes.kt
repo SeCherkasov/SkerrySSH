@@ -75,8 +75,10 @@ fun Route.teamScopeRoutes(services: Services) {
         call.requireActiveMember(
             services, teamId, principal.accountId, TeamRoles::canManageMembers, "manage-members role required",
         ) ?: return@delete
-        val grantees = services.teamScopes.grants(teamId, scopeId).map { it.accountId }
-        if (!services.teamScopes.delete(teamId, scopeId)) {
+        // Grantees come back from the same transaction that removed them: read separately first, a
+        // grant added in between is revoked without its holder ever being told.
+        val grantees = services.teamScopes.deleteReturningGrantees(teamId, scopeId)
+        if (grantees == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("no such scope"))
             return@delete
         }

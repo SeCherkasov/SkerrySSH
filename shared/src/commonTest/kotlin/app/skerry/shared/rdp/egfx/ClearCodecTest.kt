@@ -253,6 +253,37 @@ class ClearCodecTest {
     }
 
     @Test
+    fun `a subcodec tile wider than any screen is refused before it is allocated`() {
+        // The tile carries its own dimensions, independent of the image's: bounding the image on the
+        // way in says nothing about them. Thirteen bytes of header buy the allocation, and the size
+        // the header asks for is never read from the body — three bytes of payload is enough.
+        val stream = stream(subcodecs = subcodec(0, 0, width = 20_000, height = 1, subCodecId = 0x00, data = ByteArray(3)))
+
+        assertFailsWith<RdpProtocolException> { codec.decode(stream, width = 2, height = 2) }
+    }
+
+    @Test
+    fun `a subcodec tile at the widest a u16 can name is refused`() {
+        // Unguarded, 65535 * 65535 wraps Int negative and the allocation fails with
+        // NegativeArraySizeException instead of a protocol error. This pair is over MAX_DIMENSION, so
+        // it is the dimension clause that stops it — the pixel-count clause has its own test below.
+        val stream = stream(subcodecs = subcodec(0, 0, width = 65_535, height = 65_535, subCodecId = 0x00, data = ByteArray(3)))
+
+        assertFailsWith<RdpProtocolException> { codec.decode(stream, width = 2, height = 2) }
+    }
+
+    @Test
+    fun `a subcodec tile within both dimensions but over the pixel budget is refused`() {
+        // The clause the two tests above never reach: requireSize is one `||` chain, and a tile over
+        // MAX_DIMENSION short-circuits before the pixel count is ever multiplied out. 9000 x 9000 is
+        // inside MAX_DIMENSION on both axes and still 81 megapixels against a budget of 64, which is
+        // the shape a server uses to ask for hundreds of megabytes with a thirteen-byte header.
+        val stream = stream(subcodecs = subcodec(0, 0, width = 9_000, height = 9_000, subCodecId = 0x00, data = ByteArray(3)))
+
+        assertFailsWith<RdpProtocolException> { codec.decode(stream, width = 2, height = 2) }
+    }
+
+    @Test
     fun `a band taller than a V-Bar may be is rejected`() {
         val stream = stream(bands = band(0, 0, 0, 52, bkg = RED, vBars = listOf(vBarHit(0))))
 

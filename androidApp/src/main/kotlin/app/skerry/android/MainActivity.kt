@@ -18,7 +18,8 @@ import app.skerry.shared.ai.local.ModelDownloader
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.ssh.FileHostKeyMismatchStore
 import app.skerry.shared.ssh.VaultKnownHostsStore
-import app.skerry.shared.ssh.ProbeHostKeyVerifier
+import app.skerry.shared.ssh.ReadOnlyHostKeyVerifier
+import app.skerry.shared.ssh.UnknownHost
 import app.skerry.shared.ssh.RoutingTransport
 import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.KeyFileResolver
@@ -509,20 +510,34 @@ class MainActivity : FragmentActivity() {
                 deviceId(dir),
             ),
         )
-        // Probe transport (read-only verifier, no silent TOFU): activating a saved tunnel and
-        // listing a host's containers from the connection form both ride it, so neither can
-        // establish trust in a host key on their own.
+        // Read-only verifier, so neither of the two transports below can establish trust in a host
+        // key — only a real session (TOFU) does. They differ on a host with no entry, because the
+        // difference is whether anyone is waiting for the answer: the connection form is driven by
+        // the user and names a host that is usually not saved yet, while activating a tunnel opens a
+        // forward with no terminal and no prompt and must not settle a host's identity on its own.
         val probeTransport = SshjTransport(
-            HostCertificateVerifier(trustedCaStore, ProbeHostKeyVerifier(knownHostsStore)) { Instant.now().epochSecond },
+            HostCertificateVerifier(
+                trustedCaStore,
+                ReadOnlyHostKeyVerifier(knownHostsStore, UnknownHost.Accept),
+            ) { Instant.now().epochSecond },
+            keyFiles = keyFileResolver,
+            keyboardInteractiveResponder = keyboardInteractive.responder,
+        )
+        val tunnelTransport = SshjTransport(
+            HostCertificateVerifier(
+                trustedCaStore,
+                ReadOnlyHostKeyVerifier(knownHostsStore, UnknownHost.Refuse),
+            ) { Instant.now().epochSecond },
             keyFiles = keyFileResolver,
             keyboardInteractiveResponder = keyboardInteractive.responder,
         )
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { tunnelScope = it }
         val tunnels = TunnelManager(
             store = VaultTunnelStore(vault, trash),
-            transport = probeTransport,
+            transport = tunnelTransport,
             resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::find) },
             scope = scope,
+            scanTransport = probeTransport,
         ) { UUID.randomUUID().toString() }
         // Saved command snippets: SNIPPET records in the vault (commands may contain inline
         // credentials, hence shared encryption and E2E sync). Run into the terminal.

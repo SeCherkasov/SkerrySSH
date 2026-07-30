@@ -184,7 +184,7 @@ val LocalConnectPane: ProvidableCompositionLocal<(Host, String) -> Unit> = stati
 /**
  * SSH transport for one-off "Test connection" checks from the form (connect without opening a
  * session). Deliberately separate from the live-session transport: behind it is a read-only verifier
- * ([app.skerry.shared.ssh.ProbeHostKeyVerifier]) that does not add the new host's key to known_hosts,
+ * ([app.skerry.shared.ssh.ReadOnlyHostKeyVerifier]) that does not add the new host's key to known_hosts,
  * since a probe must not establish permanent trust (only a real connect via TOFU does). Do not use
  * this slot to open real sessions. `null` — mock path/preview without a live transport: the Test
  * button is disabled. Supplied by [DesktopDesignApp]; sole consumer is

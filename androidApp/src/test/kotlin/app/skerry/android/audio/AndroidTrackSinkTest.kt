@@ -2,9 +2,14 @@ package app.skerry.android.audio
 
 import app.skerry.shared.audio.AndroidPlaybackTrack
 import app.skerry.shared.audio.AndroidTrackSink
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+
+/** `AudioTrack.ERROR_DEAD_OBJECT` — the constant itself needs a device, so it is spelled out here. */
+private const val ERROR_DEAD_OBJECT = -6
 
 /**
  * What the session does to an Android track. The track itself needs a real device, so the sequences
@@ -20,6 +25,17 @@ class AndroidTrackSinkTest {
         AndroidTrackSink(track).write(ByteArray(320))
 
         assertEquals(listOf("write 320"), track.events)
+    }
+
+    @Test
+    fun `a device that stopped taking blocks is reported instead of returning quietly`() {
+        // AudioTrack answers a dead or reclaimed device with a negative ERROR_* code rather than an
+        // exception. Swallowing it leaves PcmPlayer's writesFailing false, so the session goes silent
+        // with nothing in the trace to tell "the device never opened" from "the server stopped
+        // sending" — and the write returns at once, dropping the back-pressure the stream relies on.
+        val track = FakeTrack(writeResult = { ERROR_DEAD_OBJECT })
+
+        assertFailsWith<IOException> { AndroidTrackSink(track).write(ByteArray(320)) }
     }
 
     /** The track has to be paused before its buffer can be dropped; it resumes on the next write. */
@@ -73,14 +89,16 @@ class AndroidTrackSinkTest {
 private class FakeTrack(
     private val failPause: Boolean = false,
     private val failStop: Boolean = false,
+    private val writeResult: (Int) -> Int = { it },
 ) : AndroidPlaybackTrack {
 
     val events = mutableListOf<String>()
     var released = false
         private set
 
-    override fun write(pcm: ByteArray) {
+    override fun write(pcm: ByteArray): Int {
         events += "write ${pcm.size}"
+        return writeResult(pcm.size)
     }
 
     override fun pause() {

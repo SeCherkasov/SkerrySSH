@@ -72,15 +72,24 @@ fun interface CaKeyParser {
  * a changed key every time, which trains the user to accept it; a certificate signed by a CA they
  * trust is checkable without ever having seen the machine.
  *
- * Decision order for an offered certificate:
- *  1. no certificate at all -> [fallback] (ordinary TOFU);
- *  2. no trusted CA matches the signing key **and** the host -> [fallback] on the key inside the
- *     certificate. Not a rejection: a user who hasn't configured a CA still connects, and TOFU now
- *     remembers the host's key rather than the certificate, so re-issues stop looking like key
- *     changes;
- *  3. a trusted CA covers this host -> the certificate must hold up completely (below), otherwise
- *     the connection is refused. Once a CA is trusted for a host, falling back to TOFU there would
- *     let a bad certificate downgrade into a first-contact prompt.
+ * Decision order turns on whether any trusted CA *claims* the host — its [TrustedCa.hostPattern]
+ * matches — and not on what the server chose to offer:
+ *  1. no CA claims the host -> [fallback] (ordinary TOFU), on the key inside the certificate if one
+ *     came with the offer. Not a rejection: a user who hasn't configured a CA still connects, and
+ *     TOFU remembers the host's own key rather than the certificate, so re-issues stop looking like
+ *     key changes;
+ *  2. a CA claims the host -> the offer must be a certificate that holds up completely (below).
+ *     Anything else is refused and [fallback] is never consulted — a bare key, a certificate signed
+ *     by some other CA, and one whose CA key did not parse all land here. The reason is the store
+ *     write this class deliberately skips: a CA-verified connection records nothing, so as far as
+ *     TOFU is concerned such a host is permanently a first contact, and a first contact is adopted
+ *     silently with no fingerprint to disagree with. Passing any of those down would turn a
+ *     configured trust anchor back into blind trust-on-first-use, which is what an on-path server
+ *     gets by simply omitting its certificate.
+ *
+ * An unreadable CA store ([TrustedCaStore.allOrNull] == `null`, e.g. the vault auto-locked during
+ * the handshake) refuses the key outright: without the trusted set an ordinary host cannot be told
+ * from a claimed one, and guessing "ordinary" is the downgrade above.
  *
  * What "hold up" means: the transport verified the CA's signature ([OfferedHostCertificate
  * .caSignatureVerified]), it is a host certificate rather than a user one, it carries no critical
@@ -98,15 +107,16 @@ class HostCertificateVerifier(
 ) : HostKeyVerifier {
 
     override fun verify(offer: HostKeyOffer): Boolean {
-        val certificate = offer.certificate ?: return fallback.verify(offer)
+        // Read before anything else: deciding a bare key needs the trusted set too, now that a CA
+        // claiming the host is what makes that key inadmissible.
         val trusted = cas.allOrNull() ?: return false
+        val claiming = trusted.filter { HostPattern.matches(it.hostPattern, offer.host, offer.port) }
+        val certificate = offer.certificate
+            ?: return if (claiming.isEmpty()) fallback.verify(offer) else false
         // A blank fingerprint means the CA key didn't parse; it must not match a stored entry whose
         // own fingerprint is blank (a corrupt or hand-edited synced record).
-        if (certificate.caFingerprint.isBlank()) return fallback.verify(offer.bareKey())
-        val covered = trusted.any {
-            it.fingerprint == certificate.caFingerprint && HostPattern.matches(it.hostPattern, offer.host, offer.port)
-        }
-        if (!covered) return fallback.verify(offer.bareKey())
+        if (certificate.caFingerprint.isBlank()) return unclaimedFallback(claiming, offer)
+        if (claiming.none { it.fingerprint == certificate.caFingerprint }) return unclaimedFallback(claiming, offer)
 
         if (!certificate.caSignatureVerified) return false
         if (!certificate.hostCertificate) return false
@@ -123,6 +133,14 @@ class HostCertificateVerifier(
         // Deliberately no store write: see the class doc — certificates rotate, trust is in the CA.
         return true
     }
+
+    /**
+     * A certificate this class cannot use: TOFU decides only if no CA claims the host, and then on
+     * the key inside the certificate rather than the certificate itself, whose fingerprint changes
+     * on every re-issue.
+     */
+    private fun unclaimedFallback(claiming: List<TrustedCa>, offer: HostKeyOffer): Boolean =
+        if (claiming.isEmpty()) fallback.verify(offer.bareKey()) else false
 
     private fun principalMatches(principal: String, host: String): Boolean =
         principal.length <= HostPattern.MAX_PATTERN_LENGTH && globMatches(principal.lowercase(), host.lowercase())
