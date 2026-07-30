@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "app.skerry"
-version = "0.2.0"
+version = "0.2.1"
 
 // Second launcher in the same distribution: `bin/skerry-admin` (the administration CLI) ships next
 // to `bin/server`, so the Docker image gets it for free — the Dockerfile copies the whole install
