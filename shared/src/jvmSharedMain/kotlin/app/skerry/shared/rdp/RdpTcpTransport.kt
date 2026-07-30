@@ -374,6 +374,10 @@ class RdpSocketSession(
     override suspend fun setOutputVisible(visible: Boolean) =
         withContext(Dispatchers.IO) { codec.setOutputVisible(visible) }
 
+    // Both bits, for the reason in the interface: the repaint is what ends a suppression.
+    override val outputSuppressionSupported: Boolean =
+        state.capabilities.suppressOutputSupported && state.capabilities.refreshRectSupported
+
     override suspend fun setDesktopSize(width: Int, height: Int) {
         withContext(Dispatchers.IO) { display.requestResolution(width, height) }
     }
