@@ -25,6 +25,11 @@ class GraphicsChannel(
     private val framebuffer: RemoteFramebuffer,
     private val codecs: GraphicsCodecs,
     private val surfaceBudgetPixels: Int = MAX_SURFACE_PIXELS,
+    /**
+     * Where a line about the capability exchange goes; silent by default. Which version the server
+     * picked decides whether it may use H.264 at all, and nothing else on the wire says so.
+     */
+    private val trace: (String) -> Unit = {},
     private val send: suspend (ByteArray) -> Unit,
 ) : DynamicChannelHandler {
 
@@ -68,6 +73,17 @@ class GraphicsChannel(
         if (!insideFrame) flushDamage()
     }
 
+    /**
+     * The session is over: give back what the codecs hold outside this process.
+     *
+     * The surfaces and the caches are memory and go with the object, but an H.264 decoder is a
+     * process on the desktop and one of a handful of hardware codec instances on Android, and a
+     * server has no reason to delete the surface it drew the desktop on before disconnecting.
+     */
+    fun close() {
+        codecs.avc?.close()
+    }
+
     /** The updates decoded since the last call; the session emits them into its flow. */
     fun drainUpdates(): List<RdpUpdate> {
         if (updates.isEmpty()) return emptyList()
@@ -78,9 +94,11 @@ class GraphicsChannel(
 
     private suspend fun handle(commandId: Int, body: RdpReader) {
         when (commandId) {
-            // The confirmation names the version the server picked, which is one of ours by
-            // construction: the client advertised exactly one.
-            CMDID_CAPS_CONFIRM -> Unit
+            // The confirmation names the version the server picked out of what was advertised. There
+            // is nothing to do with it — a version this client offered is one it can decode, and the
+            // codec id of every bitmap says which codec it is anyway — but it is the only place that
+            // says whether the server took the offer of H.264, so it is worth a line.
+            CMDID_CAPS_CONFIRM -> trace("the server confirmed capability version 0x${body.u32le().toString(16)}")
             CMDID_RESET_GRAPHICS -> resetGraphics(body)
             CMDID_CREATE_SURFACE -> createSurface(body)
             CMDID_DELETE_SURFACE -> deleteSurface(body)
@@ -144,15 +162,20 @@ class GraphicsChannel(
         }
         surfacePixels += width * height - replaced
         surfaces[surfaceId] = GraphicsSurface(surfaceId, width, height)
-        // An id in use again is a new surface, not the old one resized: whatever the progressive
-        // codec still holds under it belongs to the picture that has just been thrown away.
-        codecs.progressive?.forgetSurface(surfaceId)
+        // An id in use again is a new surface, not the old one resized: whatever a stateful codec
+        // still holds under it belongs to the picture that has just been thrown away.
+        forgetSurfaceState(surfaceId)
     }
 
     private fun deleteSurface(body: RdpReader) {
         val surfaceId = body.u16le()
         surfaces.remove(surfaceId)?.let { surfacePixels -= it.pixels.size }
+        forgetSurfaceState(surfaceId)
+    }
+
+    private fun forgetSurfaceState(surfaceId: Int) {
         codecs.progressive?.forgetSurface(surfaceId)
+        codecs.avc?.forgetSurface(surfaceId)
     }
 
     /**
@@ -193,6 +216,20 @@ class GraphicsChannel(
             val progressive = codecs.progressive
                 ?: throw RdpProtocolException("the server used the progressive codec, which was not advertised")
             for (touched in progressive.decode(data, surface, rect)) present(surface, touched)
+            return
+        }
+
+        if (codecId in AVC_CODECS) {
+            // The rectangle above is the whole frame; which parts of it were redrawn is in the
+            // message's own region list, in surface coordinates.
+            val avc = codecs.avc
+                ?: throw RdpProtocolException("the server used ${GraphicsCodecs.codecName(codecId)}, not advertised")
+            val touched = if (codecId == GraphicsCodecs.CODEC_AVC420) {
+                avc.decodeAvc420(data, surface)
+            } else {
+                avc.decodeAvc444(data, surface, version2 = codecId == GraphicsCodecs.CODEC_AVC444_V2)
+            }
+            for (region in touched) present(surface, region)
             return
         }
 
@@ -355,16 +392,25 @@ class GraphicsChannel(
     }
 
     /**
-     * Version 8 of the capability set, and only that one. Later versions each add a codec — H.264
-     * above all — and advertising a version whose codecs this client cannot decode would trade a
-     * working session for a frozen one.
+     * What the client can take. The server picks the highest version it also knows and confirms that
+     * one, so a version is advertised only when every codec it implies can be decoded here —
+     * advertising more would trade a working session for a frozen screen.
+     *
+     * Version 8 alone means no H.264. 8.1 adds it for 4:2:0 through an explicit flag, and 10.4 adds
+     * 4:4:4, which is on unless the client asks for it to be off. 10.5 and later are left out
+     * deliberately: they oblige the client to scale a surface onto the output, and this one only
+     * scales the whole desktop, in the view.
      */
-    private fun capsAdvertise(): ByteArray = RdpWriter(16)
-        .u16le(1) // capsSetCount
-        .u32le(CAPVERSION_8)
-        .u32le(4) // capsDataLength
-        .u32le(CAPS_FLAG_SMALL_CACHE)
-        .toByteArray()
+    private fun capsAdvertise(): ByteArray {
+        val h264 = codecs.avc != null
+        val writer = RdpWriter(40).u16le(if (h264) 3 else 1) // capsSetCount
+        writer.u32le(CAPVERSION_8).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE)
+        if (h264) {
+            writer.u32le(CAPVERSION_8_1).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE or CAPS_FLAG_AVC420_ENABLED)
+            writer.u32le(CAPVERSION_10_4).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE)
+        }
+        return writer.toByteArray()
+    }
 
     private fun pdu(commandId: Int, body: ByteArray): ByteArray = RdpWriter(body.size + HEADER_SIZE)
         .u16le(commandId)
@@ -401,7 +447,18 @@ class GraphicsChannel(
         private const val CMDID_MAP_SURFACE_TO_SCALED_OUTPUT = 0x0017
 
         private const val CAPVERSION_8 = 0x00080004
+        private const val CAPVERSION_8_1 = 0x00080105
+        private const val CAPVERSION_10_4 = 0x000A0400
         private const val CAPS_FLAG_SMALL_CACHE = 0x00000002
+
+        /** 4:2:0 H.264, in version 8.1 only; from version 10 on, AVC is on unless disabled. */
+        private const val CAPS_FLAG_AVC420_ENABLED = 0x00000010
+
+        private val AVC_CODECS = setOf(
+            GraphicsCodecs.CODEC_AVC420,
+            GraphicsCodecs.CODEC_AVC444,
+            GraphicsCodecs.CODEC_AVC444_V2,
+        )
 
         /** "I am not reporting a queue depth": the server then paces on frame ids alone. */
         private const val QUEUE_DEPTH_UNAVAILABLE = 0x00000000

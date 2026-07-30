@@ -45,6 +45,12 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
+      - name: Install ffmpeg
+        # The desktop H.264 decoder is an ffmpeg process, and the flags it drives one with were
+        # arrived at empirically (see FfmpegH264DecoderTest). Its test skips itself where there is no
+        # ffmpeg, so without this step a regression in those flags would go green here.
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Test
         # `allTests` as well as `test`: :shared and :composeApp are Kotlin Multiplatform modules
         # whose test tasks are named after their targets (desktopTest), so a bare `test` matched

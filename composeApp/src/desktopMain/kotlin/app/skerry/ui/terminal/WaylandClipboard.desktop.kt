@@ -1,6 +1,6 @@
 package app.skerry.ui.terminal
 
-import java.io.File
+import app.skerry.shared.process.resolveExecutableOnPath
 import java.lang.ProcessBuilder.Redirect
 import java.util.concurrent.TimeUnit
 
@@ -27,8 +27,8 @@ internal object WaylandClipboard {
         get() = System.getenv("WAYLAND_DISPLAY")?.isNotBlank() == true ||
             System.getenv("XDG_SESSION_TYPE")?.equals("wayland", ignoreCase = true) == true
 
-    private val wlCopyPath: String? by lazy { if (isWaylandSession) resolveOnPath("wl-copy") else null }
-    private val wlPastePath: String? by lazy { if (isWaylandSession) resolveOnPath("wl-paste") else null }
+    private val wlCopyPath: String? by lazy { if (isWaylandSession) resolveExecutableOnPath("wl-copy") else null }
+    private val wlPastePath: String? by lazy { if (isWaylandSession) resolveExecutableOnPath("wl-paste") else null }
 
     /** True if this is a Wayland session and both utilities were found on PATH; computed once per process. */
     val available: Boolean by lazy { wlCopyPath != null && wlPastePath != null }
@@ -80,16 +80,4 @@ internal object WaylandClipboard {
             proc.waitFor(2, TimeUnit.SECONDS) && proc.exitValue() == 0
         }.getOrDefault(false)
     }
-
-    /**
-     * Find executable [name] on PATH and return its absolute path, or null. No `sh -c`, avoiding shell
-     * injection and an extra subprocess; the path is fixed so a mutated PATH can't retarget it later.
-     */
-    private fun resolveOnPath(name: String): String? =
-        (System.getenv("PATH") ?: "").split(File.pathSeparatorChar)
-            .asSequence()
-            .filter { it.isNotEmpty() }
-            .map { File(it, name) }
-            .firstOrNull { it.isFile && it.canExecute() }
-            ?.absolutePath
 }

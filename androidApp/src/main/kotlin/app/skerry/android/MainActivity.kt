@@ -699,6 +699,8 @@ class MainActivity : FragmentActivity() {
                 ),
                 // Playback for a profile that asks for the session's sound (MS-RDPEA).
                 audioPlayers = app.skerry.shared.audio.AndroidAudioPlayers(applicationContext),
+                // H.264 in the graphics pipeline, through the platform decoder.
+                h264Decoders = app.skerry.shared.rdp.egfx.MediaCodecH264Decoders(),
             ),
             // Speaker, headset, Bluetooth — what the RDP profile form offers to play on.
             audioOutputs = app.skerry.shared.audio.AndroidAudioOutputs(applicationContext),
