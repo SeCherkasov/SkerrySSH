@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshAuthenticationException
 import app.skerry.shared.ssh.SshConnectionException
@@ -25,8 +26,8 @@ sealed interface ConnectionTestProblem {
     /** The server rejected the supplied credentials. */
     data object AuthenticationFailed : ConnectionTestProblem
 
-    /** The host presented a key that doesn't match the pinned one. */
-    data object HostKeyRejected : ConnectionTestProblem
+    /** The host key was not trusted; [refusal] is why, where the transport reported it. */
+    data class HostKeyRejected(val refusal: HostKeyRefusal? = null) : ConnectionTestProblem
 
     /** Anything else on the wire. Deliberately coarse: transport text would leak library/host detail. */
     data object ConnectionFailed : ConnectionTestProblem
@@ -88,7 +89,7 @@ suspend fun runConnectionTest(
 } catch (e: SshAuthenticationException) {
     ConnectionTestStatus.Failure(ConnectionTestProblem.AuthenticationFailed)
 } catch (e: SshHostKeyRejectedException) {
-    ConnectionTestStatus.Failure(ConnectionTestProblem.HostKeyRejected)
+    ConnectionTestStatus.Failure(ConnectionTestProblem.HostKeyRejected(e.refusal))
 } catch (e: SshConnectionException) {
     ConnectionTestStatus.Failure(ConnectionTestProblem.ConnectionFailed)
 } catch (e: CancellationException) {

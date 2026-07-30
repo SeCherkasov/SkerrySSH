@@ -12,9 +12,11 @@ import org.jetbrains.compose.resources.stringResource
 /** Localized reason a container listing failed (shown under the container field). */
 @Composable
 fun containerBrowseFailureText(problem: ContainerBrowseProblem): String = when (problem) {
-    ContainerBrowseProblem.AUTHENTICATION_FAILED -> stringResource(Res.string.conn_container_err_auth)
-    ContainerBrowseProblem.HOST_KEY_REJECTED -> stringResource(Res.string.conn_container_err_host_key)
-    ContainerBrowseProblem.CONNECTION_FAILED -> stringResource(Res.string.conn_container_err_connection)
-    ContainerBrowseProblem.INCOMPLETE_FORM -> stringResource(Res.string.conn_container_incomplete)
-    ContainerBrowseProblem.COMMAND_FAILED -> stringResource(Res.string.conn_container_err_command)
+    ContainerBrowseProblem.AuthenticationFailed -> stringResource(Res.string.conn_container_err_auth)
+    is ContainerBrowseProblem.HostKeyRejected ->
+        problem.refusal?.let { hostKeyRefusalLine(it, hop = false) }
+            ?: stringResource(Res.string.conn_container_err_host_key)
+    ContainerBrowseProblem.ConnectionFailed -> stringResource(Res.string.conn_container_err_connection)
+    ContainerBrowseProblem.IncompleteForm -> stringResource(Res.string.conn_container_incomplete)
+    ContainerBrowseProblem.CommandFailed -> stringResource(Res.string.conn_container_err_command)
 }

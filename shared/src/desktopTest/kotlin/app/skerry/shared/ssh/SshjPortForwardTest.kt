@@ -20,7 +20,7 @@ import kotlin.test.assertTrue
 private const val USER = "skerry"
 private const val PASSWORD = "correct horse battery staple"
 
-private val acceptAllKeys = HostKeyVerifier { true }
+private val acceptAllKeys = HostKeyVerifier { null }
 
 /**
  * Integration tests for port forwarding against an embedded Apache MINA SSHD. The tunnel

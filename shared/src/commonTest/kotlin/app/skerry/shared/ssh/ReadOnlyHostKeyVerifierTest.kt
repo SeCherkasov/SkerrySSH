@@ -80,6 +80,40 @@ class ReadOnlyHostKeyVerifierTest {
     }
 
     @Test
+    fun `Refuse says the host is merely untrusted, not that its key changed`() {
+        // This is the one refusal the user can fix themselves — open a terminal session once, or
+        // add a CA — and the message can only say so if the reason survives the trip to the UI.
+        val store = RecordingKnownHostsStore()
+        val verifier = ReadOnlyHostKeyVerifier(store, UnknownHost.Refuse)
+
+        assertEquals(HostKeyRefusal.NotTrustedYet, verifier.check("example.com", 22, ed25519, fpA))
+    }
+
+    @Test
+    fun `a changed key is named as such under either policy`() {
+        bothPolicies { policy, store ->
+            store.seed(KnownHost("example.com", 22, ed25519, fpA))
+            val verifier = ReadOnlyHostKeyVerifier(store, policy)
+
+            assertEquals(HostKeyRefusal.KeyChanged, verifier.check("example.com", 22, ed25519, fpB), "$policy")
+        }
+    }
+
+    @Test
+    fun `an unreadable store is named as such under either policy`() {
+        bothPolicies { policy, store ->
+            store.readable = false
+            val verifier = ReadOnlyHostKeyVerifier(store, policy)
+
+            assertEquals(
+                HostKeyRefusal.TrustStoreUnreadable,
+                verifier.check("example.com", 22, ed25519, fpA),
+                "$policy",
+            )
+        }
+    }
+
+    @Test
     fun `a new key type for a known host counts as an unknown host`() {
         // ed25519 is stored, the server offers rsa: a different (host, port, keyType) triple, so there
         // is no key to compare against and the policy decides.

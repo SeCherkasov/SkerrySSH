@@ -6,7 +6,6 @@ import java.security.PrivateKey
 import java.security.PublicKey
 import java.security.Security
 import java.util.Base64
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import kotlinx.coroutines.Dispatchers
@@ -123,7 +122,7 @@ class SshjTransport(
         // harmless there.
         client.connectTimeout = CONNECT_TIMEOUT_MILLIS
         configure(client)
-        val hostKeyRejected = installHostKeyVerifier(client)
+        val hostKeyRefused = installHostKeyVerifier(client)
         opened += client
         try {
             if (upstream == null) {
@@ -135,9 +134,11 @@ class SshjTransport(
             // Don't put the host address in the message text (logs/crash reporters): connect
             // metadata is sensitive in a zero-knowledge client. Diagnostic detail stays in the
             // cause (e).
-            if (hostKeyRejected.get()) {
+            hostKeyRefused.get()?.let { refusal ->
                 throw SshHostKeyRejectedException(
                     if (hop) "Jump host key rejected by verifier" else "Host key rejected by verifier",
+                    refusal,
+                    hop,
                 )
             }
             // sshj checks a host certificate (CA signature, principals, validity) during KEX and
@@ -150,6 +151,8 @@ class SshjTransport(
                     } else {
                         "Host certificate rejected: not valid for this host, or expired"
                     },
+                    HostKeyRefusal.CertificateRejected,
+                    hop,
                     e,
                 )
             }
@@ -159,15 +162,15 @@ class SshjTransport(
     }
 
     /**
-     * Attach an adapter for our [hostKeyVerifier] to [client]. The returned flag is set on
-     * rejection: verify() is called from sshj's IO thread, while the flag is read from the
-     * coroutine after connect() — needs thread-safe visibility, hence AtomicBoolean.
+     * Attach an adapter for our [hostKeyVerifier] to [client]. The returned holder carries the
+     * refusal: check() is called from sshj's IO thread, while the reason is read from the
+     * coroutine after connect() — needs thread-safe visibility, hence AtomicReference.
      */
-    private fun installHostKeyVerifier(client: SSHClient): AtomicBoolean {
-        val hostKeyRejected = AtomicBoolean(false)
+    private fun installHostKeyVerifier(client: SSHClient): AtomicReference<HostKeyRefusal?> {
+        val hostKeyRefusal = AtomicReference<HostKeyRefusal?>(null)
         client.addHostKeyVerifier(object : net.schmizz.sshj.transport.verification.HostKeyVerifier {
             override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
-                val trusted = hostKeyVerifier.verify(
+                val refusal = hostKeyVerifier.check(
                     HostKeyOffer(
                         host = hostname,
                         port = port,
@@ -176,13 +179,13 @@ class SshjTransport(
                         certificate = (key as? Certificate<*>)?.let { offeredCertificate(it, hostname) },
                     ),
                 )
-                if (!trusted) hostKeyRejected.set(true)
-                return trusted
+                if (refusal != null) hostKeyRefusal.set(refusal)
+                return refusal == null
             }
 
             override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
         })
-        return hostKeyRejected
+        return hostKeyRefusal
     }
 
     /**

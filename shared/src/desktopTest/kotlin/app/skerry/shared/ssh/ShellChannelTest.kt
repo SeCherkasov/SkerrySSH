@@ -49,7 +49,7 @@ class ShellChannelTest {
     }
 
     private suspend fun connect(): SshConnection =
-        SshjTransport(HostKeyVerifier { true }).connect(
+        SshjTransport(HostKeyVerifier { null }).connect(
             SshTarget(host = "127.0.0.1", port = server.port, username = USER),
             SshAuth.Password(PASSWORD),
         )

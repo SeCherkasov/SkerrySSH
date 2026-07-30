@@ -9,6 +9,7 @@ import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.container.containerListCommandLine
 import app.skerry.shared.container.parseContainerList
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshAuthenticationException
 import app.skerry.shared.ssh.SshConnectionException
@@ -25,15 +26,26 @@ import kotlinx.coroutines.withContext
 /**
  * Why "Browse containers" came back empty-handed. Typed, not a message string, so the view renders
  * localized text (`containerBrowseFailureText`) — same rule as [ConnectionTestProblem].
- * [COMMAND_FAILED] covers the runtime side: no `docker`/`kubectl` on the host, no permission on the
- * socket, no cluster context — all indistinguishable from here and all fixed on the host.
  */
-enum class ContainerBrowseProblem {
-    AUTHENTICATION_FAILED,
-    HOST_KEY_REJECTED,
-    CONNECTION_FAILED,
-    INCOMPLETE_FORM,
-    COMMAND_FAILED,
+sealed interface ContainerBrowseProblem {
+    data object AuthenticationFailed : ContainerBrowseProblem
+
+    /**
+     * The host key was not trusted; [refusal] is why, where the transport reported it. The probe
+     * dials a host the user usually already has an open session with, so the reasons it can really
+     * hit — the key changed since, the vault locked in between — have different fixes.
+     */
+    data class HostKeyRejected(val refusal: HostKeyRefusal? = null) : ContainerBrowseProblem
+
+    data object ConnectionFailed : ContainerBrowseProblem
+
+    data object IncompleteForm : ContainerBrowseProblem
+
+    /**
+     * The runtime side: no `docker`/`kubectl` on the host, no permission on the socket, no cluster
+     * context — all indistinguishable from here and all fixed on the host.
+     */
+    data object CommandFailed : ContainerBrowseProblem
 }
 
 /**
@@ -73,7 +85,7 @@ suspend fun listContainers(
         // A non-zero exit means the CLI itself refused (missing binary, denied socket, no context):
         // the stdout we might have is not a listing.
         if (result.exitCode != null && result.exitCode != 0) {
-            ContainerBrowseStatus.Failure(ContainerBrowseProblem.COMMAND_FAILED)
+            ContainerBrowseStatus.Failure(ContainerBrowseProblem.CommandFailed)
         } else {
             ContainerBrowseStatus.Loaded(parseContainerList(spec.runtime, result.stdout))
         }
@@ -87,15 +99,15 @@ suspend fun listContainers(
         }
     }
 } catch (e: SshAuthenticationException) {
-    ContainerBrowseStatus.Failure(ContainerBrowseProblem.AUTHENTICATION_FAILED)
+    ContainerBrowseStatus.Failure(ContainerBrowseProblem.AuthenticationFailed)
 } catch (e: SshHostKeyRejectedException) {
-    ContainerBrowseStatus.Failure(ContainerBrowseProblem.HOST_KEY_REJECTED)
+    ContainerBrowseStatus.Failure(ContainerBrowseProblem.HostKeyRejected(e.refusal))
 } catch (e: SshConnectionException) {
-    ContainerBrowseStatus.Failure(ContainerBrowseProblem.CONNECTION_FAILED)
+    ContainerBrowseStatus.Failure(ContainerBrowseProblem.ConnectionFailed)
 } catch (e: CancellationException) {
     throw e
 } catch (e: Exception) {
-    ContainerBrowseStatus.Failure(ContainerBrowseProblem.CONNECTION_FAILED)
+    ContainerBrowseStatus.Failure(ContainerBrowseProblem.ConnectionFailed)
 }
 
 /**

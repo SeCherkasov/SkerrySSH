@@ -10,6 +10,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 private const val USER = "skerry"
@@ -55,7 +56,7 @@ class SshjJumpTest {
     private fun target(jump: SshJump?) =
         SshTarget(host = "127.0.0.1", port = targetServer.port, username = USER, jump = jump)
 
-    private val acceptAll = HostKeyVerifier { true }
+    private val acceptAll = HostKeyVerifier { null }
 
     @Test
     fun `connects through the jump host and executes a command`() = runTest {
@@ -85,7 +86,7 @@ class SshjJumpTest {
         val seen = mutableListOf<Pair<String, Int>>()
         val recording = HostKeyVerifier { offer ->
             synchronized(seen) { seen += offer.host to offer.port }
-            true
+            null
         }
         val connection = SshjTransport(recording).connect(target(jumpHop()), SshAuth.Password(PASSWORD))
         connection.disconnect()
@@ -95,23 +96,31 @@ class SshjJumpTest {
 
     @Test
     fun `rejected jump host key fails the connect and names the hop`() = runTest {
-        val rejectJump = HostKeyVerifier { it.port != jumpServer.port }
+        val rejectJump = HostKeyVerifier { offer ->
+            if (offer.port == jumpServer.port) HostKeyRefusal.NotTrustedYet else null
+        }
         val e = assertFailsWith<SshHostKeyRejectedException> {
             SshjTransport(rejectJump).connect(target(jumpHop()), SshAuth.Password(PASSWORD))
         }
         // The user must be able to tell WHOSE key was rejected — a changed bastion key would
         // otherwise send them investigating the target's fingerprint (and vice versa).
         assertEquals("Jump host key rejected by verifier", e.message)
+        assertEquals(HostKeyRefusal.NotTrustedYet, e.refusal) // the reason survives the IO thread
+        assertTrue(e.hop, "the refusal must say it was the hop, not the target")
         awaitNoSessions(jumpServer)
     }
 
     @Test
     fun `rejected target host key names the target, not the hop`() = runTest {
-        val rejectTarget = HostKeyVerifier { it.port != targetServer.port }
+        val rejectTarget = HostKeyVerifier { offer ->
+            if (offer.port == targetServer.port) HostKeyRefusal.NotTrustedYet else null
+        }
         val e = assertFailsWith<SshHostKeyRejectedException> {
             SshjTransport(rejectTarget).connect(target(jumpHop()), SshAuth.Password(PASSWORD))
         }
         assertEquals("Host key rejected by verifier", e.message)
+        assertEquals(HostKeyRefusal.NotTrustedYet, e.refusal)
+        assertFalse(e.hop)
         awaitNoSessions(jumpServer)
     }
 

@@ -12,7 +12,9 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun connectionTestFailureText(problem: ConnectionTestProblem): String = when (problem) {
     ConnectionTestProblem.AuthenticationFailed -> stringResource(Res.string.conn_test_err_auth)
-    ConnectionTestProblem.HostKeyRejected -> stringResource(Res.string.conn_test_err_host_key)
+    is ConnectionTestProblem.HostKeyRejected ->
+        problem.refusal?.let { stringResource(hostKeyRefusalText(it)) }
+            ?: stringResource(Res.string.conn_test_err_host_key)
     ConnectionTestProblem.ConnectionFailed -> stringResource(Res.string.conn_test_err_connection)
     ConnectionTestProblem.IncompleteForm -> stringResource(Res.string.conn_test_incomplete)
     is ConnectionTestProblem.Jump -> jumpProblemText(problem.problem)
