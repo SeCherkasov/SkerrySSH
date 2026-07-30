@@ -124,8 +124,9 @@ class TunnelEntry internal constructor(tunnel: Tunnel) {
 /**
  * Manager for saved tunnels: a tunnel is a standalone object in [TunnelStore], not part of an
  * open terminal session. [activate] opens its own SSH connection to the bound host via
- * [transport] (in production, a transport with `ProbeHostKeyVerifier` — only already-trusted
- * hosts) and raises the forward; [deactivate] closes the forward and its connection. Host/secret
+ * [transport] (in production, a transport with `ReadOnlyHostKeyVerifier(UnknownHost.Refuse)` — only a
+ * host already trusted or covered by a trusted CA, since this connection has no terminal and nobody
+ * watching it) and raises the forward; [deactivate] closes the forward and its connection. Host/secret
  * resolution is factored into [resolve] so the manager has no direct dependency on the host
  * manager or vault, and can be tested without them.
  *
@@ -139,13 +140,20 @@ class TunnelManager(
     private val resolve: (String) -> TunnelResolution,
     private val scope: CoroutineScope,
     private val pollIntervalMillis: Long = 1000,
+    /**
+     * Transport for the service scan, which is a different kind of connection from a forward: the
+     * user pressed a button and is watching the result, so an unknown host key is theirs to accept,
+     * while [transport] refuses one because a forward runs unattended. Defaults to [transport] for
+     * tests and previews, which care about neither distinction.
+     */
+    private val scanTransport: SshTransport = transport,
     private val newId: () -> String,
 ) {
     var tunnels: List<TunnelEntry> by mutableStateOf(store.all().map { TunnelEntry(it) })
         private set
 
     /** Discovery of listening services on a host, for forwarding one of them in a tap. */
-    val services: ServiceScanController = ServiceScanController(transport, resolve, scope)
+    val services: ServiceScanController = ServiceScanController(scanTransport, resolve, scope)
 
     init {
         // Polls telemetry for active tunnels: samples counters and computes rate from the delta.

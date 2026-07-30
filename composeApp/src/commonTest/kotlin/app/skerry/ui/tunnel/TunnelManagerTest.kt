@@ -43,16 +43,33 @@ class TunnelManagerTest {
         store: TunnelStore = FakeTunnelStore(),
         resolve: (String) -> TunnelResolution = { TunnelResolution.Ready(target, auth) },
         ids: List<String> = List(20) { "id-$it" },
+        scanTransport: SshTransport? = null,
     ): TunnelManager {
         val scope = TestScope(UnconfinedTestDispatcher())
         val it = ids.iterator()
-        return TunnelManager(store, transport, resolve, scope) { it.next() }
+        return TunnelManager(store, transport, resolve, scope, scanTransport = scanTransport ?: transport) { it.next() }
     }
 
     private fun localDraft(label: String = "web", hostId: String = "h1") = TunnelDraft(
         label = label, hostId = hostId, direction = TunnelDirection.Local,
         bindHost = "127.0.0.1", bindPort = 8080, destHost = "10.0.0.5", destPort = 80,
     )
+
+    @Test
+    fun `the service scan dials through the scan transport, not the one that raises forwards`() = runTest {
+        // The scan is a probe the user pressed and is watching, so an unknown host key is theirs to
+        // accept; a forward runs unattended and may not accept one. Both once shared a single
+        // transport, so tightening the forward silently made the scan refuse hosts it used to reach —
+        // and nothing in this suite noticed, which is why the distinction is pinned here.
+        val forwards = FakeTunnelTransport()
+        val scans = FakeTunnelTransport()
+        val manager = managerWith(forwards, scanTransport = scans)
+
+        manager.services.scan("h1")
+
+        assertEquals(target, scans.lastTarget, "the scan must ride the scan transport")
+        assertNull(forwards.lastTarget, "the scan must not touch the transport that raises forwards")
+    }
 
     @Test
     fun `save persists a new tunnel and lists it inactive`() = runTest {
