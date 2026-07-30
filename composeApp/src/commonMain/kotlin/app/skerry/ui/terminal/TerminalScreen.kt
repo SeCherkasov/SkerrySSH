@@ -785,22 +785,17 @@ fun TerminalScreen(
               }
           }
       }
-      Text(
-        text = structural,
-        style = structuralStyle,
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            // bottom += bottomSlack — an empty gap below the content so the live grid sticks to the
-            // viewport top rather than leaving a peeked scrollback row above (see bottomSlack).
-            .padding(start = PADDING_DP.dp, top = PADDING_DP.dp, end = PADDING_DP.dp, bottom = PADDING_DP.dp + bottomSlack)
-            // Scroll height is set explicitly (contentHeight) from cellHeight, not the Text font metrics.
-            .height(contentHeight)
-            .fillMaxWidth()
-            .focusRequester(focusRequester)
-            // Focus reporting (DEC 1004): vim/tmux get ESC[I/ESC[O on terminal window focus.
-            .onFocusChanged { state.notifyFocus(it.isFocused) }
-            .onPreviewKeyEvent { event ->
+      // Keyboard focus sits on this wrapper rather than on the scrolling text inside it: a focusable
+      // node within its own verticalScroll makes Compose scroll that container to "reveal" the node
+      // when it takes focus, and clicking the pane back into focus slid the whole screen up by a
+      // couple of rows. Nothing scrollable wraps this Box, so taking focus moves nothing.
+      Box(
+          Modifier
+              .fillMaxSize()
+              .focusRequester(focusRequester)
+              // Focus reporting (DEC 1004): vim/tmux get ESC[I/ESC[O on terminal window focus.
+              .onFocusChanged { state.notifyFocus(it.isFocused) }
+              .onPreviewKeyEvent { event ->
                 // Toggle the link (hand) cursor as Ctrl is pressed/released without moving the mouse.
                 // Runs before the KeyDown guard so a Ctrl KeyUp also clears it. Never consumes the event.
                 hoverPos?.let { updateHoverAffordance(it, event.isCtrlPressed) }
@@ -836,8 +831,11 @@ fun TerminalScreen(
                     state.openReverseSearch()
                     return@onPreviewKeyEvent true
                 }
-                // Shift+Tab — cycle autocomplete suggestion alternatives (only if one exists).
-                if (event.isShiftPressed && event.key == Key.Tab && state.suggestionTail != null) {
+                // Shift+Tab — cycle autocomplete suggestion alternatives. Swallowed whenever a ghost
+                // is on screen, even one that cannot be accepted yet: letting it through sends ESC[Z,
+                // which the engine reads as navigation and drops the line it is tracking.
+                val ghostOnScreen = state.hasSuggestion || state.suggestionTail != null
+                if (event.isShiftPressed && event.key == Key.Tab && ghostOnScreen) {
                     state.cycleSuggestion()
                     return@onPreviewKeyEvent true
                 }
@@ -871,7 +869,7 @@ fun TerminalScreen(
                     textToolbar.hide()
                     // Tab with an autocomplete suggestion — accept it (fish-style), don't send to the shell.
                     // Without a suggestion Tab goes to the PTY as usual (server-side completion isn't broken).
-                    if (bytes == "\t" && state.suggestionTail != null) {
+                    if (bytes == "\t" && state.hasSuggestion) {
                         state.acceptSuggestion()
                     } else {
                         state.typeInput(bytes)
@@ -880,8 +878,21 @@ fun TerminalScreen(
                 } else {
                     false
                 }
-            }
-            .focusable()
+              }
+              .focusable()
+      ) {
+      Text(
+        text = structural,
+        style = structuralStyle,
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scroll)
+            // bottom += bottomSlack — an empty gap below the content so the live grid sticks to the
+            // viewport top rather than leaving a peeked scrollback row above (see bottomSlack).
+            .padding(start = PADDING_DP.dp, top = PADDING_DP.dp, end = PADDING_DP.dp, bottom = PADDING_DP.dp + bottomSlack)
+            // Scroll height is set explicitly (contentHeight) from cellHeight, not the Text font metrics.
+            .height(contentHeight)
+            .fillMaxWidth()
             .onGloballyPositioned { layoutCoords = it }
             // Mouse wheel: when the app listens for the mouse — send a wheel report; in alt-screen without
             // mouse tracking (less/man) — arrows (3 rows per "tick"), since there's no own scrollback.
@@ -1145,6 +1156,7 @@ fun TerminalScreen(
                 }
             },
       )
+      }
 
       // Cursor overlay over the text per the DECSCUSR shape. Block — fill the cell + redraw the char in
       // a contrasting color; Underline — a bar at the bottom; Bar — a vertical line on the left. Geometry
@@ -1177,13 +1189,18 @@ fun TerminalScreen(
       }
 
       // Autocomplete "ghost": draw the suggestion tail in gray from the cursor position (fish/zsh-style).
-      // Same monospace geometry as the cursor; Tab (desktop) / chip (mobile) accept it. In alt-screen
-      // (vim/htop) there's no suggestion — [suggestionTail] is already cleared there.
-      val ghost = state.suggestionTail
-      if (ghost != null && !closed && screen.isNotEmpty()) {
+      // Same monospace geometry as the cursor; Tab (desktop) and the `tab` keycap (mobile) accept it.
+      // It continues what the cursor row shows, so text and ghost always read as one command. In
+      // alt-screen (vim/htop) there's no suggestion — [suggestionTail] is already cleared there.
+      if (!closed && screen.isNotEmpty()) {
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp).clipToBounds()) {
-              val x = cursorCol * metrics.cellWidth
-              val y = cursorRow * metrics.cellHeight - scroll.value.toFloat()
+              // Tail and cursor are read here, in the draw phase, rather than in composition: the tail
+              // changes on each published snapshot and on Shift+Tab, and reading it above would
+              // recompose the whole terminal to repaint one overlay. Reading the cursor alongside it
+              // keeps both from the same snapshot even if one lands between composition and draw.
+              val ghost = state.suggestionTail ?: return@Canvas
+              val x = state.cursorCol * metrics.cellWidth
+              val y = state.cursorRow * metrics.cellHeight - scroll.value.toFloat()
               drawGlyphText(measurer, ghost, Offset(x, y), ghostStyle)
           }
       }

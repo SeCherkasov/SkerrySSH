@@ -278,12 +278,298 @@ class TerminalScreenStateTest {
     @Test
     fun `preloaded history feeds autosuggestion`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
         val state = TerminalScreenState(
-            FakeTerminalSession(), scope,
+            session, scope,
             initialHistory = listOf("git push origin main"),
         )
+        session.emit("$ ".encodeToByteArray())
         state.typeInput("git pu")
+        session.emit("git pu".encodeToByteArray())
+
         assertEquals("sh origin main", state.suggestionTail)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the ghost follows the echoed text and never blinks off while typing`() = runTest {
+        // The ghost is drawn at the cursor of the published snapshot, so its text has to be the
+        // continuation of what that snapshot shows — not of the locally tracked line, which runs
+        // ahead of the echo. Recomputing it on every keystroke made it disappear for the round trip
+        // (a visible blink per character); deriving it from the screen keeps the completed command
+        // standing still while the typed part grows into it.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("git push origin main"),
+        )
+        session.emit("$ ".encodeToByteArray())
+
+        state.typeInput("git")
+        assertEquals(null, state.suggestionTail) // nothing echoed yet, so there is no place to draw
+        session.emit("git".encodeToByteArray())
+        assertEquals(" push origin main", state.suggestionTail)
+
+        // Typing ahead of the echo leaves the ghost where it is: the screen still reads "git".
+        state.typeInput(" pu")
+        assertEquals(" push origin main", state.suggestionTail)
+
+        // The echo arrives and the ghost shortens by exactly the characters that became text — its
+        // right edge does not move.
+        session.emit(" pu".encodeToByteArray())
+        assertEquals("sh origin main", state.suggestionTail)
+        scope.cancel()
+    }
+
+    @Test
+    fun `an accepted suggestion stays on screen until its echo turns it into text`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("git push origin main", "git push origin main --force-with-lease"),
+        )
+        session.emit("$ ".encodeToByteArray())
+        state.typeInput("git pu")
+        session.emit("git pu".encodeToByteArray())
+        assertEquals("sh origin main", state.suggestionTail)
+
+        assertTrue(state.acceptSuggestion())
+        // Still anchored to what the screen shows ("git pu"), now continuing the accepted command.
+        assertEquals("sh origin main --force-with-lease", state.suggestionTail)
+
+        session.emit("sh origin main".encodeToByteArray())
+        assertEquals(" --force-with-lease", state.suggestionTail)
+        scope.cancel()
+    }
+
+    @Test
+    fun `Tab accepts a suggestion that is not drawable yet`() = runTest {
+        // Nothing is echoed yet, so there is no ghost — but the completion exists. Tab and the mobile
+        // chip key off [hasSuggestion], or a Tab pressed on a slow link would fall through to the
+        // shell as a raw HT and Shift+Tab would reach the PTY as ESC[Z, clearing the tracked line.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("git push origin main"),
+        )
+        session.emit("$ ".encodeToByteArray())
+
+        state.typeInput("git pu")
+        assertEquals(null, state.suggestionTail)
+        assertTrue(state.hasSuggestion)
+        assertTrue(state.acceptSuggestion())
+        assertEquals("sh origin main", session.sent.last().decodeToString())
+        scope.cancel()
+    }
+
+    @Test
+    fun `backspace does not blink the ghost either`() = runTest {
+        // The erase is local first: until the shell echoes it the screen still reads "ll", and the
+        // ghost that belongs to "ll" is the correct thing to keep drawing there.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("lsof -i", "ll -h"),
+        )
+        session.emit("$ ".encodeToByteArray())
+        state.typeInput("ll")
+        session.emit("ll".encodeToByteArray())
+        assertEquals(" -h", state.suggestionTail)
+
+        state.typeInput("\b")
+        assertEquals(" -h", state.suggestionTail)
+
+        session.emit("\b \b".encodeToByteArray()) // how a shell erases a character
+        assertEquals("sof -i", state.suggestionTail)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the guard holds a line run by accept-line-and-down-history`() = runTest {
+        // Ctrl-O runs the current line just like Enter does; the mobile keybar reaches it as ctrl + "/".
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        state.typeInput("rm -rf /srv")
+
+        state.typeInput("${15.toChar()}") // Ctrl-O
+
+        assertNotNull(state.pendingGuarded)
+        assertEquals(false, session.sent.any { it.decodeToString() == "${15.toChar()}" })
+        scope.cancel()
+    }
+
+    @Test
+    fun `Tab inside the backspace window offers nothing`() = runTest {
+        // The ghost still shows the longer line's completion until the erase echoes, so accepting in
+        // that window would insert a command other than the one on screen.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("less /var/log/syslog", "ll -h"),
+        )
+        session.emit("$ ".encodeToByteArray())
+        state.typeInput("ll")
+        session.emit("ll".encodeToByteArray())
+        assertEquals(" -h", state.suggestionTail)
+
+        state.typeInput("\b")
+        assertEquals(" -h", state.suggestionTail) // unchanged: the screen still reads "ll"
+        assertEquals(false, state.hasSuggestion)
+
+        session.emit("\b \b".encodeToByteArray())
+        assertTrue(state.hasSuggestion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a paste gets its ghost when the echo lands`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("systemctl restart nginx"),
+        )
+        session.emit("$ ".encodeToByteArray())
+
+        state.paste("systemctl")
+        assertEquals(null, state.suggestionTail)
+
+        session.emit("systemctl".encodeToByteArray())
+        assertEquals(" restart nginx", state.suggestionTail)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the ghost shows the command Tab will insert, not the one the screen alone suggests`() = runTest {
+        // Two sources of truth: the ghost continues the echoed prefix, Tab completes the tracked line.
+        // Picking the candidate from the echoed prefix draws "docker ps" while Tab would insert
+        // "docker logs " — the key does something other than what the user is looking at.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        session.emit("$ ".encodeToByteArray())
+        state.typeInput("docker")
+        session.emit("docker".encodeToByteArray())
+        assertEquals(" ps", state.suggestionTail)
+
+        state.typeInput(" l") // typed ahead of the echo
+        assertEquals(" logs ", state.suggestionTail)
+
+        assertTrue(state.acceptSuggestion())
+        assertEquals("ogs ", session.sent.last().decodeToString())
+        scope.cancel()
+    }
+
+    @Test
+    fun `cycling while the echo lags draws the alternative that Tab will insert`() = runTest {
+        // The ghost is drawn from the echoed prefix and the accepted text from the tracked line, so
+        // both must name the SAME candidate. Picking it by index in two different candidate lists
+        // ("back" matches three commands, "backu" only two) draws one alternative and inserts another.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("backupdb", "backupfiles", "backends"),
+        )
+        session.emit("$ ".encodeToByteArray())
+        state.typeInput("back")
+        session.emit("back".encodeToByteArray())
+
+        state.typeInput("u") // typed ahead of the echo: screen still reads "back"
+        state.cycleSuggestion()
+        state.cycleSuggestion() // past the end of the "backu" candidates — wraps to the first
+
+        assertEquals("updb", state.suggestionTail)
+        assertTrue(state.acceptSuggestion())
+        assertEquals("pdb", session.sent.last().decodeToString())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a ghost after a non-BMP character keeps its place`() = runTest {
+        // The echoed prefix is found by comparing UTF-16 code units, and an emoji is a surrogate
+        // pair: a probe landing between the halves must not corrupt the tail or throw.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("echo 😀 done"),
+        )
+        session.emit("$ ".encodeToByteArray())
+        state.typeInput("echo 😀")
+        session.emit("echo 😀".encodeToByteArray())
+
+        assertEquals(" done", state.suggestionTail)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a line the shell redrew offers nothing to accept`() = runTest {
+        // Ctrl-W kills a word on the host but is a control byte the engine ignores, so its line keeps
+        // the word. Neither the ghost nor Tab may act on a line that no longer exists on screen.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("git push origin main"),
+        )
+        session.emit("$ ".encodeToByteArray())
+        state.typeInput("git pu")
+        session.emit("git pu".encodeToByteArray())
+        assertTrue(state.hasSuggestion)
+
+        state.typeInput("${23.toChar()}") // Ctrl-W
+        session.emit("\r$ git ${27.toChar()}[K".encodeToByteArray()) // the shell redraws the line
+
+        assertEquals(false, state.hasSuggestion)
+        assertEquals(null, state.suggestionTail)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a wrapped line gets no ghost`() = runTest {
+        // The ghost is drawn as one unwrapped run from the cursor, so on a line that already wrapped
+        // it would run off the right edge. Nothing is drawn there at all.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("uptime --pretty"),
+        )
+        state.resize(PtySize(cols = 6, rows = 4))
+        state.typeInput("uptime -")
+        session.emit("uptime -".encodeToByteArray())
+
+        assertEquals(null, state.suggestionTail)
+        // And nothing to accept either: Tab would insert a completion the user never saw.
+        assertEquals(false, state.hasSuggestion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `entering alt-screen clears a visible ghost`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(
+            session, scope,
+            initialHistory = listOf("vimdiff a b"),
+        )
+        session.emit("$ ".encodeToByteArray())
+        state.typeInput("vim")
+        session.emit("vim".encodeToByteArray())
+        assertEquals("diff a b", state.suggestionTail)
+
+        session.emit("${27.toChar()}[?1049h".encodeToByteArray())
+        assertEquals(true, state.altScreen)
+        assertEquals(null, state.suggestionTail)
+        assertEquals(false, state.hasSuggestion)
         scope.cancel()
     }
 
@@ -303,11 +589,15 @@ class TerminalScreenStateTest {
     @Test
     fun `cycle suggestion advances the ghost tail`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
         val state = TerminalScreenState(
-            FakeTerminalSession(), scope,
+            session, scope,
             initialHistory = listOf("backupdb", "backupfiles"),
         )
+        session.emit("$ ".encodeToByteArray())
         state.typeInput("back")
+        session.emit("back".encodeToByteArray())
+
         assertEquals("updb", state.suggestionTail)
         state.cycleSuggestion()
         assertEquals("upfiles", state.suggestionTail)

@@ -27,6 +27,15 @@ class AutocompleteEngine(
     /** Current typed line (for tests/diagnostics). */
     val currentLine: String get() = line.toString()
 
+    /**
+     * Whether the tracked line may no longer match the host's. Set when input carried a control byte
+     * this engine ignores but a shell acts on (Ctrl-W erases a word, Ctrl-T transposes): from there
+     * the line here and the line on screen have diverged, and anything built on it — a suggestion, a
+     * completion to insert — would complete a line the user is not on. Cleared when the line is.
+     */
+    var lineSuspect: Boolean = false
+        private set
+
     /** Command history (for reverse-search from the UI). */
     val commandHistory: CommandHistory get() = history
 
@@ -37,6 +46,7 @@ class AutocompleteEngine(
     fun reset() {
         line.clear()
         cycleIndex = 0
+        lineSuspect = false
     }
 
     /**
@@ -53,16 +63,21 @@ class AutocompleteEngine(
             when {
                 b == CR || b == LF -> {
                     val cmd = line.toString().trim()
-                    if (cmd.isNotEmpty()) {
+                    if (cmd.isNotEmpty() && !lineSuspect) {
                         history.record(cmd)
                         committed = cmd
                     }
                     line.clear()
+                    lineSuspect = false
                 }
                 b == BS || b == DEL -> if (line.isNotEmpty()) line.deleteAt(line.length - 1)
-                b == CTRL_U || b == CTRL_C -> line.clear()
-                b == ESC -> { line.clear(); i = skipEscapeSequence(data, i) } // arrows/navigation — reset
+                b == CTRL_U || b == CTRL_C -> { line.clear(); lineSuspect = false }
+                b == ESC -> { line.clear(); lineSuspect = false; i = skipEscapeSequence(data, i) } // arrows/navigation — reset
                 b == TAB -> { /* accept — handled by the UI via acceptSuggestion */ }
+                // A control byte that edits the line on the shell side (Ctrl-W kills a word, Ctrl-K
+                // the rest of it) leaves the two lines disagreeing — mark the line, nothing is offered
+                // for it. Cursor moves and screen redraws (Ctrl-A/E, Ctrl-L) keep the line as it is.
+                b in LINE_EDITING_CONTROLS -> lineSuspect = true
                 b < 0x20 -> { /* other control bytes — ignored, line untouched */ }
                 else -> {
                     // Printable character: decoded as UTF-8 (multi-byte sequences taken whole).
@@ -83,8 +98,9 @@ class AutocompleteEngine(
      * path/tokens seen in this session's history. Duplicates collapsed, first-seen order kept.
      * Empty if there's nothing to suggest (empty line / ends with a space).
      */
-    fun candidates(): List<String> {
-        val prefix = line.toString()
+    fun candidates(): List<String> = candidatesFor(line.toString())
+
+    private fun candidatesFor(prefix: String): List<String> {
         if (prefix.isBlank() || prefix.endsWith(' ')) return emptyList()
         val out = LinkedHashSet<String>()
         history.matches(prefix).forEach { out.add(it) }
@@ -96,18 +112,21 @@ class AutocompleteEngine(
         return out.filter { it.length > prefix.length && it.startsWith(prefix) }.toList()
     }
 
-    /** Full suggestion for the current line — the candidate under the cycle cursor, or `null`. */
-    fun suggestion(): String? {
-        val c = candidates()
+    /**
+     * Full suggestion for the current line — the candidate under the cycle cursor, or `null`. Also
+     * `null` for a line a control byte may have edited ([lineSuspect]): completing it would rewrite a
+     * line the user is no longer on.
+     */
+    fun suggestion(): String? = if (lineSuspect) null else suggestionFor(line.toString())
+
+    private fun suggestionFor(prefix: String): String? {
+        val c = candidatesFor(prefix)
         if (c.isEmpty()) return null
         return c[cycleIndex.mod(c.size)]
     }
 
     /** Suggestion tail — what to render in gray after the typed text, or `null`. */
-    fun suggestionTail(): String? {
-        val full = suggestion() ?: return null
-        return full.substring(line.length)
-    }
+    fun suggestionTail(): String? = suggestion()?.substring(line.length)
 
     /**
      * Switches to the next suggestion alternative (Shift+Tab). Cycles through [candidates] with
@@ -210,6 +229,15 @@ class AutocompleteEngine(
         const val CTRL_U = 21
         const val ESC = 27
         const val TAB = 9
+
+        /**
+         * Control bytes a shell acts on by rewriting the current line, which this engine cannot
+         * follow: Ctrl-D (delete forward), Ctrl-K (kill to end), Ctrl-N/Ctrl-P (history recall,
+         * which replaces the line wholesale), Ctrl-O (run it and recall the next), Ctrl-T
+         * (transpose), Ctrl-W (kill word), Ctrl-Y (yank), Ctrl-_ (undo). Ctrl-U and Ctrl-C clear the
+         * line outright and are handled above; cursor moves and redraws (Ctrl-A/B/E/F/L) leave it be.
+         */
+        val LINE_EDITING_CONTROLS = setOf(4, 11, 14, 15, 16, 20, 23, 25, 31)
     }
 }
 

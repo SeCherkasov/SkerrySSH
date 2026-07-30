@@ -944,11 +944,13 @@ class TerminalEmulator(
         when (mode) {
             0 -> { eraseLine(0); for (r in cy + 1 until rows) blankLine(r) }
             1 -> { for (r in 0 until cy) blankLine(r); eraseLine(1) }
-            // ED 2/3 clear the whole screen. On the primary buffer the old screen goes to scrollback so
-            // `clear`/`Ctrl+L` leave output scrollable (like gnome-terminal/VTE) rather than lost. ED 3
-            // ("erase saved lines") deliberately does not wipe history — clear sends it right after ED 2,
-            // by which point the screen is already empty, so no extra rows reach history.
-            2, 3 -> clearScreenToScrollback()
+            // ED 2 clears the screen; on the primary buffer the old screen goes to scrollback, so
+            // Ctrl+L (which sends ED 2 alone) pushes output out of sight but keeps it scrollable.
+            2 -> clearScreenToScrollback()
+            // ED 3 is "erase saved lines" — history goes. `clear` sends it right after ED 2, which is
+            // what makes that command drop the output instead of only paging past it. Not from the alt
+            // screen: a TUI resetting its display would take history it never owned with it.
+            3 -> if (!altScreen) scrollback.clear()
         }
     }
 
