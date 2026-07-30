@@ -235,6 +235,9 @@ compose.desktop {
         providers.environmentVariable("SKERRY_RDP_AUDIO_TRACE").orNull?.let {
             jvmArgs("-Dskerry.rdp.audioTrace=$it")
         }
+        providers.environmentVariable("SKERRY_RDP_H264_TRACE").orNull?.let {
+            jvmArgs("-Dskerry.rdp.h264Trace=$it")
+        }
 
         nativeDistributions {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Msi, TargetFormat.Dmg)

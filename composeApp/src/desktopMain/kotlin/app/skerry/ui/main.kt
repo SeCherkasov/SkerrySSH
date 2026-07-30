@@ -470,6 +470,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
             ),
             // Playback for a profile that asks for the session's sound (MS-RDPEA).
             audioPlayers = app.skerry.shared.audio.JavaSoundPlayers(),
+            // H.264 in the graphics pipeline, on a machine that has an ffmpeg to decode it with.
+            h264Decoders = app.skerry.shared.rdp.egfx.FfmpegH264Decoders(),
         ),
         workspaceLayout = workspaceLayout,
         ai = ai,
