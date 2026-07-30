@@ -60,12 +60,15 @@ private class LocalShellConnection(
         check(shellOpened.compareAndSet(false, true)) { "Local shell already started its stream" }
         val started = withContext(Dispatchers.IO) {
             try {
+                // Published inside the block, not after it: `withContext` throws at its boundary and
+                // discards the result if the job was cancelled while the (blocking, uncancellable)
+                // spawn ran, and a handle nothing holds is a shell process nothing can close.
                 start(LocalShellConfig(command = command, cols = size.cols, rows = size.rows))
+                    .also { handle = it }
             } catch (e: LocalShellUnavailableException) {
                 throw SshConnectionException(e.message ?: "Local terminal is not available", e)
             }
         }
-        handle = started
         return LocalShellChannel(started)
     }
 

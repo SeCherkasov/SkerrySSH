@@ -10,8 +10,11 @@ import java.io.PipedOutputStream
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 
@@ -127,6 +130,24 @@ class LocalShellTransportTest {
             }
             conn.disconnect()
         }
+    }
+
+    @Test
+    fun `a shell spawned while the caller is cancelled is still closed by disconnect`() = runBlocking {
+        // Closing the tab during fork+exec. `withContext` discards its result and throws at its own
+        // boundary when the job was cancelled while the block ran, so a handle published only after
+        // that boundary is held by nothing: disconnect() finds null and the shell process and its
+        // PTY outlive the app's interest in them.
+        val handle = FakeHandle()
+        lateinit var job: Job
+        val transport = LocalShellTransport(start = { job.cancel(); handle })
+        val conn = transport.connect(localTarget(), SshAuth.Password(""))
+
+        job = launch { runCatching { conn.openShell(PtySize(80, 24), "xterm") } }
+        job.join()
+
+        conn.disconnect()
+        assertFalse(handle.isOpen, "the spawned shell must not outlive the connection that started it")
     }
 
     private fun localTarget() = SshTarget(host = "", username = "")
