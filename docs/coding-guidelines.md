@@ -35,6 +35,8 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Reading/writing a protocol PDU with bounds checks | `rdp/RdpIo`: `RdpReader`, `RdpWriter`, `RdpSource`, `RdpSink`; malformed input → `rdp/RdpProtocolException` |
 | RDP connection entry point and live session | `rdp/RdpTransport`: `RdpTransport`, `RdpSession`, `RdpUpdate` |
 | MS-RDPEDYC dynamic channel (clipboard/display/audio/graphics) | `rdp/egfx/DynamicChannelHandler` |
+| Platform H.264 decoder injected into RDP | `rdp/egfx/H264Decoder`: `H264DecoderFactory` + `YuvFrame` — the platform answers for the decoder only, the wire and the 4:4:4 assembly are `AvcCodec`'s. `available` is what decides whether AVC is advertised at all |
+| Finding an executable on PATH (desktop) | `process/resolveExecutableOnPath` (ffmpeg, wl-clipboard) |
 | Platform crypto injected into RDP (NLA, licensing) | `rdp/nla/NtlmCrypto`, `rdp/LicenseCrypto/RdpLicenseCrypto` |
 | Server-certificate trust decision (TOFU by fingerprint) | `rdp/RdpCertificate/RdpCertificateVerifier` |
 | VNC connection entry point, session, auth | `vnc/VncTransport`: `VncTransport`, `VncSession`, `VncUpdate`, `VncAuth` |

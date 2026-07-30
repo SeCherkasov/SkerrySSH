@@ -19,6 +19,11 @@ class GraphicsCodecs(
     // ClearCodec carries state across messages — its caches are what make it cheap — so one decoder
     // serves the whole connection rather than being made per bitmap.
     private val clear: ClearCodec? = null,
+    /**
+     * The H.264 codecs, present only when this machine has a decoder for them. Whether it does is
+     * also what the client advertises, so a null here means the server was told not to send AVC.
+     */
+    val avc: AvcDecoder? = null,
 ) {
 
     /** Decode a whole [width]×[height] image, or null when [codecId] is one this client lacks. */
@@ -51,18 +56,55 @@ class GraphicsCodecs(
         const val CODEC_CLEARCODEC = 0x0008
         const val CODEC_PROGRESSIVE = 0x0009
         const val CODEC_PLANAR = 0x000A
+        const val CODEC_AVC420 = 0x000B
+        const val CODEC_AVC444 = 0x000E
+
+        /**
+         * The same 4:4:4 pair with the chroma of the odd rows packed differently — the version a
+         * server picks once the client advertises capability version 10.4 or later.
+         */
+        const val CODEC_AVC444_V2 = 0x000F
 
         private const val OPAQUE = 0xFF shl 24
 
         /** The name of a codec id, for the message a session ends with when one is not supported. */
         fun codecName(codecId: Int): String = when (codecId) {
-            0x000B -> "H.264 (AVC420)"
+            CODEC_AVC420 -> "H.264 (AVC420)"
             0x000C -> "alpha"
             0x000D -> "progressive v2"
-            0x000E, 0x000F -> "H.264 (AVC444)"
+            CODEC_AVC444, CODEC_AVC444_V2 -> "H.264 (AVC444)"
             else -> "0x${codecId.toString(16)}"
         }
     }
+}
+
+/**
+ * The H.264 codecs' decoder. Like [ProgressiveDecoder] it is handed the surface rather than a bare
+ * buffer — a frame is a difference from the pictures before it, and in 4:4:4 the full-resolution
+ * chroma is accumulated across messages — and it says which parts of the surface it touched.
+ */
+interface AvcDecoder {
+    /** Decode a 4:2:0 message (codec [GraphicsCodecs.CODEC_AVC420]) into [surface]. */
+    fun decodeAvc420(data: ByteArray, surface: GraphicsSurface): List<RdpRect>
+
+    /**
+     * Decode a 4:4:4 message into [surface]. [version2] selects the chroma packing of
+     * [GraphicsCodecs.CODEC_AVC444_V2]; the two differ in nothing else.
+     */
+    fun decodeAvc444(data: ByteArray, surface: GraphicsSurface, version2: Boolean): List<RdpRect>
+
+    /** Forget everything held for a surface that is going away, decoder included. */
+    fun forgetSurface(surfaceId: Int)
+
+    /**
+     * Give every decoder back, whatever the server did or did not say about its surfaces.
+     *
+     * A decoder here is not memory but an operating-system resource — a process on the desktop, one
+     * of a handful of hardware codec instances on Android — and a server has no reason to delete the
+     * surface it drew the desktop on before the session ends. Without this the session that ends
+     * takes neither with it.
+     */
+    fun close()
 }
 
 /**

@@ -108,7 +108,9 @@ Building it yourself is also easy — see [Building from source](#building-from-
   Existing hosts can be imported from `~/.ssh/config`.
 - **Remote desktops** — VNC and RDP in a section of their own, both on a client stack written
   for this project. A session panel carries screenshots, Ctrl+Alt+Del, clipboard exchange and
-  settings that apply mid-session.
+  settings that apply mid-session. RDP takes the H.264 stream a modern Windows host prefers when
+  the machine can decode it — Android always can; a desktop needs `ffmpeg` on PATH, and without
+  one the session simply runs on the other codecs.
 - **Terminal** — custom grid emulation, session tabs with up to four tiled panes and
   synchronized input, SSH auto-reconnect, scrollback search, live host metrics, a command
   palette over the history, broadcast input to several sessions, file paths from the output

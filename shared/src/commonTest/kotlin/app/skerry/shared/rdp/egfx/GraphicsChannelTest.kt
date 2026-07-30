@@ -36,6 +36,96 @@ class GraphicsChannelTest {
     }
 
     @Test
+    fun `a client with an H 264 decoder advertises the versions that let the server use it`() = runTest {
+        val avc = RecordingAvc()
+        val withH264 = GraphicsChannel(framebuffer, GraphicsCodecs(avc = avc)) { data -> sent.add(data) }
+
+        withH264.onOpen()
+
+        val advertise = sent.single()
+        assertEquals(3, advertise.u16(8), "three capability sets")
+        assertEquals(0x00080004, advertise.u32(10), "version 8, which the server falls back to")
+        assertEquals(0x00080105, advertise.u32(22), "version 8.1, which adds 4:2:0 H.264")
+        assertEquals(0x10, advertise.u32(30) and 0x10, "8.1 carries H.264 only with the flag set")
+        assertEquals(0x000A0400, advertise.u32(34), "version 10.4, which adds 4:4:4 H.264")
+        assertEquals(0, advertise.u32(42) and 0x20, "10.4 must not carry the flag that disables AVC")
+    }
+
+    @Test
+    fun `the version the server confirmed is reported, because nothing else says it took H 264`() = runTest {
+        val lines = mutableListOf<String>()
+        val channel = GraphicsChannel(framebuffer, GraphicsCodecs(), trace = { lines += it }) { }
+
+        channel.onMessage(bulk(pdu(0x0013, RdpWriter(4).u32le(0x000A0400).toByteArray())))
+
+        assertTrue(lines.single().contains("a0400"), "the confirmed version was not reported: $lines")
+    }
+
+    @Test
+    fun `a 4 to 2 to 0 bitmap goes to the H 264 codec and its regions reach the screen`() = runTest {
+        val avc = RecordingAvc()
+        avc.touched += RdpRect(0, 0, 4, 4)
+        val channel = GraphicsChannel(framebuffer, GraphicsCodecs(avc = avc)) { }
+        channel.onMessage(bulk(createSurface(id = 1, width = 8, height = 8)))
+        channel.onMessage(bulk(mapToOutput(surfaceId = 1, x = 0, y = 0)))
+        channel.drainUpdates()
+
+        channel.onMessage(
+            bulk(wireToSurfaceRaw(surfaceId = 1, codecId = 0x000B, payload = byteArrayOf(9), rect = RdpRect(0, 0, 8, 8))),
+        )
+
+        assertEquals(listOf<Byte>(9), avc.decoded420.single().toList())
+        val regions = channel.drainUpdates().filterIsInstance<RdpUpdate.Region>()
+        assertEquals(listOf(RdpRect(0, 0, 4, 4)), regions.single().rects)
+    }
+
+    @Test
+    fun `both 4 to 4 to 4 codec ids reach the decoder, and only one of them is the second packing`() = runTest {
+        val avc = RecordingAvc()
+        val channel = GraphicsChannel(framebuffer, GraphicsCodecs(avc = avc)) { }
+        channel.onMessage(bulk(createSurface(id = 1, width = 8, height = 8)))
+
+        channel.onMessage(bulk(wireToSurfaceRaw(1, codecId = 0x000E, payload = byteArrayOf(1))))
+        channel.onMessage(bulk(wireToSurfaceRaw(1, codecId = 0x000F, payload = byteArrayOf(2))))
+
+        assertEquals(listOf(false, true), avc.decoded444)
+    }
+
+    @Test
+    fun `a server that sends H 264 to a client without a decoder is reported`() = runTest {
+        deliver(createSurface(id = 1, width = 8, height = 8))
+
+        val failure = assertFailsWith<RdpProtocolException> {
+            deliver(wireToSurfaceRaw(surfaceId = 1, codecId = 0x000B, payload = byteArrayOf(1)))
+        }
+
+        assertTrue(failure.message.orEmpty().contains("H.264"), "the reason has to name the codec")
+    }
+
+    @Test
+    fun `closing the channel gives back the decoders the server never asked to delete`() = runTest {
+        val avc = RecordingAvc()
+        val channel = GraphicsChannel(framebuffer, GraphicsCodecs(avc = avc)) { }
+        channel.onMessage(bulk(createSurface(id = 1, width = 8, height = 8)))
+
+        channel.close()
+
+        assertTrue(avc.closed, "the session ended holding an H.264 decoder")
+    }
+
+    @Test
+    fun `a deleted surface takes its H 264 decoder with it`() = runTest {
+        val avc = RecordingAvc()
+        val channel = GraphicsChannel(framebuffer, GraphicsCodecs(avc = avc)) { }
+        channel.onMessage(bulk(createSurface(id = 3, width = 8, height = 8)))
+        avc.forgotten.clear()
+
+        channel.onMessage(bulk(deleteSurface(id = 3)))
+
+        assertEquals(listOf(3), avc.forgotten)
+    }
+
+    @Test
     fun `pixels reach the screen only once the surface is mapped to an output`() = runTest {
         deliver(createSurface(id = 1, width = 8, height = 8))
         deliver(wireToSurface(surfaceId = 1, rect = RdpRect(0, 0, 8, 8), colour = 0x123456))
@@ -325,6 +415,33 @@ class GraphicsChannelTest {
 
         override fun forgetSurface(surfaceId: Int) {
             forgotten += surfaceId
+        }
+    }
+
+    /** Stands in for the H.264 codecs, which have their own tests. */
+    private class RecordingAvc : AvcDecoder {
+        val decoded420 = mutableListOf<ByteArray>()
+        val decoded444 = mutableListOf<Boolean>()
+        val forgotten = mutableListOf<Int>()
+        val touched = mutableListOf<RdpRect>()
+        var closed = false
+
+        override fun decodeAvc420(data: ByteArray, surface: GraphicsSurface): List<RdpRect> {
+            decoded420 += data
+            return touched
+        }
+
+        override fun decodeAvc444(data: ByteArray, surface: GraphicsSurface, version2: Boolean): List<RdpRect> {
+            decoded444 += version2
+            return touched
+        }
+
+        override fun forgetSurface(surfaceId: Int) {
+            forgotten += surfaceId
+        }
+
+        override fun close() {
+            closed = true
         }
     }
 

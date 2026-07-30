@@ -4,10 +4,13 @@ import app.skerry.shared.audio.RemoteAudioPlayer
 import app.skerry.shared.audio.audioTrace
 import app.skerry.shared.audio.RemoteAudioPlayerFactory
 import app.skerry.shared.graphics.RemoteFramebuffer
+import app.skerry.shared.rdp.egfx.AvcCodec
 import app.skerry.shared.rdp.egfx.ClearCodec
 import app.skerry.shared.rdp.egfx.DynamicChannels
 import app.skerry.shared.rdp.egfx.GraphicsChannel
 import app.skerry.shared.rdp.egfx.GraphicsCodecs
+import app.skerry.shared.rdp.egfx.H264DecoderFactory
+import app.skerry.shared.rdp.egfx.h264Trace
 import app.skerry.shared.rdp.egfx.Progressive
 import app.skerry.shared.rdp.nla.CredSspClient
 import app.skerry.shared.rdp.nla.JvmNtlmCrypto
@@ -44,6 +47,12 @@ class RdpTcpTransport(
      * of the connection request rather than opened and dropped on the floor.
      */
     private val audioPlayers: RemoteAudioPlayerFactory? = null,
+    /**
+     * The machine's H.264 decoders. `null` — or a factory that says it has none — and the graphics
+     * pipeline never tells the server this client can take AVC, so a modern Windows host keeps sending
+     * the codecs decoded in Kotlin instead of a stream that would arrive as a frozen screen.
+     */
+    private val h264Decoders: H264DecoderFactory? = null,
 ) : RdpTransport {
 
     /**
@@ -139,7 +148,7 @@ class RdpTcpTransport(
                 connection.clearReadTimeout()
                 // `target` is where this attempt landed, which after a redirection is not the host
                 // the user typed.
-                RdpSocketSession(target.host, connection, state, settings, logon, audio)
+                RdpSocketSession(target.host, connection, state, settings, logon, audio, h264Decoders)
             } catch (e: Throwable) {
                 connection.close()
                 audio?.close()
@@ -196,6 +205,8 @@ class RdpSocketSession(
     logon: RdpLogonInfo,
     /** Local playback device for the session's sound; `null` when the profile asked for none. */
     audioPlayer: RemoteAudioPlayer? = null,
+    /** The machine's H.264 decoders, or `null` where it has none — see [RdpTcpTransport]. */
+    h264Decoders: H264DecoderFactory? = null,
 ) : RdpSession {
 
     override val framebuffer = RemoteFramebuffer(
@@ -245,7 +256,15 @@ class RdpSocketSession(
      */
     private val graphics = GraphicsChannel(
         framebuffer = framebuffer,
-        codecs = GraphicsCodecs(remoteFx = RemoteFx(), progressive = Progressive(), clear = ClearCodec()),
+        codecs = GraphicsCodecs(
+            remoteFx = RemoteFx(),
+            progressive = Progressive(),
+            clear = ClearCodec(),
+            // Only when this machine actually has a decoder: the codec being plugged in here is what
+            // makes the client advertise H.264, so a factory that answers no has to leave it out.
+            avc = h264Decoders?.takeIf { it.available }?.let { AvcCodec(it, trace = h264Trace) },
+        ),
+        trace = h264Trace,
         send = { data -> dynamicChannels.sendTo(GraphicsChannel.NAME, data) },
     )
 
@@ -410,6 +429,9 @@ class RdpSocketSession(
         // is what lets the playback coroutine end instead of outliving the session.
         audio?.close()
         audioScope?.cancel()
+        // The graphics pipeline holds what the H.264 codecs opened outside this process: a decoder
+        // per surface, which the server never asked to have deleted.
+        graphics.close()
         connection.close()
     }
 }
