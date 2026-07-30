@@ -4,6 +4,7 @@ import app.skerry.ui.remote.remoteKeyEvent
 import app.skerry.ui.remote.RemoteDesktopPanel
 import app.skerry.ui.remote.RemoteDesktopScreenState
 import app.skerry.ui.remote.RemoteDesktopUiState
+import app.skerry.ui.remote.ReportOutputVisibility
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
@@ -108,7 +109,11 @@ fun MobileVncScreen(state: MobileDesignState) {
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         when (val ui = vnc?.uiState) {
-            is RemoteDesktopUiState.Connected -> VncTouchSurface(ui.screen)
+            is RemoteDesktopUiState.Connected -> {
+                // The app going to the background stops the server drawing a desktop nobody sees.
+                ReportOutputVisibility(ui.screen)
+                VncTouchSurface(ui.screen)
+            }
             is RemoteDesktopUiState.Error -> CenterText(vncFailureText(ui.failure), Skerry.colors.sunset)
             is RemoteDesktopUiState.Disconnected -> Box(Modifier.fillMaxSize()) {
                 VncTouchSurface(ui.screen, interactive = false)

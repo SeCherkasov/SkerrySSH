@@ -129,7 +129,19 @@ class RdpRemoteDesktop(
     /** The RDP cursor is always the client's to draw; there is nothing to hand over. */
     override suspend fun setLocalCursor(enabled: Boolean) = Unit
 
-    override suspend fun setOutputVisible(visible: Boolean) = session.setOutputVisible(visible)
+    /**
+     * A suppressed server draws nothing, so while the window was away its screen and the last frame
+     * held here drifted apart — the picture comes back only if the whole of it is asked for. The
+     * server is under no obligation to volunteer that repaint (MS-RDPBCGR 2.2.11.3 says what stops,
+     * not what resumes), and an incremental update would leave the stale pixels around whatever
+     * happened to change. Which is why a server that cannot be asked for the repaint is not asked
+     * to stop either — see [RdpSession.outputSuppressionSupported].
+     */
+    override suspend fun setOutputVisible(visible: Boolean) {
+        if (!session.outputSuppressionSupported) return
+        session.setOutputVisible(visible)
+        if (visible) requestFullUpdate()
+    }
 
     override suspend fun setAudioMuted(muted: Boolean) = session.setAudioMuted(muted)
 

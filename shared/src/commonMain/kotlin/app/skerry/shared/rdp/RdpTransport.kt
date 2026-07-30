@@ -129,6 +129,15 @@ interface RdpSession {
     suspend fun setOutputVisible(visible: Boolean)
 
     /**
+     * Whether suppressing output is worth asking for at all. It takes both optional capabilities:
+     * the one that stops the drawing (MS-RDPBCGR 2.2.11.3) and the one that asks for it back
+     * (2.2.11.2). They are separate bits, and a server that grants only the first would hold the
+     * last frame on screen for the rest of the session — a picture nobody can repair is worse than
+     * the bandwidth suppression saves.
+     */
+    val outputSuppressionSupported: Boolean
+
+    /**
      * Ask the server to serve [width]×[height] from now on (MS-RDPEDISP). Dropped when the server
      * did not open the display control channel, which is how a host that cannot resize says so.
      */

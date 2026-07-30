@@ -8,6 +8,7 @@ import app.skerry.shared.graphics.RemoteRect
 import app.skerry.shared.graphics.RemoteDesktopUpdate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -350,6 +351,77 @@ class RemoteDesktopScreenStateTest {
         screen.toggleRemoteResize() // off again before the debounce fires
         advanceUntilIdle()
         assertTrue(session.desktopSizes.isEmpty())
+        scope.cancel()
+    }
+
+    @Test
+    fun a_window_going_off_screen_is_reported_to_the_session() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        screen.setVisible(false)
+        screen.setVisible(true)
+
+        assertEquals(listOf(false, true), session.visibility)
+        scope.cancel()
+    }
+
+    @Test
+    fun a_session_starts_visible_and_says_so_only_once_it_changes() = runTest {
+        // The state is the client's half of the protocol: the server was told nothing yet and is
+        // drawing, so repeating "visible" is a PDU that buys nothing — and a hidden window reported
+        // twice (window minimised, then the tab left the screen) must not un-suppress anything.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        screen.setVisible(true)
+        assertTrue(session.visibility.isEmpty(), "a session that was never hidden has nothing to report")
+
+        screen.setVisible(false)
+        screen.setVisible(false)
+        assertEquals(listOf(false), session.visibility)
+        scope.cancel()
+    }
+
+    @Test
+    fun visibility_reports_reach_the_session_in_the_order_they_were_made() = runTest {
+        // Minimise and restore in quick succession and the two writes race: each is its own
+        // coroutine on a multi-threaded scope. If "back on screen" overtakes "hidden", the server
+        // ends up suppressed while the client has already recorded the session as visible — and the
+        // record is what stops any later report from putting it right.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = object : FakeRemoteDesktop() {
+            override suspend fun setOutputVisible(visible: Boolean) {
+                // A slow first write is what gives the second one the chance to overtake it.
+                if (!visible) delay(50)
+                super.setOutputVisible(visible)
+            }
+        }
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        screen.setVisible(false)
+        screen.setVisible(true)
+        advanceUntilIdle()
+
+        assertEquals(listOf(false, true), session.visibility)
+        scope.cancel()
+    }
+
+    @Test
+    fun a_visibility_report_to_a_dead_session_does_not_escape_the_launch() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = object : FakeRemoteDesktop() {
+            override suspend fun setOutputVisible(visible: Boolean): Unit = throw IllegalStateException("Socket closed")
+        }
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        screen.setVisible(false)
+
+        // Reaching here at all is the assertion: the window is minimised on a session whose socket
+        // has already gone, and an exception out of the bare launch kills the process on Android.
+        assertTrue(session.visibility.isEmpty())
         scope.cancel()
     }
 

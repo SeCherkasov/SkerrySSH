@@ -169,6 +169,35 @@ class RemoteDesktopScreenState(
         }
     }
 
+    // What the server was last told about whether anyone is looking. A session starts as visible
+    // because that is the state a server begins in, so the first report worth sending is the one
+    // that changes it — see [setVisible].
+    private var outputVisible = true
+    private var visibilityJob: Job? = null
+
+    /**
+     * Report whether this session is on screen at all. Off screen the server is asked to stop
+     * rendering and streaming a desktop nobody is looking at (RDP's Suppress Output; a no-op where
+     * the protocol has no such PDU), and the picture is asked for again on the way back.
+     *
+     * Unlike the other writes here these have to reach the server in the order they were made:
+     * minimise-and-restore fires two of them, and a "back on screen" that overtakes the "hidden"
+     * would leave the server suppressed while this side has already recorded the session as
+     * visible — with that record then swallowing every later report. So each one waits for the
+     * previous one instead of racing it.
+     *
+     * Called from the platform's window/app lifecycle — see [ReportOutputVisibility].
+     */
+    fun setVisible(visible: Boolean) {
+        if (visible == outputVisible) return
+        outputVisible = visible
+        val previous = visibilityJob
+        visibilityJob = send {
+            previous?.join()
+            session.setOutputVisible(visible)
+        }
+    }
+
     /** Sound from the remote machine is silenced locally; the channel itself stays open. */
     var audioMuted by mutableStateOf(false)
         private set
@@ -316,15 +345,16 @@ class RemoteDesktopScreenState(
      * process down on Android. The dropped session surfaces through [closed] instead, which is the
      * read loop's job; there is nothing a failed input write can tell the user that the imminent
      * "Connection lost" doesn't.
+     *
+     * The job is returned for the one caller that has to order its writes ([setVisible]); the rest
+     * drop it.
      */
-    private fun send(block: suspend () -> Unit) {
-        scope.launch {
-            try {
-                block()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-            }
+    private fun send(block: suspend () -> Unit): Job = scope.launch {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
         }
     }
 
