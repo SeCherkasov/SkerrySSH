@@ -130,7 +130,11 @@ sealed interface RemoteDesktopUpdate {
     /** The server moved the pointer itself. */
     data class CursorPosition(val x: Int, val y: Int) : RemoteDesktopUpdate
 
-    /** Whether the remote cursor is shown at all. */
+    /**
+     * Whether the remote cursor is drawn at all. False hides it; true is the server asking for the
+     * ordinary system pointer rather than a shape of its own (RDP's SYSPTR_DEFAULT), which leaves
+     * the client's own pointer to stand in — it is not a request to redraw the last shape.
+     */
     data class CursorVisible(val visible: Boolean) : RemoteDesktopUpdate
 
     /** The remote clipboard's new text. */

@@ -47,7 +47,10 @@ sealed interface RdpUpdate {
     /** The server moved the pointer itself (a program warped it, not the user). */
     data class PointerPosition(val x: Int, val y: Int) : RdpUpdate
 
-    /** Whether the remote cursor is drawn at all; false is the "hidden pointer" state. */
+    /**
+     * A System Pointer Update: false is SYSPTR_NULL, the hidden pointer; true is SYSPTR_DEFAULT, the
+     * ordinary arrow — a shape the server never sends, so the client's own pointer stands in for it.
+     */
     data class PointerVisible(val visible: Boolean) : RdpUpdate
 
     /**
