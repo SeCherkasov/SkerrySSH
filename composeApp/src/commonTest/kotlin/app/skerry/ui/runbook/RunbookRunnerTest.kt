@@ -27,6 +27,7 @@ import kotlin.test.assertTrue
 class RunbookRunnerTest {
 
     private val poll = 100L
+    private val stallAfter = 5_000L
 
     private class FakeTerminal {
         val sent = mutableListOf<String>()
@@ -72,6 +73,7 @@ class RunbookRunnerTest {
             newId = { RUN_ID },
             environment = ::environment,
             pollIntervalMillis = poll,
+            stallAfterMillis = stallAfter,
         )
         try {
             body(runner, term)
@@ -87,6 +89,61 @@ class RunbookRunnerTest {
         target: RunbookTarget,
         contextValue: (SnippetSegment.Variable) -> String,
     ): Boolean = requestStart(runbook, target) && confirmStart(contextValue)
+
+    @Test
+    fun a_step_that_goes_quiet_without_reporting_is_flagged() = runnerTest { r, term ->
+        // An unterminated here-doc (or quote, or a shell that replaced itself with `exec`) leaves
+        // nothing that will ever print the marker. The run cannot know that, but it can see that the
+        // step has printed nothing for a long time and has not reported a status.
+        r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
+        assertFalse(r.steps[0].stalled)
+
+        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+
+        assertTrue(r.steps[0].stalled)
+        // Not killed: `sleep 3600` and a silent migration look exactly the same from here, so the
+        // decision stays the user's.
+        assertEquals(RunbookStepStatus.RUNNING, r.steps[0].status)
+        assertEquals(RunbookPhase.RUNNING, r.phase)
+    }
+
+    @Test
+    fun a_step_that_keeps_printing_is_never_flagged() = runnerTest { r, term ->
+        r.startNow(runbook(step("s1", "apt upgrade")), term.target()) { "" }
+
+        repeat(6) {
+            testScheduler.advanceTimeBy(stallAfter / 2); testScheduler.runCurrent()
+            term.buffer += "Unpacking package $it\n"
+        }
+        testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
+
+        assertFalse(r.steps[0].stalled, "a long step that talks is not a stuck one")
+    }
+
+    @Test
+    fun output_after_a_quiet_spell_clears_the_flag() = runnerTest { r, term ->
+        r.startNow(runbook(step("s1", "./migrate.sh")), term.target()) { "" }
+        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+        assertTrue(r.steps[0].stalled)
+
+        term.buffer += "migrating 1/400\n"
+        testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
+
+        assertFalse(r.steps[0].stalled)
+    }
+
+    @Test
+    fun a_step_that_reports_after_a_quiet_spell_does_not_stay_flagged() = runnerTest { r, term ->
+        r.startNow(runbook(step("s1", "sleep 300")), term.target()) { "" }
+        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+        assertTrue(r.steps[0].stalled)
+
+        term.complete(0, 0)
+        testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.steps[0].status)
+        assertFalse(r.steps[0].stalled)
+    }
 
     @Test
     fun sends_the_command_with_the_exit_code_probe() = runnerTest { r, term ->
