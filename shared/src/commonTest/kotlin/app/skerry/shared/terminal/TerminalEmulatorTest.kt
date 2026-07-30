@@ -489,55 +489,70 @@ class TerminalEmulatorTest {
     }
 
     @Test
-    fun `erase display 3 keeps scrollback so clear preserves history`() {
+    fun `erase display 3 wipes the scrollback`() {
         val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("a\r\nb\r\nc\r\nd"))
-        val before = emu.lines.size
-        assertTrue(before > 2) // scrollback accumulated
+        assertTrue(emu.lines.size > 2) // scrollback accumulated
+
         emu.feed("$esc[3J".encodeToByteArray())
-        // ED 3 ("erase saved lines") does not wipe history — it stays scrollable.
-        assertTrue(emu.lines.size >= before, "scrollback preserved")
+
+        // ED 3 is "erase saved lines": history is gone, only the visible grid is left.
+        assertEquals(2, emu.lines.size)
     }
 
     @Test
-    fun `clear sequence blanks the screen yet keeps prior output scrollable`() {
-        // Exactly what the `clear` command sends: home, erase screen, erase saved lines.
+    fun `erase display 3 from the alternate screen keeps the primary scrollback`() {
+        // A TUI resetting its own display must not destroy the history it never owned.
+        val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("keep me\r\nand me\r\nx"))
+        val before = emu.lines.size
+
+        emu.feed("$esc[?1049h".encodeToByteArray())
+        emu.feed("$esc[3J".encodeToByteArray())
+        emu.feed("$esc[?1049l".encodeToByteArray())
+
+        assertEquals(before, emu.lines.size)
+    }
+
+    @Test
+    fun `clear leaves nothing to scroll back to`() {
+        // Exactly what the `clear` command sends: home, erase screen, erase saved lines. Unlike Ctrl+L
+        // (ED 2 alone), it is meant to drop the output, not just push it out of sight.
         val emu = emulate(cols = 10, rows = 3, chunks = arrayOf("alpha\r\nbeta\r\ngamma", "$esc[H$esc[2J$esc[3J"))
-        // Prior output is available in history...
+
         val text = emu.lines.joinToString("\n") { row -> row.joinToString("") { it.text }.trimEnd() }
-        assertTrue("alpha" in text && "beta" in text && "gamma" in text, "history preserved")
-        // ...while the visible grid (bottom 3 rows) is blank and the cursor is at its start (home).
-        assertTrue(emu.lines.takeLast(3).all { row -> row.all { it.text == " " } }, "screen cleared")
-        assertEquals(3, emu.cursorRow)
+        assertTrue("alpha" !in text && "beta" !in text && "gamma" !in text, "history dropped")
+        assertEquals(3, emu.lines.size) // the visible grid and nothing else
+        assertTrue(emu.lines.all { row -> row.all { it.text == " " } }, "screen cleared")
+        assertEquals(0, emu.cursorRow)
         assertEquals(0, emu.cursorCol)
     }
 
     @Test
-    fun `clear keeps a background-colored blank row in history`() {
-        // A row of spaces with a colored background (BCE) is content, not emptiness: on clear it must go
-        // to scrollback, not be trimmed as a trailing blank.
+    fun `ctrl-L keeps a background-colored blank row in history`() {
+        // A row of spaces with a colored background (BCE) is content, not emptiness: pushing the screen
+        // to scrollback must move it, not trim it as a trailing blank.
         val emu = emulate(cols = 4, rows = 3, chunks = arrayOf("ab\r\n", "$esc[41m    $esc[m"))
-        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray())
+        emu.feed("$esc[H$esc[2J".encodeToByteArray())
         assertEquals(5, emu.lines.size) // "ab" + the colored row in scrollback + 3 blank on-screen
         assertEquals(TermColor.Red, emu.lines[1][0].style.bg)
     }
 
     @Test
-    fun `repeated clear does not flood scrollback with blank lines`() {
+    fun `repeated ctrl-L does not flood scrollback with blank lines`() {
         val emu = emulate(cols = 10, rows = 3, chunks = arrayOf("x\r\ny"))
-        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray())
+        emu.feed("$esc[H$esc[2J".encodeToByteArray())
         val afterFirst = emu.lines.size
-        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clearing an already-empty screen
+        emu.feed("$esc[H$esc[2J".encodeToByteArray()) // clearing an already-empty screen
         assertEquals(afterFirst, emu.lines.size, "a repeated clear doesn't spawn empty rows in history")
     }
 
     @Test
-    fun `resize after clear keeps the screen empty and history scrolled back`() {
-        // After `clear`, prior output sits in scrollback and the visible screen is empty (a single fresh
+    fun `resize after ctrl-L keeps the screen empty and history scrolled back`() {
+        // After Ctrl+L, prior output sits in scrollback and the visible screen is empty (a single fresh
         // prompt at the top). A resize — e.g. opening a split that narrows the terminal — must not pull
         // history back onto the visible screen: the empty space below the cursor is screen content, not
         // an "insignificant tail", and reflow must preserve it.
         val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("line1\r\nline2\r\nline3"))
-        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clear: history → scrollback, screen empty
+        emu.feed("$esc[H$esc[2J".encodeToByteArray())        // Ctrl+L: screen → scrollback, screen empty
         emu.feed("$ ".encodeToByteArray())                   // fresh prompt in the top screen row
         emu.resize(6, 4)                                     // narrow the terminal (like opening a split)
 
@@ -559,7 +574,7 @@ class TerminalEmulatorTest {
         // When a resize also reduces height, the nr-1 cap on the preserved space below the cursor must
         // keep the cursor within the new screen (not push it past the top boundary).
         val emu = emulate(cols = 10, rows = 4, chunks = arrayOf("line1\r\nline2\r\nline3"))
-        emu.feed("$esc[H$esc[2J$esc[3J".encodeToByteArray()) // clear
+        emu.feed("$esc[H$esc[2J".encodeToByteArray()) // clear
         emu.feed("$ ".encodeToByteArray())                   // prompt at the top of the screen
         emu.resize(6, 2)                                     // narrower AND shorter
 
