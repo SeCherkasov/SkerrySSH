@@ -81,6 +81,45 @@ class RunbookMarkerTest {
     }
 
     @Test
+    fun `a command ending in a line continuation gets the probe past a blank line`() {
+        // A trailing backslash swallows whichever separator comes next: `cmd \; probe` runs `cmd`
+        // with the whole probe as its arguments, and `cmd \` followed by a plain newline does the
+        // same. Verified against bash. Only a blank line ends the command — the continuation joins
+        // with the empty line, and the newline after that terminates it.
+        assertEquals(
+            "docker run -d --rm nginx \\\n\n${RunbookMarker.probe("TOK")}",
+            RunbookMarker.probeLine("docker run -d --rm nginx \\", "TOK"),
+        )
+    }
+
+    @Test
+    fun `a continuation on the last line of a multi-line command is absorbed too`() {
+        // The multi-line branch would otherwise hand this to the shell as `… nginx \` + newline +
+        // probe, which is the same swallowed probe one line further down.
+        assertEquals(
+            "docker run \\\n  --rm nginx \\\n\n${RunbookMarker.probe("TOK")}",
+            RunbookMarker.probeLine("docker run \\\n  --rm nginx \\", "TOK"),
+        )
+    }
+
+    @Test
+    fun `three trailing backslashes are still a continuation`() {
+        // The rule is parity, not "ends with one but not two". An implementation that only looked at
+        // the last two characters would call this complete and swallow the probe again.
+        assertEquals(
+            "cmd \\\\\\\n\n${RunbookMarker.probe("TOK")}",
+            RunbookMarker.probeLine("cmd \\\\\\", "TOK"),
+        )
+    }
+
+    @Test
+    fun `an escaped backslash ends the command and keeps the probe on the same line`() {
+        // `cmd \\` is a literal backslash, not a continuation; only an odd number of them continues
+        // the line. Verified against bash: the ordinary `;` form runs here.
+        assertEquals("echo a \\\\; ${RunbookMarker.probe("TOK")}", RunbookMarker.probeLine("echo a \\\\", "TOK"))
+    }
+
+    @Test
     fun `exit code is read back from the printed marker`() {
         val token = RunbookMarker.token("run", 0)
         assertEquals(0, RunbookMarker.exitCodeIn("some output\n$token:0\n$ ", token))
