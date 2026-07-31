@@ -1,6 +1,5 @@
 package app.skerry.ui.remote
 
-import androidx.compose.runtime.snapshots.Snapshot
 import app.skerry.shared.graphics.RemoteDesktopUpdate
 import app.skerry.ui.vnc.VncFailure
 import kotlinx.coroutines.CompletableDeferred
@@ -57,10 +56,6 @@ class RemoteDesktopControllerTest {
         controller.connect { session }
         advanceUntilIdle()
         updates.emit(RemoteDesktopUpdate.Closed(cleanExit = false, reason = "the server went away"))
-        advanceUntilIdle()
-        // The watcher hangs off snapshotFlow, which a running Compose frame would notify; outside
-        // one the test has to apply the snapshot itself.
-        Snapshot.sendApplyNotifications()
         advanceUntilIdle()
 
         val state = controller.uiState
