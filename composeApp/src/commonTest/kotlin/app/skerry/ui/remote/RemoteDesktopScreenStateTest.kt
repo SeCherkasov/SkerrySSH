@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -66,15 +67,46 @@ class RemoteDesktopScreenStateTest {
     }
 
     @Test
-    fun close_update_marks_closed() = runTest {
+    fun close_update_publishes_the_reason_the_server_gave() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
         val session = FakeRemoteDesktop(updates = updates)
         val screen = RemoteDesktopScreenState(session, scope)
 
-        updates.emit(RemoteDesktopUpdate.Closed(cleanExit = true))
-        assertTrue(screen.closed)
-        assertTrue(screen.cleanExit)
+        assertNull(screen.close.value)
+        updates.emit(RemoteDesktopUpdate.Closed(cleanExit = true, reason = "the user logged off"))
+        assertEquals(
+            RemoteDesktopUpdate.Closed(cleanExit = true, reason = "the user logged off"),
+            screen.close.value,
+        )
+        scope.cancel()
+    }
+
+    @Test
+    fun a_throwing_update_flow_closes_the_screen_as_a_drop() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop(updates = flow { error("socket died") })
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        assertEquals(RemoteDesktopUpdate.Closed(cleanExit = false), screen.close.value)
+        scope.cancel()
+    }
+
+    @Test
+    fun the_close_the_server_explained_survives_the_read_loop_blowing_up_after_it() = runTest {
+        // Teardown throwing behind an orderly close must not replace the server's own words with a
+        // bare drop — that is the only text the tab has to explain why it ended.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val explained = RemoteDesktopUpdate.Closed(cleanExit = true, reason = "the account may not log on remotely")
+        val session = FakeRemoteDesktop(
+            updates = flow {
+                emit(explained)
+                error("socket died")
+            },
+        )
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        assertEquals(explained, screen.close.value)
         scope.cancel()
     }
 

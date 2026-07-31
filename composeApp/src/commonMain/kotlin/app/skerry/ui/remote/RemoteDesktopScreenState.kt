@@ -18,6 +18,9 @@ import app.skerry.ui.vnc.clampPan
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -252,20 +255,19 @@ class RemoteDesktopScreenState(
         }
     }
 
-    /** True once the session has closed (server drop / EOF); the controller reacts to this. */
-    var closed by mutableStateOf(false)
-        private set
-
-    /** Whether the last close was a clean peer exit (vs a transport drop). */
-    var cleanExit: Boolean = false
-        private set
+    private val _close = MutableStateFlow<RemoteDesktopUpdate.Closed?>(null)
 
     /**
-     * The server's own explanation of the close, where it gave one ("the account may not log on
-     * remotely"). Empty when the session simply dropped.
+     * The close, once the session ended on its own (server drop / EOF); null while it is live. It
+     * carries `cleanExit` (a clean peer exit vs a transport drop) and the server's own explanation
+     * where it gave one ("the account may not log on remotely").
+     *
+     * A flow rather than snapshot state: the watcher is a coroutine on the session scope, not a
+     * composition, and snapshot reads only reach one through the process-wide apply-observer
+     * registry — delivered by whatever frame happens to run next. The terminal side watches
+     * `TerminalState` the same way.
      */
-    var closeReason: String = ""
-        private set
+    val close: StateFlow<RemoteDesktopUpdate.Closed?> = _close.asStateFlow()
 
     /** Latest clipboard text from the remote host; the view mirrors it into the system clipboard. */
     var serverClipboard: String? by mutableStateOf(null)
@@ -287,8 +289,9 @@ class RemoteDesktopScreenState(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                cleanExit = false
-                closed = true
+                // Only if nothing closed the session already: a read loop that blows up behind an
+                // orderly close must not replace the server's own words with a bare drop.
+                _close.compareAndSet(null, RemoteDesktopUpdate.Closed(cleanExit = false))
             }
         }
     }
@@ -316,11 +319,7 @@ class RemoteDesktopScreenState(
                 if (remoteResize) scheduleRemoteResize()
             }
 
-            is RemoteDesktopUpdate.Closed -> {
-                cleanExit = update.cleanExit
-                closeReason = update.reason
-                closed = true
-            }
+            is RemoteDesktopUpdate.Closed -> _close.value = update
 
             else -> onPeripheralUpdate(update)
         }
@@ -392,7 +391,7 @@ class RemoteDesktopScreenState(
      * Fire-and-forget a write to the server. Every caller is a UI event (a mouse move, a menu click)
      * racing the read loop, so the socket can already be dead when the write lands — and an exception
      * escaping a bare `launch` isn't merely lost, it reaches the default handler and takes the whole
-     * process down on Android. The dropped session surfaces through [closed] instead, which is the
+     * process down on Android. The dropped session surfaces through [close] instead, which is the
      * read loop's job; there is nothing a failed input write can tell the user that the imminent
      * "Connection lost" doesn't.
      *
