@@ -4,7 +4,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import app.skerry.shared.graphics.RemoteDesktopSession
 import app.skerry.ui.vnc.VncFailure
 import app.skerry.ui.vnc.vncFailureOf
@@ -14,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
@@ -113,11 +113,11 @@ class RemoteDesktopController(
      */
     private fun watchForClose(screen: RemoteDesktopScreenState, sScope: CoroutineScope) {
         sScope.launch {
-            snapshotFlow { screen.closed }.first { it }
+            val closed = screen.close.filterNotNull().first()
             // Dispatch onto the main scope (like ConnectionController) so the transition doesn't race disconnect.
             scope.launch {
                 if (uiState is RemoteDesktopUiState.Connected) {
-                    uiState = RemoteDesktopUiState.Disconnected(screen, screen.cleanExit, screen.closeReason)
+                    uiState = RemoteDesktopUiState.Disconnected(screen, closed.cleanExit, closed.reason)
                     releaseSession()
                 }
             }
