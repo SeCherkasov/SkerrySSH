@@ -139,6 +139,7 @@ import app.skerry.ui.host.hostChipLabel
 import app.skerry.ui.host.hostTagChips
 import app.skerry.ui.host.icon
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -835,7 +836,7 @@ private fun HostRow(
             // Selection highlight: marks the row clicked in double-click mode (and the most recently
             // connected one in single-click mode). Distinct from the live-connection status dot.
             selected = host.id == selectedHostId,
-            dot = sessionDotColor(sessions?.statusFor(host.id)),
+            dot = sessionDotColor(sessions?.sessionStatusFor(host.id) ?: SessionStatus.Idle),
             badge = null,
             onClick = onClick,
             onSelect = onSelect,

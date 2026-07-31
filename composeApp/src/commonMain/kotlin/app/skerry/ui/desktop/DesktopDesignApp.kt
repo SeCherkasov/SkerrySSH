@@ -39,8 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -1105,7 +1103,7 @@ private fun DesktopChrome(
                             stringResource(Res.string.shell_disconnect_message)
                         },
                         confirmLabel = stringResource(Res.string.shell_disconnect),
-                        onConfirm = { closeSessionTab(state, sessions, pc.id); state.dismissClose() },
+                        onConfirm = { sessions?.close(pc.id); state.dismissClose() },
                         onDismiss = state::dismissClose,
                     )
                 }
@@ -1256,8 +1254,6 @@ internal fun selectTabByIndex(index: Int, state: DesktopDesignState, sessions: S
     if (sessions != null) {
         val target = sessions.tabs.getOrNull(index) ?: return false
         sessions.activate(target.id)
-        // A tab hotkey can cross sections (Alt+3 onto a remote desktop): the work area follows.
-        followActiveTabSection(state, sessions)
         return true
     }
     if (index !in state.tabs.indices) return false
@@ -1273,7 +1269,6 @@ internal fun cycleTab(delta: Int, state: DesktopDesignState, sessions: SessionsC
         val current = list.indexOfFirst { it.id == sessions.activeId }.coerceAtLeast(0)
         val next = ((current + delta) % list.size + list.size) % list.size
         sessions.activate(list[next].id)
-        followActiveTabSection(state, sessions)
         return true
     }
     val count = state.tabs.size
@@ -1397,14 +1392,14 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                         name = focused.tabTitle(state.showTerminalTitleOnTabs),
                         // A recording tab has no connection: its dot and accent are sunset, so it
                         // never reads as a live (or dead) session.
-                        dot = if (s.isPlayer) Skerry.colors.sunset else sessionDotColor(focused.controller.uiState),
+                        dot = if (s.isPlayer) Skerry.colors.sunset else sessionDotColor(focused.status),
                         accent = if (s.isPlayer || prodTab) Skerry.colors.sunset else Skerry.colors.cyan,
                         split = s.isSplit,
                         active = s.id == sessions.activeId,
-                        // Chips of both sections share one row, so selecting one also moves the work
-                        // area to the section that tab belongs to.
-                        onClick = { sessions.activate(s.id); followActiveTabSection(state, sessions) },
-                        onClose = { tabDrag.tabClosed(s.id); closeSessionTab(state, sessions, s.id) },
+                        // Chips of both sections share one row: selecting one swaps the work area
+                        // (workAreaSection) and leaves the rail on whatever catalog is open.
+                        onClick = { sessions.activate(s.id) },
+                        onClose = { tabDrag.tabClosed(s.id); sessions.close(s.id) },
                         dragging = tabDrag.draggingTabId == s.id,
                         modifier = Modifier
                             .tabBoundsAnchor(tabDrag, s.id)
@@ -1511,15 +1506,6 @@ internal fun SessionTabChip(
                 },
             )
             .border(1.dp, if (active) accentBorder else Skerry.colors.line, shape)
-            // Accent strip on the active tab's top edge (editor tab style). drawBehind renders over the
-            // background/border but under content; doesn't inflate the chip's width.
-            .then(
-                if (active) {
-                    Modifier.drawBehind { drawRect(accent, size = Size(size.width, 2.dp.toPx())) }
-                } else {
-                    Modifier
-                },
-            )
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             // Middle-click closes the tab (browser-tab convention), active or not: armed on the
             // tertiary press, committed on its release while still over the chip — moving off
@@ -1575,7 +1561,6 @@ private fun TabInsertLine() {
 
 @Composable
 private fun IconRail(state: DesktopDesignState) {
-    val sessions = LocalSessions.current
     Column(
         Modifier
             .width(52.dp)
@@ -1596,8 +1581,9 @@ private fun IconRail(state: DesktopDesignState) {
                     when (val target = item.target) {
                         // App-level (Vault/Known/Teams/Tunnels/Snippets) → overlay over the tabs.
                         is RailTarget.View -> state.showView(target.view)
-                        // Work-area section: switch the shell and land on that section's newest tab.
-                        is RailTarget.Section -> openRailSection(state, sessions, target.section)
+                        // Work-area section: swaps the sidebar catalog; a running session stays on
+                        // screen (openRailSection).
+                        is RailTarget.Section -> openRailSection(state, target.section)
                     }
                 },
             )

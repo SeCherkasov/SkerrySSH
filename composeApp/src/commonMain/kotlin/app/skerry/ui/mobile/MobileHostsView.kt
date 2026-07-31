@@ -77,6 +77,7 @@ import app.skerry.ui.host.folderRangeAnchor
 import app.skerry.ui.host.hostBoundsAnchor
 import app.skerry.ui.host.hostChipLabel
 import app.skerry.ui.host.icon
+import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.host.draggableFolderHeader
 import app.skerry.ui.host.draggableHostRow
@@ -461,13 +462,13 @@ private fun MobileFolderHeader(
  * Host row: icon tile + name + monospace `user@address` + status dot. The tile carries the
  * profile's protocol ([app.skerry.ui.host.icon], same symbol as the desktop sidebar and the
  * connection form); the dot color is live, taken from the host's latest session status
- * ([SessionsController.statusFor]) via the desktop-shared [sessionDotColor] (connected → green,
+ * ([SessionsController.sessionStatusFor]) via the desktop-shared [sessionDotColor] (live → green,
  * connecting → amber, error/dropped → sunset, no session → dim). Reading uiState inside the
  * composition subscribes the row to status changes so the dot updates on connect.
  */
 @Composable
 private fun MobileHostRow(host: Host, onClick: () -> Unit) {
-    val dotColor = sessionDotColor(LocalSessions.current?.statusFor(host.id))
+    val dotColor = sessionDotColor(LocalSessions.current?.sessionStatusFor(host.id) ?: SessionStatus.Idle)
     val prod = isProdHost(host)
     Row(
         Modifier

@@ -66,13 +66,21 @@ fun SessionView.asDesktopView(): DesktopView = when (this) {
 }
 
 /**
- * Work-area section a tab belongs to: a remote-desktop tab ([Tab.isVnc]) renders in the
- * remote-desktop section, everything else (shells, SFTP, recording player) in the terminal one.
- * Activating a tab moves the shell to its section, so the rail, the sidebar and the work area never
- * disagree about what is on screen.
+ * Section the work area renders, given the selected tab [active] and the section open in the rail
+ * ([DesktopDesignState.section]). A remote-desktop tab ([Tab.isVnc]) renders as a framebuffer,
+ * everything else (shells, SFTP, recording player) as a terminal-side view.
+ *
+ * The work area belongs to the tab, not to the rail: opening a section swaps the catalog in the
+ * sidebar and leaves the live session on screen, so walking over to the desktops catalog while a
+ * shell is running doesn't replace that shell with an empty state. It works the other way too —
+ * tabbing between sessions swaps the screen without dragging the catalog along. Only with no tab
+ * open does the rail decide the whole work area: there is nothing to keep.
  */
-fun sectionOf(tab: Tab?): HostSection =
-    if (tab?.isVnc == true) HostSection.RemoteDesktops else HostSection.Terminal
+fun workAreaSection(active: Tab?, section: HostSection): HostSection = when {
+    active == null -> section
+    active.isVnc -> HostSection.RemoteDesktops
+    else -> HostSection.Terminal
+}
 
 /** Settings panel tabs. */
 enum class SettingsTab { AI, Sync, Security, Appearance, Terminal, Keyboard, Trash, About }
@@ -488,8 +496,8 @@ class DesktopDesignState(
      * Open a work-area section from the rail (terminal / remote desktops). Clears the app overlay —
      * the click asks for the work area, which an open Vault/Teams section would otherwise hide. The
      * session sub-view ([view]) is left alone, so returning to the terminal lands on the SFTP panel
-     * if that is where the user was. Activating the section's newest tab is the caller's job (it
-     * holds the session manager), see [app.skerry.ui.desktop.openRailSection].
+     * if that is where the user was. The selected tab is left alone too — see
+     * [app.skerry.ui.desktop.openRailSection] for why the rail doesn't touch it.
      */
     fun showSection(s: HostSection) {
         appOverlay = null

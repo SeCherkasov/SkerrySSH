@@ -439,7 +439,11 @@ fun TerminalView(state: DesktopDesignState) {
             visible = !state.sidebarHidden,
             enter = expandHorizontally(expandFrom = Alignment.End),
             exit = shrinkHorizontally(shrinkTowards = Alignment.End),
-        ) { HostsSidebar(state) }
+        ) {
+            // The catalog belongs to the rail, not to what's on screen: a shell keeps running while
+            // the user browses the desktops list beside it (see workAreaSection).
+            HostsSidebar(state, state.section)
+        }
         // Reopen handle: a slim strip at the terminal's left edge, shown only while the sidebar is
         // collapsed (its collapse chevron lives in the panel header, which is gone when hidden).
         AnimatedVisibility(

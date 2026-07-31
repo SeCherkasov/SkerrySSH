@@ -2,9 +2,7 @@ package app.skerry.ui.desktop
 
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.DesktopView
-import app.skerry.ui.app.sectionOf
 import app.skerry.ui.host.HostSection
-import app.skerry.ui.session.SessionsController
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rail_desktops
 import app.skerry.ui.generated.resources.rail_hosts
@@ -54,33 +52,16 @@ fun railItemActive(item: RailItem, state: DesktopDesignState): Boolean = when (v
 }
 
 /**
- * Open a work-area section from the rail: switch the shell to it and activate that section's newest
- * tab, so returning to a section lands back on its live session instead of an empty work area. With
- * no tab of that section the active tab is left alone — the work area shows the section's empty
- * state, and the other section's tab stays selected for when the user switches back.
+ * Open a work-area section from the rail: swap the sidebar catalog, leave the running session on
+ * screen. Walking the rail is navigation, not a session switch — the tab the user is working in
+ * keeps its chip selected and keeps rendering ([app.skerry.ui.app.workAreaSection]), and the
+ * catalog that just opened is how the next session starts. Only with no tab open does the section
+ * take over the whole work area.
  */
-fun openRailSection(state: DesktopDesignState, sessions: SessionsController?, section: HostSection) {
+fun openRailSection(state: DesktopDesignState, section: HostSection) {
     state.showSection(section)
-    sessions?.lastSessionIn(remoteDesktop = section == HostSection.RemoteDesktops)
-        ?.let { sessions.activate(it.id) }
 }
 
-/**
- * Follow a tab selection (chip click, tab hotkey, a session opening): the work area moves to the
- * section the now-active tab belongs to, so clicking a remote-desktop chip shows the framebuffer
- * rather than leaving the terminal on screen.
- */
-fun followActiveTabSection(state: DesktopDesignState, sessions: SessionsController?) {
-    state.showSection(sectionOf(sessions?.active))
-}
-
-/**
- * Close tab [id] and follow whatever tab becomes active. Every close path goes through here (chip
- * "×", the disconnect confirmation): closing hands the selection to a neighbour, which may belong
- * to the other section, and a close that forgot to follow would leave the rail, the tab row and
- * the work area pointing at three different things.
- */
-fun closeSessionTab(state: DesktopDesignState, sessions: SessionsController?, id: String) {
-    sessions?.close(id)
-    followActiveTabSection(state, sessions)
-}
+// Selecting, cycling or closing a tab deliberately has no rail counterpart: the work area follows
+// the selection on its own ([app.skerry.ui.app.workAreaSection]), and the catalog stays the one the
+// user opened. The rail moves on a rail click and on a connect (which lands in that host's section).
