@@ -7,6 +7,8 @@ import app.skerry.server.metrics.JwtRejection
 import app.skerry.server.metrics.RejectReason
 import app.skerry.server.model.ErrorResponse
 import app.skerry.server.model.ReadyResponse
+import app.skerry.server.routes.accountRoutes
+import app.skerry.server.routes.adminHealthRoute
 import app.skerry.server.routes.adminRoutes
 import app.skerry.server.routes.authRoutes
 import app.skerry.server.routes.deviceRoutes
@@ -18,6 +20,9 @@ import app.skerry.server.routes.syncWebSocket
 import app.skerry.server.routes.teamRoutes
 import app.skerry.server.routes.teamScopeRoutes
 import app.skerry.server.routes.vaultRoutes
+import app.skerry.server.routes.WebSessionScope
+import app.skerry.server.routes.webFrontendRoutes
+import app.skerry.server.routes.webPasswordRoute
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -43,14 +48,12 @@ import io.ktor.server.plugins.ratelimit.RateLimit
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.plugins.statuspages.StatusPages
-import io.ktor.server.http.content.staticResources
 import io.ktor.server.request.contentLength
 import io.ktor.server.request.header
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
-import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -70,6 +73,7 @@ object RateLimits {
     val PAIRING_CLAIM = RateLimitName("pairing-claim")
     val REFRESH = RateLimitName("auth-refresh")
     val CHANGE_PASSWORD = RateLimitName("auth-change-password")
+    val WEB_LOGIN = RateLimitName("auth-web-login")
     val ADMIN = RateLimitName("admin")
     val TEAM_SESSION_EVENTS = RateLimitName("team-session-events")
     val METRICS = RateLimitName("metrics")
@@ -137,16 +141,18 @@ fun Application.configureServer(services: Services) {
             meterBinders = emptyList()
         }
     }
-    // Security headers on every response. CSP is locked to 'self' (API returns JSON, admin
-    // console is same-origin with no external resources); inline style/script are allowed
-    // because the console uses them and is embedded in the same page.
+    // Security headers on every response. CSP is locked to 'self': the API returns JSON and the web
+    // frontend is same-origin with no external resource. Script is 'self' only — the pages load
+    // /assets/*.js and attach every handler with addEventListener, so an injected <script> or
+    // onerror= that ever slipped past the frontend's escaping would still not run. Style keeps
+    // 'unsafe-inline' because the page's own stylesheet and its style="" attributes are inline.
     install(DefaultHeaders) {
         header("X-Content-Type-Options", "nosniff")
         header("X-Frame-Options", "DENY")
         header("Referrer-Policy", "no-referrer")
         header(
             "Content-Security-Policy",
-            "default-src 'self'; font-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+            "default-src 'self'; font-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'",
         )
     }
     // Rate-limit by client IP: throttles brute force/flooding on register, SRP, and pairing claim.
@@ -177,6 +183,10 @@ fun Application.configureServer(services: Services) {
         // Password rotation proves the current password via SRP; rate-limited like the SRP endpoints
         // as defense-in-depth (it's a public POST that swaps the verifier).
         perIp(RateLimits.CHANGE_PASSWORD, limit = 10)
+        // Web sign-in is a password typed into a browser, so this is where an online brute force
+        // lands. Same budget as the SRP endpoints, and the limiter gates the route: a throttled
+        // attempt is turned away before the Argon2 verification it would otherwise pay for.
+        perIp(RateLimits.WEB_LOGIN, limit = 10)
         // The admin console uses a constant-time static token compare, which doesn't stop brute
         // forcing the token itself, hence a rate limit on /admin/*.
         perIp(RateLimits.ADMIN, limit = 30)
@@ -289,20 +299,23 @@ fun Application.configureServer(services: Services) {
             metricsRoutes(services)
         }
 
-        // Root redirects to the admin console so opening the server in a browser isn't a 404.
-        get("/") { call.respondRedirect("/console/") }
-
-        // Static admin console (self-hosted): /console -> resources/admin/index.html.
-        staticResources("/console", "admin")
+        // Self-hosted web frontend: / public page, /account cabinet, /console operator console.
+        webFrontendRoutes()
 
         authRoutes(services)
         pairingClaimRoute(services)   // no JWT: the new device hasn't logged in yet
+        adminHealthRoute(services)    // open, and outside the admin bucket: the front page reads it
         rateLimit(RateLimits.ADMIN) {
             adminRoutes(services)     // own admin auth (static token) plus a brute-force rate limit
         }
 
         authenticate("auth-jwt") {
+            // A token minted for a browser is an account token like any other; this is what keeps
+            // the web password from reaching what the master password protects (see WebSessionGuard).
+            install(WebSessionScope)
             vaultRoutes(services)
+            accountRoutes(services)
+            webPasswordRoute(services)   // set from the app, over its own session — never from a browser
             deviceRoutes(services)
             pairingStartRoute(services)
             teamRoutes(services)

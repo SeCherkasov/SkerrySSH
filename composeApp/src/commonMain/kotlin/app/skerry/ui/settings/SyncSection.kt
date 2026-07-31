@@ -58,9 +58,11 @@ import app.skerry.ui.generated.resources.settings_sync_syncing
 import app.skerry.ui.generated.resources.settings_sync_syncing_desc
 import app.skerry.ui.generated.resources.settings_this_device
 import app.skerry.ui.generated.resources.settings_what_syncs
+import app.skerry.ui.generated.resources.web_access_label
 import app.skerry.ui.sync.AccountCardModel
 import app.skerry.ui.sync.AccountIdentityBlock
 import app.skerry.ui.sync.SyncStatus
+import app.skerry.ui.sync.WebAccessCard
 import app.skerry.ui.sync.accountCardModelLocalized
 import app.skerry.ui.sync.syncFailureText
 import kotlinx.coroutines.launch
@@ -123,7 +125,13 @@ private fun LiveSyncSection(sync: app.skerry.ui.sync.SyncCoordinator, state: Des
     WhatSyncsHeader()
     WhatSyncsToggles(sync)
     // The device list is only known server-side while a session is active (Online).
-    if (status is SyncStatus.Online) LinkedDevices(sync, onLink = state::openPairing)
+    if (status is SyncStatus.Online) {
+        LinkedDevices(sync, onLink = state::openPairing)
+        // Same session requirement, and the same card as mobile: the web password is set over this
+        // device's own token and nowhere else.
+        SectionLabel(stringResource(Res.string.web_access_label), top = 18.dp, bottom = 10.dp)
+        WebAccessCard(sync)
+    }
 }
 
 /**

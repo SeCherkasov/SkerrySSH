@@ -1,5 +1,6 @@
 package app.skerry.server.model
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 
 /**
@@ -66,9 +67,12 @@ data class AdminAccountsResponse(val accounts: List<AdminAccountDto>, val total:
  * A vault record envelope as the server actually sees it: plaintext sync metadata plus ciphertext
  * size and [previewHex] (leading bytes of the real ciphertext, opaque noise). No content by
  * construction: the blob is unreadable without dataKey.
+ *
+ * Served to both zones — the operator's account inspector and the owner's own Storage section. The
+ * preview is the load-bearing part in the second: it is what the server holds, shown as it holds it.
  */
 @Serializable
-data class AdminRecordDto(
+data class RecordEnvelopeDto(
     val id: String,
     val type: String,
     val version: Long,
@@ -81,7 +85,43 @@ data class AdminRecordDto(
 )
 
 @Serializable
-data class AdminRecordsResponse(val accountId: String, val records: List<AdminRecordDto>)
+data class AdminRecordsResponse(val accountId: String, val records: List<RecordEnvelopeDto>)
+
+// --- account zone ---
+
+/**
+ * `GET /account/summary`: the caller's own totals, the same aggregates `/admin/accounts` reports for
+ * one row. [records] counts tombstones too ([tombstones] is how many of them are); [lastSeenAt] is
+ * the most recent activity across the account's devices, null for an account that never synced.
+ */
+@Serializable
+data class AccountSummaryResponse(
+    val accountId: String,
+    val createdAt: Long,
+    val syncSeq: Long,
+    val devices: Int,
+    val activeDevices: Int,
+    val records: Int,
+    val tombstones: Int,
+    val storageBytes: Long,
+    val lastSeenAt: Long?,
+)
+
+/** `GET /account/activity`: one row of the caller's own log. No accountId — every row is theirs. */
+@Serializable
+data class AccountActivityDto(
+    val deviceId: String?,
+    val event: String,
+    val detail: String,
+    val createdAt: Long,
+)
+
+@Serializable
+data class AccountActivityResponse(val events: List<AccountActivityDto>, val total: Long)
+
+/** `GET /vault/envelopes`: what the server stores for the caller, metadata and preview only. */
+@Serializable
+data class VaultEnvelopesResponse(val records: List<RecordEnvelopeDto>)
 
 /** Result of a tombstone purge: how many tombstones were physically deleted. */
 @Serializable
@@ -98,8 +138,20 @@ data class StatsResponse(
     val storageBytes: Long,
 )
 
+/**
+ * `GET /admin/health`, the one open endpoint under `/admin` — it is what the public front page
+ * reads. [registrationOpen] is there because a visitor otherwise has no way to tell whether an
+ * account on this instance is possible; it says nothing about who already has one.
+ */
 @Serializable
-data class HealthResponse(val status: String, val version: String)
+data class HealthResponse(
+    val status: String,
+    val version: String,
+    // @EncodeDefault, or the field silently disappears from the response whenever it equals the
+    // default — which is the open case, i.e. the usual one. The default itself stays for reading a
+    // response from a server that predates the field.
+    @EncodeDefault val registrationOpen: Boolean = true,
+)
 
 /**
  * `GET /admin/observability`: is monitoring actually wired up on this instance? The console has no

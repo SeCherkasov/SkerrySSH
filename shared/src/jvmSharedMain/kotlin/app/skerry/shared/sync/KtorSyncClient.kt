@@ -17,6 +17,8 @@ import app.skerry.sync.wire.RecordsResponse
 import app.skerry.sync.wire.RefreshRequest
 import app.skerry.sync.wire.RegisterRequest
 import app.skerry.sync.wire.TokenResponse
+import app.skerry.sync.wire.WebAccessResponse
+import app.skerry.sync.wire.WebPasswordRequest
 import app.skerry.sync.wire.VerifyRequest
 import app.skerry.sync.wire.VerifyResponse
 import com.nimbusds.srp6.SRP6ClientSession
@@ -96,7 +98,7 @@ import java.util.Base64
 class KtorSyncClient(
     private val serverUrl: String,
     private val http: HttpClient = defaultHttpClient(),
-) : SyncClient, TeamClient,
+) : SyncClient, TeamClient, WebAccessClient,
     // Session sharing is its own protocol over the same server and the same HTTP client; delegated
     // rather than inlined, so this file stays about sync and Teams.
     app.skerry.shared.share.SessionShareClient by app.skerry.shared.share.KtorSessionShareClient(serverUrl, http) {
@@ -244,6 +246,30 @@ class KtorSyncClient(
             HttpStatusCode.NotFound -> false
             else -> throw resp.toException()
         }
+    }
+
+    override suspend fun webAccessEnabled(session: SyncSession): Boolean {
+        val resp: WebAccessResponse = get("/auth/web-password") { bearerAuth(session.accessToken) }.bodyChecked()
+        return resp.enabled
+    }
+
+    override suspend fun setWebPassword(session: SyncSession, password: CharArray) {
+        // Same limitation as the SRP authKey hex below: the JSON body is built from an immutable
+        // String, so the password outlives this call until GC whatever the caller does. Wiping the
+        // caller's CharArray still bounds every copy the app itself holds.
+        webPassword(session, WebPasswordRequest(String(password)))
+    }
+
+    override suspend fun clearWebPassword(session: SyncSession) {
+        webPassword(session, WebPasswordRequest(null))
+    }
+
+    private suspend fun webPassword(session: SyncSession, body: WebPasswordRequest) {
+        post("/auth/web-password") {
+            bearerAuth(session.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }.expectSuccess()
     }
 
     override suspend fun refresh(session: SyncSession): SyncSession {

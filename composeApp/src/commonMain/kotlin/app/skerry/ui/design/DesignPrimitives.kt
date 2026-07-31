@@ -420,19 +420,23 @@ fun GhostButton(
     icon: String? = null,
     fg: Color = Skerry.colors.text,
     border: Color = Skerry.colors.lineStrong,
+    enabled: Boolean = true,
 ) {
+    // Same contract as PrimaryButton: the primitive owns the disabled look and swallows the click,
+    // so a caller never has to pre-dim its own colours or guard the lambda.
+    val content = if (enabled) fg else fg.copy(alpha = 0.4f)
     Row(
         modifier
             .clip(RoundedCornerShape(7.dp))
-            .border(1.dp, border, RoundedCornerShape(7.dp))
-            .clickable(onClick = onClick)
+            .border(1.dp, if (enabled) border else border.copy(alpha = 0.4f), RoundedCornerShape(7.dp))
+            .clickable(enabled = enabled, onClick = onClick)
             // Match PrimaryButton's padding and icon size so a Ghost + Primary pair is the same height.
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) Sym(icon, size = 16.sp, color = fg)
-        Txt(label, color = fg, size = 12.sp, weight = FontWeight.Medium)
+        if (icon != null) Sym(icon, size = 16.sp, color = content)
+        Txt(label, color = content, size = 12.sp, weight = FontWeight.Medium)
     }
 }
 

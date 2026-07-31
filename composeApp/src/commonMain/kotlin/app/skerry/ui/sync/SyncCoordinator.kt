@@ -14,6 +14,7 @@ import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.InMemorySyncStateStore
 import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSettingsStore
+import app.skerry.shared.sync.WebAccessClient
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.MasterKey
 import app.skerry.shared.vault.RecordType
@@ -131,6 +132,24 @@ sealed interface AccountPasswordChange {
 
     /** The rotation failed before anything changed ([reason] is localized in the UI; [detail] optional). */
     data class Failed(val reason: SyncFailureReason, val detail: String? = null) : AccountPasswordChange
+}
+
+/**
+ * Outcome of a web-access change ([SyncCoordinator.setWebPassword], [SyncCoordinator.clearWebPassword]).
+ * A discrete action result like [AccountPasswordChange], not a [SyncStatus] transition: this is one
+ * settings card's action, and its failure must not overwrite the state of the sync session itself.
+ */
+sealed interface WebAccessChange {
+    data object Success : WebAccessChange
+
+    /**
+     * No live session. The web password is account-level and travels over the app's own token, so
+     * there is nothing to change while this device is merely linked or offline.
+     */
+    data object NotConnected : WebAccessChange
+
+    /** The server refused or was unreachable ([reason] is localized in the UI; [detail] optional). */
+    data class Failed(val reason: SyncFailureReason, val detail: String? = null) : WebAccessChange
 }
 
 /** [SyncStatus.Failed] causes — one value per user-facing situation (en+ru strings in the UI). */
@@ -1420,6 +1439,86 @@ class SyncCoordinator(
             // status so the Sync section shows the failure, and return false (list isn't reread).
             _status.value = SyncStatus.Failed(SyncFailureReason.RevokeFailed, e.message)
             false
+        }
+    }
+
+    /**
+     * Whether the account currently has a web password (Settings → Sync → Web access), or `null`
+     * when it can't be told: no session, a server too old to answer, or the request failed. `null`
+     * is not `false` — the card must not report "web access is off" for an account that has it on.
+     */
+    suspend fun webAccessEnabled(): Boolean? = try {
+        onWebAccess { c, s -> c.webAccessEnabled(s) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        // Every failure collapses into "can't tell": the card renders it as unknown and still
+        // offers to set a password, which is the one action that works from an unknown state.
+        null
+    }
+
+    /**
+     * Set or rotate the web password — the credential that opens the browser account zone, and the
+     * only one that ever does. Not the master password: the server serving that page is the server
+     * the master password protects, so it never travels there.
+     *
+     * Owns [password] and wipes it before returning.
+     */
+    suspend fun setWebPassword(password: CharArray): WebAccessChange = try {
+        webAccessChange { c, s -> c.setWebPassword(s, password) }
+    } finally {
+        // Wiped here rather than in the client: the wire needs an immutable String, so the array is
+        // the only copy this side can actually clear. Also covers the cancelled-mid-submit path.
+        password.fill(' ')
+    }
+
+    /**
+     * Remove web access. The server closes the browser session in the same transaction, so this is
+     * both "no more sign-ins" and "the one signed in now is out".
+     */
+    suspend fun clearWebPassword(): WebAccessChange = webAccessChange { c, s -> c.clearWebPassword(s) }
+
+    /** [op] against the web-access endpoints, its failures turned into a [WebAccessChange]. */
+    private suspend fun webAccessChange(op: suspend (WebAccessClient, SyncSession) -> Unit): WebAccessChange = try {
+        onWebAccess(op)?.let { WebAccessChange.Success } ?: WebAccessChange.NotConnected
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: SyncException) {
+        val failure = syncFailure(e)
+        WebAccessChange.Failed(failure.reason, failure.detail)
+    } catch (e: Exception) {
+        WebAccessChange.Failed(SyncFailureReason.ConnectFailed, e.message)
+    }
+
+    /**
+     * Runs [op] against the account's web-access endpoints with the live session, or returns `null`
+     * when there is none (or the client doesn't speak this protocol — a team-scoped one doesn't).
+     *
+     * A 401 here is the expired short-TTL access token, not a rejection: the settings screen is
+     * typically opened long after the last sync, and the session's refresh token is still good. Same
+     * recovery [runSyncLocked] does — rotate once under [syncMutex], retry once — minus its
+     * `lockPaused` check: that one exists because a retried *sync* would throw inside the locked
+     * vault and overwrite the status, and nothing here reads the vault or writes [status].
+     */
+    private suspend fun <T> onWebAccess(op: suspend (WebAccessClient, SyncSession) -> T): T? {
+        val c = client ?: return null
+        val web = c as? WebAccessClient ?: return null
+        val s = session ?: return null
+        return try {
+            op(web, s)
+        } catch (e: SyncException) {
+            if (e.kind != SyncException.Kind.UNAUTHORIZED) throw e
+            when (val refreshed = syncMutex.withLock { refreshSessionLocked(c, s) }) {
+                RefreshResult.Refreshed -> op(web, session ?: throw e)
+                // The refresh attempt itself failed (network/protocol): report THAT cause, the way
+                // runSyncLocked does. Rethrowing the original 401 would say the session is gone and
+                // send the user to re-enter a master password that was never the problem.
+                is RefreshResult.Failed -> throw refreshed.cause
+                // Dead: the refresh token was rejected and the session is already torn down — the
+                // 401 is the truth. StandDown: someone replaced the session under us; this call
+                // simply didn't happen, and its own 401 is the honest answer.
+                RefreshResult.Dead, RefreshResult.StandDown -> throw e
+            }
         }
     }
 

@@ -118,18 +118,18 @@ class MetricsRoutesTest {
     }
 
     /**
-     * Cardinality guard. `/console` is a tailcard route and `/anything` doesn't match at all, both
+     * Cardinality guard. `/assets` is a tailcard route and `/anything` doesn't match at all, both
      * reachable without a credential — if either produced one series per request, an attacker could
      * grow the registry until the process dies.
      */
     @Test
     fun `unmatched and static paths do not create a series per request`() = withServer("open") { services ->
-        client.get("/console/one")
+        client.get("/assets/one")
         client.get("/nope-one")
         val baseline = services.metrics.scrape().lines().count { it.startsWith("skerry_http_server_requests") }
 
         repeat(50) { i ->
-            client.get("/console/junk-$i")
+            client.get("/assets/junk-$i")
             client.get("/nope-$i")
         }
         val after = services.metrics.scrape().lines().count { it.startsWith("skerry_http_server_requests") }

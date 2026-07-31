@@ -20,7 +20,11 @@ fun Route.deviceRoutes(services: Services) {
         val principal = call.jwtPrincipal()
         val current = principal.deviceId
         val devices = services.devices.list(principal.accountId).map {
-            DeviceDto(it.id, it.name, it.createdAt, it.lastSeenAt, it.revoked, current = it.id == current)
+            DeviceDto(
+                it.id, it.name, it.createdAt, it.lastSeenAt, it.revoked,
+                current = it.id == current,
+                platform = it.platform,
+            )
         }
         call.respond(DevicesResponse(devices))
     }

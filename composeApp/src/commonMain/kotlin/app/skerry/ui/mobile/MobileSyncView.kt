@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.sync.RemoteDevice
@@ -41,6 +42,7 @@ import app.skerry.ui.sync.PasswordReplaceConfirm
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupBody
 import app.skerry.ui.sync.SyncStatus
+import app.skerry.ui.sync.WebAccessCard
 import app.skerry.ui.sync.syncFailureText
 import app.skerry.ui.sync.SyncStatusNotice
 import app.skerry.ui.generated.resources.Res
@@ -73,6 +75,7 @@ import app.skerry.ui.generated.resources.sync_this_device_badge
 import app.skerry.ui.generated.resources.sync_confirm
 import app.skerry.ui.generated.resources.sync_cancel
 import app.skerry.ui.generated.resources.sync_revoke
+import app.skerry.ui.generated.resources.web_access_label
 import app.skerry.ui.generated.resources.stail_reenroll_prompt_title
 import app.skerry.ui.generated.resources.stail_reenroll_prompt_cancel
 import app.skerry.ui.generated.resources.stail_reenroll_prompt_subtitle
@@ -207,6 +210,9 @@ private fun SyncBody(sync: SyncCoordinator) {
             MobileAccountActions(sync)
             MobileWhatSyncs(sync)
             MobileLinkedDevices(sync)
+            // Desktop parity: the same card, in the same place relative to the device list.
+            MobileSectionLabel(stringResource(Res.string.web_access_label))
+            WebAccessCard(sync)
         }
         // Connecting hit an existing account under a different password → confirm re-keying this device
         // to the account password before adopting it (issue #28).
@@ -241,13 +247,27 @@ private fun SyncBody(sync: SyncCoordinator) {
  * "SSH keys" and "Terminal history" are deliberately omitted (as on desktop): keys
  * always sync together with "Hosts & groups", and terminal history isn't a feature yet.
  */
+/**
+ * Header above a block on the Sync screen. Its own style rather than settings' `SectionLabel`: this
+ * screen has no settings chrome around it, and the two would not read as the same kind of heading.
+ * The default spacing is the one the screen uses between blocks; only the toggles sit tighter.
+ */
+@Composable
+private fun MobileSectionLabel(text: String, top: Dp = 26.dp, bottom: Dp = 6.dp) {
+    Txt(
+        text,
+        color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
+        modifier = Modifier.padding(top = top, bottom = bottom),
+    )
+}
+
 @Composable
 private fun MobileWhatSyncs(sync: SyncCoordinator) {
     val settings = sync.syncSettings.collectAsState().value
     LaunchedEffect(Unit) { sync.refreshSyncSettings() }
     // Section framed by lines above the header and below the toggles, matching desktop WhatSyncsHeader.
     HLine(modifier = Modifier.padding(top = 20.dp))
-    Txt(stringResource(Res.string.sync_what_syncs), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 18.dp, bottom = 4.dp))
+    MobileSectionLabel(stringResource(Res.string.sync_what_syncs), top = 18.dp, bottom = 4.dp)
     // onToggle reads the current value from the flow, not a composition snapshot (stale-closure write-write).
     MobileSyncToggleRow(stringResource(Res.string.sync_what_hosts), null, on = settings.syncHosts) {
         val current = sync.syncSettings.value
@@ -328,7 +348,7 @@ private fun MobileLinkedDevices(sync: SyncCoordinator) {
         loading = false
     }
 
-    Txt(stringResource(Res.string.sync_linked_devices), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 26.dp, bottom = 6.dp))
+    MobileSectionLabel(stringResource(Res.string.sync_linked_devices))
     when {
         loading -> Txt(stringResource(Res.string.sync_loading_devices), color = Skerry.colors.faint, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))
         devices.isEmpty() -> Txt(stringResource(Res.string.sync_load_devices_failed), color = Skerry.colors.amber, size = 12.sp, modifier = Modifier.padding(vertical = 4.dp))

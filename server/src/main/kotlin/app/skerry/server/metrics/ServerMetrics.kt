@@ -286,6 +286,7 @@ enum class AuthKind(val label: String) {
     REFRESH("refresh"),
     CHANGE_PASSWORD("change_password"),
     PAIRING_CLAIM("pairing_claim"),
+    WEB_LOGIN("web_login"),
 }
 
 enum class AuthOutcome(val label: String) { OK("ok"), DENIED("denied"), ERROR("error") }

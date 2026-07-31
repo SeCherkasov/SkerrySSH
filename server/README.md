@@ -76,7 +76,7 @@ runs — production only *requires* a stable `SKERRY_JWT_SECRET`.
 | `SKERRY_DB_USER` / `SKERRY_DB_PASSWORD` | *(empty)* | Database credentials (PostgreSQL). |
 | `SKERRY_JWT_SECRET` | `dev-insecure-change-me` | JWT signing secret. **The server refuses to start with the default** unless `SKERRY_DEV=1`. Rotating it invalidates all issued tokens. |
 | `SKERRY_JWT_ISSUER` | `skerry-sync` | JWT `iss` claim. |
-| `SKERRY_ADMIN_TOKEN` | *(empty)* | Admin console token (`/console`, `/admin/*`). Empty ⇒ admin data endpoints are closed. |
+| `SKERRY_ADMIN_TOKEN` | *(empty)* | Operator console token (`/console`, `/admin/*`). Empty ⇒ admin data endpoints are closed. |
 | `SKERRY_ACCESS_TTL` | `900` (15 min) | Access-token lifetime, seconds. |
 | `SKERRY_REFRESH_TTL` | `2592000` (30 days) | Refresh-token lifetime, seconds. |
 | `SKERRY_PAIRING_TTL` | `300` (5 min) | Lifetime of a one-shot QR pairing session. |
@@ -120,6 +120,10 @@ All cipher blobs (`blob`, `wrappedDataKey`, `encryptedDataKey`) travel as base64
 | `POST` | `/auth/register` | Registration: SRP salt/verifier + wrapped dataKey → tokens. |
 | `POST` | `/auth/srp/challenge` → `/auth/srp/verify` | SRP-6a login without transmitting the password. |
 | `POST` | `/auth/refresh` | Access/refresh token rotation. |
+| `POST` | `/auth/change-password` | Password rotation: SRP proof of the current one, new verifier and re-wrapped dataKey. |
+| `GET` | `/auth/web-password` (JWT) | Whether the account has a web password — what the app's Web access card reads. |
+| `POST` | `/auth/web-password` (JWT) | Set, rotate or clear the **web** password from the app. Clearing also revokes the open browser session. |
+| `POST` | `/auth/web-login` | Web password → the standard token pair. Rate-limited; the session registers as a `platform = "web"` device. |
 
 ### Vault & devices (JWT auth)
 
@@ -127,6 +131,9 @@ All cipher blobs (`blob`, `wrappedDataKey`, `encryptedDataKey`) travel as base64
 |---|---|---|
 | `GET` | `/vault/keys` | Wrapped `dataKey` for a new device. |
 | `GET` | `/vault/records?since={cursor}` | Delta of encrypted records. |
+| `GET` | `/vault/envelopes` | Record metadata and a short ciphertext preview — sizes, never blobs (the account zone's Storage section). |
+| `GET` | `/account/summary` | The caller's own totals: devices, records, tombstones, ciphertext size, last sync. |
+| `GET` | `/account/activity` | The caller's own audit rows (team-scoped rows excluded). |
 | `PUT` | `/vault/records` | Batch upsert with LWW (version, then deviceId). |
 | `WS` | `/sync` | "Changes available" push (cursor only, no content). |
 | `GET` / `DELETE` | `/devices`, `/devices/{id}` | Device list and revocation. |
@@ -178,18 +185,43 @@ Nothing stops the same person from registering the same id again afterwards: ids
 and the local vault is still on their device, so a fresh registration re-uploads it. Close the
 instance (`SKERRY_REGISTRATION=closed`) if that matters.
 
-## Admin console
+## Web frontend
 
-A static page at `http://localhost:8080/console` (requires `SKERRY_ADMIN_TOKEN`) — a single
-dashboard: **Overview** (accounts, devices, records, total ciphertext size), **Devices**
-(platform, last sync, cursor version, status + revocation), **Privacy boundary** (what the
-server can and cannot see), and **Recent activity** (audit log). Zero-knowledge holds: the
-console sees only metadata — event, device, platform label, cursors, and size aggregates —
-never record contents, the master password, or the `dataKey`.
+One static bundle, three entrances, served by Ktor itself:
+
+| URL | Who | Credential | Shows |
+|---|---|---|---|
+| `/` | anyone | none | Is the instance serving, what version, is registration open, and the URL to paste into a client. |
+| `/account` | an account owner | account id + **web password** (set in the app) | Devices, teams, live sessions, stored record envelopes, the account's own log, security hand-offs. |
+| `/console` | the operator | `SKERRY_ADMIN_TOKEN` | Instance totals, accounts (devices and record envelopes expand inside a row), observability, audit log. |
+
+The web password is a separate credential, unrelated to any vault key: the page asking for it is
+served by the same server it protects, so the master password never travels this way. A browser
+signed in with it reads the metadata the server already holds in the clear and cannot decrypt a
+record — `dataKey` is not part of the flow. The token it gets is restricted server-side to that:
+read-only, without `/vault/keys` and `/vault/records`, plus revoking a device. Losing the password
+costs a reset from the app; losing the master password is still unrecoverable by design.
+
+The password is set in the app: **Settings → Sync → Web access**, on a connected device. The same
+card rotates it and takes it away — removing it also signs out the browser session that is open at
+that moment. It is 8–256 characters. The endpoint behind the card is `POST /auth/web-password`
+(`{"password": null}` clears it), which is also how a script would do it.
+
+The account's token pair lives in `sessionStorage` and dies with the tab; the admin token is kept in
+memory only and is asked for again after a reload. Every destructive action (revoke, purge, delete)
+states its exact blast radius before it runs.
+
+Team membership and keys are **not** manageable from the browser: an invite or a key rotation seals
+an envelope under the team key, and no browser session has one. The team panes are read-only.
+
+Interface languages: English, Russian, Chinese (`?lang=` in the URL, then the stored preference,
+then the browser). Zero-knowledge holds throughout — lists show ids, types, sizes and timestamps,
+and the ciphertext preview is shown as what it is.
 
 > Fonts (Space Grotesk, JetBrains Mono) are bundled into the server
-> (`resources/admin/fonts/*.woff2`), icons are inline SVG. The console works fully offline,
-> with no external CDN requests.
+> (`resources/web/assets/fonts/*.woff2`), icons are inline SVG, and the CSP is `default-src 'self'`.
+> The pages work fully offline, with no external CDN requests. Chinese falls through to the
+> system CJK stack — the bundled faces are latin + latin-ext.
 
 > ⚠️ Metadata includes `accountId` (an e-mail) and is retained in the audit log (last 2000
 > events). For a single-user self-host the operator *is* the data subject — acceptable. The
@@ -199,7 +231,7 @@ never record contents, the master password, or the `dataKey`.
 ## Admin CLI
 
 `skerry-admin` ships in the same image as the server (`/app/bin/skerry-admin`) and drives the same
-`/admin` endpoints as the console — one implementation and one authorization gate per operation.
+`/admin` endpoints as the operator console — one implementation and one authorization gate per operation.
 It needs `SKERRY_ADMIN_TOKEN` and a reachable server; it never touches the database directly.
 
 ```bash

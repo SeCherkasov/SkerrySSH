@@ -6,6 +6,7 @@ import app.skerry.server.deviceId
 import app.skerry.server.jwtPrincipal
 import app.skerry.server.metrics.SyncScope
 import app.skerry.server.model.ErrorResponse
+import app.skerry.server.model.VaultEnvelopesResponse
 import app.skerry.sync.wire.KeysResponse
 import app.skerry.sync.wire.PushRequest
 import app.skerry.sync.wire.PushResponse
@@ -38,6 +39,16 @@ fun Route.vaultRoutes(services: Services) {
         }
         services.devices.touch(principal.accountId, principal.deviceId)
         call.respond(KeysResponse(account.wrappedDataKey.b64()))
+    }
+
+    get("/vault/envelopes") {
+        val principal = call.jwtPrincipal()
+        val limit = call.limitParam(default = 100, max = 500)
+        // The same projection the operator console gets, from the owner's side: sizes, sync metadata
+        // and the leading bytes of the real ciphertext. Not `delta()` — that ships whole blobs, and a
+        // browser has no key to open one with, so it has no business holding them either.
+        val records = services.admin.recordEnvelopes(principal.accountId, limit).map { it.toDto() }
+        call.respond(VaultEnvelopesResponse(records))
     }
 
     get("/vault/records") {

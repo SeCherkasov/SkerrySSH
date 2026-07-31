@@ -11,8 +11,8 @@ import app.skerry.server.model.AdminDeviceDto
 import app.skerry.server.model.AdminDevicesResponse
 import app.skerry.server.model.AdminObservabilityDto
 import app.skerry.server.model.AdminPurgeResponse
-import app.skerry.server.model.AdminRecordDto
 import app.skerry.server.model.AdminRecordsResponse
+import app.skerry.server.model.toDto
 import app.skerry.server.model.ErrorResponse
 import app.skerry.server.model.HealthResponse
 import app.skerry.server.model.StatsResponse
@@ -39,11 +39,20 @@ import io.ktor.server.routing.route
  * interceptor. Zero-knowledge holds: only metadata (counts, device list) is served, no access to
  * record content.
  */
-fun Route.adminRoutes(services: Services) {
+/**
+ * `/admin/health` is the only open endpoint under `/admin`, and since the public front page reads it
+ * on every visit it is registered outside the admin rate-limit bucket: sharing the brute-force
+ * budget of the admin token would let anonymous page views throttle the operator out of the console
+ * — and, behind a reverse proxy that isn't in `SKERRY_TRUSTED_PROXIES`, all visitors count as one
+ * client, so a healthy instance would start reporting itself unavailable.
+ */
+fun Route.adminHealthRoute(services: Services) {
     get("/admin/health") {
-        call.respond(HealthResponse("ok", SERVER_VERSION))
+        call.respond(HealthResponse("ok", SERVER_VERSION, services.config.registrationOpen))
     }
+}
 
+fun Route.adminRoutes(services: Services) {
     // Guard on a transparent child node (like authenticate {}): routing merges identical
     // selectors, so a plugin installed directly on route("/admin") would also cover the open
     // /admin/health above.
@@ -140,19 +149,7 @@ fun Route.adminRoutes(services: Services) {
         get("/accounts/{id}/records") {
             val accountId = call.requiredPathId("id") ?: return@get
             val limit = call.limitParam(default = 100, max = 500)
-            val records = services.admin.recordEnvelopes(accountId, limit).map {
-                AdminRecordDto(
-                    id = it.id,
-                    type = it.type,
-                    version = it.version,
-                    updatedAt = it.updatedAt,
-                    deviceId = it.deviceId,
-                    deleted = it.deleted,
-                    blobBytes = it.blobBytes,
-                    serverSeq = it.serverSeq,
-                    previewHex = it.previewHex,
-                )
-            }
+            val records = services.admin.recordEnvelopes(accountId, limit).map { it.toDto() }
             call.respond(AdminRecordsResponse(accountId, records))
         }
 
