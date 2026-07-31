@@ -28,13 +28,14 @@ import app.skerry.shared.graphics.RemoteDesktopUpdate
 import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.session.SessionStatus
+import app.skerry.ui.session.asSessionStatus
 import app.skerry.ui.terminal.MirroredInput
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.DesktopView
+import app.skerry.ui.app.workAreaSection
 import app.skerry.ui.desktop.RAIL
 import app.skerry.ui.desktop.RailTarget
-import app.skerry.ui.desktop.closeSessionTab
-import app.skerry.ui.desktop.followActiveTabSection
 import app.skerry.ui.desktop.openRailSection
 import app.skerry.ui.desktop.railItemActive
 import app.skerry.ui.host.HostSection
@@ -196,14 +197,14 @@ class SessionsControllerTest {
     }
 
     @Test
-    fun `statusFor reports the state of the newest session for a host, else null`() = runTest {
+    fun `sessionStatusFor reports the newest session of a host, idle for an unopened one`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
-        assertNull(sessions.statusFor("host-a"))
+        assertEquals(SessionStatus.Idle, sessions.sessionStatusFor("host-a"))
 
         sessions.open(hostId = "host-a")
 
-        assertIs<ConnectionUiState.Connected>(sessions.statusFor("host-a"))
-        assertNull(sessions.statusFor("host-b"))
+        assertEquals(SessionStatus.Live, sessions.sessionStatusFor("host-a"))
+        assertEquals(SessionStatus.Idle, sessions.sessionStatusFor("host-b"))
         scope.cancel()
     }
 
@@ -437,13 +438,13 @@ class SessionsControllerTest {
     }
 
     @Test
-    fun `statusFor sees a host connected in a pane, not just in a tab of its own`() = runTest {
+    fun `sessionStatusFor sees a host connected in a pane, not just in a tab of its own`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
         val a = sessions.open(hostId = "host-a")
         val pane = sessions.addPane()!!
         sessions.connectPane(tabId = a, paneId = pane, hostId = "host-b")
 
-        assertIs<ConnectionUiState.Connected>(sessions.statusFor("host-b"))
+        assertEquals(SessionStatus.Live, sessions.sessionStatusFor("host-b"))
         scope.cancel()
     }
 
@@ -1046,6 +1047,40 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
+    @Test
+    fun `a connected remote desktop reports a live status, not the placeholder controller's`() = runTest {
+        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
+
+        val desktop = sessions.openVnc(hostId = "screen")!!
+
+        val session = sessions.tab(desktop)!!.focusedPane
+        assertEquals(SessionStatus.Live, session.status)
+        // The terminal controller beside it never connects — reading it alone reports Idle.
+        assertEquals(SessionStatus.Idle, session.controller.uiState.asSessionStatus())
+        scope.cancel()
+    }
+
+    @Test
+    fun `the catalog dot sees a connected desktop, and nothing for an unopened host`() = runTest {
+        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
+
+        sessions.openVnc(hostId = "screen")
+
+        assertEquals(SessionStatus.Live, sessions.sessionStatusFor("screen"))
+        assertEquals(SessionStatus.Idle, sessions.sessionStatusFor("host-b"))
+        scope.cancel()
+    }
+
+    @Test
+    fun `a connected shell reports a live status`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+
+        val id = sessions.open(hostId = "host-a")
+
+        assertEquals(SessionStatus.Live, sessions.tab(id)!!.focusedPane.status)
+        scope.cancel()
+    }
+
     // Section-scoped active tab (terminal shell vs remote desktop)
 
     @Test
@@ -1071,28 +1106,6 @@ class SessionsControllerTest {
         assertEquals(id, sessions.activeTerminal?.id)
         assertNull(sessions.activeDesktop)
         sessions.close(id)
-        scope.cancel()
-    }
-
-    @Test
-    fun `lastSessionIn finds the newest tab of a section`() = runTest {
-        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
-        val shellA = sessions.open(hostId = "a")
-        val desktop = sessions.openVnc(hostId = "screen")!!
-        val shellB = sessions.open(hostId = "b")
-
-        assertEquals(shellB, sessions.lastSessionIn(remoteDesktop = false)?.id)
-        assertEquals(desktop, sessions.lastSessionIn(remoteDesktop = true)?.id)
-        assertTrue(shellA != shellB)
-        scope.cancel()
-    }
-
-    @Test
-    fun `lastSessionIn reports nothing when the section has no tabs`() = runTest {
-        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
-        sessions.open(hostId = "a")
-
-        assertNull(sessions.lastSessionIn(remoteDesktop = true))
         scope.cancel()
     }
 
@@ -1262,50 +1275,65 @@ class DesktopSectionNavigationTest {
     }
 
     @Test
-    fun `opening a section activates its newest tab`() = runTest {
+    fun `opening a section keeps the running session on screen`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
+
+        openRailSection(state, HostSection.RemoteDesktops)
+
+        // The rail moved the catalog to the desktops, but the shell is what the user was working
+        // in: it stays selected and stays on screen. The desktops catalog is how a desktop opens.
+        assertEquals(HostSection.RemoteDesktops, state.section)
+        assertEquals(shell, sessions.activeId)
+        assertEquals(HostSection.Terminal, workAreaSection(sessions.active, state.section))
+        scope.cancel()
+    }
+
+    @Test
+    fun `opening a section with no tabs switches the whole work area`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+
+        openRailSection(state, HostSection.RemoteDesktops)
+
+        // Nothing to keep on screen, so the rail decides: the desktops empty state.
+        assertEquals(HostSection.RemoteDesktops, workAreaSection(sessions.active, state.section))
+        scope.cancel()
+    }
+
+    @Test
+    fun `a desktop session stays on screen while the terminal catalog is open`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        sessions.openVnc("screen", "screen", "", target, VncAuth.None)!!
+
+        openRailSection(state, HostSection.Terminal)
+
+        // Symmetric to the shell case: the framebuffer keeps rendering while the hosts catalog is
+        // the one in the sidebar.
+        assertEquals(HostSection.Terminal, state.section)
+        assertEquals(HostSection.RemoteDesktops, workAreaSection(sessions.active, state.section))
+        scope.cancel()
+    }
+
+    @Test
+    fun `selecting a tab moves the work area, never the rail`() = runTest {
         val (sessions, scope) = sessions()
         val state = DesktopDesignState()
         val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
         val desktop = sessions.openVnc("screen", "screen", "", target, VncAuth.None)!!
+        openRailSection(state, HostSection.Terminal)
 
-        openRailSection(state, sessions, HostSection.Terminal)
+        // Chip clicks and tab hotkeys swap what's on screen and nothing else: the catalog stays the
+        // one the user opened, so tabbing through sessions doesn't shuffle the sidebar under them.
+        sessions.activate(desktop)
         assertEquals(HostSection.Terminal, state.section)
-        assertEquals(shell, sessions.activeId)
-
-        openRailSection(state, sessions, HostSection.RemoteDesktops)
-        assertEquals(HostSection.RemoteDesktops, state.section)
-        assertEquals(desktop, sessions.activeId)
-        scope.cancel()
-    }
-
-    @Test
-    fun `opening a section with no tabs still switches the work area`() = runTest {
-        val (sessions, scope) = sessions()
-        val state = DesktopDesignState()
-        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
-
-        openRailSection(state, sessions, HostSection.RemoteDesktops)
-
-        // The section opens on its empty state; the shell tab stays selected for the way back.
-        assertEquals(HostSection.RemoteDesktops, state.section)
-        assertEquals(shell, sessions.activeId)
-        assertNull(sessions.activeDesktop)
-        scope.cancel()
-    }
-
-    @Test
-    fun `selecting a tab moves the work area to its section`() = runTest {
-        val (sessions, scope) = sessions()
-        val state = DesktopDesignState()
-        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
-        sessions.openVnc("screen", "screen", "", target, VncAuth.None)
-
-        followActiveTabSection(state, sessions)
-        assertEquals(HostSection.RemoteDesktops, state.section)
+        assertEquals(HostSection.RemoteDesktops, workAreaSection(sessions.active, state.section))
 
         sessions.activate(shell)
-        followActiveTabSection(state, sessions)
         assertEquals(HostSection.Terminal, state.section)
+        assertEquals(HostSection.Terminal, workAreaSection(sessions.active, state.section))
         scope.cancel()
     }
 
@@ -1329,36 +1357,71 @@ class DesktopSectionNavigationTest {
     }
 
     @Test
-    fun `closing a tab hands the work area to the tab that becomes active`() = runTest {
+    fun `closing the last tab keeps the open catalog and shows its empty state`() = runTest {
         val (sessions, scope) = sessions()
         val state = DesktopDesignState()
-        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
-        sessions.openVnc("screen", "screen", "", target, VncAuth.None)
-        sessions.activate(shell)
-        followActiveTabSection(state, sessions)
-        assertEquals(HostSection.Terminal, state.section)
-
-        // Closing the active shell promotes its right neighbour — a remote desktop.
-        closeSessionTab(state, sessions, shell)
-
+        val desktop = sessions.openVnc("screen", "screen", "", target, VncAuth.None)!!
+        openRailSection(state, HostSection.RemoteDesktops)
         assertEquals(HostSection.RemoteDesktops, state.section)
-        assertEquals(sessions.activeId, sessions.activeDesktop?.id)
+
+        sessions.close(desktop)
+
+        assertTrue(sessions.tabs.isEmpty())
+        assertEquals(HostSection.RemoteDesktops, state.section)
+        assertEquals(HostSection.RemoteDesktops, workAreaSection(sessions.active, state.section))
         scope.cancel()
     }
 
     @Test
-    fun `closing the last tab of a section falls back to the other one`() = runTest {
+    fun `closing the active tab hands the screen to the neighbour, catalog unchanged`() = runTest {
         val (sessions, scope) = sessions()
         val state = DesktopDesignState()
-        sessions.open("a", "a", "", target, SshAuth.Password("pw"))
+        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
         val desktop = sessions.openVnc("screen", "screen", "", target, VncAuth.None)!!
-        followActiveTabSection(state, sessions)
+        openRailSection(state, HostSection.RemoteDesktops)
+        assertEquals(HostSection.RemoteDesktops, state.section)
 
         sessions.close(desktop)
-        followActiveTabSection(state, sessions)
 
-        // The shell tab became active, so the shell section is what the work area shows.
+        // The shell takes over the screen; the rail and the sidebar stay on the desktops catalog.
+        assertEquals(shell, sessions.activeId)
+        assertEquals(HostSection.RemoteDesktops, state.section)
+        assertEquals(HostSection.Terminal, workAreaSection(sessions.active, state.section))
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing an inactive tab never moves the selection`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        val first = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
+        val second = sessions.open("b", "b", "", target, SshAuth.Password("pw"))
+        sessions.openVnc("screen", "screen", "", target, VncAuth.None)
+        sessions.activate(second)
+        // Working in a shell while browsing the desktop catalog — the rail leaves the selection be.
+        openRailSection(state, HostSection.RemoteDesktops)
+
+        sessions.close(first)
+
+        assertEquals(second, sessions.activeId)
+        assertEquals(HostSection.RemoteDesktops, state.section)
+        scope.cancel()
+    }
+
+    @Test
+    fun `closing a tab of the other section leaves the open one alone`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        val shell = sessions.open("a", "a", "", target, SshAuth.Password("pw"))
+        val desktop = sessions.openVnc("screen", "screen", "", target, VncAuth.None)!!
+        sessions.activate(shell)
+        openRailSection(state, HostSection.Terminal)
+
+        // The "×" of a remote-desktop chip is reachable from the terminal section — one tab row.
+        sessions.close(desktop)
+
         assertEquals(HostSection.Terminal, state.section)
+        assertEquals(shell, sessions.activeId)
         scope.cancel()
     }
 }

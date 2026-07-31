@@ -80,7 +80,6 @@ import app.skerry.ui.generated.resources.vnc_resize_to_window
 import app.skerry.ui.generated.resources.vnc_session_closed
 import app.skerry.ui.generated.resources.vnc_view_only
 import app.skerry.ui.design.EmptyState
-import app.skerry.ui.host.HostSection
 import app.skerry.ui.terminal.HostsSidebar
 import app.skerry.ui.terminal.SidebarReopenHandle
 import app.skerry.ui.terminal.plainTextClipEntry
@@ -103,7 +102,11 @@ fun RemoteDesktopsView(state: DesktopDesignState) {
             visible = !state.sidebarHidden,
             enter = expandHorizontally(expandFrom = Alignment.End),
             exit = shrinkHorizontally(shrinkTowards = Alignment.End),
-        ) { HostsSidebar(state, HostSection.RemoteDesktops) }
+        ) {
+            // Same as the terminal side: the catalog follows the rail, the framebuffer follows the
+            // selected tab (see workAreaSection).
+            HostsSidebar(state, state.section)
+        }
         AnimatedVisibility(
             visible = state.sidebarHidden,
             enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
