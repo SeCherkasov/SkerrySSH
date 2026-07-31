@@ -70,6 +70,14 @@ class Session(
         private set
 
     /**
+     * Status for the chrome around this session (tab chip, host row). Reads whichever controller
+     * actually holds the connection: a remote desktop's terminal [controller] is a placeholder that
+     * never leaves its idle state, so going through it alone would paint a live desktop grey.
+     */
+    val status: SessionStatus
+        get() = if (isVnc) vncController?.uiState.asSessionStatus() else controller.uiState.asSessionStatus()
+
+    /**
      * A blank pane with no session: no host selected and no connection started yet (controller in
      * [ConnectionUiState.Form]). A pane with a host already bound does not become blank again after
      * [ConnectionController.disconnect].
@@ -295,12 +303,6 @@ class SessionsController(
 
     /** The active tab as seen by the remote-desktop section, `null` when a terminal tab is active. */
     val activeDesktop: Tab? get() = active?.takeIf { it.isVnc }
-
-    /**
-     * Newest tab of a section, or `null` if it has none. Switching sections from the rail activates
-     * this one, so returning to a section lands back on a live session instead of an empty area.
-     */
-    fun lastSessionIn(remoteDesktop: Boolean): Tab? = tabs.lastOrNull { it.isVnc == remoteDesktop }
 
     /**
      * Put [session] in a tab of its own, append it to the bar and make it active.
@@ -629,9 +631,12 @@ class SessionsController(
         tabs = remaining
     }
 
-    /** State of the most recent session for host [hostId] (for the sidebar status dot), or null. */
-    fun statusFor(hostId: String): ConnectionUiState? =
-        allSessions.lastOrNull { it.hostId == hostId }?.controller?.uiState
+    /**
+     * Status of the most recent session for host [hostId] — what the catalog's status dot reads.
+     * Remote desktops included: their state lives in their own controller (see [Session.status]).
+     */
+    fun sessionStatusFor(hostId: String): SessionStatus =
+        allSessions.lastOrNull { it.hostId == hostId }?.status ?: SessionStatus.Idle
 
     /** Close all sessions (panes included) — call on screen teardown to avoid leaking sockets. */
     fun disconnectAll() {

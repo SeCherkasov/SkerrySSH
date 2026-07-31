@@ -17,13 +17,18 @@ import app.skerry.ui.tunnel.TunnelsView
 import app.skerry.ui.vault.VaultView
 import app.skerry.ui.vnc.RemoteDesktopsView
 import app.skerry.ui.app.asSessionView
+import app.skerry.ui.app.workAreaSection
 
 /**
  * Switches the main content area. App-level views (Vault/Known/Teams/Snippets) render over
- * everything per [DesktopDesignState.appOverlay]; otherwise the selected work-area section
- * ([DesktopDesignState.section]) decides: remote desktops render their own catalog + framebuffer,
- * the terminal section renders the active terminal tab's subview
- * ([app.skerry.ui.session.Session.view]), falling back to [state.view] with no live sessions.
+ * everything per [DesktopDesignState.appOverlay]; otherwise the selected tab decides
+ * ([workAreaSection]): a remote-desktop tab renders the framebuffer, any other one renders its
+ * subview ([app.skerry.ui.session.Session.view]). Only with no tab open does the section chosen in
+ * the rail decide, on its empty state — with no live sessions at all (design preview) it also
+ * supplies the subview via [state.view].
+ *
+ * The sidebar beside the work area is the rail's, not the tab's: it always lists
+ * [DesktopDesignState.section]'s catalog.
  */
 @Composable
 fun Viewport(state: DesktopDesignState) {
@@ -34,20 +39,21 @@ fun Viewport(state: DesktopDesignState) {
         DesktopView.Vault -> VaultView()
         DesktopView.Known -> KnownHostsView()
         DesktopView.Teams -> TeamsView()
-        // overlay == null: renders the selected section (showView only stores app-level values in appOverlay).
-        else -> when (state.section) {
-            HostSection.RemoteDesktops -> RemoteDesktopsView(state)
-            HostSection.Terminal -> {
-                val sessions = LocalSessions.current
-                // activeTerminal, not active: a remote-desktop tab may still be the selected one
-                // (its section has no tab to fall back to), and it is not this section's to render.
-                val view = sessions?.activeTerminal?.view ?: state.view.asSessionView()
-                when (view) {
-                    SessionView.Terminal -> TerminalView(state)
-                    SessionView.Sftp -> SftpView()
-                    // A remote desktop never renders here (see activeTerminal); keep the branch total.
-                    SessionView.Vnc -> TerminalView(state)
-                    SessionView.Player -> CastPlayerView()
+        // overlay == null: renders the work area (showView only stores app-level values in appOverlay).
+        else -> {
+            val sessions = LocalSessions.current
+            when (workAreaSection(sessions?.active, state.section)) {
+                HostSection.RemoteDesktops -> RemoteDesktopsView(state)
+                HostSection.Terminal -> {
+                    // activeTerminal, not active: a remote-desktop tab renders in the branch above.
+                    val view = sessions?.activeTerminal?.view ?: state.view.asSessionView()
+                    when (view) {
+                        SessionView.Terminal -> TerminalView(state)
+                        SessionView.Sftp -> SftpView()
+                        // A remote desktop never renders here (see activeTerminal); keep the branch total.
+                        SessionView.Vnc -> TerminalView(state)
+                        SessionView.Player -> CastPlayerView()
+                    }
                 }
             }
         }

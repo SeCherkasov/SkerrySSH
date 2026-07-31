@@ -67,6 +67,7 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_accept
@@ -699,7 +700,7 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>, section: HostSec
  */
 @Composable
 private fun MobileTeamHostRow(host: Host, mono: androidx.compose.ui.text.font.FontFamily, onClick: () -> Unit) {
-    val dotColor = sessionDotColor(LocalSessions.current?.statusFor(host.id))
+    val dotColor = sessionDotColor(LocalSessions.current?.sessionStatusFor(host.id) ?: SessionStatus.Idle)
     Row(
         Modifier
             .fillMaxWidth()
