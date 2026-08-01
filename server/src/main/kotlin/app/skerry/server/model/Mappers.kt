@@ -1,5 +1,6 @@
 package app.skerry.server.model
 
+import app.skerry.server.db.AdminRepository
 import app.skerry.server.db.IncomingRecord
 import app.skerry.server.db.StoredRecord
 import app.skerry.sync.wire.RecordDto
@@ -16,5 +17,12 @@ fun String.unb64(): ByteArray = try {
 }
 
 fun StoredRecord.toDto() = RecordDto(id, type, version, updatedAt, deviceId, deleted, blob.b64())
+
+/**
+ * One mapping for both zones that serve envelopes — the operator's account inspector and the
+ * owner's own Storage section. Two copies would be two places for a blob field to appear in.
+ */
+fun AdminRepository.RecordEnvelope.toDto() =
+    RecordEnvelopeDto(id, type, version, updatedAt, deviceId, deleted, blobBytes, serverSeq, previewHex)
 
 fun RecordDto.toIncoming() = IncomingRecord(id, type, version, updatedAt, deviceId, deleted, blob.unb64())

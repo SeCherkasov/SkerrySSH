@@ -11,8 +11,8 @@ import app.skerry.server.model.AdminDeviceDto
 import app.skerry.server.model.AdminDevicesResponse
 import app.skerry.server.model.AdminObservabilityDto
 import app.skerry.server.model.AdminPurgeResponse
-import app.skerry.server.model.AdminRecordDto
 import app.skerry.server.model.AdminRecordsResponse
+import app.skerry.server.model.toDto
 import app.skerry.server.model.ErrorResponse
 import app.skerry.server.model.HealthResponse
 import app.skerry.server.model.StatsResponse
@@ -39,11 +39,20 @@ import io.ktor.server.routing.route
  * interceptor. Zero-knowledge holds: only metadata (counts, device list) is served, no access to
  * record content.
  */
-fun Route.adminRoutes(services: Services) {
+/**
+ * `/admin/health` is the only open endpoint under `/admin`, and since the public front page reads it
+ * on every visit it is registered outside the admin rate-limit bucket: sharing the brute-force
+ * budget of the admin token would let anonymous page views throttle the operator out of the console
+ * — and, behind a reverse proxy that isn't in `SKERRY_TRUSTED_PROXIES`, all visitors count as one
+ * client, so a healthy instance would start reporting itself unavailable.
+ */
+fun Route.adminHealthRoute(services: Services) {
     get("/admin/health") {
-        call.respond(HealthResponse("ok", SERVER_VERSION))
+        call.respond(HealthResponse("ok", SERVER_VERSION, services.config.registrationOpen))
     }
+}
 
+fun Route.adminRoutes(services: Services) {
     // Guard on a transparent child node (like authenticate {}): routing merges identical
     // selectors, so a plugin installed directly on route("/admin") would also cover the open
     // /admin/health above.
@@ -75,11 +84,12 @@ fun Route.adminRoutes(services: Services) {
 
         get("/devices") {
             val limit = call.limitParam(default = 200, max = 500)
+            val offset = call.offsetParam()
             // Optional account filter (`skerry-admin devices list --account`); the total follows it so
             // the "N of M" line can't disagree with the page.
             val accountFilter = call.request.queryParameters["accountId"]?.takeIf { it.isNotBlank() }
             val total = services.devices.count(accountFilter)
-            val devices = services.devices.listAll(limit, accountFilter).map {
+            val devices = services.devices.listAll(limit, accountFilter, offset).map {
                 AdminDeviceDto(
                     accountId = it.accountId,
                     id = it.id,
@@ -97,7 +107,7 @@ fun Route.adminRoutes(services: Services) {
         get("/activity") {
             val limit = call.limitParam(default = 50, max = 2000)
             val total = services.activity.count()
-            val events = services.activity.recent(limit).map {
+            val events = services.activity.recent(limit, call.offsetParam()).map {
                 AdminActivityDto(it.accountId, it.deviceId, it.event, it.detail, it.createdAt)
             }
             call.respond(AdminActivityResponse(events, total))
@@ -121,7 +131,7 @@ fun Route.adminRoutes(services: Services) {
         get("/accounts") {
             val limit = call.limitParam(default = 100, max = 1000)
             val total = services.admin.accountCount()
-            val accounts = services.admin.accountSummaries(limit).map {
+            val accounts = services.admin.accountSummaries(limit, offset = call.offsetParam()).map {
                 AdminAccountDto(
                     id = it.id,
                     createdAt = it.createdAt,
@@ -140,20 +150,8 @@ fun Route.adminRoutes(services: Services) {
         get("/accounts/{id}/records") {
             val accountId = call.requiredPathId("id") ?: return@get
             val limit = call.limitParam(default = 100, max = 500)
-            val records = services.admin.recordEnvelopes(accountId, limit).map {
-                AdminRecordDto(
-                    id = it.id,
-                    type = it.type,
-                    version = it.version,
-                    updatedAt = it.updatedAt,
-                    deviceId = it.deviceId,
-                    deleted = it.deleted,
-                    blobBytes = it.blobBytes,
-                    serverSeq = it.serverSeq,
-                    previewHex = it.previewHex,
-                )
-            }
-            call.respond(AdminRecordsResponse(accountId, records))
+            val records = services.admin.recordEnvelopes(accountId, limit, call.offsetParam()).map { it.toDto() }
+            call.respond(AdminRecordsResponse(accountId, records, services.admin.recordCount(accountId)))
         }
 
         delete("/accounts/{id}/tombstones") {

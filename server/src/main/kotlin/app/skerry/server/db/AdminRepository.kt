@@ -1,11 +1,15 @@
 package app.skerry.server.db
 
+import org.jetbrains.exposed.v1.core.IColumnType
 import org.jetbrains.exposed.v1.core.SortOrder
+import org.jetbrains.exposed.v1.core.VarCharColumnType
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.lessEq
 import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.statements.StatementType
 import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.andWhere
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
@@ -61,18 +65,35 @@ class AdminRepository(private val db: Database) {
     private class RecAgg(var total: Int = 0, var tombstones: Int = 0, var bytes: Long = 0)
 
     /**
-     * Summary for all accounts on the instance. Aggregates are computed in the database (three
-     * grouped queries, not N+1): devices (total/active/last seen) and records (total/tombstones/bytes).
-     * `NOT revoked` / `CASE WHEN deleted` are portable between SQLite (0/1) and PostgreSQL (boolean).
+     * The same aggregates for one account, for the account zone's own Overview. Deliberately the
+     * same query as the console's: two zones reporting different numbers for one account would be a
+     * bug nobody could reproduce. Null if the account doesn't exist.
      */
-    suspend fun accountSummaries(limit: Int = 100): List<AccountSummary> = dbTransaction(db) {
+    suspend fun accountSummary(accountId: String): AccountSummary? =
+        accountSummaries(limit = 1, accountId = accountId).firstOrNull()
+
+    /**
+     * Summary for all accounts on the instance, or for [accountId] alone. Aggregates are computed in
+     * the database (three grouped queries, not N+1): devices (total/active/last seen) and records
+     * (total/tombstones/bytes). `NOT revoked` / `CASE WHEN deleted` are portable between SQLite (0/1)
+     * and PostgreSQL (boolean).
+     */
+    suspend fun accountSummaries(limit: Int = 100, accountId: String? = null, offset: Long = 0): List<AccountSummary> = dbTransaction(db) {
+        // Bound parameter, never interpolation: the account zone reaches this with an id it took
+        // from a JWT, and one route away from that is a browser-supplied string.
+        val scope = if (accountId == null) "" else " WHERE account_id = ?"
+        val args: List<Pair<IColumnType<*>, Any?>> =
+            if (accountId == null) emptyList() else listOf(VarCharColumnType(ACCOUNT_ID_LENGTH) to accountId)
+
         val devAgg = HashMap<String, DevAgg>()
         exec(
             """SELECT account_id,
                       COUNT(*) AS total,
                       SUM(CASE WHEN NOT revoked THEN 1 ELSE 0 END) AS active,
                       MAX(last_seen_at) AS last_seen
-               FROM devices GROUP BY account_id""",
+               FROM devices$scope GROUP BY account_id""",
+            args,
+            StatementType.SELECT,
         ) { rs ->
             while (rs.next()) {
                 val a = DevAgg(rs.getInt("total"), rs.getInt("active"))
@@ -87,7 +108,9 @@ class AdminRepository(private val db: Database) {
                       COUNT(*) AS total,
                       SUM(CASE WHEN deleted THEN 1 ELSE 0 END) AS tombstones,
                       COALESCE(SUM(LENGTH(blob)), 0) AS bytes
-               FROM records GROUP BY account_id""",
+               FROM records$scope GROUP BY account_id""",
+            args,
+            StatementType.SELECT,
         ) { rs ->
             while (rs.next()) {
                 recAgg[rs.getString("account_id")] =
@@ -95,9 +118,10 @@ class AdminRepository(private val db: Database) {
             }
         }
 
-        Accounts.selectAll()
-            .orderBy(Accounts.createdAt to SortOrder.ASC)
-            .limit(limit)
+        val rows = Accounts.selectAll()
+        if (accountId != null) rows.andWhere { Accounts.id eq accountId }
+        rows.orderBy(Accounts.createdAt to SortOrder.ASC)
+            .limit(limit).offset(offset)
             .map { row ->
                 val id = row[Accounts.id]
                 val d = devAgg[id] ?: DevAgg()
@@ -116,6 +140,16 @@ class AdminRepository(private val db: Database) {
             }
     }
 
+    /**
+     * Records held for one account: the same predicate [recordEnvelopes] pages over, so the total
+     * counts that list and no other. It is read in its own transaction, so a write landing between
+     * the two can leave the count a row ahead of the page until the next read — a stale number, not
+     * a wrong list.
+     */
+    suspend fun recordCount(accountId: String): Long = dbTransaction(db) {
+        Records.selectAll().where { Records.accountId eq accountId }.count()
+    }
+
     /** Total accounts on the instance, for an accurate "N of M" in the console. */
     suspend fun accountCount(): Long = dbTransaction(db) {
         Accounts.selectAll().count()
@@ -126,11 +160,11 @@ class AdminRepository(private val db: Database) {
      * [limit]). [RecordEnvelope.previewHex] is the first 16 bytes of the actual ciphertext —
      * opaque noise demonstrating content is unreadable without the dataKey.
      */
-    suspend fun recordEnvelopes(accountId: String, limit: Int = 100): List<RecordEnvelope> = dbTransaction(db) {
+    suspend fun recordEnvelopes(accountId: String, limit: Int = 100, offset: Long = 0): List<RecordEnvelope> = dbTransaction(db) {
         Records.selectAll()
             .where { Records.accountId eq accountId }
             .orderBy(Records.serverSeq to SortOrder.DESC)
-            .limit(limit)
+            .limit(limit).offset(offset)
             .map { row ->
                 val bytes = row[Records.blob].bytes
                 RecordEnvelope(
@@ -233,5 +267,8 @@ class AdminRepository(private val db: Database) {
     private companion object {
         /** Succession order for an orphaned team; an unknown role sorts last but still qualifies. */
         val SUCCESSION = listOf(TeamRoles.ADMIN, TeamRoles.EDITOR, TeamRoles.MEMBER, TeamRoles.VIEWER)
+
+        /** Mirrors `varchar(320)` in [Accounts.id]; the bound-parameter type for the scoped queries. */
+        const val ACCOUNT_ID_LENGTH = 320
     }
 }

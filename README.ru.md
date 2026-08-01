@@ -245,8 +245,9 @@ docker run -d --name skerry-sync -p 8080:8080 \
   secherkasov/skerry-sync:latest
 ```
 
-Сервер слушает `http://localhost:8080` и несёт встроенную, полностью офлайновую
-админ-консоль на `/console`. Для сборки из исходников выполните из корня репозитория
+Сервер слушает `http://localhost:8080` и несёт встроенный, полностью офлайновый
+веб-интерфейс: публичная страница на `/`, кабинет аккаунта на `/account`, консоль
+оператора на `/console`. Для сборки из исходников выполните из корня репозитория
 `docker compose up -d --build`; для PostgreSQL раскомментируйте сервис `db` и
 postgres-переменные в [docker-compose.yml](docker-compose.yml). Сборка только сервера не
 требует Android SDK: `./gradlew :server:run -PserverOnly`.

@@ -19,6 +19,13 @@ object Accounts : Table("accounts") {
     val srpVerifier = text("srp_verifier")
     /** dataKey wrapped under masterKey; the server stores only ciphertext. */
     val wrappedDataKey = blob("wrapped_data_key")
+    /**
+     * Argon2id hash of the **web** password (PHC string, see
+     * [app.skerry.server.auth.WebPasswordHasher]) — the credential that opens the browser account
+     * zone, unrelated to [srpVerifier] and to any vault key. Nullable: an account without web access
+     * is the default, and clearing the password puts the column back to null.
+     */
+    val webPasswordHash = text("web_password_hash").nullable()
     /** Monotonic per-account sync cursor (delta watermark). */
     val syncSeq = long("sync_seq").default(0)
     val createdAt = long("created_at")

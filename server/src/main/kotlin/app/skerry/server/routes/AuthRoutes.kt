@@ -2,9 +2,14 @@ package app.skerry.server.routes
 
 import app.skerry.server.RateLimits
 import app.skerry.server.Services
+import app.skerry.server.accountId
+import app.skerry.server.db.WebSession
+import app.skerry.server.deviceId
+import app.skerry.server.jwtPrincipal
 import app.skerry.server.metrics.AuthKind
 import app.skerry.server.metrics.AuthOutcome
 import app.skerry.server.metrics.RegistrationRejection
+import app.skerry.server.metrics.RevokedBy
 import app.skerry.server.metrics.TokenType
 import app.skerry.sync.wire.ChallengeRequest
 import app.skerry.sync.wire.ChallengeResponse
@@ -16,12 +21,16 @@ import app.skerry.sync.wire.RegisterRequest
 import app.skerry.sync.wire.TokenResponse
 import app.skerry.sync.wire.VerifyRequest
 import app.skerry.sync.wire.VerifyResponse
+import app.skerry.sync.wire.WebAccessResponse
+import app.skerry.sync.wire.WebLoginRequest
+import app.skerry.sync.wire.WebPasswordRequest
 import app.skerry.server.model.unb64
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import java.math.BigInteger
 import javax.crypto.Mac
@@ -206,6 +215,62 @@ fun Route.authRoutes(services: Services) {
         }
     }
 
+    // The limiter gates the route, so a throttled attempt never reaches the Argon2 verification —
+    // which is the expensive half and the one an attacker would rather make us run.
+    rateLimit(RateLimits.WEB_LOGIN) {
+        post("/auth/web-login") {
+            val req = call.receive<WebLoginRequest>()
+            if (tooLong(req.accountId)) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
+                return@post
+            }
+            // Longer than one can be set to, so it cannot be right — and saying so costs nothing,
+            // while verifying it would cost an Argon2id pass (19 MiB, two iterations) per request.
+            // The length carries no information about the account, so this answer leaks nothing the
+            // uniform 401 below is protecting.
+            if (req.password.length > MAX_WEB_PASSWORD) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("web password too long"))
+                return@post
+            }
+            if (!services.accounts.verifyWebPassword(req.accountId, req.password)) {
+                // One answer for a wrong password, an account with no web access, and an account
+                // that doesn't exist. Anything more specific is an enumeration signal, and the
+                // verification above already spent the same time on all three.
+                services.metrics.authAttempt(AuthKind.WEB_LOGIN, AuthOutcome.DENIED)
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
+                return@post
+            }
+            val reactivated = services.openWebSession(req.accountId)
+            if (reactivated == null) {
+                // The password was cleared while this sign-in was verifying it. Same answer as a
+                // wrong one: the credential this request used no longer exists.
+                services.metrics.authAttempt(AuthKind.WEB_LOGIN, AuthOutcome.DENIED)
+                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("authentication failed"))
+                return@post
+            }
+            services.activity.record(
+                req.accountId, "auth.web_login", "browser signed in", deviceId = WebSession.DEVICE_ID,
+            )
+            // Same signal the SRP path records: a revoked device that comes back looks active again
+            // in the console with nothing to say why. Here it means the web password was cleared and
+            // then set anew — the session the clear closed is open once more.
+            if (reactivated) {
+                services.activity.record(
+                    req.accountId, "device.reenrolled", "revoked device re-enrolled", deviceId = WebSession.DEVICE_ID,
+                )
+            }
+            services.metrics.authAttempt(AuthKind.WEB_LOGIN, AuthOutcome.OK)
+            services.metrics.tokensIssued(TokenType.ACCESS)
+            services.metrics.tokensIssued(TokenType.REFRESH)
+            call.respond(
+                TokenResponse(
+                    accessToken = services.tokens.issueAccess(req.accountId, WebSession.DEVICE_ID),
+                    refreshToken = services.tokens.issueRefresh(req.accountId, WebSession.DEVICE_ID),
+                ),
+            )
+        }
+    }
+
     rateLimit(RateLimits.REFRESH) {
     post("/auth/refresh") {
         val req = call.receive<RefreshRequest>()
@@ -231,6 +296,100 @@ fun Route.authRoutes(services: Services) {
     }
     }
 }
+
+/**
+ * Registers the browser as this account's web device. Returns whether a revoked device was
+ * re-enrolled, or null when the web password is gone — see below.
+ *
+ * Verifying the password and writing this row are two round trips, and Argon2 makes the gap between
+ * them wide. A clear landing inside it nulls the column and revokes the session; this registration
+ * would then un-revoke the very session the clear had just closed, and hand it a fresh 30-day
+ * refresh token. Re-reading the column after the write closes that in every interleaving: if the
+ * clear committed first, the read here returns null and the session is revoked again before a token
+ * is issued; if it commits after, its own revoke covers the row this call has already written.
+ */
+internal suspend fun Services.openWebSession(accountId: String): Boolean? {
+    val reactivated = devices.register(
+        accountId = accountId,
+        deviceId = WebSession.DEVICE_ID,
+        name = WebSession.DEVICE_NAME,
+        platform = WebSession.PLATFORM,
+    )
+    if (accounts.webPasswordHash(accountId) != null) return reactivated
+    // The result is deliberately ignored: whether this call or the concurrent clear did the
+    // revoking, the row ends up revoked and no token is issued on this branch either way.
+    devices.revoke(accountId, WebSession.DEVICE_ID)
+    return null
+}
+
+/**
+ * `POST /auth/web-password` — the app sets, rotates or clears the web password over its own
+ * authenticated session. Installed under `authenticate("auth-jwt")` (see [configureServer]): the
+ * password can only be changed by a device that already holds a live token, so it is never a way
+ * back in for someone who lost one.
+ */
+fun Route.webPasswordRoute(services: Services) {
+    // The state the app's Web access screen renders: a screen that cannot tell "no web access" from
+    // "web access is on" would have to offer both buttons blind, and its "remove" would be a guess.
+    // Only the hash's presence leaves the server — never the hash.
+    get("/auth/web-password") {
+        val accountId = call.jwtPrincipal().accountId
+        call.respond(WebAccessResponse(services.accounts.webPasswordHash(accountId) != null))
+    }
+
+    post("/auth/web-password") {
+        val principal = call.jwtPrincipal()
+        val accountId = principal.accountId
+        val password = call.receive<WebPasswordRequest>().password
+        if (password == null || password.isEmpty()) {
+            val revoked = services.accounts.clearWebPassword(accountId)
+            if (revoked == null) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("no such account"))
+                return@post
+            }
+            services.activity.record(
+                accountId, "auth.web_password_set", "web access removed", deviceId = principal.deviceId,
+            )
+            // One line per closed session, the same event the console shows for any revocation: an
+            // account log that only said "removed" would hide that a live browser was just cut off.
+            revoked.forEach { deviceId ->
+                services.activity.record(accountId, "device.revoked", "revoked $deviceId", deviceId = principal.deviceId)
+                services.metrics.deviceRevoked(RevokedBy.USER)
+            }
+            call.respond(HttpStatusCode.NoContent)
+            return@post
+        }
+        if (password.length !in MIN_WEB_PASSWORD..MAX_WEB_PASSWORD) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ErrorResponse("web password must be $MIN_WEB_PASSWORD..$MAX_WEB_PASSWORD characters"),
+            )
+            return@post
+        }
+        // Read before the write: afterwards there is no way left to tell a first-time grant from a
+        // rotation, and the two are different facts to whoever reads the log.
+        val rotation = services.accounts.webPasswordHash(accountId) != null
+        if (!services.accounts.setWebPassword(accountId, password)) {
+            call.respond(HttpStatusCode.NotFound, ErrorResponse("no such account"))
+            return@post
+        }
+        services.activity.record(
+            accountId,
+            "auth.web_password_set",
+            if (rotation) "web password rotated" else "web access enabled",
+            deviceId = principal.deviceId,
+        )
+        call.respond(HttpStatusCode.NoContent)
+    }
+}
+
+/**
+ * The web password protects metadata, not vault content, and online guessing is rate-limited — but
+ * the hash is offline-guessable if the database leaks, so a floor is still worth having. The ceiling
+ * only keeps an absurd input out of Argon2.
+ */
+private const val MIN_WEB_PASSWORD = 8
+private const val MAX_WEB_PASSWORD = 256
 
 private fun hmacSha256(secret: String, message: String): ByteArray {
     val mac = Mac.getInstance("HmacSHA256")
