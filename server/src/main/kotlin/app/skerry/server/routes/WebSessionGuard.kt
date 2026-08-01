@@ -18,6 +18,24 @@ import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
 
+/** Placeholder for one path parameter — a team id, a device id. Never a literal segment. */
+private const val ANY_SEGMENT = "*"
+
+private val ALLOWED_GETS = listOf(
+    listOf("account", "summary"),
+    listOf("account", "activity"),
+    listOf("vault", "envelopes"),
+    listOf("devices"),
+    listOf("teams"),
+    listOf("teams", ANY_SEGMENT, "members"),
+    listOf("teams", ANY_SEGMENT, "scopes"),
+    listOf("teams", ANY_SEGMENT, "activity"),
+    listOf("teams", ANY_SEGMENT, "shares"),
+)
+
+/** Revoking a device, the one thing the account zone can change. */
+private val ALLOWED_DELETES = listOf(listOf("devices", ANY_SEGMENT))
+
 /**
  * What a browser signed in with the **web password** may do with the token it got.
  *
@@ -30,41 +48,46 @@ import io.ktor.server.response.respond
  * lock the owner out of their own zone; `/pairing/start` would enrol a device that clearing the web
  * password does not revoke, since the clear only revokes `platform = "web"` rows.
  *
- * The rule is therefore: read-only, minus the two reads that carry ciphertext, plus the single
- * write the account zone offers — revoking a device. A web session is recognised by its device id,
- * which the server assigns itself at sign-in (see [WebSession]) and which travels inside the signed
- * token, so it cannot be claimed by a caller.
+ * The rule is therefore an **allow-list**: exactly the reads the account zone makes, plus the single
+ * write it offers — revoking a device. Everything else is refused, including a route that does not
+ * exist yet. A deny-list phrased as "any GET is a read" was the earlier shape and it was wrong twice
+ * over: a WebSocket handshake is a GET, so it let a browser session onto the share relay
+ * ([shareRoutes]) — `/host` opens a live session under the account's name and burns the per-team
+ * share cap, `/join` takes a viewer slot and relays frames back to a real host — and every future
+ * route under `authenticate("auth-jwt")` would have opened itself the same way, silently.
+ *
+ * A web session is recognised by its device id, which the server assigns itself at sign-in (see
+ * [WebSession]) and which travels inside the signed token, so it cannot be claimed by a caller.
  */
-private val CIPHERTEXT_PATHS = setOf("/vault/keys", "/vault/records")
-
 internal fun webSessionMayCall(method: HttpMethod, rawPath: String): Boolean {
-    val path = routedPath(rawPath) ?: return false
-    return when {
-        // Team records are the same blobs under a different key, and there is no envelope projection
-        // for them — a browser has no business holding either.
-        path in CIPHERTEXT_PATHS || (path.startsWith("/teams/") && path.endsWith("/records")) -> false
-        method == HttpMethod.Get -> true
-        method == HttpMethod.Delete && path.startsWith("/devices/") -> true
-        else -> false
+    val segments = routedSegments(rawPath) ?: return false
+    val allowed = when (method) {
+        HttpMethod.Get -> ALLOWED_GETS
+        HttpMethod.Delete -> ALLOWED_DELETES
+        else -> return false
     }
+    return allowed.any { it.matches(segments) }
 }
 
+/** A path pattern matches when it has the same length and every segment agrees, `*` with any one. */
+private fun List<String>.matches(segments: List<String>): Boolean =
+    size == segments.size && indices.all { this[it] == ANY_SEGMENT || this[it] == segments[it] }
+
 /**
- * The path the router will match, rebuilt the way [io.ktor.server.routing.RoutingResolveContext]
- * builds it: empty segments dropped, each remaining one percent-decoded.
+ * The segments the router will match on, rebuilt the way [io.ktor.server.routing.RoutingResolveContext]
+ * builds them: empty ones dropped, each remaining one percent-decoded.
  *
  * `call.request.path()` is the raw request target, and the router does not match on it — so
  * `/vault/%72ecords` and `/vault//records` both reach the handler that hands over every ciphertext
- * blob while a rule comparing the raw string sees a path it doesn't recognise and falls through to
- * "a GET is fine". Two parsers deciding the same question have to agree; this one follows the
- * router's.
+ * blob while a rule comparing the raw string sees a path it doesn't recognise. Two parsers deciding
+ * the same question have to agree; this one follows the router's.
  *
  * `null` for a target that can't be decoded, or whose decoded segment carries a separator of its own
  * (`%2F`) — neither resolves to a route this guard has an opinion about, and refusing is the answer
  * that cannot be wrong.
  */
-private fun routedPath(rawPath: String): String? {
-    val segments = rawPath.split('/').filter { it.isNotEmpty() }.map { segment ->
+private fun routedSegments(rawPath: String): List<String>? =
+    rawPath.split('/').filter { it.isNotEmpty() }.map { segment ->
         val decoded = try {
             segment.decodeURLPart()
         } catch (_: URLDecodeException) {
@@ -73,8 +96,6 @@ private fun routedPath(rawPath: String): String? {
         if ('/' in decoded) return null
         decoded
     }
-    return segments.joinToString(separator = "/", prefix = "/")
-}
 
 /**
  * Runs in the `Call` phase, for two reasons: it needs `finish()` to keep the route handler from

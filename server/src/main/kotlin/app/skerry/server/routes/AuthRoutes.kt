@@ -224,6 +224,14 @@ fun Route.authRoutes(services: Services) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
                 return@post
             }
+            // Longer than one can be set to, so it cannot be right — and saying so costs nothing,
+            // while verifying it would cost an Argon2id pass (19 MiB, two iterations) per request.
+            // The length carries no information about the account, so this answer leaks nothing the
+            // uniform 401 below is protecting.
+            if (req.password.length > MAX_WEB_PASSWORD) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("web password too long"))
+                return@post
+            }
             if (!services.accounts.verifyWebPassword(req.accountId, req.password)) {
                 // One answer for a wrong password, an account with no web access, and an account
                 // that doesn't exist. Anything more specific is an enumeration signal, and the

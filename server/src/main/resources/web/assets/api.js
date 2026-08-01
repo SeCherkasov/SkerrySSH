@@ -74,6 +74,15 @@ async function request(path, init) {
  */
 let refreshing = null;
 
+/**
+ * True when the token pair was renewed, false when the server refused the refresh token itself —
+ * the only answer that means the session is really gone.
+ *
+ * Everything else throws: a 429 from the refresh limiter, a 5xx, a dropped connection, a 200 that
+ * isn't a token pair. Folding those into `false` would sign the person out and show them the
+ * sign-in card for what was a hiccup, and the stored pair is still good — this is the same line the
+ * app's own client draws between a dead session and a failed attempt to renew one.
+ */
 function refreshSession() {
   if (refreshing) return refreshing;
   const current = session();
@@ -84,8 +93,13 @@ function refreshSession() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken: current.refreshToken }),
     });
-    if (!response.ok) return false;
-    const tokens = await response.json();
+    if (response.status === 401) return false;
+    if (!response.ok) throw new ApiError(response.status);
+    const tokens = await body(response);
+    if (!tokens || !tokens.accessToken || !tokens.refreshToken) {
+      console.error("refresh answered " + response.status + " without a token pair");
+      throw new ApiError(response.status);
+    }
     storeSession({ accountId: current.accountId, ...tokens });
     return true;
   })().finally(() => { refreshing = null; });
@@ -101,7 +115,9 @@ async function authRequest(path, init, retry) {
   });
   if (response.status === 401) {
     // One refresh, then the sign-in screen: a second 401 means the device was revoked or the
-    // refresh token is dead, and retrying past that is a loop, not resilience.
+    // refresh token is dead, and retrying past that is a loop, not resilience. A refresh that
+    // failed for its own reason throws from here instead, leaving the stored pair alone — only a
+    // refused refresh token clears the session below.
     if (retry && await refreshSession()) return authRequest(path, init, false);
     signOutAccount();
     onSignedOut();

@@ -254,6 +254,31 @@ class SyncCoordinatorWebAccessTest {
     }
 
     @Test
+    fun `a rejected refresh token is a dead session, and the card says so`() = runBlocking {
+        // The other half of the branch above: the server refused the refresh token itself, so the
+        // session really is gone. `refreshSessionLocked` tears it down, and the honest answer to the
+        // caller is the original 401 — not the network reason the blip case reports.
+        val client = FakeWebAccessClient(staleToken = "access")
+        val sut = connected(client)
+        try {
+            client.refreshFailure = SyncException(SyncException.Kind.UNAUTHORIZED, "refresh token rejected")
+            // Unauthorized carries no detail: the reason is the credential, not a server sentence.
+            assertEquals(
+                WebAccessChange.Failed(SyncFailureReason.Unauthorized, null),
+                sut.setWebPassword("web-pw-123".toCharArray()),
+            )
+            // The teardown is the point: the session is gone, so the next call has nothing to run on.
+            assertNull(sut.webAccessEnabled())
+            assertEquals(WebAccessChange.NotConnected, sut.clearWebPassword())
+            // Parked on Configured, not Disabled: the saved server link survives a dead session, or
+            // the person has to re-enter the URL and account id to sign in again.
+            assertTrue(sut.status.value is SyncStatus.Configured)
+        } finally {
+            sut.close()
+        }
+    }
+
+    @Test
     fun `cancelling mid-submit still wipes the password`() = runBlocking {
         // Leaving the settings screen while the request is in flight cancels the scope the card
         // launched in. The typed array must not survive that — it is the one copy this side can clear.

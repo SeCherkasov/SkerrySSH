@@ -20,9 +20,39 @@ class WebSessionGuardTest {
 
     @Test
     fun `metadata reads are allowed`() {
-        listOf("/account/summary", "/account/activity", "/vault/envelopes", "/devices", "/teams").forEach {
+        listOf(
+            "/account/summary", "/account/activity", "/vault/envelopes", "/devices", "/teams",
+            "/teams/t1/members", "/teams/t1/scopes", "/teams/t1/activity", "/teams/t1/shares",
+        ).forEach {
             assertTrue(mayGet(it), it)
         }
+    }
+
+    /**
+     * A WebSocket handshake is an HTTP GET, so "any GET is a read" let a web session onto the share
+     * relay: `/host` opens a live session under the account's name and burns the per-team share cap,
+     * `/join` takes a viewer slot and relays frames back to a real host. Neither is a read.
+     */
+    @Test
+    fun `the share sockets are refused`() {
+        assertFalse(mayGet("/teams/t1/shares/s1/host"))
+        assertFalse(mayGet("/teams/t1/shares/s1/join"))
+        assertFalse(mayGet("/sync"))
+    }
+
+    /**
+     * The rule is an allow-list, so a route nobody thought about is refused by default. That is the
+     * whole point: the next route added under `authenticate("auth-jwt")` must not open itself to a
+     * browser session by being a GET.
+     */
+    @Test
+    fun `a path the account zone does not call is refused`() {
+        assertFalse(mayGet("/auth/web-password"))
+        assertFalse(mayGet("/teams/t1"))
+        assertFalse(mayGet("/account"))
+        assertFalse(mayGet("/account/summary/extra"))
+        assertFalse(mayGet("/devices/some-device"))
+        assertFalse(mayGet("/"))
     }
 
     @Test
@@ -46,6 +76,10 @@ class WebSessionGuardTest {
         assertFalse(webSessionMayCall(HttpMethod.Put, "/vault/records"))
         assertFalse(webSessionMayCall(HttpMethod.Delete, "/teams/t1"))
         assertTrue(webSessionMayCall(HttpMethod.Delete, "/devices/some-device"))
+        // One id, not a prefix: the rule used to be `startsWith("/devices/")`, which would also
+        // have covered anything nested under it.
+        assertFalse(webSessionMayCall(HttpMethod.Delete, "/devices/a/b"))
+        assertFalse(webSessionMayCall(HttpMethod.Delete, "/devices"))
     }
 
     /**

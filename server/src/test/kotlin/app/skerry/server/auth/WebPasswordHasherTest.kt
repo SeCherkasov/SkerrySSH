@@ -35,8 +35,19 @@ class WebPasswordHasherTest {
     @Test
     fun `an unparseable record denies access instead of throwing`() {
         // A corrupted column is a closed door, not a 500.
-        listOf("", "not-a-hash", "\$argon2id\$v=19\$m=x,t=2,p=1\$c2FsdA\$aGFzaA", "\$argon2i\$v=19\$m=8,t=1,p=1\$c2FsdA\$aGFzaA")
-            .forEach { assertFalse(WebPasswordHasher.verify("pw", it), it) }
+        listOf(
+            "",
+            "not-a-hash",
+            "\$argon2id\$v=19\$m=x,t=2,p=1\$c2FsdA\$aGFzaA",
+            "\$argon2i\$v=19\$m=8,t=1,p=1\$c2FsdA\$aGFzaA",
+            // The two fields that are base64 and not parameters: unreadable, and empty after a
+            // decode that succeeded. Either one leaves nothing to compare against, and the answer
+            // has to be "no" rather than an exception out of the Argon2 call.
+            "\$argon2id\$v=19\$m=8,t=1,p=1\$!!!\$aGFzaA",
+            "\$argon2id\$v=19\$m=8,t=1,p=1\$c2FsdA\$!!!",
+            "\$argon2id\$v=19\$m=8,t=1,p=1\$\$aGFzaA",
+            "\$argon2id\$v=19\$m=8,t=1,p=1\$c2FsdA\$",
+        ).forEach { assertFalse(WebPasswordHasher.verify("pw", it), it) }
     }
 
     @Test

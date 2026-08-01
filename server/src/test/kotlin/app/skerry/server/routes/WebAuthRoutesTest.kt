@@ -13,6 +13,8 @@ import app.skerry.sync.wire.WebPasswordRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.websocket.WebSockets
+import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.client.request.bearerAuth
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -32,6 +34,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
@@ -273,6 +276,87 @@ class WebAuthRoutesTest {
         )
         // The app's own session is not restricted by any of this.
         assertEquals(HttpStatusCode.OK, client.get("/vault/keys") { bearerAuth(app.accessToken) }.status)
+    }
+
+    /**
+     * `""` takes the same path as `null`. The app never sends it — the form's own bounds stop at 8 —
+     * but the route's contract is what a browser or a script sees, and "empty means remove" closes a
+     * live session, so it is worth stating rather than leaving to be discovered.
+     */
+    @Test
+    fun `an empty password removes web access, like a null one`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val app = client.registerAccount(account, password)
+        client.setWebPassword(app.accessToken, webPassword)
+        val web: TokenResponse = client.webLogin().body()
+
+        assertEquals(HttpStatusCode.NoContent, client.setWebPassword(app.accessToken, "").status)
+
+        assertNull(services.accounts.webPasswordHash(account))
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/devices") { bearerAuth(web.accessToken) }.status)
+        assertEquals(HttpStatusCode.Unauthorized, client.webLogin().status)
+    }
+
+    /**
+     * A password longer than one can ever be set to cannot be right, and Argon2id costs 19 MiB and
+     * two passes to say so. The refusal has to come before the hash, or the sign-in route is a way
+     * to make the server do that work on request, a body at a time.
+     */
+    @Test
+    fun `an over-long sign-in password is refused without hashing it`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val app = client.registerAccount(account, password)
+        client.setWebPassword(app.accessToken, webPassword)
+
+        assertEquals(HttpStatusCode.BadRequest, client.webLogin(value = "p".repeat(257)).status)
+        // The ceiling itself is still a password the route will check, and answer 401 for.
+        assertEquals(HttpStatusCode.Unauthorized, client.webLogin(value = "p".repeat(256)).status)
+    }
+
+    /**
+     * A WebSocket handshake is an HTTP GET. Under the earlier "any GET is a read" rule that put a
+     * browser session on the share relay: `/host` opens a live session under the account's name and
+     * burns the per-team share cap, `/join` takes a viewer slot and relays frames back to a real
+     * host.
+     *
+     * What this pins is that the guard is installed on the socket routes and runs *before* the
+     * upgrade — which [webSessionMayCall]'s own test cannot show. The status itself is not visible
+     * here: the client engine owns the upgrade headers, so a plain `get` cannot resolve these
+     * routes, and a failed handshake carries no code. [WebSessionGuardTest] pins the decision, and
+     * the app-token loop below rules out the false green where the path or the plugin is simply
+     * wrong — that would fail for both tokens.
+     */
+    @Test
+    fun `a web session cannot open a share socket`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient {
+            install(ContentNegotiation) { json() }
+            install(WebSockets)
+        }
+        val app = client.registerAccount(account, password)
+        client.setWebPassword(app.accessToken, webPassword)
+        val web: TokenResponse = client.webLogin().body()
+
+        val sockets = listOf("/teams/t1/shares/s1/host", "/teams/t1/shares/s1/join", "/sync")
+
+        // A refusal is a failed handshake. The type and message are pinned so a harness slip — an
+        // assertion or a cancellation raised inside the block — cannot pass for one.
+        sockets.forEach { path ->
+            val refused = assertFailsWith<IllegalStateException>(path) {
+                client.webSocket(path, request = { bearerAuth(web.accessToken) }) {}
+            }
+            assertEquals("WebSocket connection failed", refused.message, path)
+        }
+        // The same three accept the app's own session, so what refused above was the scope rule and
+        // not the route. (`webSessionMayCall` is where the answer itself is pinned.)
+        sockets.forEach { path ->
+            client.webSocket(path, request = { bearerAuth(app.accessToken) }) {}
+        }
     }
 
     /**
