@@ -209,10 +209,10 @@ private fun SyncBody(sync: SyncCoordinator) {
             // Disconnect and Link a device sit together (separated by tabs on desktop).
             MobileAccountActions(sync)
             MobileWhatSyncs(sync)
-            MobileLinkedDevices(sync)
             // Desktop parity: the same card, in the same place relative to the device list.
             MobileSectionLabel(stringResource(Res.string.web_access_label))
             WebAccessCard(sync)
+            MobileLinkedDevices(sync)
         }
         // Connecting hit an existing account under a different password → confirm re-keying this device
         // to the account password before adopting it (issue #28).

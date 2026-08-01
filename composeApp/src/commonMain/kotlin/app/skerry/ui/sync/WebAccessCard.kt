@@ -1,6 +1,7 @@
 package app.skerry.ui.sync
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -38,6 +40,7 @@ import app.skerry.ui.generated.resources.web_access_field_new
 import app.skerry.ui.generated.resources.web_access_field_repeat
 import app.skerry.ui.generated.resources.web_access_mismatch
 import app.skerry.ui.generated.resources.web_access_not_connected
+import app.skerry.ui.generated.resources.web_access_open
 import app.skerry.ui.generated.resources.web_access_remove
 import app.skerry.ui.generated.resources.web_access_remove_body
 import app.skerry.ui.generated.resources.web_access_remove_title
@@ -69,6 +72,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun WebAccessCard(sync: SyncCoordinator, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
+    val uriHandler = LocalUriHandler.current
     // null while the state is still being read; the answer is itself nullable — see webAccessEnabled.
     var enabled by remember { mutableStateOf<Boolean?>(null) }
     var checked by remember { mutableStateOf(false) }
@@ -120,11 +124,19 @@ fun WebAccessCard(sync: SyncCoordinator, modifier: Modifier = Modifier) {
     ) {
         WebAccessHeader(enabled, checked)
         // The address to open, printed verbatim: the page lives on the user's own server, and a
-        // paraphrase ("your sync server") is not something you can type into a browser.
-        // Remembered, not read per recomposition: savedConfig reads and parses the config file, and
-        // this body re-runs on every keystroke in the password field.
-        val serverUrl = remember(sync) { sync.savedConfig?.serverUrl }
-        serverUrl?.let { WebAccessUrl(it) }
+        // paraphrase ("your sync server") is not something you can type into a browser. Null with no
+        // server configured, which is what leaves both the link and the Open button out.
+        //
+        // Address and opener are remembered together, not rebuilt per recomposition: savedConfig
+        // reads and parses the config file, this body re-runs on every keystroke in the password
+        // field, and a fresh lambda each time would keep the buttons below from ever being skipped.
+        // A failing system handler must not throw into the composition (see AboutSection).
+        val account: Pair<String, () -> Unit>? = remember(sync, uriHandler) {
+            accountPageUrl(sync.savedConfig?.serverUrl)?.let { url ->
+                url to { runCatching { uriHandler.openUri(url) }; Unit }
+            }
+        }
+        account?.let { (url, open) -> WebAccessUrl(url, open) }
         Txt(
             stringResource(Res.string.web_access_desc),
             color = Skerry.colors.faint, size = 11.5.sp, lineHeight = 16.sp,
@@ -141,6 +153,7 @@ fun WebAccessCard(sync: SyncCoordinator, modifier: Modifier = Modifier) {
             editing = editing,
             busy = busy,
             canSubmit = form.canSubmit,
+            onOpen = account?.second,
             onSubmit = submit,
             onEdit = { editing = true; result = null },
             onCancel = { editing = false; form = WebPasswordForm(); result = null },
@@ -196,14 +209,26 @@ private fun WebAccessHeader(enabled: Boolean?, checked: Boolean) {
     }
 }
 
-/** The account page's address, in the monospace face every literal value on screen uses. */
+/**
+ * The account page's address on the configured server, or null when there is no server to point at.
+ * The server URL is whatever was typed into the setup field, so a trailing slash is ordinary input
+ * and `//account` is a different path to a browser than `/account`.
+ */
+internal fun accountPageUrl(serverUrl: String?): String? =
+    serverUrl?.trim()?.trimEnd('/')?.ifEmpty { null }?.let { "$it/account" }
+
+/**
+ * The account page's address, in the monospace face every literal value on screen uses, and the link
+ * itself: the whole row opens the page, which is the shortest path from reading the address to being
+ * on it.
+ */
 @Composable
-private fun WebAccessUrl(serverUrl: String) {
+private fun WebAccessUrl(url: String, onOpen: () -> Unit) {
     val mono = LocalFonts.current.mono
     Txt(
-        "$serverUrl/account",
-        color = Skerry.colors.dim, size = 11.5.sp, font = mono,
-        modifier = Modifier.padding(top = 8.dp),
+        url,
+        color = Skerry.colors.cyanBright, size = 11.5.sp, font = mono,
+        modifier = Modifier.padding(top = 8.dp).clickable(onClick = onOpen),
     )
 }
 
@@ -252,7 +277,8 @@ private fun WebAccessMessage(form: WebPasswordForm, result: WebAccessChange?) {
 }
 
 /**
- * Set / Change / Remove, or Save / Cancel while editing. Remove is offered only for a state read as
+ * Open / Set / Change / Remove, or Save / Cancel while editing. Open is null when no server is
+ * configured — there is nothing to point a browser at. Remove is offered only for a state read as
  * on: a button that clears a password nobody set does nothing and says nothing.
  */
 @Composable
@@ -262,6 +288,7 @@ private fun WebAccessActions(
     editing: Boolean,
     busy: Boolean,
     canSubmit: Boolean,
+    onOpen: (() -> Unit)?,
     onSubmit: () -> Unit,
     onEdit: () -> Unit,
     onCancel: () -> Unit,
@@ -277,6 +304,17 @@ private fun WebAccessActions(
             PrimaryButton(stringResource(Res.string.web_access_save), onClick = onSubmit, enabled = canSubmit && !busy)
             GhostButton(stringResource(Res.string.web_access_cancel), onClick = onCancel, fg = Skerry.colors.dim)
         } else {
+            // First in the row and offered whichever way the state read went: with no password set
+            // the page still opens and says to come back here, which is the answer to "what now".
+            onOpen?.let {
+                GhostButton(
+                    stringResource(Res.string.web_access_open),
+                    onClick = it,
+                    icon = "open_in_new",
+                    fg = Skerry.colors.cyanBright,
+                    border = Skerry.colors.cyanBright.copy(alpha = 0.4f),
+                )
+            }
             // Gated on busy like the Save above: the removal dialog closes the moment it is
             // confirmed, so without this both buttons are live again while that request is still in
             // flight, and a second tap starts a concurrent change with no defined winner.

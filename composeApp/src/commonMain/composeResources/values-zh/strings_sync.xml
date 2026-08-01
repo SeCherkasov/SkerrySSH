@@ -130,14 +130,15 @@
     <!-- Web access: the password for the browser account zone at /account (Settings -> Sync) -->
     <string name="web_access_label">网页访问</string>
     <string name="web_access_title">浏览器中的账户页</string>
-    <string name="web_access_desc">使用独立密码，绝非主密码。该页面显示元数据——设备、记录大小、活动；记录本身仍保持加密。</string>
+    <string name="web_access_desc">网页访问密码独立于主密码设置。浏览器中可见设备、活动和记录大小——记录本身不可见。</string>
     <string name="web_access_state_on">已启用</string>
     <string name="web_access_state_off">未设置</string>
     <string name="web_access_state_unknown">无法读取状态</string>
     <string name="web_access_checking">检查中…</string>
     <string name="web_access_set">设置密码</string>
     <string name="web_access_change">修改</string>
-    <string name="web_access_remove">移除</string>
+    <string name="web_access_open">打开</string>
+    <string name="web_access_remove">停用</string>
     <string name="web_access_field_new">网页访问密码</string>
     <string name="web_access_field_repeat">重复密码</string>
     <string name="web_access_save">保存</string>
@@ -146,6 +147,6 @@
     <string name="web_access_too_long">最多 %1$d 个字符。</string>
     <string name="web_access_mismatch">两次输入的密码不一致。</string>
     <string name="web_access_not_connected">请先连接到同步服务器。</string>
-    <string name="web_access_remove_title">移除网页访问？</string>
+    <string name="web_access_remove_title">停用网页访问？</string>
     <string name="web_access_remove_body">当前已登录的浏览器会话将被登出。重新设置密码即可再次开放该页面。</string>
 </resources>

@@ -42,15 +42,15 @@ const state = { tab: { account: TABS.account[0].id, operator: TABS.operator[0].i
  * the storage table with it. A stale page after a purge lands on an empty one — the server clamps a
  * too-large offset rather than failing, so nothing here has to guess how long the list still is.
  */
-const PAGE_SIZES = [10, 50, 100, 200, 300];
+const PAGE_SIZES = [10, 20, 50, 100];
 const pager = {
-  storage:   { size: 50, page: 0 },
-  log:       { size: 50, page: 0 },
-  audit:     { size: 50, page: 0 },
-  accounts:  { size: 50, page: 0 },
-  acctDevs:  { size: 50, page: 0 },
-  acctRecs:  { size: 50, page: 0 },
-  teamLog:   { size: 50, page: 0 },
+  storage:   { size: PAGE_SIZES[0], page: 0 },
+  log:       { size: PAGE_SIZES[0], page: 0 },
+  audit:     { size: PAGE_SIZES[0], page: 0 },
+  accounts:  { size: PAGE_SIZES[0], page: 0 },
+  acctDevs:  { size: PAGE_SIZES[0], page: 0 },
+  acctRecs:  { size: PAGE_SIZES[0], page: 0 },
+  teamLog:   { size: PAGE_SIZES[0], page: 0 },
 };
 /** `?limit=&offset=` for one pager, appended to a path that may already carry a query. */
 const pageQuery = (key, path) => {

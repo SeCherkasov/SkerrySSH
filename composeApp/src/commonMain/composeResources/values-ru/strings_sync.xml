@@ -130,14 +130,15 @@
     <!-- Web access: the password for the browser account zone at /account (Settings -> Sync) -->
     <string name="web_access_label">ВЕБ-ДОСТУП</string>
     <string name="web_access_title">Кабинет в браузере</string>
-    <string name="web_access_desc">Отдельный пароль, не мастер-пароль. Страница показывает метаданные — устройства, размеры записей, события; сами записи остаются зашифрованными.</string>
+    <string name="web_access_desc">Пароль веб-доступа задаётся отдельно от мастер-пароля. В браузере видны устройства, события и размеры записей — не сами записи.</string>
     <string name="web_access_state_on">Включён</string>
     <string name="web_access_state_off">Не задан</string>
     <string name="web_access_state_unknown">Состояние не прочитано</string>
     <string name="web_access_checking">Проверка…</string>
     <string name="web_access_set">Задать пароль</string>
     <string name="web_access_change">Сменить</string>
-    <string name="web_access_remove">Снять</string>
+    <string name="web_access_open">Открыть</string>
+    <string name="web_access_remove">Отключить</string>
     <string name="web_access_field_new">ПАРОЛЬ ВЕБ-ДОСТУПА</string>
     <string name="web_access_field_repeat">ПОВТОР ПАРОЛЯ</string>
     <string name="web_access_save">Сохранить</string>
@@ -146,6 +147,6 @@
     <string name="web_access_too_long">Не длиннее %1$d символов.</string>
     <string name="web_access_mismatch">Пароли не совпадают.</string>
     <string name="web_access_not_connected">Сначала подключитесь к серверу синхронизации.</string>
-    <string name="web_access_remove_title">Снять веб-доступ?</string>
+    <string name="web_access_remove_title">Отключить веб-доступ?</string>
     <string name="web_access_remove_body">Открытая сейчас сессия в браузере будет закрыта. Новый пароль откроет страницу снова.</string>
 </resources>

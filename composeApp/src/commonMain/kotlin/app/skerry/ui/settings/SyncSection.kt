@@ -126,11 +126,11 @@ private fun LiveSyncSection(sync: app.skerry.ui.sync.SyncCoordinator, state: Des
     WhatSyncsToggles(sync)
     // The device list is only known server-side while a session is active (Online).
     if (status is SyncStatus.Online) {
-        LinkedDevices(sync, onLink = state::openPairing)
-        // Same session requirement, and the same card as mobile: the web password is set over this
-        // device's own token and nowhere else.
+        // Same session requirement as the device list, and the same card as mobile: the web password
+        // is set over this device's own token and nowhere else.
         SectionLabel(stringResource(Res.string.web_access_label), top = 18.dp, bottom = 10.dp)
         WebAccessCard(sync)
+        LinkedDevices(sync, onLink = state::openPairing)
     }
 }
 
