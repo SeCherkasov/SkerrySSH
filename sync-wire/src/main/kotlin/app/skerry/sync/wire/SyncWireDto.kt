@@ -85,6 +85,35 @@ data class ChangePasswordRequest(
 @Serializable
 data class ChangePasswordResponse(val m2: String, val accessToken: String, val refreshToken: String)
 
+/**
+ * Set, rotate or clear the **web** password — the credential that opens the browser account zone at
+ * `/account`, sent by the app over its authenticated session. A null [password] clears it, which
+ * also revokes the browser session it was holding open.
+ *
+ * It is not the master password and derives no key: a browser signed in with it reads the metadata
+ * the server already holds in plaintext, and cannot decrypt a record. Whoever serves the page also
+ * runs the server the password protects, which is why the master password never travels this way.
+ */
+@Serializable
+data class WebPasswordRequest(val password: String? = null)
+
+/**
+ * Whether the account currently has a web password (`GET /auth/web-password`) — the app's Web access
+ * screen needs to know before it offers to set one or to take it away. Carries no default on
+ * purpose: kotlinx omits a property equal to its default, and the absent field would read back as
+ * `false` on a client that parses it, which is the exact state the screen must not invent.
+ */
+@Serializable
+data class WebAccessResponse(val enabled: Boolean)
+
+/**
+ * Sign a browser in to the account zone. No deviceId: the server names the web session itself, so
+ * this unauthenticated endpoint can't be used to adopt the id of another device. The response is the
+ * ordinary [TokenResponse] every client gets.
+ */
+@Serializable
+data class WebLoginRequest(val accountId: String, val password: String)
+
 // --- vault ---
 
 @Serializable
@@ -123,6 +152,11 @@ data class PushResponse(val records: List<RecordDto>, val cursor: Long)
 
 // --- devices ---
 
+/**
+ * [platform] is what the device called itself when it enrolled (`Linux`, `Android`, `web`, …), null
+ * for a device enrolled by a client that predates the field. The account zone shows it beside the
+ * name, and it is the only thing that tells the browser session apart from an app one.
+ */
 @Serializable
 data class DeviceDto(
     val id: String,
@@ -131,6 +165,7 @@ data class DeviceDto(
     val lastSeenAt: Long,
     val revoked: Boolean,
     val current: Boolean,
+    val platform: String? = null,
 )
 
 @Serializable
@@ -144,8 +179,18 @@ data class PairingStartRequest(val encryptedDataKey: String, val ttlSeconds: Lon
 @Serializable
 data class PairingStartResponse(val code: String, val expiresAt: Long)
 
+/**
+ * [platform] is reported by the claiming device, exactly as `/auth/register` reports it — without it
+ * every device but the first would enroll with none. Optional, so a client that predates the field
+ * still pairs; the absent value stays absent instead of becoming an invented default.
+ */
 @Serializable
-data class PairingClaimRequest(val code: String, val deviceId: String, val deviceName: String)
+data class PairingClaimRequest(
+    val code: String,
+    val deviceId: String,
+    val deviceName: String,
+    val platform: String? = null,
+)
 
 @Serializable
 data class PairingClaimResponse(

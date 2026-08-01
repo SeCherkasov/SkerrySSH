@@ -62,7 +62,12 @@ class DeviceRepository(private val db: Database) {
     }
 
     suspend fun list(accountId: String): List<DeviceRow> = dbTransaction(db) {
-        Devices.selectAll().where { Devices.accountId eq accountId }.map { it.toDeviceRow() }
+        // Most recently active first, like [listAll]. The account zone calls a device stale after a
+        // week of silence, so this ordering is also what keeps the live ones above the quiet ones.
+        Devices.selectAll()
+            .where { Devices.accountId eq accountId }
+            .orderBy(Devices.lastSeenAt to SortOrder.DESC)
+            .map { it.toDeviceRow() }
     }
 
     /**
@@ -71,11 +76,11 @@ class DeviceRepository(private val db: Database) {
      * never deleted, so including them would let the list grow without bound. A revoked device that
      * re-authenticates clears its revocation and reappears here.
      */
-    suspend fun listAll(limit: Int = 200, accountId: String? = null): List<DeviceRow> = dbTransaction(db) {
+    suspend fun listAll(limit: Int = 200, accountId: String? = null, offset: Long = 0): List<DeviceRow> = dbTransaction(db) {
         Devices.selectAll()
             .where { activeDevices(accountId) }
             .orderBy(Devices.lastSeenAt to SortOrder.DESC)
-            .limit(limit)
+            .limit(limit).offset(offset)
             .map { it.toDeviceRow() }
     }
 
@@ -84,7 +89,7 @@ class DeviceRepository(private val db: Database) {
         Devices.selectAll().where { activeDevices(accountId) }.count()
     }
 
-    /** The listing predicate, shared by [listAll] and [count] so a page and its total can't disagree. */
+    /** The listing predicate, shared by [listAll] and [count] so both speak about the same list. */
     private fun activeDevices(accountId: String?) =
         (Devices.revoked eq false).let { active ->
             if (accountId == null) active else active and (Devices.accountId eq accountId)

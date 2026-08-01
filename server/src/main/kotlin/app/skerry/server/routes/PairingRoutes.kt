@@ -71,7 +71,7 @@ fun Route.pairingClaimRoute(services: Services) {
             services.metrics.authAttempt(AuthKind.PAIRING_CLAIM, AuthOutcome.OK)
             services.metrics.tokensIssued(TokenType.ACCESS)
             services.metrics.tokensIssued(TokenType.REFRESH)
-            services.devices.register(session.accountId, req.deviceId, req.deviceName)
+            services.devices.register(session.accountId, req.deviceId, req.deviceName, req.platform)
             call.respond(
                 PairingClaimResponse(
                     accountId = session.accountId,

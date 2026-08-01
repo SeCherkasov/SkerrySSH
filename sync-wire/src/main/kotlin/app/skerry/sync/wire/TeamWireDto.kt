@@ -1,5 +1,6 @@
 package app.skerry.sync.wire
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 
 /**
@@ -113,7 +114,13 @@ data class TeamActivityDto(
 )
 
 @Serializable
-data class TeamActivityResponse(val entries: List<TeamActivityDto>)
+data class TeamActivityResponse(
+    val entries: List<TeamActivityDto>,
+    // @EncodeDefault, or an empty log answers without a total at all — kotlinx omits a property
+    // equal to its default. The reader would then page a list whose length it cannot see. The
+    // default itself stays for reading a response from a server that predates the field.
+    @EncodeDefault val total: Long = 0,
+)
 
 /**
  * A client's report that it opened a session on a shared record, or saved a recording of one

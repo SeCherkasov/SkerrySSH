@@ -30,6 +30,21 @@ data class AccountRow(
     }
 }
 
+/**
+ * The browser session in the account zone, as a device row.
+ *
+ * [DEVICE_ID] is fixed rather than chosen by the caller: `/auth/web-login` is an unauthenticated
+ * endpoint, and [DeviceRepository.register] clears revocation, so a caller-supplied id would let a
+ * web sign-in adopt — and un-revoke — a device it isn't. One row per account also bounds a list a
+ * browser would otherwise grow by a device per tab, since a web session keeps its tokens in
+ * `sessionStorage`.
+ */
+object WebSession {
+    const val PLATFORM = "web"
+    const val DEVICE_ID = "web-session"
+    const val DEVICE_NAME = "browser"
+}
+
 data class DeviceRow(
     val id: String,
     val accountId: String,

@@ -512,12 +512,12 @@ internal fun SyncStatusNotice(icon: String, iconColor: Color, title: String, sub
 }
 
 @Composable
-private fun SyncFieldLabel(text: String) {
+internal fun SyncFieldLabel(text: String) {
     Txt(text, color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 16.dp, bottom = 6.dp))
 }
 
 @Composable
-private fun SyncTextField(
+internal fun SyncTextField(
     value: String,
     placeholder: String,
     keyboardType: KeyboardType,

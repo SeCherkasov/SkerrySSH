@@ -126,4 +126,27 @@
     <string name="sync_account_id_label">Account ID</string>
     <string name="sync_sharing_fingerprint_label">Sharing key fingerprint</string>
     <string name="sync_identity_hint">A team owner needs these identifiers to invite you to a team.</string>
+
+    <!-- Web access: the password for the browser account zone at /account (Settings -> Sync) -->
+    <string name="web_access_label">WEB ACCESS</string>
+    <string name="web_access_title">Account page in a browser</string>
+    <string name="web_access_desc">The web password is set apart from the master password. A browser shows devices, activity and record sizes — not the records.</string>
+    <string name="web_access_state_on">Enabled</string>
+    <string name="web_access_state_off">Not set</string>
+    <string name="web_access_state_unknown">Can\'t read the state</string>
+    <string name="web_access_checking">Checking…</string>
+    <string name="web_access_set">Set password</string>
+    <string name="web_access_change">Change</string>
+    <string name="web_access_open">Open</string>
+    <string name="web_access_remove">Disable</string>
+    <string name="web_access_field_new">WEB PASSWORD</string>
+    <string name="web_access_field_repeat">REPEAT PASSWORD</string>
+    <string name="web_access_save">Save</string>
+    <string name="web_access_cancel">Cancel</string>
+    <string name="web_access_too_short">At least %1$d characters.</string>
+    <string name="web_access_too_long">At most %1$d characters.</string>
+    <string name="web_access_mismatch">Passwords don\'t match.</string>
+    <string name="web_access_not_connected">Connect to the sync server first.</string>
+    <string name="web_access_remove_title">Disable web access?</string>
+    <string name="web_access_remove_body">A browser signed in right now is signed out. Setting a password again reopens the page.</string>
 </resources>

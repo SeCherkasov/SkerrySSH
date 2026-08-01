@@ -33,6 +33,14 @@ internal fun ApplicationCall.limitParam(default: Int, max: Int): Int =
     request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, max) ?: default
 
 /**
+ * `?offset=` query parameter: how many rows of the list to skip. Clamped at zero rather than
+ * rejected — a reader holding a stale page number after rows were purged should land on an empty
+ * page, and a negative offset is an SQL error waiting to happen, not a 400 worth writing.
+ */
+internal fun ApplicationCall.offsetParam(): Long =
+    request.queryParameters["offset"]?.toLongOrNull()?.coerceAtLeast(0) ?: 0
+
+/**
  * Constant-time comparison of two long-lived static tokens (admin console, metrics scraper). Both
  * values are hashed to a fixed 32 bytes with SHA-256 first, then compared — otherwise
  * [MessageDigest.isEqual] on differing lengths returns early and leaks the token length via timing.

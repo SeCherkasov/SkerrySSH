@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<!--
+  Skerry Sync — web frontend. One page, three entrances: the public front page at `/`, the account
+  cabinet at `/account`, the operator console at `/console`. The zone comes from the path; the
+  credentials of the three never mix (an admin token is never sent to an account endpoint).
+
+  Static and hand-written, like the console it replaces: no bundler, no CDN, self-hosted fonts,
+  inline SVG icons. CSP is `default-src 'self'`.
+
+  Zero-knowledge holds here as everywhere else: this page never derives a key, never unwraps
+  dataKey and never decrypts a record. Lists show ids, types, sizes and timestamps — the metadata
+  the server already holds in plaintext — and the ciphertext preview is shown as what it is.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Skerry Sync</title>
+<!-- Self-hosted like everything else: CSP is `default-src 'self'`, and a browser asks for
+     /favicon.ico unprompted, so the icon is named here instead of 404-ing on every load. -->
+<link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"/>
+<link rel="icon" type="image/png" sizes="64x64" href="/assets/favicon.png"/>
+<link rel="apple-touch-icon" href="/assets/favicon.png"/>
+<style>
+  /* Self-hosted variable fonts (no CDN). Latin + latin-ext only: Chinese falls through to the
+     system CJK stack by design — a CJK face would be megabytes. */
+  @font-face {
+    font-family: "Space Grotesk"; font-style: normal; font-weight: 300 700; font-display: swap;
+    src: url("/assets/fonts/space-grotesk-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "Space Grotesk"; font-style: normal; font-weight: 300 700; font-display: swap;
+    src: url("/assets/fonts/space-grotesk-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap;
+    src: url("/assets/fonts/jetbrains-mono-latin.woff2") format("woff2");
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: "JetBrains Mono"; font-style: normal; font-weight: 100 800; font-display: swap;
+    src: url("/assets/fonts/jetbrains-mono-latin-ext.woff2") format("woff2");
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  :root {
+    --page:        #040B12;
+    --panel:       #07141E;
+    --card:        #0B1A26;
+    --card-hi:     #102534;
+    --cyan:        #2BBDEE;
+    --moss:        #5DCE9E;
+    --amber:       #F2A65A;
+    --storm:       #E94B4B;
+    --text:        #E9EFF2;
+    --text-dim:    #93A7B4;
+    /* Four steps of dimness, and the two dimmest still clear WCAG AA (4.5:1) on every surface the
+       page paints them on — the darkest is `--page`, the lightest a card at 0.86 alpha. Anything
+       quieter than `--text-ghost` was unreadable rather than subdued. */
+    --text-faint:  #8299A9;
+    --text-ghost:  #6C8394;
+    --line:        rgba(43,189,238,0.09);
+    --line-soft:   rgba(43,189,238,0.05);
+    --line-strong: rgba(43,189,238,0.18);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  /* One ring for everything focusable. :focus-visible, not :focus — a mouse click on a button
+     should not leave it ringed. */
+  :focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; border-radius: 4px; }
+  body {
+    background:
+      radial-gradient(1100px 620px at 50% -8%, rgba(43,189,238,0.10), transparent 62%),
+      radial-gradient(760px 420px at 88% 8%, rgba(93,206,158,0.055), transparent 60%),
+      var(--page);
+    background-attachment: fixed;
+    color: var(--text); font-family: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; font-size: 15px; min-height: 100vh;
+  }
+  .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 24px; }
+
+  /* ===== top bar ===== */
+  .top {
+    position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px);
+    background: rgba(4,11,18,0.82); border-bottom: 1px solid var(--line);
+  }
+  .top .inner { display: flex; align-items: center; gap: 16px; height: 62px; }
+  .logo {
+    display: flex; align-items: center; gap: 10px; cursor: pointer;
+    background: transparent; border: 0; padding: 0; color: inherit; font: inherit;
+  }
+  .logo svg { width: 28px; height: 28px; }
+  .logo .n { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  .top .right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+  .langs { display: flex; gap: 2px; background: rgba(11,26,38,0.9); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  .langs button {
+    background: transparent; border: 0; border-radius: 7px; color: var(--text-faint);
+    font: inherit; font-size: 12px; font-weight: 600; padding: 6px 11px; cursor: pointer;
+  }
+  .langs button:hover { color: var(--text-dim); }
+  .langs button.on { background: rgba(43,189,238,0.15); color: var(--cyan); }
+
+  /* The bar scrolls when the tabs outrun the screen; the fade on the right is the only thing that
+     says so, since a touch scrollbar is invisible until you already dragged. */
+  .tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  /* `.more` is set by renderTabs when the row actually overflows: an unconditional fade would dim
+     the last tab on a desktop where everything fits. */
+  .tabs.more { mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent); }
+  .tab {
+    background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--text-faint);
+    font: inherit; font-size: 13.5px; font-weight: 600; padding: 13px 15px; cursor: pointer; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text-dim); }
+  .tab.on { color: var(--text); border-bottom-color: var(--cyan); }
+  .tab .n { margin-left: 7px; font-size: 11.5px; color: var(--text-ghost); font-variant-numeric: tabular-nums; }
+
+  /* ===== buttons ===== */
+  .btn {
+    background: transparent; border: 1px solid rgba(43,189,238,0.28); color: var(--text-dim);
+    border-radius: 11px; padding: 10px 17px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--cyan); color: var(--text); }
+  .btn[disabled] { opacity: 0.5; cursor: default; }
+  .btn.primary { background: var(--cyan); border-color: var(--cyan); color: #04222E; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.danger { border-color: rgba(233,75,75,0.35); color: var(--storm); }
+  .btn.danger:hover { background: rgba(233,75,75,0.10); border-color: var(--storm); }
+  .btn.sm { padding: 7px 12px; font-size: 12px; border-radius: 9px; }
+  .btn.ghost { border-color: transparent; color: var(--text-faint); }
+  .btn.ghost:hover { border-color: var(--line-strong); color: var(--text); }
+
+  /* ===== front page ===== */
+  /* padding-block, not the shorthand: the shorthand would drop the side gutter `.wrap` sets, and
+     below the 1060px max-width that gutter is the only thing between the content and the screen. */
+  .front { padding-block: 74px 90px; }
+  .kicker {
+    display: inline-flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 600;
+    color: var(--moss); background: rgba(93,206,158,0.08); border: 1px solid rgba(93,206,158,0.22);
+    border-radius: 999px; padding: 7px 14px;
+  }
+  .kicker .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); box-shadow: 0 0 9px var(--moss); }
+  .kicker.down { color: var(--storm); background: rgba(233,75,75,0.08); border-color: rgba(233,75,75,0.22); }
+  .kicker.down .dot { background: var(--storm); box-shadow: 0 0 9px var(--storm); }
+  .kicker.wait { color: var(--text-faint); background: rgba(143,163,176,0.07); border-color: rgba(143,163,176,0.18); }
+  .kicker.wait .dot { background: var(--text-faint); box-shadow: none; }
+  .front h1 { margin: 20px 0 0; font-size: 38px; line-height: 1.15; font-weight: 650; letter-spacing: -1px; word-break: break-word; }
+  .front .lead { margin-top: 18px; font-size: 16px; line-height: 1.65; color: var(--text-dim); max-width: 62ch; }
+
+  /* Four equal cells, label over value. The strip used to be a baseline-aligned row of inline
+     fragments — a label, a value and a trailing half-sentence, all on one line — which read as
+     prose broken mid-thought and wrapped into a ragged second row as soon as one value grew. */
+  .facts {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px;
+    margin-top: 30px; overflow: hidden;
+    background: var(--line); border: 1px solid var(--line); border-radius: 14px;
+  }
+  .fact { padding: 16px 20px; background: rgba(11,26,38,0.92); }
+  .fact .k {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase;
+    color: var(--text-ghost);
+  }
+  .fact .v { margin-top: 7px; font-size: 16px; font-weight: 650; letter-spacing: -0.2px; }
+  .fact .v.ok { color: var(--moss); }
+  .fact .v.warn { color: var(--amber); }
+  .fact .s { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--text-faint); }
+  .fact .s.warn { color: var(--amber); }
+
+  .doors { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  .door {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: linear-gradient(150deg, rgba(43,189,238,0.07), rgba(43,189,238,0.015) 70%);
+    border: 1px solid var(--line-strong); border-radius: 18px; padding: 24px 26px; color: inherit; font: inherit;
+    transition: border-color .15s, transform .15s;
+  }
+  .door:hover { border-color: var(--cyan); transform: translateY(-1px); }
+  .door .t { font-size: 17px; font-weight: 650; letter-spacing: -0.3px; display: flex; align-items: center; gap: 10px; }
+  .door .d { font-size: 13px; color: var(--text-faint); margin-top: 8px; line-height: 1.6; }
+  .door .go { margin-top: 16px; font-size: 12.5px; font-weight: 600; color: var(--cyan); }
+
+  .urlrow {
+    display: flex; align-items: center; gap: 12px; margin-top: 40px; padding: 14px 16px;
+    background: rgba(7,20,30,0.9); border: 1px solid var(--line-strong); border-radius: 14px;
+  }
+  .urlrow .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase; color: var(--text-ghost); }
+  .urlrow code { flex: 1; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 14px; color: var(--cyan); overflow: hidden; text-overflow: ellipsis; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 14px; counter-reset: s; }
+  .step { background: rgba(11,26,38,0.7); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+  .step .n {
+    counter-increment: s; width: 26px; height: 26px; border-radius: 9px; background: rgba(43,189,238,0.13);
+    color: var(--cyan); font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .step .n::before { content: counter(s); }
+  .step .t { font-size: 14px; font-weight: 600; margin-top: 14px; }
+  .step .d { font-size: 12.5px; color: var(--text-faint); margin-top: 6px; line-height: 1.6; }
+
+  /* ===== sign-in card ===== */
+  .signin { max-width: 500px; margin: 90px auto; text-align: center; }
+  .signin .ico {
+    width: 58px; height: 58px; margin: 0 auto 20px; border-radius: 17px;
+    background: rgba(43,189,238,0.10); border: 1px solid var(--line-strong);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .signin h1 { margin: 0 0 10px; font-size: 23px; font-weight: 650; letter-spacing: -0.5px; }
+  .signin p { margin: 0 0 26px; font-size: 14px; color: var(--text-faint); line-height: 1.65; }
+  .signin input {
+    width: 100%; background: rgba(4,11,18,0.9); border: 1px solid var(--line-strong); color: var(--text);
+    padding: 14px 16px; border-radius: 13px; font-size: 17px; font-family: "JetBrains Mono", ui-monospace, monospace;
+    letter-spacing: 2px; text-align: center;
+  }
+  .signin input::placeholder { color: var(--text-ghost); letter-spacing: 1px; }
+  .signin input:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(43,189,238,0.10); }
+  .signin .btn { width: 100%; margin-top: 12px; padding: 13px; font-size: 14px; }
+  .signin .err { font-size: 13px; color: var(--storm); margin-top: 14px; min-height: 18px; }
+  .signin .hint { font-size: 12px; color: var(--text-ghost); margin-top: 6px; line-height: 1.65; }
+
+  .signin input.plain {
+    font-family: "Space Grotesk", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: normal; text-align: left; font-size: 15px; padding: 12px 15px;
+  }
+
+  /* ===== cabinet ===== */
+  .pane { padding-block: 34px 90px; }
+  .phead { margin-bottom: 24px; }
+  .phead h1 { margin: 0; font-size: 26px; font-weight: 650; letter-spacing: -0.6px; }
+  .phead .p { font-size: 13.5px; color: var(--text-faint); margin-top: 9px; line-height: 1.65; max-width: 70ch; }
+
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 30px; }
+  .tile { background: rgba(11,26,38,0.8); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; }
+  .tile .k { font-size: 12px; color: var(--text-faint); font-weight: 600; }
+  .tile .k .envkey { font-size: 10.5px; letter-spacing: -0.2px; word-break: break-all; }
+  /* A fixed line box, so a short number and a long "4 minutes ago" sit on the same baseline across
+     the row instead of each tile setting its own. */
+  .tile .v { font-size: 27px; line-height: 34px; min-height: 34px; display: flex; align-items: baseline;
+    font-weight: 700; letter-spacing: -0.9px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .tile .v.sm { font-size: 18px; letter-spacing: -0.2px; }
+  .tile .v.ok { color: var(--moss); }
+  .tile .v.warn { color: var(--amber); }
+  .tile .v.bad { color: var(--storm); }
+  .tile .s { font-size: 11.5px; color: var(--text-ghost); margin-top: 4px; }
+
+  .rows { display: grid; gap: 10px; }
+  .row {
+    display: flex; align-items: center; gap: 16px; background: rgba(11,26,38,0.8);
+    border: 1px solid var(--line); border-radius: 15px; padding: 16px 20px;
+  }
+  .row:hover { border-color: var(--line-strong); }
+  .row .glyph {
+    width: 38px; height: 38px; flex: 0 0 auto; border-radius: 12px; background: rgba(43,189,238,0.08);
+    display: flex; align-items: center; justify-content: center; font-size: 15px;
+  }
+  .row .main { min-width: 0; }
+  .row .t { font-size: 14.5px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+  .row .d { font-size: 12.5px; color: var(--text-faint); margin-top: 4px; }
+  .row .side { margin-left: auto; display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .panel {
+    background: rgba(11,26,38,0.8); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px;
+  }
+  .panel .t { font-size: 15px; font-weight: 650; letter-spacing: -0.2px; }
+  .panel .d { font-size: 12.5px; color: var(--text-faint); margin-top: 7px; line-height: 1.6; }
+  .panel .meta { display: flex; gap: 18px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+  .panel .meta div { font-size: 12px; color: var(--text-faint); }
+  .panel .meta b { display: block; color: var(--text); font-size: 14px; font-weight: 650; margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  .tablecard { background: rgba(11,26,38,0.8); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    text-align: left; padding: 13px 16px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10px;
+    font-weight: 700; letter-spacing: 0.7px; text-transform: uppercase; color: var(--text-faint);
+    border-bottom: 1px solid var(--line); white-space: nowrap;
+  }
+  th:first-child, td:first-child { padding-left: 22px; }
+  th:last-child, td:last-child { padding-right: 22px; }
+  th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td { padding: 14px 16px; border-bottom: 1px solid var(--line-soft); color: var(--text-dim); }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(43,189,238,0.02); }
+  td.id { color: var(--text); font-weight: 500; }
+
+  /* ===== expanded account row (operator zone) ===== */
+  tr.pick { cursor: pointer; }
+  tr.pick.selected td { background: rgba(43,189,238,0.06) !important; border-bottom-color: transparent; }
+  .caret { display: inline-block; width: 16px; color: var(--text-faint); transition: transform .12s; }
+  tr.pick.selected .caret { transform: rotate(90deg); color: var(--cyan); }
+  tr.exp td.expcell { padding: 0; background: rgba(4,11,18,0.5); border-bottom: 1px solid var(--line); }
+  .expand { border-left: 2px solid var(--cyan); padding-bottom: 8px; }
+  .itabs { display: flex; align-items: center; gap: 2px; padding: 8px 18px 0; border-bottom: 1px solid var(--line-soft); }
+  .itab {
+    background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--text-faint);
+    font: inherit; font-size: 13px; font-weight: 600; padding: 10px 13px; cursor: pointer;
+  }
+  .itab:hover { color: var(--text-dim); }
+  .itab.on { color: var(--text); border-bottom-color: var(--cyan); }
+  .itab .n { margin-left: 7px; font-size: 11.5px; color: var(--text-ghost); font-variant-numeric: tabular-nums; }
+  .itabs .iacts { margin-left: auto; display: flex; gap: 8px; padding-bottom: 8px; }
+  table.sub { font-size: 13px; }
+  table.sub th { font-size: 9.5px; padding: 10px 16px; border-bottom-color: var(--line-soft); }
+  table.sub td { padding: 11px 16px; }
+  table.sub th:first-child, table.sub td:first-child { padding-left: 40px; }
+
+  .panel.team { cursor: pointer; }
+  .panel.team:hover { border-color: var(--line-strong); }
+  .dhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 16px 0 18px; }
+  .dhead h1 { margin: 0; font-size: 24px; font-weight: 650; letter-spacing: -0.5px; }
+  .dhead .dmeta { font-size: 12.5px; color: var(--text-faint); }
+  .itabs.flat { padding-left: 0; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+
+  .tl { display: grid; gap: 0; }
+  .tlrow { display: flex; gap: 16px; padding: 15px 4px; border-bottom: 1px solid var(--line-soft); align-items: flex-start; }
+  .tlrow:last-child { border-bottom: none; }
+  .tlrow .when { flex: 0 0 92px; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: var(--text-ghost); padding-top: 2px; }
+  .tlrow .when .day, .tlrow .when .clock { display: block; white-space: nowrap; }
+  .tlrow .when .clock { margin-top: 2px; }
+  .tlrow .body .t { font-size: 13.5px; color: var(--text); }
+  .tlrow .body .d { font-size: 12.5px; color: var(--text-faint); margin-top: 3px; }
+
+  .badge { display: inline-block; font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+  .badge.ok { background: rgba(93,206,158,0.12); color: var(--moss); }
+  .badge.warn { background: rgba(242,166,90,0.12); color: var(--amber); }
+  .badge.bad { background: rgba(233,75,75,0.12); color: var(--storm); }
+  .badge.dim { background: rgba(143,163,176,0.10); color: var(--text-faint); }
+  .badge.cyan { background: rgba(43,189,238,0.12); color: var(--cyan); }
+
+  .note { font-size: 12.5px; color: var(--text-faint); line-height: 1.7; margin-top: 16px; max-width: 78ch; }
+  /* Sits above a journal that filled its window: how many rows are on screen, and the way to more. */
+  /* One control for every paged list: size on the left, position and the two steps on the right. */
+  .pager {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px;
+    font-size: 12.5px; color: var(--text-faint);
+  }
+  .pager .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase; color: var(--text-ghost); }
+  .pager .range { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .psizes { display: flex; gap: 2px; background: rgba(11,26,38,0.9); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  .psize {
+    background: transparent; border: 0; border-radius: 7px; color: var(--text-faint);
+    font: inherit; font-size: 12px; font-weight: 600; padding: 5px 10px; cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .psize:hover { color: var(--text); }
+  .psize.on { background: rgba(43,189,238,0.15); color: var(--cyan); }
+  .pstep { min-width: 34px; padding: 5px 10px; font-size: 15px; line-height: 1; }
+  .pstep[disabled] { opacity: 0.35; cursor: default; }
+  .pstep[disabled]:hover { border-color: transparent; color: var(--text-faint); }
+  .note strong { color: var(--text-dim); font-weight: 600; }
+  .hex { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 11.5px; color: var(--text-ghost); letter-spacing: 0.3px; }
+  .empty { padding: 34px; text-align: center; color: var(--text-faint); font-size: 13.5px; }
+  .empty.bad { color: var(--storm); }
+  .seclabel { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-ghost); margin: 30px 0 12px; }
+
+  /* The rule separates the page from its colophon, so it needs air above it: sitting flush under
+     the last card it read as that card's underline rather than as the end of the page. */
+  .foot {
+    margin-top: 56px; border-top: 1px solid var(--line); padding: 20px 0 40px;
+    font-size: 12px; color: var(--text-ghost); display: flex; gap: 14px; align-items: center;
+  }
+
+  @media (max-width: 860px) {
+    .front { padding-block: 46px 60px; }
+    .front h1 { font-size: 31px; letter-spacing: -0.9px; }
+    /* The facts strip is a nowrap flex row: on a phone it would push the page wider than the
+       screen, so here its columns stack and its labels wrap instead. */
+    .facts { grid-template-columns: repeat(2, 1fr); }
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+    .doors, .grid2, .steps { grid-template-columns: 1fr; }
+    .row { flex-wrap: wrap; }
+    /* The name has to keep the icon company on the first line whatever its length: without a grow
+       factor a long "Linux · Added … · Last seen …" pushed itself below the icon on some cards and
+       not on others, so a list of identical rows read as three different layouts. */
+    .row .main { flex: 1 1 0; }
+    .row .side { margin-left: 0; width: 100%; }
+    /* A table narrower than its columns hides the last of them with no way to reach it. Let the
+       card scroll sideways instead, and stop the cells from breaking mid-identifier. */
+    .tablecard { overflow-x: auto; }
+    th, td { white-space: nowrap; }
+  }
+
+  /* A phone is not a narrow desktop: at this width the bar has to give up the wordmark and the
+     roomy paddings, or "Sign out" wraps onto two lines and the mark is clipped by the edge. */
+  @media (max-width: 460px) {
+    .top .inner { gap: 10px; height: 56px; }
+    .logo .n { display: none; }
+    .langs { padding: 2px; }
+    .langs button { padding: 6px 8px; font-size: 11px; }
+    .top .right { gap: 6px; }
+    .top .right .btn { padding: 7px 10px; font-size: 12px; white-space: nowrap; }
+    .tab { padding: 12px 11px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Skerry mark, verbatim from the console it replaces (the approved brand mark). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <radialGradient id="a1bg" cx="0.28" cy="0.18" r="1.15">
+      <stop offset="0" stop-color="#142634"/><stop offset="0.52" stop-color="#0a141b"/><stop offset="1" stop-color="#05090d"/>
+    </radialGradient>
+    <linearGradient id="a1s" x1="31" y1="32" x2="60" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7ff0e2"/><stop offset="1" stop-color="#22b3a4"/>
+    </linearGradient>
+  </defs>
+  <symbol id="skerry-mark" viewBox="0 0 120 120">
+    <rect x="2" y="2" width="116" height="116" rx="28" fill="url(#a1bg)"/>
+    <g fill="none" stroke-linecap="round">
+      <path d="M75 40 A26 26 0 0 1 75 80" stroke="#34d3c0" stroke-width="6.5" opacity="0.85"/>
+      <path d="M84 29 A40 40 0 0 1 84 91" stroke="#34d3c0" stroke-width="6.5" opacity="0.45"/>
+      <path d="M93 19 A54 54 0 0 1 93 101" stroke="#34d3c0" stroke-width="6.5" opacity="0.18"/>
+      <path d="M60 44 C60 37 53 34 46 34 C36 34 31 40 31 47 C31 60 60 54 60 68 C60 77 53 81 45 81 C36 81 31 77 31 70" stroke="url(#a1s)" stroke-width="10.5"/>
+    </g>
+  </symbol>
+</svg>
+
+<header class="top">
+  <div class="wrap inner">
+    <button class="logo" id="home" type="button">
+      <svg viewBox="0 0 120 120" aria-hidden="true"><use href="#skerry-mark"/></svg>
+      <span class="n">Skerry Sync</span>
+    </button>
+    <div class="right">
+      <div class="langs">
+        <button data-lang="en">EN</button><button data-lang="ru">RU</button><button data-lang="zh">中文</button>
+      </div>
+      <div id="topact"></div>
+    </div>
+  </div>
+  <nav class="wrap" id="tabnav" hidden><div class="tabs" id="tabs" role="tablist"></div></nav>
+</header>
+
+<main id="main"></main>
+
+<!-- Load order is the dependency order: dictionaries, then the i18n runtime over them, then the
+     fetch layer, then the panes, and app.js last — it renders the first frame. -->
+<script src="/assets/dict.js"></script>
+<script src="/assets/i18n.js"></script>
+<script src="/assets/api.js"></script>
+<script src="/assets/panes.js"></script>
+<script src="/assets/app.js"></script>
+</body>
+</html>

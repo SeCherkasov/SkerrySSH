@@ -72,6 +72,10 @@ dependencies {
 
     // SRP-6a: the server stores only the verifier; the client's password/authKey is never transmitted.
     implementation(libs.nimbus.srp)
+    // Argon2id for the web password (see WebPasswordHasher). BouncyCastle rather than the libsodium
+    // binding the client uses: it is pure Java, so the server keeps running wherever a JVM does and
+    // an operator's `docker compose up` never depends on a native library resolving.
+    implementation(libs.bouncycastle.prov)
 
     testImplementation(libs.ktor.server.test.host)
     testImplementation(libs.ktor.client.content.negotiation)

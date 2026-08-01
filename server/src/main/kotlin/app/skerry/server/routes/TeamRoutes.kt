@@ -327,7 +327,8 @@ fun Route.teamRoutes(services: Services) {
         call.requireActiveMember(
             services, teamId, principal.accountId, TeamRoles::canViewAudit, "audit role required",
         ) ?: return@get
-        val entries = services.activity.recentForTeam(teamId).map {
+        val limit = call.limitParam(default = 100, max = 500)
+        val entries = services.activity.recentForTeam(teamId, limit, call.offsetParam()).map {
             TeamActivityDto(
                 actorAccountId = it.accountId,
                 event = it.event,
@@ -339,7 +340,7 @@ fun Route.teamRoutes(services: Services) {
                 durationSec = it.durationSec,
             )
         }
-        call.respond(TeamActivityResponse(entries))
+        call.respond(TeamActivityResponse(entries, services.activity.countForTeam(teamId)))
     }
 
     /**

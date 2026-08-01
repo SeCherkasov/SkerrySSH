@@ -1,0 +1,140 @@
+package app.skerry.server.auth
+
+import org.bouncycastle.crypto.generators.Argon2BytesGenerator
+import org.bouncycastle.crypto.params.Argon2Parameters
+import org.slf4j.LoggerFactory
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
+
+/**
+ * Argon2id hashing for the **web** password — the credential that opens the browser account zone.
+ *
+ * It is not a vault key: nothing here derives, wraps or unwraps anything the client encrypts with,
+ * and the master password never reaches this server. So the cost parameters are chosen for a
+ * server-side login check (OWASP's Argon2id minimum, m=19 MiB t=2 p=1) rather than for the client's
+ * m=64 MiB t=3 p=4 key derivation — a login must not hand an attacker 64 MiB per request.
+ *
+ * The encoded form is the standard PHC string, so the parameters travel with the hash: raising the
+ * cost later re-hashes on the next set instead of invalidating every account at once.
+ */
+object WebPasswordHasher {
+
+    private const val MEMORY_KIB = 19_456
+    private const val ITERATIONS = 2
+    private const val PARALLELISM = 1
+    private const val SALT_BYTES = 16
+    private const val HASH_BYTES = 32
+    private const val ALGORITHM = "argon2id"
+
+    private val log = LoggerFactory.getLogger(WebPasswordHasher::class.java)!!
+    private val random = SecureRandom()
+    private val encoder: Base64.Encoder = Base64.getEncoder().withoutPadding()
+    private val decoder: Base64.Decoder = Base64.getDecoder()
+
+    /**
+     * A real hash of a value nobody holds. [verifyMiss] runs against it so an account with no web
+     * password — or no account at all — costs the same as a wrong one. Built once at class load;
+     * a fresh salt per process is enough, since it is never compared against anything stored.
+     */
+    private val missDecoy: String by lazy { hash("\u0000absent") }
+
+    fun hash(password: String): String {
+        val salt = ByteArray(SALT_BYTES).also(random::nextBytes)
+        val digest = derive(password, salt, MEMORY_KIB, ITERATIONS, PARALLELISM)
+        return "\$$ALGORITHM\$v=${Argon2Parameters.ARGON2_VERSION_13}" +
+            "\$m=$MEMORY_KIB,t=$ITERATIONS,p=$PARALLELISM" +
+            "\$${encoder.encodeToString(salt)}\$${encoder.encodeToString(digest)}"
+    }
+
+    /**
+     * Whether [password] produced [encoded]. A record this can't parse is treated as a wrong
+     * password: a corrupted column is a closed door, and turning it into a 500 would announce which
+     * accounts have one.
+     */
+    fun verify(password: String, encoded: String): Boolean {
+        val record = parse(encoded) ?: run {
+            // Logged because the answer is indistinguishable from a wrong password: without this
+            // line, an account whose column got corrupted (bad migration, hand-edited row) refuses
+            // every login forever and the operator has nothing to go on. The record itself is not
+            // logged — it is still a password hash.
+            log.warn("web password record is not a readable argon2id string; treating it as no match")
+            return false
+        }
+        val digest = derive(password, record.salt, record.memoryKib, record.iterations, record.parallelism, record.hash.size)
+        return MessageDigest.isEqual(digest, record.hash)
+    }
+
+    /**
+     * Always false, at the cost of a real verification. The point is the cost: without it, the time
+     * to reject tells an enumerator which account ids exist and which of them opened web access.
+     */
+    fun verifyMiss(password: String): Boolean {
+        verify(password, missDecoy)
+        return false
+    }
+
+    private fun derive(
+        password: String,
+        salt: ByteArray,
+        memoryKib: Int,
+        iterations: Int,
+        parallelism: Int,
+        length: Int = HASH_BYTES,
+    ): ByteArray {
+        val params = Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+            .withVersion(Argon2Parameters.ARGON2_VERSION_13)
+            .withSalt(salt)
+            .withMemoryAsKB(memoryKib)
+            .withIterations(iterations)
+            .withParallelism(parallelism)
+            .build()
+        val out = ByteArray(length)
+        Argon2BytesGenerator().apply { init(params) }
+            .generateBytes(password.toByteArray(Charsets.UTF_8), out)
+        return out
+    }
+
+    private class Record(
+        val memoryKib: Int,
+        val iterations: Int,
+        val parallelism: Int,
+        val salt: ByteArray,
+        val hash: ByteArray,
+    )
+
+    /** `$argon2id$v=19$m=..,t=..,p=..$<salt>$<hash>`; null for anything else. */
+    private fun parse(encoded: String): Record? {
+        val parts = encoded.split('$')
+        val wellFormed = parts.size == 6 && parts[0].isEmpty() && parts[1] == ALGORITHM &&
+            parts[2] == "v=${Argon2Parameters.ARGON2_VERSION_13}"
+        if (!wellFormed) return null
+        val (memoryKib, iterations, parallelism) = costParameters(parts[3]) ?: return null
+        val salt = decodeOrNull(parts[4])?.takeIf { it.isNotEmpty() } ?: return null
+        val hash = decodeOrNull(parts[5])?.takeIf { it.isNotEmpty() } ?: return null
+        return Record(memoryKib, iterations, parallelism, salt, hash)
+    }
+
+    /** `m=..,t=..,p=..` as (memory, iterations, parallelism); null unless all three are positive. */
+    private fun costParameters(segment: String): Triple<Int, Int, Int>? {
+        val values = segment.split(',')
+            .map { it.split('=') }
+            .filter { it.size == 2 }
+            .associate { (key, value) -> key to (value.toIntOrNull() ?: 0) }
+        val memoryKib = values["m"] ?: 0
+        val iterations = values["t"] ?: 0
+        val parallelism = values["p"] ?: 0
+        return if (memoryKib > 0 && iterations > 0 && parallelism > 0) {
+            Triple(memoryKib, iterations, parallelism)
+        } else {
+            null
+        }
+    }
+
+    private fun decodeOrNull(value: String): ByteArray? =
+        try {
+            decoder.decode(value)
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+}

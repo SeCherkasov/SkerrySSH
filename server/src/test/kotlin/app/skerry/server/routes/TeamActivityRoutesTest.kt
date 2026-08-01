@@ -264,4 +264,27 @@ class TeamActivityRoutesTest {
         assertEquals(HttpStatusCode.Created, client.reportSession(editor.accessToken, "p-1", "open").status)
         assertEquals("prod", client.activity(owner.accessToken).entries.first().scopeId)
     }
+
+    @Test
+    fun `the team log pages by offset and counts the whole log`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val owner = client.registerAccount("owner@x.io", pw, deviceId = "d-owner")
+        client.createTeam(owner.accessToken)
+        // Distinct records: re-pushing the same one is a no-op and writes no event to page through.
+        repeat(5) { i -> client.push(owner.accessToken, listOf(host("p-$i", 1))) }
+
+        val all = client.activity(owner.accessToken)
+        val first: TeamActivityResponse =
+            client.get("/teams/$teamId/activity?limit=2") { bearerAuth(owner.accessToken) }.body()
+        val second: TeamActivityResponse =
+            client.get("/teams/$teamId/activity?limit=2&offset=2") { bearerAuth(owner.accessToken) }.body()
+
+        assertEquals(2, first.entries.size)
+        assertEquals(2, second.entries.size)
+        assertEquals(all.entries.size.toLong(), first.total, "total counts the log, not the page")
+        assertEquals(all.entries.take(2).map { it.recordId }, first.entries.map { it.recordId })
+        assertEquals(all.entries.drop(2).take(2).map { it.recordId }, second.entries.map { it.recordId })
+    }
 }

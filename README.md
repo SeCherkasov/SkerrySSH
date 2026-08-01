@@ -243,8 +243,9 @@ docker run -d --name skerry-sync -p 8080:8080 \
   secherkasov/skerry-sync:latest
 ```
 
-The server listens on `http://localhost:8080` and ships a built-in, fully offline admin
-console at `/console`. To build from source instead, run `docker compose up -d --build`
+The server listens on `http://localhost:8080` and ships a built-in, fully offline web
+frontend: a public page at `/`, an account cabinet at `/account`, an operator console at
+`/console`. To build from source instead, run `docker compose up -d --build`
 from the repository root; for PostgreSQL, uncomment the `db` service and the postgres
 variables in [docker-compose.yml](docker-compose.yml). A server-only Gradle build needs no
 Android SDK: `./gradlew :server:run -PserverOnly`.
