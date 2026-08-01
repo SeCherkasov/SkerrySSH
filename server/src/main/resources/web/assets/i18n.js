@@ -24,7 +24,8 @@ function pickLang() {
 
 let lang = pickLang();
 
-/** Missing translation degrades to English, never to a raw key. */
+/** A key missing from the chosen language degrades to English. Missing from English too, [t]
+ *  returns the key itself — visibly wrong, which is what an untranslated string is. */
 function entry(key) {
   const d = DICT[lang];
   return (d && d[key] !== undefined) ? d[key] : DICT.en[key];
@@ -52,6 +53,11 @@ function fmtBytes(n) {
 }
 const fmtDate = ms => new Intl.DateTimeFormat(lang, { year: "2-digit", month: "short", day: "2-digit" }).format(new Date(ms));
 const fmtTime = ms => new Intl.DateTimeFormat(lang, { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(ms));
+/**
+ * A log entry needs the day it happened on, not only the time of day: a list covering a month reads
+ * as one afternoon otherwise, and "41 days ago" beside "06:39 PM" is the only date cue left.
+ */
+const fmtDateTime = ms => fmtDate(ms) + " " + fmtTime(ms);
 /** Relative time through Intl, replacing the English-only helper the old console had. */
 function fmtAgo(ms) {
   const diff = ms - Date.now();

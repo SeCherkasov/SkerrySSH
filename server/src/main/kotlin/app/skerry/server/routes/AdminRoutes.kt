@@ -84,11 +84,12 @@ fun Route.adminRoutes(services: Services) {
 
         get("/devices") {
             val limit = call.limitParam(default = 200, max = 500)
+            val offset = call.offsetParam()
             // Optional account filter (`skerry-admin devices list --account`); the total follows it so
             // the "N of M" line can't disagree with the page.
             val accountFilter = call.request.queryParameters["accountId"]?.takeIf { it.isNotBlank() }
             val total = services.devices.count(accountFilter)
-            val devices = services.devices.listAll(limit, accountFilter).map {
+            val devices = services.devices.listAll(limit, accountFilter, offset).map {
                 AdminDeviceDto(
                     accountId = it.accountId,
                     id = it.id,
@@ -106,7 +107,7 @@ fun Route.adminRoutes(services: Services) {
         get("/activity") {
             val limit = call.limitParam(default = 50, max = 2000)
             val total = services.activity.count()
-            val events = services.activity.recent(limit).map {
+            val events = services.activity.recent(limit, call.offsetParam()).map {
                 AdminActivityDto(it.accountId, it.deviceId, it.event, it.detail, it.createdAt)
             }
             call.respond(AdminActivityResponse(events, total))
@@ -130,7 +131,7 @@ fun Route.adminRoutes(services: Services) {
         get("/accounts") {
             val limit = call.limitParam(default = 100, max = 1000)
             val total = services.admin.accountCount()
-            val accounts = services.admin.accountSummaries(limit).map {
+            val accounts = services.admin.accountSummaries(limit, offset = call.offsetParam()).map {
                 AdminAccountDto(
                     id = it.id,
                     createdAt = it.createdAt,
@@ -149,8 +150,8 @@ fun Route.adminRoutes(services: Services) {
         get("/accounts/{id}/records") {
             val accountId = call.requiredPathId("id") ?: return@get
             val limit = call.limitParam(default = 100, max = 500)
-            val records = services.admin.recordEnvelopes(accountId, limit).map { it.toDto() }
-            call.respond(AdminRecordsResponse(accountId, records))
+            val records = services.admin.recordEnvelopes(accountId, limit, call.offsetParam()).map { it.toDto() }
+            call.respond(AdminRecordsResponse(accountId, records, services.admin.recordCount(accountId)))
         }
 
         delete("/accounts/{id}/tombstones") {

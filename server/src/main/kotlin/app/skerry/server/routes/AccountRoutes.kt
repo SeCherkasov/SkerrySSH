@@ -50,7 +50,7 @@ fun Route.accountRoutes(services: Services) {
         val accountId = call.jwtPrincipal().accountId
         val limit = call.limitParam(default = 100, max = 500)
         val total = services.activity.countForAccount(accountId)
-        val events = services.activity.recentForAccount(accountId, limit).map {
+        val events = services.activity.recentForAccount(accountId, limit, call.offsetParam()).map {
             AccountActivityDto(it.deviceId, it.event, it.detail, it.createdAt)
         }
         call.respond(AccountActivityResponse(events, total))

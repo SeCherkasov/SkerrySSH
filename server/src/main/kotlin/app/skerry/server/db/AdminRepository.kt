@@ -78,7 +78,7 @@ class AdminRepository(private val db: Database) {
      * (total/tombstones/bytes). `NOT revoked` / `CASE WHEN deleted` are portable between SQLite (0/1)
      * and PostgreSQL (boolean).
      */
-    suspend fun accountSummaries(limit: Int = 100, accountId: String? = null): List<AccountSummary> = dbTransaction(db) {
+    suspend fun accountSummaries(limit: Int = 100, accountId: String? = null, offset: Long = 0): List<AccountSummary> = dbTransaction(db) {
         // Bound parameter, never interpolation: the account zone reaches this with an id it took
         // from a JWT, and one route away from that is a browser-supplied string.
         val scope = if (accountId == null) "" else " WHERE account_id = ?"
@@ -121,7 +121,7 @@ class AdminRepository(private val db: Database) {
         val rows = Accounts.selectAll()
         if (accountId != null) rows.andWhere { Accounts.id eq accountId }
         rows.orderBy(Accounts.createdAt to SortOrder.ASC)
-            .limit(limit)
+            .limit(limit).offset(offset)
             .map { row ->
                 val id = row[Accounts.id]
                 val d = devAgg[id] ?: DevAgg()
@@ -140,6 +140,16 @@ class AdminRepository(private val db: Database) {
             }
     }
 
+    /**
+     * Records held for one account: the same predicate [recordEnvelopes] pages over, so the total
+     * counts that list and no other. It is read in its own transaction, so a write landing between
+     * the two can leave the count a row ahead of the page until the next read — a stale number, not
+     * a wrong list.
+     */
+    suspend fun recordCount(accountId: String): Long = dbTransaction(db) {
+        Records.selectAll().where { Records.accountId eq accountId }.count()
+    }
+
     /** Total accounts on the instance, for an accurate "N of M" in the console. */
     suspend fun accountCount(): Long = dbTransaction(db) {
         Accounts.selectAll().count()
@@ -150,11 +160,11 @@ class AdminRepository(private val db: Database) {
      * [limit]). [RecordEnvelope.previewHex] is the first 16 bytes of the actual ciphertext —
      * opaque noise demonstrating content is unreadable without the dataKey.
      */
-    suspend fun recordEnvelopes(accountId: String, limit: Int = 100): List<RecordEnvelope> = dbTransaction(db) {
+    suspend fun recordEnvelopes(accountId: String, limit: Int = 100, offset: Long = 0): List<RecordEnvelope> = dbTransaction(db) {
         Records.selectAll()
             .where { Records.accountId eq accountId }
             .orderBy(Records.serverSeq to SortOrder.DESC)
-            .limit(limit)
+            .limit(limit).offset(offset)
             .map { row ->
                 val bytes = row[Records.blob].bytes
                 RecordEnvelope(

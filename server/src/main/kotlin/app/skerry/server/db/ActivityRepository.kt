@@ -123,20 +123,20 @@ class ActivityRepository(
     }
 
     /** Most recent events first (descending monotonic `seq`). */
-    suspend fun recent(limit: Int = 50): List<ActivityRow> = dbTransaction(db) {
+    suspend fun recent(limit: Int = 50, offset: Long = 0): List<ActivityRow> = dbTransaction(db) {
         ActivityLog.selectAll()
             .orderBy(ActivityLog.seq to SortOrder.DESC)
-            .limit(limit)
+            .limit(limit).offset(offset)
             .map { it.toRow() }
     }
 
     /** Most recent events for one team (team-scoped history for owner/admin members). */
-    suspend fun recentForTeam(teamId: String, limit: Int = 100): List<ActivityRow> =
+    suspend fun recentForTeam(teamId: String, limit: Int = 100, offset: Long = 0): List<ActivityRow> =
         dbTransaction(db) {
             ActivityLog.selectAll()
                 .where { ActivityLog.teamId eq teamId }
                 .orderBy(ActivityLog.seq to SortOrder.DESC)
-                .limit(limit)
+                .limit(limit).offset(offset)
                 .map { it.toRow() }
         }
 
@@ -145,12 +145,12 @@ class ActivityRepository(
      * out: they belong to a team's history, which has its own endpoint and its own membership rules,
      * and picking them by "who acted" would show a member a slice of it filtered by nothing else.
      */
-    suspend fun recentForAccount(accountId: String, limit: Int = 100): List<ActivityRow> =
+    suspend fun recentForAccount(accountId: String, limit: Int = 100, offset: Long = 0): List<ActivityRow> =
         dbTransaction(db) {
             ActivityLog.selectAll()
                 .where { (ActivityLog.accountId eq accountId) and ActivityLog.teamId.isNull() }
                 .orderBy(ActivityLog.seq to SortOrder.DESC)
-                .limit(limit)
+                .limit(limit).offset(offset)
                 .map { it.toRow() }
         }
 
@@ -159,6 +159,11 @@ class ActivityRepository(
         ActivityLog.selectAll()
             .where { (ActivityLog.accountId eq accountId) and ActivityLog.teamId.isNull() }
             .count()
+    }
+
+    /** Retained events for one team, matching [recentForTeam] so a page and its total agree. */
+    suspend fun countForTeam(teamId: String): Long = dbTransaction(db) {
+        ActivityLog.selectAll().where { ActivityLog.teamId eq teamId }.count()
     }
 
     /** Total retained events (all buckets), for an accurate "N of M" in the console. */

@@ -292,7 +292,7 @@ class KtorSyncClient(
     override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult {
         val resp: PairingClaimResponse = post("/pairing/claim") {
             contentType(ContentType.Application.Json)
-            setBody(PairingClaimRequest(code, device.id, device.name))
+            setBody(PairingClaimRequest(code, device.id, device.name, device.platform))
         }.bodyChecked()
         return PairingResult(
             accountId = resp.accountId,

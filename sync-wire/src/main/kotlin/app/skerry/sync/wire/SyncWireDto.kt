@@ -179,8 +179,18 @@ data class PairingStartRequest(val encryptedDataKey: String, val ttlSeconds: Lon
 @Serializable
 data class PairingStartResponse(val code: String, val expiresAt: Long)
 
+/**
+ * [platform] is reported by the claiming device, exactly as `/auth/register` reports it — without it
+ * every device but the first would enroll with none. Optional, so a client that predates the field
+ * still pairs; the absent value stays absent instead of becoming an invented default.
+ */
 @Serializable
-data class PairingClaimRequest(val code: String, val deviceId: String, val deviceName: String)
+data class PairingClaimRequest(
+    val code: String,
+    val deviceId: String,
+    val deviceName: String,
+    val platform: String? = null,
+)
 
 @Serializable
 data class PairingClaimResponse(

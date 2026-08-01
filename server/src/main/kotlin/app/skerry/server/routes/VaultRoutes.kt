@@ -47,8 +47,8 @@ fun Route.vaultRoutes(services: Services) {
         // The same projection the operator console gets, from the owner's side: sizes, sync metadata
         // and the leading bytes of the real ciphertext. Not `delta()` — that ships whole blobs, and a
         // browser has no key to open one with, so it has no business holding them either.
-        val records = services.admin.recordEnvelopes(principal.accountId, limit).map { it.toDto() }
-        call.respond(VaultEnvelopesResponse(records))
+        val records = services.admin.recordEnvelopes(principal.accountId, limit, call.offsetParam()).map { it.toDto() }
+        call.respond(VaultEnvelopesResponse(records, services.admin.recordCount(principal.accountId)))
     }
 
     get("/vault/records") {

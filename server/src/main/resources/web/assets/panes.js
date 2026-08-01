@@ -22,7 +22,11 @@ function frontPage() {
     ? t(health.data.registrationOpen ? "instance.reg.open" : "instance.reg.closed")
     : unknown;
   // The scheme is printed verbatim, like every other API value: the page cannot know the TLS
-  // version, and a "TLS 1.3" it did not measure would be decoration, not a fact.
+  // version, and a "TLS 1.3" it did not measure would be decoration, not a fact. Plain http is not
+  // a neutral one of two schemes — tokens and wrapped keys cross the wire readable — so it is
+  // marked, except on a loopback host, where there is no wire to read.
+  const tls = location.protocol === "https:";
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
   const transport = '<span class="mono">' + location.protocol.replace(":", "") + "</span>";
 
   return '<div class="wrap front">' +
@@ -31,13 +35,16 @@ function frontPage() {
     '<div class="kicker' + (waiting ? " wait" : up ? "" : " down") + '"><span class="dot"></span>' +
       (waiting ? t("state.loading") : t(up ? "instance.status.up" : "instance.status.down")) + "</div>" +
     "<h1>" + esc(location.host) + "</h1>" +
+    '<div class="lead">' + t("front.lead") + "</div>" +
 
     '<div class="facts">' +
-      '<div class="fact"><div class="k">' + t("instance.exposure") + '</div><div class="v ok">' + t("instance.exposure.val") +
-        '</div><div class="s">' + t("instance.exposure.sub") + "</div></div>" +
+      '<div class="fact"><div class="k">' + t("instance.storage") + '</div>' +
+        '<div class="v ok">' + t("instance.storage.val") + "</div></div>" +
       '<div class="fact"><div class="k">' + t("instance.version") + '</div><div class="v">' + version + "</div></div>" +
       '<div class="fact"><div class="k">' + t("instance.reg") + '</div><div class="v">' + registration + "</div></div>" +
-      '<div class="fact"><div class="k">' + t("instance.transport") + '</div><div class="v">' + transport + "</div></div>" +
+      '<div class="fact"><div class="k">' + t("instance.transport") + '</div>' +
+        '<div class="v' + (tls || loopback ? "" : " warn") + '">' + transport + "</div>" +
+        (tls || loopback ? "" : '<div class="s warn">' + t("instance.transport.plain") + "</div>") + "</div>" +
     "</div>" +
 
     '<div class="seclabel">' + t("front.doors") + "</div>" +
@@ -64,22 +71,21 @@ function signInPage(zone) {
     '<rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>';
   if (zone === "operator") {
     return '<div class="wrap"><div class="signin">' + icon +
-      "<h2>" + t("gate.operator.h") + "</h2><p>" + t("gate.operator.p") + "</p>" +
-      '<input id="code" type="password" data-i18n-attr="placeholder:gate.operator.ph" autocomplete="off"/>' +
+      "<h1>" + t("gate.operator.h") + "</h1><p>" + t("gate.operator.p") + "</p>" +
+      '<input id="code" type="password" data-i18n-attr="placeholder:gate.operator.ph;aria-label:gate.operator.ph" autocomplete="off"/>' +
       '<button class="btn primary" id="go">' + t("gate.operator.go") + "</button>" +
       '<button class="btn ghost" id="back" style="width:100%;margin-top:8px">' + t("gate.back") + "</button>" +
-      '<div class="err" id="err"></div>' +
-      '<div class="hint">' + t("gate.operator.hint") + "</div></div></div>";
+      '<div class="err" id="err" role="alert" aria-live="polite"></div></div></div>';
   }
   // Account: account id + web password. The web password is a server-side credential set in the app;
   // it is not the master password and never touches the vault keys.
   return '<div class="wrap"><div class="signin">' + icon +
-    "<h2>" + t("gate.account.h") + "</h2><p>" + t("gate.account.p") + "</p>" +
-    '<input id="acct" type="email" class="plain" data-i18n-attr="placeholder:gate.acct.ph" autocomplete="username"/>' +
-    '<input id="code" type="password" class="plain" style="margin-top:10px" data-i18n-attr="placeholder:gate.pw.ph" autocomplete="current-password"/>' +
+    "<h1>" + t("gate.account.h") + "</h1><p>" + t("gate.account.p") + "</p>" +
+    '<input id="acct" type="email" class="plain" data-i18n-attr="placeholder:gate.acct.ph;aria-label:gate.acct.label" autocomplete="username"/>' +
+    '<input id="code" type="password" class="plain" style="margin-top:10px" data-i18n-attr="placeholder:gate.pw.ph;aria-label:gate.pw.ph" autocomplete="current-password"/>' +
     '<button class="btn primary" id="go">' + t("gate.account.go") + "</button>" +
     '<button class="btn ghost" id="back" style="width:100%;margin-top:8px">' + t("gate.back") + "</button>" +
-    '<div class="err" id="err"></div>' +
+    '<div class="err" id="err" role="alert" aria-live="polite"></div>' +
     '<div class="hint">' + t("gate.account.hint") + "</div></div></div>";
 }
 
@@ -88,8 +94,10 @@ function signInPage(zone) {
 function deviceRows() {
   const r = res("/devices", () => authGet("/devices"));
   if (r.state !== "ready") return pending(r);
-  const devices = r.data.devices;
+  const revoked = r.data.devices.filter(d => d.revoked).length;
+  const devices = r.data.devices.filter(d => !d.revoked);
   if (!devices.length) return emptyCard();
+  const foot = revoked ? '<div class="note">' + tn("dev.revoked.hidden", revoked) + "</div>" : "";
   return '<div class="rows">' + devices.map(d => {
     const st = deviceState(d);
     const platform = d.platform ? esc(d.platform) : "—";
@@ -99,9 +107,9 @@ function deviceRows() {
       '<div class="d">' + platform + " · " + t("dev.created") + " " + fmtDate(d.createdAt) +
         " · " + t("dev.seen") + " " + fmtAgo(d.lastSeenAt) + "</div></div>" +
       '<div class="side"><span class="badge ' + st.c + '">' + t(st.k) + "</span>" +
-        (d.revoked ? "" : '<button class="btn sm danger" data-revoke="' + esc(d.id) +
-          '" data-name="' + esc(d.name) + '">' + t("act.revoke") + "</button>") + "</div></div>";
-  }).join("") + "</div>";
+        '<button class="btn sm danger" data-revoke="' + esc(d.id) +
+          '" data-name="' + esc(d.name) + '">' + t("act.revoke") + "</button></div></div>";
+  }).join("") + "</div>" + foot;
 }
 
 /** Live sessions are per team, so the team list has to arrive before any share list can be asked for. */
@@ -143,9 +151,7 @@ const PANE = {
         tile("ov.records", fmtNum(s.records), t("ov.records.sub", { n: fmtNum(s.tombstones) })) +
         tile("ov.storage", fmtBytes(s.storageBytes), "XChaCha20-Poly1305", "sm") +
         tile("ov.lastsync", s.lastSeenAt ? fmtAgo(s.lastSeenAt) : "—", s.lastSeenAt ? fmtTime(s.lastSeenAt) : "", "sm ok") +
-      "</div>" +
-      '<div class="seclabel">' + t("sec.devices") + "</div>" + deviceRows() +
-      '<div class="seclabel">' + t("sec.sessions") + "</div>" + shareRows();
+      "</div>";
   },
 
   devices: () => phead("dev.h", t("dev.p")) + deviceRows(),
@@ -166,7 +172,7 @@ const PANE = {
           statusBadge(x.status) + "</div>" +
         '<div class="d">' + t("team.role") + ": " + esc(x.role) + "</div>" +
         '<div class="meta"><div>' + t("team.members") + "<b>" + tn("n.members", x.memberCount) + "</b></div>" +
-          "<div>" + t("team.epoch") + "<b>#" + fmtNum(num(x.keyEpoch)) + "</b></div>" +
+          "<div>" + t("team.epoch") + "<b>v" + fmtNum(num(x.keyEpoch)) + "</b></div>" +
           '<div style="margin-left:auto;align-self:flex-end"><button class="btn sm">' + t("act.open") + "</button></div></div></div>").join("") +
       "</div>";
   },
@@ -184,7 +190,8 @@ const PANE = {
 
     const members = res(base + "/members", () => authGet(base + "/members"));
     const scopes = res(base + "/scopes", () => authGet(base + "/scopes"));
-    const activity = audit ? res(base + "/activity", () => authGet(base + "/activity")) : null;
+    const activityPathTeam = pageQuery("teamLog", base + "/activity");
+    const activity = audit ? res(activityPathTeam, () => authGet(activityPathTeam)) : null;
     const source = team.tab === "members" ? members : team.tab === "scopes" ? scopes : activity;
 
     let body;
@@ -201,23 +208,24 @@ const PANE = {
         [{ key: "team.scope" }, { key: "team.grants", cls: "num" }, { key: "team.epoch", cls: "num" }],
         source.data.scopes.map(sc => "<tr>" +
           '<td class="id mono">' + esc(sc.scopeId) + '</td><td class="num">' + tn("n.members", num(sc.memberCount)) + "</td>" +
-          '<td class="num mono">#' + fmtNum(num(sc.keyEpoch)) + "</td></tr>")) +
+          '<td class="num mono">v' + fmtNum(num(sc.keyEpoch)) + "</td></tr>")) +
         '<div class="note">' + t("team.scope.p") + "</div>";
     } else {
-      body = timeline(source.data.entries.map(e => tlrow(
+      body = pagerBar("teamLog", source.data.entries.length, source.data.total) +
+        timeline(source.data.entries.map(e => tlrow(
         e.createdAt,
         eventBadge(e.event) + " " + esc(e.detail),
         t("team.act.who") + ": " + esc(e.actorAccountId) + " · " + fmtAgo(e.createdAt))));
     }
 
     return '<button class="btn sm ghost" id="team-back">← ' + t("team.back") + "</button>" +
-      '<div class="dhead"><h2 class="mono">' + esc(x.id) + "</h2>" + statusBadge(x.status) +
+      '<div class="dhead"><h1 class="mono">' + esc(x.id) + "</h1>" + statusBadge(x.status) +
       '<span class="badge dim">' + esc(x.role) + "</span>" +
-      '<span class="dmeta">' + tn("n.members", x.memberCount) + " · " + t("team.epoch") + " #" + fmtNum(num(x.keyEpoch)) + "</span></div>" +
+      '<span class="dmeta">' + tn("n.members", x.memberCount) + " · " + t("team.epoch") + " v" + fmtNum(num(x.keyEpoch)) + "</span></div>" +
       '<div class="itabs flat">' +
-        tab("members", "team.members", count(base + "/members", d => d.members.length)) +
-        tab("scopes", "team.scopes", count(base + "/scopes", d => d.scopes.length)) +
-        (audit ? tab("activity", "team.log", count(base + "/activity", d => d.entries.length)) : "") +
+        tab("members", "team.members", count(base + "/members", () => authGet(base + "/members"), d => d.members.length)) +
+        tab("scopes", "team.scopes", count(base + "/scopes", () => authGet(base + "/scopes"), d => d.scopes.length)) +
+        (audit ? tab("activity", "team.log", count(activityPathTeam, () => authGet(activityPathTeam), d => d.total)) : "") +
       "</div>" + body;
   },
 
@@ -225,18 +233,24 @@ const PANE = {
 
   storage() {
     const head = phead("st.h", t("st.p"));
-    const r = res(STORAGE_PATH, () => authGet(STORAGE_PATH));
+    const path = storagePath();
+    const r = res(path, () => authGet(path));
     if (r.state !== "ready") return head + pending(r);
-    return head + tablecard(envelopeCols, r.data.records.map(envelopeRow)) +
+    if (!r.data.records.length) return head + strandedPager("storage", r.data.total) + emptyCard();
+    return head + pagerBar("storage", r.data.records.length, r.data.total) +
+      tablecard(envelopeCols, r.data.records.map(envelopeRow)) +
       '<div class="note">' + t("st.note") + "</div>";
   },
 
   log() {
     const head = phead("log.h", t("log.p"));
-    const r = res(ACTIVITY_PATH, () => authGet(ACTIVITY_PATH));
+    const path = activityPath();
+    const r = res(path, () => authGet(path));
     if (r.state !== "ready") return head + pending(r);
-    if (!r.data.events.length) return head + emptyCard();
-    return head + timeline(r.data.events.map(e => tlrow(
+    // An empty page keeps its pager when the list itself is not empty: the reader is standing past
+    // the end (rows were purged under them, or the page size shrank) and "‹" is the only way back.
+    if (!r.data.events.length) return head + strandedPager("log", r.data.total) + emptyCard();
+    return head + pagerBar("log", r.data.events.length, r.data.total) + timeline(r.data.events.map(e => tlrow(
       e.createdAt,
       eventBadge(e.event) + " " + esc(e.detail),
       t("log.device") + ": " + (e.deviceId ? esc(e.deviceId) : "—") + " · " + fmtAgo(e.createdAt))));
@@ -252,8 +266,7 @@ const PANE = {
       '<div class="t">' + t(k) + '</div><div class="d" style="max-width:64ch;line-height:1.6">' + t(k + "d") + "</div></div>" +
       (action ? '<div class="side"><button class="btn sm" data-action="' + action + '">' + t(k + ".go") + "</button></div>" : "") +
       "</div>";
-    return phead("sc.h") + '<div class="rows">' +
-      item("sc.webpw") + item("sc.pw") + item("sc.all", "signout-all") + "</div>";
+    return phead("sc.h") + '<div class="rows">' + item("sc.all", "signout-all") + "</div>";
   },
 
   /* ---- operator ---- */
@@ -269,19 +282,18 @@ const PANE = {
         tile("op.devices", fmtNum(s.devices)) +
         tile("op.records", fmtNum(s.records)) +
         tile("op.storage", fmtBytes(s.storageBytes), "", "sm") +
-      "</div>" +
-      '<div class="seclabel">' + t("sec.audit") + "</div>" + PANE.auditTable();
+      "</div>";
   },
 
   /** Accounts, each row expanding in place into its devices and its record envelopes. */
   accounts() {
     const head = phead("op.acc.h", t("op.acc.p"));
-    const r = res(ACCOUNTS_PATH, () => adminGet(ACCOUNTS_PATH));
+    const r = res(accountsPath(), () => adminGet(accountsPath()));
     if (r.state !== "ready") return head + pending(r);
     const cols = [{ key: "op.acc.id" }, { key: "op.acc.created" }, { key: "op.acc.devices", cls: "num" },
                   { key: "op.acc.records", cls: "num" }, { key: "op.acc.size", cls: "num" },
                   { key: "op.acc.seen" }, { key: "", cls: "num" }];
-    if (!r.data.accounts.length) return head + emptyCard();
+    if (!r.data.accounts.length) return head + strandedPager("accounts", r.data.total) + emptyCard();
     const rows = r.data.accounts.map(a => {
       const open = insp.acct === a.id;
       const row = '<tr class="pick' + (open ? " selected" : "") + '" data-acct="' + esc(a.id) + '">' +
@@ -295,15 +307,16 @@ const PANE = {
         ? row + '<tr class="exp"><td class="expcell" colspan="' + cols.length + '">' + PANE.expand(a) + "</td></tr>"
         : row;
     });
-    return head + '<div class="tablecard"><table><thead><tr>' +
+    return head + pagerBar("accounts", r.data.accounts.length, r.data.total) +
+      '<div class="tablecard"><table><thead><tr>' +
       cols.map(c => '<th class="' + (c.cls || "") + '">' + (c.key ? t(c.key) : "") + "</th>").join("") +
       "</tr></thead><tbody>" + rows.join("") + "</tbody></table></div>";
   },
 
   /** Both 1:N children of an account, as tabs inside its row. */
   expand(a) {
-    const devicesPath = "/admin/devices?accountId=" + enc(a.id);
-    const recordsPath = "/admin/accounts/" + enc(a.id) + "/records";
+    const devicesPath = pageQuery("acctDevs", "/admin/devices?accountId=" + enc(a.id));
+    const recordsPath = pageQuery("acctRecs", "/admin/accounts/" + enc(a.id) + "/records");
     const devices = res(devicesPath, () => adminGet(devicesPath));
     const records = res(recordsPath, () => adminGet(recordsPath));
     const source = insp.tab === "devices" ? devices : records;
@@ -317,7 +330,7 @@ const PANE = {
     } else if (insp.tab === "devices") {
       // /admin/devices lists active devices only, so a revoked one leaves this table rather than
       // sitting in it greyed out.
-      body = subtable(
+      body = pagerBar("acctDevs", source.data.devices.length, source.data.total) + subtable(
         [{ key: "dev.name" }, { key: "dev.platform" }, { key: "dev.created" }, { key: "dev.seen" },
          { key: "dev.cursor", cls: "num" }, { key: "dev.state" }, { key: "", cls: "num" }],
         source.data.devices.map(d => {
@@ -332,12 +345,13 @@ const PANE = {
             "</td></tr>";
         }));
     } else {
-      body = subtable(envelopeCols, source.data.records.map(envelopeRow));
+      body = pagerBar("acctRecs", source.data.records.length, source.data.total) +
+        subtable(envelopeCols, source.data.records.map(envelopeRow));
     }
 
     return '<div class="expand"><div class="itabs">' +
-      tab("devices", "sec.devices", count(devicesPath, d => d.devices.length)) +
-      tab("records", "sec.storage", count(recordsPath, d => d.records.length)) +
+      tab("devices", "sec.devices", count(devicesPath, () => adminGet(devicesPath), d => d.total)) +
+      tab("records", "sec.storage", count(recordsPath, () => adminGet(recordsPath), d => d.total)) +
       '<div class="iacts"><button class="btn sm" data-purge="' + esc(a.id) + '">' + t("act.purge") + "</button>" +
       '<button class="btn sm danger" data-delete="' + esc(a.id) + '">' + t("act.delete") + "</button></div></div>" +
       body + "</div>";
@@ -358,10 +372,10 @@ const PANE = {
         "SKERRY_METRICS", "sm " + (o.metrics === "off" ? "" : o.metrics === "open" ? "warn" : "ok")) +
       tileLit('<span class="mono">/readyz</span>',
         '<span class="mono">' + (o.ready ? "ready" : "not_ready") + "</span>",
-        "db: " + (o.ready ? "up" : "down"), "sm " + (o.ready ? "ok" : "bad")) +
+        t("op.observ.db") + ": " + t(o.ready ? "instance.status.up" : "instance.status.down"), "sm " + (o.ready ? "ok" : "bad")) +
       tileLit('<span class="mono envkey">SKERRY_METRICS_INVENTORY_SECONDS</span>',
         '<span class="mono">' + fmtNum(o.inventoryIntervalSeconds) + "</span>",
-        "age: " + (age === null || age === undefined ? "never" : fmtNum(age) + " s"),
+        t("op.observ.age") + ": " + (age === null || age === undefined ? t("op.observ.never") : fmtNum(age) + " s"),
         "sm " + (stale ? "warn" : "")) +
       "</div>";
   },
@@ -369,12 +383,13 @@ const PANE = {
   audit: () => phead("op.audit.h") + PANE.auditTable(),
 
   auditTable() {
-    const r = res(ADMIN_ACTIVITY_PATH, () => adminGet(ADMIN_ACTIVITY_PATH));
+    const path = adminActivityPath();
+    const r = res(path, () => adminGet(path));
     if (r.state !== "ready") return pending(r);
-    return tablecard(
+    return pagerBar("audit", r.data.events.length, r.data.total) + tablecard(
       [{ key: "log.when" }, { key: "op.acct" }, { key: "log.device" }, { key: "log.event" }, { key: "log.detail" }],
       r.data.events.map(e => "<tr>" +
-        '<td class="mono">' + fmtTime(e.createdAt) + '</td><td class="id">' + esc(e.accountId) + "</td>" +
+        '<td class="mono">' + fmtDateTime(e.createdAt) + '</td><td class="id">' + esc(e.accountId) + "</td>" +
         "<td>" + (e.deviceId ? esc(e.deviceId) : "—") + "</td><td>" + eventBadge(e.event) + "</td>" +
         "<td>" + esc(e.detail) + "</td></tr>"));
   }

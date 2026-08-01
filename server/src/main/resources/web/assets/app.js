@@ -18,34 +18,83 @@ const insp = { acct: null, tab: "devices" };
 const TABS = {
   account: [
     { id: "overview", key: "sec.overview" },
-    { id: "devices", key: "sec.devices", n: () => count("/devices", d => d.devices.length) },
-    { id: "teams", key: "sec.teams", n: () => count("/teams", d => d.teams.length) },
+    { id: "devices", key: "sec.devices", n: () => count("/devices", () => authGet("/devices"), d => d.devices.filter(x => !x.revoked).length) },
+    { id: "teams", key: "sec.teams", n: () => count("/teams", () => authGet("/teams"), d => d.teams.length) },
     { id: "sessions", key: "sec.sessions" },
-    { id: "storage", key: "sec.storage", n: () => count(STORAGE_PATH, d => d.records.length) },
+    { id: "storage", key: "sec.storage", n: () => count(storagePath(), () => authGet(storagePath()), d => d.total) },
     { id: "log", key: "sec.log" },
     { id: "security", key: "sec.security" }
   ],
   operator: [
     { id: "stats", key: "sec.stats" },
     // A device belongs to one account (1:N), so it opens inside the account row, not as a sibling tab.
-    { id: "accounts", key: "sec.accounts", n: () => count(ACCOUNTS_PATH, d => d.accounts.length) },
-    { id: "observ", key: "sec.observ" },
-    { id: "audit", key: "sec.audit" }
+    { id: "accounts", key: "sec.accounts", n: () => count(accountsPath(), () => adminGet(accountsPath()), d => d.total) },
+    { id: "audit", key: "sec.audit" },
+    { id: "observ", key: "sec.health" }
   ]
 };
 
-/** The remembered tab, checked against the zone's tabs: a stale or edited value is not a pane. */
-function storedTab(zone) {
-  const id = localStorage.getItem("skerry.tab." + zone);
-  return TABS[zone].some(x => x.id === id) ? id : TABS[zone][0].id;
+const state = { tab: { account: TABS.account[0].id, operator: TABS.operator[0].id } };
+
+/**
+ * Paging for every list long enough to need it. The page size is the reader's choice; the offset is
+ * where they are. Both live per list, not globally: reading page 4 of the audit log should not move
+ * the storage table with it. A stale page after a purge lands on an empty one — the server clamps a
+ * too-large offset rather than failing, so nothing here has to guess how long the list still is.
+ */
+const PAGE_SIZES = [10, 50, 100, 200, 300];
+const pager = {
+  storage:   { size: 50, page: 0 },
+  log:       { size: 50, page: 0 },
+  audit:     { size: 50, page: 0 },
+  accounts:  { size: 50, page: 0 },
+  acctDevs:  { size: 50, page: 0 },
+  acctRecs:  { size: 50, page: 0 },
+  teamLog:   { size: 50, page: 0 },
+};
+/** `?limit=&offset=` for one pager, appended to a path that may already carry a query. */
+const pageQuery = (key, path) => {
+  const p = pager[key];
+  return path + (path.includes("?") ? "&" : "?") + "limit=" + p.size + "&offset=" + p.page * p.size;
+};
+const activityPath = () => pageQuery("log", "/account/activity");
+const adminActivityPath = () => pageQuery("audit", "/admin/activity");
+const storagePath = () => pageQuery("storage", "/vault/envelopes");
+/** A size change restarts at the first page: keeping the offset would land the reader mid-nowhere. */
+function setPageSize(key, size) { pager[key].size = size; pager[key].page = 0; render(); }
+function setPage(key, page) { pager[key].page = Math.max(0, page); render(); }
+
+/**
+ * The control over a paged list: page size, the range on screen, and the two steps. `total` is what
+ * the server counted for the whole list, so the range is a fact rather than an estimate.
+ */
+function pagerBar(key, shown, total) {
+  const p = pager[key];
+  total = num(total); // one choke point: a missing count must read as zero, never propagate as NaN
+  // Nothing on screen reads as 0–0: on a stranded page the first row's ordinal is past the last
+  // one's, and "151–150 of 40" is worse than saying plainly that this page holds nothing.
+  const from = total === 0 || shown === 0 ? 0 : p.page * p.size + 1;
+  const to = shown === 0 ? 0 : p.page * p.size + shown;
+  const last = Math.max(0, Math.ceil(total / p.size) - 1);
+  const sizes = PAGE_SIZES.map(n =>
+    '<button class="psize' + (n === p.size ? " on" : "") + '" data-size="' + key + ":" + n + '">' +
+    fmtNum(n) + "</button>").join("");
+  const step = (page, glyph, label, off) =>
+    '<button class="btn sm ghost pstep" data-page="' + key + ":" + page + '" aria-label="' + label + '"' +
+    (off ? " disabled" : "") + ">" + glyph + "</button>";
+  return '<div class="pager"><span class="lbl">' + t("page.size") + "</span>" +
+    '<div class="psizes">' + sizes + "</div>" +
+    '<span class="range">' + t("page.range", { from: fmtNum(from), to: fmtNum(to), total: fmtNum(total) }) + "</span>" +
+    step(p.page - 1, "\u2039", t("page.prev"), p.page === 0) +
+    step(p.page + 1, "\u203a", t("page.next"), p.page >= last) +
+    "</div>";
 }
-const state = { tab: { account: storedTab("account"), operator: storedTab("operator") } };
-
-const STORAGE_PATH = "/vault/envelopes?limit=200";
-const ACTIVITY_PATH = "/account/activity?limit=100";
-const ACCOUNTS_PATH = "/admin/accounts?limit=100";
-const ADMIN_ACTIVITY_PATH = "/admin/activity?limit=50";
-
+/**
+ * The pager for a page that came back empty. Nothing to page through means nothing to draw; a
+ * non-empty list behind an empty page means the reader is past its end and needs the way back.
+ */
+const strandedPager = (key, total) => (num(total) ? pagerBar(key, 0, total) : "");
+const accountsPath = () => pageQuery("accounts", "/admin/accounts");
 const el = id => document.getElementById(id);
 const enc = encodeURIComponent;
 const D_MS = 86400000;
@@ -63,6 +112,10 @@ const glyph = platform => (Object.prototype.hasOwnProperty.call(GLYPH, platform)
  * re-renders, and by then the entry is `ready` and the pane draws itself from real data.
  */
 const cache = new Map();
+/** Latched by a failed draw, released when the reader asks for fresh data. @see res */
+let renderFailed = false;
+/** Drop every cached response and the failed-draw latch with it: this is the retry. */
+const reload = () => { cache.clear(); renderFailed = false; };
 function res(key, loader) {
   let entry = cache.get(key);
   if (!entry) {
@@ -77,14 +130,25 @@ function res(key, loader) {
         entry.state = "error";
         entry.error = error;
       },
-    ).then(render);
+    // A pane that throws while drawing leaves a rejected promise nobody reads: the page freezes
+    // half-rendered and the only trace is the browser console. Say it out loud instead.
+    ).then(render).catch(e => {
+      console.error("rendering after " + key + " failed", e);
+      // One dialog, not one per in-flight request: a broken pane throws on every chain that
+      // reaches it, and a stack of identical modals buries the page under its own error.
+      if (!renderFailed) { renderFailed = true; alert(t("err.render")); }
+    });
   }
   return entry;
 }
-/** Value of an already-loaded path, or null — for tab counters, which must not start a request. */
-function count(key, of) {
-  const entry = cache.get(key);
-  return entry && entry.state === "ready" ? of(entry.data) : null;
+/**
+ * Counter for a tab. It loads its own path rather than peeking at whatever another pane happened to
+ * fetch: peeking made the set of numbers in the bar depend on where the reader had already been —
+ * Storage counted only after Storage had been opened, and lost the count again on reload.
+ */
+function count(key, loader, of) {
+  const entry = res(key, loader);
+  return entry.state === "ready" ? of(entry.data) : null;
 }
 const errText = e => (e && e.status ? t("err.http", { code: e.status }) : t("err.net"));
 const pending = entry =>
@@ -94,7 +158,7 @@ const emptyCard = () => '<div class="tablecard"><div class="empty">' + t("ses.em
 
 /* ===== small builders ================================================= */
 
-const phead = (h, sub) => '<div class="phead"><h2>' + t(h) + "</h2>" +
+const phead = (h, sub) => '<div class="phead"><h1>' + t(h) + "</h1>" +
   (sub ? '<div class="p">' + sub + "</div>" : "") + "</div>";
 /** Tile whose label is a literal (an endpoint, an env var) rather than a translation key. */
 const tileLit = (label, v, s, cls) => '<div class="tile"><div class="k">' + label + '</div><div class="v ' + (cls || "") + '">' + v + "</div>" +
@@ -115,7 +179,8 @@ function subtable(cols, rows) {
     "</tr></thead><tbody>" + rows.join("") + "</tbody></table>";
 }
 const timeline = rows => '<div class="tablecard" style="padding:6px 20px"><div class="tl">' + rows.join("") + "</div></div>";
-const tlrow = (at, head, sub) => '<div class="tlrow"><div class="when">' + fmtTime(at) + "</div>" +
+const tlrow = (at, head, sub) => '<div class="tlrow"><div class="when">' +
+  '<span class="day">' + fmtDate(at) + '</span><span class="clock">' + fmtTime(at) + "</span></div>" +
   '<div class="body"><div class="t">' + head + '</div><div class="d">' + sub + "</div></div></div>";
 
 /**
@@ -158,20 +223,31 @@ function currentView() {
 /** Navigating drops every drill-down and every cached response: a zone is entered fresh. */
 function navigate(path) {
   if (location.pathname !== path) history.pushState(null, "", path + location.search);
-  cache.clear();
+  reload();
   team.id = null;
   insp.acct = null;
+  resetPages(...Object.keys(pager)); // the next account's lists start at their own first page
   render();
 }
 const setTab = (zone, id) => {
   state.tab[zone] = id;
-  localStorage.setItem("skerry.tab." + zone, id);
   team.id = null;
   insp.acct = null;   // a tab switch leaves no drill-down open behind it
   render();
 };
-const openTeam = id => { team.id = id; team.tab = "members"; render(); };
-const toggleAccount = id => { insp.acct = insp.acct === id ? null : id; insp.tab = "devices"; render(); };
+/**
+ * A drill-down's pager is per screen, not per subject: opening another team or account with the
+ * page number left over from the previous one asks for an offset that subject may not have, and
+ * the answer — an empty table — looks like "nothing here" rather than "you are on page 4".
+ */
+const resetPages = (...keys) => keys.forEach(k => { pager[k].page = 0; });
+const openTeam = id => { team.id = id; team.tab = "members"; resetPages("teamLog"); render(); };
+const toggleAccount = id => {
+  insp.acct = insp.acct === id ? null : id;
+  insp.tab = "devices";
+  resetPages("acctDevs", "acctRecs");
+  render();
+};
 function signOut(zone) {
   if (zone === "operator") setAdminToken(null); else signOutAccount();
   navigate("/");
@@ -225,11 +301,15 @@ async function act(run) {
       // no way to tell whether the delete they confirmed went through.
       setAdminToken(null);
       alert(t("gate.operator.err"));
-    } else if (e.status !== 401) {
+    } else if (e.status === 401) {
+      // Same for the account zone: the session is already torn down by the time we get here, and
+      // the sign-in card that follows is indistinguishable from having simply been signed out.
+      alert(t("err.session"));
+    } else {
       alert(errText(e));
     }
   }
-  cache.clear();
+  reload();
   render();
 }
 
@@ -292,14 +372,18 @@ function renderTabs() {
   const view = currentView();
   const zone = (view === "account" || view === "operator") ? view : null;
   const tabs = el("tabs");
-  if (!zone) { tabs.innerHTML = ""; tabs.style.display = "none"; return; }
-  tabs.style.display = "flex";
+  const nav = el("tabnav");
+  if (!zone) { tabs.innerHTML = ""; nav.hidden = true; return; }
+  nav.hidden = false;
   tabs.innerHTML = TABS[zone].map(x => {
+    const on = x.id === state.tab[zone];
     const n = x.n ? x.n() : null;
-    return '<button class="tab' + (x.id === state.tab[zone] ? " on" : "") + '" data-tab="' + x.id + '">' + t(x.key) +
-      (n === null ? "" : '<span class="n">' + fmtNum(n) + "</span>") + "</button>";
+    return '<button class="tab' + (on ? " on" : "") + '" role="tab" aria-selected="' + on + '" data-tab="' + x.id + '">' +
+      t(x.key) + (n === null || n === undefined ? "" : '<span class="n">' + fmtNum(n) + "</span>") + "</button>";
   }).join("");
   tabs.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => setTab(zone, b.dataset.tab)));
+  // The fade that says "there is more to the right" only belongs there when there is.
+  tabs.classList.toggle("more", tabs.scrollWidth > tabs.clientWidth + 1);
 }
 
 function renderTopAction() {
@@ -310,11 +394,12 @@ function renderTopAction() {
       '<button class="btn sm" id="out">' + t(view === "operator" ? "act.lock" : "act.signout") + "</button>";
     box.style.display = "flex";
     box.style.gap = "8px";
-    el("reload").addEventListener("click", () => { cache.clear(); render(); });
+    el("reload").addEventListener("click", () => { reload(); render(); });
     el("out").addEventListener("click", () => signOut(view));
-  } else if (view === "public") {
-    box.innerHTML = '<button class="btn sm" data-go="/account">' + t("act.enter") + "</button>";
   } else {
+    // Nothing in the bar on the public page: both entrances are cards below, each labelled with what
+    // is behind it. A bare "Enter" up here only asked "enter what?".
+
     box.innerHTML = "";
   }
 }
@@ -358,22 +443,45 @@ function renderMain() {
     b.addEventListener("click", e => { e.stopPropagation(); deleteAccount(b.dataset.delete); }));
   main.querySelectorAll('[data-action="signout-all"]').forEach(b =>
     b.addEventListener("click", signOutEverywhere));
+  main.querySelectorAll("[data-size]").forEach(b =>
+    b.addEventListener("click", () => {
+      const [key, size] = b.dataset.size.split(":");
+      setPageSize(key, Number(size));
+    }));
+  main.querySelectorAll("[data-page]").forEach(b =>
+    b.addEventListener("click", () => {
+      const [key, page] = b.dataset.page.split(":");
+      setPage(key, Number(page));
+    }));
 
   const back = el("team-back");
   if (back) back.addEventListener("click", () => { team.id = null; render(); });
   const copy = el("copy");
   if (copy) copy.addEventListener("click", () => {
-    // The clipboard API is absent in an insecure context and can be refused in a secure one, so
-    // "Copied" is claimed only once the write has actually resolved.
+    const flash = key => {
+      copy.textContent = t(key);
+      setTimeout(() => { copy.textContent = t("connect.copy"); }, 2000);
+    };
+    /**
+     * There is no clipboard API in an insecure context, and a self-hosted instance on a LAN address
+     * is exactly that — the common case for this page, not an edge one. Selecting the URL leaves the
+     * reader one keystroke from the same result; failing silently left them with nothing at all.
+     */
+    const manual = () => {
+      const url = document.querySelector(".urlrow code");
+      if (url) {
+        const range = document.createRange();
+        range.selectNodeContents(url);
+        const sel = getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      flash("connect.copy.manual");
+    };
+    // "Copied" is claimed only once the write has actually resolved, never before it.
     const write = navigator.clipboard?.writeText(location.origin);
-    if (!write) { console.error("clipboard unavailable — the URL was not copied"); return; }
-    write.then(
-      () => {
-        copy.textContent = t("connect.copied");
-        setTimeout(() => { copy.textContent = t("connect.copy"); }, 1500);
-      },
-      e => { console.error("clipboard write refused", e); },
-    );
+    if (!write) { manual(); return; }
+    write.then(() => flash("connect.copied"), () => manual());
   });
 }
 
@@ -388,5 +496,7 @@ function render() {
 setSignedOutHandler(() => render());
 el("home").addEventListener("click", () => navigate("/"));
 document.querySelectorAll("[data-lang]").forEach(b => b.addEventListener("click", () => setLang(b.dataset.lang, render)));
-window.addEventListener("popstate", () => { cache.clear(); team.id = null; insp.acct = null; render(); });
+window.addEventListener("popstate", () => {
+  reload(); team.id = null; insp.acct = null; resetPages(...Object.keys(pager)); render();
+});
 render();

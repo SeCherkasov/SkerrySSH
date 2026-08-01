@@ -85,7 +85,13 @@ data class RecordEnvelopeDto(
 )
 
 @Serializable
-data class AdminRecordsResponse(val accountId: String, val records: List<RecordEnvelopeDto>)
+data class AdminRecordsResponse(
+    val accountId: String,
+    val records: List<RecordEnvelopeDto>,
+    // @EncodeDefault: an account with no records answers `{"total":0}` rather than dropping the
+    // field, which kotlinx does for any property equal to its default. See [HealthResponse].
+    @EncodeDefault val total: Long = 0,
+)
 
 // --- account zone ---
 
@@ -121,7 +127,11 @@ data class AccountActivityResponse(val events: List<AccountActivityDto>, val tot
 
 /** `GET /vault/envelopes`: what the server stores for the caller, metadata and preview only. */
 @Serializable
-data class VaultEnvelopesResponse(val records: List<RecordEnvelopeDto>)
+data class VaultEnvelopesResponse(
+    val records: List<RecordEnvelopeDto>,
+    /** @see AdminRecordsResponse.total — an empty vault is the common case for a new account. */
+    @EncodeDefault val total: Long = 0,
+)
 
 /** Result of a tombstone purge: how many tombstones were physically deleted. */
 @Serializable

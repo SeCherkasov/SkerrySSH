@@ -226,6 +226,30 @@ class RoutesTest {
     }
 
     @Test
+    fun `devices are listed most recently active first`() = testApplication {
+        // The account zone marks a device stale after a week of silence, so ordering by last activity
+        // is what puts every live device above every quiet one. Unordered, the list came back in
+        // whatever order the database felt like and read as noise.
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokens = client.registerAccount(accountId, password)
+
+        val day = 86_400_000L
+        val now = System.currentTimeMillis()
+        services.devices.register(accountId, "quiet", "Quiet", now = now - 30 * day)
+        services.devices.register(accountId, "yesterday", "Yesterday", now = now - day)
+        services.devices.register(accountId, "stale", "Stale", now = now - 10 * day)
+
+        val devices: DevicesResponse = client.get("/devices") { bearerAuth(tokens.accessToken) }.body()
+        assertEquals(
+            listOf("devA", "yesterday", "stale", "quiet"),
+            devices.devices.map { it.id },
+            "newest activity first, so the live devices sit above the quiet ones",
+        )
+    }
+
+    @Test
     fun `revoked device re-logs in with master password and regains access`() = testApplication {
         // Re-login with the correct master password (SRP) must reactivate a revoked device and
         // restore access; revoke kills current tokens but does not ban the device.
@@ -346,6 +370,76 @@ class RoutesTest {
                 setBody(PairingClaimRequest(start.code, "devC", "C"))
             }.status,
         )
+    }
+
+    @Test
+    fun `pairing carries the platform of the claiming device`() = testApplication {
+        // Only /auth/register used to report a platform, so every device after the first one showed
+        // up with none — and the device lists have a column for it.
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokens = client.registerAccount(accountId, password, deviceName = "A", platform = "Linux")
+
+        val start: PairingStartResponse = client.post("/pairing/start") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PairingStartRequest(byteArrayOf(9).b64()))
+        }.body()
+        client.post("/pairing/claim") {
+            contentType(ContentType.Application.Json)
+            setBody(PairingClaimRequest(start.code, "devB", "Phone B", platform = "Android"))
+        }.body<PairingClaimResponse>()
+
+        val devices: DevicesResponse = client.get("/devices") { bearerAuth(tokens.accessToken) }.body()
+        assertEquals("Android", devices.devices.single { it.id == "devB" }.platform)
+        assertEquals("Linux", devices.devices.single { it.id == "devA" }.platform)
+    }
+
+    @Test
+    fun `pairing without a platform leaves the device without one`() = testApplication {
+        // The field is optional on the wire: a client that predates it must still pair, and the
+        // absent platform must read as absent rather than as some invented default.
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokens = client.registerAccount(accountId, password, deviceName = "A")
+
+        val start: PairingStartResponse = client.post("/pairing/start") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PairingStartRequest(byteArrayOf(9).b64()))
+        }.body()
+        client.post("/pairing/claim") {
+            contentType(ContentType.Application.Json)
+            setBody(PairingClaimRequest(start.code, "devB", "Phone B"))
+        }.body<PairingClaimResponse>()
+
+        val devices: DevicesResponse = client.get("/devices") { bearerAuth(tokens.accessToken) }.body()
+        assertEquals(null, devices.devices.single { it.id == "devB" }.platform)
+    }
+
+    @Test
+    fun `re-pairing without a platform keeps the one the device already reported`() = testApplication {
+        // An older build of the same device claims again: it sends no platform, and the value
+        // learned earlier must survive rather than be overwritten with nothing.
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokens = client.registerAccount(accountId, password, deviceName = "A", platform = "Linux")
+
+        val start: PairingStartResponse = client.post("/pairing/start") {
+            bearerAuth(tokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PairingStartRequest(byteArrayOf(9).b64()))
+        }.body()
+        client.post("/pairing/claim") {
+            contentType(ContentType.Application.Json)
+            setBody(PairingClaimRequest(start.code, "devA", "A"))
+        }.body<PairingClaimResponse>()
+
+        val devices: DevicesResponse = client.get("/devices") { bearerAuth(tokens.accessToken) }.body()
+        assertEquals("Linux", devices.devices.single { it.id == "devA" }.platform)
     }
 
     @Test
