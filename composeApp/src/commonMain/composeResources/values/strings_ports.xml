@@ -2,8 +2,6 @@
     <string name="ports_port_forwarding">Port forwarding</string>
     <string name="ports_saved_tunnels_subtitle">Saved tunnels — local, remote and dynamic (SOCKS) forwards.</string>
     <string name="ports_new_tunnel">New tunnel</string>
-    <string name="ports_active_tunnel_one">%1$d active tunnel</string>
-    <string name="ports_active_tunnels_other">%1$d active tunnels</string>
     <string name="ports_no_tunnels_yet">No tunnels yet</string>
     <string name="ports_add_tunnel_right">Add a tunnel on the right →</string>
     <string name="ports_add_tunnel_below">Add a tunnel below</string>
@@ -37,9 +35,9 @@
     <string name="ports_remove_confirm_title">Remove \"%1$s\"?</string>
     <string name="ports_remove_active_message">Active tunnel. It will be disconnected and deleted — can't be undone.</string>
     <string name="ports_remove_inactive_message">This saved tunnel is deleted. This can't be undone.</string>
-    <string name="ports_type_local">LOCAL</string>
-    <string name="ports_type_remote">REMOTE</string>
-    <string name="ports_type_socks">SOCKS</string>
+    <string name="ports_type_local">local</string>
+    <string name="ports_type_remote">remote</string>
+    <string name="ports_type_socks">SOCKS5</string>
     <string name="ports_type_local_display">Local forward (-L)</string>
     <string name="ports_type_remote_display">Remote forward (-R)</string>
     <string name="ports_type_socks_display">Dynamic SOCKS (-D)</string>
@@ -56,4 +54,50 @@
     <string name="ports_pick_host_to_scan">Pick a host to scan</string>
     <string name="ports_open_in_browser">Open in browser</string>
     <string name="ports_close">Close</string>
+    <string name="ports_tunnels">Tunnels</string>
+    <string name="ports_col_name">NAME</string>
+    <string name="ports_col_listen">LISTEN</string>
+    <string name="ports_col_target">TARGET</string>
+    <string name="ports_col_host">HOST</string>
+    <string name="ports_col_traffic">TRAFFIC</string>
+    <string name="ports_col_status">STATUS</string>
+    <string name="ports_status_active">active</string>
+    <string name="ports_status_connecting">connecting</string>
+    <string name="ports_status_failed">failed</string>
+    <string name="ports_status_stopped">stopped</string>
+    <string name="ports_autostart">Autostart</string>
+    <string name="ports_autostart_hint">These tunnels come up on their own once the vault is unlocked.</string>
+    <string name="ports_autostart_none">No tunnels start on their own</string>
+    <string name="ports_field_autostart">Start on unlock</string>
+    <string name="ports_card_throughput">Throughput</string>
+    <string name="ports_rate_out">out</string>
+    <string name="ports_rate_in">in</string>
+    <string name="ports_card_errors">Recent errors</string>
+    <string name="ports_errors_none">No failures recorded</string>
+    <string name="ports_errors_updated">Updated</string>
+    <string name="ports_ago_seconds">%1$d s ago</string>
+    <string name="ports_ago_minutes">%1$d min ago</string>
+    <string name="ports_event_recovered">recovered</string>
+    <string name="ports_fail_host_key">host key</string>
+    <string name="ports_fail_auth">auth</string>
+    <string name="ports_fail_forward">forward</string>
+    <string name="ports_fail_connection">refused</string>
+    <string name="ports_fail_unavailable">unavailable</string>
+    <plurals name="ports_tunnel_count">
+        <item quantity="one">%1$d tunnel</item>
+        <item quantity="other">%1$d tunnels</item>
+    </plurals>
+    <string name="ports_autostart_hint_one">This tunnel comes up on its own once the vault is unlocked.</string>
+    <plurals name="ports_count_active">
+        <item quantity="other">%1$d active</item>
+    </plurals>
+    <plurals name="ports_count_stopped">
+        <item quantity="other">%1$d stopped</item>
+    </plurals>
+    <string name="ports_bind_beyond_loopback">Listens beyond loopback — reachable from the network.</string>
+    <string name="ports_dismiss">Dismiss</string>
+    <plurals name="ports_autostart_failed">
+        <item quantity="one">%1$d autostart tunnel didn't come up</item>
+        <item quantity="other">%1$d autostart tunnels didn't come up</item>
+    </plurals>
 </resources>

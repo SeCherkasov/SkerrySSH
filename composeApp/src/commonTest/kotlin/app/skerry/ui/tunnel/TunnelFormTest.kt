@@ -9,8 +9,10 @@ import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.JumpChainProblem
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class TunnelFormTest {
 
@@ -121,5 +123,20 @@ class TunnelFormTest {
             resolveTunnelHost(tunnel.hostId, findHost = { hosts[it] }, findCredential = { if (it == "c1") credential else null }),
         )
         assertEquals(TunnelUnavailable.Jump(JumpChainProblem.NO_CREDENTIAL), r.reason)
+    }
+
+    @Test
+    fun `the form seeds autostart from the edited tunnel and carries it into the draft`() {
+        val form = TunnelFormState.fromEntry(TunnelEntry(tunnel.copy(autostart = true)))
+
+        assertTrue(form.autostart)
+        assertEquals(true, form.draft?.autostart)
+    }
+
+    @Test
+    fun `a new tunnel starts with autostart off`() {
+        val form = TunnelFormState.fromEntry(null)
+
+        assertFalse(form.autostart)
     }
 }
