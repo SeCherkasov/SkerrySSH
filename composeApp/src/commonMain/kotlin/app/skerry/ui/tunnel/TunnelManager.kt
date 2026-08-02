@@ -38,6 +38,7 @@ data class TunnelDraft(
     val bindPort: Int,
     val destHost: String? = null,
     val destPort: Int? = null,
+    val autostart: Boolean = false,
 )
 
 /**
@@ -155,6 +156,30 @@ class TunnelManager(
     /** Discovery of listening services on a host, for forwarding one of them in a tap. */
     val services: ServiceScanController = ServiceScanController(scanTransport, resolve, scope)
 
+    /** Aggregate throughput window and the failure journal behind the section's dashboard. */
+    val telemetry: TunnelTelemetry = TunnelTelemetry(pollIntervalMillis)
+
+    // Autostart is a one-shot per unlock: reloadManagers runs on every synced change, and re-running
+    // it there would raise tunnels the user had just switched off. Rearmed by closeAll (the lock).
+    private var autostarted = false
+
+    // Ids raised by the last autostart run, so the section can say how many of them are down.
+    // Snapshot state: dismissing the report has to reach the banner.
+    private var autostartIds: Set<String> by mutableStateOf(emptySet())
+
+    /**
+     * Autostart tunnels that are currently failed. Derived rather than latched at the end of the
+     * run: the raises settle asynchronously, and a tunnel the user retries by hand should leave the
+     * report on its own.
+     */
+    val autostartFailures: List<TunnelEntry>
+        get() = tunnels.filter { it.id in autostartIds && it.status is TunnelStatus.Failed }
+
+    /** Drops the report without touching the tunnels — the rows keep saying what happened. */
+    fun dismissAutostartReport() {
+        autostartIds = emptySet()
+    }
+
     init {
         // Polls telemetry for active tunnels: samples counters and computes rate from the delta.
         scope.launch {
@@ -179,6 +204,19 @@ class TunnelManager(
     fun find(id: String): TunnelEntry? = tunnels.firstOrNull { it.id == id }
 
     /**
+     * Raises every tunnel flagged [Tunnel.autostart]. Called once the vault is open — a tunnel
+     * needs its host's secret, so there is nothing to raise before that. Idempotent within one
+     * unlock, so wiring it into `reloadManagers` doesn't fight the user's own toggles.
+     */
+    fun startAutostart() {
+        if (autostarted) return
+        autostarted = true
+        val flagged = tunnels.filter { it.tunnel.autostart }
+        autostartIds = flagged.map { it.id }.toSet()
+        flagged.forEach { activate(it.id) }
+    }
+
+    /**
      * Creates (when [TunnelDraft.id] is null) or updates a tunnel and writes it to the store.
      * Returns the assigned id. Editing an active tunnel's config updates the row in place but
      * does not restart the forward; new parameters take effect on the next activation.
@@ -194,6 +232,7 @@ class TunnelManager(
             bindPort = draft.bindPort,
             destHost = draft.destHost,
             destPort = draft.destPort,
+            autostart = draft.autostart,
         )
         store.put(tunnel)
         val existing = find(id)
@@ -206,6 +245,7 @@ class TunnelManager(
         deactivate(id)
         store.remove(id)
         tunnels = tunnels.filterNot { it.id == id }
+        telemetry.forget(id)
     }
 
     /** Activates a tunnel: opens the host connection and raises the forward. Idempotent for an active tunnel. */
@@ -219,7 +259,10 @@ class TunnelManager(
         entry.connectingJob = scope.launch {
             try {
                 when (val resolution = resolve(entry.tunnel.hostId)) {
-                    is TunnelResolution.Unavailable -> entry.status = TunnelStatus.Failed(reason = resolution.reason)
+                    is TunnelResolution.Unavailable -> {
+                        entry.status = TunnelStatus.Failed(reason = resolution.reason)
+                        noteFailure(entry, TunnelFailureKind.Unavailable)
+                    }
                     is TunnelResolution.Ready -> openForward(entry, resolution)
                 }
             } finally {
@@ -242,13 +285,22 @@ class TunnelManager(
             entry.handle = forward
             entry.resetCounters()
             entry.status = TunnelStatus.Active(forward.boundPort)
+            telemetry.active(entry.id, entry.tunnel.label, forward.boundPort)
+            // Once it has come up, the autostart run is answered for it. A failure hours later,
+            // after the user toggled it by hand, is not something autostart did.
+            autostartIds = autostartIds - entry.id
         } catch (e: CancellationException) {
             closeQuietly(conn)
             throw e
         } catch (e: Exception) {
             closeQuietly(conn)
             entry.status = TunnelStatus.Failed(friendlyTunnelError(e))
+            noteFailure(entry, tunnelFailureKind(e))
         }
+    }
+
+    private fun noteFailure(entry: TunnelEntry, kind: TunnelFailureKind) {
+        telemetry.failed(entry.id, entry.tunnel.label, entry.tunnel.bindPort, kind)
     }
 
     private suspend fun raise(conn: SshConnection, tunnel: Tunnel): PortForward = when (tunnel.direction) {
@@ -295,20 +347,30 @@ class TunnelManager(
     fun closeAll() {
         tunnels.forEach { deactivate(it.id) }
         services.reset()
+        // The window and the journal describe connections that no longer exist, and behind a lock
+        // screen they would still name hosts and ports. Autostart rearms for the next unlock.
+        telemetry.reset()
+        autostarted = false
+        autostartIds = emptySet()
     }
 
     internal fun pollTelemetry() {
+        var up = 0L
+        var down = 0L
         tunnels.forEach { entry ->
             val handle = entry.handle ?: return@forEach
-            val up = handle.bytesUp
-            val down = handle.bytesDown
-            entry.upRate = ((up - entry.prevUp) * 1000 / pollIntervalMillis).coerceAtLeast(0)
-            entry.downRate = ((down - entry.prevDown) * 1000 / pollIntervalMillis).coerceAtLeast(0)
-            entry.prevUp = up
-            entry.prevDown = down
-            entry.bytesUp = up
-            entry.bytesDown = down
+            val entryUp = handle.bytesUp
+            val entryDown = handle.bytesDown
+            entry.upRate = ((entryUp - entry.prevUp) * 1000 / pollIntervalMillis).coerceAtLeast(0)
+            entry.downRate = ((entryDown - entry.prevDown) * 1000 / pollIntervalMillis).coerceAtLeast(0)
+            entry.prevUp = entryUp
+            entry.prevDown = entryDown
+            entry.bytesUp = entryUp
+            entry.bytesDown = entryDown
+            up += entry.upRate
+            down += entry.downRate
         }
+        telemetry.sample(up, down)
     }
 
     private fun closeQuietly(conn: SshConnection?) {

@@ -155,6 +155,7 @@ import app.skerry.ui.app.SftpPrefs
 import app.skerry.ui.design.MeterBar
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
+import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.theme.Skerry
@@ -627,21 +628,9 @@ private fun ColumnsMenu(prefs: SftpPrefs) {
                 weight = FontWeight.SemiBold,
                 letterSpacing = 0.5.sp,
             )
-            ColumnToggleRow(stringResource(Res.string.sftp_col_modified), prefs.showModified) { prefs.setShowModified(it) }
-            ColumnToggleRow(stringResource(Res.string.sftp_col_permissions), prefs.showPermissions) { prefs.setShowPermissions(it) }
+            ToggleRow(stringResource(Res.string.sftp_col_modified), prefs.showModified, onToggle = { prefs.setShowModified(!prefs.showModified) })
+            ToggleRow(stringResource(Res.string.sftp_col_permissions), prefs.showPermissions, onToggle = { prefs.setShowPermissions(!prefs.showPermissions) })
         }
-    }
-}
-
-@Composable
-private fun ColumnToggleRow(label: String, on: Boolean, onToggle: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Txt(label, color = Skerry.colors.text, size = 12.5.sp)
-        Toggle(on = on, onToggle = { onToggle(!on) })
     }
 }
 

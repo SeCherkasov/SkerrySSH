@@ -46,6 +46,9 @@ import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.forward.rateFraction
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.sftp.humanSize
+import app.skerry.ui.tunnel.AutostartFailureBanner
+import app.skerry.ui.tunnel.BindExposureWarning
 import app.skerry.ui.tunnel.ListeningService
 import app.skerry.ui.tunnel.ServiceScanState
 import app.skerry.ui.tunnel.TunnelEntry
@@ -64,9 +67,11 @@ import app.skerry.ui.tunnel.displayLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ports_add_tunnel_below
 import app.skerry.ui.generated.resources.ports_already_forwarded
+import app.skerry.ui.generated.resources.ports_autostart_hint_one
 import app.skerry.ui.generated.resources.ports_changes_apply_after_restart
 import app.skerry.ui.generated.resources.ports_edit
 import app.skerry.ui.generated.resources.ports_edit_tunnel
+import app.skerry.ui.generated.resources.ports_field_autostart
 import app.skerry.ui.generated.resources.ports_field_bind_address
 import app.skerry.ui.generated.resources.ports_field_destination
 import app.skerry.ui.generated.resources.ports_field_live_throughput
@@ -106,6 +111,7 @@ import app.skerry.ui.design.MeterBar
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Toggle
+import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
 
@@ -180,6 +186,7 @@ private fun LiveMobilePortsBody(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        AutostartFailureBanner(manager)
         if (tunnels.isEmpty()) {
             MobileEmptyTunnels()
         } else {
@@ -245,7 +252,7 @@ private fun LiveTunnelCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Badge(t.direction.badgeLabel(), bg = bg, fg = fg, radius = 4, size = 9.5.sp)
-            Txt(stringResource(Res.string.ports_via, via), color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
+            Txt(t.label, color = Skerry.colors.textBright, size = 13.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
             // Only a live local forward has something to open; -R listens on the server, -D is SOCKS.
             tunnelBrowserUrl(entry)?.let { url ->
                 val uriHandler = LocalUriHandler.current
@@ -267,6 +274,13 @@ private fun LiveTunnelCard(
             Txt("${t.bindHost}:$port", color = if (dim) Skerry.colors.dim else Skerry.colors.text, size = 12.5.sp, font = mono)
             Sym(mobileTunnelArrow(t.direction), size = 16.sp, color = Skerry.colors.faint)
             Txt(mobileTunnelDest(t), color = if (dim) Skerry.colors.faint else Skerry.colors.textBright, size = 12.5.sp, font = mono)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Txt(stringResource(Res.string.ports_via, via), color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
+            // Counters reset on every raise, so a tunnel that has carried nothing shows nothing.
+            val total = entry.bytesUp + entry.bytesDown
+            if (total > 0) Txt(humanSize(total), color = Skerry.colors.faint, size = 11.sp, font = mono)
         }
         (entry.status as? TunnelStatus.Failed)?.let {
             Spacer(Modifier.height(6.dp))
@@ -368,6 +382,7 @@ private fun MobileTunnelEditorSheet(
                 MobileFormField(stringResource(Res.string.ports_field_bind_address), Modifier.weight(1f)) { PortInput(form.bindHost, { form.bindHost = it }, "127.0.0.1", mono) }
                 MobileFormField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(form.bindPort, { form.bindPort = it }, "8080", mono, KeyboardType.Number) }
             }
+            BindExposureWarning(form.bindHost)
             if (!form.isDynamic) {
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -383,6 +398,15 @@ private fun MobileTunnelEditorSheet(
                     lineHeight = 17.sp,
                 )
             }
+            Spacer(Modifier.height(16.dp))
+            ToggleRow(
+                label = stringResource(Res.string.ports_field_autostart),
+                on = form.autostart,
+                onToggle = { form.autostart = !form.autostart },
+                // Singular copy: the desktop panel's hint speaks about a list, this sheet edits one.
+                subtitle = stringResource(Res.string.ports_autostart_hint_one),
+                labelSize = 14.sp,
+            )
             if (existing != null && existing.status is TunnelStatus.Active) {
                 Spacer(Modifier.height(16.dp))
                 MobileFormField(stringResource(Res.string.ports_field_live_throughput)) {

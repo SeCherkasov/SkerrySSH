@@ -387,6 +387,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val onVaultUnlocked: () -> Unit = {
         // Vault opened, so reload managers (including AI BYOK settings) from decrypted records.
         reloadManagers()
+        // Tunnels flagged for autostart come up now, not in reloadManagers: that one also runs on
+        // every synced change, and raising there would fight the user's own toggles.
+        tunnels.startAutostart()
         // Apply the trash retention window here, not only when its screen is opened: otherwise a
         // deleted secret a user never goes looking for would sit in the vault (and keep being
         // pushed to the server) long past the 30 days the UI promises.

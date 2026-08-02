@@ -2,8 +2,6 @@
     <string name="ports_port_forwarding">端口转发</string>
     <string name="ports_saved_tunnels_subtitle">已保存的隧道 — 本地、远程和动态 (SOCKS) 转发。</string>
     <string name="ports_new_tunnel">新建隧道</string>
-    <string name="ports_active_tunnel_one">%1$d 个活动隧道</string>
-    <string name="ports_active_tunnels_other">%1$d 个活动隧道</string>
     <string name="ports_no_tunnels_yet">暂无隧道</string>
     <string name="ports_add_tunnel_right">在右侧添加隧道 →</string>
     <string name="ports_add_tunnel_below">在下方添加隧道</string>
@@ -37,9 +35,9 @@
     <string name="ports_remove_confirm_title">移除 \"%1$s\"?</string>
     <string name="ports_remove_active_message">隧道处于活动状态，将断开并删除，无法撤销。</string>
     <string name="ports_remove_inactive_message">此已保存隧道将被删除。无法撤销。</string>
-    <string name="ports_type_local">本地转发</string>
-    <string name="ports_type_remote">远程转发</string>
-    <string name="ports_type_socks">SOCKS</string>
+    <string name="ports_type_local">本地</string>
+    <string name="ports_type_remote">远程</string>
+    <string name="ports_type_socks">SOCKS5</string>
     <string name="ports_type_local_display">本地转发 (-L)</string>
     <string name="ports_type_remote_display">远程转发 (-R)</string>
     <string name="ports_type_socks_display">动态 SOCKS (-D)</string>
@@ -56,4 +54,48 @@
     <string name="ports_pick_host_to_scan">选择要扫描的主机</string>
     <string name="ports_open_in_browser">在浏览器中打开</string>
     <string name="ports_close">关闭</string>
+    <string name="ports_tunnels">隧道</string>
+    <string name="ports_col_name">名称</string>
+    <string name="ports_col_listen">监听</string>
+    <string name="ports_col_target">目标</string>
+    <string name="ports_col_host">主机</string>
+    <string name="ports_col_traffic">流量</string>
+    <string name="ports_col_status">状态</string>
+    <string name="ports_status_active">活动</string>
+    <string name="ports_status_connecting">连接中</string>
+    <string name="ports_status_failed">失败</string>
+    <string name="ports_status_stopped">已停止</string>
+    <string name="ports_autostart">自动启动</string>
+    <string name="ports_autostart_hint">这些隧道会在保险库解锁后自动建立。</string>
+    <string name="ports_autostart_none">没有隧道会自动启动</string>
+    <string name="ports_field_autostart">解锁后自动启动</string>
+    <string name="ports_card_throughput">吞吐量</string>
+    <string name="ports_rate_out">出</string>
+    <string name="ports_rate_in">入</string>
+    <string name="ports_card_errors">最近的错误</string>
+    <string name="ports_errors_none">没有记录到故障</string>
+    <string name="ports_errors_updated">更新于</string>
+    <string name="ports_ago_seconds">%1$d 秒前</string>
+    <string name="ports_ago_minutes">%1$d 分钟前</string>
+    <string name="ports_event_recovered">已恢复</string>
+    <string name="ports_fail_host_key">主机密钥</string>
+    <string name="ports_fail_auth">认证</string>
+    <string name="ports_fail_forward">转发</string>
+    <string name="ports_fail_connection">拒绝</string>
+    <string name="ports_fail_unavailable">不可用</string>
+    <plurals name="ports_tunnel_count">
+        <item quantity="other">%1$d 个隧道</item>
+    </plurals>
+    <string name="ports_autostart_hint_one">该隧道会在保险库解锁后自动建立。</string>
+    <plurals name="ports_count_active">
+        <item quantity="other">%1$d 个活动</item>
+    </plurals>
+    <plurals name="ports_count_stopped">
+        <item quantity="other">%1$d 个已停止</item>
+    </plurals>
+    <string name="ports_bind_beyond_loopback">监听范围超出回环地址 — 可从网络访问。</string>
+    <string name="ports_dismiss">忽略</string>
+    <plurals name="ports_autostart_failed">
+        <item quantity="other">%1$d 个自动启动隧道未能建立</item>
+    </plurals>
 </resources>

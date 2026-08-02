@@ -18,6 +18,10 @@ enum class TunnelDirection { Local, Remote, Dynamic }
  *
  * The secret itself is not stored here — the tunnel references a host, and the host references
  * a vault keychain record.
+ *
+ * [autostart] raises the tunnel once per vault unlock, without waiting for a session to its host.
+ * It defaults to off, which is also what a record written before the field existed decodes to —
+ * an update must not start dialling hosts nobody asked it to.
  */
 @Serializable
 data class Tunnel(
@@ -29,4 +33,5 @@ data class Tunnel(
     val bindPort: Int,
     val destHost: String? = null,
     val destPort: Int? = null,
+    val autostart: Boolean = false,
 )
