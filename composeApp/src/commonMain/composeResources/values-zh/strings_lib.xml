@@ -48,7 +48,6 @@
     <string name="lib_known_reject">拒绝</string>
 
     <!-- 片段（SnippetsView、MobileSnippetsView） -->
-    <string name="lib_snippets_library">库</string>
     <string name="lib_snippets_empty">暂无片段</string>
     <string name="lib_snippets_no_matches">无匹配</string>
     <string name="lib_snippets_chip_all">全部</string>
@@ -79,6 +78,24 @@
     <string name="lib_snippets_run_empty">暂无片段。在\"片段\"标签页中添加。</string>
     <string name="lib_snippets_run_in_terminal">在终端中运行</string>
     <string name="lib_snippets_save_snippet">保存片段</string>
+    <string name="lib_snippets_facts_variables">%1$d 个含变量</string>
+    <string name="lib_snippets_variables">变量</string>
+    <string name="lib_snippets_preview_runs">预览 — 实际执行内容</string>
+    <string name="lib_snippets_runs_on">运行于</string>
+    <string name="lib_snippets_run">运行</string>
+    <string name="lib_snippets_copy">复制</string>
+    <string name="lib_snippets_copied">已复制</string>
+    <string name="lib_snippets_edit_action">编辑</string>
+    <string name="lib_snippets_no_session">没有已连接的会话</string>
+    <string name="lib_snippets_run_failed">会话已关闭 — 请选择其他目标</string>
+    <string name="lib_snippets_clipboard_ref">&lt;剪贴板&gt;</string>
+    <string name="lib_snippets_vault_ref">保险库</string>
+    <string name="lib_snippets_shortcut_insert">在会话中运行</string>
+    <string name="lib_snippets_shortcut_unset">未设置</string>
+    <string name="lib_snippets_rename_tag">重命名标签</string>
+    <plurals name="lib_snippets_command_count">
+        <item quantity="other">%1$d 条命令</item>
+    </plurals>
 
     <!-- Dynamic snippet variables (run confirmation dialog) -->
     <string name="lib_snippet_vars_preview">命令预览</string>

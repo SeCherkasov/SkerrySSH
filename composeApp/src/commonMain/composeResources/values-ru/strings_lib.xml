@@ -48,7 +48,6 @@
     <string name="lib_known_reject">Отклонить</string>
 
     <!-- Snippets -->
-    <string name="lib_snippets_library">БИБЛИОТЕКА</string>
     <string name="lib_snippets_empty">Пока нет сниппетов</string>
     <string name="lib_snippets_no_matches">Нет совпадений</string>
     <string name="lib_snippets_chip_all">Все</string>
@@ -79,6 +78,27 @@
     <string name="lib_snippets_run_empty">Пока нет сниппетов. Добавьте их на вкладке «Сниппеты».</string>
     <string name="lib_snippets_run_in_terminal">Запустить в терминале</string>
     <string name="lib_snippets_save_snippet">Сохранить сниппет</string>
+    <string name="lib_snippets_facts_variables">%1$d с переменными</string>
+    <string name="lib_snippets_variables">Переменные</string>
+    <string name="lib_snippets_preview_runs">Превью — что выполнится</string>
+    <string name="lib_snippets_runs_on">Где выполнить</string>
+    <string name="lib_snippets_run">Запустить</string>
+    <string name="lib_snippets_copy">Копировать</string>
+    <string name="lib_snippets_copied">Скопировано</string>
+    <string name="lib_snippets_edit_action">Изменить</string>
+    <string name="lib_snippets_no_session">Нет подключённой сессии</string>
+    <string name="lib_snippets_run_failed">Сессия закрыта — выберите другую</string>
+    <string name="lib_snippets_clipboard_ref">&lt;буфер обмена&gt;</string>
+    <string name="lib_snippets_vault_ref">хранилище</string>
+    <string name="lib_snippets_shortcut_insert">Запуск в сессии</string>
+    <string name="lib_snippets_shortcut_unset">Не задана</string>
+    <string name="lib_snippets_rename_tag">Переименовать тег</string>
+    <plurals name="lib_snippets_command_count">
+        <item quantity="one">%1$d команда</item>
+        <item quantity="few">%1$d команды</item>
+        <item quantity="many">%1$d команд</item>
+        <item quantity="other">%1$d команды</item>
+    </plurals>
 
     <!-- Dynamic snippet variables (run confirmation dialog) -->
     <string name="lib_snippet_vars_preview">Предпросмотр команды</string>

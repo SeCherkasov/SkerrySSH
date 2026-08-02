@@ -10,17 +10,18 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.theme.Skerry
 
 /**
- * Uppercase form field label (small caps, dimmed color), with [top] spacing from the previous
- * block. Shared primitive for settings/dialog forms (same look as sync/tunnel/snippet form labels).
+ * Uppercase form field label (small caps, dimmed color), with [top] spacing from the previous block
+ * and [bottom] to the field it labels. Shared primitive for settings/dialog forms (same look as
+ * sync/tunnel/snippet form labels).
  */
 @Composable
-fun FieldLabel(text: String, top: Dp = 12.dp) {
+fun FieldLabel(text: String, top: Dp = 12.dp, bottom: Dp = 5.dp) {
     Txt(
         text,
         color = Skerry.colors.faint,
         size = 10.5.sp,
         weight = FontWeight.SemiBold,
         letterSpacing = 0.6.sp,
-        modifier = Modifier.padding(top = top, bottom = 5.dp),
+        modifier = Modifier.padding(top = top, bottom = bottom),
     )
 }

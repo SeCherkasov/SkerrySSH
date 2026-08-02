@@ -48,7 +48,6 @@
     <string name="lib_known_reject">Reject</string>
 
     <!-- Snippets (SnippetsView, MobileSnippetsView) -->
-    <string name="lib_snippets_library">LIBRARY</string>
     <string name="lib_snippets_empty">No snippets yet</string>
     <string name="lib_snippets_no_matches">No matches</string>
     <string name="lib_snippets_chip_all">All</string>
@@ -79,6 +78,25 @@
     <string name="lib_snippets_run_empty">No snippets yet. Add some on the Snippets tab.</string>
     <string name="lib_snippets_run_in_terminal">Run in terminal</string>
     <string name="lib_snippets_save_snippet">Save snippet</string>
+    <string name="lib_snippets_facts_variables">%1$d with variables</string>
+    <string name="lib_snippets_variables">Variables</string>
+    <string name="lib_snippets_preview_runs">Preview — what runs</string>
+    <string name="lib_snippets_runs_on">Runs on</string>
+    <string name="lib_snippets_run">Run</string>
+    <string name="lib_snippets_copy">Copy</string>
+    <string name="lib_snippets_copied">Copied</string>
+    <string name="lib_snippets_edit_action">Edit</string>
+    <string name="lib_snippets_no_session">No connected session</string>
+    <string name="lib_snippets_run_failed">Session closed — pick another target</string>
+    <string name="lib_snippets_clipboard_ref">&lt;clipboard&gt;</string>
+    <string name="lib_snippets_vault_ref">vault</string>
+    <string name="lib_snippets_shortcut_insert">Run in session</string>
+    <string name="lib_snippets_shortcut_unset">Not set</string>
+    <string name="lib_snippets_rename_tag">Rename tag</string>
+    <plurals name="lib_snippets_command_count">
+        <item quantity="one">%1$d command</item>
+        <item quantity="other">%1$d commands</item>
+    </plurals>
 
     <!-- Dynamic snippet variables (run confirmation dialog) -->
     <string name="lib_snippet_vars_preview">Command preview</string>

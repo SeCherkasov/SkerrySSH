@@ -174,8 +174,10 @@ class SnippetManager(
      * [pendingRun] until the dialog resolves and confirms it (variable values — clipboard, vault
      * secrets, Teams-shared templates — ARE untrusted; see [SnippetTemplate.resolve]).
      * [recording] — whether the target terminal is recording, for the dialog's warning.
+     * [params] seeds the dialog's prompted parameters (the snippets panel collects them before Run);
+     * empty falls back to this snippet's previous run.
      */
-    fun run(id: String, recording: Boolean = false, send: (String) -> Unit) {
+    fun run(id: String, recording: Boolean = false, params: Map<String, String> = emptyMap(), send: (String) -> Unit) {
         // A run initiated while the variable dialog is up would silently replace (or race) the
         // request the user is looking at — first request wins until confirmed or dismissed.
         if (pendingRun != null) return
@@ -192,7 +194,7 @@ class SnippetManager(
             segments = segments,
             environment = environment(),
             recording = recording,
-            initialParams = lastParams[snippet.id].orEmpty(),
+            initialParams = params.ifEmpty { lastParams[snippet.id].orEmpty() },
             sendLine = send,
         )
     }
