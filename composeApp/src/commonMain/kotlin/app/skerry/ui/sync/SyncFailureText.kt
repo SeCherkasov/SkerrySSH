@@ -12,6 +12,7 @@ import app.skerry.ui.generated.resources.sync_fail_network
 import app.skerry.ui.generated.resources.sync_fail_pairing
 import app.skerry.ui.generated.resources.sync_fail_pairing_expired
 import app.skerry.ui.generated.resources.sync_fail_protocol
+import app.skerry.ui.generated.resources.sync_fail_registration_refused_signin
 import app.skerry.ui.generated.resources.sync_fail_rejected
 import app.skerry.ui.generated.resources.stail_sync_fail_detail
 import app.skerry.ui.generated.resources.stail_sync_fail_key_adopt
@@ -63,4 +64,5 @@ internal fun syncFailureResource(reason: SyncFailureReason): StringResource =
         SyncFailureReason.TooManyRequests -> Res.string.sync_fail_too_many_requests
         SyncFailureReason.ServerError -> Res.string.sync_fail_server_error
         SyncFailureReason.Rejected -> Res.string.sync_fail_rejected
+        SyncFailureReason.RegistrationRefusedSignInFailed -> Res.string.sync_fail_registration_refused_signin
     }

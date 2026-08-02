@@ -173,6 +173,11 @@ enum class SyncFailureReason {
     SyncFailed,            // sync cycle failure (detail: cause)
     RevokeFailed,          // device revoke failed (detail: cause)
     Rejected,              // the server refused on purpose (closed registration, blocked account id) — detail: its message
+    // The instance refuses new accounts AND didn't accept the sign-in: either there is no such
+    // account, or its password was rotated elsewhere and this vault still holds the old one. The two
+    // are indistinguishable by design (see the anti-enumeration login), so both are named — detail:
+    // the server's registration refusal.
+    RegistrationRefusedSignInFailed,
     TooManyRequests,       // the server's rate limiter turned the request away — retrying later works
     ServerError,           // the server (or the proxy in front of it) is broken or restarting
 }
@@ -502,8 +507,32 @@ class SyncCoordinator(
                 try {
                     syncClient.register(accountId, ak, crypto.wrapDataKey(mk, dataKey), device)
                 } catch (e: SyncException) {
-                    if (e.kind != SyncException.Kind.CONFLICT) throw e
-                    val s = syncClient.login(accountId, ak, device)
+                    // CONFLICT: the account is already there. FORBIDDEN: the instance refuses NEW accounts
+                    // (closed registration, or the account cap) and answers before it ever looks at the id,
+                    // so an existing account gets the same 403. Both mean the account, if it exists, is
+                    // reachable only through login.
+                    if (e.kind != SyncException.Kind.CONFLICT && e.kind != SyncException.Kind.FORBIDDEN) throw e
+                    val s = try {
+                        syncClient.login(accountId, ak, device)
+                    } catch (failure: SyncException) {
+                        // A 401/404 after a 403 is ambiguous, and the server keeps it that way on purpose
+                        // (it hides "no such account" behind the wrong-password shape): either there is no
+                        // account on an instance that won't create one, or the account password was rotated
+                        // from another device and this vault still holds the old one. Reporting only the 403
+                        // would misname the second case — the refusal may be "registration limit reached",
+                        // which says nothing about a password — so the failure names both and carries the
+                        // server's own sentence as its detail. Every other login failure (throttled,
+                        // network, 5xx) is a fact of its own and survives untouched, as does the CONFLICT
+                        // path, where a 401 is an ordinary wrong password.
+                        if (e.kind == SyncException.Kind.FORBIDDEN &&
+                            (failure.kind == SyncException.Kind.UNAUTHORIZED || failure.kind == SyncException.Kind.NOT_FOUND)
+                        ) {
+                            runCatching { syncClient.close() }
+                            _status.value = SyncStatus.Failed(SyncFailureReason.RegistrationRefusedSignInFailed, e.message)
+                            return
+                        }
+                        throw failure
+                    }
                     reactivated = s.reactivated
                     // Same password on both sides: nothing to re-wrap, only a possible key change.
                     adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf()) == KeyAdoption.Adopted
