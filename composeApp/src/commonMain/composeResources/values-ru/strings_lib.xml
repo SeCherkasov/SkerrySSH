@@ -132,7 +132,6 @@
     <string name="lib_teams_event_remove">Удалил участника</string>
     <string name="lib_teams_event_accept">Присоединился к команде</string>
     <string name="lib_teams_event_role_change">Сменил роль</string>
-    <string name="lib_teams_event_share">Поделился записями</string>
     <string name="lib_teams_event_delete">Удалил команду</string>
     <!-- Фид активности: подписи событий. Субъект записи (имя хоста/сниппета) показывается рядом. -->
     <string name="lib_teams_event_rekey">Сменил ключ команды</string>
@@ -172,7 +171,6 @@
     <!-- История одной записи; %1$s — имя записи -->
     <string name="lib_teams_feed_record_title">История · %1$s</string>
     <string name="lib_teams_feed_record_empty">С этой записью пока ничего не происходило.</string>
-    <string name="lib_teams_feed_record_history">История этой записи</string>
     <!-- Свёрнутый массовый пуш; %1$d — сколько записей изменилось разом -->
     <string name="lib_teams_event_records_bulk">Обновил записей: %1$d</string>
     <!-- Фолбэк для неизвестного клиенту кода события аудита; %1$s — исходный код с сервера -->

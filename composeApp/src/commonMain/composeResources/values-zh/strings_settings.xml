@@ -29,7 +29,6 @@
     <string name="settings_ai_prompt_placeholder_needs_key">请先保存 API 密钥</string>
     <string name="settings_ai_sending">发送中…</string>
     <string name="settings_ai_ask">提问</string>
-    <string name="settings_ai_mock_subtitle">AI 运行位置。默认在本机；每个连接可单独覆盖。</string>
     <string name="settings_ai_default_provider">默认 AI 提供商</string>
     <string name="settings_ai_default_provider_desc">用于未单独设置的连接。</string>
     <string name="settings_ai_provider_device">本设备</string>

@@ -21,7 +21,6 @@
     <string name="share_fail_network">无法连接中继。</string>
     <string name="share_fail_rejected">服务器拒绝了此共享。</string>
     <string name="share_fail_server">服务器无法中继此会话。</string>
-    <string name="share_typing">%1$s 正在输入…</string>
     <string name="share_control_wants">%1$s 请求输入权限</string>
     <string name="share_grant">允许</string>
     <string name="share_deny">拒绝</string>

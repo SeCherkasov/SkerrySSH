@@ -132,7 +132,6 @@
     <string name="lib_teams_event_remove">Removed a member</string>
     <string name="lib_teams_event_accept">Joined the team</string>
     <string name="lib_teams_event_role_change">Changed a role</string>
-    <string name="lib_teams_event_share">Shared records</string>
     <string name="lib_teams_event_delete">Deleted team</string>
     <!-- Activity feed: event labels. A record event's subject (host/snippet name) is shown beside the label. -->
     <string name="lib_teams_event_rekey">Rotated the team key</string>
@@ -172,7 +171,6 @@
     <!-- Per-record history; %1$s — the record's name -->
     <string name="lib_teams_feed_record_title">History · %1$s</string>
     <string name="lib_teams_feed_record_empty">Nothing has happened to this record yet.</string>
-    <string name="lib_teams_feed_record_history">History of this record</string>
     <!-- Bulk push summary row; %1$d — how many records changed at once -->
     <string name="lib_teams_event_records_bulk">Updated %1$d records</string>
     <!-- Fallback for an audit event code this client doesn't know; %1$s — the raw server code -->

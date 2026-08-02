@@ -29,7 +29,6 @@
     <string name="settings_ai_prompt_placeholder_needs_key">Сначала сохраните ключ API</string>
     <string name="settings_ai_sending">Отправка…</string>
     <string name="settings_ai_ask">Спросить</string>
-    <string name="settings_ai_mock_subtitle">Где выполняется AI. По умолчанию — локально; для каждого подключения можно переопределить.</string>
     <string name="settings_ai_default_provider">Провайдер AI по умолчанию</string>
     <string name="settings_ai_default_provider_desc">Для подключений без переопределения.</string>
     <string name="settings_ai_provider_device">На этом устройстве</string>
