@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.shared.vault.CredentialUsage
 import app.skerry.shared.vault.SshCertificateInfo
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
@@ -111,6 +113,9 @@ import app.skerry.ui.generated.resources.vault_field_passphrase
 import app.skerry.ui.generated.resources.vault_field_password
 import app.skerry.ui.generated.resources.vault_field_private_key_pem
 import app.skerry.ui.generated.resources.vault_generate
+import app.skerry.ui.generated.resources.vault_header_summary
+import app.skerry.ui.generated.resources.vault_item_count
+import app.skerry.ui.generated.resources.vault_title
 import app.skerry.ui.generated.resources.vault_generate_key
 import app.skerry.ui.generated.resources.vault_hint_cert_sibling
 import app.skerry.ui.generated.resources.vault_hint_cert_sibling_opaque
@@ -119,7 +124,6 @@ import app.skerry.ui.generated.resources.vault_import_certificate
 import app.skerry.ui.generated.resources.vault_key_file_missing
 import app.skerry.ui.generated.resources.vault_key_unreadable
 import app.skerry.ui.generated.resources.vault_label_cert_path
-import app.skerry.ui.generated.resources.vault_label_fingerprint
 import app.skerry.ui.generated.resources.vault_label_key_path
 import app.skerry.ui.generated.resources.vault_label_principals
 import app.skerry.ui.generated.resources.vault_label_public_key
@@ -128,10 +132,6 @@ import app.skerry.ui.generated.resources.vault_label_signing_ca
 import app.skerry.ui.generated.resources.vault_label_valid
 import app.skerry.ui.generated.resources.vault_link
 import app.skerry.ui.generated.resources.vault_link_key_file
-import app.skerry.ui.generated.resources.vault_meta_any_principal
-import app.skerry.ui.generated.resources.vault_meta_certificate
-import app.skerry.ui.generated.resources.vault_meta_key_file
-import app.skerry.ui.generated.resources.vault_meta_password
 import app.skerry.ui.generated.resources.vault_not_attached
 import app.skerry.ui.generated.resources.vault_password_mismatch_retry
 import app.skerry.ui.generated.resources.vault_placeholder_master_password
@@ -154,8 +154,6 @@ import app.skerry.ui.generated.resources.vault_used_by
 import app.skerry.ui.generated.resources.vault_used_by_one
 import app.skerry.ui.generated.resources.vault_used_by_snippets
 import app.skerry.ui.generated.resources.vault_used_by_snippets_one
-import app.skerry.ui.generated.resources.vtail_meta_fingerprint
-import app.skerry.ui.generated.resources.vtail_meta_principals
 import app.skerry.ui.host.HostDraft
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -173,7 +171,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.app.LocalSync
+import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.Chip
@@ -198,6 +199,12 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.theme.Skerry
+
+/**
+ * Width of the secret detail panel — wide enough for a fingerprint and a wrapped public key to sit
+ * next to their labels without the key block turning into a column of fragments.
+ */
+private val DETAIL_PANEL_WIDTH = 400.dp
 
 /**
  * Vault view. With a live keychain ([LocalCredentials]) renders the open vault's real data:
@@ -245,6 +252,9 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
 
     val credItems = VaultPresentation.credentialsIn(category, allCreds)
     val selectedCred = credItems.firstOrNull { it.id == selectedId } ?: credItems.firstOrNull()
+    // "Stored on server" is only true once an account exists; without sync the ciphertext never
+    // leaves this device, and the panel has to say so.
+    val syncing = LocalSync.current?.status?.collectAsState()?.value.let { it != null && it !is SyncStatus.Disabled }
 
     Box(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxSize()) {
@@ -253,6 +263,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
             Column(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg)) {
                 VaultHeader(
                     category = category,
+                    itemCount = allCreds.size,
                     canGenerate = generator != null,
                     canImportCert = inspector != null,
                     canLinkFile = secretFiles != null,
@@ -265,18 +276,16 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     if (credItems.isEmpty()) {
                         VaultEmptyCategory(category, Modifier.weight(1f).fillMaxHeight())
                     } else {
-                        Column(
-                            Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
+                        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
                             credItems.forEach { credential ->
-                                LiveSecretCard(
+                                LiveSecretRow(
                                     credential = credential,
-                                    active = credential.id == selectedCred?.id,
+                                    selected = credential.id == selectedCred?.id,
                                     generator = generator,
                                     inspector = inspector,
+                                    usage = credentials.usageOf(credential.id),
                                     usedBy = VaultPresentation.usedByLabel(
-                                        hostCount = VaultPresentation.hostsUsing(credential.id, hosts).size,
+                                        hostLabels = VaultPresentation.hostsUsing(credential.id, hosts).map { it.label },
                                         snippetCount = VaultPresentation.snippetsUsing(credential.label, snippetList).size,
                                     ),
                                     mono = mono,
@@ -291,11 +300,15 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                             credential = credential,
                             generator = generator,
                             inspector = inspector,
+                            usage = credentials.usageOf(credential.id),
+                            syncing = syncing,
                             hosts = VaultPresentation.hostsUsing(credential.id, hosts),
                             snippetLabels = VaultPresentation.snippetsUsing(credential.label, snippetList).map { it.label },
                             mono = mono,
                             onCopy = { copyTextToClipboard(it) },
-                            onCopyPassword = { pwd -> copyAuth.authorize { copyPasswordToClipboard(pwd) } },
+                            onCopyPassword = { pwd ->
+                                copyAuth.authorize { credentials.recordCopied(credential.id); copyPasswordToClipboard(pwd) }
+                            },
                             onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
                             onRename = { pendingRenameCred = credential },
                             onDelete = { pendingDeleteCred = credential },
@@ -473,6 +486,7 @@ private fun VaultCategoryRow(icon: String, label: String, count: String, active:
 @Composable
 private fun VaultHeader(
     category: VaultCategoryKind,
+    itemCount: Int,
     canGenerate: Boolean,
     canImportCert: Boolean,
     canLinkFile: Boolean,
@@ -482,7 +496,13 @@ private fun VaultHeader(
     onLinkKeyFile: () -> Unit,
 ) {
     SectionHeader(
-        title = category.title(),
+        // The section names the whole keychain and how it is protected; which slice of it is on
+        // screen is what the sidebar highlights.
+        title = stringResource(Res.string.vault_title),
+        subtitle = stringResource(
+            Res.string.vault_header_summary,
+            pluralStringResource(Res.plurals.vault_item_count, itemCount, itemCount),
+        ),
         actions = {
             when (category) {
                 // "Link file" sits in both key and certificate categories: which one a file-backed
@@ -504,86 +524,41 @@ private fun VaultHeader(
 // Keychain secret card (key/password/certificate) + account card + empty states.
 
 @Composable
-private fun LiveSecretCard(
+private fun LiveSecretRow(
     credential: Credential,
-    active: Boolean,
+    selected: Boolean,
     generator: SshKeyGenerator?,
     inspector: SshCertificateInspector?,
+    usage: CredentialUsage?,
     usedBy: String?,
     mono: FontFamily,
     onClick: () -> Unit,
 ) {
-    val border = if (active) Skerry.colors.cyan.copy(alpha = 0.18f) else Skerry.colors.cyan08
-    val bg = if (active) Skerry.colors.cyan.copy(alpha = 0.04f) else Color.Transparent
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(bg).border(1.dp, border, RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        when (val secret = credential.secret) {
-            is CredentialSecret.Certificate -> {
-                val info = rememberCertInfo(credential, inspector)
-                SecretIcon("workspace_premium", tinted = true, color = Skerry.colors.moss)
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Txt(credential.label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.SemiBold)
-                        info?.keyTypeLabel?.let { Badge(it, bg = Skerry.colors.moss.copy(alpha = 0.16f), fg = Skerry.colors.moss, radius = 3, size = 9.5.sp) }
-                        if (info?.expired == true) Badge(stringResource(Res.string.vault_badge_expired), bg = Skerry.colors.sunset.copy(alpha = 0.16f), fg = Skerry.colors.sunset, radius = 3, size = 9.5.sp)
+    val secret = credential.secret
+    val style = VaultPresentation.secretStyle(secret, Skerry.colors)
+    val keyInfo = rememberKeyInfo(credential, generator)
+    val certInfo = rememberCertInfo(credential, inspector)
+    val fileState = (secret as? CredentialSecret.KeyFile)?.let { rememberKeyFileState(it, LocalSecretFileReader.current, inspector) }
+    SecretRow(
+        icon = style.icon,
+        iconColor = style.color,
+        tintedIcon = style.tinted,
+        name = credential.label,
+        meta = secretMetaLine(secret, keyInfo, certInfo, usage, usedBy),
+        mono = mono,
+        selected = selected,
+        onClick = onClick,
+        status = {
+            when (secret) {
+                is CredentialSecret.KeyFile -> KeyFileBadges(fileState)
+                is CredentialSecret.Certificate ->
+                    if (certInfo?.expired == true) {
+                        Badge(stringResource(Res.string.vault_badge_expired), bg = Skerry.colors.sunset.copy(alpha = 0.16f), fg = Skerry.colors.sunset, radius = 3, size = 9.5.sp)
                     }
-                    val meta = when {
-                        info == null -> usedBy?.let { stringResource(Res.string.vault_meta_certificate, it) }
-                            ?: stringResource(Res.string.vault_subtitle_certificate)
-                        info.principals.isEmpty() -> usedBy?.let { stringResource(Res.string.vault_meta_any_principal, it) }
-                            ?: stringResource(Res.string.vault_any_principal)
-                        else -> usedBy?.let { stringResource(Res.string.vtail_meta_principals, info.principals.joinToString(", "), it) }
-                            ?: info.principals.joinToString(", ")
-                    }
-                    Txt(meta, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
-                }
+                is CredentialSecret.Password, is CredentialSecret.PrivateKey -> Unit
             }
-            is CredentialSecret.KeyFile -> {
-                val state = rememberKeyFileState(secret, LocalSecretFileReader.current, inspector)
-                SecretIcon(VaultPresentation.secretIcon(secret), tinted = true, color = if (secret.certificateRef.isNullOrBlank()) Skerry.colors.cyanBright else Skerry.colors.moss)
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Txt(credential.label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.SemiBold)
-                        KeyFileBadges(state)
-                    }
-                    Txt(
-                        stringResource(Res.string.vault_meta_key_file, secret.privateKeyRef),
-                        color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-            }
-            is CredentialSecret.PrivateKey -> {
-                val info = rememberKeyInfo(credential, generator)
-                SecretIcon("key", tinted = true, color = Skerry.colors.cyanBright)
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Txt(credential.label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.SemiBold)
-                        info?.keyTypeLabel?.let { Badge(it, bg = Skerry.colors.moss.copy(alpha = 0.16f), fg = Skerry.colors.moss, radius = 3, size = 9.5.sp) }
-                    }
-                    val meta = when {
-                        info != null && usedBy != null ->
-                            stringResource(Res.string.vtail_meta_fingerprint, shortFingerprint(info.fingerprintSha256), usedBy)
-                        info != null -> shortFingerprint(info.fingerprintSha256)
-                        else -> usedBy ?: stringResource(Res.string.vault_subtitle_private_key)
-                    }
-                    Txt(meta, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
-                }
-            }
-            is CredentialSecret.Password -> {
-                SecretIcon("password", tinted = false, color = Skerry.colors.dim)
-                Column(Modifier.weight(1f)) {
-                    Txt(credential.label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.SemiBold)
-                    Txt(
-                        usedBy?.let { stringResource(Res.string.vault_meta_password, it) } ?: stringResource(Res.string.vault_subtitle_password),
-                        color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-            }
-        }
-    }
+        },
+    )
 }
 
 /** Square secret icon in the card/detail panel (cyan/moss tint for keys/certificates, neutral for passwords). */
@@ -642,6 +617,8 @@ private fun LiveSecretDetail(
     credential: Credential,
     generator: SshKeyGenerator?,
     inspector: SshCertificateInspector?,
+    usage: CredentialUsage?,
+    syncing: Boolean,
     hosts: List<Host>,
     snippetLabels: List<String>,
     mono: FontFamily,
@@ -655,7 +632,6 @@ private fun LiveSecretDetail(
     val keyInfo = rememberKeyInfo(credential, generator)
     val certInfo = rememberCertInfo(credential, inspector)
     val keyFileState = (secret as? CredentialSecret.KeyFile)?.let { rememberKeyFileState(it, LocalSecretFileReader.current, inspector) }
-    val (icon, color, tinted) = VaultPresentation.secretStyle(secret, Skerry.colors)
     val subtitle = when (secret) {
         is CredentialSecret.Certificate -> certInfo?.keyTypeLabel?.let { stringResource(Res.string.vault_subtitle_certificate_typed, it) } ?: stringResource(Res.string.vault_subtitle_certificate)
         is CredentialSecret.PrivateKey -> keyInfo?.keyTypeLabel ?: stringResource(Res.string.vault_subtitle_private_key)
@@ -664,23 +640,27 @@ private fun LiveSecretDetail(
             if (secret.certificateRef.isNullOrBlank()) stringResource(Res.string.vault_subtitle_key_file)
             else stringResource(Res.string.vault_subtitle_key_file_cert)
     }
-    Column(Modifier.width(340.dp).fillMaxHeight().background(Skerry.colors.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
-        Row(Modifier.padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-            SecretIcon(icon, tinted = tinted, color = color, size = 40)
-            Column {
-                Txt(credential.label, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold)
-                Txt(subtitle, color = Skerry.colors.dim, size = 11.5.sp)
-            }
-        }
+    Column(Modifier.width(DETAIL_PANEL_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
+        DetailLabel(credential.label)
+        SecretFactRows(
+            typeLabel = subtitle,
+            // A password has no fingerprint, and a key still being parsed has none yet — the row is
+            // dropped rather than filled with a placeholder that reads like data.
+            fingerprint = keyInfo?.fingerprintSha256?.let { shortFingerprint(it) }
+                ?: keyFileState?.certificate?.caFingerprintSha256?.let { shortFingerprint(it) },
+            secret = secret,
+            usage = usage,
+            modifier = Modifier.padding(bottom = 16.dp),
+        )
         when (secret) {
             is CredentialSecret.Certificate -> CertificateDetailBody(certInfo, mono)
             is CredentialSecret.PrivateKey -> {
                 DetailLabel(stringResource(Res.string.vault_label_public_key))
+                // The fingerprint itself is already a fact row above; what the panel adds here is the
+                // key the user actually has to paste somewhere.
                 Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
                     Txt(keyInfo?.publicKeyOpenSsh ?: stringResource(Res.string.vault_key_unreadable), color = Skerry.colors.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
                 }
-                DetailLabel(stringResource(Res.string.vault_label_fingerprint))
-                Txt(keyInfo?.fingerprintSha256 ?: "—", color = Skerry.colors.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
             }
             is CredentialSecret.Password -> Unit
             is CredentialSecret.KeyFile -> KeyFileDetailBody(secret, keyFileState, mono)
@@ -715,6 +695,14 @@ private fun LiveSecretDetail(
                 is CredentialSecret.Password, is CredentialSecret.KeyFile ->
                     GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
             }
+        }
+        SecretSectionLabel(encryptionSectionTitle())
+        SecretEncryptionRows(syncing)
+        // Audit counts clipboard copies, and only a password ever leaves the vault that way: for a
+        // key or a certificate the copy button hands over the public half, which is not a secret.
+        if (secret is CredentialSecret.Password) {
+            SecretSectionLabel(auditSectionTitle())
+            SecretAuditRows(usage)
         }
     }
 }
@@ -1140,18 +1128,26 @@ internal fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDism
     }
 }
 
-// Mock path (offscreen render/preview): static categories/keys/details.
+// Mock path (offscreen render/preview): the same sidebar, rows and panel over sample secrets.
 
-/** Vault view (mock): secret categories (sidebar) + SSH key list + key detail panel. */
+/** Vault view (mock): categories, the secret list and the detail panel, over [mockSecrets]. */
 @Composable
 private fun MockVaultView() {
     val mono = LocalFonts.current.mono
+    val secrets = mockSecrets()
+    val selected = secrets.first().first
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
             SidebarSectionTitle(stringResource(Res.string.vault_sidebar_header), Modifier.padding(start = 10.dp, bottom = 10.dp))
-            VaultCategory("key", "SSH keys", "4", active = true)
-            VaultCategory("password", "Passwords", "12")
-            VaultCategory("vpn_lock", "Certificates", "2")
+            VaultPresentation.sidebarCategories.forEach { kind ->
+                VaultCategoryRow(
+                    icon = kind.icon,
+                    label = kind.title(),
+                    count = VaultPresentation.count(kind, secrets.map { it.first }).toString(),
+                    active = kind == VaultCategoryKind.SSH_KEYS,
+                    onClick = {},
+                )
+            }
             Spacer(Modifier.weight(1f))
             Column(
                 Modifier.clip(RoundedCornerShape(8.dp)).background(Skerry.colors.moss.copy(alpha = 0.06f)).border(1.dp, Skerry.colors.moss.copy(alpha = 0.16f), RoundedCornerShape(8.dp)).padding(10.dp),
@@ -1166,134 +1162,56 @@ private fun MockVaultView() {
         VLine(Skerry.colors.line)
         Column(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg)) {
             SectionHeader(
-                title = "SSH keys",
+                title = stringResource(Res.string.vault_title),
+                subtitle = stringResource(
+                    Res.string.vault_header_summary,
+                    pluralStringResource(Res.plurals.vault_item_count, secrets.size, secrets.size),
+                ),
                 actions = { PrimaryButton(stringResource(Res.string.vault_generate_key), onClick = {}, icon = "add") },
             )
             Row(Modifier.weight(1f).fillMaxWidth()) {
-                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    KeyCard(
-                        iconBg = Skerry.colors.cyan.copy(alpha = 0.12f), iconColor = Skerry.colors.cyanBright, icon = "key",
-                        name = "id_ed25519", badges = listOf("ED25519" to false, "DEFAULT" to true),
-                        meta = "SHA256:8c3F1a…Qz9pK · used by 6 hosts", mono = mono,
-                        border = Skerry.colors.cyan.copy(alpha = 0.18f), bg = Skerry.colors.cyan.copy(alpha = 0.04f),
-                        trailing = { CopyButton() },
-                    )
-                    KeyCard(
-                        iconBg = Skerry.colors.overlayMed, iconColor = Skerry.colors.dim, icon = "key",
-                        name = "id_rsa_legacy", badges = listOf("RSA-4096" to null),
-                        meta = "SHA256:2dE7b…Lm4xR · used by 2 hosts", mono = mono,
-                        border = Skerry.colors.cyan08, bg = Color.Transparent,
-                        trailing = { CopyButton() },
-                    )
-                    KeyCard(
-                        iconBg = Skerry.colors.sunset.copy(alpha = 0.12f), iconColor = Skerry.colors.sunset, icon = "warning",
-                        name = "deploy_ci", badges = listOf("ROTATE SOON" to false), rotateBadge = true,
-                        meta = "SHA256:9aB0c…Tn2wE · created 412 days ago", mono = mono,
-                        border = Skerry.colors.sunset.copy(alpha = 0.25f), bg = Skerry.colors.sunset.copy(alpha = 0.04f),
-                        trailing = {
-                            Box(Modifier.clip(RoundedCornerShape(6.dp)).border(1.dp, Skerry.colors.sunset.copy(alpha = 0.4f), RoundedCornerShape(6.dp)).padding(horizontal = 12.dp, vertical = 7.dp)) {
-                                Txt("Rotate", color = Skerry.colors.sunset, size = 11.5.sp, weight = FontWeight.SemiBold)
-                            }
-                        },
-                    )
-                }
-                VLine(Skerry.colors.line)
-                KeyDetail(mono)
-            }
-        }
-    }
-}
-
-@Composable
-private fun VaultCategory(icon: String, label: String, count: String, active: Boolean = false) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (active) Skerry.colors.cyan10 else Color.Transparent)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Sym(icon, size = 16.sp, color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim)
-        Txt(label, color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim, size = 12.5.sp, modifier = Modifier.weight(1f))
-        Txt(count, color = Skerry.colors.faint, size = 10.sp)
-    }
-}
-
-@Composable
-private fun KeyCard(
-    iconBg: Color,
-    iconColor: Color,
-    icon: String,
-    name: String,
-    badges: List<Pair<String, Boolean?>>,
-    meta: String,
-    mono: FontFamily,
-    border: Color,
-    bg: Color,
-    rotateBadge: Boolean = false,
-    trailing: @Composable () -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(bg).border(1.dp, border, RoundedCornerShape(10.dp)).padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        Box(Modifier.size(38.dp).clip(RoundedCornerShape(9.dp)).background(iconBg), contentAlignment = Alignment.Center) {
-            Sym(icon, size = 20.sp, color = iconColor)
-        }
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Txt(name, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.SemiBold)
-                badges.forEach { (text, default) ->
-                    when {
-                        rotateBadge -> Badge(text, bg = Skerry.colors.sunset.copy(alpha = 0.16f), fg = Skerry.colors.sunset, radius = 3, size = 9.5.sp)
-                        default == true -> Badge(text, bg = Skerry.colors.cyan14, fg = Skerry.colors.cyanBright, radius = 3, size = 9.5.sp)
-                        default == false -> Badge(text, bg = Skerry.colors.moss.copy(alpha = 0.16f), fg = Skerry.colors.moss, radius = 3, size = 9.5.sp)
-                        else -> Badge(text, bg = Skerry.colors.overlayMed, fg = Skerry.colors.dim, radius = 3, size = 9.5.sp)
+                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                    secrets.forEach { (credential, meta) ->
+                        val style = VaultPresentation.secretStyle(credential.secret, Skerry.colors)
+                        SecretRow(
+                            icon = style.icon,
+                            iconColor = style.color,
+                            tintedIcon = style.tinted,
+                            name = credential.label,
+                            meta = meta,
+                            mono = mono,
+                            selected = credential.id == selected.id,
+                            onClick = {},
+                        )
                     }
                 }
+                VLine(Skerry.colors.line)
+                MockSecretDetail(selected, mono)
             }
-            Txt(meta, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.padding(top = 6.dp))
         }
-        trailing()
     }
 }
 
+/** Detail panel of the mock selection: the same fact rows, key block and sections as the live one. */
 @Composable
-private fun CopyButton() {
-    Box(Modifier.size(30.dp).clip(RoundedCornerShape(6.dp)).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(6.dp)), contentAlignment = Alignment.Center) {
-        Sym("content_copy", size = 16.sp, color = Skerry.colors.dim)
-    }
-}
-
-@Composable
-private fun KeyDetail(mono: FontFamily) {
-    Column(Modifier.width(340.dp).fillMaxHeight().background(Skerry.colors.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
-        Row(Modifier.padding(bottom = 18.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
-            Box(Modifier.size(40.dp).clip(RoundedCornerShape(9.dp)).background(Skerry.colors.cyan.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Sym("key", size = 21.sp, color = Skerry.colors.cyanBright)
-            }
-            Column {
-                Txt("id_ed25519", color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold)
-                Txt("ED25519 · 256-bit", color = Skerry.colors.dim, size = 11.5.sp)
-            }
-        }
+private fun MockSecretDetail(credential: Credential, mono: FontFamily) {
+    Column(Modifier.width(DETAIL_PANEL_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
+        DetailLabel(credential.label)
+        SecretFactRows(
+            typeLabel = "ED25519",
+            fingerprint = "SHA256:9pQk…dR2f",
+            secret = credential.secret,
+            usage = mockUsage(),
+            modifier = Modifier.padding(bottom = 16.dp),
+        )
         DetailLabel(stringResource(Res.string.vault_label_public_key))
         Box(Modifier.fillMaxWidth().padding(bottom = 16.dp).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Txt("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH8c3F1a2bQz9pK7mLwR0vNqz9pKmaya@skerry.dev", color = Skerry.colors.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
+            Txt("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP9k2RmXq7f0LcV8m1Zb4t6Yh3sJdQ1oNp5uWxK deploy@skerry", color = Skerry.colors.dim, size = 10.5.sp, font = mono, lineHeight = 16.sp)
         }
-        DetailLabel(stringResource(Res.string.vault_label_fingerprint))
-        Txt("SHA256:8c3F1a2bQz9pK7mLwR0vNqz9pK", color = Skerry.colors.textBright, size = 11.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
-        DetailLabel("Used by · 6 hosts")
+        DetailLabel(stringResource(Res.string.vault_used_by, 2))
         Row(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             HostPill("prod-web-01", mono)
             HostPill("prod-web-02", mono)
-        }
-        Row(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            HostPill("db-master", mono)
-            HostPill("homelab-pi", mono)
-            HostPill("+2", mono, dim = true)
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PrimaryButton(stringResource(Res.string.vault_copy_public_key), onClick = {}, icon = "content_copy", modifier = Modifier.fillMaxWidth())
@@ -1302,6 +1220,8 @@ private fun KeyDetail(mono: FontFamily) {
                 GhostButton(stringResource(Res.string.vault_delete), onClick = {}, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
             }
         }
+        SecretSectionLabel(encryptionSectionTitle())
+        SecretEncryptionRows(syncing = true)
     }
 }
 

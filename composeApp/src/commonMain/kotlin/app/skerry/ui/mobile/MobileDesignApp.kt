@@ -449,7 +449,7 @@ private fun MobileChrome(
                     // with no user name at all (what an imported `.rdp` file usually is) has nothing
                     // to prompt for and opens its form; anything else asks. A team-shared profile
                     // arrives with its credential link stripped and has no other way in.
-                    val password = credentials?.find(host.credentialId)?.toRdpPassword()
+                    val password = credentials?.useForConnect(host.credentialId)?.toRdpPassword()
                     when {
                         password != null -> openMobileRdp(sessions, state, hostManager, host, password)
                         host.username.isBlank() -> state.openEditConn(host)
@@ -459,7 +459,7 @@ private fun MobileChrome(
                 } else if (host.connectionType.isVnc) {
                     // VNC opens a framebuffer screen (not a terminal). A stored password is used directly;
                     // "ask every time" (no bound secret) prompts for one first.
-                    val cred = credentials?.find(host.credentialId)
+                    val cred = credentials?.useForConnect(host.credentialId)
                     if (cred != null) {
                         sessions?.openVnc(
                             host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
@@ -484,11 +484,13 @@ private fun MobileChrome(
                             existing?.let { sessions.close(it.id) }
                             // ProxyJump chain first — resolved before the password prompt so a broken
                             // chain surfaces immediately, not after the user typed a password.
-                            when (val chain = resolveJumpChain(host, { id -> hostManager?.find(id) }, { id -> credentials?.find(id) })) {
+                            // Jump hops go through useForConnect too — see the desktop shell.
+                            when (val chain = resolveJumpChain(host, { id -> hostManager?.find(id) }, { id -> credentials?.useForConnect(id) })) {
                                 is JumpChainResolution.Unavailable -> jumpProblem = chain.problem
                                 is JumpChainResolution.Resolved -> {
                                     // Single-level resolve: host → keychain secret by credentialId → SshAuth; no binding → password.
-                                    val credential = credentials?.find(host.credentialId)
+                                    // useForConnect stamps "last used" on the secret, as the desktop path does.
+                                    val credential = credentials?.useForConnect(host.credentialId)
                                     when {
                                         // Telnet/Serial have no auth — connect immediately, no password
                                         // prompt. SSH and Mosh resolve a credential or ask for a password.

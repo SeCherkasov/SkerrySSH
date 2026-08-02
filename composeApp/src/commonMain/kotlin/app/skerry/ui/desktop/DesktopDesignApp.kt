@@ -690,7 +690,9 @@ private fun DesktopChrome(
     // opens — so a password prompt in between can't act on a stale chain.
     fun openResolved(target: PendingAuth, auth: SshAuth) {
         val jump = when (
-            val chain = resolveJumpChain(target.host, { id -> hostManager?.find(id) }, { id -> credentials?.find(id) })
+            // A jump hop authenticates with its own secret — resolved through useForConnect so the
+            // key of a host reached only as a bastion doesn't read as "never used".
+            val chain = resolveJumpChain(target.host, { id -> hostManager?.find(id) }, { id -> credentials?.useForConnect(id) })
         ) {
             is JumpChainResolution.Unavailable -> { jumpProblem = chain.problem; return }
             is JumpChainResolution.Resolved -> chain.jump
@@ -750,7 +752,7 @@ private fun DesktopChrome(
                     // straight away; without one the prompt asks for it, exactly as VNC does. A
                     // profile with no user name at all (what an imported `.rdp` file usually is)
                     // has nothing to prompt for, so its form opens instead.
-                    val password = credentials?.find(host.credentialId)?.toRdpPassword()
+                    val password = credentials?.useForConnect(host.credentialId)?.toRdpPassword()
                     when {
                         password != null -> openRdpWith(host, password)
                         host.username.isBlank() -> state.openEditModal(host)
@@ -760,7 +762,7 @@ private fun DesktopChrome(
                 } else if (host.connectionType.isVnc) {
                     // VNC opens a framebuffer tab (not a terminal). A stored password is used directly;
                     // "ask every time" (no bound secret) prompts for one first. No ProxyJump/host-key path.
-                    val cred = credentials?.find(host.credentialId)
+                    val cred = credentials?.useForConnect(host.credentialId)
                     if (cred != null) {
                         state.recordRecentHost(host.id)
                         sessions?.openVnc(

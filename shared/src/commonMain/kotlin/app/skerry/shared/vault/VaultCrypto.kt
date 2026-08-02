@@ -50,6 +50,14 @@ interface VaultCrypto {
     companion object {
         /** Empty AAD — no slot binding; the getter returns a fresh array (no shared mutable state). */
         val EMPTY_AAD: ByteArray get() = ByteArray(0)
+
+        /**
+         * Memory cost of the Argon2id master-key derivation, in MiB. A strength parameter of the
+         * implementation, published here for the one place that legitimately reports it — the Vault
+         * panel, which states how the secrets on screen are protected. The implementation derives its
+         * own limit from this constant, so the number the UI shows can't drift from the one in use.
+         */
+        const val KDF_MEMORY_MIB: Int = 64
     }
 
     /** New random salt for master-key derivation (length required by Argon2id). */
