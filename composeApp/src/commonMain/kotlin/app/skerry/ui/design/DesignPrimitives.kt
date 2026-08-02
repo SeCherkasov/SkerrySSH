@@ -245,7 +245,8 @@ fun Dot(color: Color, size: Int = 6, modifier: Modifier = Modifier) {
 /**
  * Titlebar/toolbar icon button: rounded [box]dp square. Material Symbols icon sized [icon], tinted
  * [tint]; [hoverTint] recolors the icon on hover (e.g. the window close cross turning white over
- * its red hover background), `null` keeps [tint].
+ * its red hover background), `null` keeps [tint]. [enabled] false dims the glyph and swallows the
+ * click, for rows where the action exists but has nothing to act on.
  */
 @Composable
 fun IconBtn(
@@ -258,6 +259,7 @@ fun IconBtn(
     hoverBg: Color = Skerry.colors.hover,
     hoverTint: Color? = null,
     tooltip: String? = null,
+    enabled: Boolean = true,
 ) {
     // Custom light hover background (dark theme): clickable's default indication gives a dark
     // ripple that's barely visible on a dark background, so we highlight with a light overlay instead.
@@ -267,11 +269,16 @@ fun IconBtn(
         modifier
             .size(box.dp)
             .clip(RoundedCornerShape(6.dp))
-            .background(if (hovered) hoverBg else Color.Transparent)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+            .background(if (hovered && enabled) hoverBg else Color.Transparent)
+            .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Sym(name, size = icon, color = if (hovered && hoverTint != null) hoverTint else tint)
+        val color = when {
+            !enabled -> Skerry.colors.faint
+            hovered && hoverTint != null -> hoverTint
+            else -> tint
+        }
+        Sym(name, size = icon, color = color)
         if (tooltip != null && hovered) HoverTooltip(tooltip)
     }
 }

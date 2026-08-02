@@ -185,6 +185,9 @@ fun main() {
         seedFakeHome()
         sessions?.setActiveView(SessionView.Sftp)
     }
+    // Assistant panel open over the live terminal (-Dskerry.screenshot.assistantPanel=true): checks
+    // that the pinned action row steps aside for the panel's own header.
+    if (System.getProperty("skerry.screenshot.assistantPanel", "false").toBoolean()) state.toggleAssistant()
     // A recording plays in its own tab, so it can't be reached through the rail: open one directly.
     if (viewName == "Player") sessions?.openPlayer("deploy.cast", seededCast())
     val knownHosts = if (live) seededKnownHosts() else null
@@ -216,6 +219,9 @@ fun main() {
         // Trash section with a seeded trash: the settings overlay can't show it (the mock graph has
         // no vault), so the list is rendered standalone against an in-memory vault.
         "trash" -> { { GateScreenPreview { TrashPreview() } } }
+        // Assistant panel with a seeded conversation: the feed's bubbles and command blocks can't be
+        // reached offscreen (they need a live answer), so the panel is rendered standalone.
+        "assistant" -> { { GateScreenPreview { AssistantPreview() } } }
         else -> { { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions, knownHosts = knownHosts, trustedCas = trustedCas, credentials = credentials, keyGenerator = keyGenerator, certificateInspector = certificateInspector, tunnels = tunnels, ai = ai, updates = updates, windowChrome = windowChrome) } }
     }
 
@@ -374,6 +380,56 @@ private class PreviewFileSource(private val item: FileItem, private val text: St
     override suspend fun stat(path: String): FileItem = item
     override suspend fun readFile(path: String, maxBytes: Long): ByteArray = text.encodeToByteArray()
     override suspend fun writeFile(path: String, data: ByteArray) = Unit
+}
+
+/**
+ * The assistant panel with a canned conversation, for visual review of the feed: an answer carrying
+ * a command block, a block holding several separately runnable commands, and a destructive command
+ * (which renders in the warning colour and asks twice before running).
+ */
+@Composable
+private fun AssistantPreview() {
+    val controller = remember {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        var reply = ""
+        val provider = object : app.skerry.shared.ai.AiProvider {
+            override fun chat(request: app.skerry.shared.ai.AiChatRequest): Flow<app.skerry.shared.ai.AiDelta> =
+                flow { emit(app.skerry.shared.ai.AiDelta(reply)) }
+            override suspend fun close() {}
+        }
+        app.skerry.ui.ai.SessionAssistantController(
+            app.skerry.shared.ai.AiPolicy.Balanced,
+            settings = { app.skerry.shared.ai.AiSettings(apiKey = "sk-demo") },
+            providerFactory = { provider },
+            scope = scope,
+        ).apply {
+            reply = "The journal is the largest single consumer: **5.9 GiB** in `/var/log/journal`, " +
+                "on a filesystem that is 87% full. Docker layers take another 21 GiB.\n" +
+                "```bash\njournalctl --vacuum-size=500M\ndocker system prune -af\n```"
+            ask("Which service is eating the disk?", outputs = emptyList())
+            reply = "21 GiB in `/var/lib/docker`, of which 12.4 GiB are dangling layers built on this " +
+                "host. Pruning frees roughly 12 GiB without touching running containers.\n" +
+                "```\ndocker image prune -a --filter \"until=168h\"\n```"
+            ask("And the docker layers?", outputs = emptyList())
+            // One block holding several commands: what a model does when asked for a list, and each
+            // line has to stay separately runnable.
+            reply = "These are the ones worth having:\n```\ntop\nhtop\nvmstat 1 5\n```"
+            ask("Give me the basic load commands", outputs = emptyList())
+            // A genuinely destructive one, so the preview actually shows the warning colour and the
+            // two-click arming the doc above promises.
+            reply = "That frees the rotated logs, but it deletes them outright — there is no undo.\n" +
+                "```\nrm -rf /var/log/*.gz\n```"
+            ask("Can I just delete the rotated logs?", outputs = listOf("# ls /var/log", "# du -sh /var/log"))
+        }
+    }
+    androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).fillMaxSize())
+        app.skerry.ui.ai.AssistantPanel(
+            controller = controller,
+            terminal = null,
+            modelLabel = "local · Qwen2.5 Coder 7B",
+        )
+    }
 }
 
 /**

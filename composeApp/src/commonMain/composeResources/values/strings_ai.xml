@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assistant_title">Assistant</string>
+    <string name="assistant_clear">Clear conversation</string>
+    <string name="assistant_thinking">Thinking…</string>
+    <string name="assistant_empty">Ask about this session: output, errors, the next step.</string>
+    <string name="assistant_explain_request">Explain the output above.</string>
+    <string name="assistant_ask_placeholder">Ask about this session…</string>
+    <string name="assistant_context_chip">context: %1$d</string>
+    <string name="assistant_context_title">RECENT OUTPUTS TO SEND</string>
+    <string name="assistant_context_off">Off</string>
+    <string name="assistant_policy_note">Destructive commands are never run without your click. Context sent: command output only — no keys, no vault.</string>
+    <string name="assistant_run">Run in session</string>
+    <string name="assistant_run_anyway">Run anyway</string>
+    <string name="assistant_confirm_run">Confirm run</string>
+    <string name="assistant_no_answer">The model returned nothing. Ask again or add more context.</string>
+    <string name="assistant_attached">outputs sent: %1$d</string>
+    <string name="assistant_copy">Copy</string>
+    <string name="assistant_edit">Edit</string>
+    <string name="shell_tip_assistant">Assistant</string>
+</resources>

@@ -161,6 +161,12 @@ private const val HOST_DOUBLE_CLICK_MS = 400L
 private const val NO_PRESS = Long.MIN_VALUE / 2
 
 /**
+ * Height of the sidebar's bottom strip (the "New connection" button): a fixed height keeps the
+ * button box the same size whatever the button label's language does to its width.
+ */
+private val SIDEBAR_FOOTER_HEIGHT = 48.dp
+
+/**
  * Host-row connect click behavior from Settings → Terminal → Behavior: single click connects
  * directly, double click requires a second click. Desktop-only (mobile always connects on tap).
  *
@@ -171,6 +177,7 @@ private const val NO_PRESS = Long.MIN_VALUE / 2
  * - Keyboard activation (Enter/Space) connects directly — the double-click requirement applies to
  *   the mouse only, so keyboard-only users can always connect.
  */
+
 @Composable
 private fun Modifier.hostConnectClick(
     onClick: () -> Unit,
@@ -428,9 +435,8 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
             }
         }
         HLine()
-        // Fixed to the AI bar's idle height so both bottom strips share one top line.
         val importScope = rememberCoroutineScope()
-        Box(Modifier.height(BOTTOM_BAR_HEIGHT).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.height(SIDEBAR_FOOTER_HEIGHT).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 // The form opens on this section's protocols: a remote desktop is never created from
                 // the terminal list, and a shell never from the desktops list.

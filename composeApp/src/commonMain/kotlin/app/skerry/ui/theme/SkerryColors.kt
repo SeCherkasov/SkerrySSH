@@ -77,6 +77,9 @@ data class SkerryColors(
     val cyan20: Color get() = cyan.copy(alpha = 0.20f)
     val amberSoft: Color get() = amber.copy(alpha = 0.14f)
 
+    /** Teal tint behind assistant accents (model badge, the spark on the ask row). */
+    val tealSoft: Color get() = teal.copy(alpha = 0.14f)
+
     // Badge fills
     val strictBg: Color get() = sunset.copy(alpha = 0.16f)
     val devBg: Color get() = moss.copy(alpha = 0.16f)

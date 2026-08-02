@@ -47,6 +47,13 @@ sealed interface AiNotice {
     /** The reply was prose or nothing usable; the UI shows a fixed localized "not a command" message. */
     data object Rejected : AiNotice
 
+    /**
+     * The model returned an empty reply. Distinct from [Rejected]: the session assistant asks
+     * free-form questions, so "that is not a command" would describe something that didn't happen
+     * and tell the user to rephrase in a way that changes nothing.
+     */
+    data object NoAnswer : AiNotice
+
     /** Provider/transport failure; the UI resolves the localized text (see `aiFailureMessage`). */
     data class Error(val failure: AiFailure) : AiNotice
 }
@@ -152,7 +159,7 @@ class TerminalAiController(
      * [explanation]; it is never parsed as a command or offered for execution.
      */
     fun explain(output: String) {
-        val context = clampContext(output)
+        val context = clampAiContext(output)
         if (busy || context.isEmpty() || !decision.aiEnabled) return
         notice = null
         pending = null
@@ -197,13 +204,6 @@ class TerminalAiController(
                 if (gen == generation) busy = false
             },
         )
-    }
-
-    /** Keep the tail of long output within [EXPLAIN_CONTEXT_LIMIT]; the most recent lines matter most. */
-    private fun clampContext(output: String): String {
-        val trimmed = output.trim()
-        if (trimmed.length <= EXPLAIN_CONTEXT_LIMIT) return trimmed
-        return "…" + trimmed.substring(trimmed.length - EXPLAIN_CONTEXT_LIMIT)
     }
 
     /**
@@ -267,11 +267,8 @@ class TerminalAiController(
         /** Explanation temperature: a touch higher than commands for readable prose, still low for small local models. */
         const val EXPLAIN_TEMPERATURE = 0.3
 
-        /**
-         * Max characters of terminal output sent for an explanation. The tail is kept (recent output
-         * is what the user is asking about), bounding request size for both cloud and small local models.
-         */
-        const val EXPLAIN_CONTEXT_LIMIT = 6000
+        /** Max characters of terminal output sent for an explanation; see [clampAiContext]. */
+        const val EXPLAIN_CONTEXT_LIMIT = AI_CONTEXT_LIMIT
 
         /**
          * Prompt that turns a chunk of terminal output into a plain-language explanation. [language]

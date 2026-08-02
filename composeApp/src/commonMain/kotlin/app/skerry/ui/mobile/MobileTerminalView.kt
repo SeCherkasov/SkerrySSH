@@ -568,7 +568,10 @@ private fun MobileAiBarInput(controller: TerminalAiController, terminal: Termina
                     controller.notice != null -> when (val notice = controller.notice!!) {
                         is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         is AiNotice.Ask -> Txt(notice.question, color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        AiNotice.Rejected -> Txt(stringResource(Res.string.term_ai_not_a_command), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        // The bar only ever asks for a command, so an empty reply is the same
+                        // "nothing usable" outcome as prose — one message covers both.
+                        AiNotice.Rejected, AiNotice.NoAnswer ->
+                            Txt(stringResource(Res.string.term_ai_not_a_command), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = Skerry.colors.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     else -> {
