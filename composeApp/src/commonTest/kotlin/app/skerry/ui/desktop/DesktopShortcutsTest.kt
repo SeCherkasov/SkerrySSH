@@ -118,7 +118,7 @@ class DesktopShortcutsTest {
         assertEquals(DesktopShortcut.SyncPanes, match(meta = true, key = Key.I))
         assertEquals(DesktopShortcut.OpenSftp, match(meta = true, key = Key.E))
         assertEquals(DesktopShortcut.Lock, match(meta = true, key = Key.L))
-        assertEquals(DesktopShortcut.FocusAiBar, match(meta = true, key = Key.Slash))
+        assertEquals(DesktopShortcut.OpenAssistant, match(meta = true, key = Key.Slash))
     }
 
     @Test
@@ -128,7 +128,7 @@ class DesktopShortcutsTest {
         assertEquals(DesktopShortcut.SyncPanes, match(ctrl = true, shift = true, key = Key.I))
         assertEquals(DesktopShortcut.OpenSftp, match(ctrl = true, shift = true, key = Key.E))
         assertEquals(DesktopShortcut.Lock, match(ctrl = true, shift = true, key = Key.L))
-        assertEquals(DesktopShortcut.FocusAiBar, match(ctrl = true, shift = true, key = Key.Slash))
+        assertEquals(DesktopShortcut.OpenAssistant, match(ctrl = true, shift = true, key = Key.Slash))
     }
 
     @Test

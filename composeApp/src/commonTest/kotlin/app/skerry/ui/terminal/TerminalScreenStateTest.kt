@@ -256,6 +256,43 @@ class TerminalScreenStateTest {
         assertEquals("root@140722:~# cd /var/log", lastCommandBlock("root@140722:~# cd /var/log\nroot@140722:~#"))
     }
 
+    // --- lastCommandBlocks (context attached to an assistant question) ---
+
+    @Test
+    fun `lastCommandBlocks returns the most recent blocks, newest last`() {
+        val screen = listOf(
+            "Last login: Fri Jul 24 11:51:03 2026",
+            "root@140722:~# df -h /",
+            "/dev/sda1        50G   42G  6.4G  87% /",
+            "root@140722:~# uptime",
+            " 12:21:14 up 129 days,  load average: 0.48",
+            "root@140722:~#",
+        ).joinToString("\n")
+
+        val blocks = lastCommandBlocks(screen, 2)
+
+        assertEquals(2, blocks.size)
+        assertEquals("root@140722:~# df -h /\n/dev/sda1        50G   42G  6.4G  87% /", blocks[0])
+        assertEquals("root@140722:~# uptime\n 12:21:14 up 129 days,  load average: 0.48", blocks[1])
+    }
+
+    @Test
+    fun `lastCommandBlocks caps at what the screen holds and never includes the banner`() {
+        val screen = "Welcome to Ubuntu\nroot@140722:~# uptime\n load average: 0.48\nroot@140722:~#"
+
+        val blocks = lastCommandBlocks(screen, 5)
+
+        assertEquals(listOf("root@140722:~# uptime\n load average: 0.48"), blocks)
+    }
+
+    @Test
+    fun `lastCommandBlocks returns nothing for a zero count or an unusable prompt`() {
+        val screen = "root@140722:~# uptime\n load average: 0.48\nroot@140722:~#"
+
+        assertEquals(emptyList(), lastCommandBlocks(screen, 0))
+        assertEquals(emptyList(), lastCommandBlocks("total output here\n$ ls\n$", 2))
+    }
+
     @Test
     fun `lastOutput reads the last command block from the live screen`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))

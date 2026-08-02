@@ -3,7 +3,9 @@ package app.skerry.ui.design
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -21,7 +23,8 @@ import app.skerry.ui.theme.Skerry
 /**
  * Compact chip button (6dp corner radius, border, 12dp horizontal padding). Two variants:
  * outline (default — transparent background + [Skerry.colors.cyan14] border) and filled ([filled] —
- * tinted background/border from [color]; disabled state is dimmed).
+ * tinted background/border from [color]; disabled state is dimmed). An optional [icon] glyph sits
+ * before the label, for the chips whose action needs a symbol of its own (run, warn).
  */
 @Composable
 fun ChipButton(
@@ -34,9 +37,11 @@ fun ChipButton(
     size: TextUnit = 11.5.sp,
     weight: FontWeight = FontWeight.Normal,
     verticalPadding: Dp = 6.dp,
+    icon: String? = null,
 ) {
     val background = if (filled) (if (enabled) color.copy(alpha = 0.16f) else Skerry.colors.overlaySoft) else Color.Transparent
     val border = if (filled) (if (enabled) color.copy(alpha = 0.5f) else Skerry.colors.line) else Skerry.colors.cyan14
+    val foreground = if (enabled) color else Skerry.colors.faint
     Box(
         modifier
             .clip(RoundedCornerShape(6.dp))
@@ -46,6 +51,13 @@ fun ChipButton(
             .padding(horizontal = 12.dp, vertical = verticalPadding),
         contentAlignment = Alignment.Center,
     ) {
-        Txt(label, color = if (enabled) color else Skerry.colors.faint, size = size, weight = weight)
+        if (icon == null) {
+            Txt(label, color = foreground, size = size, weight = weight)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Sym(icon, size = size, color = foreground)
+                Txt(label, color = foreground, size = size, weight = weight)
+            }
+        }
     }
 }

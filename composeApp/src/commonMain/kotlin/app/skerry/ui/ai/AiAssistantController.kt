@@ -20,8 +20,12 @@ import app.skerry.shared.ai.local.LocalModelCatalog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 
-/** A single turn in the assistant conversation (for rendering the chat feed). */
-data class AiTurn(val role: AiRole, val text: String)
+/**
+ * A single turn in the assistant conversation (for rendering the chat feed). [outputs] is how many
+ * command outputs were attached to a user turn as context — the session panel shows it so what left
+ * the machine is visible in the feed; quick chat has no session context and leaves it at zero.
+ */
+data class AiTurn(val role: AiRole, val text: String, val outputs: Int = 0)
 
 /**
  * UI controller for the AI assistant: holds [AiSettings] (provider choice + BYOK + local model),
@@ -95,8 +99,12 @@ class AiAssistantController(
      */
     var uiLanguageProvider: () -> String = { "English" }
 
-    /** Reloads settings from storage (after vault unlock). */
-    fun refresh() { settings = reload() }
+    /**
+     * Reloads settings from storage (after vault unlock, and when live sync brings another device's
+     * edit). Goes through the same endpoint check as a local change: a provider or key that arrives
+     * over sync moves the conversations to a different server just as surely as one typed here.
+     */
+    fun refresh() { applySettings(reload()) }
 
     /**
      * Builds a terminal AI bar controller for a per-host [policy], sharing provider/scope/settings
@@ -111,6 +119,29 @@ class AiAssistantController(
             responseLanguage = { uiLanguageProvider() },
             localInstalled = localInstalled,
         )
+
+    /**
+     * Builds the assistant-panel controller for a session on a host with [policy], sharing
+     * provider/scope/settings with this assistant (one BYOK key per app). Settings are read lazily,
+     * so they are fresh after [refresh].
+     */
+    fun sessionController(policy: AiPolicy): SessionAssistantController =
+        SessionAssistantController(
+            policy,
+            settings = { settings },
+            providerFactory = providerFactory,
+            scope = scope,
+            responseLanguage = { uiLanguageProvider() },
+            localInstalled = localInstalled,
+        )
+
+    /**
+     * The panel conversations, one per open pane. Lives here rather than in the terminal screen's
+     * composition: the panel leaves composition whenever the user opens SFTP, the vault or another
+     * section, and a conversation must survive that — it belongs to the pane, not to the screen that
+     * happened to be on top. [close] on a provider change is what stops the requests it holds.
+     */
+    internal val sessionAssistants: SessionAssistantStore = SessionAssistantStore { sessionController(it) }
 
     /** Saves BYOK fields (the key is encrypted in the vault by [persist]); provider choice is untouched. */
     fun save(apiKey: String, model: String, baseUrl: String) {
@@ -135,7 +166,21 @@ class AiAssistantController(
 
     private fun persistSettings(next: AiSettings) {
         persist(next)
+        applySettings(next)
+    }
+
+    /**
+     * Adopt [next] and, when it points somewhere else, end the panel conversations. A conversation is
+     * tied to the endpoint that answered it: switching the provider (or turning AI off entirely) must
+     * not leave a request streaming from the old one, nor replay that history to the new one.
+     */
+    private fun applySettings(next: AiSettings) {
+        val endpointChanged = next.provider != settings.provider ||
+            next.apiKey != settings.apiKey ||
+            next.baseUrl != settings.baseUrl ||
+            next.localModelId != settings.localModelId
         settings = next
+        if (endpointChanged) sessionAssistants.close()
     }
 
     /**
@@ -160,9 +205,12 @@ class AiAssistantController(
         job = runner.launch(
             endpoint = route.endpoint,
             messages = messages,
-            onDelta = { streaming = it },
-            onComplete = { turns.add(AiTurn(AiRole.ASSISTANT, it)) },
-            onError = { error = it },
+            // Guarded like the finally below: a cancel only *requests* cancellation, so a stream
+            // already past its last suspension point still runs these — and would re-add the reply
+            // to a feed [clearConversation] just emptied.
+            onDelta = { if (gen == generation) streaming = it },
+            onComplete = { if (gen == generation) turns.add(AiTurn(AiRole.ASSISTANT, it)) },
+            onError = { if (gen == generation) error = it },
             onFinally = {
                 if (gen == generation) {
                     streaming = null

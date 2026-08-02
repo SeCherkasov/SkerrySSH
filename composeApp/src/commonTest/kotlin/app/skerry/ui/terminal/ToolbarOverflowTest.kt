@@ -35,6 +35,15 @@ class ToolbarOverflowTest {
     }
 
     @Test
+    fun `the assistant button costs a slot only while it is shown`() {
+        // Hidden for a host with AI off, so its slot must not be reserved: the row would collapse
+        // one action early for every such host.
+        val off = overflowedActions(available = 500.dp, syncShown = false, assistantShown = false)
+        val on = overflowedActions(available = 500.dp, syncShown = false, assistantShown = true)
+        assertEquals(off.size + 1, on.size)
+    }
+
+    @Test
     fun `a pane narrower than its own header hides everything that can be hidden`() {
         val hidden = overflowedActions(available = 150.dp, syncShown = true)
         // Add-pane, sync and power are not in the enum: those three never leave the row.

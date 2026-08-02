@@ -183,7 +183,7 @@
     <string name="settings_kb_focus_pane">聚焦该方向的窗格</string>
     <string name="settings_kb_next_prev_tab">下一个 / 上一个标签页</string>
     <string name="settings_kb_select_tab_number">按数字选择标签页</string>
-    <string name="settings_kb_focus_ai">聚焦 AI 栏</string>
+    <string name="settings_kb_open_assistant">打开助手</string>
     <string name="settings_kb_open_sftp">打开 SFTP</string>
     <string name="settings_kb_lock">锁定 Skerry</string>
     <string name="settings_kb_accept_autocomplete">接受自动补全建议</string>

@@ -28,8 +28,8 @@ sealed interface DesktopShortcut {
     /** Open search over the focused terminal's output (⌘F / Ctrl+Shift+F). */
     data object FindInTerminal : DesktopShortcut
 
-    /** Focus the AI bar's input field (⌘/ / Ctrl+Shift+/). */
-    data object FocusAiBar : DesktopShortcut
+    /** Open the assistant panel and focus its input (⌘/ / Ctrl+Shift+/). */
+    data object OpenAssistant : DesktopShortcut
 
     /** Lock the vault (⌘L / Ctrl+Shift+L). */
     data object Lock : DesktopShortcut
@@ -98,7 +98,7 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
         Key.S -> DesktopShortcut.SnippetPalette
         Key.R -> DesktopShortcut.ToggleRecording
         Key.P -> DesktopShortcut.PlayRecording
-        Key.Slash -> DesktopShortcut.FocusAiBar
+        Key.Slash -> DesktopShortcut.OpenAssistant
         // Arrows under the app modifier walk the pane grid; plain and Ctrl/Shift+arrow stay with the
         // terminal (history, cursor, word-wise movement and selection). Unlike the rest of this set,
         // the match is acted on by the grid rather than the root handler — see [paneGridDirection].

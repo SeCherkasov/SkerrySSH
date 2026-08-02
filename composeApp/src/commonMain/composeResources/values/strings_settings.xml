@@ -183,7 +183,7 @@
     <string name="settings_kb_focus_pane">Focus the pane in that direction</string>
     <string name="settings_kb_next_prev_tab">Next / previous tab</string>
     <string name="settings_kb_select_tab_number">Select tab by number</string>
-    <string name="settings_kb_focus_ai">Focus AI bar</string>
+    <string name="settings_kb_open_assistant">Open assistant</string>
     <string name="settings_kb_open_sftp">Open SFTP</string>
     <string name="settings_kb_lock">Lock Skerry</string>
     <string name="settings_kb_accept_autocomplete">Accept autocomplete suggestion</string>

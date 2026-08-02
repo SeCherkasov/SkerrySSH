@@ -305,6 +305,12 @@ class DesktopDesignState(
     var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
 
     /**
+     * Whether the assistant panel is open beside the terminal. Session-scoped like the info panel,
+     * and not persisted: the assistant is opened for a question, not left standing.
+     */
+    var assistantPanel: Boolean by mutableStateOf(false); private set
+
+    /**
      * View state of the snippet library (search, category chip, collapsed sections). Lives here so
      * leaving the Snippets section and coming back doesn't reset the view; not persisted across
      * restarts (see [app.skerry.ui.snippet.SnippetLibraryState]).
@@ -584,13 +590,29 @@ class DesktopDesignState(
     fun toggleRemotePanel() { remotePanelHidden = !remotePanelHidden }
     fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
 
-    // Signal to focus the AI bar's input (hotkey Cmd// Ctrl+Shift+/). SharedFlow rather than a counter
-    // state: it does not replay to a new subscriber, so remounting the AI bar (tab switch) can't steal
-    // focus retroactively — focus is requested only on a NEW event. extraBufferCapacity=1 so tryEmit
-    // isn't dropped when no collector is active at the moment of the keypress.
-    private val _aiBarFocusRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val aiBarFocusRequests: SharedFlow<Unit> = _aiBarFocusRequests
-    fun requestAiBarFocus() { _aiBarFocusRequests.tryEmit(Unit) }
+    fun toggleAssistant() { assistantPanel = !assistantPanel }
+
+    /**
+     * Hotkey (Cmd+/ or Ctrl+Shift+/): open the assistant panel and put the caret in its input. Opens
+     * the panel rather than toggling it — the shortcut means "ask something", and hitting it with the
+     * panel already open must not close it under the user.
+     */
+    fun openAssistant() {
+        assistantPanel = true
+        assistantFocusPending = true
+    }
+
+    /**
+     * A focus request the assistant's input has not taken yet. A flag rather than the one-shot
+     * [SharedFlow] the always-mounted AI bar used: the chord usually fires while the panel is closed,
+     * so there is no collector at that moment and an emitted event would simply be dropped — the
+     * panel would open with the caret still in the terminal. The ask row clears it via
+     * [consumeAssistantFocus] once it has the focus, so a later remount can't take it retroactively.
+     */
+    var assistantFocusPending: Boolean by mutableStateOf(false); private set
+
+    /** The ask row took the pending focus request (see [assistantFocusPending]). */
+    fun consumeAssistantFocus() { assistantFocusPending = false }
 
     // Hotkeys for the toolbar buttons that own their own state (snippet palette popup, recording
     // toggle, file picker). Same one-shot signal as the AI bar above rather than a flag on the
