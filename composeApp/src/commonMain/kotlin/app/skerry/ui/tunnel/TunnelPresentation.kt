@@ -32,7 +32,7 @@ import app.skerry.ui.theme.Skerry
 
 /**
  * Tunnel direction presentation (badge/label/colors) — single source of truth for desktop
- * ([TunnelsView]) and mobile (`MobilePortsView`), following [app.skerry.ui.forward.forwardTypeLabel].
+ * ([TunnelsView]) and mobile (`MobilePortsView`).
  */
 
 /** Badge label for the tunnel direction: `-L`→LOCAL, `-R`→REMOTE, `-D`→SOCKS. */

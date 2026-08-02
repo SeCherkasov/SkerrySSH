@@ -29,7 +29,6 @@
     <string name="settings_ai_prompt_placeholder_needs_key">Save an API key first</string>
     <string name="settings_ai_sending">Sending…</string>
     <string name="settings_ai_ask">Ask</string>
-    <string name="settings_ai_mock_subtitle">Where AI runs. Default is on-device; each connection can override.</string>
     <string name="settings_ai_default_provider">Default AI provider</string>
     <string name="settings_ai_default_provider_desc">Used when a connection has no override.</string>
     <string name="settings_ai_provider_device">On this device</string>

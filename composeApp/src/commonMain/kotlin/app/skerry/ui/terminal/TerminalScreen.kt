@@ -524,7 +524,7 @@ fun TerminalScreen(
     fun filePathUnderPos(pos: TerminalPos): TextLinkSpan? {
         if (onOpenPath == null) return null
         val row = state.screen.getOrNull(pos.row) ?: return null
-        return rowFilePathSpans(row).firstOrNull { pos.col >= it.start && pos.col < it.endExclusive }
+        return filePathSpanAt(row, pos.col)
     }
 
     // Recomputes both Ctrl+hover affordances (hand cursor, path underline) for [pos]. Called on

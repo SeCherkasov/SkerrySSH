@@ -21,7 +21,6 @@
     <string name="share_fail_network">The relay is unreachable.</string>
     <string name="share_fail_rejected">The server refused the share.</string>
     <string name="share_fail_server">The server failed to relay the session.</string>
-    <string name="share_typing">%1$s is typing…</string>
     <string name="share_control_wants">%1$s wants to type</string>
     <string name="share_grant">Allow</string>
     <string name="share_deny">Deny</string>

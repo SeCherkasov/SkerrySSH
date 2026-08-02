@@ -21,7 +21,6 @@
     <string name="share_fail_network">Релей недоступен.</string>
     <string name="share_fail_rejected">Сервер отклонил запрос.</string>
     <string name="share_fail_server">Сервер не смог передать сессию.</string>
-    <string name="share_typing">%1$s печатает…</string>
     <string name="share_control_wants">%1$s просит управление</string>
     <string name="share_grant">Разрешить</string>
     <string name="share_deny">Отклонить</string>

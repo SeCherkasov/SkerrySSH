@@ -24,7 +24,6 @@
     <string name="conn_subtitle_new_desktop">Add a remote desktop. Its password is encrypted with your master password.</string>
     <string name="nav_tab_desktops">Desktops</string>
     <string name="rd_screen_title">Remote desktops</string>
-    <string name="rd_panel_title">Session</string>
     <string name="rd_panel_hide">Hide the panel</string>
     <string name="rd_panel_show">Show the panel</string>
     <string name="rd_screenshot">Screenshot</string>

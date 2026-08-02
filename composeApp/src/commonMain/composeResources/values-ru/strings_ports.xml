@@ -1,6 +1,5 @@
 <resources>
     <string name="ports_port_forwarding">Проброс портов</string>
-    <string name="ports_saved_tunnels_subtitle">Сохранённые туннели — локальные, обратные и динамические (SOCKS) пробросы.</string>
     <string name="ports_new_tunnel">Новый туннель</string>
     <string name="ports_no_tunnels_yet">Пока нет туннелей</string>
     <string name="ports_add_tunnel_right">Добавьте туннель справа →</string>
@@ -28,10 +27,6 @@
     <string name="ports_no_saved_hosts">Нет сохранённых хостов</string>
     <string name="ports_via">через %1$s</string>
     <string name="ports_col_type">ТИП</string>
-    <string name="ports_col_source">ИСТОЧНИК</string>
-    <string name="ports_col_destination">НАЗНАЧЕНИЕ</string>
-    <string name="ports_col_via_host">ЧЕРЕЗ ХОСТ</string>
-    <string name="ports_col_active">АКТИВЕН</string>
     <string name="ports_remove_confirm_title">Удалить «%1$s»?</string>
     <string name="ports_remove_active_message">Туннель активен. Он будет отключён и удалён — отменить нельзя.</string>
     <string name="ports_remove_inactive_message">Сохранённый туннель будет удалён. Отменить нельзя.</string>
@@ -53,7 +48,6 @@
     <string name="ports_service_port">порт %1$d</string>
     <string name="ports_pick_host_to_scan">Выберите хост для сканирования</string>
     <string name="ports_open_in_browser">Открыть в браузере</string>
-    <string name="ports_close">Закрыть</string>
     <string name="ports_tunnels">Туннели</string>
     <string name="ports_col_name">ИМЯ</string>
     <string name="ports_col_listen">СЛУШАЕТ</string>

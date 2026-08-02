@@ -159,11 +159,11 @@ class TerminalFilePathsTest {
     }
 
     @Test
-    fun `filePathAt returns the path only under its columns`() {
+    fun `filePathSpanAt returns the path only under its columns`() {
         val cells = row("cat /etc/hosts")
-        assertNull(filePathAt(cells, 0))
-        assertEquals("/etc/hosts", filePathAt(cells, 4))
-        assertEquals("/etc/hosts", filePathAt(cells, cells.lastIndex))
+        assertNull(filePathSpanAt(cells, 0))
+        assertEquals("/etc/hosts", filePathSpanAt(cells, 4)?.uri)
+        assertEquals("/etc/hosts", filePathSpanAt(cells, cells.lastIndex)?.uri)
     }
 
     @Test
@@ -176,7 +176,7 @@ class TerminalFilePathsTest {
         }
         val span = rowFilePathSpans(cells).single()
         assertEquals(3, span.start)
-        assertEquals("/etc/hosts", filePathAt(cells, 3))
+        assertEquals("/etc/hosts", filePathSpanAt(cells, 3)?.uri)
     }
 
     @Test
