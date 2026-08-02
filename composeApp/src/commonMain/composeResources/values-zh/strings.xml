@@ -34,7 +34,6 @@
 
     <!-- 底部导航（移动端） -->
     <string name="nav_tab_hosts">主机</string>
-    <string name="nav_tab_snippets">片段</string>
     <string name="nav_tab_vault">保险库</string>
     <string name="nav_tab_more">更多</string>
 

@@ -24,7 +24,6 @@
     <string name="conn_subtitle_new_desktop">添加远程桌面。其密码将使用主密码加密。</string>
     <string name="nav_tab_desktops">桌面</string>
     <string name="rd_screen_title">远程桌面</string>
-    <string name="rd_panel_title">会话</string>
     <string name="rd_panel_hide">隐藏面板</string>
     <string name="rd_panel_show">显示面板</string>
     <string name="rd_screenshot">屏幕截图</string>

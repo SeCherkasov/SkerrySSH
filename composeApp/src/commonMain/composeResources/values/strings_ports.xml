@@ -1,6 +1,5 @@
 <resources>
     <string name="ports_port_forwarding">Port forwarding</string>
-    <string name="ports_saved_tunnels_subtitle">Saved tunnels — local, remote and dynamic (SOCKS) forwards.</string>
     <string name="ports_new_tunnel">New tunnel</string>
     <string name="ports_no_tunnels_yet">No tunnels yet</string>
     <string name="ports_add_tunnel_right">Add a tunnel on the right →</string>
@@ -28,10 +27,6 @@
     <string name="ports_no_saved_hosts">No saved hosts</string>
     <string name="ports_via">via %1$s</string>
     <string name="ports_col_type">TYPE</string>
-    <string name="ports_col_source">SOURCE</string>
-    <string name="ports_col_destination">DESTINATION</string>
-    <string name="ports_col_via_host">VIA HOST</string>
-    <string name="ports_col_active">ACTIVE</string>
     <string name="ports_remove_confirm_title">Remove \"%1$s\"?</string>
     <string name="ports_remove_active_message">Active tunnel. It will be disconnected and deleted — can't be undone.</string>
     <string name="ports_remove_inactive_message">This saved tunnel is deleted. This can't be undone.</string>
@@ -53,7 +48,6 @@
     <string name="ports_service_port">port %1$d</string>
     <string name="ports_pick_host_to_scan">Pick a host to scan</string>
     <string name="ports_open_in_browser">Open in browser</string>
-    <string name="ports_close">Close</string>
     <string name="ports_tunnels">Tunnels</string>
     <string name="ports_col_name">NAME</string>
     <string name="ports_col_listen">LISTEN</string>

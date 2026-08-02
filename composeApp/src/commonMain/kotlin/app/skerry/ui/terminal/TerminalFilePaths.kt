@@ -125,9 +125,9 @@ internal fun rowFilePathSpans(row: List<TermCell>): List<TextLinkSpan> {
     }
 }
 
-/** The file path under column [col] in [row], or `null`. Used for Ctrl+click hit-testing. */
-internal fun filePathAt(row: List<TermCell>, col: Int): String? =
-    rowFilePathSpans(row).firstOrNull { col >= it.start && col < it.endExclusive }?.uri
+/** The file-path span under column [col] in [row], or `null`. Used for Ctrl+click hit-testing. */
+internal fun filePathSpanAt(row: List<TermCell>, col: Int): TextLinkSpan? =
+    rowFilePathSpans(row).firstOrNull { col >= it.start && col < it.endExclusive }
 
 /**
  * The path a touch selection stands for, or `null`. Only a selection that is exactly one path
