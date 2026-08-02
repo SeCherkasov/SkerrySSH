@@ -643,6 +643,9 @@ class MainActivity : FragmentActivity() {
             snippets.reload()
             runbooks.reload()
             tunnels.reload()
+            // Tunnels flagged for autostart come up here and only here: the other reload sites run
+            // on every synced change, and raising there would fight the user's own toggles.
+            tunnels.startAutostart()
             knownHosts.refresh()
             // Trash retention is applied on unlock too (desktop parity): waiting for the user to
             // open the Trash screen would keep an expired secret in the vault indefinitely.

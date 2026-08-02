@@ -306,6 +306,203 @@ class TunnelManagerTest {
     }
 
     @Test
+    fun `flipping autostart through a draft keeps every other field`() = runTest {
+        // What the autostart list does on a toggle: round-trip the saved tunnel through a draft and
+        // change one flag. A field dropped from `toDraft` would silently rewrite the tunnel.
+        val store = FakeTunnelStore()
+        val manager = managerWith(FakeTunnelTransport(), store)
+        val id = manager.save(localDraft(label = "web"))
+        val before = manager.find(id)!!.tunnel
+
+        manager.save(before.toDraft().copy(autostart = true))
+
+        val after = store.all().single()
+        assertEquals(before.copy(autostart = true), after)
+    }
+
+    @Test
+    fun `startAutostart raises only the flagged tunnels`() = runTest {
+        val manager = managerWith(FakeTunnelTransport(FakeTunnelConnection(localPort = 50050)))
+        val flagged = manager.save(localDraft(label = "flagged").copy(autostart = true))
+        val plain = manager.save(localDraft(label = "plain"))
+
+        manager.startAutostart()
+
+        assertEquals(TunnelStatus.Active(50050), manager.find(flagged)!!.status)
+        assertEquals(TunnelStatus.Inactive, manager.find(plain)!!.status)
+    }
+
+    @Test
+    fun `startAutostart runs once per unlock and does not re-raise what the user stopped`() = runTest {
+        // reloadManagers fires on every synced change, so autostart has to be a one-shot per unlock:
+        // otherwise a tunnel switched off by hand would come back up on the next sync tick.
+        val manager = managerWith(FakeTunnelTransport(FakeTunnelConnection(localPort = 50051)))
+        val id = manager.save(localDraft().copy(autostart = true))
+
+        manager.startAutostart()
+        manager.deactivate(id)
+        manager.startAutostart()
+
+        assertEquals(TunnelStatus.Inactive, manager.find(id)!!.status)
+    }
+
+    @Test
+    fun `closeAll re-arms autostart for the next unlock`() = runTest {
+        val manager = managerWith(FakeTunnelTransport(FakeTunnelConnection(localPort = 50052)))
+        val id = manager.save(localDraft().copy(autostart = true))
+        manager.startAutostart()
+
+        manager.closeAll() // vault lock
+        manager.startAutostart() // unlocked again
+
+        assertEquals(TunnelStatus.Active(50052), manager.find(id)!!.status)
+    }
+
+    @Test
+    fun `autostart failures are reported as a set, not left one per row`() = runTest {
+        // Unlock succeeding and every autostart tunnel being up are two different things. Without an
+        // aggregate, a user who doesn't open the section has nothing to notice.
+        var available = false
+        val manager = managerWith(
+            FakeTunnelTransport(FakeTunnelConnection(localPort = 50080)),
+            resolve = {
+                if (available) TunnelResolution.Ready(target, auth) else TunnelResolution.Unavailable(TunnelUnavailable.NoCredential)
+            },
+        )
+        val broken = manager.save(localDraft(label = "broken").copy(autostart = true))
+        manager.save(localDraft(label = "plain"))
+
+        manager.startAutostart()
+
+        assertEquals(listOf(broken), manager.autostartFailures.map { it.id })
+    }
+
+    @Test
+    fun `a tunnel that came up is not reported as an autostart failure`() = runTest {
+        val manager = managerWith(FakeTunnelTransport(FakeTunnelConnection(localPort = 50081)))
+        manager.save(localDraft().copy(autostart = true))
+
+        manager.startAutostart()
+
+        assertTrue(manager.autostartFailures.isEmpty())
+    }
+
+    @Test
+    fun `a tunnel that came up is not blamed for a later manual failure`() = runTest {
+        // The banner claims the autostart run left something down. A tunnel the user toggled by
+        // hand hours later, against a server that has since gone away, is not that.
+        var available = true
+        val manager = managerWith(
+            FakeTunnelTransport(FakeTunnelConnection(localPort = 50090)),
+            resolve = {
+                if (available) TunnelResolution.Ready(target, auth) else TunnelResolution.Unavailable(TunnelUnavailable.NoCredential)
+            },
+        )
+        val id = manager.save(localDraft().copy(autostart = true))
+        manager.startAutostart()
+
+        manager.deactivate(id)
+        available = false
+        manager.activate(id)
+
+        assertIs<TunnelStatus.Failed>(manager.find(id)!!.status)
+        assertTrue(manager.autostartFailures.isEmpty(), "autostart already answered for this tunnel")
+    }
+
+    @Test
+    fun `dismissing the autostart report clears it without touching the tunnels`() = runTest {
+        val manager = managerWith(
+            FakeTunnelTransport(),
+            resolve = { TunnelResolution.Unavailable(TunnelUnavailable.NoCredential) },
+        )
+        val id = manager.save(localDraft().copy(autostart = true))
+        manager.startAutostart()
+
+        manager.dismissAutostartReport()
+
+        assertTrue(manager.autostartFailures.isEmpty())
+        assertIs<TunnelStatus.Failed>(manager.find(id)!!.status) // the row still says what happened
+    }
+
+    @Test
+    fun `a lock clears the autostart report`() = runTest {
+        val manager = managerWith(
+            FakeTunnelTransport(),
+            resolve = { TunnelResolution.Unavailable(TunnelUnavailable.NoCredential) },
+        )
+        manager.save(localDraft().copy(autostart = true))
+        manager.startAutostart()
+
+        manager.closeAll()
+
+        assertTrue(manager.autostartFailures.isEmpty())
+    }
+
+    @Test
+    fun `polling records aggregate throughput of every active tunnel`() = runTest {
+        val conn = FakeTunnelConnection(localPort = 50060)
+        val manager = managerWith(FakeTunnelTransport(conn))
+        val a = manager.save(localDraft(label = "a"))
+        manager.activate(a)
+        val handle = conn.lastForward!!
+        handle.bytesUp = 2000
+        handle.bytesDown = 3000
+
+        manager.pollTelemetry()
+
+        assertEquals(ThroughputSample(up = 2000, down = 3000), manager.telemetry.history.last())
+    }
+
+    @Test
+    fun `a failed raise is written to the events journal`() = runTest {
+        val manager = managerWith(
+            FakeTunnelTransport(),
+            resolve = { TunnelResolution.Unavailable(TunnelUnavailable.NoCredential) },
+        )
+        val id = manager.save(localDraft(label = "Redis"))
+
+        manager.activate(id)
+
+        val event = manager.telemetry.events.single()
+        assertEquals("Redis", event.label)
+        assertEquals(TunnelEventKind.Failed(TunnelFailureKind.Unavailable), event.kind)
+    }
+
+    @Test
+    fun `coming up after a failure is written as recovered`() = runTest {
+        var available = false
+        val manager = managerWith(
+            FakeTunnelTransport(FakeTunnelConnection(localPort = 50070)),
+            resolve = {
+                if (available) TunnelResolution.Ready(target, auth) else TunnelResolution.Unavailable(TunnelUnavailable.NoCredential)
+            },
+        )
+        val id = manager.save(localDraft(label = "Redis"))
+
+        manager.activate(id)
+        available = true
+        manager.activate(id)
+
+        assertEquals(TunnelEventKind.Recovered, manager.telemetry.events.first().kind)
+    }
+
+    @Test
+    fun `deleting a tunnel forgets its failure`() = runTest {
+        val manager = managerWith(
+            FakeTunnelTransport(),
+            resolve = { TunnelResolution.Unavailable(TunnelUnavailable.NoCredential) },
+        )
+        val id = manager.save(localDraft(label = "Redis"))
+        manager.activate(id)
+
+        manager.delete(id)
+        val again = manager.save(localDraft(label = "Redis"))
+        manager.activate(again)
+
+        assertEquals(2, manager.telemetry.events.size)
+    }
+
+    @Test
     fun `loads previously saved tunnels on construction`() = runTest {
         val store = FakeTunnelStore()
         store.put(Tunnel("x", "saved", "h1", TunnelDirection.Local, "127.0.0.1", 22, "a", 1))

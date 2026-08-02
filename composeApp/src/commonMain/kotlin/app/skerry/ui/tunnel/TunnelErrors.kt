@@ -28,3 +28,14 @@ internal suspend fun friendlyTunnelError(e: Throwable): String = when (e) {
     is SshConnectionException -> getString(Res.string.ptail_err_connection_failed)
     else -> getString(Res.string.ptail_err_connection_failed)
 }
+
+/**
+ * Same classification as [friendlyTunnelError], reduced to the one-word cause the events card
+ * shows. Split out so the card never has to parse the localized sentence back into a category.
+ */
+fun tunnelFailureKind(e: Throwable): TunnelFailureKind = when (e) {
+    is SshHostKeyRejectedException -> TunnelFailureKind.HostKey
+    is SshAuthenticationException -> TunnelFailureKind.Auth
+    is PortForwardException -> TunnelFailureKind.Forward
+    else -> TunnelFailureKind.Connection
+}

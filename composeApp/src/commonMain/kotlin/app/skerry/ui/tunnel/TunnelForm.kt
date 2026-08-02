@@ -1,6 +1,7 @@
 package app.skerry.ui.tunnel
 
 import app.skerry.shared.host.Host
+import app.skerry.shared.tunnel.Tunnel
 import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.ui.connection.JumpChainResolution
 import app.skerry.ui.connection.resolveJumpChain
@@ -47,6 +48,22 @@ fun buildTunnelDraft(
         }
     }
 }
+
+/**
+ * A saved tunnel back as an editable draft, for changing one field without going through the form
+ * (the autostart list toggles the flag in place).
+ */
+fun Tunnel.toDraft(): TunnelDraft = TunnelDraft(
+    id = id,
+    label = label,
+    hostId = hostId,
+    direction = direction,
+    bindHost = bindHost,
+    bindPort = bindPort,
+    destHost = destHost,
+    destPort = destPort,
+    autostart = autostart,
+)
 
 /**
  * Resolves a host to connection parameters (for the [TunnelManager] production lambda). The host is

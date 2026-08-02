@@ -26,13 +26,19 @@ class TunnelFormState private constructor(private val editingId: String?) {
     var bindPort: String by mutableStateOf("")
     var destHost: String by mutableStateOf("")
     var destPort: String by mutableStateOf("")
+    var autostart: Boolean by mutableStateOf(false)
 
     /** SOCKS (`-D`) has no destination; the form hides the destination fields. */
     val isDynamic: Boolean get() = direction == TunnelDirection.Dynamic
 
-    /** Valid draft for [TunnelManager.save], or `null` while input is incomplete (see [buildTunnelDraft]). */
+    /**
+     * Valid draft for [TunnelManager.save], or `null` while input is incomplete (see
+     * [buildTunnelDraft]). Autostart is attached afterwards — it is a flag, with nothing about it
+     * for the address validation to reject.
+     */
     val draft: TunnelDraft?
         get() = buildTunnelDraft(editingId, label, hostId, direction, bindHost, bindPort, destHost, destPort)
+            ?.copy(autostart = autostart)
 
     companion object {
         /**
@@ -50,6 +56,7 @@ class TunnelFormState private constructor(private val editingId: String?) {
                     bindPort = seed.bindPort.toString()
                     destHost = seed.destHost ?: ""
                     destPort = seed.destPort?.toString() ?: ""
+                    autostart = seed.autostart
                 }
             }
         }

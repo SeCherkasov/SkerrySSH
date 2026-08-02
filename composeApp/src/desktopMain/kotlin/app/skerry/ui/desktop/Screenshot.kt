@@ -49,6 +49,8 @@ import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.shared.tunnel.TunnelStore
 import app.skerry.ui.tunnel.SERVICE_SCAN_COMMAND
 import app.skerry.ui.tunnel.TunnelManager
+import app.skerry.ui.tunnel.TunnelTelemetry
+import app.skerry.ui.tunnel.TunnelStatus
 import app.skerry.ui.tunnel.TunnelResolution
 import app.skerry.ui.tunnel.TunnelUnavailable
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
@@ -85,10 +87,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import app.skerry.ui.vault.DesktopCorruptedScreen
 import app.skerry.ui.vault.DesktopCreateScreen
@@ -606,9 +611,9 @@ private fun seededTunnels(hosts: HostManagerController): TunnelManager {
     }
     val hostIds = hosts.hosts.map { it.id }
     fun hostAt(i: Int) = hostIds.getOrElse(i) { hostIds.first() }
-    store.put(Tunnel("t1", "web tunnel", hostAt(0), TunnelDirection.Local, "127.0.0.1", 8080, "10.0.0.5", 80))
+    store.put(Tunnel("t1", "web tunnel", hostAt(0), TunnelDirection.Local, "127.0.0.1", 8080, "10.0.0.5", 80, autostart = true))
     store.put(Tunnel("t2", "app callback", hostAt(1), TunnelDirection.Remote, "0.0.0.0", 9000, "localhost", 3000))
-    store.put(Tunnel("t3", "socks", hostAt(2), TunnelDirection.Dynamic, "127.0.0.1", 1080, null, null))
+    store.put(Tunnel("t3", "socks", hostAt(2), TunnelDirection.Dynamic, "127.0.0.1", 1080, null, null, autostart = true))
     var next = 0
     val manager = TunnelManager(
         store = store,
@@ -624,6 +629,11 @@ private fun seededTunnels(hosts: HostManagerController): TunnelManager {
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     ) { "seed-${next++}" }
     manager.activate("t1")
+    // The scene renders one frame at t=0, so everything the one-second telemetry poll feeds — the
+    // traffic column, the throughput sparkline — would be empty. Wait for the forward, then drive
+    // the poll by hand to fill the window.
+    runBlocking { withTimeoutOrNull(2000) { while (manager.find("t1")?.status !is TunnelStatus.Active) delay(10) } }
+    repeat(TunnelTelemetry.HISTORY_CAPACITY) { manager.pollTelemetry() }
     // -Dskerry.screenshot.portsScan=true renders the Services panel instead of the tunnel editor
     // (the offscreen scene can't press Find services / Scan itself).
     if (System.getProperty("skerry.screenshot.portsScan", "false").toBoolean()) manager.services.scan(hostAt(0))
@@ -862,8 +872,12 @@ private class FakePortForward(override val boundPort: Int) : PortForward {
     override val isActive: Boolean = true
     override var isPaused: Boolean = false
         private set
-    override val bytesUp: Long = 0
-    override val bytesDown: Long = 0
+
+    // Counters grow with every read, on a small wave, so the traffic column and the throughput
+    // sparkline render with something in them. A constant would draw a flat line and read as a bug.
+    private var reads = 0L
+    override val bytesUp: Long get() = 46_000L * ++reads + (reads % 11) * 2_400
+    override val bytesDown: Long get() = 138_000L * reads + (reads % 13) * 5_800
     override suspend fun pause() { isPaused = true }
     override suspend fun resume() { isPaused = false }
     override suspend fun close() = Unit
