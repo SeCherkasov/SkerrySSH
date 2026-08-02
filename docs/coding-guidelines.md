@@ -62,6 +62,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Buttons | `PrimaryButton`, `GhostButton`, `CancelButton`, `IconBtn` |
 | Small controls | `Toggle`, `Badge`, `Dot`, `MeterBar`, `NumberStepper`, `HoverTooltip` |
 | A setting as a label + switch row | `ToggleRow` (optional second line); `SettingToggleRow` / `MobileSyncToggleRow` are its settings and sync scales and should converge onto it |
+| A fact as a label + value row in a detail panel | `KeyValueRow`; `InfoRow` (session info panel) and `CardRow` (tunnel dashboard) are the same shape and should converge onto it |
 | Chips | `Chip` (label, active/inactive) vs `ChipButton` (action chip: colour, outline/filled, enabled) — pick one, don't add a third |
 | Rules and separators | `HLine`, `VLine` |
 | Dropdowns and modals | `AnchoredDropdown`, `DropdownField`, `ModalScrim` |

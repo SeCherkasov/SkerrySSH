@@ -39,6 +39,7 @@ import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileBioArtifactStore
 import app.skerry.shared.vault.FileBiometricSupportStore
 import app.skerry.shared.vault.CredentialStore
+import app.skerry.shared.vault.FileCredentialUsageLog
 import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
@@ -448,7 +449,14 @@ class MainActivity : FragmentActivity() {
         // snapshot (More -> Trash). Passed explicitly — the stores default to deleting outright so a
         // team vault never grows a trash of its own.
         val trash = TrashStore(vault)
-        val credentials = CredentialManagerController(CredentialStore(vault, trash)) { UUID.randomUUID().toString() }
+        // Local (non-synced) usage trail the Vault sheet reports: added / last used / copies. Ids and
+        // timestamps only, hardened like the security log above.
+        val credentialUsage = FileCredentialUsageLog(
+            dir.resolve("credential_usage.json").absolutePath.toPath(),
+            FileSystem.SYSTEM,
+            harden = { app.skerry.shared.io.PrivateConfig.harden(java.io.File(it.toString()).toPath()) },
+        ) { Instant.now().toString() }
+        val credentials = CredentialManagerController(CredentialStore(vault, trash), credentialUsage) { UUID.randomUUID().toString() }
         // SSH transport (sshj, shared JVM source set). TOFU: a host's first key is remembered in the
         // vault (RecordType.KNOWN_HOST, synced across devices); a key change is rejected and logged to
         // the local (non-synced) known_hosts_mismatches so the known-hosts manager can warn and let the
@@ -535,7 +543,8 @@ class MainActivity : FragmentActivity() {
         val tunnels = TunnelManager(
             store = VaultTunnelStore(vault, trash),
             transport = tunnelTransport,
-            resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::find) },
+            // useForConnect (desktop parity): a tunnel authenticates with the secret on every start.
+            resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::useForConnect) },
             scope = scope,
             scanTransport = probeTransport,
         ) { UUID.randomUUID().toString() }
@@ -668,6 +677,8 @@ class MainActivity : FragmentActivity() {
             sync.disconnect()
             // The security event log belongs to the wiped vault; always clear it on reset.
             securityLog.clear()
+            // The usage trail names secrets the reset erased — it goes with them.
+            credentialUsage.clear()
             // Hosts/groups are wiped with the vault on any reset; clear their local UI trace
             // (collapsed state) too, or stale group names would remain visible.
             writeCollapsedGroups(dir, emptySet())

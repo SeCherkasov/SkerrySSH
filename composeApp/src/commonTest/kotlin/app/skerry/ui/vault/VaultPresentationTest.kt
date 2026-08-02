@@ -5,6 +5,7 @@ import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import app.skerry.ui.theme.nightSeaColors
 
@@ -66,6 +67,15 @@ class VaultPresentationTest {
 
     // usedByLabel is now @Composable (plural string resource), so its string unit test was dropped;
     // the label resolves in composition.
+
+    @Test
+    fun `names the hosts a secret is bound to, and counts the rest`() {
+        assertEquals("web-01", VaultPresentation.hostNames(listOf("web-01"), max = 3))
+        assertEquals("web-01, web-02", VaultPresentation.hostNames(listOf("web-01", "web-02"), max = 3))
+        // Beyond the cap the row would not fit anyway: the remainder becomes a tail count.
+        assertEquals("a, b, c +2", VaultPresentation.hostNames(listOf("a", "b", "c", "d", "e"), max = 3))
+        assertNull(VaultPresentation.hostNames(emptyList(), max = 3))
+    }
 
     @Test
     fun `hostsUsing returns only hosts referencing the credential`() {

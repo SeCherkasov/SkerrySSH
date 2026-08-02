@@ -4,15 +4,10 @@
     <string name="vault_sidebar_header">ХРАНИЛИЩЕ</string>
     <string name="vault_e2e_encrypted">Сквозное шифрование</string>
     <string name="vault_e2e_description">Приватные ключи зашифрованы мастер-паролем и никогда не синхронизируются в открытом виде.</string>
-    <string name="vault_banner_encrypted">Сквозное шифрование · запечатано мастер-паролем</string>
     <string name="vault_generate_key">Создать ключ</string>
     <string name="vault_add_password">Добавить пароль</string>
     <string name="vault_import_certificate">Импортировать сертификат</string>
 
-    <!-- Мета карточки секрета (ведущее слово + рантайм-фрагмент «используется»). -->
-    <string name="vault_meta_certificate">Сертификат · %1$s</string>
-    <string name="vault_meta_any_principal">любой principal · %1$s</string>
-    <string name="vault_meta_password">Пароль · %1$s</string>
 
     <!-- Пустые состояния категорий. -->
     <string name="vault_empty_ssh_title">Пока нет SSH-ключей</string>
@@ -30,7 +25,6 @@
     <string name="vault_subtitle_password">Пароль</string>
     <string name="vault_label_public_key">Открытый ключ</string>
     <string name="vault_key_unreadable">Не удалось прочитать ключ</string>
-    <string name="vault_label_fingerprint">Отпечаток</string>
     <string name="vault_copy_certificate">Скопировать сертификат</string>
     <string name="vault_copy_public_key">Скопировать открытый ключ</string>
     <string name="vault_copy_password">Скопировать пароль</string>
@@ -135,6 +129,45 @@
     <string name="vault_label_key_path">ФАЙЛ КЛЮЧА</string>
     <string name="vault_label_cert_path">ФАЙЛ СЕРТИФИКАТА</string>
     <string name="vault_key_file_missing">Недоступен с этого устройства</string>
-    <string name="vault_meta_key_file">файл · %1$s</string>
     <string name="vault_cert_from_file_unreadable">Файл сертификата не читается</string>
+
+    <plurals name="vault_item_count">
+        <item quantity="one">%1$d запись</item>
+        <item quantity="few">%1$d записи</item>
+        <item quantity="many">%1$d записей</item>
+        <item quantity="other">%1$d записи</item>
+    </plurals>
+    <string name="vault_header_summary">%1$s · XChaCha20-Poly1305 · Argon2id</string>
+
+
+    <string name="vault_kv_type">Тип</string>
+    <string name="vault_kv_fingerprint">Отпечаток</string>
+    <string name="vault_kv_passphrase">Пароль ключа</string>
+    <string name="vault_kv_added">Добавлен</string>
+    <string name="vault_kv_last_used">Последний раз</string>
+    <string name="vault_value_unknown">—</string>
+    <string name="vault_value_never">не использовался</string>
+    <string name="vault_passphrase_set">задан</string>
+    <string name="vault_passphrase_none">нет</string>
+
+    <string name="vault_section_encryption">Шифрование</string>
+    <string name="vault_kv_cipher">Шифр</string>
+    <string name="vault_kv_kdf">Вывод ключа</string>
+    <string name="vault_kv_stored">На сервере</string>
+    <string name="vault_kdf_value">Argon2id · %1$d МиБ</string>
+    <string name="vault_stored_ciphertext">только шифротекст</string>
+    <string name="vault_stored_local">только это устройство</string>
+
+    <string name="vault_section_audit">Аудит</string>
+    <string name="vault_kv_copied">Копировали</string>
+    <plurals name="vault_copies_window">
+        <item quantity="one">%1$d раз за %2$d дней</item>
+        <item quantity="few">%1$d раза за %2$d дней</item>
+        <item quantity="many">%1$d раз за %2$d дней</item>
+        <item quantity="other">%1$d раза за %2$d дней</item>
+    </plurals>
+
+    <string name="vault_meta_rotated">сменён %1$s</string>
+    <string name="vault_meta_valid_until">действует до %1$s</string>
+    <string name="vault_kv_changed">Изменён</string>
 </resources>

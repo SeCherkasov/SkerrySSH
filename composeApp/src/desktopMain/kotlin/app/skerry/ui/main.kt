@@ -33,6 +33,7 @@ import app.skerry.shared.ssh.SshjCaKeyParser
 import app.skerry.shared.ssh.TofuHostKeyVerifier
 import app.skerry.shared.ssh.VaultTrustedCaStore
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
+import app.skerry.shared.vault.FileCredentialUsageLog
 import app.skerry.shared.vault.FileSecurityLog
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.CredentialStore
@@ -246,7 +247,15 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val workspaceLayout = WorkspaceLayoutStore(vault)
     // Flat vault model: keychain secrets are CREDENTIAL records; a host references a secret
     // directly via credentialId.
-    val credentials = CredentialManagerController(CredentialStore(vault, trash)) { UUID.randomUUID().toString() }
+    // Local (non-synced) usage trail behind the Vault panel's dates: when a secret was added, when it
+    // last authenticated, how often it was copied. Ids and timestamps only — hardened like the
+    // security log, since it is audit metadata about this device.
+    val credentialUsage = FileCredentialUsageLog(
+        dir.resolve("credential_usage.json").toString().toPath(),
+        FileSystem.SYSTEM,
+        harden = { PrivateConfig.harden(Path.of(it.toString())) },
+    ) { Instant.now().toString() }
+    val credentials = CredentialManagerController(CredentialStore(vault, trash), credentialUsage) { UUID.randomUUID().toString() }
     // Self-hosted sync: coordinator ties together the network client (Ktor+SRP), crypto, and the
     // local vault. The server binding persists to sync.json (0600): non-secret data
     // (URL/accountId/deviceId) plus an optional refresh token sealed under dataKey (keep-connected).
@@ -319,7 +328,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val tunnels = TunnelManager(
         store = VaultTunnelStore(vault, trash),
         transport = tunnelTransport,
-        resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::find) },
+        // useForConnect, not find: a tunnel authenticates with the secret every time it comes up,
+        // which is exactly what "last used" in the Vault panel reports.
+        resolve = { hostId -> resolveTunnelHost(hostId, findHost = hosts::find, findCredential = credentials::useForConnect) },
         scope = tunnelScope,
         scanTransport = probeTransport,
     ) { UUID.randomUUID().toString() }
@@ -410,6 +421,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         // The security log refers to the erased vault (password change/biometrics/pairing); on any
         // reset it becomes stale and could leak device names, so it's always cleared.
         securityLog.clear()
+        // Same for the usage trail: its ids point at secrets that no longer exist, and a new vault
+        // must not inherit dates from the erased one.
+        credentialUsage.clear()
         // The reset erased the dataKey, so the sealed sync refresh token is wrapped under a dead key.
         // Disconnects from the server, otherwise settings would show "Linked" with no way to log in.
         // (No biometrics on desktop: deps.biometrics=null.) Clean start: create a new vault and
