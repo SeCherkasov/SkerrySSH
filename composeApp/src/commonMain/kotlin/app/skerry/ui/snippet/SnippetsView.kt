@@ -1,28 +1,16 @@
 package app.skerry.ui.snippet
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,433 +20,156 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isAltPressed
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.isMetaPressed
-import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import app.skerry.ui.snippet.SnippetDraft
-import app.skerry.ui.snippet.SnippetEntry
-import app.skerry.ui.snippet.SnippetManager
-import app.skerry.ui.snippet.SnippetShortcut
-import app.skerry.ui.snippet.snippetTagSuggestions
-import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.lib_snippets_add_tag
-import app.skerry.ui.generated.resources.lib_snippets_delete
-import app.skerry.ui.generated.resources.lib_snippets_empty
-import app.skerry.ui.generated.resources.lib_snippets_field_command
-import app.skerry.ui.generated.resources.lib_snippets_field_name
-import app.skerry.ui.generated.resources.lib_snippets_field_shortcut
-import app.skerry.ui.generated.resources.lib_snippets_field_tags
-import app.skerry.ui.generated.resources.lib_snippets_library
-import app.skerry.ui.generated.resources.lib_snippets_new
-import app.skerry.ui.generated.resources.lib_snippets_no_matches
-import app.skerry.ui.generated.resources.lib_snippets_ph_name
-import app.skerry.ui.generated.resources.lib_snippets_press_keys
-import app.skerry.ui.generated.resources.lib_snippets_save
-import app.skerry.ui.generated.resources.lib_snippets_search
-import app.skerry.ui.generated.resources.lib_snippets_select_or_create
-import app.skerry.ui.generated.resources.lib_snippets_shortcut_conflict
-import app.skerry.ui.generated.resources.lib_snippets_shortcut_reserved
-import app.skerry.ui.desktop.matchDesktopShortcut
-import app.skerry.ui.generated.resources.lib_snippets_untitled
-import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.AnchoredDropdown
-import app.skerry.ui.design.Chip
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.LocalSessions
+import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.EmptyState
-import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
-import app.skerry.ui.design.labelUppercase
-import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.design.PrimaryButton
-import app.skerry.ui.design.SIDEBAR_WIDTH
-import app.skerry.ui.design.SidebarSectionTitle
-import app.skerry.ui.design.Sym
-import app.skerry.ui.design.Txt
+import app.skerry.ui.design.SectionHeader
+import app.skerry.ui.design.SidebarSearchField
 import app.skerry.ui.design.VLine
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_snippets_command_count
+import app.skerry.ui.generated.resources.lib_snippets_empty
+import app.skerry.ui.generated.resources.lib_snippets_facts_variables
+import app.skerry.ui.generated.resources.lib_snippets_new
+import app.skerry.ui.generated.resources.lib_snippets_no_matches
+import app.skerry.ui.generated.resources.lib_snippets_screen_title
+import app.skerry.ui.generated.resources.lib_snippets_search
+import app.skerry.ui.generated.resources.lib_snippets_select_or_create
+import app.skerry.ui.generated.resources.lib_snippets_starter_pack
+import app.skerry.ui.session.SessionsController
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.vault.copyTextToClipboard
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 
-private data class MockSnippet(val icon: String, val title: String, val cmd: String, val selected: Boolean = false)
-
-private val MOCK_SNIPPETS = listOf(
-    MockSnippet("monitoring", "Disk usage report", "df -h | sort -k5 -r", selected = true),
-    MockSnippet("memory", "Top memory procs", "ps aux --sort=-%mem | head"),
-    MockSnippet("restart_alt", "Restart nginx", "sudo systemctl reload nginx"),
-    MockSnippet("cleaning_services", "Clear docker cache", "docker system prune -af"),
-)
+/** Width of the search field in the section header. */
+private val SEARCH_WIDTH = 240.dp
 
 /**
- * Global Snippets section: library of saved commands (sidebar) plus an editor (main). A snippet
- * is a self-contained plain config, no secrets; the editor only edits it, execution happens from
- * the terminal palette, a hotkey, or "Run snippet…" in a host's context menu. Shows a live list
- * when a manager is provided ([LocalSnippets]); otherwise (offscreen render/preview) shows the
- * static [MOCK_SNIPPETS].
+ * Global Snippets section: a flat library of saved commands with a run panel on the right. A snippet
+ * is a self-contained plain config, no secrets. Running happens here (into a connected session), from
+ * the terminal palette, a hotkey, or "Run snippet…" in a host's context menu; editing is a separate
+ * mode of the same panel. Shows a live list when a manager is provided ([LocalSnippets]); otherwise
+ * (offscreen render/preview) an empty state.
  */
 @Composable
 fun SnippetsView(state: DesktopDesignState) {
     val mono = LocalFonts.current.mono
     val manager = LocalSnippets.current
     if (manager == null) {
-        MockSnippetsView(mono)
+        Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
+            SnippetsHeader(SnippetLibraryFacts(0, 0), query = "", onQuery = {}, onNew = {})
+            EmptyState(icon = "code_blocks", title = stringResource(Res.string.lib_snippets_empty))
+        }
         return
     }
     LiveSnippetsView(manager, state.snippetLibrary, mono)
 }
 
-// Live path: snippet library plus editor on the right.
+/** What the panel is showing: the selected snippet's run card, a new snippet's form, or an edit form. */
+private sealed interface PanelMode {
+    data object Run : PanelMode
+    data object New : PanelMode
+
+    /**
+     * Editing [id]. The id is carried rather than re-read from the list selection: the search field
+     * and the tag chips stay live while the form is open, and a filter that hides the edited snippet
+     * would otherwise swap the form onto a different one, discarding unsaved changes.
+     */
+    data class Edit(val id: String) : PanelMode
+}
 
 @Composable
 private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibraryState, mono: FontFamily) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var adding by remember { mutableStateOf(false) }
+    var mode by remember { mutableStateOf<PanelMode>(PanelMode.Run) }
 
     val all = manager.snippets
-    // Selected snippet: explicit selectedId, else the first in the list (unless adding).
-    val selected = if (adding) null else (manager.find(selectedId) ?: all.firstOrNull())
+    val visible = library.visible(all)
+    val selected = resolveSelectedSnippet(visible, selectedId)
+    // Keyed on the snippet values, not on `all`: saving an edit mutates an entry in place, so the
+    // list keeps its identity while the variable count changes.
+    val snippets = all.map { it.snippet }
+    val facts = remember(snippets) { snippetLibraryFacts(snippets) }
 
-    Row(Modifier.fillMaxSize()) {
-        SnippetLibrarySidebar(
-            all = all,
-            library = library,
-            selectedId = if (adding) null else selected?.id,
-            mono = mono,
-            onSelect = { id -> selectedId = id; adding = false },
-            onNew = { adding = true; selectedId = null },
-            onInstallStarterPack = { manager.installStarterPack() },
-            onRenameTag = { oldTag, newTag -> manager.renameTag(oldTag, newTag)?.let { library.onTagRenamed(oldTag, it) } },
+    val sessions = LocalSessions.current
+    val targets = snippetRunTargets(sessions)
+
+    Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
+        SnippetsHeader(
+            facts = facts,
+            query = library.query,
+            onQuery = { library.query = it },
+            onNew = { mode = PanelMode.New },
         )
-        VLine(Skerry.colors.line)
-        Box(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg)) {
-            if (!adding && selected == null) {
-                EmptyState(icon = "code_blocks", title = stringResource(Res.string.lib_snippets_select_or_create))
-            } else {
-                // Keyed by the edited snippet's identity so the editor's fields reset instead of
-                // carrying over the previous values.
-                key(selected?.id, adding) {
-                    SnippetEditor(
-                        entry = selected,
-                        manager = manager,
-                        mono = mono,
-                        onSaved = { id -> selectedId = id; adding = false },
-                        onDeleted = { selectedId = null; adding = false },
-                    )
-                }
-            }
-        }
-    }
-}
-
-internal fun SnippetEntry.matches(query: String): Boolean {
-    val q = query.trim().lowercase()
-    return snippet.label.lowercase().contains(q) ||
-        snippet.command.lowercase().contains(q) ||
-        snippet.tags.any { it.lowercase().contains(q) }
-}
-
-@Composable
-private fun SnippetEditor(
-    entry: SnippetEntry?,
-    manager: SnippetManager,
-    mono: FontFamily,
-    onSaved: (String) -> Unit,
-    onDeleted: () -> Unit,
-) {
-    // Shared form state (desktop and mobile): seeded from entry, tracks canSave/tags, builds the
-    // draft. No remember keys needed; the editor is recreated externally via key(selected?.id, adding).
-    val form = remember { SnippetFormState.fromEntry(entry) }
-
-    // The editor is a pure form; execution happens from the terminal palette, a hotkey, or the
-    // host context menu, not here.
-    fun persist(): String = manager.save(form.toDraft())
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Sym("code_blocks", size = 20.sp, color = Skerry.colors.cyanBright)
-                Txt(form.label.ifBlank { stringResource(Res.string.lib_snippets_new) }, color = Skerry.colors.text, size = 17.sp, weight = FontWeight.SemiBold)
-                // Tags sit inline right after the name, not on a line of their own.
-                if (form.tags.isNotEmpty()) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        form.tags.forEach { Chip("#$it") }
-                    }
-                }
-            }
-        }
-        HLine()
-        Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-            FieldLabelSnip(stringResource(Res.string.lib_snippets_field_name))
-            // The name is human-readable text — UI font, like every other name field (command below stays mono).
-            SnipEditField(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name), LocalFonts.current.ui)
-            Column(Modifier.padding(top = 20.dp)) {
-                FieldLabelSnip(stringResource(Res.string.lib_snippets_field_command))
-                SnipCommandField(form.command, { form.command = it }, "df -h | sort -k5 -r", mono)
-            }
-            Column(Modifier.padding(top = 20.dp)) {
-                FieldLabelSnip(stringResource(Res.string.lib_snippets_field_tags))
-                // Suggestions from other snippets, excluding this one (else a just-removed tag
-                // would reappear). Memoized so editing label/command doesn't rescan.
-                val tagSugs = remember(manager.snippets, form.tags, form.tagDraft, entry?.id) {
-                    snippetTagSuggestions(manager.snippets.filter { it.id != entry?.id }.map { it.snippet }, form.tags, form.tagDraft)
-                }
-                SnipTagsField(
-                    tags = form.tags,
-                    draft = form.tagDraft,
-                    onDraftChange = form::updateTagDraft,
-                    onCommit = { form.addTags(form.tagDraft) },
-                    onRemove = form::removeTag,
-                    suggestions = tagSugs,
-                    onPick = form::pickTag,
-                )
-            }
-            Column(Modifier.padding(top = 20.dp).width(220.dp)) {
-                FieldLabelSnip(stringResource(Res.string.lib_snippets_field_shortcut))
-                // Conflict is checked against other snippets (this one's own shortcut isn't a
-                // conflict); the UI prevents assigning the same chord twice, which
-                // [SnippetManager.forShortcut] doesn't guarantee on read. Shell hotkeys are checked
-                // too: they run first and consume the event, so a snippet on one would never fire.
-                val conflict = remember(manager.snippets, form.shortcut, entry?.id) {
-                    form.shortcut?.let { manager.shortcutConflict(it, entry?.id) }
-                }
-                val reserved = remember(form.shortcut) {
-                    form.shortcut?.let { matchDesktopShortcut(it) != null } == true
-                }
-                val conflictText = when {
-                    reserved -> stringResource(Res.string.lib_snippets_shortcut_reserved)
-                    conflict != null -> stringResource(Res.string.lib_snippets_shortcut_conflict, conflict.snippet.label)
-                    else -> null
-                }
-                ShortcutField(form.shortcut, mono, conflictText = conflictText) { form.shortcut = it }
-            }
-            Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PrimaryButton(
-                    stringResource(Res.string.lib_snippets_save),
-                    onClick = { if (form.canSave) onSaved(persist()) },
-                    enabled = form.canSave,
-                )
-                if (entry != null) {
-                    GhostButton(stringResource(Res.string.lib_snippets_delete), onClick = { manager.delete(entry.id); onDeleted() }, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f))
-                }
-            }
-        }
-    }
-}
-
-// --- Tag chips ---
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SnipTagsField(
-    tags: List<String>,
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    onCommit: () -> Unit,
-    onRemove: (String) -> Unit,
-    suggestions: List<String>,
-    onPick: (String) -> Unit,
-) {
-    val mono = LocalFonts.current.mono
-    var focused by remember { mutableStateOf(false) }
-    val focus = remember { FocusRequester() }
-    AnchoredDropdown(
-        expanded = focused && suggestions.isNotEmpty(),
-        onDismiss = { focused = false },
-        focusable = false, // don't steal focus from the tag input field
-        trigger = {
-            FlowRow(
-                // Tapping anywhere in the capsule (padding, gaps between pills) focuses the input.
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { focus.requestFocus() }
-                    .padding(horizontal = 10.dp, vertical = 7.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                tags.forEach { tag -> key(tag) { SnipTagPill(tag) { onRemove(tag) } } }
-                val textColor = Skerry.colors.text
-                val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 12.5.sp, fontFamily = mono) }
-                BasicTextField(
-                    value = draft,
-                    onValueChange = onDraftChange,
-                    singleLine = true,
-                    textStyle = textStyle,
-                    cursorBrush = SolidColor(Skerry.colors.cyan),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { onCommit() }),
-                    modifier = Modifier.widthIn(min = 72.dp).focusRequester(focus).onFocusChanged { focused = it.isFocused },
-                    decorationBox = { inner ->
-                        Box(contentAlignment = Alignment.CenterStart) {
-                            if (draft.isEmpty()) Txt(stringResource(Res.string.lib_snippets_add_tag), color = Skerry.colors.faint, size = 12.5.sp, font = mono)
-                            inner()
-                        }
-                    },
-                )
-            }
-        },
-        menu = { width ->
-            Column(
-                Modifier
-                    .width(width)
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(Skerry.colors.surface2)
-                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                    .heightIn(max = 220.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 4.dp),
-            ) {
-                // Tap adds the tag; focus stays on the field, so the menu recomputes without the
-                // just-added tag.
-                suggestions.forEach { tag ->
-                    key(tag) {
-                        Box(
-                            Modifier.fillMaxWidth().clickable { onPick(tag) }.padding(horizontal = 12.dp, vertical = 9.dp),
-                        ) {
-                            Txt("#$tag", color = Skerry.colors.cyanBright, size = 12.5.sp, font = mono)
-                        }
-                    }
-                }
-            }
-        },
-    )
-}
-
-@Composable
-private fun SnipTagPill(tag: String, onRemove: () -> Unit) {
-    Row(
-        Modifier.clip(RoundedCornerShape(20.dp)).background(Skerry.colors.cyan.copy(alpha = 0.12f)).padding(start = 9.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        Txt("#$tag", color = Skerry.colors.cyanBright, size = 11.sp)
-        Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(2.dp), contentAlignment = Alignment.Center) {
-            Sym("close", size = 12.sp, color = Skerry.colors.cyanBright)
-        }
-    }
-}
-
-// --- Snippet hotkey capture ---
-
-@Composable
-private fun ShortcutField(value: String?, mono: FontFamily, conflictText: String?, onCapture: (String?) -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    val requester = remember { FocusRequester() }
-    val hasConflict = conflictText != null
-    Column {
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(7.dp))
-                .background(Skerry.colors.bg)
-                .border(1.dp, if (hasConflict) Skerry.colors.storm else if (focused) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                .focusRequester(requester)
-                .onFocusChanged { focused = it.isFocused }
-                .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (event.key) {
-                        // Esc/Backspace/Delete clear the assigned shortcut.
-                        Key.Escape, Key.Backspace, Key.Delete -> { onCapture(null); true }
-                        else -> {
-                            val s = SnippetShortcut.format(
-                                event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
-                            )
-                            if (s != null) { onCapture(s); true } else false
-                        }
-                    }
-                }
-                .clickable { requester.requestFocus() }
-                .padding(horizontal = 11.dp, vertical = 9.dp),
-        ) {
-            val text = value ?: if (focused) stringResource(Res.string.lib_snippets_press_keys) else "—"
-            Txt(text, color = if (value != null) Skerry.colors.text else Skerry.colors.faint, size = 13.sp, font = mono)
-        }
-        // The chord may already be taken (by another snippet or by the shell); the assignment still
-        // takes effect, we just warn — saving is never blocked.
-        if (conflictText != null) {
-            Txt(
-                conflictText,
-                color = Skerry.colors.storm, size = 11.sp,
-                modifier = Modifier.padding(top = 6.dp),
+        if (all.any { it.snippet.tags.isNotEmpty() }) {
+            SnippetTagFilterRow(
+                chips = library.chips(all),
+                library = library,
+                all = all,
+                onRenameTag = { oldTag, newTag -> manager.renameTag(oldTag, newTag)?.let { library.onTagRenamed(oldTag, it) } },
+                modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 10.dp),
             )
         }
-    }
-}
-
-// --- Static mock (offscreen render/preview without a manager) ---
-
-@Composable
-private fun MockSnippetsView(mono: FontFamily) {
-    Row(Modifier.fillMaxSize()) {
-        Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)) {
-            Box(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.card).border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Sym("search", size = 16.sp, color = Skerry.colors.faint)
-                    Txt(stringResource(Res.string.lib_snippets_search), color = Skerry.colors.faint, size = 12.5.sp)
+        HLine()
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                if (visible.isEmpty()) {
+                    SnippetsEmptyList(libraryEmpty = all.isEmpty(), onInstallStarterPack = { manager.installStarterPack() })
+                } else {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        visible.forEach { entry ->
+                            key(entry.id) {
+                                // Keyed by id so selecting a row doesn't recreate every row's lambda.
+                                val onClick = remember(entry.id) { { selectedId = entry.id; mode = PanelMode.Run } }
+                                SnippetListRow(entry = entry, selected = entry.id == selected?.id, mono = mono, onClick = onClick)
+                                HLine()
+                            }
+                        }
+                    }
                 }
             }
-            HLine()
-            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 8.dp)) {
-                SidebarSectionTitle(stringResource(Res.string.lib_snippets_library), modifier = Modifier.padding(start = 10.dp, top = 8.dp, bottom = 4.dp))
-                Column(Modifier.padding(horizontal = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    MOCK_SNIPPETS.forEach { MockSnippetRow(it, mono) }
+            val editMode = mode as? PanelMode.Edit
+            val editing = editMode?.let { manager.find(it.id) }
+            when {
+                mode is PanelMode.New || editing != null -> {
+                    VLine(Skerry.colors.line)
+                    Box(Modifier.width(SNIPPET_PANEL_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)) {
+                        // Keyed by the edited snippet's identity so the form resets instead of
+                        // carrying over the previous values.
+                        key(editing?.id, mode) {
+                            SnippetEditor(
+                                entry = editing,
+                                manager = manager,
+                                mono = mono,
+                                onSaved = { id -> selectedId = id; mode = PanelMode.Run },
+                                onCancel = { mode = PanelMode.Run },
+                            )
+                        }
+                    }
                 }
-            }
-            HLine()
-            Box(Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                PrimaryButton(stringResource(Res.string.lib_snippets_new), onClick = {}, icon = "add", modifier = Modifier.fillMaxWidth())
-            }
-        }
-        VLine(Skerry.colors.line)
-        Column(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
-            Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Sym("monitoring", size = 20.sp, color = Skerry.colors.cyanBright)
-                    Txt("Disk usage report", color = Skerry.colors.text, size = 17.sp, weight = FontWeight.SemiBold)
-                }
-                Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Chip("#monitoring")
-                    Chip("#disk")
-                    Chip("+ tag")
-                }
-            }
-            HLine()
-            Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-                FieldLabelSnip(stringResource(Res.string.lib_snippets_field_command))
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
-                ) {
-                    Txt("df", color = Skerry.colors.moss, size = 13.sp, font = mono)
-                    Txt(" -h | ", color = Skerry.colors.textBright, size = 13.sp, font = mono)
-                    Txt("sort", color = Skerry.colors.moss, size = 13.sp, font = mono)
-                    Txt(" -k5 -r | ", color = Skerry.colors.textBright, size = 13.sp, font = mono)
-                    Txt("head", color = Skerry.colors.moss, size = 13.sp, font = mono)
-                    Txt(" -n 10", color = Skerry.colors.textBright, size = 13.sp, font = mono)
-                }
-                Column(Modifier.padding(top = 20.dp).width(220.dp)) {
-                    FieldLabelSnip(stringResource(Res.string.lib_snippets_field_shortcut))
-                    SnipInput("⌘⇧D", mono)
-                }
-                Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PrimaryButton(stringResource(Res.string.lib_snippets_save), onClick = {})
+                selected != null -> {
+                    VLine(Skerry.colors.line)
+                    key(selected.id) {
+                        SnippetRunPanel(
+                            entry = selected,
+                            targets = targets,
+                            activeTargetId = sessions?.active?.focusedPaneId,
+                            mono = mono,
+                            onRun = { target, params -> runSnippetInSession(manager, sessions, selected.id, target.id, params) },
+                            onCopy = { copyTextToClipboard(it) },
+                            onEdit = { mode = PanelMode.Edit(selected.id) },
+                            onDelete = { manager.delete(selected.id); selectedId = null },
+                        )
+                    }
                 }
             }
         }
@@ -466,74 +177,80 @@ private fun MockSnippetsView(mono: FontFamily) {
 }
 
 @Composable
-private fun MockSnippetRow(snippet: MockSnippet, mono: FontFamily) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(7.dp))
-            .background(if (snippet.selected) Skerry.colors.cyan10 else Color.Transparent)
-            .border(1.dp, if (snippet.selected) Skerry.colors.cyan.copy(alpha = 0.18f) else Color.Transparent, RoundedCornerShape(7.dp))
-            .padding(horizontal = 11.dp, vertical = 9.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Sym(snippet.icon, size = 15.sp, color = if (snippet.selected) Skerry.colors.cyanBright else Skerry.colors.dim)
-            Txt(snippet.title, color = if (snippet.selected) Skerry.colors.cyanBright else Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
-        }
-        Txt(snippet.cmd, color = if (snippet.selected) Skerry.colors.dim else Skerry.colors.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
-    }
-}
-
-// --- Editor fields ---
-
-@Composable
-private fun FieldLabelSnip(text: String) {
-    Txt(labelUppercase(text), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 8.dp))
-}
-
-/** Single-line editable field ([SnipInput] style plus placeholder and input). */
-@Composable
-private fun SnipEditField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
-    val textColor = Skerry.colors.text
-    val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        textStyle = textStyle,
-        cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth(),
-        decorationBox = { inner ->
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
-                if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = mono)
-                inner()
-            }
+private fun SnippetsHeader(
+    facts: SnippetLibraryFacts,
+    query: String,
+    onQuery: (String) -> Unit,
+    onNew: () -> Unit,
+) {
+    val commands = pluralStringResource(Res.plurals.lib_snippets_command_count, facts.total, facts.total)
+    SectionHeader(
+        title = stringResource(Res.string.lib_snippets_screen_title),
+        // Two numbers, because they answer different questions: how much is saved, and how much of
+        // it stops to ask for something before running.
+        subtitle = if (facts.withVariables > 0) {
+            "$commands · ${stringResource(Res.string.lib_snippets_facts_variables, facts.withVariables)}"
+        } else {
+            commands
         },
-    )
-}
-
-/** Multiline command field (monospace, terminal-dark background). */
-@Composable
-private fun SnipCommandField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
-    val textColor = Skerry.colors.textBright
-    val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        textStyle = textStyle,
-        cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth(),
-        decorationBox = { inner ->
-            Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp)) {
-                if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = mono)
-                inner()
+        actions = {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                SidebarSearchField(query, onQuery, stringResource(Res.string.lib_snippets_search), Modifier.width(SEARCH_WIDTH))
+                PrimaryButton(stringResource(Res.string.lib_snippets_new), onClick = onNew, icon = "add")
             }
         },
     )
 }
 
 @Composable
-private fun SnipInput(value: String, mono: FontFamily) {
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
-        Txt(value, color = Skerry.colors.text, size = 13.sp, font = mono)
-    }
+private fun SnippetsEmptyList(libraryEmpty: Boolean, onInstallStarterPack: () -> Unit) {
+    EmptyState(
+        icon = "code_blocks",
+        title = if (libraryEmpty) stringResource(Res.string.lib_snippets_empty) else stringResource(Res.string.lib_snippets_no_matches),
+        subtitle = if (libraryEmpty) stringResource(Res.string.lib_snippets_select_or_create) else null,
+        action = if (libraryEmpty) {
+            {
+                ChipButton(
+                    label = stringResource(Res.string.lib_snippets_starter_pack),
+                    color = Skerry.colors.cyan,
+                    onClick = onInstallStarterPack,
+                )
+            }
+        } else {
+            null
+        },
+    )
+}
+
+/**
+ * Sessions a snippet can run into: connected terminal panes across every tab. A remote desktop, a
+ * recording player and a pane that is still connecting have no shell to take the line, so they never
+ * become targets.
+ */
+@Composable
+private fun snippetRunTargets(sessions: SessionsController?): List<SnippetRunTarget> {
+    if (sessions == null) return emptyList()
+    return sessions.tabs.flatMap { tab -> tab.panes }
+        .filter { pane -> !pane.isVnc && !pane.isPlayer && pane.controller.uiState is ConnectionUiState.Connected }
+        .map { pane -> SnippetRunTarget(id = pane.id, label = pane.displayTitle) }
+}
+
+/**
+ * Run [snippetId] in the pane [targetId]. The terminal is looked up at click time, so a session
+ * closed between the frame that enabled Run and the click cannot be sent into; `false` says so, and
+ * the panel reports it rather than leaving a dropped run looking like a command with no output. A
+ * snippet with variables parks in [SnippetManager.pendingRun] and reaches the terminal only after
+ * the confirmation dialog.
+ */
+private fun runSnippetInSession(
+    manager: SnippetManager,
+    sessions: SessionsController?,
+    snippetId: String,
+    targetId: String,
+    params: Map<String, String>,
+): Boolean {
+    val pane = sessions?.tabs?.flatMap { it.panes }?.firstOrNull { it.id == targetId } ?: return false
+    val terminal = (pane.controller.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
+    manager.run(snippetId, recording = terminal.recording, params = params) { text -> terminal.sendUserInputGuarded(text) }
+    return true
 }

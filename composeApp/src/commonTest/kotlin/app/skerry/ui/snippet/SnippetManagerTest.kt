@@ -154,6 +154,32 @@ class SnippetManagerTest {
     }
 
     @Test
+    fun `run prefills the dialog with the values typed in the panel`() {
+        // The snippets panel collects parameter values before Run; they seed the confirmation dialog
+        // instead of making the user type them a second time.
+        val manager = managerWith()
+        val id = manager.save(draft(command = "ping ${'$'}{{target_host}}"))
+        manager.run(id) { }
+        manager.confirmRun("ping old", mapOf("target_host" to "old"))
+
+        manager.run(id, params = mapOf("target_host" to "web9")) { }
+
+        assertEquals(mapOf("target_host" to "web9"), manager.pendingRun!!.initialParams)
+    }
+
+    @Test
+    fun `run without explicit parameters still falls back to the previous run's values`() {
+        val manager = managerWith()
+        val id = manager.save(draft(command = "ping ${'$'}{{target_host}}"))
+        manager.run(id) { }
+        manager.confirmRun("ping old", mapOf("target_host" to "old"))
+
+        manager.run(id, params = emptyMap()) { }
+
+        assertEquals(mapOf("target_host" to "old"), manager.pendingRun!!.initialParams)
+    }
+
+    @Test
     fun `run captures the recording flag on the pending run`() {
         val manager = managerWith()
         val id = manager.save(draft(command = "echo ${'$'}{{date}}"))
