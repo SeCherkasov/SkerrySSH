@@ -4,15 +4,10 @@
     <string name="vault_sidebar_header">保险库</string>
     <string name="vault_e2e_encrypted">端到端加密</string>
     <string name="vault_e2e_description">私钥由你的主密码加密，绝不以明文同步。</string>
-    <string name="vault_banner_encrypted">端到端加密 · 由主密码加密保护</string>
     <string name="vault_generate_key">生成密钥</string>
     <string name="vault_add_password">添加密码</string>
     <string name="vault_import_certificate">导入证书</string>
 
-    <!-- 密钥卡片元数据 -->
-    <string name="vault_meta_certificate">证书 · %1$s</string>
-    <string name="vault_meta_any_principal">任意主体 · %1$s</string>
-    <string name="vault_meta_password">密码 · %1$s</string>
 
     <!-- 空分类状态 -->
     <string name="vault_empty_ssh_title">暂无 SSH 密钥</string>
@@ -30,7 +25,6 @@
     <string name="vault_subtitle_password">密码</string>
     <string name="vault_label_public_key">公钥</string>
     <string name="vault_key_unreadable">无法读取密钥</string>
-    <string name="vault_label_fingerprint">指纹</string>
     <string name="vault_copy_certificate">复制证书</string>
     <string name="vault_copy_public_key">复制公钥</string>
     <string name="vault_copy_password">复制密码</string>
@@ -135,6 +129,39 @@
     <string name="vault_label_key_path">密钥文件</string>
     <string name="vault_label_cert_path">证书文件</string>
     <string name="vault_key_file_missing">此设备无法读取</string>
-    <string name="vault_meta_key_file">文件 · %1$s</string>
     <string name="vault_cert_from_file_unreadable">无法读取证书文件</string>
+
+    <plurals name="vault_item_count">
+        <item quantity="other">%1$d 项</item>
+    </plurals>
+    <string name="vault_header_summary">%1$s · XChaCha20-Poly1305 · Argon2id</string>
+
+
+    <string name="vault_kv_type">类型</string>
+    <string name="vault_kv_fingerprint">指纹</string>
+    <string name="vault_kv_passphrase">密钥口令</string>
+    <string name="vault_kv_added">添加于</string>
+    <string name="vault_kv_last_used">最近使用</string>
+    <string name="vault_value_unknown">—</string>
+    <string name="vault_value_never">从未使用</string>
+    <string name="vault_passphrase_set">已设置</string>
+    <string name="vault_passphrase_none">无</string>
+
+    <string name="vault_section_encryption">加密</string>
+    <string name="vault_kv_cipher">加密算法</string>
+    <string name="vault_kv_kdf">密钥派生</string>
+    <string name="vault_kv_stored">服务器存储</string>
+    <string name="vault_kdf_value">Argon2id · %1$d MiB</string>
+    <string name="vault_stored_ciphertext">仅密文</string>
+    <string name="vault_stored_local">仅本设备</string>
+
+    <string name="vault_section_audit">审计</string>
+    <string name="vault_kv_copied">复制</string>
+    <plurals name="vault_copies_window">
+        <item quantity="other">%2$d 天内 %1$d 次</item>
+    </plurals>
+
+    <string name="vault_meta_rotated">%1$s 轮换</string>
+    <string name="vault_meta_valid_until">有效期至 %1$s</string>
+    <string name="vault_kv_changed">更改于</string>
 </resources>

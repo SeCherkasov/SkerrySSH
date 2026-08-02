@@ -32,6 +32,8 @@ fun resolveHostAuth(host: Host, credentials: CredentialManagerController?): Host
     // demanding a password the profile deliberately doesn't have.
     host.interactiveAuth -> HostAuthResolution.Resolved(SshAuth.Interactive)
     else ->
-        credentials?.find(host.credentialId)?.let { HostAuthResolution.Resolved(it.toSshAuth()) }
+        // useForConnect, not find: resolving a binding here is the moment the secret authenticates
+        // something, and that is what the Vault panel reports as "last used".
+        credentials?.useForConnect(host.credentialId)?.let { HostAuthResolution.Resolved(it.toSshAuth()) }
             ?: HostAuthResolution.NeedsPassword
 }

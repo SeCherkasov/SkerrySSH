@@ -8,14 +8,13 @@ import app.skerry.shared.snippet.SnippetTemplate
 import app.skerry.shared.snippet.SnippetVariableKind
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.shared.vault.CredentialUsage
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_category_certificates
 import app.skerry.ui.generated.resources.vtail_category_passwords
 import app.skerry.ui.generated.resources.vtail_category_ssh_keys
 import app.skerry.ui.generated.resources.vtail_snippets_frag_one
 import app.skerry.ui.generated.resources.vtail_snippets_frag_other
-import app.skerry.ui.generated.resources.vtail_used_by_one
-import app.skerry.ui.generated.resources.vtail_used_by_other
 import app.skerry.ui.generated.resources.vtail_used_by_snippets_one
 import app.skerry.ui.generated.resources.vtail_used_by_snippets_other
 import org.jetbrains.compose.resources.stringResource
@@ -52,6 +51,9 @@ data class SecretTypeStyle(val icon: String, val color: Color, val tinted: Boole
  * secret). No Compose/IO; [VaultView] only renders the result.
  */
 object VaultPresentation {
+
+    /** How many host names a row spells out before switching to "+N". */
+    private const val MAX_NAMED_HOSTS = 3
 
     /** Categories shown in the Vault sidebar. */
     val sidebarCategories: List<VaultCategoryKind> = VaultCategoryKind.entries
@@ -96,6 +98,14 @@ object VaultPresentation {
     fun count(kind: VaultCategoryKind, credentials: List<Credential>): Int =
         credentialsIn(kind, credentials).size
 
+    /**
+     * How many clipboard copies of a secret fall inside the last [days] days. [daysAgo] resolves a
+     * stored ISO timestamp to whole days back (the platform clock, [app.skerry.shared.vault.securityMoment]);
+     * a timestamp it can't parse is not counted — an unreadable date is not evidence of a copy.
+     */
+    fun copiesWithin(usage: CredentialUsage?, days: Int, daysAgo: (String) -> Int?): Int =
+        usage?.copiedAt?.count { at -> daysAgo(at)?.let { it <= days } == true } ?: 0
+
     /** Hosts bound to keychain secret [credentialId] (via [Host.credentialId]); used for "used by" and unbinding on delete. */
     fun hostsUsing(credentialId: String, hosts: List<Host>): List<Host> =
         hosts.filter { it.credentialId == credentialId }
@@ -112,17 +122,24 @@ object VaultPresentation {
         }
 
     /**
-     * Localized "used by N host(s) · M snippet(s)" label for a secret card (desktop + mobile).
-     * `null` when nothing references the secret — the card then shows only the type word instead
-     * of a noisy "used by 0 hosts".
+     * Host names a secret is bound to, as one line: up to [max] of them, then "+N" for the rest.
+     * `null` for none. Names, not a count — a row saying "prod-web-01, prod-web-02" answers the
+     * question the count only hints at, and the row elides what doesn't fit anyway.
+     */
+    fun hostNames(labels: List<String>, max: Int = MAX_NAMED_HOSTS): String? = when {
+        labels.isEmpty() -> null
+        labels.size <= max -> labels.joinToString(", ")
+        else -> labels.take(max).joinToString(", ") + " +" + (labels.size - max)
+    }
+
+    /**
+     * Localized "prod-web-01, prod-web-02 · M snippet(s)" label for a secret row (desktop + mobile).
+     * `null` when nothing references the secret — the row then carries only its own facts instead of
+     * a noisy "used by 0 hosts".
      */
     @Composable
-    fun usedByLabel(hostCount: Int, snippetCount: Int): String? {
-        val hostsPart = when {
-            hostCount == 1 -> stringResource(Res.string.vtail_used_by_one)
-            hostCount > 1 -> stringResource(Res.string.vtail_used_by_other, hostCount)
-            else -> null
-        }
+    fun usedByLabel(hostLabels: List<String>, snippetCount: Int): String? {
+        val hostsPart = hostNames(hostLabels)
         return when {
             hostsPart != null && snippetCount > 0 -> {
                 val fragment =

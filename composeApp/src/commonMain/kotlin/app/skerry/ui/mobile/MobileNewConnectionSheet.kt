@@ -549,7 +549,8 @@ private fun mobileFormAuth(
     AuthMode.NEW_PASSWORD -> form.password.takeIf { it.isNotEmpty() }?.let { SshAuth.Password(it) }
     AuthMode.NEW_KEY -> form.privateKeyPem.takeIf { it.isNotBlank() }
         ?.let { SshAuth.PublicKey(it, form.passphrase.ifBlank { null }) }
-    AuthMode.EXISTING -> credentials?.credentials?.firstOrNull { it.id == form.existingCredentialId }?.toSshAuth()
+    // useForConnect: the sheet is opening a connection, not listing secrets (desktop parity).
+    AuthMode.EXISTING -> credentials?.useForConnect(form.existingCredentialId)?.toSshAuth()
     AuthMode.ASK -> null
     AuthMode.INTERACTIVE -> SshAuth.Interactive
 }

@@ -269,7 +269,9 @@ class IonspinVaultCrypto : VaultCrypto {
         // literal for a named preset would silently change the strength. Parallelism p from the
         // cryptoPwHash spec is fixed at 1 — a libsodium limitation shared by all platforms.
         const val OPS_LIMIT = 3UL                     // t = 3 iterations
-        const val MEM_LIMIT: Int = 64 * 1024 * 1024   // m = 64 MiB (explicit Int: guards against overflow)
+        // m = 64 MiB, taken from the published constant so the UI can state it (explicit Int
+        // arithmetic: guards against overflow).
+        const val MEM_LIMIT: Int = VaultCrypto.KDF_MEMORY_MIB * 1024 * 1024
 
         // Domain AAD for the dataKey wrapper: separates it from records (sealed with a slot AAD) so
         // the wrapper can't be substituted for a record or vice versa even if keys match.

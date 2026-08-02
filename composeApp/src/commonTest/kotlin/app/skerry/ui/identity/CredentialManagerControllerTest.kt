@@ -1,7 +1,10 @@
 package app.skerry.ui.identity
 
+import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialStore
+import app.skerry.shared.vault.CredentialUsage
+import app.skerry.shared.vault.CredentialUsageLog
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.MergeResult
 import app.skerry.shared.vault.RecordType
@@ -9,6 +12,11 @@ import app.skerry.shared.vault.SyncMeta
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecord
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -121,6 +129,154 @@ class CredentialManagerControllerTest {
         assertNull(controller.find("missing"))
         assertNull(controller.find(null))
     }
+
+    @Test
+    fun `creating a secret stamps it as added, updating one does not`() {
+        val usage = FakeUsageLog()
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault()), usage = usage, scope = CoroutineScope(Dispatchers.Unconfined)) { "gen" }
+
+        controller.save(CredentialDraft(label = "Key", kind = CredentialKind.PASSWORD, password = "p"))
+        assertEquals(listOf("added:gen"), usage.events)
+
+        // An edit of the same secret is not a second birth — it is a rotation (see the test below).
+        controller.save(CredentialDraft(id = "gen", label = "Key", kind = CredentialKind.PASSWORD, password = "p2"))
+        assertEquals(listOf("added:gen", "changed:gen"), usage.events)
+    }
+
+    @Test
+    fun `replacing the material of a secret is recorded as a rotation`() {
+        val usage = FakeUsageLog()
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault()), usage = usage, scope = CoroutineScope(Dispatchers.Unconfined)) { "gen" }
+        controller.save(CredentialDraft(label = "Key", kind = CredentialKind.PASSWORD, password = "p"))
+        usage.events.clear()
+
+        controller.save(CredentialDraft(id = "gen", label = "Key", kind = CredentialKind.PASSWORD, password = "p2"))
+        assertEquals(listOf("changed:gen"), usage.events)
+
+        // Re-saving the same material (a rename goes through save too) is not a rotation.
+        controller.save(CredentialDraft(id = "gen", label = "Renamed", kind = CredentialKind.PASSWORD, password = "p2"))
+        assertEquals(listOf("changed:gen"), usage.events)
+    }
+
+    @Test
+    fun `imported secrets are stamped as added`() {
+        val usage = FakeUsageLog()
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault()), usage = usage, scope = CoroutineScope(Dispatchers.Unconfined)) { "gen" }
+
+        controller.importCredentials(listOf(Credential("i1", "Imported", CredentialSecret.Password("p"))))
+
+        assertEquals(listOf("added:i1"), usage.events)
+    }
+
+    @Test
+    fun `deleting a secret forgets its usage`() {
+        val usage = FakeUsageLog()
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault()), usage = usage, scope = CoroutineScope(Dispatchers.Unconfined)) { "gen" }
+        controller.save(CredentialDraft(label = "Key", kind = CredentialKind.PASSWORD, password = "p"))
+
+        controller.delete("gen")
+
+        assertEquals(listOf("added:gen", "forgot:gen"), usage.events)
+    }
+
+    @Test
+    fun `resolving a secret for a connection marks it used`() {
+        val usage = FakeUsageLog()
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault()), usage = usage, scope = CoroutineScope(Dispatchers.Unconfined)) { "gen" }
+        controller.save(CredentialDraft(label = "Key", kind = CredentialKind.PASSWORD, password = "p"))
+        usage.events.clear()
+
+        assertEquals("Key", controller.useForConnect("gen")?.label)
+        assertEquals(listOf("used:gen"), usage.events)
+
+        // A host with no binding (or a dangling one) has nothing to mark.
+        assertNull(controller.useForConnect("missing"))
+        assertNull(controller.useForConnect(null))
+        assertEquals(listOf("used:gen"), usage.events)
+    }
+
+    @Test
+    fun `copying a secret is recorded against it`() {
+        val usage = FakeUsageLog()
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault()), usage = usage, scope = CoroutineScope(Dispatchers.Unconfined)) { "gen" }
+
+        controller.recordCopied("gen")
+
+        assertEquals(listOf("copied:gen"), usage.events)
+    }
+
+    @Test
+    fun `usage events run off the caller thread in the order they were submitted`() = runTest {
+        // The production lane: one thread, so a forget can't overtake a still-pending recordUsed and
+        // the in-memory mirror can't lose an update to a concurrent one.
+        @OptIn(ExperimentalCoroutinesApi::class)
+        val lane = Dispatchers.Default.limitedParallelism(1)
+        val usage = FakeUsageLog()
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault()), usage = usage, scope = CoroutineScope(lane)) { "gen" }
+
+        controller.save(CredentialDraft(label = "Key", kind = CredentialKind.PASSWORD, password = "p"))
+        controller.useForConnect("gen")
+        controller.delete("gen")
+        // Barrier: the lane is FIFO, so once our own block runs everything queued before it is done.
+        withContext(lane) { }
+
+        assertEquals(listOf("added:gen", "used:gen", "forgot:gen"), usage.events)
+        assertNull(controller.usageOf("gen"))
+    }
+
+    @Test
+    fun `works without a usage log`() {
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
+        controller.save(CredentialDraft(label = "Key", kind = CredentialKind.PASSWORD, password = "p"))
+
+        assertEquals("Key", controller.useForConnect("gen")?.label)
+        controller.recordCopied("gen")
+        controller.delete("gen")
+
+        assertEquals(emptyList(), controller.credentials)
+    }
+}
+
+/** Records what the controller reported, in order, so tests assert on the calls themselves. */
+private class FakeUsageLog : CredentialUsageLog {
+    val events = mutableListOf<String>()
+    private val entries = mutableMapOf<String, CredentialUsage>()
+
+    override fun of(credentialId: String): CredentialUsage? = entries[credentialId]
+    override fun all(): List<CredentialUsage> = entries.values.toList()
+
+    override fun recordAdded(credentialId: String): CredentialUsage {
+        events += "added:$credentialId"
+        return store(credentialId) { it.copy(addedAt = it.addedAt ?: "t") }
+    }
+
+    override fun recordChanged(credentialId: String): CredentialUsage {
+        events += "changed:$credentialId"
+        return store(credentialId) { it.copy(changedAt = "t") }
+    }
+
+    override fun recordUsed(credentialId: String): CredentialUsage {
+        events += "used:$credentialId"
+        return store(credentialId) { it.copy(lastUsedAt = "t") }
+    }
+
+    override fun recordCopied(credentialId: String): CredentialUsage {
+        events += "copied:$credentialId"
+        return store(credentialId) { it.copy(copiedAt = it.copiedAt + "t") }
+    }
+
+    override fun forget(credentialId: String) {
+        events += "forgot:$credentialId"
+        entries -= credentialId
+    }
+
+    override fun clear() {
+        events += "cleared"
+        entries.clear()
+    }
+
+    private fun store(id: String, edit: (CredentialUsage) -> CredentialUsage): CredentialUsage =
+        edit(entries[id] ?: CredentialUsage(id)).also { entries[id] = it }
 }
 
 /** In-memory [Vault] storing records (put/openPayload/records/remove, tombstone) for tests. */

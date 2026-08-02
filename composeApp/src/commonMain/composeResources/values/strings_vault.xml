@@ -4,15 +4,10 @@
     <string name="vault_sidebar_header">VAULT</string>
     <string name="vault_e2e_encrypted">End-to-end encrypted</string>
     <string name="vault_e2e_description">Private keys are encrypted with your master password and never sync in plaintext.</string>
-    <string name="vault_banner_encrypted">End-to-end encrypted · sealed with your master password</string>
     <string name="vault_generate_key">Generate key</string>
     <string name="vault_add_password">Add password</string>
     <string name="vault_import_certificate">Import certificate</string>
 
-    <!-- Secret card meta (leading word + a runtime "used by" fragment). -->
-    <string name="vault_meta_certificate">Certificate · %1$s</string>
-    <string name="vault_meta_any_principal">any principal · %1$s</string>
-    <string name="vault_meta_password">Password · %1$s</string>
 
     <!-- Empty category states. -->
     <string name="vault_empty_ssh_title">No SSH keys yet</string>
@@ -30,7 +25,6 @@
     <string name="vault_subtitle_password">Password</string>
     <string name="vault_label_public_key">Public key</string>
     <string name="vault_key_unreadable">Key could not be read</string>
-    <string name="vault_label_fingerprint">Fingerprint</string>
     <string name="vault_copy_certificate">Copy certificate</string>
     <string name="vault_copy_public_key">Copy public key</string>
     <string name="vault_copy_password">Copy password</string>
@@ -135,6 +129,47 @@
     <string name="vault_label_key_path">KEY FILE</string>
     <string name="vault_label_cert_path">CERTIFICATE FILE</string>
     <string name="vault_key_file_missing">Not readable from this device</string>
-    <string name="vault_meta_key_file">file · %1$s</string>
     <string name="vault_cert_from_file_unreadable">Certificate file not readable</string>
+
+    <!-- Section header: how much the vault holds and how it is protected. -->
+    <plurals name="vault_item_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <string name="vault_header_summary">%1$s · XChaCha20-Poly1305 · Argon2id</string>
+
+    <!-- Type badges in the secret list. -->
+
+    <!-- Detail panel: facts about the selected secret. -->
+    <string name="vault_kv_type">Type</string>
+    <string name="vault_kv_fingerprint">Fingerprint</string>
+    <string name="vault_kv_passphrase">Passphrase</string>
+    <string name="vault_kv_added">Added</string>
+    <string name="vault_kv_last_used">Last used</string>
+    <string name="vault_value_unknown">—</string>
+    <string name="vault_value_never">never</string>
+    <string name="vault_passphrase_set">set</string>
+    <string name="vault_passphrase_none">none</string>
+
+    <!-- Detail panel: how the secret is stored. -->
+    <string name="vault_section_encryption">Encryption</string>
+    <string name="vault_kv_cipher">Cipher</string>
+    <string name="vault_kv_kdf">Key derivation</string>
+    <string name="vault_kv_stored">Stored on server</string>
+    <string name="vault_kdf_value">Argon2id · %1$d MiB</string>
+    <string name="vault_stored_ciphertext">ciphertext only</string>
+    <string name="vault_stored_local">this device only</string>
+
+    <!-- Detail panel: what this device did with the secret. -->
+    <string name="vault_section_audit">Audit</string>
+    <string name="vault_kv_copied">Copied</string>
+    <plurals name="vault_copies_window">
+        <item quantity="one">%1$d time in %2$d days</item>
+        <item quantity="other">%1$d times in %2$d days</item>
+    </plurals>
+
+    <!-- Row meta line: the facts about a secret, type excluded (the badge says it). -->
+    <string name="vault_meta_rotated">rotated %1$s</string>
+    <string name="vault_meta_valid_until">valid until %1$s</string>
+    <string name="vault_kv_changed">Changed</string>
 </resources>
