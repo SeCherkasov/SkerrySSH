@@ -330,7 +330,7 @@ private fun MobileSnippetEditSheet(
 
 /**
  * Rename a snippet tag (which doubles as a library category) across every snippet that carries it.
- * Mobile counterpart of the desktop [app.skerry.ui.snippet.SnippetLibrarySidebar] rename dialog:
+ * Mobile counterpart of the desktop the desktop rename dialog in [app.skerry.ui.snippet.SnippetTagFilterRow]:
  * bottom sheet, prefilled name, Save is a no-op while blank. The merge/normalize semantics live in
  * [SnippetManager.renameTag].
  */

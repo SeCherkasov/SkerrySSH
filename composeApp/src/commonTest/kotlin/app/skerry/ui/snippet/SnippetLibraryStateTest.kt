@@ -3,8 +3,6 @@ package app.skerry.ui.snippet
 import app.skerry.shared.snippet.Snippet
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class SnippetLibraryStateTest {
 
@@ -45,47 +43,16 @@ class SnippetLibraryStateTest {
     }
 
     @Test
-    fun categories_follow_the_active_chip() {
-        val s = SnippetLibraryState()
-        s.activeChip = "disk"
-
-        assertEquals(listOf("disk"), s.categories(all).map { it.name })
-    }
-
-    @Test
-    fun a_chip_shows_one_section_even_when_a_snippet_carries_other_tags() {
+    fun a_snippet_carrying_several_tags_is_listed_once_per_chip() {
         val multi = listOf(
             entry("Deploy", listOf("prod", "db")),
             entry("Dump", listOf("db")),
         )
         val s = SnippetLibraryState()
-        s.activeChip = "prod"
+        s.activeChip = "db"
 
-        // Grouping the filtered list again would split "Deploy" back out under "db" and show it twice.
-        assertEquals(listOf("prod"), s.categories(multi).map { it.name })
-        assertEquals(listOf("Deploy"), s.categories(multi).single().snippets.map { it.snippet.label })
-    }
-
-    @Test
-    fun toggle_collapses_and_expands_a_category() {
-        val s = SnippetLibraryState()
-
-        assertFalse(s.isCollapsed("disk"))
-        s.toggleCollapsed("disk")
-        assertTrue(s.isCollapsed("disk"))
-        s.toggleCollapsed("disk")
-        assertFalse(s.isCollapsed("disk"))
-    }
-
-    @Test
-    fun a_rename_carries_the_collapsed_state_to_the_new_name() {
-        val s = SnippetLibraryState()
-        s.toggleCollapsed("db")
-
-        s.onTagRenamed("db", "database")
-
-        assertFalse(s.isCollapsed("db")) // stale key dropped
-        assertTrue(s.isCollapsed("database")) // section stays collapsed under its new name
+        // The list is flat: a snippet with two tags appears once, not once per tag.
+        assertEquals(listOf("Deploy", "Dump"), s.visible(multi).map { it.snippet.label })
     }
 
     @Test
@@ -99,13 +66,12 @@ class SnippetLibraryStateTest {
     }
 
     @Test
-    fun a_rename_leaves_an_expanded_section_and_an_unrelated_chip_untouched() {
+    fun a_rename_leaves_an_unrelated_chip_untouched() {
         val s = SnippetLibraryState()
         s.activeChip = "net"
 
-        s.onTagRenamed("db", "database") // "db" was neither collapsed nor active
+        s.onTagRenamed("db", "database") // "db" was not the active chip
 
-        assertFalse(s.isCollapsed("database"))
         assertEquals("net", s.activeChip)
     }
 }
