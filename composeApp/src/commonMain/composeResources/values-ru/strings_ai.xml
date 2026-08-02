@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assistant_title">Ассистент</string>
+    <string name="assistant_clear">Очистить диалог</string>
+    <string name="assistant_thinking">Думает…</string>
+    <string name="assistant_empty">Спросите про сессию: вывод, ошибки, следующий шаг.</string>
+    <string name="assistant_explain_request">Объясни вывод выше.</string>
+    <string name="assistant_ask_placeholder">Спросить про сессию…</string>
+    <string name="assistant_context_chip">контекст: %1$d</string>
+    <string name="assistant_context_title">СКОЛЬКО ВЫВОДОВ ОТПРАВЛЯТЬ</string>
+    <string name="assistant_context_off">Выкл.</string>
+    <string name="assistant_policy_note">Разрушающие команды не выполняются без вашего клика. В контекст уходит только вывод команд — без ключей и хранилища.</string>
+    <string name="assistant_run">Выполнить</string>
+    <string name="assistant_run_anyway">Всё равно выполнить</string>
+    <string name="assistant_confirm_run">Подтвердить</string>
+    <string name="assistant_no_answer">Модель ничего не вернула. Спросите ещё раз или добавьте контекст.</string>
+    <string name="assistant_attached">отправлено выводов: %1$d</string>
+    <string name="assistant_copy">Копировать</string>
+    <string name="assistant_edit">Править</string>
+    <string name="shell_tip_assistant">Ассистент</string>
+</resources>

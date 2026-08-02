@@ -57,10 +57,8 @@
     <string name="term_system_vcpu">%1$d vCPU</string>
     <string name="term_system_load">load %1$s</string>
     <string name="term_ai_thinking">Thinking…</string>
-    <string name="term_ai_ask_placeholder">Ask Skerry: “find files larger than 100MB”</string>
     <string name="term_ai_run">Run</string>
     <string name="term_ai_run_anyway">Run anyway</string>
-    <string name="term_ai_confirm_run">Confirm run</string>
     <string name="term_ai_dismiss">Dismiss</string>
     <string name="term_ai_not_a_command">That is not a command to run. Describe a task for the server.</string>
     <string name="term_ai_blocked_not_configured">Add an API key in AI settings first.</string>

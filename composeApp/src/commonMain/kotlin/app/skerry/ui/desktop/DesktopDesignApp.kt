@@ -1233,7 +1233,14 @@ private fun runDesktopShortcut(
             if (sessions?.activeSession?.controller?.uiState !is ConnectionUiState.Connected) return false
             state.openCommandPalette()
         }
-        DesktopShortcut.FocusAiBar -> state.requestAiBarFocus()
+        DesktopShortcut.OpenAssistant -> {
+            // The panel lives beside the terminal, so bring that view up first — pressed over SFTP
+            // or a recording the chord would otherwise open a panel nobody can see, and leave it
+            // open for the next time the terminal comes back.
+            state.clearOverlay()
+            sessions?.setActiveView(SessionView.Terminal)
+            state.openAssistant()
+        }
     }
     return true
 }

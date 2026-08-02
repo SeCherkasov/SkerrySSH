@@ -10,11 +10,14 @@ import app.skerry.shared.ai.SecretRedactor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 private class FakeProvider(
@@ -180,6 +183,56 @@ class AiAssistantControllerTest {
 
         assertEquals(app.skerry.shared.ai.AiProviderKind.DEVICE, saved!!.provider)
         assertEquals("qwen3-4b-q4km", saved!!.localModelId)
+    }
+
+    @Test
+    fun `changing the endpoint ends the panel conversations`() = runTest {
+        // A conversation belongs to the endpoint that answered it: after the provider changes, its
+        // request must not keep streaming from the old one, and its history must not be replayed to
+        // the new one.
+        val hanging = object : AiProvider {
+            override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
+                emit(AiDelta(""))
+                kotlinx.coroutines.awaitCancellation()
+            }
+            override suspend fun close() {}
+        }
+        val c = AiAssistantController(AiSettings(apiKey = "sk-x"), persist = {}, providerFactory = { hanging }, scope = this)
+        val pane = c.sessionAssistants.controller("pane-1", app.skerry.shared.ai.AiPolicy.Balanced)
+        pane.ask("question", outputs = emptyList())
+        runCurrent()
+        assertTrue(pane.busy)
+
+        c.selectProvider(app.skerry.shared.ai.AiProviderKind.DEVICE)
+        runCurrent()
+
+        assertFalse(pane.busy, "the request must not outlive the endpoint it was sent to")
+        assertNotSame(pane, c.sessionAssistants.controller("pane-1", app.skerry.shared.ai.AiPolicy.Balanced))
+    }
+
+    @Test
+    fun `a settings reload that arrives over sync ends them too`() = runTest {
+        // refresh() is the live-sync path: another device editing the BYOK key moves the endpoint
+        // just as a local change does.
+        var stored = AiSettings(apiKey = "sk-x")
+        val c = AiAssistantController(stored, persist = {}, providerFactory = { error("unused") }, scope = this, reload = { stored })
+        val pane = c.sessionAssistants.controller("pane-1", app.skerry.shared.ai.AiPolicy.Balanced)
+
+        stored = stored.copy(apiKey = "sk-rotated")
+        c.refresh()
+
+        assertNotSame(pane, c.sessionAssistants.controller("pane-1", app.skerry.shared.ai.AiPolicy.Balanced))
+    }
+
+    @Test
+    fun `a settings reload that changes nothing keeps them`() = runTest {
+        val stored = AiSettings(apiKey = "sk-x")
+        val c = AiAssistantController(stored, persist = {}, providerFactory = { error("unused") }, scope = this, reload = { stored })
+        val pane = c.sessionAssistants.controller("pane-1", app.skerry.shared.ai.AiPolicy.Balanced)
+
+        c.refresh()
+
+        assertSame(pane, c.sessionAssistants.controller("pane-1", app.skerry.shared.ai.AiPolicy.Balanced))
     }
 
     @Test

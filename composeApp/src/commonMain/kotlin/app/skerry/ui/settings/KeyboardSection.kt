@@ -45,7 +45,7 @@ import app.skerry.ui.generated.resources.settings_kb_files_group
 import app.skerry.ui.generated.resources.settings_kb_files_hidden
 import app.skerry.ui.generated.resources.settings_kb_files_save
 import app.skerry.ui.generated.resources.settings_kb_files_switch_pane
-import app.skerry.ui.generated.resources.settings_kb_focus_ai
+import app.skerry.ui.generated.resources.settings_kb_open_assistant
 import app.skerry.ui.generated.resources.settings_kb_focus_pane
 import app.skerry.ui.generated.resources.settings_kb_global
 import app.skerry.ui.generated.resources.settings_kb_lock
@@ -94,7 +94,7 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_focus_pane), mod("←↑↓→"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_next_prev_tab), "${ctrl("Tab")} / ${ctrlShift("Tab")}", live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_select_tab_number), if (mac) "⌥1–9" else "Alt+1–9", live = true),
-        KeyboardBinding(stringResource(Res.string.settings_kb_focus_ai), mod("/"), live = true),
+        KeyboardBinding(stringResource(Res.string.settings_kb_open_assistant), mod("/"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_open_sftp), mod("E"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_lock), mod("L"), live = true),
     )

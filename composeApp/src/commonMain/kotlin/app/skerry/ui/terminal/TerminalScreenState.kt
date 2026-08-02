@@ -1312,17 +1312,38 @@ private val PASSWORD_PROMPT_HINTS = listOf(
  * Heuristic only — no shell cooperation (OSC 133) is assumed, and prompts vary. A very short prompt
  * (e.g. a bare "$") is rejected, since it would match unrelated lines and mis-slice the screen.
  */
-internal fun lastCommandBlock(text: String): String? {
+/**
+ * The [count] most recent command blocks of screen [text], oldest first — the context the assistant
+ * panel attaches to a question. Same prompt heuristic as [lastCommandBlock], applied repeatedly:
+ * every line that repeats the current prompt and has something typed after it starts a block, and a
+ * block runs to the next such line. Returns fewer entries than asked when the screen holds fewer,
+ * and an empty list when the prompt is unusable.
+ */
+internal fun lastCommandBlocks(text: String, count: Int): List<String> {
+    if (count <= 0) return emptyList()
     val lines = text.split("\n")
-    if (lines.size < 2) return null
+    if (lines.size < 2) return emptyList()
     val prompt = lines.last()
-    if (prompt.length < 3) return null
+    if (prompt.length < 3) return emptyList()
+    // Walk up from the current prompt collecting command lines, newest first, then slice each block
+    // from its command line down to the next one.
+    val starts = mutableListOf<Int>()
     for (i in lines.size - 2 downTo 0) {
         val line = lines[i]
         // A command line repeats the prompt and has something typed after it.
         if (line.length > prompt.length && line.startsWith(prompt)) {
-            return lines.subList(i, lines.size - 1).joinToString("\n").trim().ifBlank { null }
+            starts += i
+            if (starts.size == count) break
         }
     }
-    return null
+    val blocks = mutableListOf<String>()
+    var end = lines.size - 1
+    starts.forEach { start ->
+        val block = lines.subList(start, end).joinToString("\n").trim()
+        if (block.isNotEmpty()) blocks += block
+        end = start
+    }
+    return blocks.reversed()
 }
+
+internal fun lastCommandBlock(text: String): String? = lastCommandBlocks(text, 1).firstOrNull()

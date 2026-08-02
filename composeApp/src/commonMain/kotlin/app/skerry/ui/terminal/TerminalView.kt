@@ -1,6 +1,7 @@
 package app.skerry.ui.terminal
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -79,6 +80,9 @@ import app.skerry.ui.desktop.matchDesktopShortcut
 import app.skerry.ui.desktop.paneGridDirection
 import app.skerry.ui.host.localTerminalHost
 import app.skerry.ui.app.DesktopView
+import app.skerry.ui.ai.ASSISTANT_PANEL_WIDTH
+import app.skerry.ui.ai.AssistantPanel
+import app.skerry.ui.ai.assistantModelLabel
 import app.skerry.ui.app.LocalAi
 import app.skerry.shared.host.Host
 import app.skerry.ui.app.LocalConnectPane
@@ -107,6 +111,7 @@ import app.skerry.ui.generated.resources.shell_tip_record
 import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.generated.resources.shell_tip_ports
 import app.skerry.ui.generated.resources.shell_tip_add_pane
+import app.skerry.ui.generated.resources.shell_tip_assistant
 import app.skerry.ui.generated.resources.shell_tip_sync_panes
 import app.skerry.ui.generated.resources.term_connecting
 import app.skerry.ui.generated.resources.term_connection_failed
@@ -174,7 +179,12 @@ private val PANE_HEADER_ROOM = 220.dp
  * over the header of a pane it does not belong to.
  */
 @Composable
-private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: Modifier = Modifier) {
+private fun SessionActions(
+    state: DesktopDesignState,
+    available: Dp?,
+    assistantShown: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val sessions = LocalSessions.current
     val tab = sessions?.activeTerminal
     // Session-scoped actions (snippets, runbooks, recording) act on the pane the user is working
@@ -183,7 +193,7 @@ private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: 
     val active = tab?.focusedPane
     val teams = LocalTeams.current
     val syncShown = tab != null && tab.isSplit
-    val hidden = overflowedActions(available, syncShown)
+    val hidden = overflowedActions(available, syncShown, assistantShown)
 
     // Files / tunnels / info are stateless, so the overflow menu can run them directly. The palettes
     // and the recorder own their popups and save dialogs, so those are parked below instead and
@@ -265,6 +275,17 @@ private fun SessionActions(state: DesktopDesignState, available: Dp?, modifier: 
             // recording in its own tab, so the shells stay reachable while it plays; the mock path
             // (no session manager) has no tabs and falls back to the overlay.
             if (ToolbarAction.Play !in hidden) PlayRecordingButton(state.castOpenRequests, onCastOpened)
+            // Opens the assistant beside the terminal. Lit while it is open, like the info toggle;
+            // absent entirely when AI is off for this host or globally, so a host that opted out
+            // shows no AI affordance at all.
+            if (assistantShown) {
+                IconBtn(
+                    "auto_awesome",
+                    onClick = state::toggleAssistant,
+                    tint = if (state.assistantPanel) Skerry.colors.teal else Skerry.colors.dim,
+                    tooltip = stringResource(Res.string.shell_tip_assistant),
+                )
+            }
             // Lit while the info panel is open — the only action here with a visible on/off state.
             // The panel is session-scoped, so with no active session there is nothing to show: the
             // button dims and no-ops rather than toggling a panel that can't appear.
@@ -327,9 +348,10 @@ internal fun infoPanelAvailable(hasSession: Boolean, watched: Boolean, mock: Boo
  * Pure so the thresholds can be tested without a window: the row must also keep room for the
  * overflow button itself once anything is hidden.
  */
-internal fun overflowedActions(available: Dp?, syncShown: Boolean): Set<ToolbarAction> {
+internal fun overflowedActions(available: Dp?, syncShown: Boolean, assistantShown: Boolean = false): Set<ToolbarAction> {
     if (available == null) return emptySet()
-    val total = ToolbarAction.entries.size + 2 + if (syncShown) 1 else 0 // + add-pane and power
+    // + add-pane and power, plus the two conditional buttons when they are actually drawn.
+    val total = ToolbarAction.entries.size + 2 + (if (syncShown) 1 else 0) + if (assistantShown) 1 else 0
     val room = available - PANE_HEADER_ROOM - 32.dp // the row's own horizontal padding
     val fits = (room / ACTION_SLOT_WIDTH).toInt()
     if (fits >= total) return emptySet()
@@ -452,26 +474,26 @@ fun TerminalView(state: DesktopDesignState) {
             exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
         ) { SidebarReopenHandle(onClick = state::toggleSidebar) }
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            // Shared live AI bar controller (or null): one instance for the overlay layer and
-            // input row; key() recreates it when the active host/policy changes. Off/mock -> null
-            // (falls back to the slot below).
             val liveAi = LocalAi.current
-            // The AI bar acts on the pane in focus: on a split it explains and runs there.
+            // The assistant answers about the pane in focus: on a split it reads and runs there.
             val aiSession = LocalSessions.current?.activeTerminal?.focusedPane
             val aiPolicy = aiSession?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
             val aiTerminal = (aiSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
-            // liveAi.enabled is in the key: toggling the global OFF setting shows/hides the bar
-            // without recreating the screen (settings is Compose state, so it recomposes).
-            // The pane's id is in it too. terminalController() builds a fresh controller holding the
-            // proposed command, and most hosts sit on the same policy, so without the id one
-            // controller was shared across panes while `aiTerminal` below followed the focus: a
-            // command proposed for one pane would run on whichever pane was focused when Run was
-            // pressed. Switching focus now discards an unconfirmed proposal, which is the cheap side
-            // of that trade.
-            val aiController = key(liveAi, aiPolicy, liveAi?.enabled, aiSession?.id) {
-                remember {
-                    if (liveAi != null && liveAi.enabled && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
-                }
+            // Conversations are per pane and outlive this composition: the store belongs to the
+            // assistant itself, so opening SFTP or the vault (which takes this view off screen)
+            // leaves the threads intact, and a provider change closes them there (see
+            // AiAssistantController.sessionAssistants).
+            val assistants = liveAi?.takeIf { it.enabled }?.sessionAssistants
+            // Off for this host (or globally) hides the panel and its toolbar button entirely.
+            val assistantController = aiSession?.let { session ->
+                assistants?.takeIf { AiPolicyDecision.of(aiPolicy).aiEnabled }?.controller(session.id, aiPolicy)
+            }
+            val assistantVisible = state.assistantPanel && assistantController != null
+            // A closed pane's conversation is dropped with it, so closing tabs doesn't accumulate
+            // controllers (and a request left in flight there is cancelled).
+            val openPaneIds = LocalSessions.current?.tabs?.flatMap { it.panes.map { pane -> pane.id } }?.toSet()
+            LaunchedEffect(assistants, openPaneIds) {
+                if (openPaneIds != null) assistants?.retain(openPaneIds)
             }
             // Width of the pinned action row, measured so the pane it sits over can reserve room
             // for it instead of drawing its own header controls underneath.
@@ -516,21 +538,48 @@ fun TerminalView(state: DesktopDesignState) {
                         enter = expandHorizontally(expandFrom = Alignment.Start),
                         exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
                     ) { InfoPanel() }
+                    // The assistant sits beside the terminal, the same way the info panel does: it
+                    // is about this session, and a question is asked while its output is in view.
+                    // Nothing to talk about without a session, so it stays closed there.
+                    AnimatedVisibility(
+                        visible = assistantVisible,
+                        enter = expandHorizontally(expandFrom = Alignment.Start),
+                        exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
+                    ) {
+                        assistantController?.let { controller ->
+                            // Keyed on the conversation: the draft question, the feed's scroll
+                            // position and the context menu belong to the pane that was asked about.
+                            // Without the key they would sit in the same composition slot and follow
+                            // the focus to another pane — a question typed for one host would be
+                            // sent to another, with that other host's output attached.
+                            key(controller) {
+                                AssistantPanel(
+                                    controller = controller,
+                                    terminal = aiTerminal,
+                                    focusPending = state.assistantFocusPending,
+                                    onFocusConsumed = state::consumeAssistantFocus,
+                                    modelLabel = liveAi?.let { assistantModelLabel(it) }.orEmpty(),
+                                )
+                            }
+                        }
+                    }
                 }
+                // The pinned row floats over the right edge of the work area, which is the assistant
+                // panel while it is open — and the panel has a header of its own there. Inset the row
+                // by the panel's width so it keeps sitting over the terminal instead of over the
+                // panel title; animated, so it travels with the panel rather than jumping.
+                val actionsInset by animateDpAsState(
+                    if (assistantVisible) ASSISTANT_PANEL_WIDTH else 0.dp,
+                    label = "assistantActionsInset",
+                )
                 SessionActions(
                     state,
                     available = if (tab != null) actionsPaneWidth else null,
-                    modifier = Modifier.align(Alignment.TopEnd).onGloballyPositioned {
+                    assistantShown = assistantController != null,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(end = actionsInset).onGloballyPositioned {
                         actionsWidth = with(density) { it.size.width.toDp() }
                     },
                 )
-            }
-            // Single bar row: command + inline explanation/risk reason + buttons; thinking/blocked/
-            // error states share it. Never overlaps the terminal or changes its height. Off/mock -> slot.
-            // AI bar only shows with an active session; not shown on the empty "no active session"
-            // screen. Design preview (LocalSessions == null) keeps the mock bar.
-            if (aiSession != null || LocalSessions.current == null) {
-                if (aiController != null) AiBarInput(aiController, aiTerminal, state.aiBarFocusRequests) else TerminalAiBarSlot()
             }
         }
     }

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="assistant_title">助手</string>
+    <string name="assistant_clear">清空对话</string>
+    <string name="assistant_thinking">思考中…</string>
+    <string name="assistant_empty">询问此会话：输出、错误、下一步。</string>
+    <string name="assistant_explain_request">解释上面的输出。</string>
+    <string name="assistant_ask_placeholder">询问此会话…</string>
+    <string name="assistant_context_chip">上下文：%1$d</string>
+    <string name="assistant_context_title">发送最近的输出数量</string>
+    <string name="assistant_context_off">关闭</string>
+    <string name="assistant_policy_note">破坏性命令必须经你点击才会执行。仅将命令输出作为上下文发送——不含密钥与保险库。</string>
+    <string name="assistant_run">在会话中运行</string>
+    <string name="assistant_run_anyway">仍然运行</string>
+    <string name="assistant_confirm_run">确认运行</string>
+    <string name="assistant_no_answer">模型未返回内容。请重新提问或补充上下文。</string>
+    <string name="assistant_attached">已发送 %1$d 条输出</string>
+    <string name="assistant_copy">复制</string>
+    <string name="assistant_edit">编辑</string>
+    <string name="shell_tip_assistant">助手</string>
+</resources>
