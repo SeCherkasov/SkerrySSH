@@ -20,7 +20,7 @@ material3 = "1.9.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 ktor = "3.5.1"
-logback = "1.6.0"
+logback = "1.6.1"
 # slf4j-nop: a no-op SLF4J provider for the app. sshj logs via slf4j-api (2.0.17 on the
 # classpath); without any binding SLF4J prints "No SLF4J providers were found" and goes NOP.
 # An explicit nop removes the warning while keeping current behavior (sshj logs are not needed in the client anyway).
@@ -44,7 +44,7 @@ sshd = "2.19.0"
 # multiplatform libsodium binding (KMP, Argon2id + XChaCha20-Poly1305) for a single VaultCrypto
 ionspin-libsodium = "0.9.5"
 # okio — cross-platform file I/O behind FileSystem (FileVault in commonMain, FakeFileSystem in tests)
-okio = "3.18.0"
+okio = "3.18.1"
 # atomicfu — multiplatform locks (kotlinx.atomicfu.locks) instead of JVM-only @Synchronized
 atomicfu = "0.33.0"
 # --- Phase 2 sync ---
