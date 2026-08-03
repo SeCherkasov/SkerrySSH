@@ -64,6 +64,28 @@ class WindowDragGestureTest {
         assertEquals(Point(110, 200), gesture.drag(Point(450, 30), origin, floating = true))
     }
 
+    /**
+     * The native WM drag was asked for and never happened: the in-app drag takes the gesture over
+     * mid-flight, from wherever the pointer and the window are right now.
+     */
+    @Test
+    fun takeOverGrabsTheWindowWithoutWaitingForTheDeadZone() {
+        val gesture = gesture(Point(500, 20))
+        gesture.takeOver(Point(560, 60), origin)
+        // No further dead zone: the very next move repositions the window by the pointer delta...
+        assertEquals(Point(110, 210), gesture.drag(Point(570, 70), origin, floating = true))
+        // ...and a move back to the take-over point leaves the window exactly where it started.
+        assertEquals(origin, gesture.drag(Point(560, 60), Point(110, 210), floating = true))
+    }
+
+    @Test
+    fun takenOverGestureStillStopsWhenTheWindowStopsFloating() {
+        val gesture = gesture(Point(500, 20))
+        gesture.takeOver(Point(560, 60), origin)
+        assertNull(gesture.drag(Point(600, 100), Point(0, 0), floating = false))
+        assertNull(gesture.drag(Point(640, 140), Point(0, 0), floating = true))
+    }
+
     @Test
     fun dragWithoutPressIsIgnored() {
         val gesture = WindowDragGesture(deadZone)

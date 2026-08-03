@@ -24,6 +24,8 @@ import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
 import java.awt.Cursor
 import java.awt.MouseInfo
+import java.awt.Point
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Custom chrome for the undecorated main window: dragging the empty titlebar space (with
@@ -41,9 +43,13 @@ fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit)
                 else WindowPlacement.Maximized
         }
         val isFloating = { state.placement == WindowPlacement.Floating }
-        // On X11 the WM moves the window itself (smooth, compositor-driven — see NativeWindowMove);
-        // elsewhere fall back to moving it frame by frame from the app thread.
+        // On X11 the WM is asked to move the window itself (smooth, compositor-driven — see
+        // NativeWindowMove); where it doesn't answer, the same gesture drags the window from the app
+        // thread instead.
         val useNativeMove = NativeWindowMove.isAvailable()
+        // One per window, not per drag area: whether this WM answers at all is a property of the
+        // session, and a pointer-input node is rebuilt whenever the screen around it changes.
+        val nativeMoveWatch = NativeMoveWatch(NATIVE_MOVE_SETTLE)
         WindowChrome(
             isMaximized = { state.placement == WindowPlacement.Maximized },
             onMinimize = { state.isMinimized = true },
@@ -53,66 +59,70 @@ fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit)
                 val doubleClick = Modifier.onUnconsumedDoubleClick(toggleMaximize)
                 when {
                     state.placement == WindowPlacement.Maximized -> Box(doubleClick) { content() }
-                    useNativeMove -> Box(doubleClick.then(Modifier.nativeWindowDrag(awtWindow))) { content() }
-                    else -> Box(doubleClick.then(Modifier.inAppWindowDrag(awtWindow, isFloating))) { content() }
+                    else -> Box(
+                        doubleClick.then(Modifier.windowDrag(awtWindow, isFloating, useNativeMove, nativeMoveWatch)),
+                    ) { content() }
                 }
             },
         )
     }
 }
 
-/**
- * Moves the window frame by frame from the app thread, for platforms without [NativeWindowMove].
- * Gated by [WindowDragGesture] (dead zone, floating only), and driven by absolute pointer positions
- * ([MouseInfo]) because local ones shift together with the window and would feed back. [isFloating]
- * is read per event, so a double-click that maximizes the window mid-gesture stops the drag instead
- * of dragging the now screen-sized window back to the floating origin (issue #76). Only unconsumed
- * presses arm it, so buttons/tabs that consume their own press are excluded.
- */
-private fun Modifier.inAppWindowDrag(window: java.awt.Window, isFloating: () -> Boolean): Modifier =
-    pointerInput(window) {
-        val gesture = WindowDragGesture(viewConfiguration.touchSlop.toInt())
-        awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = true)
-            gesture.press(MouseInfo.getPointerInfo()?.location ?: return@awaitEachGesture)
-            try {
-                while (true) {
-                    val event = awaitPointerEvent()
-                    val change = event.changes.firstOrNull() ?: break
-                    if (!change.pressed) break
-                    val pointer = MouseInfo.getPointerInfo()?.location ?: continue
-                    val target = gesture.drag(pointer, window.location, isFloating()) ?: continue
-                    change.consume()
-                    window.setLocation(target.x, target.y)
-                }
-            } finally {
-                gesture.release()
-            }
-        }
-    }
+// How long a requested native move has to actually move the window before the drag stops waiting
+// for the WM. Long enough for a compositor round-trip, short enough to pass for a slow first frame —
+// and paid only while the WM still looks like it might answer (see NativeMoveWatch.worthTrying).
+private val NATIVE_MOVE_SETTLE = 60.milliseconds
+
+/** The real window behind the drag arbitration in [WindowDragArbiter]. */
+private class AwtDragTarget(private val window: java.awt.Window) : DragTarget {
+
+    override val origin: Point get() = window.location
+
+    override fun moveTo(target: Point) = window.setLocation(target.x, target.y)
+
+    override fun startNativeMove(pointer: Point) = NativeWindowMove.startMove(window, pointer.x, pointer.y)
+
+    override fun cancelNativeMove(pointer: Point) = NativeWindowMove.cancelMove(window, pointer.x, pointer.y)
+}
 
 /**
- * Starts a native WM drag ([NativeWindowMove]) once the pointer moves past touch-slop from the
- * initial press — the slop threshold keeps clicks on titlebar buttons and the double-click-to-
- * maximize gesture working, since a plain click never crosses it. Only unconsumed presses arm the
- * drag, so buttons/tabs that consume their own press are excluded. Once handed off, the compositor
- * owns the pointer and this gesture simply ends.
+ * Drags the undecorated window by its titlebar. Where [native] is available the WM is asked to take
+ * the window over ([NativeWindowMove]) so the move is compositor-driven and smooth; that request is
+ * fire-and-forget, and a WM that ignores it would otherwise leave the window frozen under the
+ * pointer, so [NativeMoveWatch] gives it [NATIVE_MOVE_SETTLE] and then hands the gesture back to the
+ * in-app drag ([DragMode]). A WM that does take the window swallows the rest of the events, so the
+ * gesture ends on the first event that arrives after the window moved — otherwise it would sit here
+ * waiting for a release that never comes and the next press would land inside the stale gesture.
+ *
+ * Driven by absolute pointer positions ([MouseInfo]) because local ones shift together with the
+ * window and would feed back. [isFloating] is read per event, so a double-click that maximizes the
+ * window mid-gesture stops the drag instead of dragging the now screen-sized window back to the
+ * floating origin (issue #76). Only unconsumed presses arm it, so buttons/tabs that consume their
+ * own press are excluded.
  */
-private fun Modifier.nativeWindowDrag(window: java.awt.Window): Modifier = pointerInput(window) {
+private fun Modifier.windowDrag(
+    window: java.awt.Window,
+    isFloating: () -> Boolean,
+    native: Boolean,
+    watch: NativeMoveWatch,
+): Modifier = pointerInput(window, native) {
+    val slop = viewConfiguration.touchSlop
+    val arbiter = WindowDragArbiter(AwtDragTarget(window), slop.toInt(), watch, native)
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = true)
-        val slop = viewConfiguration.touchSlop
-        while (true) {
-            val event = awaitPointerEvent()
-            val change = event.changes.firstOrNull() ?: break
-            if (!change.pressed) break // released without dragging — leave it for click/double-click
-            if ((change.position - down.position).getDistance() > slop) {
-                val mouse = MouseInfo.getPointerInfo()?.location
-                if (mouse != null && NativeWindowMove.startMove(window, mouse.x, mouse.y)) {
-                    change.consume()
-                }
-                break
+        arbiter.press(MouseInfo.getPointerInfo()?.location ?: return@awaitEachGesture)
+        try {
+            while (true) {
+                val change = awaitPointerEvent().changes.firstOrNull() ?: break
+                if (!change.pressed) break // released — left for click/double-click
+                val pointer = MouseInfo.getPointerInfo()?.location ?: continue
+                val pastDeadZone = (change.position - down.position).getDistance() > slop
+                val step = arbiter.moved(pointer, pastDeadZone, isFloating())
+                if (step.consume) change.consume()
+                if (step.mode == null) break // the WM has the window; the next press starts fresh
             }
+        } finally {
+            arbiter.release()
         }
     }
 }

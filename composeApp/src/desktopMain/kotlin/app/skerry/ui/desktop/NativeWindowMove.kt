@@ -17,8 +17,10 @@ import java.awt.Window
  * false and the caller keeps using the manual drag.
  */
 object NativeWindowMove {
-    // From X11/Xutil.h: the direction telling the WM to start a plain move (not a resize).
+    // From X11/Xutil.h: the direction telling the WM to start a plain move (not a resize), and the
+    // one withdrawing a request it hasn't acted on.
     private const val NET_WM_MOVERESIZE_MOVE = 8
+    private const val NET_WM_MOVERESIZE_CANCEL = 11
     // SubstructureRedirectMask (1<<20) | SubstructureNotifyMask (1<<19): the mask the WM listens on
     // for client messages posted to the root window.
     private val ROOT_EVENT_MASK = NativeLong((1L shl 20) or (1L shl 19))
@@ -59,7 +61,17 @@ object NativeWindowMove {
      * [screenX]/[screenY] (where the drag began). Returns false if unavailable or the window has no
      * X11 id yet, so the caller can fall back. [button] is the mouse button held (1 = left).
      */
-    fun startMove(window: Window, screenX: Int, screenY: Int, button: Int = 1): Boolean {
+    fun startMove(window: Window, screenX: Int, screenY: Int, button: Int = 1): Boolean =
+        send(window, screenX, screenY, NET_WM_MOVERESIZE_MOVE, button)
+
+    /**
+     * Withdraws a move request the WM never acted on. Without it a WM that answers late would start
+     * dragging a window the app has meanwhile taken over, and the two would fight over it.
+     */
+    fun cancelMove(window: Window, screenX: Int, screenY: Int, button: Int = 1): Boolean =
+        send(window, screenX, screenY, NET_WM_MOVERESIZE_CANCEL, button)
+
+    private fun send(window: Window, screenX: Int, screenY: Int, direction: Int, button: Int): Boolean {
         val s = session ?: return false
         val xid = try {
             Native.getWindowID(window)
@@ -81,7 +93,7 @@ object NativeWindowMove {
             event.xclient.data.setType("l")
             event.xclient.data.l[0] = NativeLong(screenX.toLong())
             event.xclient.data.l[1] = NativeLong(screenY.toLong())
-            event.xclient.data.l[2] = NativeLong(NET_WM_MOVERESIZE_MOVE.toLong())
+            event.xclient.data.l[2] = NativeLong(direction.toLong())
             event.xclient.data.l[3] = NativeLong(button.toLong())
             event.xclient.data.l[4] = NativeLong(1) // source indication: normal application
             event.write()
