@@ -15,8 +15,8 @@ enum class HeaderAutoHideDelay(val id: String, val hideAfterMs: Long?) {
     SixtySeconds("60s", 60_000L);
 
     companion object {
-        /** Default: keep the header visible (no auto-hide). */
-        val DEFAULT: HeaderAutoHideDelay = Never
+        /** Default: auto-hide after 3 seconds (the pre-setting behaviour). */
+        val DEFAULT: HeaderAutoHideDelay = ThreeSeconds
 
         /** Parses a stable [id] from storage; unknown/blank falls back to [DEFAULT]. */
         fun fromId(id: String?): HeaderAutoHideDelay = entries.firstOrNull { it.id == id } ?: DEFAULT
