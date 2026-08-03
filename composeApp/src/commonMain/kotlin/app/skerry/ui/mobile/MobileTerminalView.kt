@@ -233,11 +233,14 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // Header auto-hide per the setting (More -> Appearance -> Terminal); Never keeps it visible.
     val autoHideMs = state.headerAutoHide.hideAfterMs
     // Held open while a sheet launched from it is up: the header is where they were opened from, and
-    // hiding it under an open menu reads as the app losing its place.
-    LaunchedEffect(headerVisible, menuOpen, paletteOpen, revealNonce, autoHideMs) {
+    // hiding it under an open menu reads as the app losing its place. The timer only starts once the
+    // session is Connected — while connecting/error/disconnected the user needs the status visible.
+    LaunchedEffect(headerVisible, menuOpen, paletteOpen, revealNonce, autoHideMs, active?.controller?.uiState) {
         val autoHide = autoHideMs
         val panelsClosed = !menuOpen && !paletteOpen
-        if (autoHide != null && headerVisible && panelsClosed) {
+        val connected = active?.controller?.uiState is ConnectionUiState.Connected
+        val shouldAutoHide = autoHide != null && headerVisible && panelsClosed && connected
+        if (shouldAutoHide) {
             delay(autoHide)
             headerVisible = false
         }
