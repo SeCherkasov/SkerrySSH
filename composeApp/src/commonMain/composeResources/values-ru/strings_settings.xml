@@ -83,6 +83,9 @@
     <string name="settings_terminal_header_auto_hide_15s">15 секунд</string>
     <string name="settings_terminal_header_auto_hide_30s">30 секунд</string>
     <string name="settings_terminal_header_auto_hide_60s">60 секунд</string>
+    <string name="settings_terminal_header_position">Положение заголовка терминала</string>
+    <string name="settings_terminal_header_position_top">Сверху</string>
+    <string name="settings_terminal_header_position_bottom">Снизу</string>
     <string name="settings_terminal_cursor_block_blink">Блок (мигающий)</string>
     <string name="settings_terminal_cursor_block_steady">Блок</string>
     <string name="settings_terminal_cursor_underline_blink">Подчёркивание (мигающее)</string>

@@ -83,6 +83,9 @@
     <string name="settings_terminal_header_auto_hide_15s">15 seconds</string>
     <string name="settings_terminal_header_auto_hide_30s">30 seconds</string>
     <string name="settings_terminal_header_auto_hide_60s">60 seconds</string>
+    <string name="settings_terminal_header_position">Terminal header position</string>
+    <string name="settings_terminal_header_position_top">Top</string>
+    <string name="settings_terminal_header_position_bottom">Bottom</string>
     <string name="settings_terminal_cursor_block_blink">Block (blink)</string>
     <string name="settings_terminal_cursor_block_steady">Block</string>
     <string name="settings_terminal_cursor_underline_blink">Underline (blink)</string>

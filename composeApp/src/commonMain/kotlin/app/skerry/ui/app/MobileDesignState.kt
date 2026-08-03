@@ -18,6 +18,7 @@ import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.session.BroadcastController
 import app.skerry.ui.mobile.HeaderAutoHideDelay
+import app.skerry.ui.mobile.HeaderPosition
 import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.shared.terminal.Asciicast
@@ -147,6 +148,8 @@ class MobileDesignState(
     // persistence, callback writes back. Never = header always visible (default).
     initialHeaderAutoHide: HeaderAutoHideDelay = HeaderAutoHideDelay.DEFAULT,
     private val onHeaderAutoHideChange: (HeaderAutoHideDelay) -> Unit = {},
+    initialHeaderPosition: HeaderPosition = HeaderPosition.DEFAULT,
+    private val onHeaderPositionChange: (HeaderPosition) -> Unit = {},
 ) {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
 
@@ -383,6 +386,12 @@ class MobileDesignState(
      */
     var headerAutoHide: HeaderAutoHideDelay by mutableStateOf(initialHeaderAutoHide); private set
 
+    /**
+     * Where the mobile terminal's header sits (More -> Appearance -> Terminal). [HeaderPosition.Bottom]
+     * moves it below the key bar for punch-hole/notch phones. Persisted per device.
+     */
+    var headerPosition: HeaderPosition by mutableStateOf(initialHeaderPosition); private set
+
     /** Choose the auto-lock threshold and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseAutoLock(duration: AutoLockDuration) {
         if (duration == autoLock) return
@@ -497,5 +506,12 @@ class MobileDesignState(
         if (delay == headerAutoHide) return
         headerAutoHide = delay
         onHeaderAutoHideChange(delay)
+    }
+
+    /** Choose where the mobile terminal header sits and report outward (for persistence). */
+    fun chooseHeaderPosition(position: HeaderPosition) {
+        if (position == headerPosition) return
+        headerPosition = position
+        onHeaderPositionChange(position)
     }
 }

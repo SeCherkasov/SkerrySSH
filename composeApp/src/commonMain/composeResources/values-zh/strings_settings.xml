@@ -83,6 +83,9 @@
     <string name="settings_terminal_header_auto_hide_15s">15 秒</string>
     <string name="settings_terminal_header_auto_hide_30s">30 秒</string>
     <string name="settings_terminal_header_auto_hide_60s">60 秒</string>
+    <string name="settings_terminal_header_position">终端顶栏位置</string>
+    <string name="settings_terminal_header_position_top">顶部</string>
+    <string name="settings_terminal_header_position_bottom">底部</string>
     <string name="settings_terminal_cursor_block_blink">方块（闪烁）</string>
     <string name="settings_terminal_cursor_block_steady">方块</string>
     <string name="settings_terminal_cursor_underline_blink">下划线（闪烁）</string>

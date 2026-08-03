@@ -75,6 +75,9 @@ import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_10s
 import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_15s
 import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_30s
 import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_60s
+import app.skerry.ui.generated.resources.settings_terminal_header_position
+import app.skerry.ui.generated.resources.settings_terminal_header_position_top
+import app.skerry.ui.generated.resources.settings_terminal_header_position_bottom
 import app.skerry.ui.generated.resources.settings_terminal_scrollback
 import app.skerry.ui.generated.resources.appearance_title
 import app.skerry.ui.generated.resources.lib_snippets_screen_title
@@ -632,6 +635,11 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             FontSettingRow(stringResource(Res.string.settings_terminal_header_auto_hide)) {
                 MobileHeaderAutoHidePicker(state.headerAutoHide, onPick = state::chooseHeaderAutoHide)
             }
+            // Header position (top/bottom): bottom sidesteps punch-hole/notch phones that clip the top.
+            HLine()
+            FontSettingRow(stringResource(Res.string.settings_terminal_header_position)) {
+                MobileHeaderPositionPicker(state.headerPosition, onPick = state::chooseHeaderPosition)
+            }
             // Clickable file paths in output (desktop parity): here the affordance is a chip over a
             // selected path rather than Ctrl+click, and this switch governs both.
             HLine()
@@ -938,6 +946,33 @@ internal fun HeaderAutoHideDelay.headerAutoHideLabel(): String = stringResource(
         HeaderAutoHideDelay.FifteenSeconds -> Res.string.settings_terminal_header_auto_hide_15s
         HeaderAutoHideDelay.ThirtySeconds -> Res.string.settings_terminal_header_auto_hide_30s
         HeaderAutoHideDelay.SixtySeconds -> Res.string.settings_terminal_header_auto_hide_60s
+    },
+)
+
+/** Header position dropdown ([HeaderPosition.entries]): top = upstream layout, bottom = punch-hole safe. */
+@Composable
+private fun MobileHeaderPositionPicker(current: HeaderPosition, onPick: (HeaderPosition) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { MobileSelectTrigger(current.headerPositionLabel(), onClick = { open = !open }) },
+        menu = { width ->
+            MobileDropdownMenu(width) {
+                HeaderPosition.entries.forEach { option ->
+                    MobileDropdownOption(option.headerPositionLabel(), selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** Localized header position label. */
+@Composable
+internal fun HeaderPosition.headerPositionLabel(): String = stringResource(
+    when (this) {
+        HeaderPosition.Top -> Res.string.settings_terminal_header_position_top
+        HeaderPosition.Bottom -> Res.string.settings_terminal_header_position_bottom
     },
 )
 

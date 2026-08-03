@@ -314,31 +314,67 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 is ConnectionUiState.Disconnected ->
                     TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth())
             }
+            // Bottom position: the header joins the layout flow below the key bar (it never covers
+            // the key bar this way), sliding up from the bottom edge. It also gets a swipe-up strip
+            // at the bottom edge to bring it back when hidden.
+            if (state.headerPosition == HeaderPosition.Bottom) {
+                AnimatedVisibility(
+                    visible = headerVisible,
+                    enter = slideInVertically { it },
+                    exit = slideOutVertically { it },
+                ) {
+                    MobileTerminalHeader(
+                        title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
+                        status = active?.controller?.uiState,
+                        controller = active?.controller,
+                        onBack = state::pop,
+                        onMenu = { menuOpen = true },
+                        onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
+                    )
+                }
+            }
         }
-        // Swipe down near the top brings the header back. Starts below the edge: a swipe from the very
-        // edge is the system's own gesture for restoring the hidden bars and never reaches us.
-        Box(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                .padding(top = SYSTEM_EDGE_GESTURE).height(TOP_EDGE_STRIP)
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures { _, dy ->
-                        if (dy > 0f) { headerVisible = true; revealNonce++ }
-                    }
-                },
-        )
-        AnimatedVisibility(
-            visible = headerVisible,
-            modifier = Modifier.align(Alignment.TopCenter),
-            enter = slideInVertically { -it },
-            exit = slideOutVertically { -it },
-        ) {
-            MobileTerminalHeader(
-                title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
-                status = active?.controller?.uiState,
-                controller = active?.controller,
-                onBack = state::pop,
-                onMenu = { menuOpen = true },
-                onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
+        // Swipe down near the top brings the header back (top position). Starts below the edge: a
+        // swipe from the very edge is the system's own gesture for restoring the hidden bars and
+        // never reaches us. When the header sits at the bottom, the same strip moves to the bottom
+        // edge and the gesture flips to swipe-up.
+        if (state.headerPosition == HeaderPosition.Top) {
+            Box(
+                Modifier.align(Alignment.TopCenter).fillMaxWidth()
+                    .padding(top = SYSTEM_EDGE_GESTURE).height(TOP_EDGE_STRIP)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { _, dy ->
+                            if (dy > 0f) { headerVisible = true; revealNonce++ }
+                        }
+                    },
+            )
+        }
+        if (state.headerPosition == HeaderPosition.Top) {
+            AnimatedVisibility(
+                visible = headerVisible,
+                modifier = Modifier.align(Alignment.TopCenter),
+                enter = slideInVertically { -it },
+                exit = slideOutVertically { -it },
+            ) {
+                MobileTerminalHeader(
+                    title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
+                    status = active?.controller?.uiState,
+                    controller = active?.controller,
+                    onBack = state::pop,
+                    onMenu = { menuOpen = true },
+                    onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
+                )
+            }
+        }
+        if (state.headerPosition == HeaderPosition.Bottom) {
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .padding(bottom = SYSTEM_EDGE_GESTURE).height(TOP_EDGE_STRIP)
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { _, dy ->
+                            if (dy < 0f) { headerVisible = true; revealNonce++ }
+                        }
+                    },
             )
         }
         if (paletteOpen && snippets != null && activeTerminal != null) {

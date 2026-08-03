@@ -50,6 +50,7 @@ import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.ai.LocalAiDeps
 import app.skerry.ui.mobile.HeaderAutoHideDelay
+import app.skerry.ui.mobile.HeaderPosition
 import app.skerry.ui.mobile.MobileDesignApp
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.secure.WindowBridge
@@ -194,6 +195,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalCursorStyleChange = { writeTerminalCursorStyle(dir, it) },
                     initialHeaderAutoHide = readHeaderAutoHide(dir),
                     onHeaderAutoHideChange = { writeHeaderAutoHide(dir, it) },
+                    initialHeaderPosition = readHeaderPosition(dir),
+                    onHeaderPositionChange = { writeHeaderPosition(dir, it) },
                     initialTerminalTheme = readTerminalTheme(dir),
                     onTerminalThemeChange = { writeTerminalTheme(dir, it) },
                     initialCustomTerminalTheme = readCustomTerminalTheme(dir),
@@ -396,6 +399,16 @@ class MainActivity : FragmentActivity() {
         val id = delay.id
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "header_auto_hide").writeText(id) }
+        }
+    }
+
+    private fun readHeaderPosition(dir: File): HeaderPosition =
+        HeaderPosition.fromId(runCatching { File(dir, "header_position").readText().trim() }.getOrNull())
+
+    private fun writeHeaderPosition(dir: File, position: HeaderPosition) {
+        val id = position.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "header_position").writeText(id) }
         }
     }
 
