@@ -3,7 +3,11 @@ package app.skerry.ui.desktop
 import com.sun.jna.Native
 import com.sun.jna.NativeLong
 import com.sun.jna.platform.unix.X11
+import java.awt.GraphicsEnvironment
+import java.awt.Point
 import java.awt.Window
+import java.awt.geom.AffineTransform
+import kotlin.math.roundToLong
 
 /**
  * Hands an interactive window drag to the X11 window manager via `_NET_WM_MOVERESIZE`, instead of
@@ -55,12 +59,14 @@ object NativeWindowMove {
     fun isAvailable(): Boolean = session != null
 
     /**
-     * Asks the WM to start moving [window], following the pointer, from screen coordinates
-     * [screenX]/[screenY] (where the drag began). Returns false if unavailable or the window has no
-     * X11 id yet, so the caller can fall back. [button] is the mouse button held (1 = left).
+     * Asks the WM to start moving [window], following the pointer, from AWT screen coordinates
+     * [screenX]/[screenY] (where the drag began). [button] is the mouse button held (1 = left).
+     * Returns false when the request never reached the WM — the gesture is then over either way,
+     * since the caller commits to this path once, on [isAvailable], not per drag.
      */
     fun startMove(window: Window, screenX: Int, screenY: Int, button: Int = 1): Boolean {
         val s = session ?: return false
+        val request = moveRequest(Point(screenX, screenY), screenTransform(window), button)
         val xid = try {
             Native.getWindowID(window)
         } catch (_: Throwable) {
@@ -79,19 +85,65 @@ object NativeWindowMove {
             event.xclient.message_type = s.moveResizeAtom
             event.xclient.format = 32
             event.xclient.data.setType("l")
-            event.xclient.data.l[0] = NativeLong(screenX.toLong())
-            event.xclient.data.l[1] = NativeLong(screenY.toLong())
-            event.xclient.data.l[2] = NativeLong(NET_WM_MOVERESIZE_MOVE.toLong())
-            event.xclient.data.l[3] = NativeLong(button.toLong())
-            event.xclient.data.l[4] = NativeLong(1) // source indication: normal application
+            request.words().forEachIndexed { i, word -> event.xclient.data.l[i] = NativeLong(word) }
             event.write()
             // Under XWayland the real pointer belongs to the compositor, so the WM starts the move
             // without us having to release an X pointer grab first.
-            s.x11.XSendEvent(s.display, s.root, 0, ROOT_EVENT_MASK, event)
+            val sent = s.x11.XSendEvent(s.display, s.root, 0, ROOT_EVENT_MASK, event)
             s.x11.XFlush(s.display)
-            true
+            sent != 0
         } catch (_: Throwable) {
             false
         }
     }
+
+    /**
+     * The window's user-space→device transform, or null when it can't be determined. A window that
+     * isn't on a screen yet has no [java.awt.GraphicsConfiguration] of its own, so fall back to the
+     * default screen's rather than assuming an unscaled session.
+     */
+    private fun screenTransform(window: Window): AffineTransform? = try {
+        (
+            window.graphicsConfiguration
+                ?: GraphicsEnvironment.getLocalGraphicsEnvironment()
+                    .defaultScreenDevice.defaultConfiguration
+            )?.defaultTransform
+    } catch (_: Throwable) {
+        null
+    }
+
+    /** The `_NET_WM_MOVERESIZE` payload, in the order the protocol lays out `data.l`. */
+    internal data class MoveResizeRequest(
+        val rootX: Long,
+        val rootY: Long,
+        val direction: Long,
+        val button: Long,
+        val source: Long,
+    ) {
+        fun words(): List<Long> = listOf(rootX, rootY, direction, button, source)
+    }
+
+    /**
+     * Builds the request that moves the window the pointer is over.
+     *
+     * [pointer] is an AWT screen position, which under HiDPI is in user space — Compose Desktop
+     * turns AWT's ui scaling on, so `MouseInfo` and window bounds are scaled down by [transform].
+     * The protocol is specified in X11 pixels, and a point in the wrong space lands far from the
+     * real pointer: Mutter looks for one within 64 px before it starts the grab, finds nothing, and
+     * drops the request without a word. Hence the conversion back to device pixels here.
+     */
+    internal fun moveRequest(pointer: Point, transform: AffineTransform?, button: Int) =
+        MoveResizeRequest(
+            rootX = (pointer.x * usableScale(transform?.scaleX)).roundToLong(),
+            rootY = (pointer.y * usableScale(transform?.scaleY)).roundToLong(),
+            direction = NET_WM_MOVERESIZE_MOVE.toLong(),
+            button = button.toLong(),
+            source = 1L, // source indication: normal application
+        )
+
+    // A scale that isn't a positive finite number (0, NaN, a mirrored display's negative factor)
+    // would throw the drag onto 0,0 or the wrong side of the screen, nowhere near the pointer. An
+    // unscaled point at least still works on an unscaled session.
+    private fun usableScale(scale: Double?): Double =
+        if (scale != null && scale.isFinite() && scale > 0.0) scale else 1.0
 }
