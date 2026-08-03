@@ -75,7 +75,7 @@
     <string name="settings_terminal_scrollback">Буфер прокрутки</string>
     <string name="settings_terminal_scrollback_desc">Строк на сессию.</string>
     <string name="settings_terminal_cursor_style">Стиль курсора</string>
-    <string name="settings_terminal_header_auto_hide">Автоскрытие заголовка</string>
+    <string name="settings_terminal_header_auto_hide">Автоскрытие заголовка терминала</string>
     <string name="settings_terminal_header_auto_hide_never">Не скрывать</string>
     <string name="settings_terminal_header_auto_hide_3s">3 секунды</string>
     <string name="settings_terminal_header_auto_hide_5s">5 секунд</string>
