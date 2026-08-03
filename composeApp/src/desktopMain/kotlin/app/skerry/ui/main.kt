@@ -12,6 +12,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.skerry_icon
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.window.rememberWindowState
+import app.skerry.ui.desktop.DisplayScaleReadiness
 import app.skerry.ui.desktop.SkerryWindowFrame
 import app.skerry.ui.desktop.optimalWindowSize
 import app.skerry.ui.desktop.rememberSkerryWindowChrome
@@ -514,6 +515,9 @@ fun main(args: Array<String>) {
     // vault, no window. A packaged build has no bundled `java` to spawn, so the app re-launches its
     // own launcher with this flag; the branch must come before anything touches AWT or Skia.
     if (LlmHostCommandLine.isHostRun(args)) return LlmHostMain.main(args)
+    // Before AWT/Skiko: the UI scale is read from the X resource database exactly once, and the
+    // first X11 client of a Wayland session gets there before the settings daemon has published it.
+    DisplayScaleReadiness.awaitDisplayScale()
     // libsodium (ionspin) requires async init before the first VaultCrypto call; on desktop startup
     // this is done blocking so the dependency graph is already built and ready.
     runBlocking { initializeVaultCrypto() }
