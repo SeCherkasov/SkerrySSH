@@ -7,22 +7,23 @@
     <ID>ComplexCondition:DesktopShortcuts.kt$alt &amp;&amp; !ctrl &amp;&amp; !meta &amp;&amp; !shift</ID>
     <ID>ComplexCondition:DesktopShortcuts.kt$ctrl &amp;&amp; !alt &amp;&amp; !meta &amp;&amp; key == Key.Tab</ID>
     <ID>ComplexCondition:FramebufferImage.desktop.kt$FramebufferImage$srcOff &gt;= 0 &amp;&amp; dstOff &gt;= 0 &amp;&amp; dstOff + r.width &lt;= pixels.size &amp;&amp; srcOff + r.width &lt;= src.size</ID>
+    <ID>ComplexCondition:HostRows.kt$noteVisible &amp;&amp; !note.isNullOrBlank() &amp;&amp; !menuOpen &amp;&amp; !snippetPickerOpen</ID>
     <ID>ComplexCondition:HostsSidebar.kt$e.type != PointerEventType.Press || !e.buttons.isPrimaryPressed || e.buttons.isSecondaryPressed || e.buttons.isTertiaryPressed</ID>
     <ID>ComplexCondition:HostsSidebar.kt$folders.isEmpty() &amp;&amp; section == HostSection.RemoteDesktops &amp;&amp; query.isBlank() &amp;&amp; effectiveChip == ALL_HOSTS_CHIP</ID>
-    <ID>ComplexCondition:HostRows.kt$noteVisible &amp;&amp; !note.isNullOrBlank() &amp;&amp; !menuOpen &amp;&amp; !snippetPickerOpen</ID>
     <ID>ComplexCondition:MobileTeamsView.kt$!invited &amp;&amp; team.hasKey &amp;&amp; (scopeId.isEmpty() || activeScope?.hasKey == true)</ID>
     <ID>ComplexCondition:RemoteScreenshot.kt$it.isLetterOrDigit() || it == '-' || it == '_' || it == '.'</ID>
     <ID>ComplexCondition:RunbookPalette.kt$open &amp;&amp; enabled &amp;&amp; terminal != null &amp;&amp; active != null</ID>
     <ID>ComplexCondition:TeamsView.kt$!invited &amp;&amp; team.hasKey &amp;&amp; (scopeId.isEmpty() || activeScope?.hasKey == true)</ID>
     <ID>ComplexCondition:TerminalGeometry.kt$cols &lt;= 0 || rows &lt;= 0 || metrics.cellWidth &lt;= 0f || metrics.cellHeight &lt;= 0f</ID>
-    <ID>ComplexCondition:TerminalScreen.kt$focused &amp;&amp; !closed &amp;&amp; !imeInput &amp;&amp; modalsOpen == 0 &amp;&amp; !searchOpen</ID>
     <ID>ComplexCondition:TerminalGlyphs.kt$g &lt; row.size &amp;&amp; row[g].width == CellWidth.Single &amp;&amp; row[g].style == st &amp;&amp; row[g].isPlainAscii()</ID>
+    <ID>ComplexCondition:TerminalScreen.kt$focused &amp;&amp; !closed &amp;&amp; !imeInput &amp;&amp; modalsOpen == 0 &amp;&amp; !searchOpen</ID>
     <ID>ComplexCondition:TerminalScreenState.kt$TerminalScreenState$guardPolicy.production &amp;&amp; !awaitingSecret &amp;&amp; text.any { it == '\n' || it == '\r' }</ID>
     <ID>ComplexCondition:TerminalSearchRenderTest.kt$TerminalSearchRenderTest$close(p shr 16 and 0xFF, argb shr 16 and 0xFF) &amp;&amp; close(p shr 8 and 0xFF, argb shr 8 and 0xFF) &amp;&amp; close(p and 0xFF, argb and 0xFF) &amp;&amp; (p ushr 24) == 0xFF</ID>
     <ID>ComplexCondition:VaultGateScreen.kt$event == Lifecycle.Event.ON_STOP &amp;&amp; controller.state == VaultGateState.Unlocked &amp;&amp; !controller.biometricInFlight &amp;&amp; deviceMandatesAutoLock()</ID>
     <ID>ComplexCondition:VncCoordinates.kt$FitGeometry$fx &lt; 0f || fy &lt; 0f || fx &gt;= fbWidth || fy &gt;= fbHeight</ID>
     <ID>ComplexCondition:VncCoordinates.kt$canvas.width &lt;= 0 || canvas.height &lt;= 0 || fbWidth &lt;= 0 || fbHeight &lt;= 0</ID>
     <ID>ComplexCondition:VncCoordinates.kt$fbWidth &lt;= 0 || fbHeight &lt;= 0 || canvasWidth &lt;= 0f || canvasHeight &lt;= 0f</ID>
+    <ID>CyclomaticComplexMethod:DesktopSessionActions.kt$internal fun runDesktopShortcut( shortcut: DesktopShortcut, state: DesktopDesignState, sessions: SessionsController?, onLock: () -&gt; Unit, ): Boolean</ID>
     <ID>CyclomaticComplexMethod:DesktopShortcuts.kt$fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Boolean, key: Key): DesktopShortcut?</ID>
     <ID>CyclomaticComplexMethod:HostSidebarDnd.kt$internal suspend fun PointerInputScope.detectDeadZoneDragGestures( onStart: (Offset) -&gt; Unit, onMove: (PointerInputChange, Offset) -&gt; Unit, onEnd: () -&gt; Unit, onCancel: () -&gt; Unit, )</ID>
     <ID>CyclomaticComplexMethod:KeyboardInteractiveDialog.kt$internal fun sanitizeServerText(text: String, maxChars: Int): String</ID>
@@ -45,9 +46,10 @@
     <ID>CyclomaticComplexMethod:VncTouchSurface.kt$private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.vncTouchGestures( screen: RemoteDesktopScreenState, pad: VncTrackpad, canvasSize: () -&gt; IntSize, )</ID>
     <ID>EmptyFunctionBlock:PlatformBackHandler.desktop.kt${ }</ID>
     <ID>EmptyFunctionBlock:QrScanner.desktop.kt${ }</ID>
-    <ID>EmptyFunctionBlock:Screenshot.kt$&lt;no name provided&gt;${}</ID>
-    <ID>EmptyFunctionBlock:Screenshot.kt$FakeChannel${}</ID>
-    <ID>EmptyFunctionBlock:Screenshot.kt$FakeConnection${}</ID>
+    <ID>EmptyFunctionBlock:ScreenshotFakes.kt$FakeChannel${}</ID>
+    <ID>EmptyFunctionBlock:ScreenshotFakes.kt$FakeConnection${}</ID>
+    <ID>EmptyFunctionBlock:ScreenshotPreviews.kt$&lt;no name provided&gt;${}</ID>
+    <ID>EmptyFunctionBlock:ScreenshotSeeds.kt$&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:SecureScreen.desktop.kt${}</ID>
     <ID>ExceptionRaisedInUnexpectedLocation:FilePicker.android.kt$SafDownloadTarget$override suspend fun finalize(): Unit</ID>
     <ID>ExceptionRaisedInUnexpectedLocation:TransferCoordinatorTest.kt$TransferCoordinatorTest.FakeDownloadTarget$override suspend fun finalize()</ID>
@@ -89,18 +91,16 @@
     <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean)</ID>
     <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false)</ID>
     <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun runSyncLocked(c: SyncClient, s: SyncSession)</ID>
+    <ID>NestedBlockDepth:TerminalGlyphs.kt$internal fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette, effects: UnderlineEffects, theme: TerminalTheme)</ID>
     <ID>SpreadOperator:KeyboardInteractiveDialog.kt$(*Array(challenge.prompts.size) { "" })</ID>
     <ID>SwallowedException:AndroidSecretFileReader.kt$AndroidSecretFileReader$e: FileNotFoundException</ID>
     <ID>SwallowedException:AndroidSecretFileReader.kt$AndroidSecretFileReader$e: SecurityException</ID>
-    <ID>SwallowedException:ConnectionController.kt$ConnectionController$e: Exception</ID>
     <ID>SwallowedException:ConnectionTest.kt$e: Exception</ID>
     <ID>SwallowedException:ConnectionTest.kt$e: SshAuthenticationException</ID>
     <ID>SwallowedException:ConnectionTest.kt$e: SshConnectionException</ID>
-    <ID>SwallowedException:ConnectionTest.kt$e: SshHostKeyRejectedException</ID>
     <ID>SwallowedException:ContainerBrowse.kt$e: Exception</ID>
     <ID>SwallowedException:ContainerBrowse.kt$e: SshAuthenticationException</ID>
     <ID>SwallowedException:ContainerBrowse.kt$e: SshConnectionException</ID>
-    <ID>SwallowedException:ContainerBrowse.kt$e: SshHostKeyRejectedException</ID>
     <ID>SwallowedException:FilePicker.android.kt$e: Exception</ID>
     <ID>SwallowedException:QrScanner.android.kt$e: Exception</ID>
     <ID>SwallowedException:SecretCopyAuthorizer.kt$SecretCopyAuthorizer$e: Exception</ID>
@@ -113,12 +113,10 @@
     <ID>TooGenericExceptionThrown:PingControllerTest.kt$PingControllerTest$throw RuntimeException("boom")</ID>
     <ID>TooGenericExceptionThrown:TransferCoordinatorTest.kt$TransferCoordinatorTest.FakeDownloadTarget$throw RuntimeException(it)</ID>
     <ID>UnusedParameter:MobileSnippetsView.kt$mono: FontFamily</ID>
-    <ID>UnusedPrivateProperty:Screenshot.kt$FakeConnection$val tick = polls++</ID>
+    <ID>UnusedPrivateProperty:ScreenshotFakes.kt$FakeConnection$val tick = polls++</ID>
     <ID>UseCheckOrError:RemoteDesktopScreenStateTest.kt$RemoteDesktopScreenStateTest.&lt;no name provided&gt;$throw IllegalStateException("Socket closed")</ID>
     <ID>UseCheckOrError:SyncCoordinatorNetworkRecoveryTest.kt$SyncCoordinatorNetworkRecoveryTest$throw IllegalStateException("vault is locked")</ID>
     <ID>VariableNaming:AttachedSessionTest.kt$AttachedSessionTest.WatchedSession$val _state = MutableStateFlow&lt;TerminalState&gt;(TerminalState.Open)</ID>
     <ID>VariableNaming:HostMenuWidthTest.kt$HostMenuWidthTest$/** The trailing "⋮" IconBtn's box size in HostEntryRow, at density 1. */ private val MENU_BUTTON_BOX = 22f</ID>
-    <ID>CyclomaticComplexMethod:DesktopSessionActions.kt$internal fun runDesktopShortcut( shortcut: DesktopShortcut, state: DesktopDesignState, sessions: SessionsController?, onLock: () -&gt; Unit, ): Boolean</ID>
-    <ID>NestedBlockDepth:TerminalGlyphs.kt$internal fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette, effects: UnderlineEffects, theme: TerminalTheme)</ID>
   </CurrentIssues>
 </SmellBaseline>
