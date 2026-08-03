@@ -83,7 +83,7 @@ internal fun InfoPanel() {
     Column(Modifier.width(268.dp).fillMaxHeight().background(Skerry.colors.surface2).verticalScroll(rememberScrollState())) {
         // No heading of its own: the session action icons are pinned over this strip, and a
         // second title under them just repeated what the connection rows below already say.
-        Spacer(Modifier.height(PANE_HEADER_HEIGHT))
+        Spacer(Modifier.height(WORK_BAR_HEIGHT))
         HLine()
         Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
             // Host/Address/User come from the active session's live profile; cipher from the transport,

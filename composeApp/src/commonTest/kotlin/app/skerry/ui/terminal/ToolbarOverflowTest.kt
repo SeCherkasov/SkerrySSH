@@ -9,17 +9,17 @@ import kotlin.test.assertTrue
 class ToolbarOverflowTest {
 
     @Test
-    fun `with no pane under the row nothing overflows`() {
+    fun `with the bar not measured yet nothing overflows`() {
         assertTrue(overflowedActions(available = null, syncShown = false).isEmpty())
     }
 
     @Test
-    fun `a wide pane keeps every action in the row`() {
+    fun `a wide window keeps every action in the row`() {
         assertTrue(overflowedActions(available = 800.dp, syncShown = true).isEmpty())
     }
 
     @Test
-    fun `a narrow pane drops the rarely-reached actions first`() {
+    fun `a narrow window drops the rarely-reached actions first`() {
         val hidden = overflowedActions(available = 500.dp, syncShown = false)
         // The player and the recorder give way before the file panel does.
         assertTrue(ToolbarAction.Play in hidden)
@@ -44,7 +44,7 @@ class ToolbarOverflowTest {
     }
 
     @Test
-    fun `a pane narrower than its own header hides everything that can be hidden`() {
+    fun `a window narrower than the bar's own title hides everything that can be hidden`() {
         val hidden = overflowedActions(available = 150.dp, syncShown = true)
         // Add-pane, sync and power are not in the enum: those three never leave the row.
         assertEquals(ToolbarAction.entries.toSet(), hidden)
@@ -52,12 +52,24 @@ class ToolbarOverflowTest {
 
     @Test
     fun `hiding starts only when the row actually runs out of room`() {
-        // Just wide enough for every icon plus the pane's own header: nothing is dropped, and one
+        // Just wide enough for every icon plus the bar's own title: nothing is dropped, and one
         // step narrower something is — the threshold is real, not a constant "always overflow".
         val roomy = overflowedActions(available = 800.dp, syncShown = false)
         val tight = overflowedActions(available = 400.dp, syncShown = false)
         assertTrue(roomy.isEmpty())
         assertTrue(tight.isNotEmpty())
+    }
+
+    /**
+     * Pins the threshold to the bar's actual geometry, not just to "somewhere between 400 and 800":
+     * title room (240) + the bar's own chrome — padding 2×10, the sidebar chevron 26 and the two
+     * 8dp gaps around the title (62) — plus 10 slots of 30 = 602dp. Sliding any of those constants
+     * without re-deriving this number has to break the test.
+     */
+    @Test
+    fun `the threshold sits exactly where the bar's geometry puts it`() {
+        assertTrue(overflowedActions(available = 602.dp, syncShown = false).isEmpty())
+        assertTrue(overflowedActions(available = 601.dp, syncShown = false).isNotEmpty())
     }
 }
 

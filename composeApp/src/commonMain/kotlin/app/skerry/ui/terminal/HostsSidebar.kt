@@ -278,13 +278,9 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
     val effectiveChip = if (activeChip in chips) activeChip else ALL_HOSTS_CHIP
     Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
-            // Search and the collapse control share the header. The chevron pulls the search field
-            // in from the right edge (it no longer runs to the panel border) and collapses the
-            // sidebar; the reopen handle then lives at the terminal's left edge (SidebarReopenHandle).
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                HostSearchField(state, section, Modifier.weight(1f))
-                IconBtn("chevron_left", onClick = state::toggleSidebar, box = 30, icon = 18.sp, tint = Skerry.colors.faint)
-            }
+            // Search alone in the header: collapsing is the work bar's chevron (and the rail's
+            // toggle), so a third control here only took room from the search field.
+            HostSearchField(state, section, Modifier.fillMaxWidth())
             // The filter-tag row overflows the narrow sidebar, so it scrolls horizontally. Desktop's
             // vertical mouse wheel doesn't translate to horizontal on its own, so Scroll events are
             // caught and [chipScroll] is driven manually (delta.y, or delta.x on a horizontal axis);

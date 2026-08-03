@@ -115,6 +115,14 @@
     <string name="local_shell_name">Local shell</string>
     <string name="term_launch_local_shell">Launch local shell</string>
     <string name="term_open_path_in_files">Open in Files</string>
-    <string name="term_pane_sync_badge">SYNC</string>
     <string name="term_auth_key_file">Key file</string>
+    <plurals name="term_wbar_panes">
+        <item quantity="one">%1$d pane</item>
+        <item quantity="other">%1$d panes</item>
+    </plurals>
+    <string name="term_wbar_sync">synchronized input</string>
+    <string name="term_tip_sidebar">Hosts</string>
+    <string name="term_pane_menu">Pane actions</string>
+    <string name="term_pane_change_host">Change host</string>
+    <string name="term_pane_close">Close pane</string>
 </resources>
