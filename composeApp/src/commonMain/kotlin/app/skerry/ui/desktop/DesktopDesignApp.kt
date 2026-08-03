@@ -1354,7 +1354,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
     Row(
         Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(TITLEBAR_HEIGHT)
             .background(Brush.verticalGradient(listOf(Skerry.colors.titleTop, Skerry.colors.titleBottom)))
             .padding(start = 14.dp, end = if (windowChrome != null) 8.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
