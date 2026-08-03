@@ -87,7 +87,10 @@ class SyncCoordinatorReactivationTest {
         override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = emptyList()
         override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean = false
         override suspend fun refresh(session: SyncSession): SyncSession = throw NotImplementedError()
-        override suspend fun changePassword(accountId: String, currentAuthKey: ByteArray, newAuthKey: ByteArray, newWrappedDataKey: ByteArray, device: DeviceInfo): SyncSession = throw NotImplementedError()
+        // The rotation itself isn't what these tests are about: they need the activation that follows it,
+        // which re-publishes the session WITHOUT reconciling. Accepts any current password.
+        override suspend fun changePassword(accountId: String, currentAuthKey: ByteArray, newAuthKey: ByteArray, newWrappedDataKey: ByteArray, device: DeviceInfo): SyncSession =
+            SyncSession(accountId, accessToken = "access2", refreshToken = "refresh2")
         override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = throw NotImplementedError()
         override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult = throw NotImplementedError()
     }
@@ -95,9 +98,16 @@ class SyncCoordinatorReactivationTest {
     /**
      * A real vault whose reconcile-time clear fails — what an auto-lock landing inside the connect does
      * (`clearRecords` requires an unlocked vault), leaving the durable marker up with nothing cleared.
+     * [failures] bounds how many clears fail, so a test can also drive the recovery: the lock is gone by
+     * the next connect and the reconcile finally runs.
      */
-    private class ClearFailingVault(private val delegate: Vault) : Vault by delegate {
-        override fun clearRecords(types: Set<RecordType>): Unit = error("vault is locked")
+    private class ClearFailingVault(private val delegate: Vault, private val failures: Int = Int.MAX_VALUE) : Vault by delegate {
+        private var attempts = 0
+
+        override fun clearRecords(types: Set<RecordType>) {
+            if (attempts++ < failures) error("vault is locked")
+            delegate.clearRecords(types)
+        }
     }
 
     /** Config store that refuses exactly the write retiring the reconcile marker (a full disk). */
@@ -239,12 +249,14 @@ class SyncCoordinatorReactivationTest {
 
     /**
      * The marker is persisted BEFORE the vault is cleared (a crash in between must not lose the signal),
-     * so it can be up on a device whose reconcile never actually ran. The session is published by then,
-     * so an ordinary cycle can still succeed — and it is not the rebuild the marker is waiting for.
-     * Retiring the marker there would strand the pre-revocation records for good.
+     * so it can be up on a device whose reconcile never actually ran — the clear threw and the session
+     * published a moment earlier is still live. That session must not sync: its vault still holds the
+     * pre-revocation records the server purged, and a cycle would push them straight back and report
+     * Online while doing it (issue #142). The cycle is refused and the status parks on the link state;
+     * the rebuild is left to the next connect/restore, which redoes the reconcile.
      */
     @Test
-    fun `a marker whose reconcile never cleared the vault survives a later successful sync`() = runBlocking {
+    fun `a session whose reconcile never cleared the vault refuses to sync`() = runBlocking {
         initializeVaultCrypto()
         val vault = freshVault()
         vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
@@ -263,11 +275,134 @@ class SyncCoordinatorReactivationTest {
             assertEquals(true, config.load()?.pendingReconcile, "a reconcile that could not clear the vault keeps the marker")
 
             sut.syncNow()
-            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
+            val settled = sut.status.awaitStatus("the manual sync to settle") {
+                it is SyncStatus.Online || (it as? SyncStatus.Failed)?.reason == SyncFailureReason.ReconcileRequired
+            }
+            assertEquals(
+                SyncStatus.Failed(SyncFailureReason.ReconcileRequired),
+                settled,
+                "a device that owes a reconcile must refuse the cycle, not run it and report Online",
+            )
+            assertFalse(
+                client.pushed.any { it.id == "r1" },
+                "a refused cycle must not push the records the reconcile was supposed to drop",
+            )
             assertEquals(true, config.load()?.pendingReconcile, "only a reconcile that actually ran may retire the marker")
             assertTrue(vault.records().any { it.id == "r1" }, "the stale record is still there — the reconcile never ran")
-            // That cycle also pushes the un-cleared record back to the server: the session is published
-            // before the clear runs, so a failed clear leaves a syncable session — issue #142.
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The refusal is a stop, not a dead end: the marker is still on disk, so the next connect on the SAME
+     * coordinator redoes the reconcile — this time over a vault that lets the clear through — and the
+     * device comes back Online with its records rebuilt from the server. Recovery through a fresh
+     * coordinator (an app restart) is a different path and is covered by the pending-marker test above.
+     */
+    @Test
+    fun `a reconnect finishes the reconcile the refused cycle was waiting for`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = InMemorySyncConfigStore()
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val sut = SyncCoordinator(
+            clientFactory = { client },
+            crypto = crypto,
+            vault = ClearFailingVault(vault, failures = 1),
+            configStore = config,
+        )
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the clear") { it is SyncStatus.Failed }
+            sut.syncNow()
+            sut.status.awaitStatus("the cycle to be refused") {
+                (it as? SyncStatus.Failed)?.reason == SyncFailureReason.ReconcileRequired
+            }
+
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the reconnect to settle") { it is SyncStatus.Online }
+            assertFalse(vault.records().any { it.id == "r1" }, "the redone reconcile must drop the pre-revocation record")
+            assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must never have been pushed")
+            assertEquals(false, config.load()?.pendingReconcile, "the completed reconcile retires the marker")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * A password rotation re-activates the session without reconciling, and the config it saves still
+     * carries the marker. When the reconcile it belongs to already ran here (records dropped, only the
+     * marker write refused), that re-activation must not disarm the coordinator: doing so would make
+     * every later cycle refuse — including the one that would finally retire the marker — and the device
+     * would sit blocked until a reconnect for a rebuild that already happened.
+     */
+    @Test
+    fun `a password rotation over a reconcile that already ran keeps syncing`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = MarkerClearFailingStore(InMemorySyncConfigStore())
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "the reconcile itself succeeded — only its marker write was refused")
+            assertEquals(true, config.load()?.pendingReconcile, "the refused write leaves the marker up")
+
+            // changeAccountPassword awaits the activation it triggers, so the cycle has already run here.
+            assertEquals(
+                AccountPasswordChange.Success,
+                sut.changeAccountPassword(password.toCharArray(), "vault-B".toCharArray()),
+            )
+            assertTrue(
+                sut.status.value is SyncStatus.Online,
+                "a re-activation carrying a marker whose reconcile already ran must keep syncing",
+            )
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The mirror case: the reconcile never ran (the clear threw), and a password rotation re-publishes
+     * the session without reconciling either. The rotation itself succeeds — the server did change the
+     * password — but the vault it re-publishes still holds the purged records, so the cycle is refused
+     * instead of pushing them. The activation path is not the reactivation one, which is the point:
+     * the refusal is keyed on the marker, not on who published the session.
+     */
+    @Test
+    fun `a password rotation cannot sync a vault whose reconcile never ran`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = InMemorySyncConfigStore()
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val sut = SyncCoordinator(
+            clientFactory = { client },
+            crypto = crypto,
+            vault = ClearFailingVault(vault),
+            configStore = config,
+        )
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the clear") { it is SyncStatus.Failed }
+
+            assertEquals(
+                AccountPasswordChange.Success,
+                sut.changeAccountPassword(password.toCharArray(), "vault-B".toCharArray()),
+            )
+            assertEquals(
+                SyncStatus.Failed(SyncFailureReason.ReconcileRequired),
+                sut.status.value,
+                "an activation that doesn't reconcile must not sync a vault that still owes one",
+            )
+            assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must not reach the server")
         } finally {
             sut.close()
         }

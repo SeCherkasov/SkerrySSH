@@ -116,6 +116,7 @@
     <string name="sync_fail_server_error">服务器响应异常，请稍后重试</string>
     <string name="sync_fail_rejected">服务器拒绝了该请求 — 请联系服务器管理员</string>
     <string name="sync_fail_registration_refused_signin">服务器拒绝了注册和登录 — 请检查密码</string>
+    <string name="sync_fail_reconcile_required">此设备需要从服务器重建数据 — 请重新连接后同步</string>
 
     <!-- issue #28: 连接到使用其他密码的现有账户会将本设备改用该密码 -->
     <string name="sync_password_replace_title">使用账户密码？</string>
