@@ -115,6 +115,7 @@
     <string name="sync_fail_too_many_requests">Сервер ограничивает частоту запросов — подождите и попробуйте снова</string>
     <string name="sync_fail_server_error">Сервер отвечает с ошибкой — попробуйте позже</string>
     <string name="sync_fail_rejected">Сервер отклонил запрос — обратитесь к его администратору</string>
+    <string name="sync_fail_registration_refused_signin">Сервер отклонил регистрацию и вход — проверьте пароль</string>
 
     <!-- issue #28: подключение к существующему аккаунту с другим паролём меняет пароль этого устройства -->
     <string name="sync_password_replace_title">Использовать пароль аккаунта?</string>

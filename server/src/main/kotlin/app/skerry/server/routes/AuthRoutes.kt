@@ -43,8 +43,10 @@ fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.REGISTER) {
         post("/auth/register") {
             // Registration policy is checked before any work: a closed instance (Vaultwarden's
-            // SIGNUPS_ALLOWED=false) rejects new accounts outright; existing accounts still log in
-            // and pair new devices (those paths don't hit /auth/register).
+            // SIGNUPS_ALLOWED=false) rejects new accounts outright. The check runs before the id is
+            // even read, so an EXISTING account gets this same 403 — a connect under the device's own
+            // vault password probes register first. The client treats 403 like the 409 it gets on an
+            // open instance and falls back to login, which is how existing accounts still get in here.
             if (!services.config.registrationOpen) {
                 services.metrics.registrationRejected(RegistrationRejection.CLOSED)
                 services.metrics.authAttempt(AuthKind.REGISTER, AuthOutcome.DENIED)
