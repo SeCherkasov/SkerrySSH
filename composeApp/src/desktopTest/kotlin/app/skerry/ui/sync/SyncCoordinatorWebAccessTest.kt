@@ -22,10 +22,8 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
@@ -145,7 +143,7 @@ class SyncCoordinatorWebAccessTest {
         initializeVaultCrypto()
         val sut = coordinator(localVault(), client)
         sut.connect(serverUrl, account, password.toCharArray())
-        withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+        sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
         return sut
     }
 
@@ -289,7 +287,7 @@ class SyncCoordinatorWebAccessTest {
             client.entered = gate
             val typed = "web-pw-123".toCharArray()
             val job = launch { sut.setWebPassword(typed) }
-            withTimeout(30_000) { gate.await() }
+            awaitSync("the web-password call to reach the client") { gate.await() }
             job.cancelAndJoin()
             assertTrue(typed.all { it == ' ' }, "a cancelled submit must not leave the password in the array")
         } finally {
@@ -305,8 +303,8 @@ class SyncCoordinatorWebAccessTest {
             val before = client.refreshes
             val set = async { sut.setWebPassword("web-pw-123".toCharArray()) }
             val state = async { sut.webAccessEnabled() }
-            assertEquals(WebAccessChange.Success, withTimeout(30_000) { set.await() })
-            withTimeout(30_000) { state.await() }
+            assertEquals(WebAccessChange.Success, awaitSync("the web-password call to land") { set.await() })
+            awaitSync("the web-access read to land") { state.await() }
             // One rotation, not one per caller: the second finds the session already replaced under
             // syncMutex and retries with it rather than spending another refresh token.
             assertEquals(1, client.refreshes - before)

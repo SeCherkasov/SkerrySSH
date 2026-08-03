@@ -366,6 +366,13 @@ class SyncCoordinator(
     @Volatile
     private var retryJob: Job? = null
 
+    // Whether THIS coordinator has actually started a reactivation reconcile (records dropped, cursor
+    // reset) — the permission [clearPendingReconcile] needs before it may retire the durable marker.
+    // The marker alone isn't enough: it is persisted before the vault is touched, so it can be up while
+    // nothing was cleared. Every read and write is under [syncMutex].
+    @Volatile
+    private var reconcileArmed = false
+
     // Set by [pauseForLock], cleared by [resumeAfterUnlock]: which of the two the coordinator should end
     // up obeying when they queue up behind a long operation holding [opMutex], regardless of the order
     // their coroutines get dispatched in.
@@ -678,26 +685,32 @@ class SyncCoordinator(
         // then be pushed once the pull flips the filter on — resurrecting the purged record. Clearing by the
         // maximal (everything-on) filter covers any server settings; only never-synced, device-local types
         // (terminal history) are kept.
-        if (clearLocalRecords) {
-            // Persist the reconcile intent BEFORE mutating the vault: the server clears revocation on the
-            // verify that reported `reactivated` and never reports it again, so a crash between here and the
-            // first successful sync would otherwise lose the signal and let the stale records push. The
-            // marker is cleared only after runSync succeeds below, so an interrupted reconcile is retried.
-            configStore.save(config.copy(pendingReconcile = true))
-            val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
-            vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet())
-            syncState.setCursor(config.accountId, 0) // reactivation always full-pulls to rebuild from the server
-        } else {
-            if (resetCursor) syncState.setCursor(config.accountId, 0)
-            configStore.save(config)
+        //
+        // Under [syncMutex]: a cycle that isn't ours (a manual syncNow, the previous session's watch)
+        // could otherwise read the vault mid-clear, sync off the old cursor, and finish after
+        // [reconcileArmed] went up — retiring the marker for a cycle that was never the full re-pull. It
+        // does NOT cover the gap before this lock, where the session published above is already syncable
+        // over an un-cleared vault: that is issue #142. Lock order holds: we're under opMutex.
+        syncMutex.withLock {
+            if (clearLocalRecords) {
+                // Persist the reconcile intent BEFORE mutating the vault: the server clears revocation on the
+                // verify that reported `reactivated` and never reports it again, so a crash between here and
+                // the first successful sync would otherwise lose the signal and let the stale records push.
+                configStore.save(config.copy(pendingReconcile = true))
+                val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
+                vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet())
+                syncState.setCursor(config.accountId, 0) // reactivation always full-pulls to rebuild from the server
+                reconcileArmed = true // only now — see [clearPendingReconcile]
+            } else {
+                if (resetCursor) syncState.setCursor(config.accountId, 0)
+                configStore.save(config)
+                reconcileArmed = false
+            }
         }
         health.setTarget(config.serverUrl)
+        // The marker raised above is dropped by the sync cycle itself ([clearPendingReconcile]) — not
+        // here, because a first cycle that fails leaves it to a later retry to finish the reconcile.
         runSync()
-        // The reconcile is complete only once the first full re-pull actually succeeded (status Online);
-        // until then keep the marker so an interrupted or failed reconcile is redone on the next connect.
-        if (clearLocalRecords && _status.value is SyncStatus.Online) {
-            configStore.save(config.copy(pendingReconcile = false))
-        }
         startWatch()
         startLocalPush()
         // Reconnecting over a live session (switching accounts, a confirmed password replace) leaves the
@@ -1257,11 +1270,44 @@ class SyncCoordinator(
     // One sync attempt + the Online bookkeeping; exceptions propagate to runSyncLocked.
     private suspend fun runSyncAttempt(c: SyncClient, s: SyncSession) {
         val outcome = engineFactory(c).sync(s)
+        clearPendingReconcile(s.accountId)
         _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
         // Pulled records from the server → refresh list managers, else synced data isn't visible until reopen.
         if (outcome.pulled > 0) {
             refreshSyncSettings() // another device may have changed "what to sync"
             runCatching { onSynced() }
+        }
+    }
+
+    /**
+     * Drop the durable reactivation marker ([SyncConfig.pendingReconcile]) once a sync cycle for that
+     * account has actually succeeded. [reconcileArmed] says this coordinator dropped the local records
+     * and reset the cursor, so the cycle that just finished IS the full re-pull the marker is waiting
+     * for — including one reached by a later retry (backoff loop, reachability trigger, manual sync)
+     * after the reconcile's own first cycle failed.
+     *
+     * The marker on its own would be the wrong permission: [activateSession] persists it BEFORE it
+     * touches the vault (a crash in between must not lose the signal), so a clear that threw — an
+     * auto-lock landing inside the connect — leaves it up over a vault nothing was dropped from, on a
+     * session that is already published and can still sync. Retiring it there would strand the
+     * pre-revocation records; the next connect redoes the reconcile instead.
+     *
+     * Called before the status is published: [SyncStatus.Online] is what every observer reacts to, and
+     * clearing the marker afterwards leaves a window in which Online is on screen while the saved config
+     * still says a reconcile is pending. Reads the live config rather than a captured copy — the cycle
+     * that just ran may have rotated a fresh sealed refresh token into it.
+     *
+     * Best-effort like [resealRefreshToken]: a config store that fails must not turn a sync that
+     * succeeded into a failure — [reconcileArmed] stays up so the next cycle retries the clear.
+     */
+    private fun clearPendingReconcile(accountId: String) {
+        if (!reconcileArmed) return
+        runCatching {
+            val cfg = configStore.load()
+            if (cfg != null && cfg.accountId == accountId) {
+                if (cfg.pendingReconcile) configStore.save(cfg.copy(pendingReconcile = false))
+                reconcileArmed = false // also when the marker was already down: nothing left to retry
+            }
         }
     }
 

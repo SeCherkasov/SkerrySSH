@@ -110,7 +110,7 @@ class SyncCoordinatorLockPauseTest {
         val sut = coordinator(vault, client)
         try {
             sut.connect(serverUrl, account, password.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
             withTimeout(5_000) { while (client.watchers.get() == 0) delay(10) }
 
             // Lock: no live subscription may survive it — otherwise the WS keeps retrying against a
@@ -123,7 +123,7 @@ class SyncCoordinatorLockPauseTest {
             // Unlock: sync resumes on its own, no password retyped and no manual "Sync".
             assertTrue(vault.unlock(password.toCharArray()) is UnlockResult.Success)
             sut.resumeAfterUnlock()
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
             withTimeout(5_000) { while (client.watchers.get() == 0) delay(10) }
             assertEquals(1, client.peakWatchers.get(), "resume must not stack a second live-pull subscription")
         } finally {
@@ -140,7 +140,7 @@ class SyncCoordinatorLockPauseTest {
         val sut = coordinator(vault, client)
         try {
             sut.connect(serverUrl, account, password.toCharArray())
-            withTimeout(30_000) { client.registering.await() } // the connect now holds opMutex
+            awaitSync("the connect to reach register") { client.registering.await() } // the connect now holds opMutex
 
             // The vault locks mid-connect. The pause queues behind the connect on opMutex and tears down
             // what it published; without that, live sync survives the lock unnoticed.
@@ -148,7 +148,7 @@ class SyncCoordinatorLockPauseTest {
             sut.pauseForLock()
             gate.complete(Unit)
 
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Configured } }
+            sut.status.awaitStatus("the status to come Configured") { it is SyncStatus.Configured }
             withTimeout(5_000) { while (client.watchers.get() != 0) delay(10) }
             delay(200) // and it stays down: nothing restarts them behind the lock screen
             assertEquals(0, client.watchers.get())
@@ -171,7 +171,7 @@ class SyncCoordinatorLockPauseTest {
             delay(100) // let the pause run to completion, so it cannot tear the connect down for us
             sut.connect(serverUrl, account, password.toCharArray())
 
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Configured } }
+            sut.status.awaitStatus("the status to come Configured") { it is SyncStatus.Configured }
             delay(200)
             assertEquals(0, client.watchers.get(), "no live-pull may survive behind a locked vault")
         } finally {
@@ -187,7 +187,7 @@ class SyncCoordinatorLockPauseTest {
         val sut = coordinator(vault, client)
         try {
             sut.connect(serverUrl, account, password.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
             withTimeout(5_000) { while (client.watchers.get() == 0) delay(10) }
 
             // A stray unlock callback (biometric re-prompt, gate recomposition) must not tear down or

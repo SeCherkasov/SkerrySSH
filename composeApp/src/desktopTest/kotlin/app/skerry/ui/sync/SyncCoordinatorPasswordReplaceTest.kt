@@ -18,9 +18,7 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.initializeVaultCrypto
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
@@ -73,11 +71,12 @@ class SyncCoordinatorPasswordReplaceTest {
                 expectedAuthKey = null
                 wrappedAccountKey = null
             } else {
-                val mk = crypto.deriveMasterKey(existingAccountPassword.toCharArray(), crypto.deriveSyncSalt(account))
+                // Shared cache, not zeroized here: this class builds a client per test and the Argon2id
+                // derivation is what makes the class the slowest in the suite (issue #141).
+                val mk = syncAccountKey(crypto, existingAccountPassword, account)
                 expectedAuthKey = crypto.deriveAuthKey(mk)
                 val key = accountDataKey ?: crypto.newDataKey()
                 wrappedAccountKey = crypto.wrapDataKey(mk, key)
-                mk.zeroize()
                 key.zeroize()
             }
         }
@@ -177,7 +176,7 @@ class SyncCoordinatorPasswordReplaceTest {
         val sut = coordinator(vault, FakeAccountClient(existingAccountPassword = accountPassword))
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
             // The bug: the vault unlock password must NOT have silently changed.
             assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "local vault password must still work")
             assertFalse(vault.verifyPassword(accountPassword.toCharArray()), "account password must not have replaced it yet")
@@ -193,9 +192,9 @@ class SyncCoordinatorPasswordReplaceTest {
         val sut = coordinator(vault, FakeAccountClient(existingAccountPassword = accountPassword))
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
             sut.confirmPasswordReplace()
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
             assertFalse(vault.verifyPassword(vaultPassword.toCharArray()), "old vault password must no longer work")
             assertTrue(vault.verifyPassword(accountPassword.toCharArray()), "account password now unlocks the vault")
         } finally {
@@ -210,9 +209,9 @@ class SyncCoordinatorPasswordReplaceTest {
         val sut = coordinator(vault, FakeAccountClient(existingAccountPassword = accountPassword))
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
             sut.cancelPasswordReplace()
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Disabled } }
+            sut.status.awaitStatus("the status to come Disabled") { it is SyncStatus.Disabled }
             assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "local vault password must be untouched")
             assertFalse(vault.verifyPassword(accountPassword.toCharArray()), "account password must not unlock the vault")
         } finally {
@@ -228,12 +227,12 @@ class SyncCoordinatorPasswordReplaceTest {
         var closed = false
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
             // Esc on the desktop modal (and leaving the mobile screen): it must decline the replace, not
             // leave the connect paused with the
             // kept password alive and the status stuck on NeedsPasswordReplaceConfirm ("Syncing…" forever).
             dismissPasswordReplace(sut) { closed = true }.invoke()
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Disabled } }
+            sut.status.awaitStatus("the status to come Disabled") { it is SyncStatus.Disabled }
             assertTrue(closed, "the modal still closes")
             // Nothing left pending: a stale confirm (reopened dialog, queued tap) can't re-key the vault.
             sut.confirmPasswordReplace()
@@ -263,9 +262,9 @@ class SyncCoordinatorPasswordReplaceTest {
             // The vault password drifts away from the account password (Settings → Security).
             assertTrue(vault.changePassword(vaultPassword.toCharArray(), "changed-X".toCharArray()))
             sut.connect(serverUrl, account, accountPassword.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
             sut.confirmPasswordReplace()
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             assertTrue(sut.status.value is SyncStatus.Online, "connects: the key is ours, only the wrap changes")
             assertTrue(vault.verifyPassword(accountPassword.toCharArray()), "the account password now unlocks the vault")
             assertFalse(vault.verifyPassword("changed-X".toCharArray()), "the old local password no longer unlocks")
@@ -287,9 +286,9 @@ class SyncCoordinatorPasswordReplaceTest {
         val sut = coordinator(vault, client)
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
             sut.confirmPasswordReplace()
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             assertTrue(sut.status.value is SyncStatus.Failed, "must not report success on a replace that didn't happen")
             assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "the vault password is left as it was")
         } finally {
@@ -305,7 +304,7 @@ class SyncCoordinatorPasswordReplaceTest {
         val sut = coordinator(vault, client)
         try {
             sut.connect(serverUrl, account, vaultPassword.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
             assertTrue(client.registered, "account should be registered under the vault password")
             assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "vault password is unchanged")
         } finally {
@@ -322,8 +321,8 @@ class SyncCoordinatorPasswordReplaceTest {
         try {
             // "wrong-C" is neither the vault password nor a real account password.
             sut.connect(serverUrl, account, "wrong-C".toCharArray())
-            withTimeout(30_000) {
-                sut.status.first { it is SyncStatus.Failed && it.reason == SyncFailureReason.Unauthorized }
+            sut.status.awaitStatus("the connect to be refused as unauthorized") {
+                it is SyncStatus.Failed && it.reason == SyncFailureReason.Unauthorized
             }
             assertFalse(client.registered, "must not register a divergent account under a non-vault password")
             assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "vault password is untouched")
@@ -345,7 +344,7 @@ class SyncCoordinatorPasswordReplaceTest {
         try {
             val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
             assertTrue(result is AccountPasswordChange.Success, "rotation succeeds, was $result")
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
             assertTrue(vault.verifyPassword(rotated.toCharArray()), "the vault now unlocks with the new password")
             assertFalse(vault.verifyPassword(vaultPassword.toCharArray()), "the old password no longer unlocks")
         } finally {
@@ -411,9 +410,9 @@ class SyncCoordinatorPasswordReplaceTest {
         val heal = coordinator(vault, client, store)
         try {
             heal.connect(serverUrl, account, rotated.toCharArray())
-            withTimeout(30_000) { heal.status.first { it is SyncStatus.NeedsPasswordReplaceConfirm } }
+            heal.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
             heal.confirmPasswordReplace()
-            withTimeout(30_000) { heal.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            heal.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             assertTrue(heal.status.value is SyncStatus.Online, "reconnect with the new password heals the device, was ${heal.status.value}")
             assertTrue(vault.verifyPassword(rotated.toCharArray()), "the local vault now unlocks with the new password")
         } finally {
