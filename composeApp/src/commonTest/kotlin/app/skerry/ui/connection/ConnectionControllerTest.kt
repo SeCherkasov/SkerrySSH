@@ -279,6 +279,63 @@ class ConnectionControllerTest {
     }
 
     @Test
+    fun `giving up on auto-reconnect keeps the last failure reason`() = runTest {
+        val ch1 = FakeShellChannel()
+        val transport = ScriptedTransport(
+            listOf(
+                Result.success(FakeSshConnection(ch1)),
+                Result.failure(IllegalStateException("route to host lost")),
+                Result.failure(IllegalStateException("auth rejected after reboot")),
+            ),
+        )
+        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 2)
+        controller.connect(target, SshAuth.Password("pw"))
+        assertIs<ConnectionUiState.Connected>(controller.uiState)
+
+        ch1.close()
+        advanceUntilIdle()
+
+        val st = controller.uiState
+        assertIs<ConnectionUiState.Disconnected>(st)
+        assertFalse(st.reconnecting)
+        // Without this the banner says only "reconnect failed": the user cannot tell a dead route
+        // from a rejected credential, which are two entirely different next steps.
+        assertEquals("auth rejected after reboot", st.lastError)
+        scope.cancel()
+    }
+
+    @Test
+    fun `an in-flight reconnect carries no failure reason yet`() = runTest {
+        val ch1 = FakeShellChannel()
+        val transport = ScriptedTransport(
+            listOf(
+                Result.success(FakeSshConnection(ch1)),
+                Result.failure(IllegalStateException("route to host lost")),
+                Result.success(FakeSshConnection(FakeShellChannel())),
+            ),
+        )
+        val backoffMs = 1_000L
+        val (controller, scope) = controllerWith(
+            transport,
+            maxReconnectAttempts = 3,
+            reconnectDelayMillis = { backoffMs },
+        )
+        controller.connect(target, SshAuth.Password("pw"))
+        ch1.close()
+
+        // The first attempt has already failed and the second is waiting out its backoff: the loop
+        // holds a reason, but it is not the verdict yet and must not surface as "connection lost".
+        advanceTimeBy(backoffMs + backoffMs / 2)
+        val midFlight = controller.uiState
+        assertIs<ConnectionUiState.Disconnected>(midFlight)
+        assertTrue(midFlight.reconnecting)
+        assertNull(midFlight.lastError)
+
+        advanceUntilIdle()
+        assertIs<ConnectionUiState.Connected>(controller.uiState) // the third attempt got through
+        scope.cancel()
+    }
+    @Test
     fun `auto-reconnect gives up after the attempt limit and stays Disconnected`() = runTest {
         val ch1 = FakeShellChannel()
         val transport = ScriptedTransport(
@@ -893,4 +950,5 @@ private class FakeShellChannel : ShellChannel {
     override suspend fun close() {
         emissions.close()
     }
+
 }

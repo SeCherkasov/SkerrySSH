@@ -331,7 +331,7 @@ fun TerminalScreen(
     // Also re-keyed on [focused]: that is how the keyboard follows a pane focused from the keyboard
     // (⌘/Ctrl+Shift + arrow), where there is no click on the terminal to hand it over.
     val modalsOpen = ModalPresence.openCount
-    val searchOpen = state.searchQuery != null
+    val searchOpen = state.search.query != null
     LaunchedEffect(state, modalsOpen, searchOpen, focused) {
         if (focused && !closed && !imeInput && modalsOpen == 0 && !searchOpen) focusRequester.requestFocus()
     }
@@ -354,7 +354,7 @@ fun TerminalScreen(
                 // While a search hit is selected, the viewport belongs to the search: output
                 // streaming in must not yank the user away from the line they are reading.
                 // shouldSnap is still consulted (it tracks input/max) — only the scroll is skipped.
-                if (snap && state.currentMatch == null) scroll.scrollTo(max)
+                if (snap && state.search.currentMatch == null) scroll.scrollTo(max)
             }
     }
 
@@ -365,9 +365,9 @@ fun TerminalScreen(
     // following it would drag the viewport away from what the user is reading.
     LaunchedEffect(state, metrics, paddingPx) {
         var lastSelection: Pair<Int, Int>? = null
-        snapshotFlow { Triple(state.searchNavVersion, state.searchIndex, viewportSize.height) }
+        snapshotFlow { Triple(state.search.navVersion, state.search.index, viewportSize.height) }
             .collect { (navVersion, index, height) ->
-                val match = state.currentMatch
+                val match = state.search.currentMatch
                 if (match == null || height == 0) return@collect
                 val selection = navVersion to index
                 if (selection == lastSelection) return@collect
@@ -653,7 +653,7 @@ fun TerminalScreen(
           // that list is rebuilt on a throttle (a pass over a 50 000-row scrollback is expensive),
           // so during streaming output it can lag by a snapshot — and a highlight painted from
           // stale rows would sit on the wrong lines. Rescanning ~50 rows per change is cheap.
-          val currentHit = state.currentMatch
+          val currentHit = state.search.currentMatch
           // The same window the draw loop below walks, so a hit on the partly visible slack row is
           // highlighted too. derivedStateOf, not a plain read of scroll.value: this sits in
           // composition, and the raw value changes every pixel of a drag — the window changes per row.
@@ -664,19 +664,19 @@ fun TerminalScreen(
           }
           // The viewport bottom is what an incremental search re-selects around, and only the render
           // layer knows the scroll position — so it keeps the state's anchor current.
-          LaunchedEffect(state, searchWindow) { state.setSearchAnchorRow(searchWindow.last) }
+          LaunchedEffect(state, searchWindow) { state.search.setAnchorRow(searchWindow.last) }
           val hitsByRow = remember(
-              screen, state.searchQuery, state.searchCaseSensitive, state.searchRegex, searchWindow,
+              screen, state.search.query, state.search.caseSensitive, state.search.regex, searchWindow,
           ) {
-              val query = state.searchQuery
+              val query = state.search.query
               if (query.isNullOrEmpty()) {
                   emptyMap()
               } else {
                   searchTerminal(
                       screen = screen,
                       query = query,
-                      caseSensitive = state.searchCaseSensitive,
-                      regex = state.searchRegex,
+                      caseSensitive = state.search.caseSensitive,
+                      regex = state.search.regex,
                       fromRow = searchWindow.first,
                       toRow = searchWindow.last + 1,
                   ).matches.groupBy { it.row }

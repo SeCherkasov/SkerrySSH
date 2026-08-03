@@ -69,7 +69,7 @@ import org.jetbrains.compose.resources.stringResource
 internal val SEARCH_FIELD_WIDTH = 200.dp
 
 /**
- * Search panel over the terminal's output ([TerminalScreenState.searchQuery] and friends): query
+ * Search panel over the terminal's output ([TerminalScreenState.search.query] and friends): query
  * field, hit counter, case/regex toggles, and previous/next/close controls. Sits at the pane's top
  * edge the way a browser's find bar sits over the page; the highlight itself is painted onto the
  * cell grid by [TerminalScreen].
@@ -82,7 +82,7 @@ internal val SEARCH_FIELD_WIDTH = 200.dp
 @Composable
 internal fun TerminalSearchBar(state: TerminalScreenState, modifier: Modifier = Modifier, expand: Boolean = false) {
     val mono = LocalFonts.current.mono
-    val query = state.searchQuery ?: return
+    val query = state.search.query ?: return
     val focusRequester = remember { FocusRequester() }
     // The field's own buffer: the terminal state holds the query, this adds the caret. On open it is
     // seeded from the restored query with everything selected, so typing replaces it (as find bars
@@ -114,7 +114,7 @@ internal fun TerminalSearchBar(state: TerminalScreenState, modifier: Modifier = 
                 value = value,
                 onValueChange = {
                     value = it
-                    state.updateSearchQuery(it.text)
+                    state.search.updateQuery(it.text)
                 },
                 singleLine = true,
                 textStyle = TextStyle(color = Skerry.colors.text, fontSize = 12.sp, fontFamily = mono),
@@ -127,18 +127,18 @@ internal fun TerminalSearchBar(state: TerminalScreenState, modifier: Modifier = 
                 ),
                 // The soft keyboard's search key steps to the next hit — the touch equivalent of
                 // Enter, which arrives as a key event only on desktop.
-                keyboardActions = KeyboardActions(onSearch = { state.searchNext() }),
+                keyboardActions = KeyboardActions(onSearch = { state.search.next() }),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when (event.key) {
-                            Key.Escape -> { state.closeSearch(); true }
+                            Key.Escape -> { state.search.close(); true }
                             // Enter walks the hits (Shift reverses), like every find bar. Consumed
                             // either way: a newline must not slip into the query or the PTY.
                             Key.Enter, Key.NumPadEnter -> {
-                                if (event.isShiftPressed) state.searchPrev() else state.searchNext()
+                                if (event.isShiftPressed) state.search.prev() else state.search.next()
                                 true
                             }
                             else -> false
@@ -148,23 +148,23 @@ internal fun TerminalSearchBar(state: TerminalScreenState, modifier: Modifier = 
         }
         SearchStatus(state, mono)
         // Toggles re-run the current query, so a search can be narrowed without retyping it.
-        SearchToggle("Aa", state.searchCaseSensitive, stringResource(Res.string.terminal_search_match_case), mono) {
-            state.applySearchCase(!state.searchCaseSensitive)
+        SearchToggle("Aa", state.search.caseSensitive, stringResource(Res.string.terminal_search_match_case), mono) {
+            state.search.applyCase(!state.search.caseSensitive)
         }
-        SearchToggle(".*", state.searchRegex, stringResource(Res.string.terminal_search_regex), mono) {
-            state.applySearchRegex(!state.searchRegex)
+        SearchToggle(".*", state.search.regex, stringResource(Res.string.terminal_search_regex), mono) {
+            state.search.applyRegex(!state.search.regex)
         }
-        IconBtn("keyboard_arrow_up", onClick = state::searchPrev, box = 24, icon = 16.sp, tooltip = stringResource(Res.string.terminal_search_prev))
-        IconBtn("keyboard_arrow_down", onClick = state::searchNext, box = 24, icon = 16.sp, tooltip = stringResource(Res.string.terminal_search_next))
-        IconBtn("close", onClick = state::closeSearch, box = 24, icon = 16.sp, tooltip = stringResource(Res.string.terminal_search_close))
+        IconBtn("keyboard_arrow_up", onClick = state.search::prev, box = 24, icon = 16.sp, tooltip = stringResource(Res.string.terminal_search_prev))
+        IconBtn("keyboard_arrow_down", onClick = state.search::next, box = 24, icon = 16.sp, tooltip = stringResource(Res.string.terminal_search_next))
+        IconBtn("close", onClick = state.search::close, box = 24, icon = 16.sp, tooltip = stringResource(Res.string.terminal_search_close))
     }
 }
 
 /** Hit counter ("3/17"), or why the query yielded nothing. */
 @Composable
 private fun SearchStatus(state: TerminalScreenState, mono: FontFamily) {
-    val error = state.searchError
-    val total = state.searchMatches.size
+    val error = state.search.error
+    val total = state.search.matches.size
     when {
         error != null -> Txt(
             when (error) {
@@ -173,13 +173,13 @@ private fun SearchStatus(state: TerminalScreenState, mono: FontFamily) {
             },
             color = Skerry.colors.sunset, size = 11.sp, font = mono,
         )
-        state.searchQuery.isNullOrEmpty() -> Unit // nothing typed yet — no verdict to show
+        state.search.query.isNullOrEmpty() -> Unit // nothing typed yet — no verdict to show
         total == 0 -> Txt(stringResource(Res.string.terminal_search_no_matches), color = Skerry.colors.faint, size = 11.sp, font = mono)
         // A capped list ("3/5000+") must not read as the true total.
         else -> Txt(
             stringResource(
-                if (state.searchTruncated) Res.string.terminal_search_counter_capped else Res.string.terminal_search_counter,
-                state.searchIndex + 1,
+                if (state.search.truncated) Res.string.terminal_search_counter_capped else Res.string.terminal_search_counter,
+                state.search.index + 1,
                 total,
             ),
             color = Skerry.colors.dim, size = 11.sp, font = mono,

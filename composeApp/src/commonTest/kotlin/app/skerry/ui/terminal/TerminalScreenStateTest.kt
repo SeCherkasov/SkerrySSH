@@ -683,11 +683,11 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("alpha\r\nbeta\r\nalpha again\r\n".encodeToByteArray())
-        state.openSearch()
-        state.updateSearchQuery("alpha")
+        state.search.open()
+        state.search.updateQuery("alpha")
 
-        assertEquals(2, state.searchMatches.size)
-        assertEquals(true, state.currentMatch != null)
+        assertEquals(2, state.search.matches.size)
+        assertEquals(true, state.search.currentMatch != null)
         scope.cancel()
     }
 
@@ -700,11 +700,11 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("hit\r\nfiller\r\nhit\r\nfiller\r\nhit\r\n".encodeToByteArray())
-        state.openSearch(anchorRow = 2) // viewport bottom sits on the second "hit"
-        state.updateSearchQuery("hit")
+        state.search.open(anchorRow = 2) // viewport bottom sits on the second "hit"
+        state.search.updateQuery("hit")
 
-        assertEquals(1, state.searchIndex)
-        assertEquals(2, state.currentMatch?.row)
+        assertEquals(1, state.search.index)
+        assertEquals(2, state.search.currentMatch?.row)
         scope.cancel()
     }
 
@@ -715,18 +715,18 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("hit\r\nhit\r\nhit\r\n".encodeToByteArray())
-        state.openSearch(anchorRow = 0)
-        state.updateSearchQuery("hit")
+        state.search.open(anchorRow = 0)
+        state.search.updateQuery("hit")
 
-        assertEquals(0, state.searchIndex)
-        state.searchNext()
-        assertEquals(1, state.searchIndex)
-        state.searchPrev()
-        assertEquals(0, state.searchIndex)
-        state.searchPrev() // wraps to the last match
-        assertEquals(2, state.searchIndex)
-        state.searchNext() // wraps back to the first
-        assertEquals(0, state.searchIndex)
+        assertEquals(0, state.search.index)
+        state.search.next()
+        assertEquals(1, state.search.index)
+        state.search.prev()
+        assertEquals(0, state.search.index)
+        state.search.prev() // wraps to the last match
+        assertEquals(2, state.search.index)
+        state.search.next() // wraps back to the first
+        assertEquals(0, state.search.index)
         scope.cancel()
     }
 
@@ -737,18 +737,18 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("Error 404\r\nerror 500\r\n".encodeToByteArray())
-        state.openSearch()
-        state.updateSearchQuery("error")
-        assertEquals(2, state.searchMatches.size)
+        state.search.open()
+        state.search.updateQuery("error")
+        assertEquals(2, state.search.matches.size)
 
-        state.applySearchCase(true)
-        assertEquals(1, state.searchMatches.size)
+        state.search.applyCase(true)
+        assertEquals(1, state.search.matches.size)
 
-        state.applySearchCase(false)
-        state.updateSearchQuery("\\d{3}")
-        assertEquals(0, state.searchMatches.size) // still a literal search
-        state.applySearchRegex(true)
-        assertEquals(2, state.searchMatches.size)
+        state.search.applyCase(false)
+        state.search.updateQuery("\\d{3}")
+        assertEquals(0, state.search.matches.size) // still a literal search
+        state.search.applyRegex(true)
+        assertEquals(2, state.search.matches.size)
         scope.cancel()
     }
 
@@ -759,13 +759,13 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("anything\r\n".encodeToByteArray())
-        state.openSearch()
-        state.applySearchRegex(true)
-        state.updateSearchQuery("a(")
+        state.search.open()
+        state.search.applyRegex(true)
+        state.search.updateQuery("a(")
 
-        assertEquals(TerminalSearchError.InvalidPattern, state.searchError)
-        assertEquals(emptyList(), state.searchMatches)
-        assertEquals(null, state.currentMatch)
+        assertEquals(TerminalSearchError.InvalidPattern, state.search.error)
+        assertEquals(emptyList(), state.search.matches)
+        assertEquals(null, state.search.currentMatch)
         scope.cancel()
     }
 
@@ -777,13 +777,13 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope, nowMillis = { now })
 
         session.emit("hit one\r\n".encodeToByteArray())
-        state.openSearch()
-        state.updateSearchQuery("hit")
-        assertEquals(1, state.searchMatches.size)
+        state.search.open()
+        state.search.updateQuery("hit")
+        assertEquals(1, state.search.matches.size)
 
         now += SEARCH_REFRESH_INTERVAL_MS + 1 // past the refresh throttle window
         session.emit("hit two\r\n".encodeToByteArray())
-        assertEquals(2, state.searchMatches.size)
+        assertEquals(2, state.search.matches.size)
         scope.cancel()
     }
 
@@ -797,16 +797,16 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope, nowMillis = { now })
 
         session.emit("hit one\r\nhit two\r\n".encodeToByteArray())
-        state.openSearch()
-        state.updateSearchQuery("hit")
-        state.searchPrev() // select the first (older) hit
-        val selected = state.currentMatch
+        state.search.open()
+        state.search.updateQuery("hit")
+        state.search.prev() // select the first (older) hit
+        val selected = state.search.currentMatch
 
         now += SEARCH_REFRESH_INTERVAL_MS + 1
         session.emit("hit three\r\n".encodeToByteArray())
 
-        assertEquals(selected, state.currentMatch)
-        assertEquals(3, state.searchMatches.size)
+        assertEquals(selected, state.search.currentMatch)
+        assertEquals(3, state.search.matches.size)
         scope.cancel()
     }
 
@@ -822,16 +822,16 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope, nowMillis = { now })
 
         session.emit("hit one\r\n".encodeToByteArray())
-        state.openSearch()
-        state.updateSearchQuery("hit")
-        assertEquals(1, state.searchMatches.size)
+        state.search.open()
+        state.search.updateQuery("hit")
+        assertEquals(1, state.search.matches.size)
 
         session.emit("hit two\r\n".encodeToByteArray()) // same instant — throttled away
-        assertEquals(1, state.searchMatches.size)
+        assertEquals(1, state.search.matches.size)
 
         now += SEARCH_REFRESH_INTERVAL_MS + 1
         session.emit("hit three\r\n".encodeToByteArray())
-        assertEquals(3, state.searchMatches.size) // catches up on the next snapshot after the window
+        assertEquals(3, state.search.matches.size) // catches up on the next snapshot after the window
         scope.cancel()
     }
 
@@ -844,15 +844,15 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope, nowMillis = { 0L }) // clock frozen: always throttled
 
         session.emit("hit one\r\n".encodeToByteArray())
-        state.openSearch()
-        state.updateSearchQuery("hit")
+        state.search.open()
+        state.search.updateQuery("hit")
         session.emit("hit two\r\n".encodeToByteArray())
-        assertEquals(1, state.searchMatches.size)
+        assertEquals(1, state.search.matches.size)
 
-        state.searchNext()
+        state.search.next()
 
-        assertEquals(2, state.searchMatches.size)
-        assertEquals(1, state.searchIndex) // moved onto the newly found hit
+        assertEquals(2, state.search.matches.size)
+        assertEquals(1, state.search.index) // moved onto the newly found hit
         scope.cancel()
     }
 
@@ -867,11 +867,11 @@ class TerminalScreenStateTest {
 
         session.emit("hit\r\n".encodeToByteArray())
         state.openReverseSearch()
-        state.openSearch()
+        state.search.open()
         assertEquals(null, state.reverseSearchQuery)
 
         state.openReverseSearch()
-        assertEquals(null, state.searchQuery)
+        assertEquals(null, state.search.query)
         scope.cancel()
     }
 
@@ -882,10 +882,10 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val state = TerminalScreenState(FakeTerminalSession(), scope)
 
-        state.openSearch()
-        state.updateSearchQuery("x".repeat(MAX_SEARCH_QUERY_LENGTH + 500))
+        state.search.open()
+        state.search.updateQuery("x".repeat(MAX_SEARCH_QUERY_LENGTH + 500))
 
-        assertEquals(MAX_SEARCH_QUERY_LENGTH, state.searchQuery?.length)
+        assertEquals(MAX_SEARCH_QUERY_LENGTH, state.search.query?.length)
         scope.cancel()
     }
 
@@ -898,11 +898,11 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("hit\r\nfiller\r\nhit\r\nfiller\r\nhit\r\n".encodeToByteArray())
-        state.setSearchAnchorRow(2) // user scrolled up: second "hit" is the last visible row
-        state.openSearch()
-        state.updateSearchQuery("hit")
+        state.search.setAnchorRow(2) // user scrolled up: second "hit" is the last visible row
+        state.search.open()
+        state.search.updateQuery("hit")
 
-        assertEquals(2, state.currentMatch?.row)
+        assertEquals(2, state.search.currentMatch?.row)
         scope.cancel()
     }
 
@@ -913,13 +913,13 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("hit\r\n".encodeToByteArray())
-        state.openSearch()
-        state.updateSearchQuery("hit")
-        state.closeSearch()
+        state.search.open()
+        state.search.updateQuery("hit")
+        state.search.close()
 
-        assertEquals(null, state.searchQuery)
-        assertEquals(emptyList(), state.searchMatches)
-        assertEquals(null, state.currentMatch)
+        assertEquals(null, state.search.query)
+        assertEquals(emptyList(), state.search.matches)
+        assertEquals(null, state.search.currentMatch)
         scope.cancel()
     }
 
@@ -930,12 +930,12 @@ class TerminalScreenStateTest {
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
 
-        state.openSearch()
-        state.updateSearchQuery("hit")
-        state.closeSearch()
+        state.search.open()
+        state.search.updateQuery("hit")
+        state.search.close()
         session.emit("hit\r\n".encodeToByteArray())
 
-        assertEquals(emptyList(), state.searchMatches)
+        assertEquals(emptyList(), state.search.matches)
         scope.cancel()
     }
 
@@ -948,13 +948,13 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("hit\r\n".encodeToByteArray())
-        state.openSearch()
-        state.updateSearchQuery("hit")
-        state.closeSearch()
-        state.openSearch()
+        state.search.open()
+        state.search.updateQuery("hit")
+        state.search.close()
+        state.search.open()
 
-        assertEquals("hit", state.searchQuery)
-        assertEquals(1, state.searchMatches.size)
+        assertEquals("hit", state.search.query)
+        assertEquals(1, state.search.matches.size)
         scope.cancel()
     }
 
@@ -965,13 +965,13 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope)
 
         session.emit("hit\r\n".encodeToByteArray())
-        state.openSearch()
-        state.updateSearchQuery("hit")
-        state.updateSearchQuery("")
+        state.search.open()
+        state.search.updateQuery("hit")
+        state.search.updateQuery("")
 
-        assertEquals(emptyList(), state.searchMatches)
-        assertEquals(null, state.searchError)
-        assertEquals(-1, state.searchIndex)
+        assertEquals(emptyList(), state.search.matches)
+        assertEquals(null, state.search.error)
+        assertEquals(-1, state.search.index)
         scope.cancel()
     }
 
@@ -981,13 +981,13 @@ class TerminalScreenStateTest {
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
 
-        state.openSearch()
-        state.updateSearchQuery("nothing here")
-        state.searchNext()
-        state.searchPrev()
+        state.search.open()
+        state.search.updateQuery("nothing here")
+        state.search.next()
+        state.search.prev()
 
-        assertEquals(-1, state.searchIndex)
-        assertEquals(null, state.currentMatch)
+        assertEquals(-1, state.search.index)
+        assertEquals(null, state.search.currentMatch)
         scope.cancel()
     }
 

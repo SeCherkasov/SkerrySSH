@@ -198,8 +198,8 @@ internal fun RowScope.SessionActions(
     if (ToolbarAction.Info !in hidden) {
         IconBtn(
             "info",
-            onClick = { if (infoAvailable) state.toggleInfo() },
-            tint = if (state.infoPanel && infoAvailable) Skerry.colors.cyanBright else Skerry.colors.dim,
+            onClick = { if (infoAvailable) state.settings.toggleInfoPanel() },
+            tint = if (state.settings.infoPanel && infoAvailable) Skerry.colors.cyanBright else Skerry.colors.dim,
             tooltip = stringResource(Res.string.shell_tip_info),
         )
     }
@@ -297,7 +297,7 @@ private fun OverflowActionsButton(
                         val run: () -> Unit = when (action) {
                             ToolbarAction.Files -> onOpenSftp
                             ToolbarAction.Tunnels -> ({ state.showView(DesktopView.Ports) })
-                            ToolbarAction.Info -> ({ if (infoAvailable) state.toggleInfo() })
+                            ToolbarAction.Info -> ({ if (infoAvailable) state.settings.toggleInfoPanel() })
                             ToolbarAction.Snippets -> state::requestSnippetPalette
                             ToolbarAction.Runbook -> state::requestRunbookPalette
                             ToolbarAction.Record -> state::requestRecordingToggle

@@ -92,6 +92,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_connecting
 import app.skerry.ui.generated.resources.term_connection_failed
 import app.skerry.ui.generated.resources.term_connection_lost
+import app.skerry.ui.generated.resources.term_connection_lost_detail
 import app.skerry.ui.generated.resources.term_no_active_session
 import app.skerry.ui.generated.resources.term_launch_local_shell
 import app.skerry.ui.generated.resources.local_shell_name
@@ -199,7 +200,7 @@ fun TerminalView(state: DesktopDesignState) {
         // active session it would be a column of "—" placeholders next to the empty-state screen —
         // hide it there, like the pane headers. Mock preview keeps it.
         AnimatedVisibility(
-            visible = state.infoPanel && infoPanelAvailable(
+            visible = state.settings.infoPanel && infoPanelAvailable(
                 hasSession = tab != null,
                 watched = tab?.focusedPane?.controller?.isWatched == true,
                 mock = sessions == null,
@@ -309,17 +310,20 @@ private fun LivePaneBody(
     val st = pane?.controller?.uiState
     // Ctrl+click on a path opens it in the file panel — which follows the focused pane, so the pane
     // is focused first and the path is resolved on the host the user clicked in, not on a sibling.
-    val openPath: ((String) -> Unit)? = remember(sessions, pane?.id, tabId, state.openFilePathsInSftp, pane?.controller?.supportsSftp) {
+    val openPath: ((String) -> Unit)? = remember(sessions, pane?.id, tabId, state.settings.openFilePathsInSftp, pane?.controller?.supportsSftp) {
         val controller = pane?.controller
-        // No SFTP channel on Mosh/Telnet/serial/local/container sessions — offering the path there
-        // would only open a panel that can't list anything.
-        if (sessions == null || !state.openFilePathsInSftp || controller == null || !controller.supportsSftp) null
-        else ({ path: String ->
-            if (tabId != null) sessions.focusPane(tabId, pane.id)
-            controller.requestReveal(path)
-            state.clearOverlay()
-            sessions.setActiveView(SessionView.Sftp)
-        })
+        when {
+            sessions == null || controller == null -> null
+            // No SFTP channel on Mosh/Telnet/serial/local/container sessions — offering the path
+            // there would only open a panel that can't list anything.
+            !state.settings.openFilePathsInSftp || !controller.supportsSftp -> null
+            else -> ({ path: String ->
+                if (tabId != null) sessions.focusPane(tabId, pane.id)
+                controller.requestReveal(path)
+                state.clearOverlay()
+                sessions.setActiveView(SessionView.Sftp)
+            })
+        }
     }
     // A live or frozen screen sits on the terminal's own background; every notice (no session /
     // connecting / error) sits on the app background, so the empty terminal matches other sections.
@@ -332,7 +336,7 @@ private fun LivePaneBody(
     val launchLocalShell: (@Composable () -> Unit) = {
         GhostButton(
             stringResource(Res.string.term_launch_local_shell),
-            onClick = { connect(localTerminalHost(state.localShellPath, localName)) },
+            onClick = { connect(localTerminalHost(state.settings.localShellPath, localName)) },
             icon = "terminal",
         )
     }
@@ -395,6 +399,8 @@ private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: 
     val text = when {
         state.cleanExit -> stringResource(Res.string.term_session_closed)
         state.reconnecting -> stringResource(Res.string.term_reconnecting, state.attempt)
+        // Transport text in English, like the connect-error detail: it names what actually refused.
+        state.lastError != null -> stringResource(Res.string.term_connection_lost_detail, state.lastError)
         else -> stringResource(Res.string.term_connection_lost)
     }
     TerminalOverlayBanner(icon = icon, text = text, accent = color, background = Skerry.colors.bannerScrim, modifier = modifier)
@@ -444,7 +450,7 @@ private fun ColumnScope.PaneGrid(
             val shortcut = matchDesktopShortcut(
                 event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
             )
-            val direction = paneGridDirection(shortcut, searchOpen = tab.focusedPane.liveTerminal?.searchQuery != null)
+            val direction = paneGridDirection(shortcut, searchOpen = tab.focusedPane.liveTerminal?.search?.query != null)
             if (direction == null) false else { sessions.focusNeighborPane(direction); true }
         }
     }

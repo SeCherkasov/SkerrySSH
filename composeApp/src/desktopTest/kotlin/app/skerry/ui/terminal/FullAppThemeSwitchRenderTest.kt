@@ -93,7 +93,7 @@ class FullAppThemeSwitchRenderTest {
                 // Unified theming: switching the APP theme alone must recolor the terminal to the
                 // theme's twin (Blackwater's ANSI blue is unique to its terminal palette — the
                 // green-accent chrome never paints it).
-                state.chooseThemeMode(app.skerry.ui.theme.ThemeMode.BLACKWATER)
+                state.settings.chooseThemeMode(app.skerry.ui.theme.ThemeMode.BLACKWATER)
                 repeat(5) { pixels = frame() }
                 assertTrue(
                     pixels.hasColor(BLACKWATER_ANSI_BLUE),
@@ -102,7 +102,7 @@ class FullAppThemeSwitchRenderTest {
                 if (pixels.hasColor(NIGHT_SEA_ANSI_BLUE)) {
                     fail("Night Sea blue pixels remain after the app theme switch: the terminal did not follow")
                 }
-                state.chooseThemeMode(app.skerry.ui.theme.ThemeMode.DARK)
+                state.settings.chooseThemeMode(app.skerry.ui.theme.ThemeMode.DARK)
                 repeat(5) { pixels = frame() }
 
                 // Exact user path: open Settings -> Appearance over the terminal, opt into a
@@ -111,8 +111,8 @@ class FullAppThemeSwitchRenderTest {
                 state.openSettings()
                 state.showSettingsTab(app.skerry.ui.app.SettingsTab.Appearance)
                 repeat(3) { pixels = frame() }
-                state.toggleCustomTerminalTheme()
-                state.chooseTerminalTheme(TerminalThemes.SolarizedLight)
+                state.settings.toggleCustomTerminalTheme()
+                state.settings.chooseTerminalTheme(TerminalThemes.SolarizedLight)
                 repeat(3) { pixels = frame() }
                 state.closeSettings()
                 repeat(5) { pixels = frame() }

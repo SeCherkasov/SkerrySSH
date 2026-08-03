@@ -161,7 +161,7 @@ fun main() {
     runCatching { state.showSection(HostSection.valueOf(viewName)) }
         .onFailure { runCatching { state.showView(DesktopView.valueOf(viewName)) } }
     // Terminal theme for visual review: -Dskerry.screenshot.termTheme=<id> (e.g. tokyo-night).
-    System.getProperty("skerry.screenshot.termTheme")?.let { state.chooseTerminalTheme(TerminalThemes.fromId(it)) }
+    System.getProperty("skerry.screenshot.termTheme")?.let { state.settings.chooseTerminalTheme(TerminalThemes.fromId(it)) }
     when (overlay) {
         "lock" -> state.lock()
         "modal" -> state.openModal(state.section) // form of the section being rendered

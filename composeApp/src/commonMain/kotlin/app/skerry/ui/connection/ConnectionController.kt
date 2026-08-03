@@ -94,12 +94,18 @@ sealed interface ConnectionUiState {
      * [cleanExit] is true when the shell exited normally (EOF, e.g. via `exit`): there is NO
      * auto-reconnect (the session is simply closed), and the banner reads neutrally "Session
      * closed". False means a transport drop.
+     *
+     * [lastError] is the message of the failure that ended the last reconnect attempt, set only
+     * once the attempt limit is exhausted. Diagnostics, in transport English like
+     * [Error.message]: a dead route and a rejected credential both end as "not reconnected", and
+     * the two ask the user for entirely different things.
      */
     data class Disconnected(
         val terminal: TerminalScreenState,
         val reconnecting: Boolean,
         val attempt: Int,
         val cleanExit: Boolean = false,
+        val lastError: String? = null,
     ) : ConnectionUiState
 }
 
@@ -606,6 +612,7 @@ class ConnectionController(
     private fun startReconnect(frozen: TerminalScreenState, target: SshTarget, auth: SshAuth) {
         reconnectJob = scope.launch {
             var attempt = 1
+            var lastError: String? = null
             while (attempt <= maxReconnectAttempts) {
                 uiState = ConnectionUiState.Disconnected(frozen, reconnecting = true, attempt = attempt)
                 delay(reconnectDelayMillis(attempt))
@@ -615,10 +622,20 @@ class ConnectionController(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    // Keep why this attempt failed: the giving-up state below is the only thing the
+                    // user sees, and without a reason it cannot distinguish a dead route from a
+                    // rejected credential. Overwritten each attempt — the last one is the current
+                    // truth about the host.
+                    lastError = e.message
                     attempt++
                 }
             }
-            uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = maxReconnectAttempts)
+            uiState = ConnectionUiState.Disconnected(
+                frozen,
+                reconnecting = false,
+                attempt = maxReconnectAttempts,
+                lastError = lastError,
+            )
         }
     }
 

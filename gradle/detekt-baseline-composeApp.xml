@@ -19,7 +19,6 @@
     <ID>ComplexCondition:TerminalScreen.kt$g &lt; row.size &amp;&amp; row[g].width == CellWidth.Single &amp;&amp; row[g].style == st &amp;&amp; row[g].isPlainAscii()</ID>
     <ID>ComplexCondition:TerminalScreenState.kt$TerminalScreenState$guardPolicy.production &amp;&amp; !awaitingSecret &amp;&amp; text.any { it == '\n' || it == '\r' }</ID>
     <ID>ComplexCondition:TerminalSearchRenderTest.kt$TerminalSearchRenderTest$close(p shr 16 and 0xFF, argb shr 16 and 0xFF) &amp;&amp; close(p shr 8 and 0xFF, argb shr 8 and 0xFF) &amp;&amp; close(p and 0xFF, argb and 0xFF) &amp;&amp; (p ushr 24) == 0xFF</ID>
-    <ID>ComplexCondition:TerminalView.kt$sessions == null || !state.openFilePathsInSftp || controller == null || !controller.supportsSftp</ID>
     <ID>ComplexCondition:VaultGateScreen.kt$event == Lifecycle.Event.ON_STOP &amp;&amp; controller.state == VaultGateState.Unlocked &amp;&amp; !controller.biometricInFlight &amp;&amp; deviceMandatesAutoLock()</ID>
     <ID>ComplexCondition:VncCoordinates.kt$FitGeometry$fx &lt; 0f || fy &lt; 0f || fx &gt;= fbWidth || fy &gt;= fbHeight</ID>
     <ID>ComplexCondition:VncCoordinates.kt$canvas.width &lt;= 0 || canvas.height &lt;= 0 || fbWidth &lt;= 0 || fbHeight &lt;= 0</ID>

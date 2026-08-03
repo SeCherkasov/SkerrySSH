@@ -1,5 +1,6 @@
 package app.skerry.ui.desktop
 
+import app.skerry.ui.app.DesktopSettingsState
 import app.skerry.ui.connection.toRdpPassword
 import app.skerry.shared.ssh.isRdp
 import app.skerry.ui.remote.RemoteDesktopController
@@ -264,9 +265,11 @@ fun DesktopDesignApp(
     // Keyboard-interactive prompts (2FA codes a server asks for mid-connect). null on the mock path:
     // nothing is connecting, so nothing can ask.
     keyboardInteractive: app.skerry.ui.connection.KeyboardInteractivePromptController? = null,
-    // Info panel visibility is persisted externally (desktop main): starting value + write callback.
-    initialInfoPanel: Boolean = true,
-    onInfoPanelChange: (Boolean) -> Unit = {},
+    /**
+     * Persisted user preferences (Settings). The platform builds this with its own read/write
+     * callbacks; the default (no-op callbacks, stock values) is the mock/preview path.
+     */
+    settings: DesktopSettingsState = DesktopSettingsState(),
     // Collapsed host groups — also persisted externally (desktop main): starting set + write callback.
     initialCollapsedGroups: Set<String> = emptySet(),
     onCollapsedGroupsChange: (Set<String>) -> Unit = {},
@@ -284,83 +287,15 @@ fun DesktopDesignApp(
     onSftpShowModifiedChange: (Boolean) -> Unit = {},
     initialSftpShowPermissions: Boolean = false,
     onSftpShowPermissionsChange: (Boolean) -> Unit = {},
-    // Terminal font and its size (Appearance → Font / Font size) — persisted externally (desktop main).
-    initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
-    onTerminalFontChange: (TerminalFont) -> Unit = {},
-    initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
-    onTerminalFontSizeChange: (Int) -> Unit = {},
-    // Terminal line height and letter spacing (Appearance) — persisted externally (desktop main).
-    initialTerminalLineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
-    onTerminalLineHeightChange: (Float) -> Unit = {},
-    initialTerminalLetterSpacing: Float = DEFAULT_TERMINAL_LETTER_SPACING,
-    onTerminalLetterSpacingChange: (Float) -> Unit = {},
-    // UI language (Appearance → Language) — persisted externally (desktop main): starting value + write callback.
-    initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
-    onUiLanguageChange: (UiLanguage) -> Unit = {},
-    // Terminal settings (Settings → Terminal): scrollback, cursor style, show OSC title on tabs —
-    // persisted externally (desktop main): starting values + write callbacks.
-    initialTerminalScrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
-    onTerminalScrollbackChange: (Int) -> Unit = {},
-    initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
-    onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
-    initialShowTerminalTitleOnTabs: Boolean = false,
-    onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
-    // Host-row click behavior (Settings → Terminal → Behavior) — persisted externally (desktop main).
-    initialHostClickConnectMode: HostClickConnectMode = HostClickConnectMode.DEFAULT,
-    onHostClickConnectModeChange: (HostClickConnectMode) -> Unit = {},
-    // OSC 52 server clipboard-write gate (Settings → Terminal) — persisted externally (desktop main).
-    initialAllowServerClipboardWrite: Boolean = false,
-    onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
-    // Reporting sessions on team-shared hosts (Settings → Security) — persisted externally (desktop main).
-    initialReportTeamSessions: Boolean = true,
-    onReportTeamSessionsChange: (Boolean) -> Unit = {},
-    // Clickable file paths in terminal output (Settings → Terminal) — persisted externally (desktop main).
-    initialOpenFilePathsInSftp: Boolean = true,
-    onOpenFilePathsInSftpChange: (Boolean) -> Unit = {},
-    // Production guard: confirm Warn-level commands too (Settings → Terminal) — persisted externally.
-    initialConfirmProductionWarnings: Boolean = false,
-    onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
-    // Terminal color theme (Appearance → theme cards) — persisted externally (desktop main).
-    initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
-    onTerminalThemeChange: (TerminalTheme) -> Unit = {},
-    // Separately-picked terminal theme flag (unified theming) — persisted externally (desktop main).
-    initialCustomTerminalTheme: Boolean = false,
-    onCustomTerminalThemeChange: (Boolean) -> Unit = {},
-    // App theme (Settings → Appearance) — persisted externally (desktop main).
-    initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
-    onThemeModeChange: (ThemeMode) -> Unit = {},
-    initialLocalShellPath: String = "",
-    onLocalShellPathChange: (String) -> Unit = {},
-    // Idle auto-lock threshold (Settings → Security) — persisted externally (desktop main).
-    initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
-    onAutoLockChange: (AutoLockDuration) -> Unit = {},
-    // Visibility and size of the RECENT section (Settings → Appearance → Interface) — persisted externally (desktop main).
-    initialShowRecent: Boolean = true,
-    onShowRecentChange: (Boolean) -> Unit = {},
-    initialRecentLimit: Int = DesktopDesignState.MAX_RECENT_HOSTS,
-    onRecentLimitChange: (Int) -> Unit = {},
     state: DesktopDesignState = remember {
         DesktopDesignState(
-            initialInfoPanel, onInfoPanelChange, initialCollapsedGroups, onCollapsedGroupsChange,
-            initialRecentHostIds, onRecentHostIdsChange, initialCustomGroups, onCustomGroupsChange,
-            initialTerminalFont, onTerminalFontChange, initialTerminalFontSize, onTerminalFontSizeChange,
-            initialTerminalLineHeight, onTerminalLineHeightChange, initialTerminalLetterSpacing, onTerminalLetterSpacingChange,
-            initialUiLanguage, onUiLanguageChange,
-            initialTerminalScrollback, onTerminalScrollbackChange,
-            initialTerminalCursorStyle, onTerminalCursorStyleChange,
-            initialShowTerminalTitleOnTabs, onShowTerminalTitleOnTabsChange,
-            initialHostClickConnectMode, onHostClickConnectModeChange,
-            initialAllowServerClipboardWrite, onAllowServerClipboardWriteChange,
-            initialReportTeamSessions, onReportTeamSessionsChange,
-            initialOpenFilePathsInSftp, onOpenFilePathsInSftpChange,
-            initialConfirmProductionWarnings, onConfirmProductionWarningsChange,
-            initialTerminalTheme, onTerminalThemeChange,
-            initialCustomTerminalTheme, onCustomTerminalThemeChange,
-            initialThemeMode, onThemeModeChange,
-            initialLocalShellPath, onLocalShellPathChange,
-            initialAutoLock, onAutoLockChange,
-            initialShowRecent, onShowRecentChange,
-            initialRecentLimit, onRecentLimitChange,
+            settings = settings,
+            initialCollapsedGroups = initialCollapsedGroups,
+            onCollapsedGroupsChange = onCollapsedGroupsChange,
+            initialRecentHostIds = initialRecentHostIds,
+            onRecentHostIdsChange = onRecentHostIdsChange,
+            initialCustomGroups = initialCustomGroups,
+            onCustomGroupsChange = onCustomGroupsChange,
         )
     },
     vault: Vault? = null,
@@ -508,9 +443,9 @@ fun DesktopDesignApp(
                         // scrollback/cursor choice, already-open ones keep their emulator's.
                         terminalPrefs = {
                             TerminalSessionPrefs(
-                                state.terminalScrollback,
-                                state.terminalCursorStyle,
-                                clipboardWriteEnabled = state.allowServerClipboardWrite,
+                                state.settings.terminalScrollback,
+                                state.settings.terminalCursorStyle,
+                                clipboardWriteEnabled = state.settings.allowServerClipboardWrite,
                             )
                         },
                     )
@@ -527,7 +462,7 @@ fun DesktopDesignApp(
     // A cursor-style change in settings applies to ALREADY open sessions live (new ones pick it up at
     // connect via terminalPrefs). Pushed into every pane of every tab; the command goes
     // through the emulator's queue, so no race. Detached/empty tabs are simply skipped.
-    val cursorStyle = state.terminalCursorStyle
+    val cursorStyle = state.settings.terminalCursorStyle
     LaunchedEffect(cursorStyle, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
         manager.allSessions.forEach { it.liveTerminal?.applyCursorStyle(cursorStyle.shape, cursorStyle.blink) }
@@ -535,18 +470,18 @@ fun DesktopDesignApp(
     // A scrollback-buffer change in settings likewise applies to ALREADY open sessions live: shrinking
     // trims the extra old history, growing keeps new lines around longer. New sessions pick up the
     // value at connect via terminalPrefs.
-    val scrollbackLines = TerminalSessionPrefs(scrollback = state.terminalScrollback).effectiveScrollback
+    val scrollbackLines = TerminalSessionPrefs(scrollback = state.settings.terminalScrollback).effectiveScrollback
     LaunchedEffect(scrollbackLines, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
         manager.allSessions.forEach { it.liveTerminal?.applyScrollback(scrollbackLines) }
     }
     // The Teams session-report gate reads the live setting: it lives in this screen's state, while
     // the coordinator is built at startup, so it is handed a getter rather than a value.
-    LaunchedEffect(teams, state) { teams?.reportSessionsEnabled = { state.reportTeamSessions } }
+    LaunchedEffect(teams, state) { teams?.reportSessionsEnabled = { state.settings.reportTeamSessions } }
     // Toggling the OSC 52 clipboard-write gate applies to ALREADY open sessions live: turning it off
     // stops honoring server clipboard writes immediately, turning it on lets them through. New
     // sessions pick up the value at connect via terminalPrefs.
-    val allowClipboardWrite = state.allowServerClipboardWrite
+    val allowClipboardWrite = state.settings.allowServerClipboardWrite
     LaunchedEffect(allowClipboardWrite, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
         manager.allSessions.forEach { it.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite) }
@@ -555,8 +490,8 @@ fun DesktopDesignApp(
     // DesktopDesignApp recomposes on tab/session switches and vault events. Without remember a new
     // instance on every recomposition would force a full rebuild of the consumer subtree (the whole
     // terminal Canvas), even when font/size hadn't changed.
-    val terminalAppearance = remember(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing) {
-        TerminalAppearance(state.terminalFont, state.terminalFontSize, state.terminalLineHeight, state.terminalLetterSpacing)
+    val terminalAppearance = remember(state.settings.terminalFont, state.settings.terminalFontSize, state.settings.terminalLineHeight, state.settings.terminalLetterSpacing) {
+        TerminalAppearance(state.settings.terminalFont, state.settings.terminalFontSize, state.settings.terminalLineHeight, state.settings.terminalLetterSpacing)
     }
     // The terminal AI's reply language = UI language: the provider reads the applied locale tag
     // ([app.skerry.ui.i18n.LocalAppLocale]) and is reset on language change (SideEffect reruns when
@@ -567,10 +502,10 @@ fun DesktopDesignApp(
     }
     // Unified theming: unless the user opted into a separate terminal theme, the terminal follows
     // the app theme's twin ([ThemeMode.terminalThemeId]); SYSTEM tracks the OS side live.
-    val termSystemDark = systemInDarkTheme(enabled = !state.customTerminalTheme && state.themeMode == ThemeMode.SYSTEM)
+    val termSystemDark = systemInDarkTheme(enabled = !state.settings.customTerminalTheme && state.settings.themeMode == ThemeMode.SYSTEM)
     val effectiveTerminalTheme =
-        if (state.customTerminalTheme) state.terminalTheme
-        else TerminalThemes.fromId(state.themeMode.terminalThemeId(termSystemDark))
+        if (state.settings.customTerminalTheme) state.settings.terminalTheme
+        else TerminalThemes.fromId(state.settings.themeMode.terminalThemeId(termSystemDark))
     CompositionLocalProvider(
         app.skerry.ui.app.LocalKeyboardInteractive provides keyboardInteractive,
         LocalFonts provides fonts,
@@ -614,7 +549,7 @@ fun DesktopDesignApp(
                 securityLog = securityLog,
                 // Idle auto-lock threshold from settings: changing it in the UI recomposes VaultGate
                 // and restarts the idle timer; Never (idleMs == null) turns it off.
-                autoLockIdleMs = state.autoLock.idleMs,
+                autoLockIdleMs = state.settings.autoLock.idleMs,
                 // Runs on EVERY lock, including the two automatic ones that bypass the lock action.
                 onBeforeLock = { tearDownForLock(tunnels, sessions, sync, snippets, runbookRunner, keyboardInteractive) },
                 onReset = onVaultReset,
@@ -833,7 +768,7 @@ private fun DesktopChrome(
         LocalConnectPane provides connectPaneHost,
         LocalRunSnippetOnHost provides runSnippetOnHost,
         LocalCredentials provides credentials,
-        LocalHostClickConnectMode provides state.hostClickConnectMode,
+        LocalHostClickConnectMode provides state.settings.hostClickConnectMode,
         LocalShowTerminal provides showTerminal,
     ) {
         // Global snippet hotkey: preview events flow from the root down to focus, so the root Box
@@ -1017,7 +952,7 @@ private fun DesktopChrome(
             }
             // …and, once inside, keep every open session armed and confirm the risky commands it
             // holds. At the root, so the confirmation is never covered by the terminal's own chrome.
-            ProdGuardSync(sessions, state.confirmProductionWarnings)
+            ProdGuardSync(sessions, state.settings.confirmProductionWarnings)
             // Keeps each tab's synchronized-input wiring in step with its toggle.
             PaneSyncBinder(sessions)
             ProdCommandGate(sessions?.active)
@@ -1221,7 +1156,7 @@ private fun runDesktopShortcut(
             // SFTP or a recording, the chord would otherwise open a panel on a screen nobody sees.
             state.clearOverlay()
             sessions.setActiveView(SessionView.Terminal)
-            terminal.openSearch()
+            terminal.search.open()
         }
         DesktopShortcut.Lock -> onLock()
         DesktopShortcut.Broadcast -> state.openBroadcast()
@@ -1398,7 +1333,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                     // is where a wrong-window mistake starts, so the marker sits there too.
                     val prodTab = isProdHostId(focused.hostId)
                     SessionTabChip(
-                        name = focused.tabTitle(state.showTerminalTitleOnTabs),
+                        name = focused.tabTitle(state.settings.showTerminalTitleOnTabs),
                         // A recording tab has no connection: its dot and accent are sunset, so it
                         // never reads as a live (or dead) session.
                         dot = if (s.isPlayer) Skerry.colors.sunset else sessionDotColor(focused.status),

@@ -406,12 +406,12 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
                 // Narrowed to this section: history is per catalog too, so the desktops list doesn't
                 // offer to reconnect a shell. The limit applies after narrowing, so a section with
                 // few recents still fills its quota.
-                val recent = remember(state.recentHostIds, liveHosts.hosts, state.recentLimit, section) {
+                val recent = remember(state.recentHostIds, liveHosts.hosts, state.settings.recentLimit, section) {
                     state.recentHostIds.mapNotNull { liveHosts.find(it) }
                         .inSection(section)
-                        .take(state.recentLimit)
+                        .take(state.settings.recentLimit)
                 }
-                if (state.showRecent && recent.isNotEmpty()) {
+                if (state.settings.showRecent && recent.isNotEmpty()) {
                     // Divider belongs to the section: hidden together with it when RECENT is off/empty.
                     HLine(modifier = Modifier.padding(top = 8.dp))
                     RecentSectionHeader()
