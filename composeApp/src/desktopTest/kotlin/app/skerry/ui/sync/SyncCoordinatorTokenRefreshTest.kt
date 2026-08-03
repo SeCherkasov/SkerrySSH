@@ -17,10 +17,8 @@ import app.skerry.shared.vault.initializeVaultCrypto
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
@@ -105,11 +103,8 @@ class SyncCoordinatorTokenRefreshTest {
 
     /** This vault's own dataKey wrapped under the account (= vault) password, so the connect adopts nothing. */
     private fun ownWrap(vault: Vault): ByteArray {
-        val mk = crypto.deriveMasterKey(password.toCharArray(), crypto.deriveSyncSalt(account))
         val dk = vault.exportDataKey()!!
-        val wrapped = crypto.wrapDataKey(mk, dk)
-        mk.zeroize(); dk.zeroize()
-        return wrapped
+        return crypto.wrapDataKey(syncAccountKey(crypto, password, account), dk).also { dk.zeroize() }
     }
 
     /** Coordinator whose sync cycle fails with 401 whenever the session's access token is expired. */
@@ -136,7 +131,7 @@ class SyncCoordinatorTokenRefreshTest {
         val sut = coordinator(client, vault, config)
         try {
             sut.connect(serverUrl, account, password.toCharArray(), keepConnected = true)
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             assertTrue(sut.status.value is SyncStatus.Online, "connect should come Online, got ${sut.status.value}")
             val sealedAtConnect = config.load()?.sealedRefreshToken
             assertNotNull(sealedAtConnect, "keep-connected must seal the refresh token at connect")
@@ -144,8 +139,8 @@ class SyncCoordinatorTokenRefreshTest {
             // The 15-minute TTL passes: the server now rejects the session's access token.
             client.expiredTokens += "access-1"
             sut.syncNow()
-            val terminal = withTimeout(30_000) {
-                sut.status.first { (it is SyncStatus.Online && client.refreshCalls.get() > 0) || it is SyncStatus.Failed || it is SyncStatus.Configured }
+            val terminal = sut.status.awaitStatus("the expired sync to refresh and retry") {
+                (it is SyncStatus.Online && client.refreshCalls.get() > 0) || it is SyncStatus.Failed || it is SyncStatus.Configured
             }
             assertTrue(terminal is SyncStatus.Online, "an expired access token must refresh+retry, not surface as $terminal")
             assertEquals(1, client.refreshCalls.get(), "exactly one refresh for one expired sync")
@@ -174,7 +169,7 @@ class SyncCoordinatorTokenRefreshTest {
         val sut = coordinator(client, vault, config)
         try {
             sut.connect(serverUrl, account, password.toCharArray(), keepConnected = true)
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             assertTrue(sut.status.value is SyncStatus.Online)
 
             // Both tokens are dead (device revoked / 30-day refresh expiry): the link survives, the
@@ -182,8 +177,8 @@ class SyncCoordinatorTokenRefreshTest {
             client.expiredTokens += "access-1"
             client.refreshUnauthorized = true
             sut.syncNow()
-            val terminal = withTimeout(30_000) {
-                sut.status.first { it is SyncStatus.Configured || it is SyncStatus.Failed }
+            val terminal = sut.status.awaitStatus("the dead session to be torn down") {
+                it is SyncStatus.Configured || it is SyncStatus.Failed
             }
             assertTrue(terminal is SyncStatus.Configured, "a dead refresh token must ask for the password (Configured), got $terminal")
             assertEquals(null, sut.currentSession(), "the dead session must be dropped")
@@ -203,7 +198,7 @@ class SyncCoordinatorTokenRefreshTest {
         val sut = coordinator(client, vault, config)
         try {
             sut.connect(serverUrl, account, password.toCharArray(), keepConnected = true)
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             assertTrue(sut.status.value is SyncStatus.Online)
 
             // Access token expired AND the refresh round trip hits a network blip: the truthful status
@@ -212,14 +207,14 @@ class SyncCoordinatorTokenRefreshTest {
             client.expiredTokens += "access-1"
             client.refreshNetworkError = true
             sut.syncNow()
-            val failed = withTimeout(30_000) { sut.status.first { it is SyncStatus.Failed || it is SyncStatus.Configured } }
+            val failed = sut.status.awaitStatus("the failed refresh to surface") { it is SyncStatus.Failed || it is SyncStatus.Configured }
             assertTrue(failed is SyncStatus.Failed && failed.reason == SyncFailureReason.Network, "a refresh network blip must surface as Network, got $failed")
             assertTrue(sut.currentSession() != null, "the session must survive a transient refresh failure")
 
             // The blip passes: the next sync recovers through the normal refresh+retry path.
             client.refreshNetworkError = false
             sut.syncNow()
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the recovered sync to come Online") { it is SyncStatus.Online }
             assertEquals(2, client.refreshCalls.get(), "one failed and one successful refresh")
         } finally {
             sut.close()
@@ -235,13 +230,13 @@ class SyncCoordinatorTokenRefreshTest {
         val sut = coordinator(client, vault, config)
         try {
             sut.connect(serverUrl, account, password.toCharArray(), keepConnected = true)
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             assertTrue(sut.status.value is SyncStatus.Online)
 
             // Every WS drop rotates the session (best-effort refresh) — the NEXT handshake must use
             // the fresh token, not the one captured when the watch started (a dead captured token
             // would otherwise loop 401 forever while the status stays Online).
-            withTimeout(30_000) {
+            awaitSync("the watch to reconnect") {
                 while (client.watchTokens.size < 2) delay(50)
             }
             assertEquals("access-1", client.watchTokens[0])

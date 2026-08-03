@@ -117,7 +117,7 @@ class SyncCoordinatorNetworkRecoveryTest {
         val sut = coordinator(vault, client)
         try {
             sut.connect(serverUrl, account, password.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
             withTimeout(5_000) { sut.serverReachable.first { it == ServerReachable.REACHABLE } }
 
             // The network drops: a sync cycle fails with NETWORK and the status parks on Failed.
@@ -158,7 +158,7 @@ class SyncCoordinatorNetworkRecoveryTest {
         )
         try {
             sut.connect(serverUrl, account, password.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
 
             // A transient blip: the sync path fails with NETWORK while the health ping stays green, so
             // no reachability transition will ever fire — only the coordinator's own retry can heal it.
@@ -199,7 +199,7 @@ class SyncCoordinatorNetworkRecoveryTest {
         )
         try {
             sut.connect(serverUrl, account, password.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Online } }
+            sut.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
 
             // A sync is in flight (parked inside the engine) when the vault locks: pauseForLock joins
             // only watch/push, so it parks Configured while this cycle is still running.
@@ -250,7 +250,7 @@ class SyncCoordinatorNetworkRecoveryTest {
             // present, no session yet — but by the time it gets the mutex the disconnect has erased the
             // link. Restoring from the stale copy would silently re-link the device.
             sut.connect(serverUrl, account, password.toCharArray())
-            withTimeout(30_000) { client.registering.await() }
+            awaitSync("the connect to reach register") { client.registering.await() }
             sut.disconnect()
             delay(100) // keep the queue order deterministic: disconnect enters the mutex queue first
             sut.restoreSession()
@@ -279,7 +279,7 @@ class SyncCoordinatorNetworkRecoveryTest {
         val first = coordinator(vault, client, configStore)
         try {
             first.connect(serverUrl, account, password.toCharArray(), keepConnected = true)
-            withTimeout(30_000) { first.status.first { it is SyncStatus.Online } }
+            first.status.awaitStatus("the status to come Online") { it is SyncStatus.Online }
             assertTrue(configStore.load()?.sealedRefreshToken != null, "keep-connected must seal the refresh token")
         } finally {
             first.close()
