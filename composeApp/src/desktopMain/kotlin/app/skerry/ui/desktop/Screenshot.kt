@@ -782,6 +782,22 @@ private fun seededSessions(hosts: HostManagerController): SessionsController {
     // Seeds port forwards on the active session for a live Tunnels tab screenshot: waits for the
     // fake connection to come up (connect is async), then raises -L/-R/-D the same way the UI does
     // (PortForwardController). The fake forward is Active immediately.
+    // Split grid for the pane screenshots: -Dskerry.screenshot.panes=4 fills the active tab with
+    // that many connected panes and turns synchronized input on, which is what the work bar's split
+    // title is there to show.
+    val panes = System.getProperty("skerry.screenshot.panes", "1").toIntOrNull() ?: 1
+    val tabId = sessions.tabs.first().id
+    repeat((panes - 1).coerceAtLeast(0)) { i ->
+        // Loud rather than a quietly under-filled picture: a grid that refuses another pane
+        // means the requested -Dskerry.screenshot.panes cannot be rendered at all.
+        val paneId = checkNotNull(sessions.addPane(tabId)) { "pane $i of $panes refused: grid is full" }
+        val host = hosts.hosts[(i + 1) % hosts.hosts.size]
+        sessions.connectPane(tabId, paneId, host.id, host.label, host.connectionSubtitle(), host.toTarget(), SshAuth.Password(""))
+    }
+    if (panes > 1) {
+        sessions.toggleSyncInput(tabId)
+        sessions.focusPane(tabId, sessions.tabs.first().panes.first().id)
+    }
     val ctrl = sessions.tabs.first().focusedPane.controller
     scope.launch {
         // uiState is Compose snapshot state; waits for the transition to Connected via snapshotFlow

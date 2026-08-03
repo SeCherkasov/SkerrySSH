@@ -1,10 +1,7 @@
 package app.skerry.ui.terminal
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import app.skerry.ui.design.EmptyState
 import androidx.compose.foundation.background
@@ -19,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -28,7 +26,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -62,8 +58,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
@@ -79,8 +73,6 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.desktop.matchDesktopShortcut
 import app.skerry.ui.desktop.paneGridDirection
 import app.skerry.ui.host.localTerminalHost
-import app.skerry.ui.app.DesktopView
-import app.skerry.ui.ai.ASSISTANT_PANEL_WIDTH
 import app.skerry.ui.ai.AssistantPanel
 import app.skerry.ui.ai.assistantModelLabel
 import app.skerry.ui.app.LocalAi
@@ -88,10 +80,6 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.app.LocalConnectPane
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
-import app.skerry.ui.app.LocalSessionShare
-import app.skerry.ui.app.LocalTeams
-import app.skerry.ui.share.ShareSessionButton
-import app.skerry.ui.share.shareableTeams
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
 import app.skerry.ui.design.Dot
@@ -101,28 +89,17 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.share_session
-import app.skerry.ui.generated.resources.shell_tip_disconnect
-import app.skerry.ui.generated.resources.shell_tip_files
-import app.skerry.ui.generated.resources.shell_tip_info
-import app.skerry.ui.generated.resources.shell_tip_more_actions
-import app.skerry.ui.generated.resources.shell_tip_play
-import app.skerry.ui.generated.resources.shell_tip_record
-import app.skerry.ui.generated.resources.shell_tip_snippets
-import app.skerry.ui.generated.resources.shell_tip_ports
-import app.skerry.ui.generated.resources.shell_tip_add_pane
-import app.skerry.ui.generated.resources.shell_tip_assistant
-import app.skerry.ui.generated.resources.shell_tip_sync_panes
 import app.skerry.ui.generated.resources.term_connecting
 import app.skerry.ui.generated.resources.term_connection_failed
 import app.skerry.ui.generated.resources.term_connection_lost
 import app.skerry.ui.generated.resources.term_no_active_session
 import app.skerry.ui.generated.resources.term_launch_local_shell
 import app.skerry.ui.generated.resources.local_shell_name
-import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.generated.resources.term_no_host_selected
-import app.skerry.ui.generated.resources.term_pane_sync_badge
 import app.skerry.ui.generated.resources.term_no_hosts_in_catalog
+import app.skerry.ui.generated.resources.term_pane_change_host
+import app.skerry.ui.generated.resources.term_pane_close
+import app.skerry.ui.generated.resources.term_pane_menu
 import app.skerry.ui.generated.resources.term_notice_not_connected
 import app.skerry.ui.generated.resources.term_notice_pick_host_to_connect
 import app.skerry.ui.generated.resources.term_notice_pick_or_new
@@ -146,317 +123,42 @@ import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.inSection
 import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
-import app.skerry.ui.runbook.RunbookPaletteButton
-import app.skerry.ui.generated.resources.runbook_toolbar_tip
-import org.jetbrains.compose.resources.StringResource
 
-/**
- * One entry of the session action row. Panes narrow the row, so when the icons stop fitting the
- * ones listed here give way in this order — the rarely-reached first, the ones a session is steered
- * with last. [Sync], [AddPane] and [Disconnect] are not in the list: they never overflow.
- */
-internal enum class ToolbarAction { Play, Record, Share, Runbook, Snippets, Tunnels, Info, Files }
+/** Height of a pane's own header on a split grid; a single-pane tab is named by the [WorkBar]. */
+internal val PANE_HEADER_HEIGHT = 26.dp
 
-/** Width one icon claims in the row: the button box plus the spacing in front of it. */
-private val ACTION_SLOT_WIDTH = 30.dp
-
-/**
- * Room the pane under the row keeps for its own header. Enough for the host label, its address and
- * the status dot — the row gives way into its overflow menu before a pane stops saying which host
- * it is, since that is what the header is there for.
- */
-private val PANE_HEADER_ROOM = 220.dp
-
-/**
- * Session action icons (sync / add pane / SFTP / tunnels / snippets / runbooks / recording / player
- * / info panel / disconnect). Pinned to the top-right corner of the terminal area rather than living
- * in a pane header: opening the info panel or a pane narrows the panes, and icons that shift under
- * the pointer are hard to hit twice.
- *
- * [available] is the width of the pane the row floats over, or `null` when there is no grid under it
- * (design preview / empty tab). Once the icons no longer fit beside that pane's own header they
- * collapse into an overflow menu, in the order of [ToolbarAction] — otherwise the row would draw
- * over the header of a pane it does not belong to.
- */
-@Composable
-private fun SessionActions(
-    state: DesktopDesignState,
-    available: Dp?,
-    assistantShown: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    val sessions = LocalSessions.current
-    val tab = sessions?.activeTerminal
-    // Session-scoped actions (snippets, runbooks, recording) act on the pane the user is working
-    // in, not on the tab's first pane — on a split those are different sessions. Tab-scoped ones
-    // (the sync/add-pane toggles and the power button) keep using the tab itself.
-    val active = tab?.focusedPane
-    val teams = LocalTeams.current
-    val syncShown = tab != null && tab.isSplit
-    val hidden = overflowedActions(available, syncShown, assistantShown)
-
-    // Files / tunnels / info are stateless, so the overflow menu can run them directly. The palettes
-    // and the recorder own their popups and save dialogs, so those are parked below instead and
-    // reached through the request signals they already listen on.
-    val openSftp = {
-        if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp)
-    }
-    val infoAvailable = infoPanelAvailable(
-        hasSession = tab != null,
-        watched = active?.controller?.isWatched == true,
-        mock = sessions == null,
-    )
-    val playerTabTitle = stringResource(Res.string.term_player_title)
-    val onCastOpened: (CastOpenResult) -> Unit = { result ->
-        if (result is CastOpenResult.Loaded && sessions != null) {
-            state.clearOverlay()
-            // The file name labels the tab: it says "recording", and two recordings of the same
-            // host stay apart (their in-file titles are both just the host name).
-            sessions.openPlayer(result.fileName.ifBlank { playerTabTitle }, result.cast)
-        } else {
-            state.showCast(result)
-        }
-    }
-
-    Box(modifier) {
-        Row(
-            Modifier.height(PANE_HEADER_HEIGHT).padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            // Synchronized input: typing in one pane reaches every connected pane of this tab. Lit
-            // while on, since it changes where every keystroke goes. Shown only once the tab is
-            // actually split — with a single pane there is nothing to synchronize it with.
-            if (syncShown && tab != null) {
-                IconBtn(
-                    "sync_alt",
-                    onClick = { sessions?.toggleSyncInput(tab.id) },
-                    tint = if (tab.syncInput) Skerry.colors.cyanBright else Skerry.colors.dim,
-                    tooltip = stringResource(Res.string.shell_tip_sync_panes),
-                )
-            }
-            // Add pane: live mode puts another independent session on the active tab's grid (up to
-            // MAX_PANES); mock/preview toggles the demo split. Dimmed and inert once the tab is
-            // full — the same treatment the info button gets when there is nothing for it to open.
-            val canAddPane = tab?.layout?.isFull != true && tab?.isPlayer != true
-            IconBtn(
-                "splitscreen_right",
-                onClick = { if (sessions == null) state.toggleSplit() else if (canAddPane) sessions.addPane() },
-                tint = if (canAddPane) Skerry.colors.dim else Skerry.colors.faint,
-                tooltip = stringResource(Res.string.shell_tip_add_pane),
-            )
-            // Switches the active tab's subview (live mode, plus overlay reset) / mock fallback.
-            if (ToolbarAction.Files !in hidden) {
-                IconBtn("folder", onClick = openSftp, tooltip = stringResource(Res.string.shell_tip_files))
-            }
-            // Tunnels is a global section, always opens as an overlay.
-            if (ToolbarAction.Tunnels !in hidden) {
-                IconBtn("lan", onClick = { state.showView(DesktopView.Ports) }, tooltip = stringResource(Res.string.shell_tip_ports))
-            }
-            // Quick snippet launch into the active session without leaving for the Snippets section.
-            if (ToolbarAction.Snippets !in hidden) SnippetPaletteButton(active, state.snippetPaletteRequests)
-            // Same idea one size up: start a saved procedure here instead of going to its section.
-            if (ToolbarAction.Runbook !in hidden) RunbookPaletteButton(active, state.runbookPaletteRequests)
-            // Streams this session to a team over the sync relay (viewers watch; the host decides
-            // whether they may type).
-            if (ToolbarAction.Share !in hidden) {
-                ShareSessionButton(active, LocalSessionShare.current, shareableTeams(), state.sharePanelRequests)
-            }
-            // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
-            if (ToolbarAction.Record !in hidden) {
-                RecordSessionButton(
-                    active,
-                    state.recordingToggleRequests,
-                    onSaved = { hostId, seconds -> teams?.reportSessionRecorded(hostId, seconds) },
-                ) { state.showRecordingNotice(it) }
-            }
-            // Plays a .cast back. Not tied to a session (a recording is watched, not run), which is
-            // why it sits here rather than behind a connected-only guard. Live mode opens the
-            // recording in its own tab, so the shells stay reachable while it plays; the mock path
-            // (no session manager) has no tabs and falls back to the overlay.
-            if (ToolbarAction.Play !in hidden) PlayRecordingButton(state.castOpenRequests, onCastOpened)
-            // Opens the assistant beside the terminal. Lit while it is open, like the info toggle;
-            // absent entirely when AI is off for this host or globally, so a host that opted out
-            // shows no AI affordance at all.
-            if (assistantShown) {
-                IconBtn(
-                    "auto_awesome",
-                    onClick = state::toggleAssistant,
-                    tint = if (state.assistantPanel) Skerry.colors.teal else Skerry.colors.dim,
-                    tooltip = stringResource(Res.string.shell_tip_assistant),
-                )
-            }
-            // Lit while the info panel is open — the only action here with a visible on/off state.
-            // The panel is session-scoped, so with no active session there is nothing to show: the
-            // button dims and no-ops rather than toggling a panel that can't appear.
-            if (ToolbarAction.Info !in hidden) {
-                IconBtn(
-                    "info",
-                    onClick = { if (infoAvailable) state.toggleInfo() },
-                    tint = if (state.infoPanel && infoAvailable) Skerry.colors.cyanBright else Skerry.colors.dim,
-                    tooltip = stringResource(Res.string.shell_tip_info),
-                )
-            }
-            if (hidden.isNotEmpty()) {
-                OverflowActionsButton(
-                    hidden = hidden,
-                    state = state,
-                    infoAvailable = infoAvailable,
-                    onOpenSftp = openSftp,
-                )
-            }
-            // Power: closes the active session (live path) with a confirmation prompt
-            // (destructive, no auto-reconnect); no-op stub in mock mode.
-            IconBtn("power_settings_new", onClick = { if (tab != null) state.requestCloseSession(tab.id) }, tint = Skerry.colors.sunset, tooltip = stringResource(Res.string.shell_tip_disconnect))
-        }
-        // Parked out of sight, still in composition: these buttons own the palettes, the recorder
-        // and the file pickers behind them, and dropping them from the tree would take that state
-        // with them — the overflow menu drives them through their request signals instead.
-        Box(Modifier.size(0.dp).clipToBounds()) {
-            if (ToolbarAction.Snippets in hidden) SnippetPaletteButton(active, state.snippetPaletteRequests)
-            if (ToolbarAction.Runbook in hidden) RunbookPaletteButton(active, state.runbookPaletteRequests)
-            if (ToolbarAction.Record in hidden) {
-                RecordSessionButton(
-                    active,
-                    state.recordingToggleRequests,
-                    onSaved = { hostId, seconds -> teams?.reportSessionRecorded(hostId, seconds) },
-                ) { state.showRecordingNotice(it) }
-            }
-            if (ToolbarAction.Play in hidden) PlayRecordingButton(state.castOpenRequests, onCastOpened)
-            if (ToolbarAction.Share in hidden) {
-                ShareSessionButton(active, LocalSessionShare.current, shareableTeams(), state.sharePanelRequests)
-            }
-        }
-    }
-}
-
-/**
- * Whether the info panel has anything to say about the pane in focus. Everything it shows — host
- * profile, cipher, uptime, live metrics — comes from a connection this app owns, so a pane merely
- * watching a colleague's shared session ([watched]) gets the button dimmed and the panel hidden
- * instead of a column of dashes. [mock] is the preview path with no session backend, where the
- * static layout is the point.
- */
-internal fun infoPanelAvailable(hasSession: Boolean, watched: Boolean, mock: Boolean): Boolean =
-    if (mock) true else hasSession && !watched
-
-/**
- * Which actions have to leave the row for it to fit beside the header of the pane it floats over.
- * [available] is that pane's width (`null` = no pane under the row, so nothing overflows), and
- * [syncShown] counts the sync toggle, which is only there on a split tab.
- *
- * Pure so the thresholds can be tested without a window: the row must also keep room for the
- * overflow button itself once anything is hidden.
- */
-internal fun overflowedActions(available: Dp?, syncShown: Boolean, assistantShown: Boolean = false): Set<ToolbarAction> {
-    if (available == null) return emptySet()
-    // + add-pane and power, plus the two conditional buttons when they are actually drawn.
-    val total = ToolbarAction.entries.size + 2 + (if (syncShown) 1 else 0) + if (assistantShown) 1 else 0
-    val room = available - PANE_HEADER_ROOM - 32.dp // the row's own horizontal padding
-    val fits = (room / ACTION_SLOT_WIDTH).toInt()
-    if (fits >= total) return emptySet()
-    // One slot goes to the overflow button; whatever still doesn't fit gives way in enum order.
-    val keep = (fits - 1).coerceAtLeast(0)
-    val drop = (total - keep).coerceIn(0, ToolbarAction.entries.size)
-    return ToolbarAction.entries.take(drop).toSet()
-}
-
-/** The "⋯" menu holding the actions that did not fit the row. */
-@Composable
-private fun OverflowActionsButton(
-    hidden: Set<ToolbarAction>,
-    state: DesktopDesignState,
-    infoAvailable: Boolean,
-    onOpenSftp: () -> Unit,
-) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconBtn("more_horiz", onClick = { open = !open }, tooltip = stringResource(Res.string.shell_tip_more_actions))
-        if (open) {
-            Popup(alignment = Alignment.TopEnd, onDismissRequest = { open = false }, properties = PopupProperties(focusable = true)) {
-                Column(
-                    Modifier
-                        .padding(top = PANE_HEADER_HEIGHT)
-                        .width(220.dp)
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(Skerry.colors.surface2)
-                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                        .padding(4.dp),
-                ) {
-                    // Listed the way they sit in the row, so the menu reads as its continuation.
-                    hidden.sortedByDescending { it.ordinal }.forEach { action ->
-                        val run: () -> Unit = when (action) {
-                            ToolbarAction.Files -> onOpenSftp
-                            ToolbarAction.Tunnels -> ({ state.showView(DesktopView.Ports) })
-                            ToolbarAction.Info -> ({ if (infoAvailable) state.toggleInfo() })
-                            ToolbarAction.Snippets -> state::requestSnippetPalette
-                            ToolbarAction.Runbook -> state::requestRunbookPalette
-                            ToolbarAction.Record -> state::requestRecordingToggle
-                            ToolbarAction.Play -> state::requestCastOpen
-                            ToolbarAction.Share -> state::requestSharePanel
-                        }
-                        OverflowActionRow(icon = action.icon, label = stringResource(action.label)) {
-                            open = false
-                            run()
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun OverflowActionRow(icon: String, label: String, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(5.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Sym(icon, size = 15.sp, color = Skerry.colors.cyanBright)
-        Txt(label, color = Skerry.colors.dim, size = 12.sp)
-    }
-}
-
-/** The glyph the action carries in the row, reused by its overflow entry. */
-private val ToolbarAction.icon: String
-    get() = when (this) {
-        ToolbarAction.Files -> "folder"
-        ToolbarAction.Tunnels -> "lan"
-        ToolbarAction.Snippets -> "bolt"
-        ToolbarAction.Runbook -> "checklist"
-        ToolbarAction.Record -> "radio_button_checked"
-        ToolbarAction.Play -> "play_circle"
-        ToolbarAction.Share -> "cast"
-        ToolbarAction.Info -> "info"
-    }
-
-/** The action's own tooltip, reused as its label in the overflow menu. */
-private val ToolbarAction.label: StringResource
-    get() = when (this) {
-        ToolbarAction.Files -> Res.string.shell_tip_files
-        ToolbarAction.Tunnels -> Res.string.shell_tip_ports
-        ToolbarAction.Snippets -> Res.string.shell_tip_snippets
-        ToolbarAction.Runbook -> Res.string.runbook_toolbar_tip
-        ToolbarAction.Record -> Res.string.shell_tip_record
-        ToolbarAction.Share -> Res.string.share_session
-        ToolbarAction.Play -> Res.string.shell_tip_play
-        ToolbarAction.Info -> Res.string.shell_tip_info
-    }
-
-/** Shared pane header height (panes and the info panel's top strip) so rows align. */
-internal val PANE_HEADER_HEIGHT = 40.dp
-
-/** Terminal view: hosts sidebar + main (toolbar, panes, AI bar) + info panel. */
+/** Terminal view: hosts sidebar + work area (bar, panes) + info and assistant panels. */
 @Composable
 fun TerminalView(state: DesktopDesignState) {
+    val sessions = LocalSessions.current
+    val tab = sessions?.activeTerminal
+    val liveAi = LocalAi.current
+    // The assistant answers about the pane in focus: on a split it reads and runs there.
+    val aiSession = tab?.focusedPane
+    val aiPolicy = aiSession?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
+    val aiTerminal = (aiSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
+    // Conversations are per pane and outlive this composition: the store belongs to the assistant
+    // itself, so opening SFTP or the vault (which takes this view off screen) leaves the threads
+    // intact, and a provider change closes them there (see AiAssistantController.sessionAssistants).
+    val assistants = liveAi?.takeIf { it.enabled }?.sessionAssistants
+    // Off for this host (or globally) hides the panel and its toolbar button entirely.
+    val assistantController = aiSession?.let { session ->
+        assistants?.takeIf { AiPolicyDecision.of(aiPolicy).aiEnabled }?.controller(session.id, aiPolicy)
+    }
+    val assistantVisible = state.assistantPanel && assistantController != null
+    // A closed pane's conversation is dropped with it, so closing tabs doesn't accumulate
+    // controllers (and a request left in flight there is cancelled).
+    val openPaneIds = sessions?.tabs?.flatMap { it.panes.map { pane -> pane.id } }?.toSet()
+    LaunchedEffect(assistants, openPaneIds) {
+        if (openPaneIds != null) assistants?.retain(openPaneIds)
+    }
+    val density = LocalDensity.current
+    // Width of the work area, which is the width of the bar over it: the action row collapses into
+    // an overflow menu rather than squeezing the title out of the bar.
+    var workAreaWidth by remember { mutableStateOf<Dp?>(null) }
     Row(Modifier.fillMaxSize()) {
-        // Slides in/out when toggled from the icon rail (SidebarToggle); expandFrom = End keeps the
-        // right edge leading, so the panel visually emerges from under the rail instead of popping.
+        // Slides in/out when toggled from the bar's chevron (or the icon rail); expandFrom = End
+        // keeps the right edge leading, so the panel emerges from under the rail instead of popping.
         AnimatedVisibility(
             visible = !state.sidebarHidden,
             enter = expandHorizontally(expandFrom = Alignment.End),
@@ -466,128 +168,113 @@ fun TerminalView(state: DesktopDesignState) {
             // the user browses the desktops list beside it (see workAreaSection).
             HostsSidebar(state, state.section)
         }
-        // Reopen handle: a slim strip at the terminal's left edge, shown only while the sidebar is
-        // collapsed (its collapse chevron lives in the panel header, which is gone when hidden).
+        Column(
+            Modifier.weight(1f).fillMaxHeight().onGloballyPositioned {
+                workAreaWidth = with(density) { it.size.width.toDp() }
+            },
+        ) {
+            WorkBar(
+                label = activeWorkBarLabel(state, tab, soloPlaceholder = stringResource(Res.string.term_select_host_placeholder)),
+                tabKey = tab?.id,
+                sidebarHidden = state.sidebarHidden,
+                onToggleSidebar = state::toggleSidebar,
+                onPickHost = soloHostPicker(state, tab),
+                actions = {
+                    SessionActions(state, available = workAreaWidth, assistantShown = assistantController != null)
+                },
+            )
+            when {
+                // Design preview (offscreen render without a session manager).
+                sessions == null -> MockPanes(state)
+                // Live, but nothing open: the "pick a host" screen under a bar with no title.
+                tab == null -> LivePaneBody(state, pane = null, solo = true, modifier = Modifier.weight(1f).fillMaxWidth())
+                else -> PaneGrid(sessions, tab, state)
+            }
+        }
+        // Same treatment as the hosts sidebar: the panel slides out of the right edge instead of
+        // popping into the layout. shrinkTowards = Start keeps its left edge leading, so the
+        // terminal reflows smoothly as the panel widens. Both panels are siblings of the work area,
+        // not of the terminal inside it: they run the full height beside the bar, not under it.
+        // The panel is entirely about the active session (host / cipher / metrics), so with no
+        // active session it would be a column of "—" placeholders next to the empty-state screen —
+        // hide it there, like the pane headers. Mock preview keeps it.
         AnimatedVisibility(
-            visible = state.sidebarHidden,
-            enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
-            exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
-        ) { SidebarReopenHandle(onClick = state::toggleSidebar) }
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-            val liveAi = LocalAi.current
-            // The assistant answers about the pane in focus: on a split it reads and runs there.
-            val aiSession = LocalSessions.current?.activeTerminal?.focusedPane
-            val aiPolicy = aiSession?.hostId?.let { LocalHosts.current?.find(it)?.aiPolicy } ?: AiPolicy.Strict
-            val aiTerminal = (aiSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
-            // Conversations are per pane and outlive this composition: the store belongs to the
-            // assistant itself, so opening SFTP or the vault (which takes this view off screen)
-            // leaves the threads intact, and a provider change closes them there (see
-            // AiAssistantController.sessionAssistants).
-            val assistants = liveAi?.takeIf { it.enabled }?.sessionAssistants
-            // Off for this host (or globally) hides the panel and its toolbar button entirely.
-            val assistantController = aiSession?.let { session ->
-                assistants?.takeIf { AiPolicyDecision.of(aiPolicy).aiEnabled }?.controller(session.id, aiPolicy)
-            }
-            val assistantVisible = state.assistantPanel && assistantController != null
-            // A closed pane's conversation is dropped with it, so closing tabs doesn't accumulate
-            // controllers (and a request left in flight there is cancelled).
-            val openPaneIds = LocalSessions.current?.tabs?.flatMap { it.panes.map { pane -> pane.id } }?.toSet()
-            LaunchedEffect(assistants, openPaneIds) {
-                if (openPaneIds != null) assistants?.retain(openPaneIds)
-            }
-            // Width of the pinned action row, measured so the pane it sits over can reserve room
-            // for it instead of drawing its own header controls underneath.
-            var actionsWidth by remember { mutableStateOf(0.dp) }
-            val density = LocalDensity.current
-            val sessions = LocalSessions.current
-            val tab = sessions?.activeTerminal
-            // Width of the pane the pinned actions float over: the row collapses into an overflow
-            // menu rather than drawing over that pane's own header. Held here, beside the row
-            // itself, since both the grid that measures it and the row that reads it live below.
-            var actionsPaneWidth by remember { mutableStateOf<Dp?>(null) }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                Row(Modifier.fillMaxSize()) {
-                    // With the info panel closed the pinned actions sit over the top-right pane's
-                    // header, so that pane reserves room for them; with the panel open they're over it.
-                    val reserveEnd = if (state.infoPanel) 0.dp else actionsWidth
-                    Box(Modifier.weight(1f).fillMaxHeight()) {
-                        when {
-                            // Design preview (offscreen render without a session manager).
-                            sessions == null -> MockPanes(state)
-                            // Live, but nothing open: an empty header over the "pick a host" screen.
-                            tab == null -> Column(Modifier.fillMaxSize()) {
-                                PaneHeaderBar(reserveEnd) {}
-                                HLine()
-                                LivePaneBody(state, pane = null, solo = true, modifier = Modifier.weight(1f).fillMaxWidth())
-                            }
-                            else -> PaneGrid(sessions, tab, state, reserveEnd) { actionsPaneWidth = it }
-                        }
-                    }
-                    // Same treatment as the hosts sidebar: the panel slides out of the right edge
-                    // instead of popping into the layout. shrinkTowards = Start keeps its left edge
-                    // leading, so the terminal reflows smoothly as the panel widens.
-                    // The panel is entirely about the active session (host / cipher / metrics), so with
-                    // no active session it would be a column of "—" placeholders next to the empty-state
-                    // screen — hide it there, like the header and AI bar. Mock preview keeps it.
-                    AnimatedVisibility(
-                        visible = state.infoPanel && infoPanelAvailable(
-                            hasSession = tab != null,
-                            watched = tab?.focusedPane?.controller?.isWatched == true,
-                            mock = sessions == null,
-                        ),
-                        enter = expandHorizontally(expandFrom = Alignment.Start),
-                        exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
-                    ) { InfoPanel() }
-                    // The assistant sits beside the terminal, the same way the info panel does: it
-                    // is about this session, and a question is asked while its output is in view.
-                    // Nothing to talk about without a session, so it stays closed there.
-                    AnimatedVisibility(
-                        visible = assistantVisible,
-                        enter = expandHorizontally(expandFrom = Alignment.Start),
-                        exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
-                    ) {
-                        assistantController?.let { controller ->
-                            // Keyed on the conversation: the draft question, the feed's scroll
-                            // position and the context menu belong to the pane that was asked about.
-                            // Without the key they would sit in the same composition slot and follow
-                            // the focus to another pane — a question typed for one host would be
-                            // sent to another, with that other host's output attached.
-                            key(controller) {
-                                AssistantPanel(
-                                    controller = controller,
-                                    terminal = aiTerminal,
-                                    focusPending = state.assistantFocusPending,
-                                    onFocusConsumed = state::consumeAssistantFocus,
-                                    modelLabel = liveAi?.let { assistantModelLabel(it) }.orEmpty(),
-                                )
-                            }
-                        }
-                    }
+            visible = state.infoPanel && infoPanelAvailable(
+                hasSession = tab != null,
+                watched = tab?.focusedPane?.controller?.isWatched == true,
+                mock = sessions == null,
+            ),
+            enter = expandHorizontally(expandFrom = Alignment.Start),
+            exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
+        ) { InfoPanel() }
+        // The assistant sits beside the terminal, the same way the info panel does: it is about this
+        // session, and a question is asked while its output is in view. Nothing to talk about
+        // without a session, so it stays closed there.
+        AnimatedVisibility(
+            visible = assistantVisible,
+            enter = expandHorizontally(expandFrom = Alignment.Start),
+            exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
+        ) {
+            assistantController?.let { controller ->
+                // Keyed on the conversation: the draft question, the feed's scroll position and the
+                // context menu belong to the pane that was asked about. Without the key they would
+                // sit in the same composition slot and follow the focus to another pane — a question
+                // typed for one host would be sent to another, with that other host's output
+                // attached.
+                key(controller) {
+                    AssistantPanel(
+                        controller = controller,
+                        terminal = aiTerminal,
+                        focusPending = state.assistantFocusPending,
+                        onFocusConsumed = state::consumeAssistantFocus,
+                        modelLabel = liveAi?.let { assistantModelLabel(it) }.orEmpty(),
+                    )
                 }
-                // The pinned row floats over the right edge of the work area, which is the assistant
-                // panel while it is open — and the panel has a header of its own there. Inset the row
-                // by the panel's width so it keeps sitting over the terminal instead of over the
-                // panel title; animated, so it travels with the panel rather than jumping.
-                val actionsInset by animateDpAsState(
-                    if (assistantVisible) ASSISTANT_PANEL_WIDTH else 0.dp,
-                    label = "assistantActionsInset",
-                )
-                SessionActions(
-                    state,
-                    available = if (tab != null) actionsPaneWidth else null,
-                    assistantShown = assistantController != null,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(end = actionsInset).onGloballyPositioned {
-                        actionsWidth = with(density) { it.size.width.toDp() }
-                    },
-                )
             }
         }
     }
 }
 
 /**
- * Slim reopen strip shown at the terminal's left edge while the hosts sidebar is collapsed. Painted
- * in the sidebar's own surface so it reads as the panel peeking out; clicking it restores the panel.
+ * What the bar over the work area says: the live tab's panes, the static preview's when there is no
+ * session manager, or nothing at all while no tab is open. A pane with no host yet is named by
+ * [soloPlaceholder] rather than by its empty label, since clicking that title is how a host is
+ * picked for it.
+ */
+@Composable
+private fun activeWorkBarLabel(state: DesktopDesignState, tab: Tab?, soloPlaceholder: String): WorkBarLabel? = when {
+    LocalSessions.current == null -> mockWorkBarLabel(state.split)
+    tab == null -> null
+    else -> workBarLabel(
+        tab.panes.map { pane ->
+            paneFacts(pane.title, pane.subtitle, pane.status, blank = pane.isBlank, placeholder = soloPlaceholder)
+        },
+        syncInput = tab.syncInput,
+    )
+}
+
+/**
+ * Re-points a single-pane tab from the bar's title, which is that pane's header. A split tab has a
+ * header per pane and picks there instead, so this is `null` — as it is with nothing open, where
+ * there is no pane to point anywhere.
+ */
+@Composable
+private fun soloHostPicker(state: DesktopDesignState, tab: Tab?): ((Host) -> Unit)? {
+    val connectPane = LocalConnectPane.current
+    if (tab == null || tab.isSplit || tab.isPlayer) return null
+    val pane = tab.panes.first()
+    return { host ->
+        // A pane that already holds a session is re-pointed only after a confirmation: the old
+        // connection goes down with it. An empty pane has nothing to lose and connects straight away.
+        if (pane.isBlank) connectPane(host, pane.id) else state.requestPaneConnect(tab.id, pane.id, host)
+    }
+}
+
+/**
+ * Slim reopen strip shown at a view's left edge while the hosts sidebar is collapsed. Painted in
+ * the sidebar's own surface so it reads as the panel peeking out; clicking it restores the panel.
+ * The terminal reopens from the work bar's chevron instead; this is what the remote-desktop view
+ * still uses, which has no bar of its own yet.
  */
 @Composable
 internal fun SidebarReopenHandle(onClick: () -> Unit) {
@@ -596,46 +283,6 @@ internal fun SidebarReopenHandle(onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Sym("chevron_right", size = 16.sp, color = Skerry.colors.faint)
-    }
-}
-
-// Pane headers.
-
-/**
- * The strip above a pane's terminal: fixed height so every pane's header lines up across the grid,
- * and [reserveEnd] keeps the pinned [SessionActions] from covering the controls of the pane it
- * floats over. [content] is laid out as a row inside it.
- */
-@Composable
-private fun PaneHeaderBar(
-    reserveEnd: Dp,
-    modifier: Modifier = Modifier,
-    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
-) {
-    Row(
-        modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT).background(Skerry.colors.surface2)
-            .padding(start = 16.dp, end = 16.dp + reserveEnd),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        content = content,
-    )
-}
-
-/** Static header of the design preview (no session manager behind it). */
-@Composable
-private fun MockPaneHeader() {
-    val mono = LocalFonts.current.mono
-    PaneHeaderBar(reserveEnd = 0.dp) {
-        Column {
-            Txt("root@prod-web-01", color = Skerry.colors.text, size = 12.sp, weight = FontWeight.Medium, font = mono)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Txt("192.168.1.45:22", color = Skerry.colors.dim, size = 11.5.sp)
-                Txt(" · ", color = Skerry.colors.faint, size = 11.5.sp)
-                Txt("●", color = Skerry.colors.moss, size = 11.5.sp)
-                Txt(" 04:12:45", color = Skerry.colors.faint, size = 11.5.sp)
-            }
-            Txt("SSHv2 · aes256-gcm · ed25519", color = Skerry.colors.faint, size = 11.5.sp)
-        }
     }
 }
 
@@ -771,17 +418,14 @@ private val PANE_DIVIDER_GRIP = 6.dp
 /**
  * The active tab's panes on its grid ([Session.layout]): rows top to bottom, panes left to
  * right inside a row, dividers in between. Each pane is an independent session with its own header
- * and terminal; the focused one carries the accent border, and headers drag panes to another slot.
+ * and terminal; the focused one carries the accent strip, and headers drag panes to another slot.
  */
 @Composable
-private fun PaneGrid(
+private fun ColumnScope.PaneGrid(
     sessions: SessionsController,
     tab: Tab,
     state: DesktopDesignState,
-    reserveEnd: Dp,
-    onActionsPaneWidth: (Dp) -> Unit,
 ) {
-    val density = LocalDensity.current
     // Per tab: one tab's pane geometry must not resolve drops on another's grid.
     val drag = remember(tab.id) { PaneDragState() }
     // Divider drags arrive in pixels but the layout is in shares of the grid, so its size is the
@@ -804,7 +448,9 @@ private fun PaneGrid(
             if (direction == null) false else { sessions.focusNeighborPane(direction); true }
         }
     }
-    Column(Modifier.fillMaxSize().onPreviewKeyEvent(onGridKey).onGloballyPositioned { gridSize = it.size }) {
+    Column(
+        Modifier.weight(1f).fillMaxWidth().onPreviewKeyEvent(onGridKey).onGloballyPositioned { gridSize = it.size },
+    ) {
         layout.rows.forEachIndexed { rowIndex, row ->
             if (rowIndex > 0) {
                 PaneDivider(vertical = false) { px ->
@@ -820,22 +466,12 @@ private fun PaneGrid(
                     }
                     val pane = tab.pane(cell.paneId)
                     if (pane != null) {
-                        // Only the pane the pinned actions float over gives them room — and it is
-                        // the one whose width decides how many of them stay on screen.
-                        val underActions = rowIndex == 0 && columnIndex == row.cells.lastIndex
                         key(pane.id) {
                             PaneCell(
                                 sessions, tab, pane, state, drag,
                                 row = rowIndex,
                                 column = columnIndex,
-                                reserveEnd = if (underActions) reserveEnd else 0.dp,
-                                modifier = Modifier.weight(cell.weight).fillMaxHeight().then(
-                                    if (underActions) {
-                                        Modifier.onGloballyPositioned { onActionsPaneWidth(with(density) { it.size.width.toDp() }) }
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
+                                modifier = Modifier.weight(cell.weight).fillMaxHeight(),
                             )
                         }
                     }
@@ -855,7 +491,6 @@ private fun PaneCell(
     drag: PaneDragState,
     row: Int,
     column: Int,
-    reserveEnd: Dp,
     modifier: Modifier = Modifier,
 ) {
     val focused = tab.focusedPaneId == pane.id
@@ -879,14 +514,16 @@ private fun PaneCell(
     Column(
         modifier
             .paneBoundsAnchor(drag, pane.id, row, column)
-            // A single-pane tab has nothing to tell apart, so the focus border only shows on a split.
-            .then(if (tab.isSplit && focused) Modifier.border(1.dp, Skerry.colors.cyan.copy(alpha = 0.35f)) else Modifier)
             .focusPaneOnPress(sessions, tab.id, pane.id)
             .focusRequester(paneFocus)
             .focusable(),
     ) {
-        PaneHeader(sessions, tab, pane, state, drag, reserveEnd)
-        HLine()
+        // A single-pane tab has nothing to tell apart and no header of its own: the work bar names
+        // it, and the pane starts at the terminal. Only a split grid needs a header per pane.
+        if (tab.isSplit) {
+            PaneHeader(sessions, tab, pane, state, drag, focused)
+            HLine()
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LivePaneBody(state, pane, solo = !tab.isSplit, modifier = Modifier.fillMaxSize(), tabId = tab.id, focused = focused)
             drag.drop?.takeIf { it.overPaneId == pane.id }?.let { PaneDropIndicator(it.edge) }
@@ -895,13 +532,13 @@ private fun PaneCell(
 }
 
 /**
- * A pane's header: host label, connection dot, the picker that points the pane at a host, and — on a
- * split tab — the button that closes it. Dragging the header moves the pane to another slot on the
- * grid; the drag only claims the pointer past a dead zone, so the picker still opens on a click.
+ * A pane's header on a split grid: status dot, host label, and the "⋮" menu that re-points or closes
+ * it. Dragging the header moves the pane to another slot; the drag only claims the pointer past a
+ * dead zone, so the picker still opens on a click.
  *
- * Every pane carries the same header, the first one included: panes are equal, so re-pointing works
- * anywhere. The close button is left off an unsplit tab — there the pane IS the tab, and the tab is
- * closed from its chip or the power button.
+ * The address is left to the work bar, which lists every host of the tab: four panes side by side
+ * make the strip narrow, and a host name that ellipsises into `prod-w…` says less than nothing.
+ * [focused] marks the pane the keyboard is in with an accent strip on the header's leading edge.
  */
 @Composable
 private fun PaneHeader(
@@ -910,77 +547,80 @@ private fun PaneHeader(
     pane: Session,
     state: DesktopDesignState,
     drag: PaneDragState,
-    reserveEnd: Dp,
+    focused: Boolean,
 ) {
     val mono = LocalFonts.current.mono
     val connectPane = LocalConnectPane.current
     var pickerOpen by remember { mutableStateOf(false) }
-    Box(Modifier.fillMaxWidth().background(Skerry.colors.surface2)) {
-        PaneHeaderBar(
-            reserveEnd,
-            Modifier.draggablePaneHeader(drag, pane.id) { slot -> sessions.movePane(tab.id, pane.id, slot) },
+    var menuOpen by remember { mutableStateOf(false) }
+    // A pane that already holds a session is re-pointed only after a confirmation: the old
+    // connection goes down with it, and the header is one stray click away from the host list. An
+    // empty pane has nothing to lose, so it connects straight away.
+    val pick: (Host) -> Unit = { host ->
+        if (pane.isBlank) connectPane(host, pane.id) else state.requestPaneConnect(tab.id, pane.id, host)
+        pickerOpen = false
+    }
+    Box(Modifier.fillMaxWidth().background(Skerry.colors.surface)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(PANE_HEADER_HEIGHT)
+                .draggablePaneHeader(drag, pane.id) { slot -> sessions.movePane(tab.id, pane.id, slot) },
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            // The focus marker is the strip rather than a border around the whole pane: on a grid of
+            // four the borders met in the middle and it took a second look to see which one was lit.
+            Box(Modifier.width(2.dp).fillMaxHeight().background(if (focused) Skerry.colors.teal else Color.Transparent))
             Row(
-                Modifier.weight(1f).clickable { pickerOpen = !pickerOpen },
+                Modifier.weight(1f).fillMaxHeight().clickable { pickerOpen = !pickerOpen }.padding(start = 8.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // No chevron next to the label: the whole header is the picker, and on a narrow pane
-                // that glyph competed for the room the host's own name needs.
+                Dot(sessionDotColor(pane.status))
                 if (pane.isBlank) {
-                    Txt(stringResource(Res.string.term_select_host_placeholder), color = Skerry.colors.faint, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
+                    Txt(stringResource(Res.string.term_select_host_placeholder), color = Skerry.colors.faint, size = 11.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 } else {
-                    // Both stay on one line: a narrow pane (four of them, or the one reserving room
-                    // for the pinned actions) would otherwise wrap user@host onto a second row and
-                    // push the header out of alignment with its neighbours.
-                    Txt(pane.title, color = Skerry.colors.text, size = 12.sp, weight = FontWeight.Medium, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Txt(
-                        pane.subtitle, color = Skerry.colors.dim, size = 11.5.sp, font = mono,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
+                        pane.title,
+                        color = if (focused) Skerry.colors.text else Skerry.colors.dim,
+                        size = 11.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
-                    Dot(sessionDotColor(pane.controller.uiState))
-                    Spacer(Modifier.weight(1f))
                 }
+                Spacer(Modifier.weight(1f))
             }
-            // Synchronized input is marked on every pane it reaches, not just in the toolbar: what
-            // makes it dangerous is typing into a pane while forgetting the others are listening.
-            if (tab.syncInput && tab.isSplit) SyncInputBadge()
-            if (tab.isSplit) {
-                // Closing a pane that holds a session is confirmed (its connection goes with it); an
-                // empty one has nothing to lose and closes straight away.
-                IconBtn(
-                    "close",
-                    onClick = { if (pane.isBlank) sessions.closePane(tab.id, pane.id) else state.requestClosePane(tab.id, pane.id) },
-                    box = 22,
-                )
+            Box {
+                IconBtn("more_vert", onClick = { menuOpen = !menuOpen }, box = 20, icon = 13.sp, tint = Skerry.colors.faint, tooltip = stringResource(Res.string.term_pane_menu))
+                if (menuOpen) PaneMenu(onDismiss = { menuOpen = false }, onChangeHost = { pickerOpen = true }) {
+                    // Closing a pane that holds a session is confirmed (its connection goes with
+                    // it); an empty one has nothing to lose and closes straight away.
+                    if (pane.isBlank) sessions.closePane(tab.id, pane.id) else state.requestClosePane(tab.id, pane.id)
+                }
             }
         }
         if (pickerOpen) {
             Popup(alignment = Alignment.BottomStart, onDismissRequest = { pickerOpen = false }) {
-                // A pane that already holds a session is re-pointed only after a confirmation: the
-                // old connection goes down with it, and the header is one stray click away from the
-                // host list. An empty pane has nothing to lose, so it connects straight away.
-                PaneHostPicker { host ->
-                    if (pane.isBlank) connectPane(host, pane.id)
-                    else state.requestPaneConnect(tab.id, pane.id, host)
-                    pickerOpen = false
-                }
+                PaneHostPicker(onPick = pick)
             }
         }
     }
 }
 
-/** Marks a pane that shares its input with the tab's other panes (the toolbar toggle is on). */
+/** What can be done to one pane of a split: point it at another host, or close it. */
 @Composable
-private fun SyncInputBadge() {
-    Row(
-        Modifier.clip(RoundedCornerShape(4.dp)).background(Skerry.colors.cyan10).padding(horizontal = 6.dp, vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        Sym("sync_alt", size = 12.sp, color = Skerry.colors.cyanBright)
-        Txt(stringResource(Res.string.term_pane_sync_badge), color = Skerry.colors.cyanBright, size = 10.sp, weight = FontWeight.Medium)
+private fun PaneMenu(onDismiss: () -> Unit, onChangeHost: () -> Unit, onClose: () -> Unit) {
+    Popup(alignment = Alignment.TopEnd, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
+        Column(
+            Modifier
+                .padding(top = PANE_HEADER_HEIGHT)
+                .width(180.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(Skerry.colors.surface2)
+                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
+                .padding(4.dp),
+        ) {
+            MenuActionRow("dns", stringResource(Res.string.term_pane_change_host)) { onDismiss(); onChangeHost() }
+            MenuActionRow("close", stringResource(Res.string.term_pane_close)) { onDismiss(); onClose() }
+        }
     }
 }
 
@@ -990,7 +630,7 @@ private fun SyncInputBadge() {
  * live catalog).
  */
 @Composable
-private fun PaneHostPicker(onPick: (Host) -> Unit) {
+internal fun PaneHostPicker(onPick: (Host) -> Unit) {
     val mono = LocalFonts.current.mono
     // Terminal profiles only: a pane is a shell, and a remote desktop picked here would be dialled
     // as SSH on its RFB port.
@@ -1067,16 +707,23 @@ private fun BoxScope.PaneDropIndicator(edge: PaneEdge) {
 
 /** Both panes of the design preview: the mock terminal and, behind the demo flag, a second one. */
 @Composable
-private fun MockPanes(state: DesktopDesignState) {
-    Row(Modifier.fillMaxSize()) {
+private fun ColumnScope.MockPanes(state: DesktopDesignState) {
+    Row(Modifier.weight(1f).fillMaxWidth()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            MockPaneHeader()
-            HLine()
+            // Headers only on the split, the same rule the live grid follows.
+            if (state.split) {
+                MockPaneHeader("root@prod-web-01", focused = true)
+                HLine()
+            }
             MockTerminalPane(state, Modifier.weight(1f).fillMaxWidth())
         }
         if (state.split) {
             Box(Modifier.width(1.dp).fillMaxHeight().background(Skerry.colors.cyan14))
-            SplitPane(Modifier.weight(1f))
+            Column(Modifier.weight(1f).fillMaxHeight()) {
+                MockPaneHeader("root@db-master", focused = false)
+                HLine()
+                SplitPane(Modifier.weight(1f).fillMaxWidth())
+            }
         }
     }
 }

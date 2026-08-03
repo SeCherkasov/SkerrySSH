@@ -352,6 +352,7 @@ tasks.register<JavaExec>("screenshotDesign") {
     systemProperty("skerry.screenshot.device", providers.systemProperty("skerry.screenshot.device").getOrElse("desktop"))
     systemProperty("skerry.screenshot.assistantPanel", providers.systemProperty("skerry.screenshot.assistantPanel").getOrElse("false"))
     providers.systemProperty("skerry.screenshot.settingsTab").orNull?.let { systemProperty("skerry.screenshot.settingsTab", it) }
+    providers.systemProperty("skerry.screenshot.panes").orNull?.let { systemProperty("skerry.screenshot.panes", it) }
     providers.systemProperty("skerry.screenshot.termTheme").orNull?.let { systemProperty("skerry.screenshot.termTheme", it) }
     providers.systemProperty("skerry.screenshot.theme").orNull?.let { systemProperty("skerry.screenshot.theme", it) }
     providers.systemProperty("skerry.screenshot.portsScan").orNull?.let { systemProperty("skerry.screenshot.portsScan", it) }
