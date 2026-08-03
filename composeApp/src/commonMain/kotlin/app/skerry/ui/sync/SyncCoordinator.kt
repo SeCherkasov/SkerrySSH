@@ -180,6 +180,11 @@ enum class SyncFailureReason {
     RegistrationRefusedSignInFailed,
     TooManyRequests,       // the server's rate limiter turned the request away — retrying later works
     ServerError,           // the server (or the proxy in front of it) is broken or restarting
+    // This device still owes the reactivation rebuild ([SyncConfig.pendingReconcile]) and its vault was
+    // never cleared, so every sync cycle is refused rather than push records the account purged. Only a
+    // reconnect (or a keep-connected restore) redoes the reconcile — hence a named reason and not the
+    // silent Configured that reads as "vault locked".
+    ReconcileRequired,
 }
 
 /**
@@ -660,10 +665,19 @@ class SyncCoordinator(
         resetCursor: Boolean,
         clearLocalRecords: Boolean = false,
     ) {
-        // Publish under [syncMutex]: the 401 recovery ([refreshSessionLocked]) rotates/nulls the
-        // session and rewrites the config while holding syncMutex only — without sharing the lock, a
-        // refresh in flight (a suspended network call) would resolve after this activation and clobber
-        // the just-published session and config (including the pendingReconcile marker saved below).
+        // Publish and reconcile in ONE [syncMutex] section. Publishing is what makes a session syncable,
+        // and the reconcile below is what makes it safe to sync: split into two sections, the mutex is
+        // free in between, and any cycle that wins it there (the previous session's watch/push, a manual
+        // syncNow, a retry tick — all of which read the live [client]/[session] fields) runs over the
+        // just-published session with the vault not yet cleared and the marker not yet persisted, so even
+        // [reconcileOwed] cannot see that it must stand down. That cycle pushes the pre-revocation
+        // records: issue #142 again, through a narrower window.
+        //
+        // Sharing the lock with the 401 recovery ([refreshSessionLocked]) is the other reason it is held
+        // here at all: that path rotates/nulls the session and rewrites the config under syncMutex only,
+        // and a refresh in flight would otherwise resolve after this activation and clobber the session
+        // and config it just published (including the pendingReconcile marker).
+        //
         // Lock order holds: we're under opMutex, syncMutex nests inside it.
         val superseded: SyncClient?
         syncMutex.withLock {
@@ -673,25 +687,17 @@ class SyncCoordinator(
             // A retry loop armed for the previous session must not carry its escalated backoff into
             // this one — the fresh session's first network failure re-arms from the minimum.
             retryJob?.cancel()
-        }
-        // Reactivation reconcile: drop the local records BEFORE resetting the cursor and running the first
-        // sync, so the following full re-pull rebuilds them from the server snapshot and the subsequent
-        // push can't resurrect a record the server purged while this device was revoked.
-        //
-        // The drop set is EVERY sync-capable type, NOT the currently-enabled ones: the push after the
-        // reconciling pull filters by the SERVER's "what syncs" settings (the pull applies them), which can
-        // differ from this device's stale local settings. If we gated the clear by the local settings, a
-        // type disabled locally but enabled on the server would keep its stale record through the clear and
-        // then be pushed once the pull flips the filter on — resurrecting the purged record. Clearing by the
-        // maximal (everything-on) filter covers any server settings; only never-synced, device-local types
-        // (terminal history) are kept.
-        //
-        // Under [syncMutex]: a cycle that isn't ours (a manual syncNow, the previous session's watch)
-        // could otherwise read the vault mid-clear, sync off the old cursor, and finish after
-        // [reconcileArmed] went up — retiring the marker for a cycle that was never the full re-pull. It
-        // does NOT cover the gap before this lock, where the session published above is already syncable
-        // over an un-cleared vault: that is issue #142. Lock order holds: we're under opMutex.
-        syncMutex.withLock {
+            // Reactivation reconcile: drop the local records BEFORE resetting the cursor and running the
+            // first sync, so the following full re-pull rebuilds them from the server snapshot and the
+            // subsequent push can't resurrect a record the server purged while this device was revoked.
+            //
+            // The drop set is EVERY sync-capable type, NOT the currently-enabled ones: the push after the
+            // reconciling pull filters by the SERVER's "what syncs" settings (the pull applies them), which
+            // can differ from this device's stale local settings. If we gated the clear by the local
+            // settings, a type disabled locally but enabled on the server would keep its stale record
+            // through the clear and then be pushed once the pull flips the filter on — resurrecting the
+            // purged record. Clearing by the maximal (everything-on) filter covers any server settings;
+            // only never-synced, device-local types (terminal history) are kept.
             if (clearLocalRecords) {
                 // Persist the reconcile intent BEFORE mutating the vault: the server clears revocation on the
                 // verify that reported `reactivated` and never reports it again, so a crash between here and
@@ -704,7 +710,12 @@ class SyncCoordinator(
             } else {
                 if (resetCursor) syncState.setCursor(config.accountId, 0)
                 configStore.save(config)
-                reconcileArmed = false
+                // Disarm only if the config just saved carries no marker for this account. A re-activation
+                // that doesn't reconcile ([doChangeAccountPassword]) can still carry one — a reconcile that
+                // ran here but whose marker write was refused — and the records it dropped stay dropped.
+                // Disarming there would make [reconcileOwed] refuse every later cycle, including the one
+                // that would finally retire the marker.
+                reconcileArmed = reconcileArmed && config.pendingReconcile
             }
         }
         health.setTarget(config.serverUrl)
@@ -1164,6 +1175,17 @@ class SyncCoordinator(
             parkOnConfigured()
             return
         }
+        // This device owes a reconcile it never performed (see [reconcileOwed]): its vault still holds
+        // the records the server purged while it was revoked, and pushing them is exactly the
+        // resurrection the marker exists to prevent — silently, under an Online status. Refuse the cycle
+        // and name the reason: only a connect/restore redoes the reconcile, so the user has to act, and
+        // a bare Configured would render as "vault locked" over a vault that is open. The session stays
+        // published (tearing it down needs [opMutex], which nests outside this lock) but is inert —
+        // every cycle lands here until the reconcile actually runs.
+        if (reconcileOwed(s.accountId)) {
+            _status.value = SyncStatus.Failed(SyncFailureReason.ReconcileRequired)
+            return
+        }
         try {
             runSyncAttempt(c, s)
         } catch (e: CancellationException) {
@@ -1231,6 +1253,26 @@ class SyncCoordinator(
         if ((_status.value as? SyncStatus.Failed)?.reason == SyncFailureReason.Network) scheduleNetworkRetry()
     }
 
+    /**
+     * Whether a reactivation reconcile is owed on this account but was never performed here: the durable
+     * marker ([SyncConfig.pendingReconcile]) is up while [reconcileArmed] is down.
+     *
+     * [activateSession] publishes the session and reconciles in one locked section, so a cycle can no
+     * longer slip in mid-reconcile — but the clear itself can throw (an auto-lock landing inside the
+     * connect: [Vault.clearRecords] needs an unlocked vault), and the marker is persisted before the
+     * vault is touched. That leaves a live session over a vault full of pre-revocation records, as does
+     * any activation that doesn't reconcile at all ([doChangeAccountPassword]) while the marker is up.
+     * Issue #142.
+     *
+     * Read under [syncMutex] like [reconcileArmed] itself, and matched on [accountId] — a marker saved
+     * for another account says nothing about this session.
+     */
+    private fun reconcileOwed(accountId: String): Boolean {
+        if (reconcileArmed) return false
+        val cfg = configStore.load() ?: return false
+        return cfg.accountId == accountId && cfg.pendingReconcile
+    }
+
     /** Park the status on Configured (the vault-locked resting state); Disabled without a link. */
     private fun parkOnConfigured() {
         _status.value = configStore.load()?.let { SyncStatus.Configured(it.serverUrl, it.accountId) }
@@ -1289,8 +1331,8 @@ class SyncCoordinator(
      * The marker on its own would be the wrong permission: [activateSession] persists it BEFORE it
      * touches the vault (a crash in between must not lose the signal), so a clear that threw — an
      * auto-lock landing inside the connect — leaves it up over a vault nothing was dropped from, on a
-     * session that is already published and can still sync. Retiring it there would strand the
-     * pre-revocation records; the next connect redoes the reconcile instead.
+     * session that is already published. Retiring it there would strand the pre-revocation records; that
+     * session's cycles are refused ([reconcileOwed]) and the next connect redoes the reconcile instead.
      *
      * Called before the status is published: [SyncStatus.Online] is what every observer reacts to, and
      * clearing the marker afterwards leaves a window in which Online is on screen while the saved config
