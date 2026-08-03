@@ -75,7 +75,7 @@ fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modif
 }
 
 /** The remote cursor at the trackpad's position: the server's sprite, or our own arrow if it sent none. */
-private fun DrawScope.drawTouchCursor(screen: RemoteDesktopScreenState, pad: VncTrackpad) {
+internal fun DrawScope.drawTouchCursor(screen: RemoteDesktopScreenState, pad: VncTrackpad) {
     // View-only sends no pointer events, so nothing follows our cursor — the server paints the real
     // one into the framebuffer instead, and a second one here would only lie about where it is.
     if (screen.viewOnly) return
@@ -106,7 +106,7 @@ private fun DrawScope.drawTouchCursor(screen: RemoteDesktopScreenState, pad: Vnc
  * server that neither supports the Cursor pseudo-encoding nor paints a cursor itself leaves the user
  * dragging an invisible pointer. Outlined in white so it stays visible on a dark desktop.
  */
-private fun DrawScope.drawFallbackCursor(at: Offset) {
+internal fun DrawScope.drawFallbackCursor(at: Offset) {
     val arrow = Path().apply {
         moveTo(at.x, at.y)
         lineTo(at.x, at.y + CURSOR_SIZE_PX)

@@ -343,7 +343,7 @@ internal fun DrawScope.drawFramebuffer(screen: RemoteDesktopScreenState) {
  * [RemoteDesktopScreenState.desktopSize] (not the bitmap) so this layer never touches — and never invalidates
  * on — the framebuffer image itself.
  */
-private fun DrawScope.drawCursor(screen: RemoteDesktopScreenState, sprite: VncCursorImage, pointerPos: Offset) {
+internal fun DrawScope.drawCursor(screen: RemoteDesktopScreenState, sprite: VncCursorImage, pointerPos: Offset) {
     val geom = fitGeometry(
         size.width, size.height, screen.desktopSize.width, screen.desktopSize.height,
         screen.userScale, screen.userOffset.x, screen.userOffset.y,
