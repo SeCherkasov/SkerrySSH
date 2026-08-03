@@ -75,6 +75,14 @@
     <string name="settings_terminal_scrollback">Scrollback buffer</string>
     <string name="settings_terminal_scrollback_desc">Lines kept per session.</string>
     <string name="settings_terminal_cursor_style">Cursor style</string>
+    <string name="settings_terminal_header_auto_hide">Header auto-hide</string>
+    <string name="settings_terminal_header_auto_hide_never">Never hide</string>
+    <string name="settings_terminal_header_auto_hide_3s">3 seconds</string>
+    <string name="settings_terminal_header_auto_hide_5s">5 seconds</string>
+    <string name="settings_terminal_header_auto_hide_10s">10 seconds</string>
+    <string name="settings_terminal_header_auto_hide_15s">15 seconds</string>
+    <string name="settings_terminal_header_auto_hide_30s">30 seconds</string>
+    <string name="settings_terminal_header_auto_hide_60s">60 seconds</string>
     <string name="settings_terminal_cursor_block_blink">Block (blink)</string>
     <string name="settings_terminal_cursor_block_steady">Block</string>
     <string name="settings_terminal_cursor_underline_blink">Underline (blink)</string>

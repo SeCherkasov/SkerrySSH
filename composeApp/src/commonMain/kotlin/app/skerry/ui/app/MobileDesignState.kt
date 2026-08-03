@@ -17,6 +17,7 @@ import app.skerry.ui.terminal.clampTerminalLetterSpacing
 import app.skerry.ui.terminal.clampTerminalLineHeight
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.session.BroadcastController
+import app.skerry.ui.mobile.HeaderAutoHideDelay
 import app.skerry.ui.snippet.SnippetLibraryState
 import app.skerry.ui.vault.AutoLockDuration
 import app.skerry.shared.terminal.Asciicast
@@ -142,6 +143,10 @@ class MobileDesignState(
     private val onTerminalScrollbackChange: (Int) -> Unit = {},
     initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
     private val onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
+    // Mobile terminal header auto-hide (More -> Appearance -> Terminal). Initial value from
+    // persistence, callback writes back. Never = header always visible (default).
+    initialHeaderAutoHide: HeaderAutoHideDelay = HeaderAutoHideDelay.DEFAULT,
+    private val onHeaderAutoHideChange: (HeaderAutoHideDelay) -> Unit = {},
 ) {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
 
@@ -372,6 +377,12 @@ class MobileDesignState(
     /** Default cursor style (More -> Appearance -> Terminal). Applies to new sessions. */
     var terminalCursorStyle: TerminalCursorStyle by mutableStateOf(initialTerminalCursorStyle); private set
 
+    /**
+     * How long the mobile terminal's header stays before auto-hiding (More -> Appearance ->
+     * Terminal). [HeaderAutoHideDelay.Never] keeps it permanently visible. Persisted per device.
+     */
+    var headerAutoHide: HeaderAutoHideDelay by mutableStateOf(initialHeaderAutoHide); private set
+
     /** Choose the auto-lock threshold and report outward (for persistence). Repeating the same value is a no-op. */
     fun chooseAutoLock(duration: AutoLockDuration) {
         if (duration == autoLock) return
@@ -479,5 +490,12 @@ class MobileDesignState(
         if (style == terminalCursorStyle) return
         terminalCursorStyle = style
         onTerminalCursorStyleChange(style)
+    }
+
+    /** Choose the mobile terminal header auto-hide delay and report outward (for persistence). */
+    fun chooseHeaderAutoHide(delay: HeaderAutoHideDelay) {
+        if (delay == headerAutoHide) return
+        headerAutoHide = delay
+        onHeaderAutoHideChange(delay)
     }
 }

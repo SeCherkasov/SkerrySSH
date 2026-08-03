@@ -67,6 +67,14 @@ import app.skerry.ui.generated.resources.settings_terminal_open_paths_desc_mobil
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
 import app.skerry.ui.generated.resources.settings_terminal_cursor_style
+import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide
+import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_never
+import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_3s
+import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_5s
+import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_10s
+import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_15s
+import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_30s
+import app.skerry.ui.generated.resources.settings_terminal_header_auto_hide_60s
 import app.skerry.ui.generated.resources.settings_terminal_scrollback
 import app.skerry.ui.generated.resources.appearance_title
 import app.skerry.ui.generated.resources.lib_snippets_screen_title
@@ -620,6 +628,10 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             FontSettingRow(stringResource(Res.string.settings_terminal_cursor_style)) {
                 MobileCursorStylePicker(state.terminalCursorStyle, onPick = state::chooseTerminalCursorStyle)
             }
+            HLine()
+            FontSettingRow(stringResource(Res.string.settings_terminal_header_auto_hide)) {
+                MobileHeaderAutoHidePicker(state.headerAutoHide, onPick = state::chooseHeaderAutoHide)
+            }
             // Clickable file paths in output (desktop parity): here the affordance is a chip over a
             // selected path rather than Ctrl+click, and this switch governs both.
             HLine()
@@ -896,6 +908,38 @@ private fun MobileCursorStylePicker(current: TerminalCursorStyle, onPick: (Termi
         },
     )
 }
+
+/** Header auto-hide delay dropdown ([HeaderAutoHideDelay.entries]; "Never hide" keeps it visible). */
+@Composable
+private fun MobileHeaderAutoHidePicker(current: HeaderAutoHideDelay, onPick: (HeaderAutoHideDelay) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    AnchoredDropdown(
+        expanded = open,
+        onDismiss = { open = false },
+        trigger = { MobileSelectTrigger(current.headerAutoHideLabel(), onClick = { open = !open }) },
+        menu = { width ->
+            MobileDropdownMenu(width) {
+                HeaderAutoHideDelay.entries.forEach { option ->
+                    MobileDropdownOption(option.headerAutoHideLabel(), selected = option == current) { onPick(option); open = false }
+                }
+            }
+        },
+    )
+}
+
+/** Localized header auto-hide label. */
+@Composable
+internal fun HeaderAutoHideDelay.headerAutoHideLabel(): String = stringResource(
+    when (this) {
+        HeaderAutoHideDelay.Never -> Res.string.settings_terminal_header_auto_hide_never
+        HeaderAutoHideDelay.ThreeSeconds -> Res.string.settings_terminal_header_auto_hide_3s
+        HeaderAutoHideDelay.FiveSeconds -> Res.string.settings_terminal_header_auto_hide_5s
+        HeaderAutoHideDelay.TenSeconds -> Res.string.settings_terminal_header_auto_hide_10s
+        HeaderAutoHideDelay.FifteenSeconds -> Res.string.settings_terminal_header_auto_hide_15s
+        HeaderAutoHideDelay.ThirtySeconds -> Res.string.settings_terminal_header_auto_hide_30s
+        HeaderAutoHideDelay.SixtySeconds -> Res.string.settings_terminal_header_auto_hide_60s
+    },
+)
 
 /** Setting row with a stepper (mobile): label + default-value hint on the left, [NumberStepper] on the right. */
 @Composable

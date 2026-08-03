@@ -75,6 +75,14 @@
     <string name="settings_terminal_scrollback">Буфер прокрутки</string>
     <string name="settings_terminal_scrollback_desc">Строк на сессию.</string>
     <string name="settings_terminal_cursor_style">Стиль курсора</string>
+    <string name="settings_terminal_header_auto_hide">Автоскрытие заголовка</string>
+    <string name="settings_terminal_header_auto_hide_never">Не скрывать</string>
+    <string name="settings_terminal_header_auto_hide_3s">3 секунды</string>
+    <string name="settings_terminal_header_auto_hide_5s">5 секунд</string>
+    <string name="settings_terminal_header_auto_hide_10s">10 секунд</string>
+    <string name="settings_terminal_header_auto_hide_15s">15 секунд</string>
+    <string name="settings_terminal_header_auto_hide_30s">30 секунд</string>
+    <string name="settings_terminal_header_auto_hide_60s">60 секунд</string>
     <string name="settings_terminal_cursor_block_blink">Блок (мигающий)</string>
     <string name="settings_terminal_cursor_block_steady">Блок</string>
     <string name="settings_terminal_cursor_underline_blink">Подчёркивание (мигающее)</string>

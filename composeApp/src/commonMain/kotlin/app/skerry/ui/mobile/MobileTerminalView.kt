@@ -141,7 +141,6 @@ import app.skerry.ui.ai.commandRiskReasonText
 /** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
 private const val ESC = "\u001b"
 
-private const val HEADER_AUTO_HIDE_MS = 3000L
 // Where the header's reveal strip starts and how tall it is: clear of the system's edge-swipe zone.
 private val SYSTEM_EDGE_GESTURE = 40.dp
 private val TOP_EDGE_STRIP = 72.dp
@@ -186,7 +185,8 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // The AI input is off by default and raised by the sparkle key: on a phone it is a whole row of
     // screen that most sessions never use, and the terminal wants every line it can get.
     var aiOpen by remember(active?.id) { mutableStateOf(false) }
-    // Session chrome auto-hides like the VNC screen's bar; a swipe down near the top brings it back.
+    // Session chrome auto-hides per the setting (More -> Appearance -> Terminal); a swipe down
+    // near the top brings it back. Never = always visible (default).
     var headerVisible by remember(active?.id) { mutableStateOf(true) }
     // See MobileVncScreen: keyed into the auto-hide effect so a swipe restarts the timer even when
     // the header is already up.
@@ -230,11 +230,15 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     val canRunSnippet = snippets != null && activeTerminal != null
 
     ImmersiveScreen()
+    // Header auto-hide per the setting (More -> Appearance -> Terminal); Never keeps it visible.
+    val autoHideMs = state.headerAutoHide.hideAfterMs
     // Held open while a sheet launched from it is up: the header is where they were opened from, and
     // hiding it under an open menu reads as the app losing its place.
-    LaunchedEffect(headerVisible, menuOpen, paletteOpen, revealNonce) {
-        if (headerVisible && !menuOpen && !paletteOpen) {
-            delay(HEADER_AUTO_HIDE_MS)
+    LaunchedEffect(headerVisible, menuOpen, paletteOpen, revealNonce, autoHideMs) {
+        val autoHide = autoHideMs
+        val panelsClosed = !menuOpen && !paletteOpen
+        if (autoHide != null && headerVisible && panelsClosed) {
+            delay(autoHide)
             headerVisible = false
         }
     }

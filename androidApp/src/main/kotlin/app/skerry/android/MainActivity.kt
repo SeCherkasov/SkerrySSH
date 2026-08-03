@@ -49,6 +49,7 @@ import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.ai.LocalAiDeps
+import app.skerry.ui.mobile.HeaderAutoHideDelay
 import app.skerry.ui.mobile.MobileDesignApp
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.secure.WindowBridge
@@ -191,6 +192,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalScrollbackChange = { writeTerminalScrollback(dir, it) },
                     initialTerminalCursorStyle = readTerminalCursorStyle(dir),
                     onTerminalCursorStyleChange = { writeTerminalCursorStyle(dir, it) },
+                    initialHeaderAutoHide = readHeaderAutoHide(dir),
+                    onHeaderAutoHideChange = { writeHeaderAutoHide(dir, it) },
                     initialTerminalTheme = readTerminalTheme(dir),
                     onTerminalThemeChange = { writeTerminalTheme(dir, it) },
                     initialCustomTerminalTheme = readCustomTerminalTheme(dir),
@@ -378,6 +381,21 @@ class MainActivity : FragmentActivity() {
         val id = style.id
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_cursor_style").writeText(id) }
+        }
+    }
+
+    /**
+     * Mobile terminal header auto-hide delay (More → Appearance → Terminal): stable id
+     * ([HeaderAutoHideDelay.id]) in `header_auto_hide`. Missing/unreadable/unknown →
+     * [HeaderAutoHideDelay.DEFAULT] (header always visible). Write is best-effort, off the UI thread.
+     */
+    private fun readHeaderAutoHide(dir: File): HeaderAutoHideDelay =
+        HeaderAutoHideDelay.fromId(runCatching { File(dir, "header_auto_hide").readText().trim() }.getOrNull())
+
+    private fun writeHeaderAutoHide(dir: File, delay: HeaderAutoHideDelay) {
+        val id = delay.id
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "header_auto_hide").writeText(id) }
         }
     }
 
