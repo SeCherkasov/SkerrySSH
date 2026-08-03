@@ -18,7 +18,7 @@ enum class MouseEventType {
     Move,
 }
 
-private val ESC = 27.toChar()
+internal val ESC = 27.toChar()
 
 /** Base button code in the mouse protocol: left=0, middle=1, right=2, wheel up/down=64/65. */
 private fun MouseButton.code(): Int = when (this) {

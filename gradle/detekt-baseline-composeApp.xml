@@ -67,7 +67,7 @@
     <ID>LongMethod:main.kt$private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph</ID>
     <ID>LongParameterList:AiStreamRunner.kt$AiStreamRunner$( endpoint: AiEndpoint, messages: List&lt;AiMessage&gt;, onDelta: (String) -&gt; Unit, onComplete: (String) -&gt; Unit, onError: (AiFailure) -&gt; Unit, onFinally: () -&gt; Unit, // null uses the provider default; the terminal bar requests a low value (command, not creative). temperature: Double? = null, )</ID>
     <ID>LongParameterList:DesktopSessionActions.kt$( sessions: SessionsController?, state: DesktopDesignState, tabId: String?, paneId: String, host: Host, auth: SshAuth, jump: SshJump? = null, )</ID>
-    <ID>LongParameterList:MobileDesignApp.kt$( sessions: SessionsController?, state: MobileDesignState, host: Host, auth: SshAuth, jump: SshJump?, dest: MobileConnectDest, )</ID>
+    <ID>LongParameterList:MobileSessionActions.kt$( sessions: SessionsController?, state: MobileDesignState, host: Host, auth: SshAuth, jump: SshJump?, dest: MobileConnectDest, )</ID>
     <ID>LongParameterList:SessionShareController.kt$SessionShareController$(teamId: String, teamName: String, paneId: String, label: String, source: ShareSource, readOnlyOnly: Boolean)</ID>
     <ID>LongParameterList:SessionsController.kt$SessionsController$( tabId: String, paneId: String, hostId: String?, title: String, subtitle: String, target: SshTarget, auth: SshAuth, )</ID>
     <ID>LongParameterList:SharedSessionsList.kt$( sessions: SessionsController?, title: String, subtitle: String, viewer: TerminalSession, onPaneOpened: (String) -&gt; Unit, showTerminal: () -&gt; Unit, )</ID>
@@ -112,9 +112,7 @@
     <ID>TooGenericExceptionThrown:HostMetricsMonitorControllerTest.kt$HostMetricsMonitorControllerTest$throw RuntimeException("channel dropped")</ID>
     <ID>TooGenericExceptionThrown:PingControllerTest.kt$PingControllerTest$throw RuntimeException("boom")</ID>
     <ID>TooGenericExceptionThrown:TransferCoordinatorTest.kt$TransferCoordinatorTest.FakeDownloadTarget$throw RuntimeException(it)</ID>
-    <ID>UnusedParameter:MobileFilesView.kt$mono: FontFamily</ID>
     <ID>UnusedParameter:MobileSnippetsView.kt$mono: FontFamily</ID>
-    <ID>UnusedPrivateMember:MobileDesignApp.kt$@Composable private fun MobileRoutePlaceholder(state: MobileDesignState, title: String)</ID>
     <ID>UnusedPrivateProperty:Screenshot.kt$FakeConnection$val tick = polls++</ID>
     <ID>UseCheckOrError:RemoteDesktopScreenStateTest.kt$RemoteDesktopScreenStateTest.&lt;no name provided&gt;$throw IllegalStateException("Socket closed")</ID>
     <ID>UseCheckOrError:SyncCoordinatorNetworkRecoveryTest.kt$SyncCoordinatorNetworkRecoveryTest$throw IllegalStateException("vault is locked")</ID>

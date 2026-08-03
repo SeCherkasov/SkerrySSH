@@ -4,11 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,17 +12,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -39,37 +26,16 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiPolicyDecision
-import app.skerry.shared.ai.CommandRisk
 import app.skerry.shared.host.Host
-import app.skerry.shared.vault.Credential
-import app.skerry.ui.ai.AiNotice
-import app.skerry.ui.ai.TerminalAiController
-import app.skerry.ui.ai.aiBlockedMessage
-import app.skerry.ui.ai.aiFailureMessage
-import app.skerry.ui.ai.shortLabel
-import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
-import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.immersive.ImmersiveScreen
-import app.skerry.ui.immersive.hiddenSystemBarsPadding
-import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.terminal.TerminalScreen
-import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.terminal.RecordingOutcome
 import app.skerry.shared.share.ShareFrame
 import app.skerry.ui.app.LocalSessionShare
@@ -79,12 +45,9 @@ import app.skerry.ui.share.ShareSource
 import app.skerry.ui.share.ShareUiState
 import app.skerry.ui.share.shareableTeams
 import app.skerry.ui.share.viewersMayOnlyWatch
-import app.skerry.ui.vault.VaultPresentation
-import app.skerry.ui.generated.resources.shell_use_saved_secret
 import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
-import app.skerry.ui.generated.resources.term_open_path_in_files
 import app.skerry.ui.generated.resources.runbook_section
 import app.skerry.ui.generated.resources.term_broadcast_title
 import app.skerry.ui.generated.resources.term_monitor_title
@@ -95,24 +58,12 @@ import app.skerry.ui.generated.resources.term_no_active_session
 import app.skerry.ui.generated.resources.term_mobile_open_host_connect
 import app.skerry.ui.generated.resources.term_connecting
 import app.skerry.ui.generated.resources.term_connection_failed
-import app.skerry.ui.generated.resources.term_ai_thinking
-import app.skerry.ui.generated.resources.term_ai_ask_short
-import app.skerry.ui.generated.resources.term_ai_run
-import app.skerry.ui.generated.resources.term_ai_run_anyway
-import app.skerry.ui.generated.resources.term_ai_confirm
 import app.skerry.ui.generated.resources.term_ai_dismiss
-import app.skerry.ui.generated.resources.term_ai_explain_reading
-import app.skerry.ui.generated.resources.term_ai_not_a_command
-import app.skerry.ui.generated.resources.term_password_label
-import app.skerry.ui.generated.resources.term_connect
 import app.skerry.ui.generated.resources.term_disconnect
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.AiPolicy
-import app.skerry.ui.terminal.ArrowKey
-import app.skerry.ui.design.Dot
 import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.app.LocalAi
-import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSessions
@@ -121,12 +72,9 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
-import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
-import app.skerry.ui.terminal.arrowSequence
 import app.skerry.ui.terminal.filePathFromSelection
 import app.skerry.ui.session.broadcastTargets
-import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import app.skerry.shared.terminal.castFileName
@@ -136,10 +84,9 @@ import app.skerry.ui.theme.Skerry
 import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
 import app.skerry.ui.host.rememberProductionLookup
-import app.skerry.ui.ai.commandRiskReasonText
 
 /** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
-private const val ESC = "\u001b"
+internal const val ESC = "\u001b"
 
 private const val HEADER_AUTO_HIDE_MS = 3000L
 // Where the header's reveal strip starts and how tall it is: clear of the system's edge-swipe zone.
@@ -503,485 +450,4 @@ fun MobileTerminalScreen(state: MobileDesignState) {
             }
         }
     }
-}
-
-/**
- * The single form of the mobile AI bar (desktop parity) — constant height, the terminal isn't resized,
- * nothing is overlapped. One row: input, "Thinking…", blocked/error, and for a suggestion — the command
- * + inline note (None: what it does; Warn/Danger: risk reason in color) + buttons. Destructive is red
- * with a "block" icon. No auto-run: Run = confirmation; [CommandRisk.Danger] needs a second tap.
- */
-@Composable
-private fun MobileAiBarInput(controller: TerminalAiController, terminal: TerminalScreenState) {
-    val mono = LocalFonts.current.mono
-    var prompt by remember { mutableStateOf("") }
-    val submit = {
-        val text = prompt.trim()
-        if (text.isNotEmpty()) { controller.ask(text); prompt = "" }
-    }
-    val pending = controller.pending
-    val explanation = controller.explanation
-    val risk = controller.pendingRisk?.risk ?: CommandRisk.None
-    val danger = risk == CommandRisk.Danger
-    // Red for any destructive command (delete/overwrite), even Warn.
-    val severe = danger || controller.pendingRisk?.destructive == true
-    val accent = if (severe) Skerry.colors.sunset else Skerry.colors.moss
-    var armed by remember(pending) { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().background(if (pending != null) accent.copy(alpha = 0.08f) else Skerry.colors.surface2)) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Sym(
-                when {
-                    pending != null -> if (severe) "block" else "terminal"
-                    explanation != null -> "summarize"
-                    else -> "auto_awesome"
-                },
-                size = 16.sp, color = if (pending != null) accent else Skerry.colors.amber,
-            )
-            Box(Modifier.weight(1f)) {
-                when {
-                    pending != null -> {
-                        val infoColor = if (severe) Skerry.colors.sunset else if (risk == CommandRisk.Warn) Skerry.colors.amber else Skerry.colors.dim
-                        val info = when (risk) {
-                            CommandRisk.None -> controller.pendingInfo
-                            else -> controller.pendingRisk?.reason?.let { commandRiskReasonText(it) }
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // The command wraps (up to 6 lines), not truncated: the user sees in full what
-                            // they confirm and run (see TerminalView — the same safety invariant).
-                            Txt(pending, color = if (severe) Skerry.colors.sunset else Skerry.colors.text, size = 12.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
-                            if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
-                        }
-                    }
-                    explanation != null ->
-                        if (explanation.isEmpty()) {
-                            Txt(stringResource(Res.string.term_ai_explain_reading), color = Skerry.colors.dim, size = 13.sp)
-                        } else {
-                            Column(Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
-                                Txt(explanation, color = Skerry.colors.text, size = 12.sp, lineHeight = 17.sp)
-                            }
-                        }
-                    controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = Skerry.colors.dim, size = 13.sp)
-                    controller.notice != null -> when (val notice = controller.notice!!) {
-                        is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Ask -> Txt(notice.question, color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        // The bar only ever asks for a command, so an empty reply is the same
-                        // "nothing usable" outcome as prose — one message covers both.
-                        AiNotice.Rejected, AiNotice.NoAnswer ->
-                            Txt(stringResource(Res.string.term_ai_not_a_command), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = Skerry.colors.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    else -> {
-                        if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_short), color = Skerry.colors.dim, size = 13.sp)
-                        BasicTextField(
-                            value = prompt,
-                            onValueChange = { prompt = it },
-                            singleLine = true,
-                            textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp),
-                            cursorBrush = SolidColor(Skerry.colors.cyan),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(onSend = { submit() }),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
-                }
-            }
-            when {
-                pending != null -> {
-                    MobileAiChip(when { !danger -> stringResource(Res.string.term_ai_run); !armed -> stringResource(Res.string.term_ai_run_anyway); else -> stringResource(Res.string.term_ai_confirm) }, accent) {
-                        if (danger && !armed) armed = true
-                        else controller.confirm()?.let { terminal.sendUserInputGuarded(it + "\r") }
-                    }
-                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
-                }
-                explanation != null ->
-                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
-                controller.notice != null ->
-                    MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
-                else -> {
-                    // Explain the current selection, or the visible screen when nothing is selected.
-                    Box(
-                        Modifier.size(30.dp).clip(RoundedCornerShape(7.dp))
-                            .background(Skerry.colors.overlaySoft)
-                            .border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp))
-                            .clickable(enabled = !controller.busy) {
-                                // Selection wins; else the last command's output; else the whole screen.
-                                controller.explain(terminal.selectedText() ?: terminal.lastOutput() ?: terminal.output)
-                            },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Sym("summarize", size = 16.sp, color = Skerry.colors.amber)
-                    }
-                    Txt(labelUppercase(controller.policy.shortLabel()), color = Skerry.colors.faint, size = 10.sp, font = mono)
-                    Box(
-                        Modifier.size(30.dp).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.cyan)
-                            .clickable(enabled = !controller.busy) { submit() },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Sym("arrow_upward", size = 16.sp, color = Skerry.colors.ink)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * "Open in Files" row over the key panel, shown while the selection is exactly one file path. Full
- * width and tappable as a whole (a phone-sized target), with the path itself in mono so it reads as
- * the thing being opened; a long path ellipsizes at the start, keeping the file name visible.
- */
-@Composable
-private fun MobileOpenPathBar(path: String, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(Skerry.colors.surface2).clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Sym("drive_file_move", size = 16.sp, color = Skerry.colors.cyanBright)
-        Txt(stringResource(Res.string.term_open_path_in_files), color = Skerry.colors.text, size = 12.sp, weight = FontWeight.Medium)
-        Txt(
-            path,
-            color = Skerry.colors.dim,
-            size = 11.5.sp,
-            font = LocalFonts.current.mono,
-            maxLines = 1,
-            overflow = TextOverflow.StartEllipsis,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun MobileAiChip(label: String, color: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.clip(RoundedCornerShape(6.dp)).background(color.copy(alpha = 0.16f))
-            .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(6.dp)).clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 5.dp),
-    ) {
-        Txt(label, color = color, size = 11.5.sp, weight = FontWeight.Medium)
-    }
-}
-
-/**
- * Terminal header (`#0B1A26` + bottom cyan line): back chevron, host name + status line with live
- * metrics (RTT/throughput), `more_horiz` icon (menu with Disconnect). [onDisconnect]==null — no active
- * session, the Disconnect item is hidden. The split icon is removed on phone (split not needed).
- *
- * Metrics come from [controller] via the same pollers as the desktop status bar: the keep-alive/RTT
- * poller ([openPing], null with the profile's keep-alive off) and channel throughput
- * ([openThroughput]). The remember is unconditional — keys (controller + connected flag) recreate it
- * on session/connection change; both methods are idempotent (cached in the controller). Before the
- * first sample / off-connection the metric is "—"; a narrow line scrolls horizontally.
- */
-@Composable
-private fun MobileTerminalHeader(
-    title: String,
-    status: ConnectionUiState?,
-    controller: ConnectionController?,
-    onBack: () -> Unit,
-    onMenu: () -> Unit,
-    onSnippets: (() -> Unit)?,
-) {
-    val mono = LocalFonts.current.mono
-    val connected = status is ConnectionUiState.Connected
-    val throughput = remember(controller, connected) {
-        if (connected && controller != null) controller.openThroughput() else null
-    }
-    val ping = remember(controller, connected) {
-        if (connected && controller != null) controller.openPing() else null
-    }
-    Column(Modifier.fillMaxWidth().background(Skerry.colors.surface2)) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Sym(
-                "chevron_left",
-                size = 24.sp,
-                color = Skerry.colors.cyanBright,
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onBack,
-                ),
-            )
-            Column(Modifier.weight(1f)) {
-                Txt(title, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold, font = mono)
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Dot(sessionDotColor(status))
-                        Txt(mobileTerminalStatusText(mobileTerminalStatus(status)), color = sessionDotColor(status), size = 10.5.sp)
-                    }
-                    // Live metrics of the active session (desktop status-bar parity) — only when connected.
-                    if (connected) {
-                        MobileTerminalMetric("network_ping", mobileRttLabel(ping?.rttMs), mono)
-                        MobileTerminalMetric("arrow_upward", mobileRateLabel(throughput?.upRate), mono)
-                        MobileTerminalMetric("arrow_downward", mobileRateLabel(throughput?.downRate), mono)
-                    }
-                }
-            }
-            if (onSnippets != null) {
-                Sym(
-                    "bolt",
-                    size = 21.sp,
-                    color = Skerry.colors.dim,
-                    modifier = Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onSnippets,
-                    ),
-                )
-            }
-            Sym(
-                "more_horiz",
-                size = 21.sp,
-                color = Skerry.colors.dim,
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onMenu,
-                ),
-            )
-        }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Skerry.colors.cyan08))
-    }
-}
-
-/** One header status-line metric: icon + monospaced value (RTT/throughput). */
-@Composable
-private fun MobileTerminalMetric(icon: String, text: String, mono: FontFamily) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        Sym(icon, size = 11.sp, color = Skerry.colors.faint)
-        Txt(text, color = Skerry.colors.faint, size = 10.5.sp, font = mono)
-    }
-}
-
-/** Centered message over the terminal background (no session / connecting / error). */
-@Composable
-private fun MobileTerminalNotice(icon: String, title: String, subtitle: String, color: Color = Skerry.colors.dim) {
-    val mono = LocalFonts.current.mono
-    Column(
-        Modifier.fillMaxSize().padding(40.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Sym(icon, size = 30.sp, color = color)
-        Txt(title, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
-        // Long texts (Mosh setup errors) must wrap into a readable centered block, not one
-        // screen-wide line.
-        Txt(
-            subtitle, color = Skerry.colors.faint, size = 12.sp, font = mono, lineHeight = 18.sp,
-            align = TextAlign.Center, modifier = Modifier.widthIn(max = 480.dp),
-        )
-    }
-}
-
-/**
- * Special-key panel (`#0E1A24`, horizontal scroll) — the core of the mobile SSH UX: esc, tab, ctrl
- * (sticky modifier), /, |, -, ~, arrows. Control sequences go to the PTY via
- * [TerminalScreenState.sendUserInput], so a viewport scrolled into history snaps back to the live screen.
- * `ctrl` is armed by a tap (cyan highlight): [ctrlArmed] is lifted to [MobileTerminalScreen], so it
- * applies to both the panel's character keys ([controlByte]) and soft-keyboard input ([applyStickyCtrl]
- * in the IME path). Arrows are encoded per the session's DECCKM mode ([arrowSequence]): CSI normally,
- * SS3 in application-cursor (vim/less).
- */
-@Composable
-private fun MobileKeybar(
-    terminal: TerminalScreenState,
-    ctrlArmed: Boolean,
-    onCtrlArmedChange: (Boolean) -> Unit,
-    aiOpen: Boolean = false,
-    onToggleAi: (() -> Unit)? = null,
-) {
-    val plain = { seq: String -> terminal.sendUserInput(seq); onCtrlArmedChange(false) }
-    val char = { c: String ->
-        if (ctrlArmed && c.length == 1) {
-            // typeInput for the same reason as below: the ctrl forms of these keys edit or run the
-            // shell line (ctrl + "-" is CR, ctrl + "/" is accept-line-and-down-history), so they owe
-            // the engine and the production guard the same visibility as anything else typed here.
-            terminal.typeInput(controlByte(c[0]))
-            onCtrlArmedChange(false)
-        } else {
-            // typeInput, not sendUserInput: a character from the panel is typing, and it has to reach
-            // the tracked line like any other. Sending it raw left `/`, `|`, `~` out of the line the
-            // production guard classifies (the panel has no Enter key, so nothing ran unguarded —
-            // but the guard was reading a line that was missing characters).
-            terminal.typeInput(c)
-        }
-    }
-    val arrow = { key: ArrowKey -> plain(arrowSequence(key, terminal.applicationCursorKeys)) }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(Skerry.colors.surface2)
-            // The screen runs edge to edge, so the panel keeps itself off the navigation bar.
-            .hiddenSystemBarsPadding(top = false, bottom = true)
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // While reverse-search (Ctrl-R) is open, the panel shows its controls; the query is typed on the
-        // soft keyboard (routed to TerminalScreen). Otherwise — the normal layout.
-        if (terminal.reverseSearchQuery != null) {
-            KeyCap("esc") { terminal.closeReverseSearch(); onCtrlArmedChange(false) }
-            KeyCapIcon("expand_more") { terminal.reverseSearchNext() } // next (older)
-            KeyCapIcon("expand_less") { terminal.reverseSearchPrev() } // previous (newer)
-            KeyCapIcon("delete") { terminal.reverseSearchDeleteSelected() } // remove from history
-            KeyCap("insert", accent = true) { terminal.reverseSearchAccept(); onCtrlArmedChange(false) }
-            return@Row
-        }
-        // The AI input lives behind this key instead of taking a permanent row (see MobileAiBarInput).
-        if (onToggleAi != null) KeyCapIcon("auto_awesome", accent = aiOpen) { onToggleAi() }
-        KeyCap("esc") { plain(ESC) }
-        // Tab with an autocomplete suggestion — accept it; otherwise a normal tab to the PTY.
-        KeyCap("tab") {
-            if (terminal.hasSuggestion) { terminal.acceptSuggestion(); onCtrlArmedChange(false) } else plain("\t")
-        }
-        // With a suggestion available — cycle alternatives (like Shift+Tab on desktop). Keyed on the
-        // engine, not on the drawn ghost: the ghost blinks off for the echo round trip, and the row
-        // would reflow under the finger on every keystroke.
-        if (terminal.hasSuggestion) {
-            KeyCapIcon("autorenew") { terminal.cycleSuggestion() }
-        }
-        // Reverse history search (Ctrl-R): open the search overlay (query typed on the soft keyboard).
-        KeyCapIcon("search") { terminal.openReverseSearch() }
-        // Find in output (desktop ⌘F parity): opens the search panel over the terminal, which takes
-        // the soft keyboard for its query field.
-        KeyCapIcon("find_in_page") { terminal.search.open() }
-        // ctrl — special panel key (always cyan); arming fills it solid cyan.
-        KeyCap("ctrl", accent = true, active = ctrlArmed) { onCtrlArmedChange(!ctrlArmed) }
-        KeyCap("/") { char("/") }
-        KeyCap("|") { char("|") }
-        KeyCap("-") { char("-") }
-        KeyCap("~") { char("~") }
-        KeyCapIcon("keyboard_arrow_up") { arrow(ArrowKey.Up) }
-        KeyCapIcon("keyboard_arrow_down") { arrow(ArrowKey.Down) }
-        KeyCapIcon("keyboard_arrow_left") { arrow(ArrowKey.Left) }
-        KeyCapIcon("keyboard_arrow_right") { arrow(ArrowKey.Right) }
-    }
-}
-
-/**
- * Text panel key. [accent] — special key (cyan at rest, like `ctrl`); [active] — sticky arming (solid
- * cyan + dark text).
- */
-@Composable
-private fun KeyCap(label: String, accent: Boolean = false, active: Boolean = false, onClick: () -> Unit) {
-    val bg = when {
-        active -> Skerry.colors.cyan
-        accent -> Skerry.colors.cyan14
-        else -> Skerry.colors.overlayMed
-    }
-    val fg = when {
-        active -> Skerry.colors.ink
-        accent -> Skerry.colors.cyanBright
-        else -> Skerry.colors.textBright
-    }
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(7.dp))
-            .background(bg)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-    ) {
-        Txt(label, color = fg, size = 12.5.sp, font = LocalFonts.current.mono)
-    }
-}
-
-/** Icon panel key (arrows). */
-@Composable
-private fun KeyCapIcon(icon: String, accent: Boolean = false, onClick: () -> Unit) {
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(7.dp))
-            .background(if (accent) Skerry.colors.cyan14 else Skerry.colors.overlayMed)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 7.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Sym(icon, size = 16.sp, color = if (accent) Skerry.colors.cyanBright else Skerry.colors.textBright)
-    }
-}
-
-/**
- * Bottom password-prompt sheet on Connect to a host with no bound identity (styled like the
- * `New connection` sheet). The password goes to [onConnect] as a string and is used right away in
- * `SshAuth.Password`; the buffer lives only in this composable. A tap outside the sheet — [onDismiss].
- *
- * [secrets] mirror the desktop dialog: a team-shared host arrives without its credential link, so
- * the keychain is offered here too — a key-only server has no other way in.
- */
-@Composable
-fun MobilePasswordSheet(
-    host: Host,
-    onDismiss: () -> Unit,
-    onConnect: (String) -> Unit,
-    secrets: List<Credential> = emptyList(),
-    onUseSecret: (Credential) -> Unit = {},
-) {
-    var password by remember { mutableStateOf("") }
-    val submit = { if (password.isNotEmpty()) onConnect(password) }
-    // Protect SSH password entry on connect from screenshots/Recent Apps previews (Android; desktop no-op).
-    SecureScreen()
-    MobileBottomSheet(
-        onDismiss = onDismiss,
-        panelModifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
-    ) {
-        Txt(host.label, color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
-            Spacer(Modifier.height(3.dp))
-            Txt("${host.username}@${host.address}:${host.port}", color = Skerry.colors.dim, size = 12.5.sp, font = LocalFonts.current.mono)
-            Spacer(Modifier.height(18.dp))
-            Txt(stringResource(Res.string.term_password_label), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
-            Spacer(Modifier.height(6.dp))
-            MobileFormInput(
-                value = password,
-                onValueChange = { password = it },
-                placeholder = "••••••••",
-                masked = true,
-                imeAction = ImeAction.Go,
-                onSubmit = { submit() },
-            )
-            if (secrets.isNotEmpty()) {
-                Spacer(Modifier.height(18.dp))
-                Txt(stringResource(Res.string.shell_use_saved_secret), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
-                Spacer(Modifier.height(6.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    secrets.forEach { secret ->
-                        MobileSheetButton(
-                            label = secret.label,
-                            onClick = { onUseSecret(secret) },
-                            modifier = Modifier.fillMaxWidth(),
-                            icon = VaultPresentation.secretIcon(secret.secret),
-                            filled = false,
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.height(20.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (password.isNotEmpty()) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.4f))
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = submit)
-                    .padding(15.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Txt(stringResource(Res.string.term_connect), color = Skerry.colors.ink, size = 16.sp, weight = FontWeight.Bold)
-            }
-        }
 }
