@@ -9,6 +9,17 @@ val MIN_WINDOW: DpSize = DpSize(1100.dp, 720.dp)
 /** Maximum window size; the layout targets a working size, not a fullscreen 4K/ultrawide stretch. */
 val MAX_WINDOW: DpSize = DpSize(1680.dp, 1050.dp)
 
+/**
+ * Floor a resize may reach on the available [screen] area: [MIN_WINDOW], capped by the screen
+ * itself — a floor larger than the display would push the window past its edges instead of
+ * letting it shrink. Fed to the window manager as a size hint, so a WM-driven resize (keyboard,
+ * tiling, super+drag) is bounded the same way the app's own resize handles are.
+ */
+fun minimumWindowSize(screen: DpSize): DpSize = DpSize(
+    width = MIN_WINDOW.width.coerceAtMost(screen.width),
+    height = MIN_WINDOW.height.coerceAtMost(screen.height),
+)
+
 /** Default fraction of the available screen area the window occupies. */
 private const val SCREEN_FRACTION = 0.9f
 

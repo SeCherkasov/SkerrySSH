@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,6 +17,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -23,6 +25,7 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
 import java.awt.Cursor
+import java.awt.Dimension
 import java.awt.MouseInfo
 
 /**
@@ -144,12 +147,24 @@ private fun Modifier.onUnconsumedDoubleClick(onDoubleClick: () -> Unit): Modifie
  * Content wrapper for the undecorated window: draws [content] and, while the window is floating
  * (not maximized), overlays invisible resize strips along the borders — an undecorated AWT window
  * has no native resize edges, so edge drags call [resizedWindowBounds] over `window.setBounds`.
+ *
+ * Also declares how far the window may shrink, derived from [screen]: the strips clamp their own
+ * drags, but a window-manager resize (keyboard resize, tiling, super+drag) never asks them, and
+ * without the hint an undecorated window can be squeezed down to a few pixels. The floor follows
+ * the display the app started on — moving the window to a smaller monitor does not recompute it.
  */
 @Composable
-fun WindowScope.SkerryWindowFrame(state: WindowState, content: @Composable () -> Unit) {
+fun WindowScope.SkerryWindowFrame(state: WindowState, screen: DpSize, content: @Composable () -> Unit) {
+    val minimum = remember(screen) { minimumWindowDimension(screen) }
+    // The window is not displayable yet, so AWT stores the value on it and the peer applies it when
+    // realized — either way the hint is in place before the window is shown.
+    DisposableEffect(minimum) {
+        window.minimumSize = minimum
+        onDispose { }
+    }
     Box(Modifier.fillMaxSize()) {
         content()
-        if (state.placement == WindowPlacement.Floating) ResizeBorders()
+        if (state.placement == WindowPlacement.Floating) ResizeBorders(minimum)
     }
 }
 
@@ -158,27 +173,29 @@ private val EDGE = 5.dp
 private val CORNER = 14.dp
 
 @Composable
-private fun WindowScope.ResizeBorders() {
+private fun WindowScope.ResizeBorders(minimum: Dimension) {
     Box(Modifier.fillMaxSize()) {
         // Edges (inset by CORNER so corners keep their diagonal cursor).
-        ResizeStrip(ResizeEdge.Top, Cursor.N_RESIZE_CURSOR, Modifier.align(Alignment.TopCenter).fillMaxWidth().height(EDGE).padding(horizontal = CORNER))
-        ResizeStrip(ResizeEdge.Bottom, Cursor.S_RESIZE_CURSOR, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(EDGE).padding(horizontal = CORNER))
-        ResizeStrip(ResizeEdge.Left, Cursor.W_RESIZE_CURSOR, Modifier.align(Alignment.CenterStart).fillMaxHeight().width(EDGE).padding(vertical = CORNER))
-        ResizeStrip(ResizeEdge.Right, Cursor.E_RESIZE_CURSOR, Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(EDGE).padding(vertical = CORNER))
+        ResizeStrip(ResizeEdge.Top, Cursor.N_RESIZE_CURSOR, minimum, Modifier.align(Alignment.TopCenter).fillMaxWidth().height(EDGE).padding(horizontal = CORNER))
+        ResizeStrip(ResizeEdge.Bottom, Cursor.S_RESIZE_CURSOR, minimum, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(EDGE).padding(horizontal = CORNER))
+        ResizeStrip(ResizeEdge.Left, Cursor.W_RESIZE_CURSOR, minimum, Modifier.align(Alignment.CenterStart).fillMaxHeight().width(EDGE).padding(vertical = CORNER))
+        ResizeStrip(ResizeEdge.Right, Cursor.E_RESIZE_CURSOR, minimum, Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(EDGE).padding(vertical = CORNER))
         // Corners on top of the edges.
-        ResizeStrip(ResizeEdge.TopLeft, Cursor.NW_RESIZE_CURSOR, Modifier.align(Alignment.TopStart).size(CORNER))
-        ResizeStrip(ResizeEdge.TopRight, Cursor.NE_RESIZE_CURSOR, Modifier.align(Alignment.TopEnd).size(CORNER))
-        ResizeStrip(ResizeEdge.BottomLeft, Cursor.SW_RESIZE_CURSOR, Modifier.align(Alignment.BottomStart).size(CORNER))
-        ResizeStrip(ResizeEdge.BottomRight, Cursor.SE_RESIZE_CURSOR, Modifier.align(Alignment.BottomEnd).size(CORNER))
+        ResizeStrip(ResizeEdge.TopLeft, Cursor.NW_RESIZE_CURSOR, minimum, Modifier.align(Alignment.TopStart).size(CORNER))
+        ResizeStrip(ResizeEdge.TopRight, Cursor.NE_RESIZE_CURSOR, minimum, Modifier.align(Alignment.TopEnd).size(CORNER))
+        ResizeStrip(ResizeEdge.BottomLeft, Cursor.SW_RESIZE_CURSOR, minimum, Modifier.align(Alignment.BottomStart).size(CORNER))
+        ResizeStrip(ResizeEdge.BottomRight, Cursor.SE_RESIZE_CURSOR, minimum, Modifier.align(Alignment.BottomEnd).size(CORNER))
     }
 }
 
 @Composable
-private fun WindowScope.ResizeStrip(edge: ResizeEdge, cursor: Int, modifier: Modifier) {
+private fun WindowScope.ResizeStrip(edge: ResizeEdge, cursor: Int, minimum: Dimension, modifier: Modifier) {
     Box(
         modifier
             .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(cursor)))
-            .pointerInput(edge) {
+            // Keyed on the floor too: a strip that kept the old one would compute the fixed side of
+            // a left/top drag from a width that AWT then clamps to the new floor, sliding that side.
+            .pointerInput(edge, minimum) {
                 awaitEachGesture {
                     awaitFirstDown().consume()
                     val startBounds = window.bounds
@@ -193,7 +210,7 @@ private fun WindowScope.ResizeStrip(edge: ResizeEdge, cursor: Int, modifier: Mod
                         window.bounds = resizedWindowBounds(
                             startBounds, edge,
                             mouse.x - startMouse.x, mouse.y - startMouse.y,
-                            MIN_WINDOW.width.value.toInt(), MIN_WINDOW.height.value.toInt(),
+                            minimum.width, minimum.height,
                         )
                     }
                 }
