@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,6 +31,9 @@ class WindowChrome(
     val dragArea: @Composable (content: @Composable () -> Unit) -> Unit,
 )
 
+/** Height of the window titlebar, shared by the main one and the drag strip over the gate screens. */
+val TITLEBAR_HEIGHT = 44.dp
+
 /** Minimize / maximize-restore / close buttons drawn in the app palette. */
 @Composable
 fun WindowButtons(chrome: WindowChrome, modifier: Modifier = Modifier) {
@@ -46,9 +51,11 @@ fun WindowButtons(chrome: WindowChrome, modifier: Modifier = Modifier) {
 
 /**
  * Window chrome for full-window screens outside the main titlebar (vault gate: create/unlock/
- * corrupted/reset/sync-onboarding): the whole screen becomes the drag area and the window buttons
- * float in the top-right corner — otherwise an undecorated window could be neither moved nor
- * closed while locked. With `chrome == null` (decorated window) it renders [content] as-is.
+ * corrupted/reset/sync-onboarding): a drag strip the height of the real titlebar sits over the top
+ * of the screen with the window buttons in it — otherwise an undecorated window could be neither
+ * moved nor closed while locked. The strip is only that tall on purpose: a full-screen drag area
+ * turns every double-click on the form into a maximize and lets any press anywhere move the window.
+ * With `chrome == null` (decorated window) it renders [content] as-is.
  */
 @Composable
 fun LockWindowChrome(chrome: WindowChrome?, content: @Composable () -> Unit) {
@@ -56,10 +63,12 @@ fun LockWindowChrome(chrome: WindowChrome?, content: @Composable () -> Unit) {
         content()
         return
     }
-    chrome.dragArea {
-        Box(Modifier.fillMaxSize()) {
-            content()
-            WindowButtons(chrome, Modifier.align(Alignment.TopEnd).padding(10.dp))
+    Box(Modifier.fillMaxSize()) {
+        content()
+        chrome.dragArea {
+            Box(Modifier.fillMaxWidth().height(TITLEBAR_HEIGHT)) {
+                WindowButtons(chrome, Modifier.align(Alignment.CenterEnd).padding(end = 10.dp))
+            }
         }
     }
 }

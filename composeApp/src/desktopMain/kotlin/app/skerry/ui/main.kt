@@ -541,8 +541,9 @@ fun main(args: Array<String>) {
         // the new palette. onThemeModeChange (from DesktopDesignState) updates this state and persists.
         val currentThemeMode = remember { mutableStateOf(prefs.id("app_theme", app.skerry.ui.theme.ThemeMode.DEFAULT, app.skerry.ui.theme.ThemeMode::fromId)) }
         val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+        val screenSize = DpSize(screen.width.dp, screen.height.dp)
         val windowState = rememberWindowState(
-            size = optimalWindowSize(DpSize(screen.width.dp, screen.height.dp)),
+            size = optimalWindowSize(screenSize),
             position = WindowPosition(Alignment.Center),
         )
         val appIcon = painterResource(Res.drawable.skerry_icon)
@@ -556,7 +557,8 @@ fun main(args: Array<String>) {
             undecorated = true,
         ) {
           val windowChrome = rememberSkerryWindowChrome(windowState, ::exitApplication)
-          SkerryWindowFrame(windowState) {
+          // The frame owns the whole resize contract of the undecorated window, the minimum size included.
+          SkerryWindowFrame(windowState, screenSize) {
             // Live vault + hosts + sessions + known-hosts are wired up: chrome is behind the master
             // password gate, clicking a host opens a live SSH terminal in a tab (transport+identities
             // from `deps`), and the known-hosts manager runs over its own stores (knownHosts from `deps`).

@@ -1,6 +1,17 @@
 package app.skerry.ui.desktop
 
+import androidx.compose.ui.unit.DpSize
+import java.awt.Dimension
 import java.awt.Rectangle
+
+/**
+ * [minimumWindowSize] in AWT units, for the window manager's size hint and for the resize strips
+ * that clamp against it. One conversion for both: a floor the WM enforces and a different floor in
+ * the drag math would slide the fixed side of a left/top drag by their difference.
+ */
+fun minimumWindowDimension(screen: DpSize): Dimension = minimumWindowSize(screen).let {
+    Dimension(it.width.value.toInt(), it.height.value.toInt())
+}
 
 /**
  * Which window border a resize drag grabs. [dx]/[dy] mark the moving side per axis:
