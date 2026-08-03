@@ -1,8 +1,40 @@
 package app.skerry.ui.desktop
 
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import java.awt.Dimension
 import java.awt.Rectangle
 import kotlin.test.Test
 import kotlin.test.assertEquals
+
+/**
+ * The AWT floor handed to the window manager and to the resize strips: [MIN_WINDOW] in AWT units,
+ * capped by the screen the app started on.
+ */
+class MinimumWindowDimensionTest {
+
+    @Test
+    fun large_screen_yields_the_layout_minimum() {
+        assertEquals(Dimension(1100, 720), minimumWindowDimension(DpSize(3840.dp, 2160.dp)))
+    }
+
+    @Test
+    fun small_screen_caps_the_floor_at_the_screen() {
+        assertEquals(Dimension(1024, 600), minimumWindowDimension(DpSize(1024.dp, 600.dp)))
+    }
+
+    @Test
+    fun a_drag_cannot_shrink_below_the_screen_capped_floor() {
+        // The floor the strips clamp at comes from this very function, so a netbook-sized screen
+        // resizes down to its own edge instead of the (larger) layout minimum.
+        val floor = minimumWindowDimension(DpSize(1024.dp, 600.dp))
+        val bounds = resizedWindowBounds(
+            Rectangle(0, 0, 1024, 600), ResizeEdge.BottomRight, -900, -900,
+            floor.width, floor.height,
+        )
+        assertEquals(Rectangle(0, 0, 1024, 600), bounds)
+    }
+}
 
 class WindowResizeTest {
 

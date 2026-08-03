@@ -29,6 +29,19 @@ class WindowDragGestureTest {
         assertEquals(Point(140, 215), gesture.drag(Point(570, 35), origin, floating = true))
     }
 
+    /**
+     * A drag handed over after a restore (WindowFrame.followPointer) starts with no dead zone: it was
+     * already crossed before the window was restored, so the very first event must arm the gesture.
+     */
+    @Test
+    fun zeroDeadZoneArmsOnTheFirstEvent() {
+        val gesture = WindowDragGesture(deadZone = 0).apply { press(Point(500, 20)) }
+        // Not even a pixel of movement: the first event still only captures the grab...
+        assertNull(gesture.drag(Point(500, 20), origin, floating = true))
+        // ...and every event after it moves the window.
+        assertEquals(Point(101, 200), gesture.drag(Point(501, 20), origin, floating = true))
+    }
+
     /** Issue #76: the double-click maximizes the window while the button is still down. */
     @Test
     fun windowMaximizedMidGestureIsNeverMoved() {

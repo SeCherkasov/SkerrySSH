@@ -46,6 +46,36 @@ class WindowSizingTest {
     }
 
     @Test
+    fun minimum_is_the_layout_minimum_on_a_large_screen() {
+        assertEquals(MIN_WINDOW, minimumWindowSize(DpSize(3840.dp, 2160.dp)))
+    }
+
+    @Test
+    fun minimum_never_exceeds_the_screen() {
+        val screen = DpSize(1024.dp, 600.dp)
+        val min = minimumWindowSize(screen)
+        // A floor larger than the screen would make the window unshrinkable past the display edge.
+        assertEquals(screen.width, min.width)
+        assertEquals(screen.height, min.height)
+    }
+
+    @Test
+    fun start_size_is_never_below_the_minimum() {
+        listOf(
+            DpSize(800.dp, 600.dp),
+            DpSize(1024.dp, 768.dp),
+            DpSize(1366.dp, 768.dp),
+            DpSize(1920.dp, 1080.dp),
+            DpSize(3840.dp, 2160.dp),
+        ).forEach { screen ->
+            val min = minimumWindowSize(screen)
+            val size = optimalWindowSize(screen)
+            assertTrue(size.width >= min.width, "start width below minimum for $screen")
+            assertTrue(size.height >= min.height, "start height below minimum for $screen")
+        }
+    }
+
+    @Test
     fun never_exceeds_screen_for_a_range_of_sizes() {
         listOf(
             DpSize(800.dp, 600.dp),
