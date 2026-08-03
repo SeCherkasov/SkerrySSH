@@ -38,19 +38,18 @@ object NativeWindowMove {
     private val session: X11Session? by lazy { initSession() }
 
     private fun initSession(): X11Session? {
-        val os = System.getProperty("os.name")?.lowercase().orEmpty()
-        if (!os.contains("linux")) return null
-        if (System.getenv("DISPLAY").isNullOrEmpty()) return null
+        // Our own connection to $DISPLAY. The XID from Native.getWindowID is server-wide, so a
+        // client message sent from this connection to the root window reaches the WM fine.
+        val connection = X11Connection.open() ?: return null
         return try {
-            val x11 = X11.INSTANCE
-            // Our own connection to $DISPLAY. The XID from Native.getWindowID is server-wide, so a
-            // client message sent from this connection to the root window reaches the WM fine.
-            val display = x11.XOpenDisplay(null) ?: return null
+            val x11 = connection.x11
+            val display = connection.display
             val root = x11.XDefaultRootWindow(display)
             val atom = x11.XInternAtom(display, "_NET_WM_MOVERESIZE", false)
             X11Session(x11, display, root, atom)
         } catch (_: Throwable) {
-            // UnsatisfiedLinkError (no libX11), NoClassDefFoundError, etc. — fall back to manual drag.
+            // The connection is live but unusable for this — release it and fall back to manual drag.
+            connection.close()
             null
         }
     }
