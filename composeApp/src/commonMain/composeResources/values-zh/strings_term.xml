@@ -115,6 +115,13 @@
     <string name="local_shell_name">本地 Shell</string>
     <string name="term_launch_local_shell">启动本地 Shell</string>
     <string name="term_open_path_in_files">在文件中打开</string>
-    <string name="term_pane_sync_badge">同步</string>
     <string name="term_auth_key_file">密钥文件</string>
+    <plurals name="term_wbar_panes">
+        <item quantity="other">%1$d 个面板</item>
+    </plurals>
+    <string name="term_wbar_sync">同步输入</string>
+    <string name="term_tip_sidebar">主机</string>
+    <string name="term_pane_menu">面板操作</string>
+    <string name="term_pane_change_host">更换主机</string>
+    <string name="term_pane_close">关闭面板</string>
 </resources>

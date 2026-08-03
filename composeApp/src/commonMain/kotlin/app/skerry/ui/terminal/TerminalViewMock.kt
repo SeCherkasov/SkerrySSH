@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -30,14 +32,44 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalFeatures
+import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.theme.Skerry
 
 // Mock preview of the terminal view (offscreen render/design preview without live sessions):
 // static demo terminal, mocked AI card, and static split pane.
+
+/** What the work bar says in the design preview, where there is no session manager to ask. */
+internal fun mockWorkBarLabel(split: Boolean): WorkBarLabel =
+    if (split) {
+        WorkBarLabel.Split(2, "root@prod-web-01, root@db-master", SessionStatus.Live, syncInput = false)
+    } else {
+        WorkBarLabel.Solo("root@prod-web-01", "192.168.1.45:22", SessionStatus.Live)
+    }
+
+/** Static pane header of the preview's split — the live one is `PaneHeader`. */
+@Composable
+internal fun MockPaneHeader(title: String, focused: Boolean) {
+    val mono = LocalFonts.current.mono
+    Row(
+        Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT).background(Skerry.colors.surface),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.width(2.dp).fillMaxHeight().background(if (focused) Skerry.colors.teal else Color.Transparent))
+        Row(
+            Modifier.padding(start = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Dot(Skerry.colors.moss)
+            Txt(title, color = if (focused) Skerry.colors.text else Skerry.colors.dim, size = 11.sp, font = mono)
+        }
+    }
+}
 
 /** Demo terminal (mock path without live sessions: offscreen render/preview). */
 @Composable
@@ -201,10 +233,6 @@ private fun AiSuggestionCard() {
 internal fun SplitPane(modifier: Modifier = Modifier) {
     val mono = LocalFonts.current.mono
     Column(modifier.fillMaxHeight().background(Skerry.colors.terminalBg)) {
-        Box(Modifier.fillMaxWidth().background(Skerry.colors.panel).padding(horizontal = 14.dp, vertical = 6.dp)) {
-            Txt("root@db-master · 192.168.1.50", color = Skerry.colors.dim, size = 11.sp, font = mono)
-        }
-        HLine()
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp, vertical = 14.dp)) {
             Row {
                 Txt("root@db-master", color = Skerry.colors.cyan, size = 13.sp, weight = FontWeight.SemiBold, font = mono)

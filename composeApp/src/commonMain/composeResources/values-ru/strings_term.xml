@@ -115,6 +115,16 @@
     <string name="local_shell_name">Локальная оболочка</string>
     <string name="term_launch_local_shell">Запустить локальную оболочку</string>
     <string name="term_open_path_in_files">Открыть в Файлах</string>
-    <string name="term_pane_sync_badge">СИНХР</string>
     <string name="term_auth_key_file">Файл ключа</string>
+    <plurals name="term_wbar_panes">
+        <item quantity="one">%1$d панель</item>
+        <item quantity="few">%1$d панели</item>
+        <item quantity="many">%1$d панелей</item>
+        <item quantity="other">%1$d панели</item>
+    </plurals>
+    <string name="term_wbar_sync">синхронный ввод</string>
+    <string name="term_tip_sidebar">Хосты</string>
+    <string name="term_pane_menu">Действия панели</string>
+    <string name="term_pane_change_host">Сменить хост</string>
+    <string name="term_pane_close">Закрыть панель</string>
 </resources>

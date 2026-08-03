@@ -71,7 +71,7 @@ import app.skerry.ui.generated.resources.assistant_policy_note
 import app.skerry.ui.generated.resources.assistant_thinking
 import app.skerry.ui.generated.resources.assistant_title
 import app.skerry.ui.generated.resources.term_ai_not_a_command
-import app.skerry.ui.terminal.PANE_HEADER_HEIGHT
+import app.skerry.ui.terminal.WORK_BAR_HEIGHT
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.terminal.lastCommandBlocks
 import app.skerry.ui.terminal.plainTextClipEntry
@@ -155,7 +155,7 @@ internal fun actionsFor(actions: AssistantCommandActions, streaming: Boolean): A
 private fun AssistantHeader(controller: SessionAssistantController, modelLabel: String) {
     val mono = LocalFonts.current.mono
     Row(
-        Modifier.fillMaxWidth().height(PANE_HEADER_HEIGHT).padding(start = 12.dp, end = 6.dp),
+        Modifier.fillMaxWidth().height(WORK_BAR_HEIGHT).padding(start = 12.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
