@@ -17,10 +17,8 @@ import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.initializeVaultCrypto
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
@@ -111,7 +109,7 @@ class SyncCoordinatorServerFailureTest {
         )
         try {
             sut.connect(serverUrl, account, password.toCharArray())
-            withTimeout(30_000) { sut.status.first { it is SyncStatus.Failed } as SyncStatus.Failed }
+            sut.status.awaitStatus("the status to come Failed") { it is SyncStatus.Failed } as SyncStatus.Failed
         } finally {
             sut.close()
         }
@@ -220,7 +218,7 @@ class SyncCoordinatorServerFailureTest {
             )
             try {
                 sut.connect(serverUrl, account, password.toCharArray())
-                withTimeout(30_000) { sut.status.first { it is SyncStatus.Online || it is SyncStatus.Failed } }
+                sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             } finally {
                 sut.close()
             }
