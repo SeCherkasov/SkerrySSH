@@ -60,8 +60,8 @@ data class SyncConfig(
      * Durable "this device must rebuild from the server before pushing" marker for the revoked→reactivated
      * flow. The server clears revocation on the SRP verify that reports `reactivated`, so it never reports
      * it again; persisting the intent here (set before the vault is cleared, cleared only after the first
-     * sync succeeds) means an interrupted reconcile is retried on the next connect/restore instead of
-     * silently resurrecting a purged record. Default `false`; older config files without the key load as `false`.
+     * sync succeeds) means an interrupted reconcile is retried on the next connect/restore — or on the
+     * unlock that lets a failed clear through — instead of silently resurrecting a purged record. Default `false`; older config files without the key load as `false`.
      */
     val pendingReconcile: Boolean = false,
 )
@@ -181,9 +181,9 @@ enum class SyncFailureReason {
     TooManyRequests,       // the server's rate limiter turned the request away — retrying later works
     ServerError,           // the server (or the proxy in front of it) is broken or restarting
     // This device still owes the reactivation rebuild ([SyncConfig.pendingReconcile]) and its vault was
-    // never cleared, so every sync cycle is refused rather than push records the account purged. Only a
-    // reconnect (or a keep-connected restore) redoes the reconcile — hence a named reason and not the
-    // silent Configured that reads as "vault locked".
+    // never cleared, so every sync cycle is refused rather than push records the account purged. Redoing
+    // the reconcile takes a reconnect, a keep-connected restore, or the unlock of a vault that was locked
+    // when the clear ran — hence a named reason and not the silent Configured that reads as "vault locked".
     ReconcileRequired,
 }
 
@@ -687,26 +687,11 @@ class SyncCoordinator(
             // A retry loop armed for the previous session must not carry its escalated backoff into
             // this one — the fresh session's first network failure re-arms from the minimum.
             retryJob?.cancel()
-            // Reactivation reconcile: drop the local records BEFORE resetting the cursor and running the
-            // first sync, so the following full re-pull rebuilds them from the server snapshot and the
-            // subsequent push can't resurrect a record the server purged while this device was revoked.
-            //
-            // The drop set is EVERY sync-capable type, NOT the currently-enabled ones: the push after the
-            // reconciling pull filters by the SERVER's "what syncs" settings (the pull applies them), which
-            // can differ from this device's stale local settings. If we gated the clear by the local
-            // settings, a type disabled locally but enabled on the server would keep its stale record
-            // through the clear and then be pushed once the pull flips the filter on — resurrecting the
-            // purged record. Clearing by the maximal (everything-on) filter covers any server settings;
-            // only never-synced, device-local types (terminal history) are kept.
+            // Uncaught on purpose: a clear that throws must abort the activation before it starts the
+            // subscriptions, both because a session that owes a reconcile has nothing to subscribe for and
+            // because [resumeAfterUnlock]'s redo stands down on a live `watchJob`.
             if (clearLocalRecords) {
-                // Persist the reconcile intent BEFORE mutating the vault: the server clears revocation on the
-                // verify that reported `reactivated` and never reports it again, so a crash between here and
-                // the first successful sync would otherwise lose the signal and let the stale records push.
-                configStore.save(config.copy(pendingReconcile = true))
-                val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
-                vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet())
-                syncState.setCursor(config.accountId, 0) // reactivation always full-pulls to rebuild from the server
-                reconcileArmed = true // only now — see [clearPendingReconcile]
+                reconcileLocked(config)
             } else {
                 if (resetCursor) syncState.setCursor(config.accountId, 0)
                 configStore.save(config)
@@ -736,6 +721,37 @@ class SyncCoordinator(
             stopSubscriptions()
             _status.value = SyncStatus.Configured(config.serverUrl, config.accountId)
         }
+    }
+
+    /**
+     * The reactivation reconcile itself: drop the local records BEFORE resetting the cursor and running the
+     * first sync, so the following full re-pull rebuilds them from the server snapshot and the subsequent
+     * push can't resurrect a record the server purged while this device was revoked.
+     *
+     * The drop set is EVERY sync-capable type, NOT the currently-enabled ones: the push after the
+     * reconciling pull filters by the SERVER's "what syncs" settings (the pull applies them), which can
+     * differ from this device's stale local settings. If we gated the clear by the local settings, a type
+     * disabled locally but enabled on the server would keep its stale record through the clear and then be
+     * pushed once the pull flips the filter on — resurrecting the purged record. Clearing by the maximal
+     * (everything-on) filter covers any server settings; only never-synced, device-local types (terminal
+     * history) are kept.
+     *
+     * Throws whatever the clear throws — a vault locked at this moment ([Vault.clearRecords] needs an
+     * unlocked one) leaves the marker up over an un-cleared vault, which is what [reconcileOwed] reads.
+     *
+     * Call with [syncMutex] held (kotlinx [Mutex] is not reentrant): both callers — [activateSession] and
+     * the redo in [resumeAfterUnlock] — take it themselves, and every [reconcileArmed]/cursor/config write
+     * in here shares that lock with the sync cycles.
+     */
+    private fun reconcileLocked(config: SyncConfig) {
+        // Persist the reconcile intent BEFORE mutating the vault: the server clears revocation on the
+        // verify that reported `reactivated` and never reports it again, so a crash between here and
+        // the first successful sync would otherwise lose the signal and let the stale records push.
+        configStore.save(config.copy(pendingReconcile = true))
+        val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
+        vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet())
+        syncState.setCursor(config.accountId, 0) // reactivation always full-pulls to rebuild from the server
+        reconcileArmed = true // only now — see [clearPendingReconcile]
     }
 
     /**
@@ -1178,8 +1194,8 @@ class SyncCoordinator(
         // This device owes a reconcile it never performed (see [reconcileOwed]): its vault still holds
         // the records the server purged while it was revoked, and pushing them is exactly the
         // resurrection the marker exists to prevent — silently, under an Online status. Refuse the cycle
-        // and name the reason: only a connect/restore redoes the reconcile, so the user has to act, and
-        // a bare Configured would render as "vault locked" over a vault that is open. The session stays
+        // and name the reason: nothing but a connect/restore/unlock redoes the reconcile, so the user has
+        // to act, and a bare Configured would render as "vault locked" over a vault that is open. The session stays
         // published (tearing it down needs [opMutex], which nests outside this lock) but is inert —
         // every cycle lands here until the reconcile actually runs.
         if (reconcileOwed(s.accountId)) {
@@ -1332,7 +1348,9 @@ class SyncCoordinator(
      * touches the vault (a crash in between must not lose the signal), so a clear that threw — an
      * auto-lock landing inside the connect — leaves it up over a vault nothing was dropped from, on a
      * session that is already published. Retiring it there would strand the pre-revocation records; that
-     * session's cycles are refused ([reconcileOwed]) and the next connect redoes the reconcile instead.
+     * session's cycles are refused ([reconcileOwed]) and the reconcile is redone instead — by the next
+     * connect/restore, or by the unlock that hands the clear the vault it needed
+     * ([redoOwedReconcileLocked]).
      *
      * Called before the status is published: [SyncStatus.Online] is what every observer reacts to, and
      * clearing the marker afterwards leaves a window in which Online is on screen while the saved config
@@ -1705,6 +1723,10 @@ class SyncCoordinator(
      * Bring sync back after the vault is unlocked. A session paused by [pauseForLock] is still in
      * memory — resubscribe and pull what was missed; otherwise (cold start) fall back to
      * [restoreSession]. Called from `onVaultUnlocked` on both platforms.
+     *
+     * An unlock is also the one event that can finish a reconcile this session still owes
+     * ([redoOwedReconcileLocked]): the clear that failed needed exactly the unlocked vault the user has
+     * just handed us.
      */
     fun resumeAfterUnlock() {
         lockPaused = false
@@ -1718,13 +1740,48 @@ class SyncCoordinator(
         scope.launch {
             opMutex.withLock {
                 // A disconnect or a fresh connect may have run while we waited for the mutex; a
-                // reconnect has already restarted the subscriptions itself.
+                // reconnect has already restarted the subscriptions itself — and it redid the reconcile
+                // on its way, which is why the redo below sits behind this guard and not in front of it.
                 if (lockPaused || session == null || watchJob != null) return@withLock
+                // Before the cycle, not after: a reconcile still owed would refuse every cycle below.
+                // Lock order holds — syncMutex nests inside the opMutex we're under.
+                syncMutex.withLock { redoOwedReconcileLocked() }
                 runSync()
                 startWatch()
                 startLocalPush()
             }
         }
+    }
+
+    /**
+     * Finish a reactivation reconcile this live session owes ([reconcileOwed]) now that the vault is
+     * unlocked. The situation is an auto-lock landing inside a reactivating connect or silent restore: the session was
+     * published, [Vault.clearRecords] threw, and the durable marker stayed up over an un-cleared vault, so
+     * every cycle is refused with [SyncFailureReason.ReconcileRequired]. Only a connect/restore used to
+     * redo the reconcile, which asked the user for the master password — for a rebuild that needs none
+     * (drop the records, reset the cursor, arm the flag). Issue #147.
+     *
+     * A reconcile that fails again — the vault re-locked between the unlock and here, or the marker write
+     * was refused — is not a new failure: it leaves the marker up and the session owing the same
+     * reconcile, and the cycle right after this call republishes [SyncFailureReason.ReconcileRequired] —
+     * the state the user already sees, with the same recovery. Any cause lands there; naming them apart
+     * would only rename a stop whose exit is the same.
+     *
+     * Call under [syncMutex] with [opMutex] held by the caller: it writes [reconcileArmed], the cursor and
+     * the config exactly like the activation path does.
+     */
+    private fun redoOwedReconcileLocked() {
+        val accountId = session?.accountId ?: return
+        // Matched on the account before anything is dropped: reconciling under a config saved for another
+        // account would clear this vault against a marker that says nothing about it. ([reconcileOwed]
+        // matches the same way on its own read — the two agree because nothing suspends in between.)
+        val cfg = configStore.load()?.takeIf { it.accountId == accountId } ?: return
+        if (!reconcileOwed(accountId)) return
+        // Not swallowed silently: the cycle the caller runs next reads the same marker this clear failed to
+        // retire and publishes the refusal, so the failure keeps its own status — see the KDoc above.
+        // runCatching is safe here: [reconcileLocked] has no suspension point, so there is no
+        // CancellationException for it to absorb.
+        runCatching { reconcileLocked(cfg) }
     }
 
     /**

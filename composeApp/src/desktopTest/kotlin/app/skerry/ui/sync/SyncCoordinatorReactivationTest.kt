@@ -1,6 +1,7 @@
 package app.skerry.ui.sync
 
 import app.skerry.shared.sync.DeviceInfo
+import app.skerry.shared.sync.InMemorySyncStateStore
 import app.skerry.shared.sync.PairingResult
 import app.skerry.shared.sync.PairingTicket
 import app.skerry.shared.sync.RecordPage
@@ -15,6 +16,7 @@ import app.skerry.shared.sync.SyncSignal
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.initializeVaultCrypto
 import kotlinx.coroutines.CompletableDeferred
@@ -64,6 +66,9 @@ class SyncCoordinatorReactivationTest {
         private val failFirstPull: Boolean = false,
     ) : SyncClient {
         val pushed = mutableListOf<RemoteRecord>()
+
+        /** What each pull asked for — `0` is the full re-pull a reconcile's cursor reset forces. */
+        val pulledSince = mutableListOf<Long>()
         private val pulls = AtomicInteger(0)
 
         override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession =
@@ -72,6 +77,7 @@ class SyncCoordinatorReactivationTest {
             SyncSession(accountId, accessToken = "access", refreshToken = "refresh", reactivated = reactivated)
         override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray = ownWrappedKey.copyOf()
         override suspend fun pull(session: SyncSession, since: Long): RecordPage {
+            pulledSince += since
             // Not a SyncException(NETWORK): that one arms the backoff retry loop, and the test wants the
             // next cycle to be the one it triggers itself.
             if (failFirstPull && pulls.getAndIncrement() == 0) error("pull unreachable")
@@ -102,10 +108,13 @@ class SyncCoordinatorReactivationTest {
      * the next connect and the reconcile finally runs.
      */
     private class ClearFailingVault(private val delegate: Vault, private val failures: Int = Int.MAX_VALUE) : Vault by delegate {
-        private var attempts = 0
+        private val attempts = AtomicInteger(0)
+
+        /** How many clears were tried — the observable "the reconcile ran again" for a retry that fails too. */
+        val clearAttempts: Int get() = attempts.get()
 
         override fun clearRecords(types: Set<RecordType>) {
-            if (attempts++ < failures) error("vault is locked")
+            if (attempts.getAndIncrement() < failures) error("vault is locked")
             delegate.clearRecords(types)
         }
     }
@@ -327,6 +336,136 @@ class SyncCoordinatorReactivationTest {
             assertFalse(vault.records().any { it.id == "r1" }, "the redone reconcile must drop the pre-revocation record")
             assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must never have been pushed")
             assertEquals(false, config.load()?.pendingReconcile, "the completed reconcile retires the marker")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The clear fails because the vault locked inside the connect, and what the user does next is unlock it
+     * — exactly the condition the reconcile was missing. The unlock must redo the reconcile on the session
+     * that is still live, not only re-run the cycle that keeps being refused: the rebuild needs no password,
+     * so sending the user back to Settings → Sync to retype the master password is a dead end (issue #147).
+     */
+    @Test
+    fun `an unlock finishes the reconcile the refused cycle was waiting for`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = InMemorySyncConfigStore()
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        // A cursor from before the revocation: the reconcile has to reset it, or the re-pull that rebuilds
+        // the vault would ask for changes since the tip and get nothing back.
+        val state = InMemorySyncStateStore().also { it.setCursor(account, 42) }
+        val sut = SyncCoordinator(
+            clientFactory = { client },
+            crypto = crypto,
+            vault = ClearFailingVault(vault, failures = 1),
+            configStore = config,
+            syncState = state,
+        )
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the clear") { it is SyncStatus.Failed }
+            sut.syncNow()
+            sut.status.awaitStatus("the cycle to be refused") {
+                (it as? SyncStatus.Failed)?.reason == SyncFailureReason.ReconcileRequired
+            }
+
+            // The whole lock cycle, not just the resume callback: this is the state the user is actually
+            // in — the vault that made the clear fail is locked, and they unlock it.
+            vault.lock()
+            sut.pauseForLock()
+            sut.status.awaitStatus("the lock to park the status") { it is SyncStatus.Configured }
+            assertTrue(vault.unlock(password.toCharArray()) is UnlockResult.Success)
+            sut.resumeAfterUnlock()
+            sut.status.awaitStatus("the unlock to finish the reconcile") { it is SyncStatus.Online }
+            assertFalse(vault.records().any { it.id == "r1" }, "the redone reconcile must drop the pre-revocation record")
+            assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must never have been pushed")
+            assertEquals(false, config.load()?.pendingReconcile, "the completed reconcile retires the marker")
+            // The cycle the connect would have run never happened (the clear threw first), so the first
+            // pull of the whole test is the one the redo armed.
+            assertEquals(0L, client.pulledSince.firstOrNull(), "the rebuild must be a full re-pull, not one from the stale cursor")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The redone reconcile can fail too — the vault re-locked between the unlock and the clear. That must
+     * stay the same stop as before (the marker up, the cycle refused), not turn the unlock into a new
+     * failure that hides the recovery the status names.
+     *
+     * The lock is real here (`pauseForLock` parks the status on Configured), so the refusal after the
+     * resume is a status the redo path has to publish rather than the one already on screen: a redo that
+     * lets the clear's exception escape kills the resume before its cycle runs, and the status stays
+     * Configured.
+     */
+    @Test
+    fun `an unlock whose reconcile fails again keeps the refusal, not a new failure`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = InMemorySyncConfigStore()
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val clearFailing = ClearFailingVault(vault)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = clearFailing, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the clear") { it is SyncStatus.Failed }
+            sut.syncNow()
+            sut.status.awaitStatus("the cycle to be refused") {
+                (it as? SyncStatus.Failed)?.reason == SyncFailureReason.ReconcileRequired
+            }
+
+            vault.lock()
+            sut.pauseForLock()
+            sut.status.awaitStatus("the lock to park the status") { it is SyncStatus.Configured }
+            assertTrue(vault.unlock(password.toCharArray()) is UnlockResult.Success)
+            sut.resumeAfterUnlock()
+
+            sut.status.awaitStatus("the refusal to be published again") {
+                (it as? SyncStatus.Failed)?.reason == SyncFailureReason.ReconcileRequired
+            }
+            assertEquals(2, clearFailing.clearAttempts, "the unlock must have retried the reconcile exactly once")
+            assertEquals(true, config.load()?.pendingReconcile, "a reconcile that failed again keeps the marker")
+            assertTrue(vault.records().any { it.id == "r1" }, "nothing was cleared — the record is still there")
+            assertFalse(client.pushed.any { it.id == "r1" }, "and it must not have been pushed")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The other branch of the same guard, and the one with teeth: an unlock on a session that owes nothing
+     * must not reconcile. Without the [SyncCoordinator] check, every ordinary unlock would raise a fresh
+     * marker and wipe every host and snippet in the vault — the mirror image of the bug this path fixes.
+     */
+    @Test
+    fun `an unlock with no reconcile owed leaves the vault alone`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = InMemorySyncConfigStore()
+        // Not a reactivation and no pending marker: an ordinary connected device.
+        val client = ReactivatingClient(ownWrap(vault), reactivated = false)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to come Online") { it is SyncStatus.Online }
+
+            vault.lock()
+            sut.pauseForLock()
+            sut.status.awaitStatus("the lock to park the status") { it is SyncStatus.Configured }
+            assertTrue(vault.unlock(password.toCharArray()) is UnlockResult.Success)
+            sut.resumeAfterUnlock()
+            sut.status.awaitStatus("the unlock to bring sync back") { it is SyncStatus.Online }
+
+            assertTrue(vault.records().any { it.id == "r1" }, "an unlock that owes no reconcile must not clear the vault")
+            assertEquals(false, config.load()?.pendingReconcile, "and must not raise a reconcile marker of its own")
         } finally {
             sut.close()
         }
