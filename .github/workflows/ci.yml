@@ -70,7 +70,7 @@ jobs:
       # Gradle prints only the assertion's file and line; the values it compared live in the report.
       - name: Upload test reports
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports
           path: |
