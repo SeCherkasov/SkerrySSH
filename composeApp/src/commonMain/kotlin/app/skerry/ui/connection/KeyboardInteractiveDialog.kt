@@ -117,7 +117,7 @@ fun KeyboardInteractiveDialog(
             )
             if (challenge.endpoint.isNotBlank()) {
                 Txt(
-                    sanitizeServerText(challenge.endpoint, MAX_TITLE_CHARS),
+                    sanitizeServerText(challenge.endpoint, MAX_TITLE_CHARS, allowNewlines = false),
                     color = Skerry.colors.dim,
                     size = 12.5.sp,
                     font = LocalFonts.current.mono,
@@ -133,8 +133,8 @@ fun KeyboardInteractiveDialog(
                 )
             }
 
-            val name = sanitizeServerText(challenge.name, MAX_TITLE_CHARS)
-            val instruction = sanitizeServerText(challenge.instruction, MAX_INSTRUCTION_CHARS)
+            val name = sanitizeServerText(challenge.name, MAX_TITLE_CHARS, allowNewlines = false)
+            val instruction = sanitizeServerText(challenge.instruction, MAX_INSTRUCTION_CHARS, allowNewlines = true)
             if (name.isNotBlank() || instruction.isNotBlank()) {
                 Txt(
                     stringResource(Res.string.shell_kbdint_asks),
@@ -166,7 +166,7 @@ fun KeyboardInteractiveDialog(
             }
 
             challenge.prompts.forEachIndexed { index, prompt ->
-                val label = sanitizeServerText(prompt.text, MAX_PROMPT_CHARS)
+                val label = sanitizeServerText(prompt.text, MAX_PROMPT_CHARS, allowNewlines = false)
                 Txt(
                     label,
                     color = Skerry.colors.faint,
@@ -267,21 +267,36 @@ private const val MAX_PROMPT_CHARS = 200
  * Truncation is silent rather than marked with an ellipsis — the cap is generous enough that only a
  * server trying to flood the dialog reaches it.
  */
-internal fun sanitizeServerText(text: String, maxChars: Int): String {
-    val allowNewlines = maxChars > MAX_PROMPT_CHARS
+internal fun sanitizeServerText(text: String, maxChars: Int, allowNewlines: Boolean): String {
     val cleaned = buildString(minOf(text.length, maxChars)) {
         for (ch in text) {
             if (length >= maxChars) break
-            when {
-                ch == '\n' && allowNewlines -> if (isNotEmpty() && last() != '\n') append(ch)
-                ch == '\t' -> if (isNotEmpty() && last() != ' ') append(' ')
-                ch.isISOControl() -> Unit
-                // Bidi overrides/isolates: they can visually reverse the text around them.
-                ch in '\u202A'..'\u202E' || ch in '\u2066'..'\u2069' -> Unit
-                ch == '\uFEFF' -> Unit
-                else -> append(ch)
+            when (classifyServerChar(ch, allowNewlines)) {
+                ServerChar.Keep -> append(ch)
+                // Runs collapse: a server padding with blank lines or tabs gets one separator.
+                ServerChar.Break -> if (isNotEmpty() && last() != '\n') append('\n')
+                ServerChar.Space -> if (isNotEmpty() && last() != ' ') append(' ')
+                ServerChar.Drop -> Unit
             }
         }
     }
     return cleaned.trim()
+}
+
+/** What [sanitizeServerText] does with one character of server text. */
+private enum class ServerChar { Keep, Break, Space, Drop }
+
+private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = when {
+    ch == '\n' && allowNewlines -> ServerChar.Break
+    // Where newlines survive, the carriage return of a CRLF must not become a space before every
+    // one of them; it carries nothing the newline does not already say.
+    ch == '\r' && allowNewlines -> ServerChar.Drop
+    // Single-line sink: fold rather than drop, or the words either side are glued together
+    // ("Accessdeniedby policy"), which reads worse than the wrapped original.
+    ch == '\n' || ch == '\r' || ch == '\t' -> ServerChar.Space
+    ch.isISOControl() -> ServerChar.Drop
+    // Bidi overrides/isolates: they can visually reverse the text around them.
+    ch in '\u202A'..'\u202E' || ch in '\u2066'..'\u2069' -> ServerChar.Drop
+    ch == '\uFEFF' -> ServerChar.Drop
+    else -> ServerChar.Keep
 }

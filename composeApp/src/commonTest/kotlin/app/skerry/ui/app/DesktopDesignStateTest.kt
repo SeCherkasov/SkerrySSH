@@ -24,18 +24,6 @@ import app.skerry.ui.theme.ThemeMode
 class DesktopDesignStateTest {
 
     @Test
-    fun toggleOpenFilePathsInSftp_flips_and_reports() {
-        val seen = mutableListOf<Boolean>()
-        val s = DesktopDesignState(onOpenFilePathsInSftpChange = { seen += it })
-        assertEquals(true, s.openFilePathsInSftp) // on by default
-        s.toggleOpenFilePathsInSftp()
-        assertEquals(false, s.openFilePathsInSftp)
-        s.toggleOpenFilePathsInSftp()
-        assertEquals(true, s.openFilePathsInSftp)
-        assertEquals(listOf(false, true), seen)
-    }
-
-    @Test
     fun defaults_match_reference() {
         val s = DesktopDesignState()
         assertEquals(DesktopView.Terminal, s.view)
@@ -46,23 +34,8 @@ class DesktopDesignStateTest {
         assertEquals("prod-web-01", s.selectedHost)
         assertEquals(0, s.activeTab)
         assertEquals(4, s.tabs.size)
-        assertTrue(s.infoPanel)
+        assertTrue(s.settings.infoPanel)
         assertTrue(s.sanitize && s.preview && s.confirm)
-    }
-
-    @Test
-    fun toggleConfirmProductionWarnings_flips_and_reports() {
-        val seen = mutableListOf<Boolean>()
-        val s = DesktopDesignState(onConfirmProductionWarningsChange = { seen += it })
-        // Off by default: sudo is a warning and half of what gets typed on a production box.
-        assertFalse(s.confirmProductionWarnings)
-        s.toggleConfirmProductionWarnings()
-        assertTrue(s.confirmProductionWarnings)
-        s.toggleConfirmProductionWarnings()
-        assertFalse(s.confirmProductionWarnings)
-        // Reported outward on every flip, or the setting would not survive a restart.
-        assertEquals(listOf(true, false), seen)
-        assertTrue(DesktopDesignState(initialConfirmProductionWarnings = true).confirmProductionWarnings)
     }
 
     @Test
@@ -211,7 +184,7 @@ class DesktopDesignStateTest {
         val s = DesktopDesignState()
         s.toggleSanitize(); assertFalse(s.sanitize)
         s.toggleSplit(); assertTrue(s.split)
-        s.toggleInfo(); assertFalse(s.infoPanel)
+        s.settings.toggleInfoPanel(); assertFalse(s.settings.infoPanel)
         s.lock(); assertTrue(s.locked)
         s.unlock(); assertFalse(s.locked)
     }
@@ -299,22 +272,6 @@ class DesktopDesignStateTest {
 
     // Persisting info-panel visibility
 
-    @Test
-    fun info_panel_honours_initial_value() {
-        assertFalse(DesktopDesignState(initialInfoPanel = false).infoPanel)
-        assertTrue(DesktopDesignState(initialInfoPanel = true).infoPanel)
-    }
-
-    @Test
-    fun toggleInfo_reports_new_value_to_callback() {
-        val seen = mutableListOf<Boolean>()
-        val s = DesktopDesignState(initialInfoPanel = true, onInfoPanelChange = { seen += it })
-        s.toggleInfo() // true → false
-        s.toggleInfo() // false → true
-        assertEquals(listOf(false, true), seen)
-        assertTrue(s.infoPanel)
-    }
-
     // Persisting collapsed host groups
 
     @Test
@@ -398,47 +355,6 @@ class DesktopDesignStateTest {
     }
 
     // RECENT section visibility and size (Settings → Appearance → Interface)
-
-    @Test
-    fun recent_visibility_defaults_shown_full_cap() {
-        val s = DesktopDesignState()
-        assertTrue(s.showRecent)
-        assertEquals(DesktopDesignState.MAX_RECENT_HOSTS, s.recentLimit)
-    }
-
-    @Test
-    fun setRecentVisible_updates_and_reports_once() {
-        val seen = mutableListOf<Boolean>()
-        val s = DesktopDesignState(onShowRecentChange = { seen += it })
-        s.setRecentVisible(false)
-        s.setRecentVisible(false) // repeat call — no mutation, no callback
-        assertFalse(s.showRecent)
-        assertEquals(listOf(false), seen)
-    }
-
-    @Test
-    fun chooseRecentLimit_coerces_into_range_and_reports() {
-        val seen = mutableListOf<Int>()
-        val s = DesktopDesignState(onRecentLimitChange = { seen += it })
-        s.chooseRecentLimit(3)
-        s.chooseRecentLimit(99) // above the cap → clamped
-        s.chooseRecentLimit(0)  // below 1 → 1
-        s.chooseRecentLimit(1)  // already 1 — no-op
-        assertEquals(1, s.recentLimit)
-        assertEquals(listOf(3, DesktopDesignState.MAX_RECENT_HOSTS, 1), seen)
-    }
-
-    @Test
-    fun recentLimit_honours_initial_value_coerced() {
-        assertEquals(2, DesktopDesignState(initialRecentLimit = 2).recentLimit)
-        assertEquals(DesktopDesignState.MAX_RECENT_HOSTS, DesktopDesignState(initialRecentLimit = 100).recentLimit)
-        assertEquals(1, DesktopDesignState(initialRecentLimit = 0).recentLimit)
-    }
-
-    @Test
-    fun showRecent_honours_initial_value() {
-        assertFalse(DesktopDesignState(initialShowRecent = false).showRecent)
-    }
 
     // Custom (empty) host groups
 
@@ -544,142 +460,6 @@ class DesktopDesignStateTest {
     }
 
     // Terminal font and size (Appearance → Font / Font size)
-
-    @Test
-    fun terminal_font_defaults_to_hack_13px() {
-        val s = DesktopDesignState()
-        assertEquals(TerminalFont.Hack, s.terminalFont)
-        assertEquals(DEFAULT_TERMINAL_FONT_SIZE, s.terminalFontSize)
-    }
-
-    @Test
-    fun terminal_font_honours_initial_values() {
-        val s = DesktopDesignState(initialTerminalFont = TerminalFont.JetBrainsMono, initialTerminalFontSize = 16)
-        assertEquals(TerminalFont.JetBrainsMono, s.terminalFont)
-        assertEquals(16, s.terminalFontSize)
-    }
-
-    @Test
-    fun setTerminalFont_updates_and_reports_once_skipping_repeat() {
-        val seen = mutableListOf<TerminalFont>()
-        val s = DesktopDesignState(onTerminalFontChange = { seen += it })
-        s.chooseTerminalFont(TerminalFont.JetBrainsMono)
-        s.chooseTerminalFont(TerminalFont.JetBrainsMono) // repeat of the same value — no-op
-        assertEquals(TerminalFont.JetBrainsMono, s.terminalFont)
-        assertEquals(listOf(TerminalFont.JetBrainsMono), seen)
-    }
-
-    @Test
-    fun setTerminalTheme_updates_and_reports_once_skipping_repeat() {
-        val seen = mutableListOf<TerminalTheme>()
-        val s = DesktopDesignState(onTerminalThemeChange = { seen += it })
-        assertEquals(TerminalThemes.DEFAULT, s.terminalTheme) // default is Night Sea
-        s.chooseTerminalTheme(TerminalThemes.GruvboxDark)
-        s.chooseTerminalTheme(TerminalThemes.GruvboxDark) // repeat of the same theme — no-op
-        assertEquals(TerminalThemes.GruvboxDark, s.terminalTheme)
-        assertEquals(listOf(TerminalThemes.GruvboxDark), seen)
-    }
-
-    @Test
-    fun setThemeMode_updates_and_reports_once_skipping_repeat() {
-        val seen = mutableListOf<ThemeMode>()
-        val s = DesktopDesignState(onThemeModeChange = { seen += it })
-        assertEquals(ThemeMode.DEFAULT, s.themeMode) // default is night-sea dark, preserving the prior look
-        s.chooseThemeMode(ThemeMode.LIGHT)
-        s.chooseThemeMode(ThemeMode.LIGHT) // repeat of the same mode — no-op
-        assertEquals(ThemeMode.LIGHT, s.themeMode)
-        assertEquals(listOf(ThemeMode.LIGHT), seen)
-    }
-
-    @Test
-    fun setTerminalFontSize_updates_and_reports_skipping_repeat_and_out_of_range() {
-        val seen = mutableListOf<Int>()
-        val s = DesktopDesignState(onTerminalFontSizeChange = { seen += it })
-        s.chooseTerminalFontSize(16)
-        s.chooseTerminalFontSize(16)   // repeat — no-op
-        s.chooseTerminalFontSize(99)   // outside TERMINAL_FONT_SIZE_RANGE — no-op
-        s.chooseTerminalFontSize(11)
-        assertEquals(11, s.terminalFontSize)
-        assertEquals(listOf(16, 11), seen)
-    }
-
-    @Test
-    fun terminalFontSize_accepts_wide_range() {
-        val s = DesktopDesignState()
-        s.chooseTerminalFontSize(TERMINAL_FONT_SIZE_MIN)
-        assertEquals(TERMINAL_FONT_SIZE_MIN, s.terminalFontSize)
-        s.chooseTerminalFontSize(TERMINAL_FONT_SIZE_MAX)
-        assertEquals(TERMINAL_FONT_SIZE_MAX, s.terminalFontSize)
-    }
-
-    @Test
-    fun setTerminalLineHeight_clamps_rounds_and_reports_skipping_repeat() {
-        val seen = mutableListOf<Float>()
-        val s = DesktopDesignState(onTerminalLineHeightChange = { seen += it })
-        assertEquals(DEFAULT_TERMINAL_LINE_HEIGHT, s.terminalLineHeight)
-        s.chooseTerminalLineHeight(1.5f)
-        s.chooseTerminalLineHeight(1.5f)   // repeat — no-op
-        s.chooseTerminalLineHeight(5f)     // out of range → clamp to MAX
-        assertEquals(TERMINAL_LINE_HEIGHT_MAX, s.terminalLineHeight)
-        assertEquals(listOf(1.5f, TERMINAL_LINE_HEIGHT_MAX), seen)
-    }
-
-    @Test
-    fun setTerminalLetterSpacing_clamps_rounds_and_reports_skipping_repeat() {
-        val seen = mutableListOf<Float>()
-        val s = DesktopDesignState(onTerminalLetterSpacingChange = { seen += it })
-        assertEquals(DEFAULT_TERMINAL_LETTER_SPACING, s.terminalLetterSpacing)
-        s.chooseTerminalLetterSpacing(1f)
-        s.chooseTerminalLetterSpacing(1f)  // repeat — no-op
-        s.chooseTerminalLetterSpacing(-9f) // out of range → clamp to MIN
-        assertEquals(TERMINAL_LETTER_SPACING_MIN, s.terminalLetterSpacing)
-        assertEquals(listOf(1f, TERMINAL_LETTER_SPACING_MIN), seen)
-    }
-
-    @Test
-    fun terminal_behaviour_honours_initial_values() {
-        val s = DesktopDesignState(
-            initialTerminalScrollback = 50_000,
-            initialTerminalCursorStyle = TerminalCursorStyle.BarSteady,
-            initialShowTerminalTitleOnTabs = true,
-        )
-        assertEquals(50_000, s.terminalScrollback)
-        assertEquals(TerminalCursorStyle.BarSteady, s.terminalCursorStyle)
-        assertEquals(true, s.showTerminalTitleOnTabs)
-    }
-
-    @Test
-    fun setTerminalScrollback_updates_and_reports_skipping_repeat_and_out_of_range() {
-        val seen = mutableListOf<Int>()
-        val s = DesktopDesignState(onTerminalScrollbackChange = { seen += it })
-        s.chooseTerminalScrollback(5_000)
-        s.chooseTerminalScrollback(5_000)   // repeat — no-op
-        s.chooseTerminalScrollback(1_234)   // outside TERMINAL_SCROLLBACK_OPTIONS — no-op
-        s.chooseTerminalScrollback(1_000)
-        assertEquals(1_000, s.terminalScrollback)
-        assertEquals(listOf(5_000, 1_000), seen)
-    }
-
-    @Test
-    fun setTerminalCursorStyle_updates_and_reports_once_skipping_repeat() {
-        val seen = mutableListOf<TerminalCursorStyle>()
-        val s = DesktopDesignState(onTerminalCursorStyleChange = { seen += it })
-        s.chooseTerminalCursorStyle(TerminalCursorStyle.UnderlineBlink)
-        s.chooseTerminalCursorStyle(TerminalCursorStyle.UnderlineBlink) // repeat — no-op
-        assertEquals(TerminalCursorStyle.UnderlineBlink, s.terminalCursorStyle)
-        assertEquals(listOf(TerminalCursorStyle.UnderlineBlink), seen)
-    }
-
-    @Test
-    fun toggleShowTerminalTitleOnTabs_flips_and_reports_each_change() {
-        val seen = mutableListOf<Boolean>()
-        val s = DesktopDesignState(onShowTerminalTitleOnTabsChange = { seen += it })
-        assertEquals(false, s.showTerminalTitleOnTabs)
-        s.toggleShowTerminalTitleOnTabs()
-        s.toggleShowTerminalTitleOnTabs()
-        assertEquals(false, s.showTerminalTitleOnTabs)
-        assertEquals(listOf(true, false), seen)
-    }
 
     @Test
     fun group_dialog_open_and_dismiss() {

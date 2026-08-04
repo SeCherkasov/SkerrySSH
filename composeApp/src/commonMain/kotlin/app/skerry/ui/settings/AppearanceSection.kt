@@ -1,5 +1,6 @@
 package app.skerry.ui.settings
 
+import app.skerry.ui.app.DesktopSettingsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -62,7 +63,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun AppearanceSection(state: DesktopDesignState) {
     SettingRow(label = stringResource(Res.string.appearance_language), modifier = Modifier) {
-        Box(Modifier.width(180.dp)) { LanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage) }
+        Box(Modifier.width(180.dp)) { LanguagePicker(state.settings.uiLanguage, onPick = state.settings::chooseUiLanguage) }
     }
     HLine(modifier = Modifier.padding(top = 12.dp))
     // RECENT section in the sidebar: whether to show it and how many hosts. The count is a
@@ -70,21 +71,21 @@ internal fun AppearanceSection(state: DesktopDesignState) {
     SettingToggleRow(
         stringResource(Res.string.appearance_recent_show),
         stringResource(Res.string.appearance_recent_show_desc),
-        state.showRecent,
-        { state.setRecentVisible(!state.showRecent) },
+        state.settings.showRecent,
+        { state.settings.setRecentVisible(!state.settings.showRecent) },
     )
-    if (state.showRecent) {
+    if (state.settings.showRecent) {
         SettingRow(
             label = stringResource(Res.string.appearance_recent_count),
             modifier = Modifier.padding(start = 14.dp),
             hasHint = true,
-            isDefault = state.recentLimit == DesktopDesignState.MAX_RECENT_HOSTS,
-            defaultText = DesktopDesignState.MAX_RECENT_HOSTS.toString(),
-            onReset = { state.chooseRecentLimit(DesktopDesignState.MAX_RECENT_HOSTS) },
+            isDefault = state.settings.recentLimit == DesktopSettingsState.MAX_RECENT_HOSTS,
+            defaultText = DesktopSettingsState.MAX_RECENT_HOSTS.toString(),
+            onReset = { state.settings.chooseRecentLimit(DesktopSettingsState.MAX_RECENT_HOSTS) },
         ) {
             NumberStepper(
-                value = state.recentLimit.toFloat(),
-                onValueChange = { state.chooseRecentLimit(it.roundToInt()) },
+                value = state.settings.recentLimit.toFloat(),
+                onValueChange = { state.settings.chooseRecentLimit(it.roundToInt()) },
                 step = 1f,
                 format = { it.roundToInt().toString() },
                 parse = { it.trim().toIntOrNull()?.toFloat() },
@@ -103,9 +104,9 @@ internal fun AppearanceSection(state: DesktopDesignState) {
             for (mode in rowModes) {
                 AppThemeCard(
                     mode = mode,
-                    active = mode == state.themeMode,
+                    active = mode == state.settings.themeMode,
                     systemDark = systemDark,
-                    onClick = { state.chooseThemeMode(mode) },
+                    onClick = { state.settings.chooseThemeMode(mode) },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -118,10 +119,10 @@ internal fun AppearanceSection(state: DesktopDesignState) {
     SettingToggleRow(
         stringResource(Res.string.appearance_custom_term_theme),
         stringResource(Res.string.appearance_custom_term_theme_desc),
-        state.customTerminalTheme,
-        { state.toggleCustomTerminalTheme() },
+        state.settings.customTerminalTheme,
+        { state.settings.toggleCustomTerminalTheme() },
     )
-    if (state.customTerminalTheme) {
+    if (state.settings.customTerminalTheme) {
         val mono = LocalFonts.current.mono
         TerminalThemes.all.chunked(2).forEachIndexed { rowIndex, rowThemes ->
             if (rowIndex > 0) Box(Modifier.height(10.dp))
@@ -129,9 +130,9 @@ internal fun AppearanceSection(state: DesktopDesignState) {
                 for (theme in rowThemes) {
                     ThemeCard(
                         theme = theme,
-                        active = theme.id == state.terminalTheme.id,
+                        active = theme.id == state.settings.terminalTheme.id,
                         mono = mono,
-                        onClick = { state.chooseTerminalTheme(theme) },
+                        onClick = { state.settings.chooseTerminalTheme(theme) },
                         modifier = Modifier.weight(1f),
                     )
                 }

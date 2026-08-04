@@ -26,6 +26,7 @@
     <string name="term_session_closed">会话已关闭</string>
     <string name="term_reconnecting">重新连接中… 第 %1$d 次</string>
     <string name="term_connection_lost">连接已断开</string>
+    <string name="term_connection_lost_detail">连接已断开：%1$s</string>
     <string name="term_select_host_placeholder">选择主机…</string>
     <string name="term_no_host_selected">未选择主机</string>
     <string name="term_notice_pick_side_by_side">选择主机以分屏打开。</string>

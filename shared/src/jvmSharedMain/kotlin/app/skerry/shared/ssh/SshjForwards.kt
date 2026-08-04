@@ -96,8 +96,21 @@ internal abstract class AcceptingForward(
     protected fun startAccepting() {
         acceptor = thread(isDaemon = true, name = "$threadName-$boundPort") {
             while (state.active.get() && !serverSocket.isClosed) {
-                // accept throws IOException on close() — normal loop termination.
-                val socket = try { serverSocket.accept() } catch (e: IOException) { break }
+                val socket = try {
+                    serverSocket.accept()
+                } catch (e: IOException) {
+                    // close() closes the listener to break this loop — that is the normal exit and
+                    // `active`/`isClosed` already say so. Anything else (fd exhaustion, the OS
+                    // dropping the listener) leaves both saying the forward is fine while nothing
+                    // is being accepted, so take it down explicitly and let isActive report it.
+                    // compareAndSet, not get-then-set: close() may be running concurrently, and
+                    // exactly one of the two owns the teardown.
+                    if (!serverSocket.isClosed && state.active.compareAndSet(true, false)) {
+                        runCatching { serverSocket.close() }
+                        state.closeAll()
+                    }
+                    break
+                }
                 // Paused: keep the port bound but drop the connection immediately, no tunnel raised.
                 if (state.paused.get()) { runCatching { socket.close() }; continue }
                 thread(isDaemon = true, name = "$threadName-conn-$boundPort") { handle(socket) }
@@ -112,9 +125,14 @@ internal abstract class AcceptingForward(
     final override suspend fun resume() = withContext(Dispatchers.IO) { state.paused.set(false) }
 
     final override suspend fun close() = withContext(Dispatchers.IO) {
-        if (!state.active.compareAndSet(true, false)) return@withContext
-        runCatching { serverSocket.close() } // breaks accept
-        state.closeAll() // tear down already-open tunnels
+        // The accept loop claims the teardown itself when accept() fails for real, so losing this
+        // race only means its work is already being done. The join still has to happen either way:
+        // close() returning is the caller's signal that the listener is down and every live tunnel
+        // is settled, and that guarantee must not hold only on the path where nothing went wrong.
+        if (state.active.compareAndSet(true, false)) {
+            runCatching { serverSocket.close() } // breaks accept
+            state.closeAll() // tear down already-open tunnels
+        }
         acceptor.join(CLOSE_JOIN_MILLIS)
         Unit
     }

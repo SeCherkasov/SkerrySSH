@@ -227,7 +227,7 @@ internal fun SecuritySection(
             Txt(stringResource(Res.string.settings_security_auto_lock), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
             Txt(stringResource(Res.string.settings_security_auto_lock_desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
-        Box(Modifier.width(170.dp)) { AutoLockPicker(state.autoLock, onPick = state::chooseAutoLock) }
+        Box(Modifier.width(170.dp)) { AutoLockPicker(state.settings.autoLock, onPick = state.settings::chooseAutoLock) }
     }
     HLine()
 
@@ -250,8 +250,8 @@ internal fun SecuritySection(
     SettingToggleRow(
         stringResource(Res.string.settings_security_report_team_sessions),
         stringResource(Res.string.settings_security_report_team_sessions_desc),
-        on = state.reportTeamSessions,
-        onToggle = state::toggleReportTeamSessions,
+        on = state.settings.reportTeamSessions,
+        onToggle = state.settings::toggleReportTeamSessions,
     )
     HLine()
 

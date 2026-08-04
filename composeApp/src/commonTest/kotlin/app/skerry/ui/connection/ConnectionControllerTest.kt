@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalCoroutinesApi::class)
+
 package app.skerry.ui.connection
 
 import app.skerry.shared.files.FileContentBrowser
@@ -20,17 +22,10 @@ import app.skerry.shared.ssh.SshAuthenticationException
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshHostKeyRejectedException
 import app.skerry.shared.ssh.SshTarget
-import app.skerry.shared.ssh.SshTransport
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -44,27 +39,23 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class ConnectionControllerTest {
 
-    private val target = SshTarget(host = "h", port = 22, username = "u")
-
-    private fun TestScope.controllerWith(
-        transport: SshTransport,
-        maxReconnectAttempts: Int = 0,
-        // No backoff by default (determinism). The reconnect-cancellation test sets a nonzero delay
-        // so the attempt actually "hangs" on delay and can be cancelled (delay(0) doesn't suspend).
-        reconnectDelayMillis: (Int) -> Long = { 0L },
-    ): Pair<ConnectionController, CoroutineScope> {
-        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val controller = ConnectionController(
-            transport = transport,
-            scope = scope,
-            newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
-            maxReconnectAttempts = maxReconnectAttempts,
-            reconnectDelayMillis = reconnectDelayMillis,
+    @Test
+    fun `a hostile connect failure reaches the form sanitised`() = runTest {
+        val transport = ScriptedTransport(
+            listOf(Result.failure(IllegalStateException("Access denied\u202E\nby policy"))),
         )
-        return controller to scope
+        val (controller, scope) = controllerWith(transport)
+        controller.connect(testTarget, SshAuth.Password("pw"))
+        advanceUntilIdle()
+
+        val st = controller.uiState
+        assertIs<ConnectionUiState.Error>(st)
+        // The first connect fails through the same transport call the reconnect loop uses, so the
+        // server's reason is just as untrusted here — bidi override dropped, newline folded.
+        assertEquals("Access denied by policy", st.message)
+        scope.cancel()
     }
 
     @Test
@@ -79,7 +70,7 @@ class ConnectionControllerTest {
         val channel = FakeShellChannel()
         val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(channel)))
 
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
 
         val state = controller.uiState
         assertIs<ConnectionUiState.Connected>(state)
@@ -94,7 +85,7 @@ class ConnectionControllerTest {
         var calls = 0
         var received: Any? = null
 
-        controller.connect(target, SshAuth.Password("pw")) { t -> calls++; received = t }
+        controller.connect(testTarget, SshAuth.Password("pw")) { t -> calls++; received = t }
 
         val state = controller.uiState
         assertIs<ConnectionUiState.Connected>(state)
@@ -104,33 +95,11 @@ class ConnectionControllerTest {
     }
 
     @Test
-    fun `auto-reconnect does not re-invoke onConnected`() = runTest {
-        val ch1 = FakeShellChannel()
-        val ch2 = FakeShellChannel()
-        val transport = ScriptedTransport(
-            listOf(Result.success(FakeSshConnection(ch1)), Result.success(FakeSshConnection(ch2))),
-        )
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
-        var calls = 0
-
-        controller.connect(target, SshAuth.Password("pw")) { calls++ }
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-        assertEquals(1, calls)
-
-        ch1.close() // drop → auto-reconnect restores the session
-        advanceUntilIdle()
-
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-        assertEquals(1, calls) // "Run on host" isn't repeated on reconnect
-        scope.cancel()
-    }
-
-    @Test
     fun `connect failure transitions to Error with message`() = runTest {
         val transport = FakeSshTransport(error = SshAuthenticationException("access denied"))
         val (controller, scope) = controllerWith(transport)
 
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
 
         val state = controller.uiState
         assertIs<ConnectionUiState.Error>(state)
@@ -149,7 +118,7 @@ class ConnectionControllerTest {
         )
         val (controller, scope) = controllerWith(transport)
 
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
 
         val state = controller.uiState
         assertIs<ConnectionUiState.Error>(state)
@@ -166,7 +135,7 @@ class ConnectionControllerTest {
         )
         val (controller, scope) = controllerWith(transport)
 
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
 
         val state = controller.uiState
         assertIs<ConnectionUiState.Error>(state)
@@ -179,7 +148,7 @@ class ConnectionControllerTest {
         val gate = CompletableDeferred<Unit>()
         val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel()), gate = gate))
 
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         assertEquals(ConnectionUiState.Connecting, controller.uiState)
 
         gate.complete(Unit)
@@ -191,7 +160,7 @@ class ConnectionControllerTest {
     fun `disconnect returns to Form and disconnects connection`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
         controller.disconnect()
@@ -205,7 +174,7 @@ class ConnectionControllerTest {
     fun `losing the shell transitions Connected to Disconnected keeping the frozen terminal`() = runTest {
         val channel = FakeShellChannel()
         val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(channel)))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         val connected = controller.uiState
         assertIs<ConnectionUiState.Connected>(connected)
 
@@ -220,33 +189,11 @@ class ConnectionControllerTest {
     }
 
     @Test
-    fun `clean shell exit closes the session without auto-reconnect`() = runTest {
-        val channel = FakeShellChannel()
-        val transport = ScriptedTransport(listOf(Result.success(FakeSshConnection(channel))))
-        // Even with reconnect allowed, a normal exit does not trigger it.
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
-        controller.connect(target, SshAuth.Password("pw"))
-        val connected = controller.uiState
-        assertIs<ConnectionUiState.Connected>(connected)
-
-        channel.exit() // user exited the shell themselves (`exit`): EOF, not a drop
-        advanceUntilIdle()
-
-        val st = controller.uiState
-        assertIs<ConnectionUiState.Disconnected>(st)
-        assertTrue(st.cleanExit)
-        assertFalse(st.reconnecting)
-        assertSame(connected.terminal, st.terminal) // screen froze on the final output (logout)
-        assertEquals(1, transport.connectCalls) // no reconnect attempts
-        scope.cancel()
-    }
-
-    @Test
     fun `our disconnect goes to Form and never flips to Disconnected on channel close`() = runTest {
         val channel = FakeShellChannel()
         val conn = FakeSshConnection(channel)
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
         controller.disconnect() // cancels session-scope before Closed would have been observed
@@ -257,108 +204,12 @@ class ConnectionControllerTest {
     }
 
     @Test
-    fun `auto-reconnect restores Connected after the shell drops, reusing target and auth`() = runTest {
-        val ch1 = FakeShellChannel()
-        val ch2 = FakeShellChannel()
-        val transport = ScriptedTransport(
-            listOf(Result.success(FakeSshConnection(ch1)), Result.success(FakeSshConnection(ch2))),
-        )
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
-        val auth = SshAuth.Password("pw")
-        controller.connect(target, auth)
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-
-        ch1.close() // server-side drop
-        advanceUntilIdle()
-
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-        assertEquals(2, transport.connectCalls) // initial + one successful reconnect
-        assertEquals(target, transport.targets[1]) // same host
-        assertEquals(auth, transport.auths[1]) // same credentials
-        scope.cancel()
-    }
-
-    @Test
-    fun `auto-reconnect gives up after the attempt limit and stays Disconnected`() = runTest {
-        val ch1 = FakeShellChannel()
-        val transport = ScriptedTransport(
-            listOf(
-                Result.success(FakeSshConnection(ch1)),
-                Result.failure(IllegalStateException("down")),
-                Result.failure(IllegalStateException("down")),
-            ),
-        )
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 2)
-        controller.connect(target, SshAuth.Password("pw"))
-        val connected = controller.uiState
-        assertIs<ConnectionUiState.Connected>(connected)
-
-        ch1.close()
-        advanceUntilIdle()
-
-        val st = controller.uiState
-        assertIs<ConnectionUiState.Disconnected>(st)
-        assertFalse(st.reconnecting) // attempts exhausted
-        assertSame(connected.terminal, st.terminal) // screen stayed frozen
-        assertEquals(3, transport.connectCalls) // 1 initial + 2 failed attempts
-        scope.cancel()
-    }
-
-    @Test
-    fun `non-SSH drop does not auto-reconnect`() = runTest {
-        val ch1 = FakeShellChannel()
-        val transport = ScriptedTransport(
-            // The second attempt must NOT happen — there's no reconnect for Telnet/Serial.
-            listOf(Result.success(FakeSshConnection(ch1)), Result.success(FakeSshConnection(FakeShellChannel()))),
-        )
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
-        val telnetTarget = SshTarget(host = "h", port = 23, username = "", connectionType = ConnectionType.TELNET)
-        controller.connect(telnetTarget, SshAuth.Password(""))
-        val connected = controller.uiState
-        assertIs<ConnectionUiState.Connected>(connected)
-
-        ch1.close() // server-side drop
-        advanceUntilIdle()
-
-        val st = controller.uiState
-        assertIs<ConnectionUiState.Disconnected>(st)
-        assertFalse(st.reconnecting) // no auto-reconnect for Telnet/Serial
-        assertSame(connected.terminal, st.terminal) // screen stayed frozen
-        assertEquals(1, transport.connectCalls) // only the initial connect, no reconnect attempts
-        scope.cancel()
-    }
-
-    @Test
-    fun `container drop auto-reconnects like ssh`() = runTest {
-        val ch1 = FakeShellChannel()
-        val transport = ScriptedTransport(
-            listOf(Result.success(FakeSshConnection(ch1)), Result.success(FakeSshConnection(FakeShellChannel()))),
-        )
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
-        // A container session is carried by SSH, so a transport drop is the same kind of event as
-        // on SSH: reconnecting re-execs into the container (a fresh shell, like a new SSH shell).
-        val containerTarget = SshTarget(
-            host = "h", port = 22, username = "ops", connectionType = ConnectionType.CONTAINER,
-            container = app.skerry.shared.container.ContainerSpec(target = "web"),
-        )
-        controller.connect(containerTarget, SshAuth.Password("pw"))
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-
-        ch1.close() // server-side drop
-        advanceUntilIdle()
-
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-        assertEquals(2, transport.connectCalls)
-        scope.cancel()
-    }
-
-    @Test
     fun `container session keeps the profile's keep-alive cadence`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
 
         controller.connect(
-            target.copy(
+            testTarget.copy(
                 connectionType = ConnectionType.CONTAINER,
                 container = app.skerry.shared.container.ContainerSpec(target = "web"),
                 keepAliveSeconds = 30,
@@ -374,60 +225,17 @@ class ConnectionControllerTest {
     }
 
     @Test
-    fun `disconnect during reconnect cancels further attempts and returns to Form`() = runTest {
-        val ch1 = FakeShellChannel()
-        val transport = ScriptedTransport(
-            listOf(Result.success(FakeSshConnection(ch1)), Result.success(FakeSshConnection(FakeShellChannel()))),
-        )
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 5, reconnectDelayMillis = { 1_000L })
-        controller.connect(target, SshAuth.Password("pw"))
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-
-        ch1.close() // triggers reconnect (hangs on the backoff delay until advance)
-        controller.disconnect() // cancel it before it reaches the second attempt
-        advanceUntilIdle()
-
-        assertEquals(ConnectionUiState.Form, controller.uiState)
-        assertEquals(1, transport.connectCalls) // second attempt never happened
-        scope.cancel()
-    }
-
-    @Test
-    fun `clearReconnectCredentials stops auto-reconnect after a drop without killing the live session`() = runTest {
-        val ch1 = FakeShellChannel()
-        val transport = ScriptedTransport(
-            listOf(Result.success(FakeSshConnection(ch1)), Result.success(FakeSshConnection(FakeShellChannel()))),
-        )
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 5)
-        controller.connect(target, SshAuth.Password("pw"))
-        val connected = controller.uiState
-        assertIs<ConnectionUiState.Connected>(connected)
-
-        controller.clearReconnectCredentials() // lock vault: reconnect disabled, session still alive
-        assertIs<ConnectionUiState.Connected>(controller.uiState) // socket untouched
-
-        ch1.close() // drop happens with the vault already locked
-        advanceUntilIdle()
-
-        val st = controller.uiState
-        assertIs<ConnectionUiState.Disconnected>(st)
-        assertFalse(st.reconnecting) // no stored credentials → no reconnect
-        assertEquals(1, transport.connectCalls) // no re-authentication happened
-        scope.cancel()
-    }
-
-    @Test
     fun `connect is a no-op while already connected`() = runTest {
         val firstChannel = FakeShellChannel()
         val conn = CountingSshConnection(firstChannel)
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
 
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         val connected = controller.uiState
         assertIs<ConnectionUiState.Connected>(connected)
 
         // A repeated connect from Connected must not open a second shell/session.
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
 
         assertEquals(connected, controller.uiState)
         assertEquals(1, conn.openShellCalls)
@@ -439,7 +247,7 @@ class ConnectionControllerTest {
         val sftp = RecordingSftpClient()
         val conn = FakeSshConnection(FakeShellChannel(), sftp = sftp)
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
         val opened = controller.openSftp()
@@ -462,7 +270,7 @@ class ConnectionControllerTest {
         val sftp = RecordingSftpClient()
         val conn = FakeSshConnection(FakeShellChannel(), sftp = sftp)
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
         // Cached per connection: the dual-pane SFTP survives view switches, so a repeated
@@ -489,7 +297,7 @@ class ConnectionControllerTest {
         val sftp = RecordingSftpClient()
         val conn = FakeSshConnection(FakeShellChannel(), sftp = sftp)
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         controller.openTransferCoordinator(FakeFileBrowser(), "host")
         assertTrue(!sftp.closed)
 
@@ -503,7 +311,7 @@ class ConnectionControllerTest {
     fun `openPortForwards returns the same controller for one session`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
         // Cached per connection: tunnels must survive UI tab switches, so every
@@ -528,7 +336,7 @@ class ConnectionControllerTest {
     fun `openMetrics caches one controller for one session`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
         // Cached per connection: the info panel survives tab switches, a repeated call returns
@@ -545,7 +353,7 @@ class ConnectionControllerTest {
     fun `disconnect stops the metrics poller`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         controller.openMetrics()
         testScheduler.advanceTimeBy(1)
         val pollsWhileConnected = conn.execCalls
@@ -578,7 +386,7 @@ class ConnectionControllerTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
 
-        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
+        controller.connect(testTarget.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
         assertEquals(1, conn.roundTrips) // first ping fires immediately on connect
@@ -592,7 +400,7 @@ class ConnectionControllerTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
 
-        controller.connect(target, SshAuth.Password("pw")) // default keepAliveSeconds = 0
+        controller.connect(testTarget, SshAuth.Password("pw")) // default keepAliveSeconds = 0
         assertIs<ConnectionUiState.Connected>(controller.uiState)
 
         advanceTimeBy(120_000)
@@ -606,7 +414,7 @@ class ConnectionControllerTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
 
-        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
+        controller.connect(testTarget.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
 
         val ping = controller.openPing()
         assertNotNull(ping)
@@ -619,7 +427,7 @@ class ConnectionControllerTest {
     fun `disconnect stops keep-alive pings`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
+        controller.connect(testTarget.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
         advanceTimeBy(35_000)
         assertEquals(2, conn.roundTrips)
 
@@ -634,7 +442,7 @@ class ConnectionControllerTest {
     fun `disconnect stops the port-forward telemetry poller`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
-        controller.connect(target, SshAuth.Password("pw"))
+        controller.connect(testTarget, SshAuth.Password("pw"))
         controller.openPortForwards()
 
         controller.disconnect()
@@ -649,33 +457,11 @@ class ConnectionControllerTest {
     }
 
     @Test
-    fun `unanswered keep-alives force the drop path and auto-reconnect`() = runTest {
-        val ch1 = FakeShellChannel()
-        val conn1 = FakeSshConnection(ch1).apply { roundTripResult = null } // dead link from the start
-        val conn2 = FakeSshConnection(FakeShellChannel())
-        val transport = ScriptedTransport(listOf(Result.success(conn1), Result.success(conn2)))
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
-
-        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-
-        // Failures at t=0/30/60s reach the death threshold: the channel is force-closed and the
-        // loss flows through the regular drop path into auto-reconnect — no waiting for a TCP
-        // timeout on a frozen terminal.
-        advanceTimeBy(65_000)
-
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-        assertEquals(2, transport.connectCalls) // reconnected to the healthy session
-        assertTrue(conn1.disconnected) // the dead connection was torn down
-        scope.cancel()
-    }
-
-    @Test
     fun `a throwing onConnected action stops the started keep-alive`() = runTest {
         val conn = FakeSshConnection(FakeShellChannel())
         val (controller, scope) = controllerWith(FakeSshTransport(conn))
 
-        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw")) { error("boom") }
+        controller.connect(testTarget.copy(keepAliveSeconds = 30), SshAuth.Password("pw")) { error("boom") }
 
         assertIs<ConnectionUiState.Error>(controller.uiState)
         assertTrue(conn.disconnected) // full session teardown, not just the ping loop
@@ -687,36 +473,16 @@ class ConnectionControllerTest {
     }
 
     @Test
-    fun `auto-reconnect resumes keep-alive on the new connection`() = runTest {
-        val ch1 = FakeShellChannel()
-        val conn1 = FakeSshConnection(ch1)
-        val conn2 = FakeSshConnection(FakeShellChannel())
-        val transport = ScriptedTransport(listOf(Result.success(conn1), Result.success(conn2)))
-        val (controller, scope) = controllerWith(transport, maxReconnectAttempts = 3)
-
-        controller.connect(target.copy(keepAliveSeconds = 30), SshAuth.Password("pw"))
-        assertEquals(1, conn1.roundTrips)
-
-        ch1.close() // drop -> zero-backoff reconnect (the interval rides in lastTarget)
-        advanceTimeBy(1_000)
-
-        assertIs<ConnectionUiState.Connected>(controller.uiState)
-        assertEquals(1, conn1.roundTrips) // old loop stopped with the old session
-        assertEquals(1, conn2.roundTrips) // new session pings immediately again
-        scope.cancel()
-    }
-
-    @Test
     fun `only an ssh session reports sftp support`() = runTest {
         val (ssh, sshScope) = controllerWith(ScriptedTransport(listOf(Result.success(FakeSshConnection(FakeShellChannel())))))
         assertFalse(ssh.supportsSftp) // nothing connected yet
-        ssh.connect(target, SshAuth.Password("pw"))
+        ssh.connect(testTarget, SshAuth.Password("pw"))
         assertTrue(ssh.supportsSftp)
         sshScope.cancel()
 
         val (local, localScope) = controllerWith(ScriptedTransport(listOf(Result.success(FakeSshConnection(FakeShellChannel())))))
         // Local shell / Mosh / Telnet / serial / container are stream-only: openSftp would throw.
-        local.connect(target.copy(connectionType = ConnectionType.LOCAL), SshAuth.Password(""))
+        local.connect(testTarget.copy(connectionType = ConnectionType.LOCAL), SshAuth.Password(""))
         assertFalse(local.supportsSftp)
         localScope.cancel()
     }
@@ -745,75 +511,6 @@ class ConnectionControllerTest {
         scope.cancel()
     }
 
-}
-
-/**
- * Transport that returns a predefined sequence of outcomes (success/failure) — one per
- * [connect] call. Counts calls and records targets/credentials for reconnect verification.
- */
-private class ScriptedTransport(private val outcomes: List<Result<SshConnection>>) : SshTransport {
-    var connectCalls = 0
-        private set
-    val targets = mutableListOf<SshTarget>()
-    val auths = mutableListOf<SshAuth>()
-
-    override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection {
-        val index = connectCalls++
-        targets += target
-        auths += auth
-        return outcomes[index].getOrThrow()
-    }
-}
-
-/** Fake transport: optional delay via a gate, otherwise success or failure. */
-private class FakeSshTransport(
-    private val connection: SshConnection? = null,
-    private val error: Throwable? = null,
-    private val gate: CompletableDeferred<Unit>? = null,
-) : SshTransport {
-    override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection {
-        gate?.await()
-        error?.let { throw it }
-        return connection!!
-    }
-}
-
-private class FakeSshConnection(
-    private val channel: ShellChannel,
-    private val sftp: SftpClient? = null,
-) : SshConnection {
-    var disconnected = false
-        private set
-    var openSftpCalls = 0
-        private set
-    var roundTrips = 0
-        private set
-
-    /** Scripted ping outcome: `null` models a dead link (keepalives unanswered). */
-    var roundTripResult: Long? = 7L
-
-    override val isConnected: Boolean get() = !disconnected
-    override suspend fun measureRoundTrip(): Long? {
-        roundTrips++
-        return roundTripResult
-    }
-    /** Metrics polling round-trips: parsable output, so the poller keeps running while connected. */
-    var execCalls = 0
-    override suspend fun exec(command: String): ExecResult {
-        execCalls++
-        return ExecResult(0, "cpu  1 0 1 8 0 0 0 0\n@MEM\nMem: 400 200 200\n@DISK\n/dev/sda1 100 87 13 87% /", "")
-    }
-    override suspend fun openShell(size: PtySize, term: String): ShellChannel = channel
-    override suspend fun openSftp(): SftpClient {
-        openSftpCalls++
-        return sftp ?: throw UnsupportedOperationException()
-    }
-    override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = throw UnsupportedOperationException()
-    override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = throw UnsupportedOperationException()
-    override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = throw UnsupportedOperationException()
-    override suspend fun disconnect() {
-        disconnected = true
-    }
 }
 
 /** SFTP client stub: only object identity and the closed flag matter. */
@@ -868,29 +565,4 @@ private class CountingSshConnection(private val channel: ShellChannel) : SshConn
     override suspend fun forwardDynamic(spec: DynamicForwardSpec): PortForward = throw UnsupportedOperationException()
 
     override suspend fun disconnect() {}
-}
-
-private class FakeShellChannel : ShellChannel {
-    private val emissions = Channel<ByteArray>(Channel.UNLIMITED)
-    private var eof = false
-    override val isOpen: Boolean = true
-    override val endedWithEof: Boolean get() = eof
-    override val output: Flow<ByteArray> = flow { for (chunk in emissions) emit(chunk) }
-
-    suspend fun emit(chunk: ByteArray) {
-        emissions.send(chunk)
-    }
-
-    /** Normal shell exit (`exit`): channel EOF — endedWithEof=true. */
-    fun exit() {
-        eof = true
-        emissions.close()
-    }
-
-    override suspend fun write(data: ByteArray) {}
-    override suspend fun resize(size: PtySize) {}
-    /** Server/transport-side drop: the channel ends WITHOUT EOF (reconnect candidate). */
-    override suspend fun close() {
-        emissions.close()
-    }
 }

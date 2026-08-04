@@ -147,11 +147,12 @@ data class TermLine(val text: String, val isCmd: Boolean, val error: Boolean = f
  */
 @Stable
 class DesktopDesignState(
-    // Initial info-panel visibility (read from persistence at desktop startup) plus a callback for
-    // changes (written back there too), so the user's choice survives a restart. Defaults preserve
-    // prior behavior for mock/preview/tests.
-    initialInfoPanel: Boolean = true,
-    private val onInfoPanelChange: (Boolean) -> Unit = {},
+    /**
+     * Persisted user preferences (everything Settings edits). Held rather than inlined: they are
+     * their own concern with their own persistence callbacks, and the UI reaches them as
+     * `state.settings.x`.
+     */
+    val settings: DesktopSettingsState = DesktopSettingsState(),
     // Collapsed host folders in the sidebar (group names). Read from persistence at startup, written
     // back via the callback, so folder state survives a restart. Defaults (all expanded, no-op)
     // preserve prior behavior for mock/preview/tests.
@@ -167,82 +168,6 @@ class DesktopDesignState(
     // they're kept by name here and persisted. Defaults (empty, no-op) are for mock/preview/tests.
     initialCustomGroups: List<CustomGroup> = emptyList(),
     private val onCustomGroupsChange: (List<CustomGroup>) -> Unit = {},
-    // Terminal font (Appearance → Font) and its size. Read from persistence at startup, written back
-    // via the callbacks. Defaults (Hack 13px, no-op) are for mock/preview/tests.
-    initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
-    private val onTerminalFontChange: (TerminalFont) -> Unit = {},
-    initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
-    private val onTerminalFontSizeChange: (Int) -> Unit = {},
-    // Terminal line height (multiplier) and letter spacing (Appearance → Line height / Letter
-    // spacing). Also persisted externally (desktop main). Defaults (18/13, 0, no-op) are for
-    // mock/preview/tests.
-    initialTerminalLineHeight: Float = DEFAULT_TERMINAL_LINE_HEIGHT,
-    private val onTerminalLineHeightChange: (Float) -> Unit = {},
-    initialTerminalLetterSpacing: Float = DEFAULT_TERMINAL_LETTER_SPACING,
-    private val onTerminalLetterSpacingChange: (Float) -> Unit = {},
-    // UI language (Appearance → Language). Read from persistence at startup, written back via the
-    // callback. Defaults (System, no-op) preserve OS-locale auto-detection for mock/preview/tests.
-    initialUiLanguage: UiLanguage = UiLanguage.DEFAULT,
-    private val onUiLanguageChange: (UiLanguage) -> Unit = {},
-    // Terminal settings (Settings → Terminal): scrollback depth, cursor style, and showing the live
-    // OSC title on tabs. Read from persistence at startup, written back via the callbacks. Defaults
-    // (10,000 lines, blinking block, title off, no-op) are for mock/preview/tests. The first two apply
-    // to NEW sessions on connect (see [app.skerry.ui.terminal.TerminalSessionPrefs]) and are also
-    // pushed live into already-open sessions.
-    initialTerminalScrollback: Int = DEFAULT_TERMINAL_SCROLLBACK,
-    private val onTerminalScrollbackChange: (Int) -> Unit = {},
-    initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
-    private val onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
-    initialShowTerminalTitleOnTabs: Boolean = false,
-    private val onShowTerminalTitleOnTabsChange: (Boolean) -> Unit = {},
-    // Host-row click behavior (Settings → Terminal → Behavior): single click connects directly,
-    // double click requires a second click (protects against accidental connects). Desktop-only.
-    initialHostClickConnectMode: HostClickConnectMode = HostClickConnectMode.DEFAULT,
-    private val onHostClickConnectModeChange: (HostClickConnectMode) -> Unit = {},
-    // Whether the server may write the system clipboard via OSC 52 (Terminal → "Allow server
-    // clipboard write"). Off by default (like xterm/kitty). Snapshotted into new sessions via
-    // [app.skerry.ui.terminal.TerminalSessionPrefs] and pushed live into open ones.
-    initialAllowServerClipboardWrite: Boolean = false,
-    private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
-    initialReportTeamSessions: Boolean = true,
-    private val onReportTeamSessionsChange: (Boolean) -> Unit = {},
-    // Whether a file path in terminal output is clickable (Ctrl+click) and opens in the SFTP panel
-    // (Settings → Terminal). On by default; off also removes the hover highlight.
-    initialOpenFilePathsInSftp: Boolean = true,
-    private val onOpenFilePathsInSftpChange: (Boolean) -> Unit = {},
-    // Production guard: also confirm Warn-level commands (Settings → Terminal). Off by default.
-    initialConfirmProductionWarnings: Boolean = false,
-    private val onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
-    // Terminal color theme (Appearance → theme cards). Read from persistence at startup, written back
-    // via the callback. Threaded into the terminal via [app.skerry.ui.terminal.LocalTerminalTheme] and
-    // applied to open sessions live. Default (Night Sea, no-op) preserves the prior look for
-    // mock/preview/tests.
-    initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
-    private val onTerminalThemeChange: (TerminalTheme) -> Unit = {},
-    // Unified theming: by default the terminal follows the app theme's twin; this flag opts into
-    // a separately-picked terminal theme ([terminalTheme]). Persisted like the other appearance bits.
-    initialCustomTerminalTheme: Boolean = false,
-    private val onCustomTerminalThemeChange: (Boolean) -> Unit = {},
-    // App theme (Settings → Appearance). Default (night-sea dark, no-op) preserves the prior look.
-    initialThemeMode: ThemeMode = ThemeMode.DEFAULT,
-    private val onThemeModeChange: (ThemeMode) -> Unit = {},
-    // Shell binary for the pinned local terminal (blank = the system default shell). Device-local
-    // (a local shell is machine-specific, not synced); read from persistence, written back via the
-    // callback. Default (blank) is correct for mock/preview/tests.
-    initialLocalShellPath: String = "",
-    private val onLocalShellPathChange: (String) -> Unit = {},
-    // Idle auto-lock threshold (Settings → Security). Read from persistence, written back via the
-    // callback; threaded into [app.skerry.ui.vault.VaultGate] as the timer's idleMs.
-    initialAutoLock: AutoLockDuration = AutoLockDuration.DEFAULT,
-    private val onAutoLockChange: (AutoLockDuration) -> Unit = {},
-    // Visibility and size of the RECENT sidebar section (Settings → Appearance → Interface). Read
-    // from persistence, written back via the callbacks. Defaults (shown, full cap) preserve prior
-    // behavior for mock/preview/tests. [recentLimit] only trims the display: the recent-hosts store
-    // still accumulates up to [MAX_RECENT_HOSTS], the limit applies at render time.
-    initialShowRecent: Boolean = true,
-    private val onShowRecentChange: (Boolean) -> Unit = {},
-    initialRecentLimit: Int = MAX_RECENT_HOSTS,
-    private val onRecentLimitChange: (Int) -> Unit = {},
 ) {
     // Session-level view (Terminal/SFTP/Ports): mock/preview fallback when there are no live
     // sessions; in live mode each tab holds its own sub-view ([app.skerry.ui.session.Session.view]).
@@ -302,7 +227,6 @@ class DesktopDesignState(
      * connection" form and its own session tabs; [appOverlay] renders over whichever is selected.
      */
     var section: HostSection by mutableStateOf(HostSection.Terminal); private set
-    var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
 
     /**
      * Whether the assistant panel is open beside the terminal. Session-scoped like the info panel,
@@ -323,12 +247,6 @@ class DesktopDesignState(
     /** Ids of recently connected hosts, newest first (RECENT section in the sidebar). */
     var recentHostIds: List<String> by mutableStateOf(initialRecentHostIds); private set
 
-    /** Whether to show the RECENT section in the sidebar (Settings → Appearance → Interface). */
-    var showRecent: Boolean by mutableStateOf(initialShowRecent); private set
-
-    /** How many recent hosts to display (1..[MAX_RECENT_HOSTS]); trims display only, not storage. */
-    var recentLimit: Int by mutableStateOf(initialRecentLimit.coerceIn(1, MAX_RECENT_HOSTS)); private set
-
     /** Custom (still empty) host groups, shown as folders alongside host-derived ones. */
     var customGroups: List<CustomGroup> by mutableStateOf(initialCustomGroups); private set
 
@@ -346,85 +264,9 @@ class DesktopDesignState(
         customGroups = groups
     }
 
-    /** Selected terminal font (Appearance → Font). Threaded via [app.skerry.ui.terminal.LocalTerminalAppearance]. */
-    var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set
-
-    /** Terminal font size, px (Appearance → Font size). */
-    var terminalFontSize: Int by mutableStateOf(initialTerminalFontSize); private set
-
-    /** Terminal line height multiplier (Appearance → Line height). */
-    var terminalLineHeight: Float by mutableStateOf(initialTerminalLineHeight); private set
-
-    /** Terminal letter spacing, sp (Appearance → Letter spacing). */
-    var terminalLetterSpacing: Float by mutableStateOf(initialTerminalLetterSpacing); private set
-
-    /** Terminal theme (Appearance → cards). Threaded via [app.skerry.ui.terminal.LocalTerminalTheme]. */
-    var terminalTheme: TerminalTheme by mutableStateOf(initialTerminalTheme); private set
-
-    /** Whether the terminal theme is picked separately instead of following the app theme. */
-    var customTerminalTheme: Boolean by mutableStateOf(initialCustomTerminalTheme); private set
-
-    /** App theme (Settings → Appearance). Threaded into [app.skerry.ui.theme.SkerryTheme] at the root. */
-    var themeMode: ThemeMode by mutableStateOf(initialThemeMode); private set
-
-    /** Idle auto-lock threshold (Settings → Security). Threaded into [app.skerry.ui.vault.VaultGate]. */
-    var autoLock: AutoLockDuration by mutableStateOf(initialAutoLock); private set
-
-    /** UI language (Appearance → Language). Threaded to the root via [app.skerry.ui.i18n.AppLocaleProvider]. */
-    var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
-
-    /** Scrollback depth for new sessions, lines (Terminal → Scrollback buffer). Applies to new sessions. */
-    var terminalScrollback: Int by mutableStateOf(initialTerminalScrollback); private set
-
-    /** Default cursor style (Terminal → Cursor style). Applies to new sessions. */
-    var terminalCursorStyle: TerminalCursorStyle by mutableStateOf(initialTerminalCursorStyle); private set
-
-    /** Whether to show the live OSC title on terminal tabs (Terminal → Show title on tabs). */
-    var showTerminalTitleOnTabs: Boolean by mutableStateOf(initialShowTerminalTitleOnTabs); private set
-    var hostClickConnectMode: HostClickConnectMode by mutableStateOf(initialHostClickConnectMode); private set
-
-    /**
-     * Whether a server may write the system clipboard via OSC 52 (Terminal → Allow server clipboard
-     * write). Off by default; snapshotted into new sessions and pushed live into open ones.
-     */
-    var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
-
-    /**
-     * Whether opening a session on a host **shared with a team** is reported to that team's activity
-     * feed (Security → Report sessions on shared hosts). On by default: a host somebody shared into a
-     * team is shared infrastructure, and the feed is only useful if it is not full of holes. Never
-     * covers hosts of one's own — those are reported nowhere regardless of this setting.
-     */
-    var reportTeamSessions: Boolean by mutableStateOf(initialReportTeamSessions); private set
-
-    /**
-     * Whether file paths printed in terminal output are clickable and open in the SFTP panel
-     * (Terminal → Open file paths in SFTP). On by default; off is the way out for anyone whose
-     * output makes the Ctrl+hover highlight a distraction.
-     */
-    var openFilePathsInSftp: Boolean by mutableStateOf(initialOpenFilePathsInSftp); private set
-
-    /**
-     * Whether the production guard also confirms [app.skerry.shared.ai.CommandRisk.Warn] commands
-     * (Terminal → Confirm warnings on production). Off by default: `sudo` is a warning and makes up
-     * half of what is typed on a production box, so asking every time turns the dialog into a
-     * reflex. Dangerous commands are confirmed regardless.
-     */
-    var confirmProductionWarnings: Boolean by mutableStateOf(initialConfirmProductionWarnings); private set
-
     /** Open group management dialog (create/edit), or `null`. */
     var groupDialog: GroupDialog? by mutableStateOf(null); private set
     var selectedHost: String by mutableStateOf("prod-web-01"); private set
-
-    /** Shell binary for the local shell (blank = system default). Edited in Settings → Terminal → Local shell. */
-    var localShellPath: String by mutableStateOf(initialLocalShellPath); private set
-
-    fun chooseLocalShellPath(path: String) {
-        val normalized = path.trim()
-        if (normalized == localShellPath) return
-        localShellPath = normalized
-        onLocalShellPathChange(normalized)
-    }
 
     /** Host sidebar search text (by name/address/user/group/tags). Empty means no filter. */
     var hostSearchQuery: String by mutableStateOf(""); private set
@@ -588,7 +430,6 @@ class DesktopDesignState(
     fun toggleSidebar() { sidebarHidden = !sidebarHidden }
 
     fun toggleRemotePanel() { remotePanelHidden = !remotePanelHidden }
-    fun toggleInfo() { infoPanel = !infoPanel; onInfoPanelChange(infoPanel) }
 
     fun toggleAssistant() { assistantPanel = !assistantPanel }
 
@@ -647,33 +488,16 @@ class DesktopDesignState(
     }
     /**
      * Mark host [id] as recently connected: move it to the front of the list (no duplicate), trim to
-     * [MAX_RECENT_HOSTS], and report outward (for persistence). Reconnecting to the already-first host
+     * [DesktopSettingsState.MAX_RECENT_HOSTS], and report outward (for persistence). Reconnecting to
      * is a no-op (no mutation, no write). Blank id is ignored.
      */
     fun recordRecentHost(id: String) {
         if (id.isBlank()) return
-        val next = (listOf(id) + recentHostIds.filterNot { it == id }).take(MAX_RECENT_HOSTS)
+        val next = (listOf(id) + recentHostIds.filterNot { it == id })
+            .take(DesktopSettingsState.MAX_RECENT_HOSTS)
         if (next == recentHostIds) return
         recentHostIds = next
         onRecentHostIdsChange(recentHostIds)
-    }
-
-    /** Show/hide the RECENT section and report outward (for persistence). Repeating the same value is a no-op. */
-    fun setRecentVisible(on: Boolean) {
-        if (on == showRecent) return
-        showRecent = on
-        onShowRecentChange(on)
-    }
-
-    /**
-     * Change the number of recent hosts shown (clamped to 1..[MAX_RECENT_HOSTS]) and report outward.
-     * The same (already-clamped) value is a no-op: no mutation, no write.
-     */
-    fun chooseRecentLimit(n: Int) {
-        val next = n.coerceIn(1, MAX_RECENT_HOSTS)
-        if (next == recentLimit) return
-        recentLimit = next
-        onRecentLimitChange(next)
     }
 
     fun openCreateGroup(section: HostSection) { groupDialog = GroupDialog.Create(section) }
@@ -730,134 +554,6 @@ class DesktopDesignState(
         }
     }
 
-    /** Choose the terminal font and report outward (for persistence). Repeating the same value is a no-op. */
-    fun chooseTerminalFont(font: TerminalFont) {
-        if (font == terminalFont) return
-        terminalFont = font
-        onTerminalFontChange(font)
-    }
-
-    /** Choose the terminal theme and report outward (for persistence). Repeating the same value is a no-op. */
-    fun chooseTerminalTheme(theme: TerminalTheme) {
-        if (theme == terminalTheme) return
-        terminalTheme = theme
-        onTerminalThemeChange(theme)
-    }
-
-    /** Toggle the separately-picked terminal theme and report outward (for persistence). */
-    fun toggleCustomTerminalTheme() {
-        customTerminalTheme = !customTerminalTheme
-        onCustomTerminalThemeChange(customTerminalTheme)
-    }
-
-    /** Choose the app theme and report outward (for persistence). Repeating the same value is a no-op. */
-    fun chooseThemeMode(mode: ThemeMode) {
-        if (mode == themeMode) return
-        themeMode = mode
-        onThemeModeChange(mode)
-    }
-
-    /** Choose the auto-lock threshold and report outward (for persistence). Repeating the same value is a no-op. */
-    fun chooseAutoLock(duration: AutoLockDuration) {
-        if (duration == autoLock) return
-        autoLock = duration
-        onAutoLockChange(duration)
-    }
-
-    /** Choose the UI language and report outward (for persistence). Repeating the same value is a no-op. */
-    fun chooseUiLanguage(language: UiLanguage) {
-        if (language == uiLanguage) return
-        uiLanguage = language
-        onUiLanguageChange(language)
-    }
-
-    /**
-     * Set the terminal font size and report outward (for persistence). A value outside
-     * [TERMINAL_FONT_SIZE_RANGE] or equal to the current one is a no-op (no write, no callback).
-     */
-    fun chooseTerminalFontSize(px: Int) {
-        if (px == terminalFontSize || px !in TERMINAL_FONT_SIZE_RANGE) return
-        terminalFontSize = px
-        onTerminalFontSizeChange(px)
-    }
-
-    /**
-     * Set the line-height multiplier, clamped/stepped via [clampTerminalLineHeight]. Equal to the
-     * current value is a no-op (no write, no callback).
-     */
-    fun chooseTerminalLineHeight(ratio: Float) {
-        val v = clampTerminalLineHeight(ratio)
-        if (v == terminalLineHeight) return
-        terminalLineHeight = v
-        onTerminalLineHeightChange(v)
-    }
-
-    /**
-     * Set the letter spacing, clamped/stepped via [clampTerminalLetterSpacing]. Equal to the
-     * current value is a no-op (no write, no callback).
-     */
-    fun chooseTerminalLetterSpacing(sp: Float) {
-        val v = clampTerminalLetterSpacing(sp)
-        if (v == terminalLetterSpacing) return
-        terminalLetterSpacing = v
-        onTerminalLetterSpacingChange(v)
-    }
-
-    /**
-     * Set the scrollback depth and report outward (for persistence). A value outside
-     * [TERMINAL_SCROLLBACK_OPTIONS] or equal to the current one is a no-op (no write, no callback).
-     * Applies to subsequent sessions.
-     */
-    fun chooseTerminalScrollback(lines: Int) {
-        if (lines == terminalScrollback || lines !in TERMINAL_SCROLLBACK_OPTIONS) return
-        terminalScrollback = lines
-        onTerminalScrollbackChange(lines)
-    }
-
-    /** Choose the cursor style and report outward (for persistence). Repeating the same value is a no-op. */
-    fun chooseTerminalCursorStyle(style: TerminalCursorStyle) {
-        if (style == terminalCursorStyle) return
-        terminalCursorStyle = style
-        onTerminalCursorStyleChange(style)
-    }
-
-    /** Toggle showing the terminal's live OSC title on tabs and report outward (for persistence). */
-    fun toggleShowTerminalTitleOnTabs() {
-        showTerminalTitleOnTabs = !showTerminalTitleOnTabs
-        onShowTerminalTitleOnTabsChange(showTerminalTitleOnTabs)
-    }
-
-    /** Choose how host rows connect (single/double click) and report outward (for persistence). */
-    fun chooseHostClickConnectMode(mode: HostClickConnectMode) {
-        if (mode == hostClickConnectMode) return
-        hostClickConnectMode = mode
-        onHostClickConnectModeChange(mode)
-    }
-
-    /** Toggle confirming Warn-level commands on production hosts and report outward (for persistence). */
-    fun toggleConfirmProductionWarnings() {
-        confirmProductionWarnings = !confirmProductionWarnings
-        onConfirmProductionWarningsChange(confirmProductionWarnings)
-    }
-
-    /** Toggle opening clicked file paths in the SFTP panel and report outward (for persistence). */
-    fun toggleOpenFilePathsInSftp() {
-        openFilePathsInSftp = !openFilePathsInSftp
-        onOpenFilePathsInSftpChange(openFilePathsInSftp)
-    }
-
-    /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */
-    fun toggleAllowServerClipboardWrite() {
-        allowServerClipboardWrite = !allowServerClipboardWrite
-        onAllowServerClipboardWriteChange(allowServerClipboardWrite)
-    }
-
-    /** Toggle reporting sessions on team-shared hosts and report outward (for persistence). */
-    fun toggleReportTeamSessions() {
-        reportTeamSessions = !reportTeamSessions
-        onReportTeamSessionsChange(reportTeamSessions)
-    }
-
     fun toggleSanitize() { sanitize = !sanitize }
     fun togglePreview() { preview = !preview }
     fun toggleConfirm() { confirm = !confirm }
@@ -882,12 +578,7 @@ class DesktopDesignState(
         return TermLine(text = "${c.substringBefore(' ')}: command not found", isCmd = false, error = true)
     }
 
-    // internal (not private): MAX_RECENT_HOSTS is read by settings/persistence/tests in this module
-    // as the cap on the number of recents shown (Settings -> Appearance -> Interface).
     internal companion object {
-        /** Max entries in the sidebar's RECENT section; oldest are evicted by new connections. */
-        const val MAX_RECENT_HOSTS = 8
-
         val DEMO_OUTPUT = mapOf(
             "ls" to "app  deploy  logs  backup.tar.gz",
             "ls -la" to "total 24\ndrwxr-xr-x  5 root root  app\ndrwxr-xr-x  2 root root  deploy\n-rw-r--r--  1 root root  backup.tar.gz",

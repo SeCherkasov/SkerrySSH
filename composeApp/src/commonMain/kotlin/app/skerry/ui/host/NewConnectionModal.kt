@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -18,11 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -39,70 +34,30 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
-import app.skerry.shared.container.ContainerEntry
-import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.capNotes
 import app.skerry.shared.ssh.ConnectionType
-import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.usesSshAuth
 import app.skerry.shared.ssh.isRdp
-import app.skerry.shared.serial.SerialPortInfo
 import app.skerry.shared.ssh.hasAiPolicy
 import app.skerry.shared.ssh.hasConnectionTest
 import app.skerry.shared.ssh.isVnc
-import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.connection.ContainerBrowseController
 import app.skerry.ui.connection.ContainerBrowseProblem
-import app.skerry.ui.connection.ContainerBrowseStatus
-import app.skerry.ui.connection.containerBrowseFailureText
 import app.skerry.ui.connection.ConnectionTestController
 import app.skerry.ui.connection.ConnectionTestProblem
 import app.skerry.ui.connection.ConnectionTestStatus
 import app.skerry.ui.connection.JumpChainResolution
-import app.skerry.ui.connection.connectionTestFailureText
-import app.skerry.ui.connection.jumpHostCandidates
 import app.skerry.ui.connection.resolveJumpChain
-import app.skerry.ui.connection.toSshAuth
-import app.skerry.ui.design.DropdownField
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
-import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.conn_auth_ask
-import app.skerry.ui.generated.resources.conn_auth_ask_desc
-import app.skerry.ui.generated.resources.conn_auth_interactive
-import app.skerry.ui.generated.resources.conn_auth_interactive_desc
-import app.skerry.ui.generated.resources.conn_auth_existing_saved
-import app.skerry.ui.generated.resources.conn_auth_key_desc
-import app.skerry.ui.generated.resources.conn_auth_key_option
-import app.skerry.ui.generated.resources.conn_auth_passphrase_placeholder
-import app.skerry.ui.generated.resources.conn_auth_password
-import app.skerry.ui.generated.resources.conn_auth_password_desc
-import app.skerry.ui.generated.resources.conn_auth_password_option
-import app.skerry.ui.generated.resources.conn_auth_password_placeholder
-import app.skerry.ui.generated.resources.conn_auth_private_key
-import app.skerry.ui.generated.resources.conn_auth_select_credential
 import app.skerry.ui.generated.resources.conn_cancel
-import app.skerry.ui.generated.resources.conn_container_browse
-import app.skerry.ui.generated.resources.conn_container_empty
-import app.skerry.ui.generated.resources.conn_container_hint
-import app.skerry.ui.generated.resources.conn_container_loading
-import app.skerry.ui.generated.resources.conn_create
 import app.skerry.ui.generated.resources.conn_duplicate_name
 import app.skerry.ui.generated.resources.conn_field_ai_policy
 import app.skerry.ui.generated.resources.conn_field_audio
@@ -111,56 +66,31 @@ import app.skerry.ui.generated.resources.conn_field_image_quality
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
-import app.skerry.ui.generated.resources.conn_field_container
-import app.skerry.ui.generated.resources.conn_field_container_shell
 import app.skerry.ui.generated.resources.conn_field_group
 import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_jump_host
 import app.skerry.ui.generated.resources.conn_field_keep_alive
 import app.skerry.ui.generated.resources.conn_field_name
-import app.skerry.ui.generated.resources.conn_field_namespace
-import app.skerry.ui.generated.resources.conn_field_pod
-import app.skerry.ui.generated.resources.conn_field_pod_container
 import app.skerry.ui.generated.resources.conn_field_notes
 import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_protocol
-import app.skerry.ui.generated.resources.conn_field_runtime
 import app.skerry.ui.generated.resources.conn_field_tags
 import app.skerry.ui.generated.resources.conn_field_domain
 import app.skerry.ui.generated.resources.conn_field_username
 import app.skerry.ui.generated.resources.conn_footer_encrypted
-import app.skerry.ui.generated.resources.conn_group_new
-import app.skerry.ui.generated.resources.conn_group_new_title
-import app.skerry.ui.generated.resources.conn_group_none
-import app.skerry.ui.generated.resources.conn_jump_none
 import app.skerry.ui.generated.resources.conn_notes_placeholder
-import app.skerry.ui.generated.resources.conn_protocol_container
-import app.skerry.ui.generated.resources.conn_protocol_local
-import app.skerry.ui.generated.resources.conn_protocol_serial
-import app.skerry.ui.generated.resources.conn_protocol_mosh
-import app.skerry.ui.generated.resources.conn_protocol_ssh
-import app.skerry.ui.generated.resources.conn_runtime_docker
-import app.skerry.ui.generated.resources.conn_runtime_kubernetes
-import app.skerry.ui.generated.resources.conn_protocol_telnet
-import app.skerry.ui.generated.resources.conn_protocol_vnc
-import app.skerry.ui.generated.resources.conn_protocol_rdp
 import app.skerry.ui.generated.resources.conn_telnet_plaintext_warning
 import app.skerry.ui.generated.resources.conn_vnc_plaintext_warning
 import app.skerry.ui.generated.resources.conn_save
 import app.skerry.ui.generated.resources.conn_save_changes
 import app.skerry.ui.generated.resources.conn_subtitle_edit
 import app.skerry.ui.generated.resources.conn_subtitle_new
-import app.skerry.ui.generated.resources.conn_tag_add_placeholder
 import app.skerry.ui.generated.resources.conn_test
-import app.skerry.ui.generated.resources.conn_test_checking
-import app.skerry.ui.generated.resources.conn_test_connected
-import app.skerry.ui.generated.resources.conn_test_rtt_ms
 import app.skerry.ui.generated.resources.conn_title_edit
 import app.skerry.ui.generated.resources.conn_title_new
 import app.skerry.ui.generated.resources.conn_title_new_desktop
 import app.skerry.ui.generated.resources.conn_title_edit_desktop
 import app.skerry.ui.generated.resources.conn_subtitle_new_desktop
-import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.CancelButton
@@ -171,18 +101,15 @@ import app.skerry.ui.design.IconBtn
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.app.LocalFeatures
-import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalTestTransport
 import app.skerry.ui.ai.POLICY_OPTIONS
-import app.skerry.ui.ai.PolicyOption
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.i18n.label
-import app.skerry.ui.vault.title
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -551,645 +478,6 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                     enabled = hosts == null || form.canSave,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun Spacer14() = Box(Modifier.size(14.dp))
-
-@Composable
-private fun Field(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Column(modifier) {
-        Txt(label.uppercase(), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
-        content()
-    }
-}
-
-/**
- * Editable form text field (optional leading icon): layout style plus placeholder.
- * [masked] hides input (password/passphrase); [singleLine] = false plus [mono] plus [minHeightDp]
- * gives a multi-line monospace area for pasting a private key (PEM).
- */
-@Composable
-private fun ModalTextField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    icon: String? = null,
-    keyboardType: KeyboardType = KeyboardType.Text,
-    masked: Boolean = false,
-    singleLine: Boolean = true,
-    mono: Boolean = false,
-    minHeightDp: Int? = null,
-    /** Drawn at the right edge, inside the border — the serial device field hangs its menu arrow here. */
-    trailing: (@Composable () -> Unit)? = null,
-) {
-    val fonts = LocalFonts.current
-    val family = if (mono) fonts.mono else fonts.ui
-    val fontSize = if (mono) 11.5.sp else 13.sp
-    val textColor = Skerry.colors.text
-    val textStyle = remember(family, fontSize, textColor) {
-        TextStyle(color = textColor, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 16.sp else 18.sp)
-    }
-    // Border/icon live in decorationBox so a click anywhere on the field places the caret.
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = singleLine,
-        textStyle = textStyle,
-        cursorBrush = SolidColor(Skerry.colors.cyan),
-        visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
-        modifier = Modifier.fillMaxWidth(),
-        decorationBox = { inner ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .then(if (minHeightDp != null) Modifier.heightIn(min = minHeightDp.dp) else Modifier)
-                    .clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                    .padding(horizontal = 11.dp, vertical = 9.dp),
-                verticalAlignment = if (singleLine) Alignment.CenterVertically else Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (icon != null) Sym(icon, size = 16.sp, color = Skerry.colors.faint)
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = fontSize, font = if (mono) fonts.mono else null)
-                    inner()
-                }
-                trailing?.invoke()
-            }
-        },
-    )
-}
-
-/**
- * The Serial "Device" field: the port path, typed by hand or picked from the ports discovered on this
- * machine (desktop: jSerialComm, Android: USB-OTG). Both, rather than either — a port that appeared
- * after the form opened has to be typeable, and a path nobody remembers has to be pickable. Writes
- * [NewConnectionFormState.address]; with no ports discovered it is an ordinary text field.
- */
-@Composable
-private fun SerialDeviceField(form: NewConnectionFormState) {
-    // Enumerated once when the form opens (cheap, no permission needed). A machine with no ports —
-    // or a platform without serial support — gets a plain text field, with no arrow to open.
-    val ports = remember { serialPortOptions(listSerialPorts()) }
-    var menuOpen by remember { mutableStateOf(false) }
-    AnchoredDropdown(
-        expanded = menuOpen && ports.isNotEmpty(),
-        onDismiss = { menuOpen = false },
-        // Focusable so a click anywhere else closes the list: unlike the tag picker this menu is not
-        // typed into, and a non-focusable Popup never gets onDismissRequest — it would hang over the
-        // form while the user moved on to the baud rate. Passed explicitly, not left to the default.
-        focusable = true,
-        trigger = {
-            ModalTextField(
-                form.address, { form.address = it }, "/dev/ttyUSB0 or COM3", icon = "usb",
-                trailing = if (ports.isEmpty()) {
-                    null
-                } else {
-                    {
-                        Sym(
-                            if (menuOpen) "expand_less" else "expand_more",
-                            size = 16.sp,
-                            color = Skerry.colors.faint,
-                            modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable { menuOpen = !menuOpen },
-                        )
-                    }
-                },
-            )
-        },
-        menu = { width ->
-            SuggestionMenu(width) {
-                ports.forEach { port ->
-                    key(port.systemName) {
-                        SerialPortRow(port, selected = form.address == port.systemName) {
-                            form.address = port.systemName
-                            menuOpen = false
-                        }
-                    }
-                }
-            }
-        },
-    )
-}
-
-/** One row of the device menu: the port path, with the driver's description under it. */
-@Composable
-private fun SerialPortRow(port: SerialPortInfo, selected: Boolean, onClick: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-            .clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 7.dp),
-    ) {
-        Txt(port.systemName, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 12.5.sp)
-        Txt(port.description, color = Skerry.colors.faint, size = 11.sp)
-    }
-}
-
-/**
- * Auth for a form-side probe (test connection / container listing) — materialized at click time so
- * the password/key copy lives only for the probe's duration, not for as long as the modal is open.
- * `null` means "Ask every time" or an incomplete entry: nothing to dial with.
- */
-private fun formSshAuth(form: NewConnectionFormState, credentials: CredentialManagerController?): SshAuth? =
-    when (form.authMode) {
-        AuthMode.NEW_PASSWORD -> form.password.takeIf { it.isNotEmpty() }?.let { SshAuth.Password(it) }
-        AuthMode.NEW_KEY -> form.privateKeyPem.takeIf { it.isNotBlank() }
-            ?.let { SshAuth.PublicKey(it, form.passphrase.ifBlank { null }) }
-        // useForConnect: this is a real connection about to be opened, so the secret counts as used.
-        AuthMode.EXISTING -> credentials?.useForConnect(form.existingCredentialId)?.toSshAuth()
-        AuthMode.ASK -> null
-        AuthMode.INTERACTIVE -> SshAuth.Interactive
-    }
-
-/**
- * Container profile fields: runtime, what to enter (with "Browse" listing the host's containers),
- * Kubernetes namespace/container, and the shell to run. [browser] is `null` on the mock/preview path
- * (no live transport) — the field stays typeable, only listing is unavailable.
- */
-@Composable
-private fun ContainerSection(
-    form: NewConnectionFormState,
-    browser: ContainerBrowseController?,
-    onBrowse: () -> Unit,
-) {
-    val kubernetes = form.containerRuntime == ContainerRuntime.KUBERNETES
-    Spacer14()
-    Field(stringResource(Res.string.conn_field_runtime)) {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)
-                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            ProtocolSegment(stringResource(Res.string.conn_runtime_docker), "deployed_code", !kubernetes, Modifier.weight(1f)) {
-                form.containerRuntime = ContainerRuntime.DOCKER
-            }
-            ProtocolSegment(stringResource(Res.string.conn_runtime_kubernetes), "hub", kubernetes, Modifier.weight(1f)) {
-                form.containerRuntime = ContainerRuntime.KUBERNETES
-            }
-        }
-    }
-    Spacer14()
-    Field(if (kubernetes) stringResource(Res.string.conn_field_pod) else stringResource(Res.string.conn_field_container)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Box(Modifier.weight(1f)) {
-                ModalTextField(
-                    form.containerTarget, { form.containerTarget = it },
-                    if (kubernetes) "api-0" else "web or 9c1a2b3c4d5e",
-                    icon = "deployed_code",
-                )
-            }
-            GhostButton(stringResource(Res.string.conn_container_browse), onClick = onBrowse)
-        }
-    }
-    ContainerBrowseResults(browser) { entry ->
-        form.containerTarget = entry.name
-        // A single-container pod has no ambiguity to resolve; a multi-container one keeps the
-        // field empty (kubectl then picks the pod's first container) for the user to narrow down.
-        if (kubernetes) form.containerPodContainer = entry.containers.singleOrNull().orEmpty()
-        browser?.reset()
-    }
-    if (kubernetes) {
-        Spacer14()
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Field(stringResource(Res.string.conn_field_namespace), Modifier.weight(1f)) {
-                ModalTextField(form.containerNamespace, { form.containerNamespace = it }, "default")
-            }
-            Field(stringResource(Res.string.conn_field_pod_container), Modifier.weight(1f)) {
-                ModalTextField(form.containerPodContainer, { form.containerPodContainer = it }, "first container")
-            }
-        }
-    }
-    Spacer14()
-    Field(stringResource(Res.string.conn_field_container_shell)) {
-        ModalTextField(form.containerShell, { form.containerShell = it }, "sh", icon = "terminal")
-    }
-    Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Sym("info", size = 14.sp, color = Skerry.colors.faint)
-        Txt(stringResource(Res.string.conn_container_hint), color = Skerry.colors.faint, size = 11.5.sp, lineHeight = 15.sp)
-    }
-}
-
-/** Result of "Browse": progress, the host's containers (click to pick), or a localized reason. */
-@Composable
-private fun ContainerBrowseResults(browser: ContainerBrowseController?, onPick: (ContainerEntry) -> Unit) {
-    when (val status = browser?.status ?: ContainerBrowseStatus.Idle) {
-        ContainerBrowseStatus.Idle -> {}
-        ContainerBrowseStatus.Loading -> BrowseNote("progress_activity", stringResource(Res.string.conn_container_loading), Skerry.colors.dim)
-        is ContainerBrowseStatus.Failure ->
-            BrowseNote("error", containerBrowseFailureText(status.problem), Skerry.colors.storm)
-        is ContainerBrowseStatus.Loaded ->
-            if (status.entries.isEmpty()) {
-                BrowseNote("info", stringResource(Res.string.conn_container_empty), Skerry.colors.dim)
-            } else {
-                Column(
-                    Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(7.dp))
-                        .background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                        .heightIn(max = 180.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
-                ) {
-                    status.entries.forEach { entry ->
-                        key(entry.name) {
-                            Row(
-                                Modifier.fillMaxWidth().clickable { onPick(entry) }.padding(horizontal = 11.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Txt(entry.name, color = Skerry.colors.text, size = 12.5.sp, modifier = Modifier.weight(1f))
-                                val detail = listOf(entry.image, entry.status, entry.containers.joinToString(","))
-                                    .filter { it.isNotBlank() }
-                                    .joinToString(" · ")
-                                if (detail.isNotEmpty()) Txt(detail, color = Skerry.colors.faint, size = 11.sp)
-                            }
-                        }
-                    }
-                }
-            }
-    }
-}
-
-@Composable
-private fun BrowseNote(icon: String, text: String, color: Color) {
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Sym(icon, size = 14.sp, color = color)
-        Txt(text, color = color, size = 11.5.sp, lineHeight = 15.sp)
-    }
-}
-
-@Composable
-private fun ProtocolPicker(form: NewConnectionFormState, protocols: List<ConnectionType>) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        // [protocols] is this section's set (see connectionTypesIn): a new transport gets its segment
-        // for free once it declares a section, and the exhaustive `when`s behind labelRes/icon fail
-        // the build until it's given a label and an icon.
-        protocols.forEach { type ->
-            ProtocolSegment(stringResource(type.labelRes), type.icon, form.connectionType == type, Modifier.weight(1f)) {
-                form.chooseConnectionType(type)
-            }
-        }
-    }
-}
-
-/** Localized protocol name for the picker segment; the icon counterpart is [ConnectionType.icon]. */
-private val ConnectionType.labelRes: StringResource
-    get() = when (this) {
-        ConnectionType.SSH -> Res.string.conn_protocol_ssh
-        ConnectionType.MOSH -> Res.string.conn_protocol_mosh
-        ConnectionType.TELNET -> Res.string.conn_protocol_telnet
-        ConnectionType.SERIAL -> Res.string.conn_protocol_serial
-        ConnectionType.VNC -> Res.string.conn_protocol_vnc
-        ConnectionType.RDP -> Res.string.conn_protocol_rdp
-        ConnectionType.LOCAL -> Res.string.conn_protocol_local
-        ConnectionType.CONTAINER -> Res.string.conn_protocol_container
-    }
-
-/** One pill of the segmented protocol picker: the active one sits on a cyan backing. */
-@Composable
-private fun ProtocolSegment(label: String, icon: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Row(
-        modifier.clip(RoundedCornerShape(5.dp)).background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-    ) {
-        Sym(icon, size = 15.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.faint)
-        Txt(label, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim, size = 12.5.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal)
-    }
-}
-
-/**
- * Host auth selection: a working dropdown (Ask every time / new password / new key / already-saved
- * keychain secrets from the vault) plus inline fields for a new secret. The saved list comes from the
- * live [LocalCredentials] (behind the vault gate); in the mock path only the no-vault options remain.
- */
-@Composable
-private fun AuthPicker(form: NewConnectionFormState, allowKey: Boolean = true) {
-    val credentials = LocalCredentials.current
-    // VNC (allowKey = false) can only use a password secret: a key/certificate would silently map
-    // to no auth at connect (toVncAuth), so those are not offered.
-    val saved = (credentials?.credentials ?: emptyList())
-        .filter { allowKey || it.secret is CredentialSecret.Password }
-    var menuOpen by remember { mutableStateOf(false) }
-    val selectedLabel = when (form.authMode) {
-        AuthMode.ASK -> stringResource(Res.string.conn_auth_ask)
-        AuthMode.INTERACTIVE -> stringResource(Res.string.conn_auth_interactive)
-        AuthMode.NEW_PASSWORD -> stringResource(Res.string.conn_auth_password)
-        AuthMode.NEW_KEY -> stringResource(Res.string.conn_auth_private_key)
-        AuthMode.EXISTING -> saved.firstOrNull { it.id == form.existingCredentialId }?.let { stringResource(Res.string.conn_auth_existing_saved, it.label) } ?: stringResource(Res.string.conn_auth_select_credential)
-    }
-    Column {
-        AnchoredDropdown(
-            expanded = menuOpen,
-            onDismiss = { menuOpen = false },
-            trigger = {
-                Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).clickable { menuOpen = !menuOpen }.padding(horizontal = 11.dp, vertical = 9.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Txt(selectedLabel, color = Skerry.colors.text, size = 13.sp)
-                    Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
-                }
-            },
-            menu = { width ->
-                // The menu floats ABOVE the form (Popup) rather than pushing it apart; width = trigger width, scrolls on overflow.
-                Column(Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
-                    AuthOption("vpn_key_off", stringResource(Res.string.conn_auth_ask), stringResource(Res.string.conn_auth_ask_desc), form.authMode == AuthMode.ASK) {
-                        form.authMode = AuthMode.ASK; menuOpen = false
-                    }
-
-                    AuthOption("pin", stringResource(Res.string.conn_auth_interactive), stringResource(Res.string.conn_auth_interactive_desc), form.authMode == AuthMode.INTERACTIVE) {
-                        form.authMode = AuthMode.INTERACTIVE; menuOpen = false
-                    }
-                    AuthOption("password", stringResource(Res.string.conn_auth_password_option), stringResource(Res.string.conn_auth_password_desc), form.authMode == AuthMode.NEW_PASSWORD) {
-                        form.authMode = AuthMode.NEW_PASSWORD; menuOpen = false
-                    }
-                    // VNC has no key auth (allowKey = false): the RFB VNC-Auth scheme is password-only.
-                    if (allowKey) {
-                        AuthOption("key", stringResource(Res.string.conn_auth_key_option), stringResource(Res.string.conn_auth_key_desc), form.authMode == AuthMode.NEW_KEY) {
-                            form.authMode = AuthMode.NEW_KEY; menuOpen = false
-                        }
-                    }
-                    if (saved.isNotEmpty()) {
-                        HLine(modifier = Modifier.padding(vertical = 4.dp))
-                        saved.forEach { cred ->
-                            AuthOption(cred.secret.pickerIcon(), cred.label, cred.secret.pickerTypeLabel(), form.authMode == AuthMode.EXISTING && form.existingCredentialId == cred.id) {
-                                form.authMode = AuthMode.EXISTING; form.existingCredentialId = cred.id; menuOpen = false
-                            }
-                        }
-                    }
-                }
-            },
-        )
-        when (form.authMode) {
-            AuthMode.NEW_PASSWORD -> {
-                Spacer14()
-                ModalTextField(form.password, { form.password = it }, stringResource(Res.string.conn_auth_password_placeholder), icon = "key", masked = true)
-            }
-            AuthMode.NEW_KEY -> {
-                Spacer14()
-                // keyboardType=Password suppresses IME autocorrect/suggestions (Android) so the key doesn't end up in the dictionary.
-                ModalTextField(form.privateKeyPem, { form.privateKeyPem = it }, "-----BEGIN OPENSSH PRIVATE KEY-----", keyboardType = KeyboardType.Password, singleLine = false, mono = true, minHeightDp = 96)
-                Spacer14()
-                ModalTextField(form.passphrase, { form.passphrase = it }, stringResource(Res.string.conn_auth_passphrase_placeholder), icon = "lock", masked = true)
-            }
-            else -> {}
-        }
-    }
-}
-
-/** One option row in the auth dropdown: icon plus title plus subtitle plus a checkmark when selected. */
-@Composable
-private fun AuthOption(icon: String, title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        Sym(icon, size = 16.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
-        Column(Modifier.weight(1f)) {
-            Txt(title, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 12.5.sp, weight = FontWeight.Medium)
-            Txt(subtitle, color = Skerry.colors.faint, size = 10.5.sp)
-        }
-        if (selected) Sym("check", size = 15.sp, color = Skerry.colors.cyanBright)
-    }
-}
-
-/**
- * "Jump host" field: "None — direct" plus eligible saved SSH profiles ([jumpHostCandidates] — no
- * self-reference, no cycle through the edited host). Stores only the id
- * ([NewConnectionFormState.jumpHostId]); the chain itself is resolved at connect time.
- */
-@Composable
-private fun JumpHostPicker(form: NewConnectionFormState, allHosts: List<Host>, editingId: String?) {
-    val candidates = remember(allHosts, editingId) { jumpHostCandidates(allHosts, editingId) }
-    // Selected by id over ALL hosts (not just candidates): a reference that became ineligible after
-    // other edits still shows its label instead of silently reading as "none".
-    val selected = allHosts.firstOrNull { it.id == form.jumpHostId }
-    DropdownField(
-        value = selected,
-        options = listOf<Host?>(null) + candidates,
-        label = { it?.label ?: stringResource(Res.string.conn_jump_none) },
-        onPick = { form.jumpHostId = it?.id },
-    )
-}
-
-/**
- * "Keep-alive" field: cadence of the session's keepalive pings for this profile
- * ([NewConnectionFormState.keepAliveSeconds], 0 = off). Fixed option list [KEEP_ALIVE_OPTIONS].
- */
-@Composable
-private fun KeepAlivePicker(form: NewConnectionFormState) {
-    DropdownField(
-        value = form.keepAliveSeconds,
-        options = KEEP_ALIVE_OPTIONS,
-        label = { keepAliveLabel(it) },
-        onPick = { form.keepAliveSeconds = it },
-    )
-}
-
-/**
- * "Group" field: a dropdown select (like [AuthPicker]) - "No group", already-created catalog groups
- * ([groupSuggestions]), and "New group..." opening the create dialog. The selected group is stored in
- * [NewConnectionFormState.group]; creating a new one just sets its name (the profile creates the folder
- * on save). No free-text input in the field itself, only the list plus explicit creation, to avoid
- * typo-duplicate groups.
- */
-@Composable
-private fun GroupPicker(form: NewConnectionFormState, allHosts: List<Host>) {
-    var menuOpen by remember { mutableStateOf(false) }
-    var createOpen by remember { mutableStateOf(false) }
-    val groups = remember(allHosts) { groupSuggestions(allHosts) }
-    val hasGroup = form.group.isNotBlank()
-    AnchoredDropdown(
-        expanded = menuOpen,
-        onDismiss = { menuOpen = false },
-        trigger = {
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).clickable { menuOpen = !menuOpen }.padding(horizontal = 11.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Txt(if (hasGroup) form.group else stringResource(Res.string.conn_group_none), color = if (hasGroup) Skerry.colors.text else Skerry.colors.faint, size = 13.sp)
-                Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
-            }
-        },
-        menu = { width ->
-            SuggestionMenu(width) {
-                GroupOption(stringResource(Res.string.conn_group_none), selected = !hasGroup) { form.group = ""; menuOpen = false }
-                groups.forEach { group ->
-                    key(group) { GroupOption(group, selected = form.group == group) { form.group = group; menuOpen = false } }
-                }
-                HLine(modifier = Modifier.padding(vertical = 4.dp))
-                GroupOption(stringResource(Res.string.conn_group_new), selected = false, icon = "add") { menuOpen = false; createOpen = true }
-            }
-        },
-    )
-    if (createOpen) {
-        GroupCreateDialog(onDismiss = { createOpen = false }, onCreate = { name -> form.group = name.trim(); createOpen = false })
-    }
-}
-
-/** One option row of the group select: optional icon plus title plus a checkmark when selected. */
-@Composable
-private fun GroupOption(title: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        if (icon != null) Sym(icon, size = 15.sp, color = Skerry.colors.cyanBright)
-        Txt(title, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 12.5.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
-        if (selected) Sym("check", size = 15.sp, color = Skerry.colors.cyanBright)
-    }
-}
-
-/**
- * Modal dialog for creating a new group (Popup over the connection modal): name field plus Cancel/Create.
- * A blank name doesn't create anything (button disabled). The name is only set on the form, the folder
- * appears in the catalog when the host is saved.
- */
-@Composable
-private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    val canCreate = name.isNotBlank()
-    Popup(alignment = Alignment.Center, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
-        ModalScrim(onDismiss = onDismiss) {
-            Column(
-                Modifier
-                    .widthIn(max = 360.dp)
-                    .fillMaxWidth()
-                    .padding(20.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Skerry.colors.surfaceDeep)
-                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
-                    .consumeClicks()
-                    .padding(22.dp),
-            ) {
-                Txt(stringResource(Res.string.conn_group_new_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold)
-                Spacer14()
-                ModalTextField(name, { name = it }, "Production")
-                Spacer14()
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-                    CancelButton(stringResource(Res.string.conn_cancel), onClick = onDismiss)
-                    PrimaryButton(stringResource(Res.string.conn_create), onClick = { onCreate(name) }, enabled = canCreate)
-                }
-            }
-        }
-    }
-}
-
-/** Container for suggestion dropdowns (group/tags): trigger width, scrolls on overflow, menu style. */
-@Composable
-private fun SuggestionMenu(width: Dp, content: @Composable () -> Unit) {
-    Column(
-        Modifier.width(width).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surfaceDeep).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-            .heightIn(max = 240.dp).verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
-    ) { content() }
-}
-
-/** One suggestion row in the dropdown list: a single label, click to select. */
-@Composable
-private fun SuggestionRow(label: String, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Txt(label, color = Skerry.colors.text, size = 12.5.sp)
-    }
-}
-
-/** Tag pill with a remove cross; [tag] is the canonical form, shown on screen with a `#` prefix. */
-@Composable
-private fun RemovableTagPill(tag: String, onRemove: () -> Unit) {
-    Row(
-        Modifier.clip(RoundedCornerShape(20.dp)).background(Skerry.colors.cyan.copy(alpha = 0.12f)).padding(start = 9.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        Txt("#$tag", color = Skerry.colors.cyanBright, size = 11.sp)
-        Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(2.dp), contentAlignment = Alignment.Center) {
-            Sym("close", size = 12.sp, color = Skerry.colors.cyanBright)
-        }
-    }
-}
-
-/** "Test connection" status in the modal footer: checking / success (with RTT) / failure with a reason. */
-@Composable
-private fun TestStatusLabel(status: ConnectionTestStatus) {
-    when (status) {
-        ConnectionTestStatus.Idle -> {}
-        ConnectionTestStatus.Checking -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("progress_activity", size = 14.sp, color = Skerry.colors.dim)
-            Txt(stringResource(Res.string.conn_test_checking), color = Skerry.colors.dim, size = 11.5.sp)
-        }
-        is ConnectionTestStatus.Success -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("check_circle", size = 14.sp, color = Skerry.colors.moss)
-            // RTT goes on its own line: the footer slot is narrow and a single "Connected · N ms"
-            // string used to wrap mid-unit.
-            Column {
-                Txt(stringResource(Res.string.conn_test_connected), color = Skerry.colors.moss, size = 11.5.sp)
-                status.roundTripMillis?.let {
-                    Txt(stringResource(Res.string.conn_test_rtt_ms, it), color = Skerry.colors.moss.copy(alpha = 0.75f), size = 10.5.sp)
-                }
-            }
-        }
-        is ConnectionTestStatus.Failure -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("error", size = 14.sp, color = Skerry.colors.storm)
-            Txt(connectionTestFailureText(status.problem), color = Skerry.colors.storm, size = 11.5.sp)
-        }
-    }
-}
-
-/** Inline input for a new tag inside the Tags block: Enter ([onCommit]) or a comma commits the pill. */
-@Composable
-private fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: () -> Unit, onFocusChanged: ((Boolean) -> Unit)? = null, modifier: Modifier = Modifier) {
-    val fonts = LocalFonts.current
-    val textColor = Skerry.colors.text
-    val textStyle = remember(fonts.ui, textColor) { TextStyle(color = textColor, fontSize = 12.5.sp, fontFamily = fonts.ui) }
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        textStyle = textStyle,
-        cursorBrush = SolidColor(Skerry.colors.cyan),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onCommit() }),
-        modifier = modifier.widthIn(min = 72.dp).onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
-        decorationBox = { inner ->
-            Box(contentAlignment = Alignment.CenterStart) {
-                if (value.isEmpty()) Txt(stringResource(Res.string.conn_tag_add_placeholder), color = Skerry.colors.faint, size = 12.5.sp)
-                inner()
-            }
-        },
-    )
-}
-
-@Composable
-private fun PolicyRow(opt: PolicyOption, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-            .border(1.dp, if (selected) Skerry.colors.cyan else Skerry.colors.cyan06, RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(
-            Modifier.padding(top = 2.dp).size(16.dp).clip(CircleShape).border(1.5.dp, if (selected) Skerry.colors.cyan else Skerry.colors.faint, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (selected) Box(Modifier.size(8.dp).clip(CircleShape).background(Skerry.colors.cyan))
-        }
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Sym(opt.icon, size = 14.sp, color = Skerry.colors.dim)
-                Txt(stringResource(opt.title), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
-            }
-            Txt(stringResource(opt.desc), color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }

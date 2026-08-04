@@ -13,7 +13,7 @@ class UiLanguageSettingTest {
     @Test
     fun `desktop chooseUiLanguage updates state and persists`() {
         val persisted = mutableListOf<UiLanguage>()
-        val state = DesktopDesignState(onUiLanguageChange = { persisted += it })
+        val state = DesktopSettingsState(onUiLanguageChange = { persisted += it })
 
         assertEquals(UiLanguage.System, state.uiLanguage)
         state.chooseUiLanguage(UiLanguage.Russian)
@@ -25,7 +25,7 @@ class UiLanguageSettingTest {
     @Test
     fun `desktop choosing the same language is a no-op`() {
         val persisted = mutableListOf<UiLanguage>()
-        val state = DesktopDesignState(
+        val state = DesktopSettingsState(
             initialUiLanguage = UiLanguage.English,
             onUiLanguageChange = { persisted += it },
         )

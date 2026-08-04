@@ -2,12 +2,9 @@ package app.skerry.ui.terminal
 
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -16,18 +13,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -38,11 +30,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -53,38 +41,15 @@ import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
-import app.skerry.ui.host.rowSubtitle
 import app.skerry.shared.host.Host
 import app.skerry.ui.app.DesktopDesignState
-import app.skerry.shared.ssh.ConnectionType
-import app.skerry.shared.ssh.isRemoteDesktop
-import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.app.LocalHostClickConnectMode
-import app.skerry.ui.app.LocalRunSnippetOnHost
-import app.skerry.ui.app.LocalSessions
-import app.skerry.ui.app.LocalSnippets
-import app.skerry.ui.app.LocalTeams
-import app.skerry.shared.host.VaultHostStore
-import app.skerry.shared.team.TeamMemberStatus
-import app.skerry.shared.team.TeamScopeRef
-import androidx.compose.runtime.collectAsState
-import app.skerry.ui.teams.AutoPullTeamsOnOnline
-import app.skerry.ui.generated.resources.lib_teams_sidebar
-import app.skerry.ui.design.Badge
 import app.skerry.ui.design.Chip
-import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
-import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.host.pickAndParseRdpFile
 import app.skerry.ui.host.pickAndParseSshConfig
@@ -98,50 +63,25 @@ import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.rd_add_first
-import app.skerry.ui.generated.resources.rd_no_desktops
 import app.skerry.ui.generated.resources.rd_search_placeholder
 import app.skerry.ui.generated.resources.rd_section
 import app.skerry.ui.generated.resources.term_hosts_section
-import app.skerry.ui.generated.resources.term_menu_delete
-import app.skerry.ui.generated.resources.term_menu_duplicate
-import app.skerry.ui.generated.resources.term_menu_edit
-import app.skerry.ui.generated.resources.term_menu_run_snippet
 import app.skerry.ui.generated.resources.term_new_connection
 import app.skerry.ui.generated.resources.term_no_hosts_match
-import app.skerry.ui.generated.resources.term_recent_section
 import app.skerry.ui.generated.resources.term_search_hosts_placeholder
 import app.skerry.ui.host.ALL_HOSTS_CHIP
 import app.skerry.ui.host.HOST_GROUPS
 import app.skerry.ui.host.HostDragState
-import app.skerry.ui.host.HostFolder
-import app.skerry.ui.host.HostGroup
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.inSection
-import app.skerry.ui.host.MockHost
-import app.skerry.ui.host.ProdBadge
-import app.skerry.ui.host.isProdHost
-import app.skerry.ui.host.UNGROUPED_LABEL
 import app.skerry.ui.host.color
-import app.skerry.ui.host.draggableFolderHeader
-import app.skerry.ui.host.draggableHostRow
 import app.skerry.ui.host.filterHosts
-import app.skerry.ui.host.folderHeaderAnchor
-import app.skerry.ui.host.folderRangeAnchor
-import app.skerry.ui.host.connectionTypeLabel
-import app.skerry.ui.host.groupHostsByConnectionType
 import app.skerry.ui.host.groupHostsByFolder
 import app.skerry.ui.host.sidebarFolders
-import app.skerry.ui.host.ungroupedLabel
-import app.skerry.ui.host.hostBoundsAnchor
 import app.skerry.ui.host.hostChipLabel
 import app.skerry.ui.host.hostTagChips
 import app.skerry.ui.host.icon
-import app.skerry.ui.session.SessionsController
-import app.skerry.ui.session.SessionStatus
-import app.skerry.ui.session.sessionDotColor
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
@@ -179,7 +119,7 @@ private val SIDEBAR_FOOTER_HEIGHT = 48.dp
  */
 
 @Composable
-private fun Modifier.hostConnectClick(
+internal fun Modifier.hostConnectClick(
     onClick: () -> Unit,
     onSingleClick: (() -> Unit)? = null,
 ): Modifier =
@@ -406,12 +346,12 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
                 // Narrowed to this section: history is per catalog too, so the desktops list doesn't
                 // offer to reconnect a shell. The limit applies after narrowing, so a section with
                 // few recents still fills its quota.
-                val recent = remember(state.recentHostIds, liveHosts.hosts, state.recentLimit, section) {
+                val recent = remember(state.recentHostIds, liveHosts.hosts, state.settings.recentLimit, section) {
                     state.recentHostIds.mapNotNull { liveHosts.find(it) }
                         .inSection(section)
-                        .take(state.recentLimit)
+                        .take(state.settings.recentLimit)
                 }
-                if (state.showRecent && recent.isNotEmpty()) {
+                if (state.settings.showRecent && recent.isNotEmpty()) {
                     // Divider belongs to the section: hidden together with it when RECENT is off/empty.
                     HLine(modifier = Modifier.padding(top = 8.dp))
                     RecentSectionHeader()
@@ -479,559 +419,4 @@ private fun HostSearchField(state: DesktopDesignState, section: HostSection, mod
         HostSection.RemoteDesktops -> Res.string.rd_search_placeholder
     }
     SidebarSearchField(state.hostSearchQuery, state::onHostSearch, stringResource(placeholder), modifier)
-}
-
-/**
- * Host folder header: collapse chevron + icon + name + count. The chevron ([collapsed] ->
- * `chevron_right`, else `expand_more`) toggles the folder ([onToggle]); the click target is the icon
- * only, so it doesn't interfere with dragging the header (folder reorder).
- */
-@Composable
-private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit, onEdit: (() -> Unit)? = null) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
-            contentAlignment = Alignment.Center,
-        ) {
-            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
-        }
-        Sym("folder_open", size = 15.sp, color = Skerry.colors.cyanBright)
-        Txt(name, color = Skerry.colors.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
-        // Rename/delete the group (live catalog only, not for the synthetic "Ungrouped").
-        if (onEdit != null) IconBtn("edit", onClick = onEdit, box = 20, icon = 13.sp, tint = Skerry.colors.faint)
-        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Skerry.colors.card).padding(horizontal = 6.dp, vertical = 1.dp)) {
-            Txt(count.toString(), color = Skerry.colors.faint, size = 10.sp)
-        }
-    }
-}
-
-/** RECENT section header in the sidebar (shared by the live and mock paths). */
-@Composable
-private fun RecentSectionHeader() {
-    SidebarSectionTitle(
-        stringResource(Res.string.term_recent_section),
-        modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 16.dp, bottom = 4.dp),
-    )
-}
-
-@Composable
-private fun TeamHostsSectionHeader() {
-    SidebarSectionTitle(
-        stringResource(Res.string.lib_teams_sidebar),
-        modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 14.dp, bottom = 4.dp),
-    )
-}
-
-/**
- * Shared team-hosts sections below the personal catalog: one section per active team with a
- * received key that has hosts in its team vault. Hosts are read from the per-team vault; the reread
- * is keyed on ([hostsSnapshot], team list) so it refreshes after reloadManagers updates the catalog
- * post-team-sync. Click uses the same [LocalConnectHost] path (secret is prompted since credential
- * links are stripped on share).
- */
-@Composable
-private fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignState, section: HostSection, mono: FontFamily) {
-    val teams = LocalTeams.current ?: return
-    // Pulls shared team hosts when sync transitions to Online, see AutoPullTeamsOnOnline.
-    AutoPullTeamsOnOnline()
-    val teamList by teams.teams.collectAsState()
-    // Changes on every team sync, so hosts freshly pulled into the team vault appear without a
-    // manual sync (the personal catalog doesn't change, and these sections read the vault directly).
-    val revision by teams.revision.collectAsState()
-    val sections = remember(teamList, hostsSnapshot, revision, section) {
-        teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.flatMap { team ->
-            // One group per share space: the team itself, plus every scope whose key we hold. A scope
-            // we're merely told about (manager without a grant) has no readable records, so no group.
-            val spaces = listOf(TeamScopeRef(team.id) to team.name) +
-                team.scopes.filter { it.hasKey }.map { TeamScopeRef(team.id, it.id) to "${team.name} · ${it.name}" }
-            spaces.mapNotNull { (ref, label) ->
-                val vault = teams.spaceVault(ref) ?: return@mapNotNull null
-                // Shared hosts are split by section like the personal catalog: a team's VNC box belongs
-                // to the desktops list, its servers to the terminal one.
-                val shared = VaultHostStore(vault).all().inSection(section)
-                if (shared.isEmpty()) null else label to shared
-            }
-        }
-    }
-    if (sections.isEmpty()) return
-    TeamHostsSectionHeader()
-    sections.forEach { (name, shared) ->
-        // Prefixed collapse key: otherwise a team and a host group with the same name would share
-        // one entry in the common collapsedGroups.
-        val collapseKey = "$TEAM_COLLAPSE_PREFIX$name"
-        val collapsed = state.isGroupCollapsed(collapseKey)
-        val onToggle = remember(state, collapseKey) { { state.toggleGroupCollapsed(collapseKey) } }
-        TeamFolderHeader(name, shared.size, collapsed, onToggle)
-        if (!collapsed) {
-            shared.forEach { host -> key("team-${host.id}") { TeamHostRow(host, mono) } }
-        }
-    }
-}
-
-/** Collapse-key prefix for teams in the shared [DesktopDesignState.collapsedGroups], see [TeamHostsSection]. */
-private const val TEAM_COLLAPSE_PREFIX = "\u0000team\u0000"
-
-/**
- * Team header in the sidebar, modeled on [FolderHeader] (collapse chevron + icon + name + count) to
- * visually match host folders; differs only in the `group` icon marking its team-vault origin.
- */
-@Composable
-private fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onToggle: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
-            contentAlignment = Alignment.Center,
-        ) {
-            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
-        }
-        Sym("group", size = 15.sp, color = Skerry.colors.cyanBright)
-        Txt(name, color = Skerry.colors.dim, size = 12.5.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Skerry.colors.card).padding(horizontal = 6.dp, vertical = 1.dp)) {
-            Txt(count.toString(), color = Skerry.colors.faint, size = 10.sp)
-        }
-    }
-}
-
-/** Shared team host row, like [RecentHostRow]; the team-vault origin is marked by the section header. */
-@Composable
-private fun TeamHostRow(host: Host, mono: FontFamily) {
-    val connect = LocalConnectHost.current
-    val onClick = remember(host, connect) { { connect(host) } }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp)
-            .clip(RoundedCornerShape(5.dp))
-            .hostConnectClick(onClick)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Sym(host.connectionType.icon, size = 14.sp, color = Skerry.colors.faint)
-        Column(Modifier.weight(1f)) {
-            Txt(host.label, color = Skerry.colors.dim, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Txt(host.rowSubtitle(), color = Skerry.colors.faint, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
-
-/**
- * Recent-connection row: protocol icon + host name ([Host.label]) with a `user@address` secondary
- * caption below it. History is already stated by the section header, so the icon marks the protocol
- * instead. Click reconnects via [LocalConnectHost], same path as clicking a catalog row.
- */
-@Composable
-private fun RecentHostRow(host: Host, mono: FontFamily) {
-    val connect = LocalConnectHost.current
-    // Stabilizes the lambda on (host, connect), like catalog rows: without remember it would be
-    // recreated on every row recomposition.
-    val onClick = remember(host, connect) { { connect(host) } }
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp)
-            .clip(RoundedCornerShape(5.dp))
-            .hostConnectClick(onClick)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Sym(host.connectionType.icon, size = 14.sp, color = Skerry.colors.faint)
-        Column(Modifier.weight(1f)) {
-            Txt(
-                host.label,
-                color = Skerry.colors.dim, size = 12.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            Txt(
-                host.rowSubtitle(),
-                color = Skerry.colors.faint, size = 10.5.sp, font = mono,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun HostGroupBlock(group: HostGroup, state: DesktopDesignState, section: HostSection, mono: FontFamily) {
-    // The mock catalog is split by section too, so the preview of each sidebar shows its own kind of
-    // host; a folder left with nothing to show is skipped entirely.
-    val hosts = group.hosts.filter { mockHostSection(it) == section }
-    if (hosts.isEmpty()) return
-    val collapsed = state.isGroupCollapsed(group.name)
-    val onToggleCollapsed = remember(state, group.name) { { state.toggleGroupCollapsed(group.name) } }
-    Column(Modifier.padding(bottom = 2.dp)) {
-        FolderHeader(group.name, hosts.size, collapsed, onToggleCollapsed)
-        if (!collapsed) {
-            Column(Modifier.padding(start = 22.dp)) {
-                hosts.forEach { host -> HostRow(host, state, mono) }
-            }
-        }
-    }
-}
-
-/** Section of a preview-catalog row ([MockHost] carries a transport but is not a saved profile). */
-private fun mockHostSection(host: MockHost): HostSection =
-    if (host.connectionType.isRemoteDesktop) HostSection.RemoteDesktops else HostSection.Terminal
-
-/** Note shown instead of an empty column when a section's catalog holds nothing yet. */
-@Composable
-private fun EmptyCatalogNote() {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 12.dp)) {
-        Txt(stringResource(Res.string.rd_no_desktops), color = Skerry.colors.dim, size = 12.sp)
-        Txt(
-            stringResource(Res.string.rd_add_first),
-            color = Skerry.colors.faint, size = 11.5.sp, lineHeight = 16.sp,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-    }
-}
-
-/**
- * Live catalog folder: same visuals, sourced from [HostFolder] over [HostManagerController]. Clicking
- * a host connects via [LocalConnectHost]; the status dot and highlight come from live sessions
- * ([LocalSessions]) — status-dot color reflects the most recent session's connection state.
- *
- * Manual reorder ([dragState]): dragging the folder header reorders folders; dragging a host row
- * reorders within a folder or moves it to another (see [HostSidebarDnd]). Drops commit through
- * [controller]; [foldersProvider] supplies the current folder list at gesture time.
- */
-@Composable
-private fun LiveHostFolder(
-    folder: HostFolder,
-    state: DesktopDesignState,
-    section: HostSection,
-    mono: FontFamily,
-    dragState: HostDragState,
-    controller: HostManagerController,
-    selectedHostId: String?,
-    onSelectHost: (String) -> Unit,
-    foldersProvider: () -> List<HostFolder>,
-) {
-    val sessions = LocalSessions.current
-    val connect = LocalConnectHost.current
-    // Folder's group key: an empty folder uses its own name (like FolderBounds), otherwise the first
-    // host's group. The synthetic "Ungrouped" folder is the null group.
-    val group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL }
-    val collapsed = state.isGroupCollapsed(folder.name)
-    // Stabilizes the collapse lambda on (state, folder name), like the row lambdas below: otherwise
-    // every folder recomposition (every frame during a drag) would redraw the header.
-    val onToggleCollapsed = remember(state, folder.name) { { state.toggleGroupCollapsed(folder.name) } }
-    // Edit pencil in the header, except for the synthetic "Ungrouped" bucket (not renameable).
-    val onEditGroup = if (folder.name == UNGROUPED_LABEL) null
-        else remember(state, folder.name) { { state.openRenameGroup(folder.name) } }
-    // Highlights the target folder while a host is dragged over it.
-    val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
-    val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
-    // Insertion line within the folder: the index excludes the dragged host (like moveHostToGroup),
-    // so it's anchored to visible rows via neighbors from the same filtered list.
-    val others = folder.hosts.filter { it.id != dragState.draggingHostId }
-    val dropIndex = if (isDropTarget) dragState.activeHostDrop?.index?.coerceIn(0, others.size) else null
-    val lineBeforeId = dropIndex?.takeIf { it < others.size }?.let { others[it].id }
-    Column(
-        Modifier
-            .padding(bottom = 2.dp)
-            .alpha(folderAlpha)
-            .clip(RoundedCornerShape(6.dp))
-            // After clip, so bounds match the folder's visible (rounded) area, not its corners.
-            .folderRangeAnchor(dragState, folder.name)
-            .border(1.dp, if (isDropTarget) Skerry.colors.cyan else Color.Transparent, RoundedCornerShape(6.dp)),
-    ) {
-        Box(
-            Modifier.folderHeaderAnchor(dragState, folder.name)
-                // Section-aware: the drop index counts the folders this sidebar shows, not the
-                // catalog's (a folder of the other section is invisible here and keeps its place).
-                .draggableFolderHeader(dragState, folder.name, foldersProvider) { index ->
-                    controller.moveFolderInSection(group, index, section)
-                },
-        ) {
-            // The synthetic bucket shows the localized "no group" label; real folders show their name.
-            val headerName = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folder.name
-            FolderHeader(headerName, folder.hosts.size, collapsed, onToggleCollapsed, onEditGroup)
-        }
-        // A collapsed folder shows only the header; the host list (and its drag targets) is hidden.
-        if (!collapsed) Column(Modifier.padding(start = 22.dp)) {
-            if (folder.name == UNGROUPED_LABEL) {
-                // No-group bucket: sub-group by connection type with a small header per transport.
-                // Reorder insertion lines are dropped here (ordering a typeless bucket is moot); a
-                // host can still be dragged out to a real folder, which owns its own drop target.
-                groupHostsByConnectionType(folder.hosts).forEach { (type, typeHosts) ->
-                    HostTypeSubheader(connectionTypeLabel(type))
-                    typeHosts.forEach { host ->
-                        key(host.id) {
-                            HostRow(host, state, section, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
-                        }
-                    }
-                }
-            } else {
-                // key(host.id): row positional identity is pinned to the host, so an open menu/row
-                // state doesn't jump to a neighbor when the catalog reorders after an edit.
-                folder.hosts.forEach { host ->
-                    key(host.id) {
-                        if (host.id == lineBeforeId) DropLine()
-                        HostRow(host, state, section, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
-                    }
-                }
-                // Drop at the folder's end: the line goes after the last row.
-                if (dropIndex != null && dropIndex == others.size) DropLine()
-            }
-        }
-    }
-}
-
-/** Small caption for a connection-type sub-group inside the no-group bucket. */
-@Composable
-private fun HostTypeSubheader(label: String) {
-    Txt(
-        label,
-        color = Skerry.colors.faint,
-        size = 9.5.sp,
-        weight = FontWeight.SemiBold,
-        letterSpacing = 0.5.sp,
-        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 3.dp),
-    )
-}
-
-/** One host row: connection click, selection highlight, live-status dot, drag handle, and context menu. */
-@Composable
-private fun HostRow(
-    host: Host,
-    state: DesktopDesignState,
-    section: HostSection,
-    controller: HostManagerController,
-    sessions: SessionsController?,
-    connect: (Host) -> Unit,
-    mono: FontFamily,
-    selectedHostId: String?,
-    onSelectHost: (String) -> Unit,
-    dragState: HostDragState,
-    foldersProvider: () -> List<HostFolder>,
-) {
-    // Stabilizes lambdas on (host, ...): otherwise every folder recomposition would recreate them
-    // and force the row to redraw (nullable functions are unstable).
-    val onClick = remember(host, connect) { { connect(host) } }
-    val onSelect = remember(host) { { onSelectHost(host.id) } }
-    val onEdit = remember(host, state) { { state.openEditModal(host) } }
-    val onDuplicate = remember(host, state) { { state.openDuplicateModal(host) } }
-    val onDelete = remember(host, state) { { state.requestDeleteHost(host) } }
-    // Forgets the row's geometry once the host leaves the list (deleted/filtered out).
-    DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
-    Box(
-        Modifier
-            .alpha(if (dragState.draggingHostId == host.id) 0.4f else 1f)
-            .hostBoundsAnchor(dragState, host.id)
-            .draggableHostRow(dragState, host.id, foldersProvider) { drop ->
-                // Index is relative to the rows this sidebar shows; the controller translates it.
-                controller.moveHostInSection(host.id, drop.group, drop.index, section)
-            },
-    ) {
-        HostEntryRow(
-            label = host.label,
-            // Selection highlight: marks the row clicked in double-click mode (and the most recently
-            // connected one in single-click mode). Distinct from the live-connection status dot.
-            selected = host.id == selectedHostId,
-            dot = sessionDotColor(sessions?.sessionStatusFor(host.id) ?: SessionStatus.Idle),
-            badge = null,
-            onClick = onClick,
-            onSelect = onSelect,
-            mono = mono,
-            icon = host.connectionType.icon,
-            // Host object, for the "Run snippet..." menu item (runs a snippet on this host).
-            host = host,
-            // Edit/duplicate/delete the profile via the context menu (right-click/long-press).
-            onEdit = onEdit,
-            onDuplicate = onDuplicate,
-            onDelete = onDelete,
-        )
-    }
-}
-
-/** Cyan indicator line marking where a dragged host/folder will be inserted. */
-@Composable
-private fun DropLine() {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(end = 8.dp, top = 2.dp, bottom = 2.dp)
-            .height(2.dp)
-            .clip(RoundedCornerShape(1.dp))
-            .background(Skerry.colors.cyan),
-    )
-}
-
-@Composable
-private fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily) {
-    HostEntryRow(
-        label = host.name,
-        selected = state.selectedHost == host.name,
-        dot = host.status.color,
-        badge = host.badge,
-        onClick = { state.selectHost(host.name) },
-        mono = mono,
-        icon = host.connectionType.icon,
-    )
-}
-
-/** How long the pointer must rest on a host row before its note pops up. */
-private const val NOTE_TOOLTIP_DELAY_MS = 450L
-
-/**
- * Shared host row for the sidebar (mock and live catalog): status dot + protocol icon + name +
- * optional badge. [icon] is the profile's [app.skerry.ui.host.icon] and stays [Skerry.colors.faint] — the two
- * markers read as separate axes, colour for session status and shape for protocol. Clicking the row
- * connects ([onClick]). When
- * [onEdit]/[onDuplicate]/[onDelete] are provided (live catalog) or a snippet can be run on the host
- * ([host] != null and [LocalSnippets] is present), a trailing "⋮" button opens a menu (Run
- * snippet.../Edit/Duplicate/Delete); its click is intercepted before [onClick], so opening the menu
- * doesn't trigger a connection. "Run snippet..." opens the snippet picker and runs it on [host] via
- * [LocalRunSnippetOnHost]. A profile carrying [Host.notes] shows them as a hover tooltip.
- */
-@Composable
-internal fun HostEntryRow(
-    label: String,
-    selected: Boolean,
-    dot: Color,
-    badge: String?,
-    onClick: () -> Unit,
-    mono: FontFamily,
-    icon: String,
-    host: Host? = null,
-    onSelect: (() -> Unit)? = null,
-    onEdit: (() -> Unit)? = null,
-    onDuplicate: (() -> Unit)? = null,
-    onDelete: (() -> Unit)? = null,
-) {
-    // Production marker: shown before the row is ever clicked, so "wrong window" is visible in the
-    // list itself and not only once a session is open.
-    val prod = isProdHost(host)
-    val snippets = LocalSnippets.current
-    val runSnippetOnHost = LocalRunSnippetOnHost.current
-    val canRunSnippet = host != null && snippets != null
-    val hasMenu = onEdit != null || onDuplicate != null || onDelete != null || canRunSnippet
-    var menuOpen by remember { mutableStateOf(false) }
-    var snippetPickerOpen by remember { mutableStateOf(false) }
-    // The profile's note is shown on hover — mouse-only by nature; on Android the same code simply
-    // never reports a hover (the note lives in the host detail screen there).
-    val hoverInteraction = remember { MutableInteractionSource() }
-    val hovered by hoverInteraction.collectIsHoveredAsState()
-    // Dwell before the note pops up, so sweeping the pointer down the list doesn't flash a tooltip
-    // over every row on the way.
-    var noteVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(hovered) {
-        noteVisible = false
-        if (hovered) {
-            delay(NOTE_TOOLTIP_DELAY_MS)
-            noteVisible = true
-        }
-    }
-    // The tooltip is a sibling of the row, not a child: inside the row its (zero-sized) popup node
-    // would still collect the row's 8dp item spacing and shift the label sideways on hover.
-    Box(Modifier.fillMaxWidth()) {
-        val note = host?.notes
-        // Suppressed while the row's own popups are up, so the note doesn't land on top of them.
-        if (noteVisible && !note.isNullOrBlank() && !menuOpen && !snippetPickerOpen) HoverTooltip(note)
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(5.dp))
-                .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-                .hoverable(hoverInteraction)
-                .hostConnectClick(
-                    onClick = {
-                        // Connecting also marks the row selected (single-click mode too — it reads as
-                        // "the host you just opened"), then opens the session.
-                        onSelect?.invoke()
-                        onClick()
-                    },
-                    onSingleClick = onSelect,
-                )
-                .padding(start = 8.dp, end = 2.dp, top = 5.dp, bottom = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Dot(dot)
-            Sym(icon, size = 13.sp, color = Skerry.colors.faint)
-            Txt(
-                label,
-                color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim, size = 11.5.sp, font = mono,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            if (prod) ProdBadge()
-            if (badge != null) {
-                val strict = badge == "STRICT"
-                Badge(badge, bg = if (strict) Skerry.colors.strictBg else Skerry.colors.devBg, fg = if (strict) Skerry.colors.strictFg else Skerry.colors.moss)
-            }
-            if (hasMenu) {
-                Box {
-                    // Mouse-only: keeping the menu out of Tab traversal makes one Tab = one host row
-                    // (otherwise every row costs two presses); keyboard users get Enter/Space to connect.
-                    IconBtn(
-                        "more_vert",
-                        onClick = { menuOpen = !menuOpen },
-                        modifier = Modifier.focusProperties { canFocus = false },
-                        box = 22, icon = 16.sp, tint = Skerry.colors.faint,
-                    )
-                    if (menuOpen) {
-                        Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
-                            Column(
-                                Modifier.clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
-                            ) {
-                                if (canRunSnippet) {
-                                    HostMenuItem(stringResource(Res.string.term_menu_run_snippet), Skerry.colors.text) { menuOpen = false; snippetPickerOpen = true }
-                                }
-                                onEdit?.let { edit ->
-                                    HostMenuItem(stringResource(Res.string.term_menu_edit), Skerry.colors.text) { menuOpen = false; edit() }
-                                }
-                                onDuplicate?.let { duplicate ->
-                                    HostMenuItem(stringResource(Res.string.term_menu_duplicate), Skerry.colors.text) { menuOpen = false; duplicate() }
-                                }
-                                onDelete?.let { delete ->
-                                    HostMenuItem(stringResource(Res.string.term_menu_delete), Skerry.colors.sunset) { menuOpen = false; delete() }
-                                }
-                            }
-                        }
-                    }
-                    // Snippet picker: runs on this host (opens/reuses a session and runs the command after
-                    // connecting). An empty library shows "No snippets yet".
-                    if (snippetPickerOpen && host != null && snippets != null) {
-                        Popup(
-                            alignment = Alignment.TopEnd,
-                            onDismissRequest = { snippetPickerOpen = false },
-                            properties = PopupProperties(focusable = true),
-                        ) {
-                            SnippetPalette(snippets) { entry ->
-                                // Through the manager: a snippet with ${{…}} variables opens the confirm
-                                // dialog first; the resolved line (newline included) lands here after.
-                                snippets.run(entry.id) { line -> runSnippetOnHost(host, line) }
-                                snippetPickerOpen = false
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Context menu item for a host row. The width floor keeps the card from collapsing onto its longest
- * label — short verbs in some locales leave a sliver of a click target, and the same menu would
- * change width from row to row depending on which actions that row offers.
- */
-@Composable
-private fun HostMenuItem(label: String, color: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.widthIn(min = 140.dp).clip(RoundedCornerShape(5.dp)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 7.dp),
-    ) {
-        Txt(label, color = color, size = 12.sp)
-    }
 }

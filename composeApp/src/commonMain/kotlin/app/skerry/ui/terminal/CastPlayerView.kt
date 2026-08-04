@@ -91,7 +91,7 @@ fun CastPlayerView() {
  * Playback is driven by a [CastPlayer] posing as the session, so nothing here knows it isn't live.
  */
 @Composable
-private fun ColumnScope.CastPlayerContent(playback: CastPlayback, onClose: (() -> Unit)?) {
+internal fun ColumnScope.CastPlayerContent(playback: CastPlayback, onClose: (() -> Unit)?) {
     val cast = playback.cast
     Row(
         Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),

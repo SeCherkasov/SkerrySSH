@@ -26,6 +26,7 @@
     <string name="term_session_closed">Сессия закрыта</string>
     <string name="term_reconnecting">Переподключение… №%1$d</string>
     <string name="term_connection_lost">Соединение потеряно</string>
+    <string name="term_connection_lost_detail">Соединение потеряно: %1$s</string>
     <string name="term_select_host_placeholder">Выберите хост…</string>
     <string name="term_no_host_selected">Хост не выбран</string>
     <string name="term_notice_pick_side_by_side">Выберите хост, чтобы открыть его рядом.</string>
