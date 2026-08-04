@@ -32,7 +32,7 @@ data class SnippetDraft(
  * race the background sync merge, and the next [SnippetManager.save] persists the canonical form
  * anyway.
  */
-private fun Snippet.canonical(): Snippet {
+internal fun Snippet.canonical(): Snippet {
     val canonical = normalizeTags(tags)
     return if (canonical == tags) this else copy(tags = canonical)
 }

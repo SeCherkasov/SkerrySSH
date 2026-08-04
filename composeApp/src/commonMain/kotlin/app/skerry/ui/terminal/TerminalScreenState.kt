@@ -4,7 +4,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.Snapshot
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.AutocompleteEngine
 import app.skerry.shared.terminal.CommandHistory
@@ -18,25 +17,19 @@ import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermColor
 import app.skerry.shared.terminal.TerminalEmulator
-import app.skerry.shared.terminal.TerminalMatch
 import app.skerry.shared.terminal.TerminalPos
-import app.skerry.shared.terminal.TerminalSearchError
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.terminal.bracketedPasteWrap
 import app.skerry.shared.terminal.encodeMouseReport
 import app.skerry.shared.terminal.lineSelectionAt
-import app.skerry.shared.terminal.matchNearestTo
-import app.skerry.shared.terminal.searchTerminal
 import app.skerry.shared.terminal.wordSelectionAt
 import kotlin.concurrent.Volatile
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -291,6 +284,35 @@ class TerminalScreenState(
     @Volatile
     private var lastRequestedSize: PtySize? = null
 
+    /**
+     * Find-in-scrollback panel state. Its own class: the panel owns a coroutine, a throttle and a
+     * six-field publish of its own, none of which the buffer or the PTY care about.
+     */
+    // Each overlay's onOpen closes the other, so neither type can be inferred from the other and
+    // both are spelled out — that is a compile-time need, not the safety argument. What makes the
+    // forward reference safe is that neither constructor invokes its callbacks: they run only when
+    // something calls open(), which cannot happen before this constructor returns.
+    val search: TerminalOutputSearch = TerminalOutputSearch(
+        scope = scope,
+        nowMillis = nowMillis,
+        buffer = { screen },
+        // The two overlays cannot both hold the keyboard.
+        onOpen = { reverseSearch.close() },
+    )
+
+    /**
+     * Ctrl-R overlay over the shell line. Its own class: it is a picker over command history with
+     * a query and a cursor, and shares nothing with the buffer or the PTY beyond the history it
+     * reads and the command it hands back.
+     */
+    val reverseSearch: TerminalReverseSearch = TerminalReverseSearch(
+        canOpen = { !altScreen },
+        matches = { q -> autocomplete.commandHistory.search(q) },
+        onOpen = { search.close() },
+        onAccept = { applyHistoryCommand(it) },
+        onForget = { forgetHistoryCommand(it) },
+    )
+
     init {
         // Sole collector of PTY output; forwards chunks into the command queue. Closes the queue
         // when output ends (EOF/session close), otherwise the owner loop below would hang forever
@@ -407,7 +429,7 @@ class TerminalScreenState(
         // The buffer changed under an open search panel: rebuild the match list (throttled — see
         // refreshSearch) so the counter and navigation follow the output, keeping the user on the
         // hit they were reading.
-        if (searchQuery != null) refreshSearch(keep = currentMatch, force = false)
+        search.refreshFromSnapshot()
         snapshotVersion++
     }
 
@@ -712,91 +734,15 @@ class TerminalScreenState(
         refreshSuggestion()
     }
 
-    // --- Reverse search (Ctrl-R): overlay state lives here so desktop keys and the mobile
-    // panel/IME drive it uniformly, and the render overlay reads a single source. ---
-
-    /** Current reverse-search query, or `null` if the overlay is closed. */
-    var reverseSearchQuery: String? by mutableStateOf(null)
-        private set
-
-    /** Index of the selected match in [reverseSearchResults]. */
-    var reverseSearchIndex: Int by mutableStateOf(0)
-        private set
-
-    /** Matches for the current query (newest to oldest), or empty if the overlay is closed. */
-    val reverseSearchResults: List<String>
-        get() = reverseSearchQuery?.let { autocomplete.commandHistory.search(it) } ?: emptyList()
-
-    /** Selected match (at [reverseSearchIndex]) or `null`. */
-    val reverseSearchSelection: String?
-        get() {
-            val r = reverseSearchResults
-            return if (r.isEmpty()) null else r[reverseSearchIndex.mod(r.size)]
-        }
-
-    /** Open reverse search (empty query). No-op in alt-screen (no line history there). */
-    fun openReverseSearch() {
-        if (altScreen) return
-        // Only one overlay can own the keyboard: the find bar's field would keep focus and leave
-        // this overlay visible but deaf to its own keys.
-        closeSearch()
-        reverseSearchQuery = ""
-        reverseSearchIndex = 0
-    }
-
-    /** Close the reverse-search overlay without inserting anything. */
-    fun closeReverseSearch() {
-        reverseSearchQuery = null
-        reverseSearchIndex = 0
-    }
-
-    /** Append [text] to the reverse-search query (resets selection to the first match). */
-    fun reverseSearchAppend(text: String) {
-        val q = reverseSearchQuery ?: return
-        reverseSearchQuery = q + text
-        reverseSearchIndex = 0
-    }
-
-    /** Remove the last character of the reverse-search query. */
-    fun reverseSearchBackspace() {
-        val q = reverseSearchQuery ?: return
-        reverseSearchQuery = q.dropLast(1)
-        reverseSearchIndex = 0
-    }
-
-    /** Move to the next (older) match. */
-    fun reverseSearchNext() {
-        val n = reverseSearchResults.size
-        if (n > 0) reverseSearchIndex = (reverseSearchIndex + 1) % n
-    }
-
-    /** Move to the previous (newer) match. */
-    fun reverseSearchPrev() {
-        val n = reverseSearchResults.size
-        if (n > 0) reverseSearchIndex = (reverseSearchIndex - 1 + n) % n
-    }
-
-    /** Accept the selected match (insert via [applyHistoryCommand]) and close the overlay. */
-    fun reverseSearchAccept() {
-        reverseSearchSelection?.let { applyHistoryCommand(it) }
-        closeReverseSearch()
-    }
-
     /**
      * Remove [command] from the autocomplete history (manual cleanup of typos/unwanted commands)
      * and persist the update. Adjusts the reverse-search index to stay in bounds.
      */
     fun forgetHistoryCommand(command: String) {
         if (!autocomplete.forget(command)) return
-        val n = reverseSearchResults.size
-        if (n == 0) reverseSearchIndex = 0 else if (reverseSearchIndex >= n) reverseSearchIndex = n - 1
+        reverseSearch.clampIndex()
         onHistoryChanged?.invoke(autocomplete.commandHistory.commands)
         refreshSuggestion()
-    }
-
-    /** Remove the currently selected reverse-search match from history; overlay stays open. */
-    fun reverseSearchDeleteSelected() {
-        reverseSearchSelection?.let { forgetHistoryCommand(it) }
     }
 
     /**
@@ -868,232 +814,6 @@ class TerminalScreenState(
         var length = minOf(onScreen.length, line.length)
         while (length > 0 && !onScreen.regionMatches(onScreen.length - length, line, 0, length)) length--
         return line.substring(0, length)
-    }
-
-    // --- Output search (find in scrollback): the panel's whole state lives here so desktop keys and
-    // the mobile panel drive it uniformly and the render overlay reads a single source. It searches
-    // whatever [screen] holds — in alt-screen (vim/less/htop) that is the application's own frame,
-    // which has no scrollback, so the search follows what is on screen. ---
-
-    /** Current search query, or `null` if the panel is closed. */
-    var searchQuery: String? by mutableStateOf(null)
-        private set
-
-    /** Whether the search respects letter case (panel's `Aa` toggle). */
-    var searchCaseSensitive: Boolean by mutableStateOf(false)
-        private set
-
-    /** Whether the query is a regular expression rather than a literal (panel's `.*` toggle). */
-    var searchRegex: Boolean by mutableStateOf(false)
-        private set
-
-    /** Matches in the current buffer, top to bottom. Empty while the panel is closed. */
-    var searchMatches: List<TerminalMatch> by mutableStateOf(emptyList())
-        private set
-
-    /** Index of the selected match in [searchMatches], or `-1` when there is nothing selected. */
-    var searchIndex: Int by mutableStateOf(-1)
-        private set
-
-    /** Why the query yielded nothing usable (bad or too costly regex), or `null`. */
-    var searchError: TerminalSearchError? by mutableStateOf(null)
-        private set
-
-    /** Whether the match list hit its cap and more matches exist in the buffer. */
-    var searchTruncated: Boolean by mutableStateOf(false)
-        private set
-
-    /** The selected match (render scrolls to it and paints it as the current hit), or `null`. */
-    val currentMatch: TerminalMatch?
-        get() = searchMatches.getOrNull(searchIndex)
-
-    // Query of the last search, kept across closing so reopening the panel resumes it (as editors do).
-    private var lastSearchQuery: String = ""
-
-    // Buffer row the selection is measured from when the query changes: the bottom of what the user
-    // was looking at, so an incremental search lands on the nearest hit above rather than at the top
-    // of a long scrollback.
-    private var searchAnchorRow: Int = 0
-
-    // When the match list was last rebuilt, for the snapshot-driven throttle in [refreshSearch].
-    private var lastSearchRefreshAt: Long = Long.MIN_VALUE / 2
-
-    // The running search. A newer one cancels it: only the latest query's result may be published,
-    // and an abandoned pass stops scanning instead of burning a core to completion.
-    private var searchJob: Job? = null
-
-    // Steps requested by next/previous that no published list has applied yet. The pass runs off
-    // this coroutine, so a press is banked here and applied when its result lands — two quick
-    // presses move two matches, not one.
-    private var pendingSearchStep: Int = 0
-
-    /**
-     * Bumped by every user action that deliberately moves the selection (open, new query, toggle,
-     * next/previous). The viewport follows *this*, not the selected match itself: while scrollback
-     * evicts rows under streaming output, a match's row index shifts without the user asking for
-     * anything, and scrolling to it would yank them off the line they are reading.
-     */
-    var searchNavVersion: Int by mutableStateOf(0)
-        private set
-
-    /**
-     * Open the search panel, restoring the previous query. [anchorRow] is the buffer row at the
-     * viewport bottom (kept current by [TerminalScreen] through [setSearchAnchorRow]); the first
-     * selected match is the last one at or above it.
-     */
-    fun openSearch(anchorRow: Int = searchAnchorRow) {
-        // See [openReverseSearch]: the two overlays cannot both hold the keyboard.
-        closeReverseSearch()
-        searchAnchorRow = anchorRow
-        searchQuery = lastSearchQuery
-        searchNavVersion++
-        refreshSearch(keep = null)
-    }
-
-    /**
-     * Report the buffer row currently at the bottom of the viewport. The render layer owns the
-     * scroll position, so it feeds the anchor that an incremental search re-selects around.
-     */
-    fun setSearchAnchorRow(row: Int) {
-        searchAnchorRow = row
-    }
-
-    /** Close the search panel and drop its matches (the highlight goes with them). */
-    fun closeSearch() {
-        searchJob?.cancel()
-        searchJob = null
-        pendingSearchStep = 0
-        searchQuery = null
-        searchMatches = emptyList()
-        searchIndex = -1
-        searchError = null
-        searchTruncated = false
-    }
-
-    /** Replace the query and re-run the search (incremental: selection re-anchors to the viewport). */
-    fun updateSearchQuery(text: String) {
-        if (searchQuery == null) return
-        // A pasted novel is not a search term; the cap keeps pattern compilation bounded too.
-        val query = if (text.length <= MAX_SEARCH_QUERY_LENGTH) text else text.take(MAX_SEARCH_QUERY_LENGTH)
-        lastSearchQuery = query
-        searchQuery = query
-        pendingSearchStep = 0
-        searchNavVersion++
-        refreshSearch(keep = null)
-    }
-
-    /** Toggle case sensitivity, keeping the selected match if it survives. */
-    fun applySearchCase(enabled: Boolean) {
-        if (searchCaseSensitive == enabled) return
-        searchCaseSensitive = enabled
-        searchNavVersion++
-        refreshSearch(keep = currentMatch)
-    }
-
-    /** Switch between literal and regex matching, keeping the selected match if it survives. */
-    fun applySearchRegex(enabled: Boolean) {
-        if (searchRegex == enabled) return
-        searchRegex = enabled
-        searchNavVersion++
-        refreshSearch(keep = currentMatch)
-    }
-
-    /** Select the next (lower) match, wrapping around. No-op without matches. */
-    fun searchNext() {
-        stepSearch(+1)
-    }
-
-    /** Select the previous (higher) match, wrapping around. No-op without matches. */
-    fun searchPrev() {
-        stepSearch(-1)
-    }
-
-    /**
-     * Move the selection by [delta] matches. The step is banked ([pendingSearchStep]) and applied
-     * to the freshly published list rather than to the current one: navigation must walk the buffer
-     * as it is now, not as it was when the list was last rebuilt (up to
-     * [SEARCH_REFRESH_INTERVAL_MS] ago under streaming output).
-     */
-    private fun stepSearch(delta: Int) {
-        if (searchQuery.isNullOrEmpty()) return
-        pendingSearchStep += delta
-        searchNavVersion++
-        refreshSearch(keep = currentMatch)
-    }
-
-    /**
-     * Re-run the search over the current buffer. [keep] is the match to stay on if it is still
-     * there (output arriving, a toggle flipped); otherwise the selection re-anchors to the viewport
-     * ([searchAnchorRow]).
-     *
-     * The pass runs in its own coroutine and only the latest one publishes: a full buffer walk
-     * takes tens of milliseconds, and doing it inline would either block the UI thread (a keystroke
-     * in the field) or the coroutine that feeds the emulator (a published snapshot), which the user
-     * sees as a terminal that stopped updating.
-     *
-     * Snapshot-driven refreshes are additionally throttled to [SEARCH_REFRESH_INTERVAL_MS] ([force]
-     * `false`). Nothing visible lags behind — the highlight is computed per frame over the visible
-     * rows by [TerminalScreen] — only the counter and the navigation list.
-     */
-    private fun refreshSearch(keep: TerminalMatch?, force: Boolean = true) {
-        val query = searchQuery
-        if (query.isNullOrEmpty()) {
-            searchJob?.cancel()
-            searchJob = null
-            searchMatches = emptyList()
-            searchIndex = -1
-            searchError = null
-            searchTruncated = false
-            return
-        }
-        val now = nowMillis()
-        if (!force && now - lastSearchRefreshAt < SEARCH_REFRESH_INTERVAL_MS) return
-        lastSearchRefreshAt = now
-        // Everything the pass depends on is captured up front: it runs off this coroutine, while
-        // the fields it reads keep changing.
-        val buffer = screen
-        val caseSensitive = searchCaseSensitive
-        val useRegex = searchRegex
-        val anchorRow = keep?.row ?: searchAnchorRow
-        searchJob?.cancel()
-        searchJob = scope.launch {
-            val result = searchTerminal(
-                screen = buffer,
-                query = query,
-                caseSensitive = caseSensitive,
-                regex = useRegex,
-                cancelled = { !isActive },
-            )
-            if (!isActive) return@launch
-            // One atomic publish: readers must never see a new match list against an old counter
-            // or a selection index from another query.
-            Snapshot.withMutableSnapshot {
-                // A newer search took over while this one ran — its result is the one that counts.
-                if (searchQuery != query || searchCaseSensitive != caseSensitive || searchRegex != useRegex) {
-                    return@withMutableSnapshot
-                }
-                searchMatches = result.matches
-                searchError = result.error
-                searchTruncated = result.truncated
-                searchIndex = selectMatch(result.matches, keep, anchorRow)
-            }
-        }
-    }
-
-    /**
-     * Index to select in a freshly built [matches] list: the same hit if it is still there, else the
-     * nearest one to [anchorRow] — then any banked next/previous steps ([pendingSearchStep]).
-     */
-    private fun selectMatch(matches: List<TerminalMatch>, keep: TerminalMatch?, anchorRow: Int): Int {
-        if (matches.isEmpty()) {
-            pendingSearchStep = 0
-            return -1
-        }
-        val kept = keep?.let { matches.indexOf(it) } ?: -1
-        val base = if (kept >= 0) kept else matchNearestTo(matches, anchorRow)
-        val stepped = if (pendingSearchStep == 0) base else (base + pendingSearchStep).mod(matches.size)
-        pendingSearchStep = 0
-        return stepped
     }
 
     /** Send typed text to the PTY (fire-and-forget via the [outbound] queue, FIFO order). */
@@ -1248,16 +968,6 @@ class TerminalScreenState(
  * typed input feeds its autocomplete, a paste gets that pane's own bracketed-paste wrapping.
  */
 enum class MirroredInput { Typed, Pasted }
-
-/**
- * How often a published snapshot may rebuild the search match list. Long enough that streaming
- * output cannot stall the emulator's coroutine with full-buffer passes, short enough that the
- * counter never looks frozen. The on-screen highlight does not wait for this (see [TerminalScreen]).
- */
-const val SEARCH_REFRESH_INTERVAL_MS = 300L
-
-/** Longest accepted search query: past this it is not a search term but a paste accident. */
-const val MAX_SEARCH_QUERY_LENGTH = 512
 
 /** Process start mark: the default monotonic clock behind [TerminalScreenState]'s refresh throttle. */
 private val STARTED_AT = TimeSource.Monotonic.markNow()

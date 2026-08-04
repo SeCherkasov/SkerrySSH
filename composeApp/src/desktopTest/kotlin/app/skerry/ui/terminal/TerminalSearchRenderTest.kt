@@ -100,9 +100,9 @@ class TerminalSearchRenderTest {
                 repeat(3) { pixels = frame() }
                 assertFalse(pixels.hasColorNear(match), "nothing is highlighted before a search runs")
 
-                state.openSearch()
-                state.updateSearchQuery("alpha")
-                assertTrue(state.searchMatches.size == 2, "expected both rows to match, got ${state.searchMatches}")
+                state.search.open()
+                state.search.updateQuery("alpha")
+                assertTrue(state.search.matches.size == 2, "expected both rows to match, got ${state.search.matches}")
 
                 pixels = frame()
                 var attempts = 0
@@ -114,7 +114,7 @@ class TerminalSearchRenderTest {
                 assertTrue(pixels.hasColorNear(current), "the selected hit should carry the stronger wash")
 
                 // Closing the panel drops the highlight with it.
-                state.closeSearch()
+                state.search.close()
                 pixels = frame()
                 repeat(2) { pixels = frame() }
                 assertFalse(pixels.hasColorNear(match), "highlight should disappear once search is closed")

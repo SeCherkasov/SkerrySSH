@@ -87,19 +87,19 @@ internal fun TerminalSection(state: DesktopDesignState) {
     // tighter spacing) — one block; they use a numeric stepper for precise input.
     SectionLabel(stringResource(Res.string.settings_terminal_section_font), top = 0.dp)
     SettingRow(label = stringResource(Res.string.appearance_font)) {
-        Box(Modifier.width(180.dp)) { FontPicker(state.terminalFont, onPick = state::chooseTerminalFont) }
+        Box(Modifier.width(180.dp)) { FontPicker(state.settings.terminalFont, onPick = state.settings::chooseTerminalFont) }
     }
     SettingRow(
         label = stringResource(Res.string.appearance_font_size),
         modifier = Modifier.padding(start = 14.dp, top = 10.dp),
         hasHint = true,
-        isDefault = state.terminalFontSize == DEFAULT_TERMINAL_FONT_SIZE,
+        isDefault = state.settings.terminalFontSize == DEFAULT_TERMINAL_FONT_SIZE,
         defaultText = "$DEFAULT_TERMINAL_FONT_SIZE px",
-        onReset = { state.chooseTerminalFontSize(DEFAULT_TERMINAL_FONT_SIZE) },
+        onReset = { state.settings.chooseTerminalFontSize(DEFAULT_TERMINAL_FONT_SIZE) },
     ) {
         NumberStepper(
-            value = state.terminalFontSize.toFloat(),
-            onValueChange = { state.chooseTerminalFontSize(it.roundToInt().coerceIn(TERMINAL_FONT_SIZE_MIN, TERMINAL_FONT_SIZE_MAX)) },
+            value = state.settings.terminalFontSize.toFloat(),
+            onValueChange = { state.settings.chooseTerminalFontSize(it.roundToInt().coerceIn(TERMINAL_FONT_SIZE_MIN, TERMINAL_FONT_SIZE_MAX)) },
             step = 1f,
             format = { it.roundToInt().toString() },
             parse = { it.trim().toIntOrNull()?.toFloat() },
@@ -110,13 +110,13 @@ internal fun TerminalSection(state: DesktopDesignState) {
         label = stringResource(Res.string.appearance_line_height),
         modifier = Modifier.padding(start = 14.dp, top = 10.dp),
         hasHint = true,
-        isDefault = formatDecimal(state.terminalLineHeight, 2) == formatDecimal(DEFAULT_TERMINAL_LINE_HEIGHT, 2),
+        isDefault = formatDecimal(state.settings.terminalLineHeight, 2) == formatDecimal(DEFAULT_TERMINAL_LINE_HEIGHT, 2),
         defaultText = formatDecimal(DEFAULT_TERMINAL_LINE_HEIGHT, 2),
-        onReset = { state.chooseTerminalLineHeight(DEFAULT_TERMINAL_LINE_HEIGHT) },
+        onReset = { state.settings.chooseTerminalLineHeight(DEFAULT_TERMINAL_LINE_HEIGHT) },
     ) {
         NumberStepper(
-            value = state.terminalLineHeight,
-            onValueChange = state::chooseTerminalLineHeight,
+            value = state.settings.terminalLineHeight,
+            onValueChange = state.settings::chooseTerminalLineHeight,
             step = 0.05f,
             format = { formatDecimal(it, 2) },
             parse = { it.trim().replace(',', '.').toFloatOrNull() },
@@ -127,13 +127,13 @@ internal fun TerminalSection(state: DesktopDesignState) {
         label = stringResource(Res.string.appearance_letter_spacing),
         modifier = Modifier.padding(start = 14.dp, top = 10.dp),
         hasHint = true,
-        isDefault = formatDecimal(state.terminalLetterSpacing, 1) == formatDecimal(DEFAULT_TERMINAL_LETTER_SPACING, 1),
+        isDefault = formatDecimal(state.settings.terminalLetterSpacing, 1) == formatDecimal(DEFAULT_TERMINAL_LETTER_SPACING, 1),
         defaultText = "${formatDecimal(DEFAULT_TERMINAL_LETTER_SPACING, 1)} px",
-        onReset = { state.chooseTerminalLetterSpacing(DEFAULT_TERMINAL_LETTER_SPACING) },
+        onReset = { state.settings.chooseTerminalLetterSpacing(DEFAULT_TERMINAL_LETTER_SPACING) },
     ) {
         NumberStepper(
-            value = state.terminalLetterSpacing,
-            onValueChange = state::chooseTerminalLetterSpacing,
+            value = state.settings.terminalLetterSpacing,
+            onValueChange = state.settings::chooseTerminalLetterSpacing,
             step = 0.1f,
             format = { formatDecimal(it, 1) },
             parse = { it.trim().replace(',', '.').toFloatOrNull() },
@@ -149,21 +149,21 @@ internal fun TerminalSection(state: DesktopDesignState) {
             Txt(stringResource(Res.string.settings_terminal_scrollback), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
             Txt(stringResource(Res.string.settings_terminal_scrollback_desc), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
         }
-        Box(Modifier.width(160.dp)) { ScrollbackPicker(state.terminalScrollback, onPick = state::chooseTerminalScrollback) }
+        Box(Modifier.width(160.dp)) { ScrollbackPicker(state.settings.terminalScrollback, onPick = state.settings::chooseTerminalScrollback) }
     }
     HLine()
     // Cursor style: default shape x blink for new sessions.
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) { Txt(stringResource(Res.string.settings_terminal_cursor_style), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium) }
-        Box(Modifier.width(200.dp)) { CursorStylePicker(state.terminalCursorStyle, onPick = state::chooseTerminalCursorStyle) }
+        Box(Modifier.width(200.dp)) { CursorStylePicker(state.settings.terminalCursorStyle, onPick = state.settings::chooseTerminalCursorStyle) }
     }
     HLine()
     // Live terminal OSC title on tabs: enables the effectiveTabTitle branch in Session.tabTitle.
     SettingToggleRow(
         stringResource(Res.string.settings_terminal_show_title),
         stringResource(Res.string.settings_terminal_show_title_desc),
-        on = state.showTerminalTitleOnTabs,
-        onToggle = state::toggleShowTerminalTitleOnTabs,
+        on = state.settings.showTerminalTitleOnTabs,
+        onToggle = state.settings::toggleShowTerminalTitleOnTabs,
     )
     HLine()
     // Host-row click behavior: single click connects directly, double click requires a second
@@ -173,7 +173,7 @@ internal fun TerminalSection(state: DesktopDesignState) {
         // Fixed width like the neighbouring pickers: the trigger fills maxWidth, so without a bound
         // it would eat the whole row and collapse the label to a one-glyph column. Wide enough for
         // the longest localized option ("Двойной клик (клик выделяет)") on a single line.
-        Box(Modifier.width(232.dp)) { HostConnectModePicker(state.hostClickConnectMode, onPick = state::chooseHostClickConnectMode) }
+        Box(Modifier.width(232.dp)) { HostConnectModePicker(state.settings.hostClickConnectMode, onPick = state.settings::chooseHostClickConnectMode) }
     }
     HLine()
     // Production guard threshold: Danger is always confirmed, warnings only if asked for (sudo is a
@@ -181,8 +181,8 @@ internal fun TerminalSection(state: DesktopDesignState) {
     SettingToggleRow(
         stringResource(Res.string.settings_terminal_prod_warnings),
         stringResource(Res.string.settings_terminal_prod_warnings_desc),
-        on = state.confirmProductionWarnings,
-        onToggle = state::toggleConfirmProductionWarnings,
+        on = state.settings.confirmProductionWarnings,
+        onToggle = state.settings::toggleConfirmProductionWarnings,
     )
     HLine()
     // Clickable file paths in output (Ctrl+click → reveal in the SFTP panel). On by default; off
@@ -190,8 +190,8 @@ internal fun TerminalSection(state: DesktopDesignState) {
     SettingToggleRow(
         stringResource(Res.string.settings_terminal_open_paths),
         stringResource(Res.string.settings_terminal_open_paths_desc),
-        on = state.openFilePathsInSftp,
-        onToggle = state::toggleOpenFilePathsInSftp,
+        on = state.settings.openFilePathsInSftp,
+        onToggle = state.settings::toggleOpenFilePathsInSftp,
     )
     HLine()
     // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host from
@@ -199,8 +199,8 @@ internal fun TerminalSection(state: DesktopDesignState) {
     SettingToggleRow(
         stringResource(Res.string.settings_terminal_clipboard_write),
         stringResource(Res.string.settings_terminal_clipboard_write_desc),
-        on = state.allowServerClipboardWrite,
-        onToggle = state::toggleAllowServerClipboardWrite,
+        on = state.settings.allowServerClipboardWrite,
+        onToggle = state.settings::toggleAllowServerClipboardWrite,
     )
     HLine(modifier = Modifier.padding(top = 12.dp))
     // Local shell: the shell binary run for local-terminal sessions (launched from the empty-tab
@@ -211,7 +211,7 @@ internal fun TerminalSection(state: DesktopDesignState) {
         color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp,
         modifier = Modifier.padding(bottom = 8.dp),
     )
-    LocalShellField(state.localShellPath, onChange = state::chooseLocalShellPath)
+    LocalShellField(state.settings.localShellPath, onChange = state.settings::chooseLocalShellPath)
 }
 
 /** Single-line path field for the local shell binary (Terminal → Local shell). Blank = default shell. */

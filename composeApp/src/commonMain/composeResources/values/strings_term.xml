@@ -26,6 +26,7 @@
     <string name="term_session_closed">Session closed</string>
     <string name="term_reconnecting">Reconnecting… #%1$d</string>
     <string name="term_connection_lost">Connection lost</string>
+    <string name="term_connection_lost_detail">Connection lost: %1$s</string>
     <string name="term_select_host_placeholder">Select a host…</string>
     <string name="term_no_host_selected">No host selected</string>
     <string name="term_notice_pick_side_by_side">Pick a host to open it side by side.</string>
