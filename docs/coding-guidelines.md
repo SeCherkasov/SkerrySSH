@@ -75,7 +75,8 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Secret display | `VaultPresentation.secretStyle` |
 | Terminal screen state (incl. scrollback search) | `ui/terminal/TerminalScreenState` |
 | Tiled session panes (split/resize/navigate) | `ui/session/PaneLayout` |
-| Remote-desktop screen | `ui/remote/RemoteDesktopController`, `RemoteDesktopScreenState`, `RemoteDesktopPanel` |
+| Remote-desktop screen | `ui/remote/RemoteDesktopController`, `RemoteDesktopScreenState` |
+| Remote-desktop session controls (both platforms) | `ui/remote/RemoteDesktopMenus` (icon button, menu host, display/clipboard menus, screenshot and clipboard actions), laid out by `RemoteDesktopBar` + `RemoteBarState` on desktop and `RemoteDesktopPanel` on a phone |
 | Streaming an AI reply / parsing it | `ui/ai/AiStreamRunner`, `AiReplyParser` |
 | Sealed sync token, health monitoring | `ui/sync/SealedTokenCodec`, `ServerHealthMonitor` |
 | Sync failure reason → localised text | `SyncFailureReason` + `ui/sync/syncFailureText` (don't build strings in the controller) |

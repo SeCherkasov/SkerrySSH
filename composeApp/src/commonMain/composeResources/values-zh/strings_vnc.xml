@@ -39,4 +39,13 @@
     <string name="rd_audio">声音</string>
     <string name="rd_audio_device_lost">音频设备已停止接收声音。请在配置中改选输出设备后重新连接。</string>
     <string name="rd_clipboard_share">共享剪贴板</string>
+    <string name="rd_display">显示</string>
+    <string name="rd_fullscreen">铺满窗口</string>
+    <string name="rd_fullscreen_exit">退出铺满窗口</string>
+    <string name="rd_disconnect">断开连接</string>
+    <string name="rd_bar_pin">固定操作栏</string>
+    <string name="rd_bar_unpin">取消固定操作栏</string>
+    <string name="rd_bar_hide">隐藏操作栏</string>
+    <string name="rd_ctrl_alt_del_view_only">仅查看 — 不发送输入</string>
+    <string name="rd_clipboard_failed">系统剪贴板拒绝访问</string>
 </resources>

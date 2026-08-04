@@ -40,6 +40,7 @@ import app.skerry.shared.ssh.TrustedCa
 import app.skerry.shared.ssh.TrustedCaStore
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.known.TrustedCaController
+import app.skerry.ui.remote.RemoteDesktopController
 import app.skerry.ui.session.SessionsController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -365,7 +366,14 @@ internal fun seededAi(): app.skerry.ui.ai.AiAssistantController {
 internal fun seededSessions(hosts: HostManagerController): SessionsController {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     var n = 0
-    val sessions = SessionsController(newId = { "s${n++}" }, controllerFactory = { ConnectionController(fakeTransport(), scope) })
+    val sessions = SessionsController(
+        newId = { "s${n++}" },
+        controllerFactory = { ConnectionController(fakeTransport(), scope) },
+        // Remote-desktop tabs render against a still fake picture, so the Desktops section can be
+        // reviewed offscreen without a VNC/RDP server.
+        vncControllerFactory = { RemoteDesktopController(scope) },
+        openVncSession = { target, _ -> fakeRemoteDesktop(target.host) },
+    )
     // Empty password: the fake transport ignores auth (see FakeConnection); there's no real handshake.
     val h = hosts.hosts.first()
     sessions.open(h.id, h.label, h.connectionSubtitle(), h.toTarget(), SshAuth.Password(""))

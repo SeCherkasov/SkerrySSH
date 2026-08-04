@@ -4,11 +4,7 @@ import app.skerry.ui.connection.toRdpPassword
 import app.skerry.shared.ssh.isRdp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -87,7 +83,6 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.connection.DesktopPasswordDialog
 import app.skerry.ui.connection.connectableSecrets
 import app.skerry.ui.app.DesktopView
-import app.skerry.ui.design.HLine
 import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.app.LocalShowTerminal
@@ -105,9 +100,9 @@ import app.skerry.ui.host.NewConnectionModal
 import app.skerry.ui.host.SshConfigImportModal
 import app.skerry.ui.sync.PairingShowDialog
 import app.skerry.ui.app.PendingClose
+import app.skerry.ui.app.remoteChromeHidden
 import app.skerry.ui.settings.SettingsPanel
 import app.skerry.ui.sync.SyncSetupDialog
-import app.skerry.ui.design.VLine
 import app.skerry.ui.i18n.label
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.theme.Skerry
@@ -355,18 +350,14 @@ internal fun DesktopChrome(
                 }
             }
         }
+        // Full-window remote desktop: the picture takes the window, chrome and all — see [DesktopShell].
+        val bareDesktop = remoteChromeHidden(
+            immersive = state.remoteImmersive,
+            desktopSession = sessions?.activeDesktop != null,
+            overlayOpen = state.appOverlay != null,
+        )
         Box(Modifier.fillMaxSize().background(Skerry.colors.bg).onPreviewKeyEvent(onRootKey)) {
-            Column(Modifier.fillMaxSize()) {
-                TitleBar(state, onLockWithTunnels, windowChrome)
-                HLine()
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    IconRail(state)
-                    VLine(Skerry.colors.line)
-                    Box(Modifier.weight(1f).fillMaxHeight()) { Viewport(state) }
-                }
-                HLine()
-                StatusBar()
-            }
+            DesktopShell(state, onLockWithTunnels, windowChrome, bare = bareDesktop)
             // Mock/preview only: with live sessions a recording opens in its own tab (SessionView.Player),
             // and this state is never set. Esc (via ModalScrim) closes the overlay.
             state.castRecording?.let { cast -> CastPlayerOverlay(cast, onDismiss = state::closeCast) }

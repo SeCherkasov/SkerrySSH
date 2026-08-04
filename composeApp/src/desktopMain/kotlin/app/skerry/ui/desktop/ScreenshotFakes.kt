@@ -1,5 +1,12 @@
 package app.skerry.ui.desktop
 
+import app.skerry.shared.graphics.RemoteDesktopCapabilities
+import app.skerry.shared.graphics.RemoteDesktopQuality
+import app.skerry.shared.graphics.RemoteDesktopSession
+import app.skerry.shared.graphics.RemoteDesktopUpdate
+import app.skerry.shared.graphics.RemoteFramebuffer
+import app.skerry.shared.graphics.RemoteKeyEvent
+import app.skerry.shared.graphics.RemoteRect
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.sftp.SftpEntryType
@@ -148,3 +155,58 @@ internal class FakeSftpClient : SftpClient {
     override suspend fun rename(from: String, to: String) = Unit
     override suspend fun close() = Unit
 }
+
+/**
+ * Fake remote desktop: a still 1440×900 picture (gradient wallpaper with two "windows" on it) and
+ * an update flow that hands it over once and then hangs. Lets the Desktops section render a live
+ * session — its floating bar, its menus — without a VNC/RDP server.
+ */
+internal fun fakeRemoteDesktop(title: String): RemoteDesktopSession = object : RemoteDesktopSession {
+    override val title: String = title
+    override val framebuffer = RemoteFramebuffer(FAKE_DESKTOP_WIDTH, FAKE_DESKTOP_HEIGHT).also { paintFakeDesktop(it) }
+    override val capabilities = RemoteDesktopCapabilities(
+        adjustableQuality = true,
+        remoteResize = true,
+        cursorHandover = true,
+        audio = true,
+        clipboard = true,
+    )
+    override val updates: Flow<RemoteDesktopUpdate> = flow {
+        emit(RemoteDesktopUpdate.Region(listOf(RemoteRect(0, 0, FAKE_DESKTOP_WIDTH, FAKE_DESKTOP_HEIGHT))))
+        awaitCancellation()
+    }
+
+    override suspend fun sendPointer(x: Int, y: Int, buttonMask: Int) = Unit
+    override suspend fun sendKey(event: RemoteKeyEvent, down: Boolean) = Unit
+    override suspend fun sendClipboardText(text: String) = Unit
+    override suspend fun requestFullUpdate() = Unit
+    override suspend fun setQuality(quality: RemoteDesktopQuality) = Unit
+    override suspend fun setDesktopSize(width: Int, height: Int) = Unit
+    override suspend fun setLocalCursor(enabled: Boolean) = Unit
+    override suspend fun setOutputVisible(visible: Boolean) = Unit
+    override suspend fun setAudioMuted(muted: Boolean) = Unit
+    override suspend fun close() = Unit
+}
+
+private fun paintFakeDesktop(fb: RemoteFramebuffer) {
+    for (y in 0 until FAKE_DESKTOP_HEIGHT) {
+        val shade = 0x18 + (y * 0x22 / FAKE_DESKTOP_HEIGHT)
+        val argb = 0xFF shl 24 or (shade / 2 shl 16) or (shade shl 8) or (shade + 0x2A)
+        val row = IntArray(FAKE_DESKTOP_WIDTH) { argb }
+        fb.blitRow(0, y, FAKE_DESKTOP_WIDTH, row, 0)
+    }
+    fakeWindow(fb, x = 90, y = 120, w = 640, h = 380)
+    fakeWindow(fb, x = 500, y = 380, w = 700, h = 440)
+}
+
+private fun fakeWindow(fb: RemoteFramebuffer, x: Int, y: Int, w: Int, h: Int) {
+    for (dy in 0 until h) {
+        val titleBar = dy < 26
+        val argb = if (titleBar) 0xFF2B3550.toInt() else 0xFF10141F.toInt()
+        val row = IntArray(w) { argb }
+        fb.blitRow(x, y + dy, w, row, 0)
+    }
+}
+
+private const val FAKE_DESKTOP_WIDTH = 1440
+private const val FAKE_DESKTOP_HEIGHT = 900
