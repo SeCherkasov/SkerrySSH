@@ -501,10 +501,12 @@ internal fun DesktopChrome(
             // and any modal still covers it.
             LocalRunbookRunner.current?.let { runner ->
                 // Any pane of the active tab: a run started in a split pane is still this tab's.
-                val runPaneId = runner.sessionId
-                if (runPaneId != null && sessions?.activeTerminal?.pane(runPaneId) != null) {
+                // With several hosts in one run, each tab shows its own host's progress.
+                val host = runner.hosts.firstOrNull { sessions?.activeTerminal?.pane(it.sessionId) != null }
+                if (host != null) {
                     RunbookRunPanel(
                         runner,
+                        host,
                         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 46.dp),
                     )
                 }

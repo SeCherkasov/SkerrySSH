@@ -111,6 +111,9 @@ class RunbookRunnerTest {
         }
     }
 
+    /** The single host of these runs — multi-host behaviour has its own test class. */
+    private val RunbookRunner.only: RunbookHostRun get() = hosts.single()
+
     /** Prepare + confirm in one call: the dialog step has its own coverage in the UI layer. */
     private fun RunbookRunner.startNow(
         runbook: Runbook,
@@ -124,14 +127,14 @@ class RunbookRunnerTest {
         // nothing that will ever print the marker. The run cannot know that, but it can see that the
         // step has printed nothing for a long time and has not reported a status.
         r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
-        assertFalse(r.steps[0].stalled)
+        assertFalse(r.only.steps[0].stalled)
 
         testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
 
-        assertTrue(r.steps[0].stalled)
+        assertTrue(r.only.steps[0].stalled)
         // Not killed: `sleep 3600` and a silent migration look exactly the same from here, so the
         // decision stays the user's.
-        assertEquals(RunbookStepStatus.RUNNING, r.steps[0].status)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status)
         assertEquals(RunbookPhase.RUNNING, r.phase)
     }
 
@@ -145,59 +148,59 @@ class RunbookRunnerTest {
         }
         testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
 
-        assertFalse(r.steps[0].stalled, "a long step that talks is not a stuck one")
+        assertFalse(r.only.steps[0].stalled, "a long step that talks is not a stuck one")
     }
 
     @Test
     fun output_after_a_quiet_spell_clears_the_flag() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "./migrate.sh")), term.target()) { "" }
         testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
-        assertTrue(r.steps[0].stalled)
+        assertTrue(r.only.steps[0].stalled)
 
         term.buffer += "migrating 1/400\n"
         testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
 
-        assertFalse(r.steps[0].stalled)
+        assertFalse(r.only.steps[0].stalled)
     }
 
     @Test
     fun a_step_that_reports_after_a_quiet_spell_does_not_stay_flagged() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "sleep 300")), term.target()) { "" }
         testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
-        assertTrue(r.steps[0].stalled)
+        assertTrue(r.only.steps[0].stalled)
 
         term.complete(0, 0)
         testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.SUCCEEDED, r.steps[0].status)
-        assertFalse(r.steps[0].stalled)
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
+        assertFalse(r.only.steps[0].stalled)
     }
 
     @Test
     fun stopping_a_flagged_step_clears_the_flag_and_a_late_poll_cannot_bring_it_back() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
         testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
-        assertTrue(r.steps[0].stalled)
+        assertTrue(r.only.steps[0].stalled)
 
         r.stop()
         // A poll that passed its staleness check just before Stop must not re-flag a run that is
         // over — the same race the generation guard exists for, now on this flag too.
         testScheduler.advanceTimeBy(stallAfter * 2); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.STOPPED, r.steps[0].status)
-        assertFalse(r.steps[0].stalled)
+        assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
+        assertFalse(r.only.steps[0].stalled)
     }
 
     @Test
     fun a_new_run_after_a_stalled_one_starts_unflagged() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
         testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
-        assertTrue(r.steps[0].stalled)
+        assertTrue(r.only.steps[0].stalled)
         r.stop()
 
         r.startNow(runbook(step("s1", "uptime")), term.target()) { "" }
 
-        assertFalse(r.steps[0].stalled)
+        assertFalse(r.only.steps[0].stalled)
     }
 
     @Test
@@ -206,7 +209,7 @@ class RunbookRunnerTest {
 
         val expected = RunbookMarker.probeLine("systemctl restart nginx", RunbookMarker.token(RUN_ID, 0)) + "\n"
         assertEquals(listOf(expected), term.sent)
-        assertEquals(RunbookStepStatus.RUNNING, r.steps[0].status)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status)
     }
 
     @Test
@@ -216,7 +219,7 @@ class RunbookRunnerTest {
 
         // Only the first step was ever sent: the echo of its own line must not read as an exit code.
         assertEquals(1, term.sent.size)
-        assertEquals(RunbookStepStatus.RUNNING, r.steps[0].status)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status)
     }
 
     @Test
@@ -225,14 +228,14 @@ class RunbookRunnerTest {
         term.complete(0, 0)
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.SUCCEEDED, r.steps[0].status)
-        assertEquals(0, r.steps[0].exitCode)
-        assertEquals(RunbookStepStatus.RUNNING, r.steps[1].status)
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
+        assertEquals(0, r.only.steps[0].exitCode)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[1].status)
 
         term.complete(1, 0)
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.SUCCEEDED, r.steps[1].status)
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[1].status)
         assertEquals(RunbookPhase.DONE, r.phase)
         assertFalse(r.active)
         assertFalse(r.hadFailures)
@@ -244,12 +247,12 @@ class RunbookRunnerTest {
         testScheduler.advanceTimeBy(poll * 10); testScheduler.runCurrent()
 
         assertEquals(RunbookPhase.AWAITING_CONFIRM, r.phase)
-        assertEquals(RunbookStepStatus.AWAITING_CONFIRM, r.steps[0].status)
+        assertEquals(RunbookStepStatus.AWAITING_CONFIRM, r.only.steps[0].status)
         assertTrue(term.sent.isEmpty(), "nothing may reach the shell before the go-ahead")
 
         r.confirmStep()
         assertEquals(1, term.sent.size)
-        assertEquals(RunbookStepStatus.RUNNING, r.steps[0].status)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status)
     }
 
     @Test
@@ -258,9 +261,9 @@ class RunbookRunnerTest {
         term.complete(0, 1)
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.FAILED, r.steps[0].status)
-        assertEquals(1, r.steps[0].exitCode)
-        assertEquals(RunbookStepStatus.PENDING, r.steps[1].status)
+        assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
+        assertEquals(1, r.only.steps[0].exitCode)
+        assertEquals(RunbookStepStatus.PENDING, r.only.steps[1].status)
         assertEquals(RunbookPhase.FAILED, r.phase)
         assertEquals(1, term.sent.size, "the next command must not run after a failure")
     }
@@ -274,8 +277,8 @@ class RunbookRunnerTest {
         term.complete(0, 1)
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.FAILED, r.steps[0].status)
-        assertEquals(RunbookStepStatus.RUNNING, r.steps[1].status)
+        assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[1].status)
         assertEquals(RunbookPhase.RUNNING, r.phase)
 
         term.complete(1, 0)
@@ -290,8 +293,8 @@ class RunbookRunnerTest {
         r.startNow(runbook(step("s1", "reboot", confirm = true), step("s2", "uptime")), term.target()) { "" }
         r.skipStep()
 
-        assertEquals(RunbookStepStatus.SKIPPED, r.steps[0].status)
-        assertEquals(RunbookStepStatus.RUNNING, r.steps[1].status)
+        assertEquals(RunbookStepStatus.SKIPPED, r.only.steps[0].status)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[1].status)
         assertEquals(listOf(RunbookMarker.probeLine("uptime", RunbookMarker.token(RUN_ID, 1)) + "\n"), term.sent)
     }
 
@@ -301,7 +304,7 @@ class RunbookRunnerTest {
         r.stop()
 
         assertEquals(RunbookPhase.STOPPED, r.phase)
-        assertEquals(RunbookStepStatus.STOPPED, r.steps[0].status)
+        assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
 
         // Even if the step's marker turns up afterwards, the run is over.
         term.complete(0, 0)
@@ -402,7 +405,7 @@ class RunbookRunnerTest {
         r.close()
         assertNull(r.phase)
         assertNull(r.runbook)
-        assertTrue(r.steps.isEmpty())
+        assertTrue(r.hosts.isEmpty())
     }
 
     @Test
@@ -414,8 +417,8 @@ class RunbookRunnerTest {
 
         testScheduler.advanceTimeBy(stallAfter * 10); testScheduler.runCurrent()
 
-        assertFalse(r.steps[0].stalled)
-        assertEquals(RunbookStepStatus.RUNNING, r.steps[0].status)
+        assertFalse(r.only.steps[0].stalled)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status)
     }
 
     @Test
@@ -427,8 +430,8 @@ class RunbookRunnerTest {
         term.complete(0, 1)
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.FAILED, r.steps[0].status)
-        assertEquals(RunbookStepStatus.RUNNING, r.steps[1].status)
+        assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[1].status)
         assertTrue(r.hadFailures)
     }
 
@@ -443,8 +446,8 @@ class RunbookRunnerTest {
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
         assertEquals("/tmp/release.tgz" to "/srv/incoming/release.tgz", sftp.lastUpload)
-        assertEquals(RunbookStepStatus.SUCCEEDED, r.steps[0].status)
-        assertEquals(0, r.steps[0].exitCode)
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
+        assertEquals(0, r.only.steps[0].exitCode)
         assertEquals(RunbookPhase.DONE, r.phase)
         assertTrue(term.sent.isEmpty(), "a transfer must not type anything into the shell")
     }
@@ -459,8 +462,8 @@ class RunbookRunnerTest {
         r.startNow(runbook(transfer("s1")), term.target()) { "" }
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
-        assertEquals(4096L, r.steps[0].transferredBytes)
-        assertEquals(4096L, r.steps[0].totalBytes)
+        assertEquals(4096L, r.only.steps[0].transferredBytes)
+        assertEquals(4096L, r.only.steps[0].totalBytes)
     }
 
     @Test
@@ -484,7 +487,7 @@ class RunbookRunnerTest {
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
         assertEquals("/var/log/app/last.log" to "/tmp/last.log", sftp.lastDownload)
-        assertEquals(RunbookStepStatus.SUCCEEDED, r.steps[0].status)
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
     }
 
     @Test
@@ -497,8 +500,8 @@ class RunbookRunnerTest {
         r.startNow(runbook(transfer("s1"), step("s2", "systemctl restart app")), term.target()) { "" }
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.FAILED, r.steps[0].status)
-        val failure = assertIs<RunbookStepFailure.Transfer>(r.steps[0].failure)
+        assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
+        val failure = assertIs<RunbookStepFailure.Transfer>(r.only.steps[0].failure)
         assertTrue(failure.message.contains("Permission denied"), failure.message)
         assertEquals(RunbookPhase.FAILED, r.phase)
         assertTrue(term.sent.isEmpty(), "the next step must not run after a failed transfer")
@@ -512,8 +515,8 @@ class RunbookRunnerTest {
         r.startNow(runbook(transfer("s1")), term.target()) { "" }
         testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.FAILED, r.steps[0].status)
-        assertEquals(RunbookStepFailure.NoSftpChannel, r.steps[0].failure)
+        assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
+        assertEquals(RunbookStepFailure.NoSftpChannel, r.only.steps[0].failure)
         assertEquals(RunbookPhase.FAILED, r.phase)
     }
 
@@ -546,7 +549,7 @@ class RunbookRunnerTest {
         sftp.transferGate?.complete(Unit)
         testScheduler.advanceTimeBy(poll * 5); testScheduler.runCurrent()
 
-        assertEquals(RunbookStepStatus.STOPPED, r.steps[0].status)
+        assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
         assertEquals(RunbookPhase.STOPPED, r.phase)
         assertTrue(term.sent.isEmpty(), "the step after a stopped transfer must not be sent")
     }

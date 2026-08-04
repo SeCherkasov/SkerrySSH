@@ -43,6 +43,7 @@ import app.skerry.ui.generated.resources.runbook_panel_skip_step
 import app.skerry.ui.generated.resources.runbook_panel_stop
 import app.skerry.ui.generated.resources.runbook_panel_stopped
 import app.skerry.ui.generated.resources.runbook_panel_waiting
+import app.skerry.ui.generated.resources.runbook_panel_waiting_host
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
@@ -55,7 +56,7 @@ import org.jetbrains.compose.resources.stringResource
  * Renders nothing when no run is in flight, so a caller can place it unconditionally.
  */
 @Composable
-fun RunbookRunPanel(runner: RunbookRunner, modifier: Modifier = Modifier) {
+fun RunbookRunPanel(runner: RunbookRunner, host: RunbookHostRun, modifier: Modifier = Modifier) {
     val phase = runner.phase ?: return
     val runbook = runner.runbook ?: return
     val mono = LocalFonts.current.mono
@@ -79,7 +80,7 @@ fun RunbookRunPanel(runner: RunbookRunner, modifier: Modifier = Modifier) {
                 )
                 Txt(
                     phaseLabel(phase, runner.hadFailures) + " · " +
-                        stringResource(Res.string.runbook_panel_progress, finishedCount(runner), runner.steps.size),
+                        stringResource(Res.string.runbook_panel_progress, host.finishedCount, host.steps.size),
                     color = phaseColor(phase, runner.hadFailures), size = 11.sp,
                 )
             }
@@ -89,7 +90,7 @@ fun RunbookRunPanel(runner: RunbookRunner, modifier: Modifier = Modifier) {
             Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            runner.steps.forEach { state -> key(state) { StepRow(state, mono) } }
+            host.steps.forEach { state -> key(state) { StepRow(state, mono) } }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -156,6 +157,7 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
 
 @Composable
 private fun phaseLabel(phase: RunbookPhase, hadFailures: Boolean): String = when (phase) {
+    RunbookPhase.WAITING -> stringResource(Res.string.runbook_panel_waiting_host)
     RunbookPhase.AWAITING_CONFIRM -> stringResource(Res.string.runbook_panel_waiting)
     RunbookPhase.RUNNING -> stringResource(Res.string.runbook_panel_running)
     RunbookPhase.DONE ->
@@ -167,6 +169,7 @@ private fun phaseLabel(phase: RunbookPhase, hadFailures: Boolean): String = when
 
 @Composable
 private fun phaseColor(phase: RunbookPhase, hadFailures: Boolean): Color = when (phase) {
+    RunbookPhase.WAITING -> Skerry.colors.dim
     RunbookPhase.AWAITING_CONFIRM -> Skerry.colors.cyanBright
     RunbookPhase.RUNNING -> Skerry.colors.cyan
     RunbookPhase.DONE -> if (hadFailures) Skerry.colors.storm else Skerry.colors.moss
@@ -195,9 +198,3 @@ private fun statusIcon(status: RunbookStepStatus): String = when (status) {
     RunbookStepStatus.STOPPED -> "stop_circle"
 }
 
-/** Steps that already have a verdict — what "3 of 7" counts. */
-private fun finishedCount(runner: RunbookRunner): Int = runner.steps.count {
-    it.status == RunbookStepStatus.SUCCEEDED ||
-        it.status == RunbookStepStatus.FAILED ||
-        it.status == RunbookStepStatus.SKIPPED
-}

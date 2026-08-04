@@ -39,6 +39,7 @@
     <string name="runbook_panel_running">Running</string>
     <string name="runbook_panel_stalled">No output and no status yet — the shell may be waiting for input. Check the terminal.</string>
     <string name="runbook_panel_waiting">Waiting for you</string>
+    <string name="runbook_panel_waiting_host">Waiting for its turn</string>
     <string name="runbook_panel_done">Finished</string>
     <string name="runbook_panel_done_with_failures">Finished with failures</string>
     <string name="runbook_panel_failed">Stopped on a failure</string>
