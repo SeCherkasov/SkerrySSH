@@ -41,7 +41,7 @@ data class SyncSettings(
         RecordType.TEAM, RecordType.TEAM_IDENTITY -> true
         // A runbook is a checklist of the same commands, saved and shared for the same reasons, so
         // it follows the snippets toggle instead of adding a switch nobody would set differently.
-        RecordType.SNIPPET, RecordType.RUNBOOK -> syncSnippets
+        RecordType.SNIPPET, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN -> syncSnippets
         RecordType.HOST,
         RecordType.GROUP,
         RecordType.IDENTITY,

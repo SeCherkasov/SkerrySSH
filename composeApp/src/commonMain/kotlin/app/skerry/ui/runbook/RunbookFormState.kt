@@ -4,35 +4,69 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookStep
+import app.skerry.shared.runbook.RunbookTransferDirection
 import app.skerry.ui.snippet.parseSnippetTags
+
+/** What a step row is being edited as; the saved shape follows from it ([RunbookStepDraft.toStep]). */
+enum class RunbookStepKind { COMMAND, TRANSFER }
 
 /**
  * One editable step row. Its own object (rather than an index into a list of data classes) so the
  * editor can key rows by identity: a reorder must move the row, not retype every field below it.
  * [stepId] is the saved [RunbookStep.id], empty for a row added in the form — [RunbookManager.save]
  * assigns identity, the same division of labour as [RunbookDraft.id].
+ *
+ * Both kinds' fields live side by side: switching a row from a command to a transfer and back must
+ * not throw away what was typed before the switch.
  */
 @Stable
 class RunbookStepDraft internal constructor(
     internal val stepId: String,
+    kind: RunbookStepKind = RunbookStepKind.COMMAND,
     title: String = "",
     command: String = "",
+    localPath: String = "",
+    remotePath: String = "",
+    direction: RunbookTransferDirection = RunbookTransferDirection.UPLOAD,
     confirm: Boolean = true,
     continueOnError: Boolean = false,
 ) {
+    var kind: RunbookStepKind by mutableStateOf(kind)
     var title: String by mutableStateOf(title)
     var command: String by mutableStateOf(command)
+    var localPath: String by mutableStateOf(localPath)
+    var remotePath: String by mutableStateOf(remotePath)
+    var direction: RunbookTransferDirection by mutableStateOf(direction)
     var confirm: Boolean by mutableStateOf(confirm)
     var continueOnError: Boolean by mutableStateOf(continueOnError)
 
-    internal fun toStep(): RunbookStep = RunbookStep(
-        id = stepId,
-        title = title.trim(),
-        command = command,
-        confirm = confirm,
-        continueOnError = continueOnError,
-    )
+    /** Whether the row says what to do: a command line, or both ends of a transfer. */
+    internal val filled: Boolean
+        get() = when (kind) {
+            RunbookStepKind.COMMAND -> command.isNotBlank()
+            RunbookStepKind.TRANSFER -> localPath.isNotBlank() && remotePath.isNotBlank()
+        }
+
+    internal fun toStep(): RunbookStep = when (kind) {
+        RunbookStepKind.COMMAND -> RunbookStep.Command(
+            id = stepId,
+            title = title.trim(),
+            command = command,
+            confirm = confirm,
+            continueOnError = continueOnError,
+        )
+        RunbookStepKind.TRANSFER -> RunbookStep.Transfer(
+            id = stepId,
+            title = title.trim(),
+            localPath = localPath.trim(),
+            remotePath = remotePath.trim(),
+            direction = direction,
+            confirm = confirm,
+            continueOnError = continueOnError,
+        )
+    }
 }
 
 /**
@@ -56,11 +90,15 @@ class RunbookFormState private constructor(private val editingId: String?) {
     var steps: List<RunbookStepDraft> by mutableStateOf(listOf(RunbookStepDraft(stepId = "")))
         private set
 
-    /** A runbook needs a name and something to run; empty rows are dropped on save. */
-    val canSave: Boolean get() = label.isNotBlank() && steps.any { it.command.isNotBlank() }
+    /** Run policy — the chips above the step list ([RunbookPolicy]). */
+    var stopOnFirstFailure: Boolean by mutableStateOf(RunbookPolicy().stopOnFirstFailure)
+    var watchdogMinutes: Int by mutableStateOf(RunbookPolicy().watchdogMinutes)
 
-    fun addStep() {
-        steps = steps + RunbookStepDraft(stepId = "")
+    /** A runbook needs a name and something to run; empty rows are dropped on save. */
+    val canSave: Boolean get() = label.isNotBlank() && steps.any { it.filled }
+
+    fun addStep(kind: RunbookStepKind = RunbookStepKind.COMMAND) {
+        steps = steps + RunbookStepDraft(stepId = "", kind = kind)
     }
 
     /** Removes [step]; the last remaining row is replaced by a fresh empty one, never by nothing. */
@@ -100,6 +138,7 @@ class RunbookFormState private constructor(private val editingId: String?) {
         description = description.trim(),
         steps = steps.map { it.toStep() },
         tags = (tags + parseSnippetTags(tagDraft)).distinct(),
+        policy = RunbookPolicy(stopOnFirstFailure = stopOnFirstFailure, watchdogMinutes = watchdogMinutes),
     )
 
     companion object {
@@ -110,11 +149,31 @@ class RunbookFormState private constructor(private val editingId: String?) {
                 label = runbook.label
                 description = runbook.description
                 tags = runbook.tags
-                if (runbook.steps.isNotEmpty()) {
-                    steps = runbook.steps.map {
-                        RunbookStepDraft(it.id, it.title, it.command, it.confirm, it.continueOnError)
-                    }
-                }
+                stopOnFirstFailure = runbook.policy.stopOnFirstFailure
+                watchdogMinutes = runbook.policy.watchdogMinutes
+                if (runbook.steps.isNotEmpty()) steps = runbook.steps.map { it.toDraft() }
             }
     }
+}
+
+/** The editable row a saved step opens as. */
+private fun RunbookStep.toDraft(): RunbookStepDraft = when (this) {
+    is RunbookStep.Command -> RunbookStepDraft(
+        stepId = id,
+        kind = RunbookStepKind.COMMAND,
+        title = title,
+        command = command,
+        confirm = confirm,
+        continueOnError = continueOnError,
+    )
+    is RunbookStep.Transfer -> RunbookStepDraft(
+        stepId = id,
+        kind = RunbookStepKind.TRANSFER,
+        title = title,
+        localPath = localPath,
+        remotePath = remotePath,
+        direction = direction,
+        confirm = confirm,
+        continueOnError = continueOnError,
+    )
 }

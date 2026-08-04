@@ -41,6 +41,7 @@ import app.skerry.ui.app.LocalTrustedCas
 import app.skerry.ui.app.LocalTestTransport
 import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
+import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSnippets
@@ -276,6 +277,7 @@ fun MobileDesignApp(
         LocalSnippets provides deps.snippets,
         LocalRunbooks provides deps.runbooks,
         LocalRunbookRunner provides deps.runbookRunner,
+        LocalRunbookHistory provides deps.runbookHistory,
         LocalTerminalHistory provides termHistory,
         // Vault + biometrics — for the More screen's "unlock with biometrics" toggle (enable/reconfigure).
         LocalVault provides deps.vault,

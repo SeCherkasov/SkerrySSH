@@ -54,6 +54,7 @@ import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.runbook.RunbookRunPanel
 import app.skerry.ui.runbook.RunbookStartDialog
+import app.skerry.ui.runbook.runInActiveTab
 import app.skerry.ui.snippet.SnippetRunDialog
 import app.skerry.ui.app.MobileBackAction
 import app.skerry.ui.app.MobileDesignState
@@ -264,9 +265,11 @@ internal fun MobileChrome(
                 // Not gated on the terminal route: a run paused on a confirmation would otherwise
                 // lose its only Run/Skip/Stop buttons the moment the user opened another screen,
                 // and nothing would say a procedure is half-finished.
-                if (runner.sessionId != null && runner.sessionId == LocalSessions.current?.activeTerminal?.id) {
+                val run = runner.runInActiveTab(LocalSessions.current)
+                if (run != null) {
                     RunbookRunPanel(
                         runner,
+                        run,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp),
                     )
                 }

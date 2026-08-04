@@ -23,7 +23,7 @@ import app.skerry.ui.terminal.TerminalScreenState
  * framebuffer tab (remote desktop) and [Player] a recording being replayed — neither has
  * terminal/SFTP sub-views.
  */
-enum class SessionView { Terminal, Sftp, Monitor, Vnc, Player }
+enum class SessionView { Terminal, Sftp, Monitor, Vnc, Player, Runbook }
 
 /**
  * One session — a single connection with its own [ConnectionController] (one shell per session),

@@ -65,6 +65,7 @@ fun SessionView.asDesktopView(): DesktopView = when (this) {
     // Terminal); don't highlight one.
     SessionView.Vnc -> DesktopView.Terminal
     SessionView.Player -> DesktopView.Terminal
+    SessionView.Runbook -> DesktopView.Terminal
 }
 
 /**

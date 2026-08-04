@@ -39,6 +39,7 @@ import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
+import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
 import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.design.IconBtn
@@ -50,10 +51,12 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_empty
 import app.skerry.ui.generated.resources.runbook_no_matches
 import app.skerry.ui.generated.resources.runbook_palette_placeholder
+import app.skerry.ui.generated.resources.runbook_run_open
 import app.skerry.ui.generated.resources.runbook_step_count
 import app.skerry.ui.generated.resources.runbook_toolbar_tip
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.session.Session
+import app.skerry.ui.session.SessionView
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -76,6 +79,19 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
     // palette without this button having to be on screen (it may be parked out of a narrow toolbar).
     LaunchedEffect(requests, terminal) { requests?.collect { if (terminal != null) open = true } }
     if (manager == null || runner == null) return
+    // While this tab is part of a run, the icon is the way back to the run screen rather than a
+    // palette: a second runbook can't start anyway, and the run is what the icon now stands for.
+    val inRun = active?.id?.let(runner::runIn)
+    if (inRun != null) {
+        val sessions = LocalSessions.current
+        IconBtn(
+            "checklist",
+            onClick = { sessions?.setActiveView(SessionView.Runbook) },
+            tint = if (runner.phase == RunbookPhase.AWAITING_CONFIRM) Skerry.colors.cyanBright else Skerry.colors.cyan,
+            tooltip = stringResource(Res.string.runbook_run_open),
+        )
+        return
+    }
     // Nothing to run into without a connected session, and one run at a time: the button dims and
     // doesn't open rather than offering a list that can't start anything.
     val enabled = terminal != null && !runner.active && runner.pending == null
@@ -86,7 +102,7 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
             tint = if (enabled) Skerry.colors.dim else Skerry.colors.faint,
             tooltip = stringResource(Res.string.runbook_toolbar_tip),
         )
-        if (open && enabled && terminal != null && active != null) {
+        if (open && enabled) {
             Popup(
                 alignment = Alignment.TopEnd,
                 onDismissRequest = { open = false },
@@ -95,7 +111,7 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
                 RunbookPalette(manager) { entry ->
                     runner.requestStart(
                         entry.runbook,
-                        runbookTarget(active.id, terminal),
+                        runbookTarget(active.id, terminal, active.controller),
                         recording = terminal.recording,
                     )
                     open = false

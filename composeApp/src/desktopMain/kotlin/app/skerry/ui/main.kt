@@ -345,9 +345,13 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     val runbooks = app.skerry.ui.runbook.RunbookManager(
         app.skerry.shared.runbook.VaultRunbookStore(vault, trash),
     ) { UUID.randomUUID().toString() }
+    // History of past runs: RUNBOOK_RUN records next to the runbooks themselves, capped per
+    // runbook. It holds outcomes and timings only — never a command line or its output.
+    val runbookHistory = app.skerry.shared.runbook.VaultRunbookRunStore(vault)
     val runbookRunner = app.skerry.ui.runbook.RunbookRunner(
         scope = tunnelScope,
         newId = { UUID.randomUUID().toString() },
+        onFinished = runbookHistory::record,
     )
     // AI assistant: settings (provider/BYOK/local model) are an encrypted SETTINGS record in the
     // vault; a request routes to the cloud or to the local runtime (Llamatik/llama.cpp). Local AI:
@@ -482,7 +486,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // A share started or ended somewhere in the team: re-read the directory rather than wait for
     // the user to reopen the screen.
     teams.onSharesChanged = { sharedSessions.refresh() }
-    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi, audioOutputs = app.skerry.shared.audio.JavaSoundOutputs())
+    val deps = AppDependencies(transport = transport, hosts = hosts, vault = vault, credentials = credentials, knownHosts = knownHosts, trustedCas = trustedCas, keyGenerator = keyGenerator, certificateInspector = certificateInspector, secretFiles = secretFiles, tunnels = tunnels, snippets = snippets, runbooks = runbooks, runbookRunner = runbookRunner, runbookHistory = runbookHistory, sync = sync, teams = teams, sessionShare = sessionShare, sharedSessions = sharedSessions, localAi = localAi, audioOutputs = app.skerry.shared.audio.JavaSoundOutputs())
     return DesktopGraph(
         deps = deps,
         keyboardInteractive = keyboardInteractive,
@@ -661,6 +665,7 @@ fun main(args: Array<String>) {
                     snippets = deps.snippets,
                     runbooks = deps.runbooks,
                     runbookRunner = deps.runbookRunner,
+                    runbookHistory = deps.runbookHistory,
                     sync = deps.sync,
                     teams = deps.teams,
                     ai = graph.ai,

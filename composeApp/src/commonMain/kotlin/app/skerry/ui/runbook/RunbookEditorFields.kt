@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -22,8 +24,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.runbook.RunbookTransferDirection
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.IconBtn
@@ -32,33 +36,52 @@ import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.runbook_direction_download
+import app.skerry.ui.generated.resources.runbook_direction_upload
 import app.skerry.ui.generated.resources.runbook_field_description
 import app.skerry.ui.generated.resources.runbook_field_name
 import app.skerry.ui.generated.resources.runbook_field_tags
+import app.skerry.ui.generated.resources.runbook_kind_command
+import app.skerry.ui.generated.resources.runbook_kind_transfer
 import app.skerry.ui.generated.resources.runbook_ph_description
+import app.skerry.ui.generated.resources.runbook_ph_local
 import app.skerry.ui.generated.resources.runbook_ph_name
+import app.skerry.ui.generated.resources.runbook_ph_remote
 import app.skerry.ui.generated.resources.runbook_ph_tags
+import app.skerry.ui.generated.resources.runbook_policy
+import app.skerry.ui.generated.resources.runbook_policy_stop
+import app.skerry.ui.generated.resources.runbook_policy_watchdog
+import app.skerry.ui.generated.resources.runbook_policy_watchdog_off
+import app.skerry.ui.generated.resources.runbook_policy_watchdog_value
 import app.skerry.ui.generated.resources.runbook_step_add
 import app.skerry.ui.generated.resources.runbook_step_command
 import app.skerry.ui.generated.resources.runbook_step_confirm
 import app.skerry.ui.generated.resources.runbook_step_continue_on_error
 import app.skerry.ui.generated.resources.runbook_step_down
+import app.skerry.ui.generated.resources.runbook_step_local
 import app.skerry.ui.generated.resources.runbook_step_n
+import app.skerry.ui.generated.resources.runbook_step_remote
 import app.skerry.ui.generated.resources.runbook_step_remove
 import app.skerry.ui.generated.resources.runbook_step_title
 import app.skerry.ui.generated.resources.runbook_step_up
 import app.skerry.ui.generated.resources.runbook_steps
+import app.skerry.ui.generated.resources.runbook_transfer_note
+import app.skerry.ui.generated.resources.runbook_vars_hint
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
+/** Watchdog values the editor offers, in minutes; `0` turns the warning off. */
+private val WATCHDOG_CHOICES = listOf(0, 2, 5, 15)
+
 /**
- * The runbook form itself — name, description, tags and the step list — over [RunbookFormState].
- * Shared by the desktop editor ([RunbooksView]) and the mobile sheet: same fields, same validation,
- * only the surrounding chrome differs.
+ * The runbook form itself — name, description, tags, the step list and the run policy — over
+ * [RunbookFormState]. Shared by the desktop panel ([RunbookEditorPanel]) and the mobile sheet: same
+ * fields, same validation, only the surrounding chrome differs, which is what [horizontalPadding]
+ * is for (the panel pads itself, the sheet doesn't).
  */
 @Composable
-fun RunbookEditorFields(form: RunbookFormState, mono: FontFamily) {
-    Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
+fun RunbookEditorFields(form: RunbookFormState, mono: FontFamily, horizontalPadding: Dp = 24.dp) {
+    Column(Modifier.padding(horizontal = horizontalPadding, vertical = 20.dp)) {
         RunbookFieldLabel(stringResource(Res.string.runbook_field_name))
         RunbookLineField(form.label, { form.label = it }, stringResource(Res.string.runbook_ph_name), LocalFonts.current.ui)
 
@@ -99,9 +122,39 @@ fun RunbookEditorFields(form: RunbookFormState, mono: FontFamily) {
                 }
             }
             GhostButton(
-                stringResource(Res.string.runbook_step_add), icon = "add", onClick = form::addStep,
+                stringResource(Res.string.runbook_step_add), icon = "add", onClick = { form.addStep() },
                 modifier = Modifier.padding(top = 10.dp),
             )
+        }
+
+        Column(Modifier.padding(top = 24.dp)) {
+            RunbookFieldLabel(stringResource(Res.string.runbook_policy))
+            PolicyFields(form)
+        }
+    }
+}
+
+/** Run policy: what stops the run, how long a silent step is given, how hosts are spread. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PolicyFields(form: RunbookFormState) {
+    StepFlagRow(stringResource(Res.string.runbook_policy_stop), form.stopOnFirstFailure) {
+        form.stopOnFirstFailure = !form.stopOnFirstFailure
+    }
+    Txt(
+        stringResource(Res.string.runbook_policy_watchdog), color = Skerry.colors.faint, size = 11.sp,
+        modifier = Modifier.padding(top = 14.dp, bottom = 6.dp),
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        WATCHDOG_CHOICES.forEach { minutes ->
+            key(minutes) {
+                Chip(
+                    if (minutes == 0) stringResource(Res.string.runbook_policy_watchdog_off)
+                    else stringResource(Res.string.runbook_policy_watchdog_value, minutes),
+                    active = form.watchdogMinutes == minutes,
+                    onClick = { form.watchdogMinutes = minutes },
+                )
+            }
         }
     }
 }
@@ -137,17 +190,67 @@ private fun StepEditor(
                 tooltip = stringResource(Res.string.runbook_step_remove),
             )
         }
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            Chip(
+                stringResource(Res.string.runbook_kind_command),
+                active = step.kind == RunbookStepKind.COMMAND,
+                onClick = { step.kind = RunbookStepKind.COMMAND },
+            )
+            Chip(
+                stringResource(Res.string.runbook_kind_transfer),
+                active = step.kind == RunbookStepKind.TRANSFER,
+                onClick = { step.kind = RunbookStepKind.TRANSFER },
+            )
+        }
         Box(Modifier.padding(top = 8.dp)) {
             RunbookLineField(step.title, { step.title = it }, stringResource(Res.string.runbook_step_title), LocalFonts.current.ui)
         }
-        Box(Modifier.padding(top = 8.dp)) {
-            RunbookCommandField(step.command, { step.command = it }, stringResource(Res.string.runbook_step_command), mono)
+        when (step.kind) {
+            RunbookStepKind.COMMAND -> Column(Modifier.padding(top = 8.dp)) {
+                RunbookCommandField(step.command, { step.command = it }, stringResource(Res.string.runbook_step_command), mono)
+                Txt(
+                    stringResource(Res.string.runbook_vars_hint), color = Skerry.colors.faint, size = 11.sp,
+                    lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            RunbookStepKind.TRANSFER -> TransferFields(step, mono)
         }
         StepFlagRow(stringResource(Res.string.runbook_step_confirm), step.confirm) { step.confirm = !step.confirm }
         StepFlagRow(stringResource(Res.string.runbook_step_continue_on_error), step.continueOnError) {
             step.continueOnError = !step.continueOnError
         }
     }
+}
+
+/** The two ends of a transfer step plus the direction the file travels. */
+@Composable
+private fun TransferFields(step: RunbookStepDraft, mono: FontFamily) {
+    Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        RunbookTransferDirection.entries.forEach { direction ->
+            key(direction) {
+                Chip(
+                    when (direction) {
+                        RunbookTransferDirection.UPLOAD -> stringResource(Res.string.runbook_direction_upload)
+                        RunbookTransferDirection.DOWNLOAD -> stringResource(Res.string.runbook_direction_download)
+                    },
+                    active = step.direction == direction,
+                    onClick = { step.direction = direction },
+                )
+            }
+        }
+    }
+    Column(Modifier.padding(top = 8.dp)) {
+        RunbookFieldLabel(stringResource(Res.string.runbook_step_local))
+        RunbookLineField(step.localPath, { step.localPath = it }, stringResource(Res.string.runbook_ph_local), mono)
+    }
+    Column(Modifier.padding(top = 10.dp)) {
+        RunbookFieldLabel(stringResource(Res.string.runbook_step_remote))
+        RunbookLineField(step.remotePath, { step.remotePath = it }, stringResource(Res.string.runbook_ph_remote), mono)
+    }
+    Txt(
+        stringResource(Res.string.runbook_transfer_note), color = Skerry.colors.faint, size = 11.sp,
+        lineHeight = 15.sp, modifier = Modifier.padding(top = 8.dp),
+    )
 }
 
 @Composable

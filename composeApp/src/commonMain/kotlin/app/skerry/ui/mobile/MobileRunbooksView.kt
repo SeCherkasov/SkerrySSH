@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSessions
@@ -146,7 +147,7 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
                     if (runner == null || session == null || terminal == null) return@run
                     val started = runner.requestStart(
                         entry.runbook,
-                        runbookTarget(session.id, terminal),
+                        runbookTarget(session.id, terminal, session.controller),
                         recording = terminal.recording,
                     )
                     adding = false; editing = null
@@ -206,6 +207,7 @@ private fun MobileRunbookEditSheet(
 ) {
     // Shared form state (desktop <-> mobile): same fields, same validation, same draft assembly.
     val form = remember(entry) { RunbookFormState.fromEntry(entry) }
+    val history = LocalRunbookHistory.current
 
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.92f) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -214,7 +216,7 @@ private fun MobileRunbookEditSheet(
                 color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 18.dp),
             )
-            RunbookEditorFields(form, mono)
+            RunbookEditorFields(form, mono, horizontalPadding = 18.dp)
             Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (entry != null) {
                     MobileSheetButton(
@@ -231,7 +233,12 @@ private fun MobileRunbookEditSheet(
                 if (entry != null) {
                     MobileSheetButton(
                         stringResource(Res.string.runbook_delete),
-                        onClick = { manager.delete(entry.id); onDeleted() },
+                        onClick = {
+                            manager.delete(entry.id)
+                            // The runbook is gone; its run log has nothing left to belong to.
+                            history?.forget(entry.id)
+                            onDeleted()
+                        },
                         filled = false, danger = true, modifier = Modifier.fillMaxWidth(),
                     )
                 }

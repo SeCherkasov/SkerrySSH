@@ -20,6 +20,7 @@ import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.known.TrustedCaController
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.runbook.RunbookManager
+import app.skerry.shared.runbook.VaultRunbookRunStore
 import app.skerry.ui.runbook.RunbookRunner
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
@@ -226,6 +227,12 @@ val LocalRunbooks: ProvidableCompositionLocal<RunbookManager?> = staticCompositi
  * doesn't abandon a half-finished procedure. `null` on the mock path.
  */
 val LocalRunbookRunner: ProvidableCompositionLocal<RunbookRunner?> = staticCompositionLocalOf { null }
+
+/**
+ * Log of past runs, per runbook — what the run screen's "previous runs" card and the library's
+ * "last run" line read. `null` on the mock path and wherever no vault is behind the section.
+ */
+val LocalRunbookHistory: ProvidableCompositionLocal<VaultRunbookRunStore?> = staticCompositionLocalOf { null }
 
 /**
  * Per-host terminal command history over the encrypted vault: the sessions graph writes it for

@@ -51,7 +51,6 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.PaneSyncBinder
 import app.skerry.ui.session.SessionsController
-import app.skerry.ui.runbook.RunbookRunPanel
 import app.skerry.ui.runbook.RunbookStartDialog
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetRunDialog
@@ -92,6 +91,7 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalHostClickConnectMode
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalRunbookRunner
+import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSync
@@ -496,25 +496,17 @@ internal fun DesktopChrome(
             jumpProblem?.let { problem ->
                 JumpErrorDialog(problem, onDismiss = { jumpProblem = null })
             }
-            // Live runbook progress, docked over the work area of the tab the run belongs to. Not
-            // modal and placed before the dialogs below, so the terminal underneath stays readable
-            // and any modal still covers it.
-            LocalRunbookRunner.current?.let { runner ->
-                // Any pane of the active tab: a run started in a split pane is still this tab's.
-                val runPaneId = runner.sessionId
-                if (runPaneId != null && sessions?.activeTerminal?.pane(runPaneId) != null) {
-                    RunbookRunPanel(
-                        runner,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 46.dp),
-                    )
-                }
-            }
             // Confirmation for a snippet with ${{…}} variables — every launch path (palette,
             // hotkey, "Run on host", library) parks such a run in SnippetManager.pendingRun.
             snippets?.let { SnippetRunDialog(it) }
             // Confirmation before a runbook starts: it previews every step with its variables
-            // resolved, so the procedure is agreed to once instead of step by step.
-            LocalRunbookRunner.current?.let { RunbookStartDialog(it) }
+            // resolved, so the procedure is agreed to once instead of step by step. Confirming hands
+            // the work area of the tab the run was started from to the run screen — a desktop route
+            // (Viewport); the mobile chrome shows the run in its floating panel instead.
+            val runSessions = LocalSessions.current
+            LocalRunbookRunner.current?.let { runner ->
+                RunbookStartDialog(runner) { runSessions?.setActiveView(SessionView.Runbook) }
+            }
             // Delete-host-profile confirmation (invoked from the sidebar's context menu). The keychain
             // secret itself stays in the vault (reusable, managed from the Vault tab).
             val hosts = LocalHosts.current

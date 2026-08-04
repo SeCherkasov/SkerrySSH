@@ -195,7 +195,13 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
         }
     }
 
-    override suspend fun close() = Unit
+    /** How many times the channel was closed — a caller that opens one owns closing it. */
+    var closeCount: Int = 0
+        private set
+
+    override suspend fun close() {
+        closeCount++
+    }
 
     /** Insert the entry into its parent directory. */
     private fun register(entry: SftpEntry) {
