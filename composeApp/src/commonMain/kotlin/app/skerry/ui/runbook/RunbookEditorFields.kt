@@ -66,6 +66,7 @@ import app.skerry.ui.generated.resources.runbook_step_title
 import app.skerry.ui.generated.resources.runbook_step_up
 import app.skerry.ui.generated.resources.runbook_steps
 import app.skerry.ui.generated.resources.runbook_transfer_note
+import app.skerry.ui.generated.resources.runbook_vars_hint
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -205,8 +206,12 @@ private fun StepEditor(
             RunbookLineField(step.title, { step.title = it }, stringResource(Res.string.runbook_step_title), LocalFonts.current.ui)
         }
         when (step.kind) {
-            RunbookStepKind.COMMAND -> Box(Modifier.padding(top = 8.dp)) {
+            RunbookStepKind.COMMAND -> Column(Modifier.padding(top = 8.dp)) {
                 RunbookCommandField(step.command, { step.command = it }, stringResource(Res.string.runbook_step_command), mono)
+                Txt(
+                    stringResource(Res.string.runbook_vars_hint), color = Skerry.colors.faint, size = 11.sp,
+                    lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp),
+                )
             }
             RunbookStepKind.TRANSFER -> TransferFields(step, mono)
         }

@@ -54,22 +54,26 @@ import org.jetbrains.compose.resources.stringResource
 private val OUTPUT_WIDTH = 420.dp
 
 /**
- * What the step in flight has printed on this host, read out of the terminal between the echo of
- * the typed line and the marker that ended it ([runbookStepOutput]). A transfer prints nothing at
- * all, so it reports its bytes instead.
+ * What a step printed, read out of the terminal between the echo of the typed line and the marker
+ * that ended it ([runbookStepOutput]). [shownStep] is the step clicked in the list; with none the
+ * panel follows the run, so a finished run rests on its last step. A transfer prints nothing at all,
+ * so it reports its bytes instead.
  *
  * The terminal itself is a chevron away and holds everything, including what scrolled out of this
  * panel — the panel is the readable part, not the record.
  */
 @Composable
-internal fun RunbookOutputPanel(run: RunbookSessionRun, mono: FontFamily) {
-    val step = run.steps.getOrNull(run.currentIndex) ?: run.steps.lastOrNull()
+internal fun RunbookOutputPanel(run: RunbookSessionRun, mono: FontFamily, shownStep: Int? = null) {
+    val step = run.steps.getOrNull(shownStep ?: run.currentIndex) ?: run.steps.lastOrNull()
     Column(
         Modifier.width(OUTPUT_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        // Stripped like every other rendering of a step's title: a runbook can arrive over sync, and
+        // a bidi override in this header would reorder what the operator reads mid-run.
+        val title = stripUnsafeFormatChars(step?.step?.title?.takeIf { it.isNotBlank() } ?: run.label)
         Txt(
-            labelUppercase(stringResource(Res.string.runbook_run_output)) + " · " + run.label.uppercase(),
+            labelUppercase(stringResource(Res.string.runbook_run_output)) + " · " + title.uppercase(),
             color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
         )
         Box(
@@ -101,8 +105,9 @@ private fun outputText(state: RunbookStepState): String? = when {
     else -> state.output
 }
 
+/** Why a step failed, in words — a transfer has no exit code to show instead. */
 @Composable
-private fun failureText(failure: RunbookStepFailure?): String = when (failure) {
+internal fun failureText(failure: RunbookStepFailure?): String = when (failure) {
     RunbookStepFailure.NoSftpChannel -> stringResource(Res.string.runbook_panel_no_sftp)
     is RunbookStepFailure.Transfer -> stringResource(Res.string.runbook_panel_transfer_failed, failure.message)
     null -> ""
@@ -112,9 +117,11 @@ private fun failureText(failure: RunbookStepFailure?): String = when (failure) {
 @Composable
 internal fun RunbookHistoryRow(runner: RunbookRunner, mono: FontFamily) {
     // Re-read when the run ends: a finished run writes its own row, and the card is right there.
+    // Keyed on `active`, not on `phase`: every confirmation pause flips the phase, and each flip
+    // would decrypt and parse the whole run log again on the UI thread.
     val history = LocalRunbookHistory.current
     val runbookId = runner.runbook?.id
-    val records = remember(runbookId, runner.phase) {
+    val records = remember(runbookId, runner.active) {
         if (history == null || runbookId == null) emptyList() else history.forRunbook(runbookId)
     }
     RunbookHistoryCard(records, mono, Modifier.fillMaxWidth())
@@ -126,7 +133,7 @@ internal fun stepStatusText(state: RunbookStepState): String {
     val duration = state.durationMillis
     if (duration != null && (state.status == RunbookStepStatus.SUCCEEDED || state.status == RunbookStepStatus.FAILED)) {
         val code = state.exitCode
-        val text = durationText(duration)
+        val text = runbookDurationText(duration)
         return if (state.status == RunbookStepStatus.FAILED && code != null && code != 0) {
             stringResource(Res.string.runbook_panel_exit_code, code) + " · " + text
         } else {
@@ -139,13 +146,16 @@ internal fun stepStatusText(state: RunbookStepState): String {
         RunbookStepStatus.RUNNING -> stringResource(Res.string.runbook_status_running)
         RunbookStepStatus.SKIPPED -> stringResource(Res.string.runbook_status_skipped)
         RunbookStepStatus.STOPPED -> stringResource(Res.string.runbook_status_stopped)
-        RunbookStepStatus.SUCCEEDED, RunbookStepStatus.FAILED -> stringResource(Res.string.runbook_status_running)
+        // A settled step always has a duration (it is written with the status), so this is the
+        // no-clock fallback — it must not claim the step is still going.
+        RunbookStepStatus.SUCCEEDED -> stringResource(Res.string.runbook_panel_done)
+        RunbookStepStatus.FAILED -> stringResource(Res.string.runbook_panel_failed)
     }
 }
 
-/** [RunbookDuration] in words. */
+/** [RunbookDuration] in words — shared by the step rows and the history card. */
 @Composable
-private fun durationText(millis: Long): String = when (val duration = runbookDuration(millis)) {
+internal fun runbookDurationText(millis: Long): String = when (val duration = runbookDuration(millis)) {
     is RunbookDuration.Seconds -> stringResource(Res.string.runbook_dur_seconds, duration.text)
     is RunbookDuration.Minutes -> stringResource(Res.string.runbook_dur_minutes, duration.minutes, duration.seconds)
 }

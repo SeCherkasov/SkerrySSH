@@ -3,6 +3,7 @@ package app.skerry.shared.runbook
 import app.skerry.shared.snippet.SnippetRunEnvironment
 import app.skerry.shared.snippet.SnippetSegment
 import app.skerry.shared.snippet.SnippetTemplate
+import app.skerry.shared.snippet.identity
 
 /** A step with every `${{…}}` filled in — what the runner acts on. */
 sealed interface ResolvedRunbookStep {
@@ -93,6 +94,3 @@ private fun RunbookStep.templateFields(): List<String> = when (this) {
     is RunbookStep.Command -> listOf(command)
     is RunbookStep.Transfer -> listOf(localPath, remotePath)
 }
-
-/** What makes two placeholders "the same variable" within one run: kind, name and format together. */
-private fun SnippetSegment.Variable.identity(): String = kind.name + "/" + name + "/" + format

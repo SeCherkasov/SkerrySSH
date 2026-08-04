@@ -1,7 +1,6 @@
 <resources>
     <!-- Runbooks (RunbooksView, MobileRunbooksView, RunbookRunPanel) -->
     <string name="runbook_section">Runbooks</string>
-    <string name="runbook_library">RUNBOOKS</string>
     <string name="runbook_new">New runbook</string>
     <string name="runbook_untitled">Untitled runbook</string>
     <string name="runbook_palette_placeholder">Run a runbook…</string>
@@ -54,7 +53,6 @@
     <string name="runbook_panel_no_sftp">This session has no SFTP channel.</string>
 
     <!-- Library screen -->
-    <string name="runbook_screen_title">Runbooks</string>
     <string name="runbook_edit">Edit</string>
     <string name="runbook_cancel">Cancel</string>
     <plurals name="runbook_count">
@@ -76,6 +74,7 @@
     <string name="runbook_direction_upload">Upload</string>
     <string name="runbook_direction_download">Download</string>
     <string name="runbook_transfer_note">Transfers use the SFTP channel of the same session.</string>
+    <string name="runbook_vars_hint">${{name}} asks for a value before the run; ${{vault:entry}} and ${{clipboard}} fill themselves in.</string>
 
     <!-- Run policy -->
     <string name="runbook_policy">Run policy</string>
@@ -99,14 +98,6 @@
     <string name="runbook_dur_seconds">%1$s s</string>
     <string name="runbook_dur_minutes">%1$d m %2$d s</string>
     <string name="runbook_transfer_of">%1$s of %2$s</string>
-
-    <!-- Target picking -->
-    <string name="runbook_targets">Run on</string>
-    <string name="runbook_targets_sessions">Open sessions</string>
-    <string name="runbook_targets_catalog">Hosts</string>
-    <string name="runbook_targets_none">Pick at least one host.</string>
-    <string name="runbook_connecting">Connecting: %1$s</string>
-    <string name="runbook_unreachable">No answer: %1$s</string>
 
     <!-- Run history -->
     <string name="runbook_history">Previous runs</string>

@@ -22,17 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.stripUnsafeFormatChars
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import app.skerry.shared.snippet.SnippetSegment
-import app.skerry.ui.app.LocalConnectHost
-import app.skerry.ui.app.LocalHosts
-import app.skerry.ui.app.LocalSessions
-import app.skerry.ui.host.HostSection
-import app.skerry.ui.host.section
-import app.skerry.ui.session.SessionsController
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
@@ -45,9 +35,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippet_vars_recording_note
 import app.skerry.ui.generated.resources.lib_snippet_vars_secret_note
 import app.skerry.ui.generated.resources.runbook_panel_shell_note
-import app.skerry.ui.generated.resources.runbook_connecting
 import app.skerry.ui.generated.resources.runbook_run
-import app.skerry.ui.generated.resources.runbook_unreachable
 import app.skerry.ui.generated.resources.runbook_run_title
 import app.skerry.ui.generated.resources.runbook_step_n
 import app.skerry.ui.generated.resources.runbook_steps
@@ -55,7 +43,6 @@ import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.snippet.TemplateVariableFields
 import app.skerry.ui.snippet.rememberTemplateVariableValues
-import app.skerry.ui.session.SessionView
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -69,109 +56,32 @@ import org.jetbrains.compose.resources.stringResource
  * mid-procedure can't rewrite step 5 (TOCTOU rule, coding-guidelines §3).
  */
 @Composable
-fun RunbookStartDialog(runner: RunbookRunner) {
+fun RunbookStartDialog(runner: RunbookRunner, onStarted: () -> Unit = {}) {
     val request = runner.pending ?: return
-    val sessions = LocalSessions.current
-    val hostManager = LocalHosts.current
-    val connectHost = LocalConnectHost.current
-    // Keyed per request: a new run must not inherit the previous dialog's fields or its picks.
+    // Keyed per request: a new run must not inherit the previous dialog's fields.
     key(request) {
-        val launch = remember { RunbookLaunchController() }
-        val openPanes = connectedRunbookPanes(sessions)
-        // Catalog hosts without a session of their own; a host already open is offered as its pane
-        // instead, so the same machine can't be picked twice.
-        val openHostIds = openPanes.mapNotNull { pane -> paneHostId(sessions, pane.paneId) }.toSet()
-        val catalog = hostManager?.hosts.orEmpty()
-            .filter { it.section == HostSection.Terminal && it.id !in openHostIds }
-            .map { RunbookLaunchTarget.CatalogHost(it.id, it.label) }
-        var picked by remember { mutableStateOf<String?>(request.target.sessionId) }
-        // Captured when Run is pressed, not read later: a clipboard that changes while a host is
-        // still connecting must not rewrite the line that eventually runs (coding-guidelines §3).
-        var captured by remember { mutableStateOf<Map<SnippetSegment.Variable, String>?>(null) }
-
-        // The launch watches the session list: a picked catalog host comes up as a connected pane,
-        // and the run starts the moment it does.
-        LaunchedEffect(launch.state, sessions?.tabs?.map { tab -> tab.panes.map { it.id } }) {
-            launch.refresh { hostId -> connectedPaneOf(sessions, hostId) }
-            val paneId = (launch.state as? RunbookLaunchState.Ready)?.paneId ?: return@LaunchedEffect
-            val values = captured ?: return@LaunchedEffect
-            startRun(runner, sessions, paneId, values)
-            launch.cancel()
-        }
-
         RunbookStartDialogContent(
             request = request,
-            sessions = openPanes,
-            catalog = catalog,
-            picked = picked,
-            onPick = { id -> picked = id },
-            launchState = launch.state,
-            onConfirm = { values ->
-                val target = pickedLaunchTarget(openPanes, catalog, picked) ?: return@RunbookStartDialogContent
-                captured = values
-                launch.begin(target) { hostId -> hostManager?.find(hostId)?.let(connectHost) }
-            },
-            onDismiss = { launch.cancel(); runner.dismissStart() },
+            onConfirm = { values -> if (runner.confirmStart(values)) onStarted() },
+            onDismiss = runner::dismissStart,
         )
-    }
-}
-
-/**
- * Starts the run in [paneId] and puts the run screen up on the tab that holds it — which may not be
- * the active one when the host was just connected for this run.
- */
-private fun startRun(
-    runner: RunbookRunner,
-    sessions: SessionsController?,
-    paneId: String,
-    values: Map<SnippetSegment.Variable, String>,
-) {
-    val target = sessions?.let { runbookTargets(it, listOf(paneId)) }?.singleOrNull() ?: return
-    if (runner.confirmStart(target) { variable -> values[variable].orEmpty() }) {
-        sessions.setViewForPanes(listOf(paneId), SessionView.Runbook)
-    }
-}
-
-/** Host a pane is connected to, for keeping the catalog list free of machines already open. */
-private fun paneHostId(sessions: SessionsController?, paneId: String): String? =
-    sessions?.tabs.orEmpty().flatMap { it.panes }.firstOrNull { it.id == paneId }?.hostId
-
-/** What the launch is waiting for, or which hosts never answered. */
-@Composable
-private fun RunbookLaunchNote(state: RunbookLaunchState) {
-    when (state) {
-        is RunbookLaunchState.Connecting -> Txt(
-            stringResource(Res.string.runbook_connecting, state.host),
-            color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 12.dp),
-        )
-        is RunbookLaunchState.Unreachable -> Txt(
-            stringResource(Res.string.runbook_unreachable, state.host),
-            color = Skerry.colors.sunset, size = 11.5.sp, modifier = Modifier.padding(top = 12.dp),
-        )
-        else -> Unit
     }
 }
 
 @Composable
 private fun RunbookStartDialogContent(
     request: RunbookStartRequest,
-    sessions: List<RunbookLaunchTarget.Session>,
-    catalog: List<RunbookLaunchTarget.CatalogHost>,
-    picked: String?,
-    onPick: (String) -> Unit,
-    launchState: RunbookLaunchState,
-    onConfirm: (Map<SnippetSegment.Variable, String>) -> Unit,
+    onConfirm: ((SnippetSegment.Variable) -> String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val mono = LocalFonts.current.mono
     val variables = remember(request) { request.script.variables }
     val values = rememberTemplateVariableValues(request, variables)
 
-    val connecting = launchState is RunbookLaunchState.Connecting
-    val canRun = values.canRun && picked != null && !connecting
+    val canRun = values.canRun
     val confirm = {
         // The values are read once, here, and handed over as a snapshot.
-        if (canRun) onConfirm(variables.associateWith { values.value(it, masked = false) })
+        if (canRun) onConfirm(runbookValueSnapshot(variables) { values.value(it, masked = false) })
     }
 
     ModalScrim(onDismiss = onDismiss) {
@@ -252,9 +162,7 @@ private fun RunbookStartDialogContent(
                         size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp),
                     )
                 }
-                RunbookTargetPicker(sessions, catalog, picked, onPick)
             }
-            RunbookLaunchNote(launchState)
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),

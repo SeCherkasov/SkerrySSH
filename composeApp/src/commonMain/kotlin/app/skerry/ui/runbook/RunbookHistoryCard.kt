@@ -81,13 +81,7 @@ private fun runOutcomeText(record: RunbookRunRecord): String {
         return stringResource(Res.string.runbook_history_failed_at, failed)
     }
     val progress = stringResource(Res.string.runbook_panel_progress, record.host.stepsDone, record.host.stepsTotal)
-    return progress + " · " + historyDurationText(record.durationMillis)
-}
-
-@Composable
-private fun historyDurationText(millis: Long): String = when (val duration = runbookDuration(millis)) {
-    is RunbookDuration.Seconds -> stringResource(Res.string.runbook_dur_seconds, duration.text)
-    is RunbookDuration.Minutes -> stringResource(Res.string.runbook_dur_minutes, duration.minutes, duration.seconds)
+    return progress + " · " + runbookDurationText(record.durationMillis)
 }
 
 @Composable

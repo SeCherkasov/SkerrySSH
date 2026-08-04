@@ -1,7 +1,6 @@
 <resources>
     <!-- Runbooks (RunbooksView, MobileRunbooksView, RunbookRunPanel) -->
     <string name="runbook_section">运行手册</string>
-    <string name="runbook_library">运行手册</string>
     <string name="runbook_new">新建运行手册</string>
     <string name="runbook_untitled">未命名</string>
     <string name="runbook_palette_placeholder">运行运行手册…</string>
@@ -54,7 +53,6 @@
     <string name="runbook_panel_no_sftp">本会话没有 SFTP 通道。</string>
 
     <!-- Library screen -->
-    <string name="runbook_screen_title">运行手册</string>
     <string name="runbook_edit">编辑</string>
     <string name="runbook_cancel">取消</string>
     <plurals name="runbook_count">
@@ -74,6 +72,7 @@
     <string name="runbook_direction_upload">上传</string>
     <string name="runbook_direction_download">下载</string>
     <string name="runbook_transfer_note">传输使用同一会话的 SFTP 通道。</string>
+    <string name="runbook_vars_hint">${{name}} 会在运行前询问取值；${{vault:条目}} 与 ${{clipboard}} 自动填入。</string>
 
     <!-- Run policy -->
     <string name="runbook_policy">运行策略</string>
@@ -97,14 +96,6 @@
     <string name="runbook_dur_seconds">%1$s 秒</string>
     <string name="runbook_dur_minutes">%1$d 分 %2$d 秒</string>
     <string name="runbook_transfer_of">%1$s / %2$s</string>
-
-    <!-- Target picking -->
-    <string name="runbook_targets">运行于</string>
-    <string name="runbook_targets_sessions">已打开的会话</string>
-    <string name="runbook_targets_catalog">主机</string>
-    <string name="runbook_targets_none">请至少选择一台主机。</string>
-    <string name="runbook_connecting">正在连接：%1$s</string>
-    <string name="runbook_unreachable">无响应：%1$s</string>
 
     <!-- Run history -->
     <string name="runbook_history">历史运行</string>

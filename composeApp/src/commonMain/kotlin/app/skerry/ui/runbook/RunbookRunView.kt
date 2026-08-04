@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -84,14 +85,21 @@ fun RunbookRunView(state: DesktopDesignState) {
     // the terminal in the same gesture rather than leaving an empty frame in front of the user.
     val closeAndLeave: () -> Unit = { runner?.close(); back() }
     val runbook = runner?.runbook
-    // The run ended and was closed while this screen was up (vault lock, or Close on another tab):
-    // there is nothing to show, so the tab goes back to its terminal rather than to an empty frame.
-    val run = runner?.run
+    // The run of this tab, never whichever run the app happens to hold: a finished run left open in
+    // one tab must not put another tab's live steps — and a live Stop button — on this screen.
+    val run = runner?.runInActiveTab(sessions)
     if (runner == null || runbook == null || run == null) {
+        // Nothing to show: the run was closed while this screen was up (vault lock, Close elsewhere),
+        // or it belongs to another tab. The tab goes back to its terminal instead of standing on an
+        // empty frame the user has to leave by hand.
+        LaunchedEffect(Unit) { back() }
         RunbookRunFrame(state, label = null, onBack = back, actions = {}) {}
         return
     }
     val mono = LocalFonts.current.mono
+    // Which step's output the panel shows; null follows the run, so a step that is still going is
+    // read live and a finished run rests on its last step until another one is clicked.
+    var shownStep by remember(run) { mutableStateOf<Int?>(null) }
 
     RunbookRunFrame(
         state = state,
@@ -110,12 +118,12 @@ fun RunbookRunView(state: DesktopDesignState) {
                 Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                RunbookStepList(run, mono)
+                RunbookStepList(run, mono, shownStep) { index -> shownStep = index }
                 RunbookPolicyRow(runner)
                 RunbookHistoryRow(runner, mono)
             }
             VLine(Skerry.colors.line)
-            RunbookOutputPanel(run, mono)
+            RunbookOutputPanel(run, mono, shownStep)
         }
     }
 }
@@ -183,7 +191,7 @@ private fun RunbookRunActions(runner: RunbookRunner, run: RunbookSessionRun, onC
 
 /** The steps of [host], as the mockup lists them: state, name, line, and how long it took. */
 @Composable
-private fun RunbookStepList(run: RunbookSessionRun, mono: FontFamily) {
+private fun RunbookStepList(run: RunbookSessionRun, mono: FontFamily, shown: Int?, onShow: (Int) -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.card)
             .border(1.dp, Skerry.colors.line, RoundedCornerShape(11.dp)),
@@ -191,18 +199,21 @@ private fun RunbookStepList(run: RunbookSessionRun, mono: FontFamily) {
         run.steps.forEachIndexed { index, step ->
             key(step) {
                 if (index > 0) HLine()
-                RunbookStepRow(step, mono)
+                RunbookStepRow(step, mono, shown == index || (shown == null && index == run.currentIndex)) {
+                    onShow(index)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun RunbookStepRow(state: RunbookStepState, mono: FontFamily) {
+private fun RunbookStepRow(state: RunbookStepState, mono: FontFamily, shown: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(if (state.status == RunbookStepStatus.RUNNING) Skerry.colors.cyan10 else Color.Transparent)
+            .background(if (shown) Skerry.colors.cyan10 else Color.Transparent)
+            .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(12.dp),

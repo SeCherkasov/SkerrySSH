@@ -102,7 +102,7 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
             tint = if (enabled) Skerry.colors.dim else Skerry.colors.faint,
             tooltip = stringResource(Res.string.runbook_toolbar_tip),
         )
-        if (open && enabled && terminal != null && active != null) {
+        if (open && enabled) {
             Popup(
                 alignment = Alignment.TopEnd,
                 onDismissRequest = { open = false },

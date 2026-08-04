@@ -91,6 +91,7 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalHostClickConnectMode
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalRunbookRunner
+import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.LocalSync
@@ -499,8 +500,13 @@ internal fun DesktopChrome(
             // hotkey, "Run on host", library) parks such a run in SnippetManager.pendingRun.
             snippets?.let { SnippetRunDialog(it) }
             // Confirmation before a runbook starts: it previews every step with its variables
-            // resolved, so the procedure is agreed to once instead of step by step.
-            LocalRunbookRunner.current?.let { RunbookStartDialog(it) }
+            // resolved, so the procedure is agreed to once instead of step by step. Confirming hands
+            // the work area of the tab the run was started from to the run screen — a desktop route
+            // (Viewport); the mobile chrome shows the run in its floating panel instead.
+            val runSessions = LocalSessions.current
+            LocalRunbookRunner.current?.let { runner ->
+                RunbookStartDialog(runner) { runSessions?.setActiveView(SessionView.Runbook) }
+            }
             // Delete-host-profile confirmation (invoked from the sidebar's context menu). The keychain
             // secret itself stays in the vault (reusable, managed from the Vault tab).
             val hosts = LocalHosts.current

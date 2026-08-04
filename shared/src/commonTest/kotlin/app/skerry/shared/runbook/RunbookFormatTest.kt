@@ -35,6 +35,22 @@ class RunbookFormatTest {
     }
 
     @Test
+    fun `a step kind this version doesn't know reads as a command step`() {
+        // Written by a newer client and synced back here: the unknown step still has to load, or one
+        // step of a shared runbook would take the whole runbook out of the library.
+        val stored = """
+            {"id":"rb","label":"Deploy","steps":[
+              {"kind":"http","id":"s1","title":"Warm the cache","command":"curl -fsS localhost/warm"}
+            ]}
+        """.trimIndent()
+
+        val runbook = json.decodeFromString(Runbook.serializer(), stored)
+
+        val step = assertIs<RunbookStep.Command>(runbook.steps.single())
+        assertEquals("curl -fsS localhost/warm", step.command)
+    }
+
+    @Test
     fun `a runbook stored before run policy existed gets the default policy`() {
         val stored = """{"id":"rb","label":"Deploy","steps":[]}"""
 

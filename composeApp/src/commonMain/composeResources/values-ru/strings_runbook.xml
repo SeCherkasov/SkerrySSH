@@ -1,7 +1,6 @@
 <resources>
     <!-- Runbooks (RunbooksView, MobileRunbooksView, RunbookRunPanel) -->
     <string name="runbook_section">Сценарии</string>
-    <string name="runbook_library">СЦЕНАРИИ</string>
     <string name="runbook_new">Новый сценарий</string>
     <string name="runbook_untitled">Без названия</string>
     <string name="runbook_palette_placeholder">Запустить сценарий…</string>
@@ -54,7 +53,6 @@
     <string name="runbook_panel_no_sftp">У этой сессии нет SFTP-канала.</string>
 
     <!-- Library screen -->
-    <string name="runbook_screen_title">Сценарии</string>
     <string name="runbook_edit">Изменить</string>
     <string name="runbook_cancel">Отмена</string>
     <plurals name="runbook_count">
@@ -80,6 +78,7 @@
     <string name="runbook_direction_upload">Отправить</string>
     <string name="runbook_direction_download">Забрать</string>
     <string name="runbook_transfer_note">Передача идёт по SFTP-каналу той же сессии.</string>
+    <string name="runbook_vars_hint">${{name}} спросит значение перед запуском; ${{vault:запись}} и ${{clipboard}} подставятся сами.</string>
 
     <!-- Run policy -->
     <string name="runbook_policy">Политика прогона</string>
@@ -103,14 +102,6 @@
     <string name="runbook_dur_seconds">%1$s с</string>
     <string name="runbook_dur_minutes">%1$d мин %2$d с</string>
     <string name="runbook_transfer_of">%1$s из %2$s</string>
-
-    <!-- Target picking -->
-    <string name="runbook_targets">Запустить на</string>
-    <string name="runbook_targets_sessions">Открытые сессии</string>
-    <string name="runbook_targets_catalog">Хосты</string>
-    <string name="runbook_targets_none">Выберите хотя бы один хост.</string>
-    <string name="runbook_connecting">Подключение: %1$s</string>
-    <string name="runbook_unreachable">Не отвечают: %1$s</string>
 
     <!-- Run history -->
     <string name="runbook_history">Прошлые прогоны</string>

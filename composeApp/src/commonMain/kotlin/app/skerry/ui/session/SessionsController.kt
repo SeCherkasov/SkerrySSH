@@ -462,17 +462,6 @@ class SessionsController(
         tab.setView(view)
     }
 
-    /**
-     * Point every tab holding one of [paneIds] at [view] — how a runbook run puts its own screen up
-     * on each host it touches, not only on the tab that happens to be active. VNC and player tabs
-     * are left alone for the same reason [setActiveView] leaves them alone.
-     */
-    fun setViewForPanes(paneIds: Collection<String>, view: SessionView) {
-        tabs.forEach { tab ->
-            if (!tab.isVnc && !tab.isPlayer && paneIds.any { tab.pane(it) != null }) tab.setView(view)
-        }
-    }
-
     /** Make tab [id] active; an unknown id is ignored. */
     fun activate(id: String) {
         if (tabs.any { it.id == id }) activeId = id

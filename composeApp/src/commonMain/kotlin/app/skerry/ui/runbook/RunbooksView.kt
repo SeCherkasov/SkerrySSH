@@ -48,7 +48,7 @@ import app.skerry.ui.generated.resources.runbook_count
 import app.skerry.ui.generated.resources.runbook_empty
 import app.skerry.ui.generated.resources.runbook_new
 import app.skerry.ui.generated.resources.runbook_no_matches
-import app.skerry.ui.generated.resources.runbook_screen_title
+import app.skerry.ui.generated.resources.runbook_section
 import app.skerry.ui.generated.resources.runbook_search
 import app.skerry.ui.generated.resources.runbook_select_or_create
 import app.skerry.ui.generated.resources.runbook_step_count
@@ -195,7 +195,7 @@ private fun RunbooksHeader(
     onNew: () -> Unit,
 ) {
     SectionHeader(
-        title = stringResource(Res.string.runbook_screen_title),
+        title = stringResource(Res.string.runbook_section),
         // Two numbers, because they answer different questions: how many procedures are saved, and
         // how much work they add up to.
         subtitle = pluralStringResource(Res.plurals.runbook_count, runbooks, runbooks) + " · " +

@@ -22,6 +22,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
@@ -505,6 +506,59 @@ class RunbookRunnerTest {
         assertTrue(failure.message.contains("Permission denied"), failure.message)
         assertEquals(RunbookPhase.FAILED, r.phase)
         assertTrue(term.sent.isEmpty(), "the next step must not run after a failed transfer")
+    }
+
+    @Test
+    fun a_transfer_closes_the_channel_it_opened() = runnerTest { r, term ->
+        // Each transfer opens its own SFTP channel on the session's connection and owns closing it.
+        // Leaked channels only surface much later, as an unrelated feature failing to open one.
+        val sftp = FakeSftpClient()
+        sftp.seedDir("/srv/incoming")
+        term.sftp = sftp
+
+        r.startNow(runbook(transfer("s1"), transfer("s2")), term.target()) { "" }
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals(RunbookPhase.DONE, r.phase)
+        assertEquals(2, sftp.closeCount, "every transfer closes the channel it opened")
+    }
+
+    @Test
+    fun a_failing_transfer_closes_its_channel_too() = runnerTest { r, term ->
+        val sftp = FakeSftpClient()
+        sftp.seedDir("/srv/incoming")
+        sftp.uploadError = "Permission denied"
+        term.sftp = sftp
+
+        r.startNow(runbook(transfer("s1")), term.target()) { "" }
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
+        assertEquals(1, sftp.closeCount, "a throw must not leak the channel")
+    }
+
+    @Test
+    fun a_second_start_is_refused_while_the_dialog_of_the_first_is_still_open() = runnerTest { r, term ->
+        // Two clicks on Run before the dialog draws: the second must not replace the parked request,
+        // or the values the user is already looking at (and this run's uuid/date draw) are discarded.
+        assertTrue(r.requestStart(runbook(step("s1", "uptime")), term.target()))
+        val parked = r.pending
+
+        assertFalse(r.requestStart(runbook(step("s2", "df -h")), term.target()))
+
+        assertSame(parked, r.pending)
+    }
+
+    @Test
+    fun stopping_on_a_confirmation_pause_settles_the_step_it_was_waiting_on() = runnerTest { r, term ->
+        r.startNow(runbook(step("s1", "systemctl stop app", confirm = true)), term.target()) { "" }
+        assertEquals(RunbookStepStatus.AWAITING_CONFIRM, r.only.steps[0].status)
+
+        r.stop()
+
+        assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status, "a paused step must not stay pending forever")
+        assertEquals(RunbookPhase.STOPPED, r.phase)
+        assertTrue(term.sent.isEmpty(), "nothing was ever sent for a step the user stopped at the pause")
     }
 
     @Test

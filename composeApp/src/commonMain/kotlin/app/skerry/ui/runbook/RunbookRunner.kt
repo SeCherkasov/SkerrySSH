@@ -21,8 +21,10 @@ import app.skerry.shared.terminal.epochMillis
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * A run waiting on its start dialog: the runbook, its steps already parsed with this run's draw of
@@ -116,6 +118,9 @@ class RunbookRunner(
     /** Whether the run in hand has already been handed to [onFinished] — it is reported once. */
     private var reported: Boolean = false
 
+    /** The finished run's record, waiting to be handed over outside the lock ([flushReport]). */
+    private var pendingReport: RunbookRunRecord? = null
+
     private var watchJob: Job? = null
 
     // Bumped by every start/stop/close. A watcher captures it and drops its result if it no longer
@@ -160,20 +165,6 @@ class RunbookRunner(
         return start(request, contextValue)
     }
 
-    /**
-     * The start dialog was confirmed on a different session than the run was requested with — the
-     * dialog is where the host is picked, and a catalog host only becomes a target once its session
-     * is up.
-     */
-    fun confirmStart(target: RunbookTarget, contextValue: (SnippetSegment.Variable) -> String): Boolean {
-        val request = pending ?: return false
-        pending = null
-        return start(
-            RunbookStartRequest(request.runbook, request.script, target, request.recording),
-            contextValue,
-        )
-    }
-
     /** Starts a prepared [request]. Returns false (changing nothing) if a run is already in flight. */
     fun start(request: RunbookStartRequest, contextValue: (SnippetSegment.Variable) -> String): Boolean {
         if (active) return false
@@ -192,6 +183,7 @@ class RunbookRunner(
         this.run = RunbookSessionRun(request.target, request.runbook.steps)
         phase = RunbookPhase.RUNNING
         advance(0)
+        flushReport()
         return true
     }
 
@@ -200,6 +192,7 @@ class RunbookRunner(
         val run = run ?: return
         if (run.phase != RunbookPhase.AWAITING_CONFIRM) return
         dispatchStep(run.currentIndex)
+        flushReport()
     }
 
     /** The user skipped the step the run is paused on; the run continues with the next one. */
@@ -209,6 +202,7 @@ class RunbookRunner(
         val index = run.currentIndex
         run.steps.getOrNull(index)?.status = RunbookStepStatus.SKIPPED
         advance(index + 1)
+        flushReport()
     }
 
     /**
@@ -229,11 +223,15 @@ class RunbookRunner(
         }
         phase = RunbookPhase.STOPPED
         report()
+        flushReport()
     }
 
     /** Dismisses the run entirely (stopping it first if needed) and forgets its resolved values. */
     fun close() {
         stop()
+        // A record parked by a run that ended without anyone flushing it (a phase settled while the
+        // screen was gone) is written now — after this the run it describes no longer exists.
+        flushReport()
         synchronized(lock) {
             generation++
             watchJob?.cancel()
@@ -333,6 +331,9 @@ class RunbookRunner(
                     run.steps.getOrNull(index)?.output = output
                     finishStep(index, code)
                 }
+                // Outside the lock: writing the run log encrypts and rewrites the vault, and Stop
+                // comes from the UI thread through the same lock.
+                flushReport()
                 return@launch
             }
         }
@@ -356,9 +357,16 @@ class RunbookRunner(
                 val open = target.openSftp ?: throw NoSftpChannelException()
                 val client = open()
                 val progress = SftpProgress { done, total -> publishProgress(run, index, generationAtStart, done, total) }
-                when (step.direction) {
-                    RunbookTransferDirection.UPLOAD -> client.upload(step.localPath, step.remotePath, progress)
-                    RunbookTransferDirection.DOWNLOAD -> client.download(step.remotePath, step.localPath, progress)
+                // The channel belongs to whoever opened it (ConnectionController.openSftp). A run
+                // with several transfer steps would otherwise pile them up on the connection until
+                // the server refuses to open any more — to some unrelated feature, much later.
+                try {
+                    when (step.direction) {
+                        RunbookTransferDirection.UPLOAD -> client.upload(step.localPath, step.remotePath, progress)
+                        RunbookTransferDirection.DOWNLOAD -> client.download(step.remotePath, step.localPath, progress)
+                    }
+                } finally {
+                    withContext(NonCancellable) { runCatching { client.close() } }
                 }
             }
             // A cancelled transfer is Stop's business, not a failure of the step: rethrow so the
@@ -369,6 +377,7 @@ class RunbookRunner(
                 val error = outcome.exceptionOrNull()
                 if (error == null) finishStep(index, exitCode = 0) else failStep(index, failureOf(error))
             }
+            flushReport()
         }
         publishJob(job, generationAtStart)
     }
@@ -456,8 +465,12 @@ class RunbookRunner(
     }
 
     /**
-     * Hands a finished run to [onFinished], once. Called from both endings a run has: the last step
-     * reporting in and the user stopping it.
+     * Builds the record of a finished run, once, and parks it for [flushReport]. Called from both
+     * endings a run has: the last step reporting in and the user stopping it.
+     *
+     * Parked rather than handed over on the spot because one of those callers is inside the
+     * generation lock: [onFinished] writes the vault (encrypt + atomic file write), and doing that
+     * under the lock would block a Stop coming from the UI thread for the length of the write.
      */
     private fun report() {
         val phase = phase ?: return
@@ -465,27 +478,20 @@ class RunbookRunner(
         val runbook = runbook ?: return
         val run = run ?: return
         reported = true
-        onFinished(
-            RunbookRunRecord(
-                id = runId,
-                runbookId = runbook.id,
-                startedAt = startedAt,
-                durationMillis = now() - startedAt,
-                outcome = when {
-                    phase == RunbookPhase.FAILED -> RunbookRunOutcome.FAILED
-                    phase == RunbookPhase.STOPPED -> RunbookRunOutcome.STOPPED
-                    run.hadFailures -> RunbookRunOutcome.DONE_WITH_FAILURES
-                    else -> RunbookRunOutcome.DONE
-                },
-                host = RunbookHostOutcome(
-                    label = run.label,
-                    stepsDone = run.finishedCount,
-                    stepsTotal = run.steps.size,
-                    // 1-based, the way the run screen numbers steps.
-                    failedStep = run.steps.firstOrNull { it.status == RunbookStepStatus.FAILED }?.let { it.index + 1 },
-                ),
-            ),
+        pendingReport = run.runRecord(
+            id = runId,
+            runbookId = runbook.id,
+            startedAt = startedAt,
+            durationMillis = now() - startedAt,
+            phase = phase,
         )
+    }
+
+    /** Hands the parked record over, outside the lock. Does nothing when there is none. */
+    private fun flushReport() {
+        val record = pendingReport ?: return
+        pendingReport = null
+        onFinished(record)
     }
 }
 
