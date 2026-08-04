@@ -44,7 +44,7 @@ import app.skerry.ui.generated.resources.shell_tip_add_pane
 import app.skerry.ui.generated.resources.shell_tip_assistant
 import app.skerry.ui.generated.resources.shell_tip_disconnect
 import app.skerry.ui.generated.resources.shell_tip_files
-import app.skerry.ui.generated.resources.shell_tip_info
+import app.skerry.ui.generated.resources.shell_tip_monitor
 import app.skerry.ui.generated.resources.shell_tip_more_actions
 import app.skerry.ui.generated.resources.shell_tip_play
 import app.skerry.ui.generated.resources.shell_tip_record
@@ -80,7 +80,7 @@ internal enum class ToolbarAction(val group: ToolbarGroup, val needsSession: Boo
     Share(ToolbarGroup.Session, needsSession = true),
     Runbook(ToolbarGroup.Session, needsSession = true),
     Snippets(ToolbarGroup.Session, needsSession = true),
-    Info(ToolbarGroup.Global, needsSession = true),
+    Monitor(ToolbarGroup.Workspace, needsSession = true),
     Files(ToolbarGroup.Workspace, needsSession = true),
 }
 
@@ -92,12 +92,12 @@ internal enum class ToolbarAction(val group: ToolbarGroup, val needsSession: Boo
  */
 internal val TOOLBAR_ROW_ORDER: List<ToolbarAction> = listOf(
     ToolbarAction.Files,
+    ToolbarAction.Monitor,
     ToolbarAction.Snippets,
     ToolbarAction.Runbook,
     ToolbarAction.Share,
     ToolbarAction.Record,
     ToolbarAction.Play,
-    ToolbarAction.Info,
 )
 
 /**
@@ -105,8 +105,10 @@ internal val TOOLBAR_ROW_ORDER: List<ToolbarAction> = listOf(
  * rather than dimmed: a button that cannot do anything is worse than no button. What remains is
  * the recording player, which opens a recording in a tab of its own.
  */
-internal fun availableActions(hasSession: Boolean): Set<ToolbarAction> =
-    ToolbarAction.entries.filterTo(mutableSetOf()) { hasSession || !it.needsSession }
+internal fun availableActions(hasSession: Boolean, monitorShown: Boolean = true): Set<ToolbarAction> =
+    ToolbarAction.entries.filterTo(mutableSetOf()) {
+        (hasSession || !it.needsSession) && (monitorShown || it != ToolbarAction.Monitor)
+    }
 
 /** Width one icon claims in the row: the button box plus the spacing in front of it. */
 private val ACTION_SLOT_WIDTH = 30.dp
@@ -144,8 +146,8 @@ private val WORK_BAR_TITLE_ROOM = 240.dp
 private val WORK_BAR_CHROME = 62.dp
 
 /**
- * Session action icons (sync / add pane / SFTP / snippets / runbooks / sharing / recording / player
- * / assistant / info panel / disconnect), filling the right end of the [WorkBar].
+ * Session action icons (sync / add pane / SFTP / monitor / snippets / runbooks / sharing /
+ * recording / player / assistant / disconnect), filling the right end of the [WorkBar].
  *
  * [available] is the width of the work area the bar spans, or `null` when it cannot be measured
  * yet. Once the icons no longer fit beside the bar's own title they collapse into an overflow menu,
@@ -170,27 +172,35 @@ internal fun RowScope.SessionActions(
     // window with no terminal tab in focus has nothing for the session-scoped actions to act on —
     // every one of them is bound to `active`, which is null in exactly that state.
     val hasSession = sessions == null || tab != null
-    val shown = availableActions(hasSession)
+    val monitorShown = monitorAvailable(
+        hasSession = tab != null,
+        watched = active?.controller?.isWatched == true,
+        mock = sessions == null,
+    )
+    val shown = availableActions(hasSession, monitorShown)
     val hidden = overflowedActions(
         available,
         syncShown = syncTab != null,
         assistantShown = assistantShown,
         hasSession = hasSession,
+        monitorShown = monitorShown,
     )
     val drawn = { action: ToolbarAction -> action in shown && action !in hidden }
     val groupDrawn = { group: ToolbarGroup -> groupHasContent(group, hasSession, drawn) }
 
-    // Files and the info panel are stateless, so the overflow menu can run them directly. The palettes
-    // and the recorder own their popups and save dialogs, so those are parked below instead and
-    // reached through the request signals they already listen on.
+    // Files and the monitor are stateless view switches, so the overflow menu can run them
+    // directly. The palettes and the recorder own their popups and save dialogs, so those are
+    // parked below instead and reached through the request signals they already listen on.
     val openSftp = {
         if (sessions != null) { state.clearOverlay(); sessions.setActiveView(SessionView.Sftp) } else state.showView(DesktopView.Sftp)
     }
-    val infoAvailable = infoPanelAvailable(
-        hasSession = tab != null,
-        watched = active?.controller?.isWatched == true,
-        mock = sessions == null,
-    )
+    val openMonitor = {
+        if (sessions != null) {
+            state.clearOverlay(); sessions.setActiveView(SessionView.Monitor)
+        } else {
+            state.showView(DesktopView.Monitor)
+        }
+    }
     val playerTabTitle = stringResource(Res.string.term_player_title)
     val onCastOpened: (CastOpenResult) -> Unit = { result ->
         if (result is CastOpenResult.Loaded && sessions != null) {
@@ -230,6 +240,11 @@ internal fun RowScope.SessionActions(
     // Switches the active tab's subview (live mode, plus overlay reset) / mock fallback.
     if (drawn(ToolbarAction.Files)) {
         IconBtn("folder", onClick = openSftp, tooltip = stringResource(Res.string.shell_tip_files))
+    }
+    // The host monitor, the second view this tab can hold: resources of the machine the shell runs
+    // on, one exec round-trip per poll.
+    if (drawn(ToolbarAction.Monitor)) {
+        IconBtn("monitoring", onClick = openMonitor, tooltip = stringResource(Res.string.shell_tip_monitor))
     }
 
     // Group 2 — what can be sent into the session running there.
@@ -272,19 +287,8 @@ internal fun RowScope.SessionActions(
             tooltip = stringResource(Res.string.shell_tip_assistant),
         )
     }
-    // Lit while the info panel is open — the only action here with a visible on/off state. The panel
-    // is session-scoped, so with no active session there is nothing to show: the button dims and
-    // no-ops rather than toggling a panel that can't appear.
-    if (drawn(ToolbarAction.Info)) {
-        IconBtn(
-            "info",
-            onClick = { if (infoAvailable) state.settings.toggleInfoPanel() },
-            tint = if (state.settings.infoPanel && infoAvailable) Skerry.colors.cyanBright else Skerry.colors.dim,
-            tooltip = stringResource(Res.string.shell_tip_info),
-        )
-    }
     if (hidden.isNotEmpty()) {
-        OverflowActionsButton(hidden, state, infoAvailable, tabKey = tab?.id, onOpenSftp = openSftp)
+        OverflowActionsButton(hidden, state, tabKey = tab?.id, onOpenSftp = openSftp, onOpenMonitor = openMonitor)
     }
     // Power: closes the active session (live path) with a confirmation prompt (destructive, no
     // auto-reconnect); no-op stub in mock mode. With no session open there is nothing to close.
@@ -330,13 +334,13 @@ private fun ActionGroupSeparator(shown: Boolean) {
 private val SEPARATOR_HEIGHT = 16.dp
 
 /**
- * Whether the info panel has anything to say about the pane in focus. Everything it shows — host
- * profile, cipher, uptime, live metrics — comes from a connection this app owns, so a pane merely
- * watching a colleague's shared session ([watched]) gets the button dimmed and the panel hidden
- * instead of a column of dashes. [mock] is the preview path with no session backend, where the
- * static layout is the point.
+ * Whether the monitor has anything to show about the pane in focus. Every number on that screen —
+ * host profile, cipher, uptime, live metrics — comes from a connection this app owns, so a pane
+ * merely watching a colleague's shared session ([watched]) doesn't get the button at all, rather
+ * than one that opens a screen of dashes. [mock] is the preview path with no session backend,
+ * where the static layout is the point.
  */
-internal fun infoPanelAvailable(hasSession: Boolean, watched: Boolean, mock: Boolean): Boolean =
+internal fun monitorAvailable(hasSession: Boolean, watched: Boolean, mock: Boolean): Boolean =
     if (mock) true else hasSession && !watched
 
 /**
@@ -352,11 +356,12 @@ internal fun overflowedActions(
     syncShown: Boolean,
     assistantShown: Boolean = false,
     hasSession: Boolean = true,
+    monitorShown: Boolean = true,
 ): Set<ToolbarAction> {
     if (available == null) return emptySet()
     // Only what the row actually draws can overflow: without a session the session-scoped actions
     // were never there to hide (see availableActions).
-    val order = ToolbarAction.entries.filter { it in availableActions(hasSession) }
+    val order = ToolbarAction.entries.filter { it in availableActions(hasSession, monitorShown) }
     // + add-pane and power, which a session brings, plus the two conditional buttons when drawn.
     val fixed = (if (hasSession) 2 else 0) + (if (syncShown) 1 else 0) + if (assistantShown) 1 else 0
     val room = available - WORK_BAR_TITLE_ROOM - WORK_BAR_CHROME
@@ -382,9 +387,9 @@ internal fun overflowedActions(
 private fun OverflowActionsButton(
     hidden: Set<ToolbarAction>,
     state: DesktopDesignState,
-    infoAvailable: Boolean,
     tabKey: Any?,
     onOpenSftp: () -> Unit,
+    onOpenMonitor: () -> Unit,
 ) {
     var open by remember(tabKey) { mutableStateOf(false) }
     Box {
@@ -404,7 +409,7 @@ private fun OverflowActionsButton(
                     hidden.sortedBy { TOOLBAR_ROW_ORDER.indexOf(it) }.forEach { action ->
                         val run: () -> Unit = when (action) {
                             ToolbarAction.Files -> onOpenSftp
-                            ToolbarAction.Info -> ({ if (infoAvailable) state.settings.toggleInfoPanel() })
+                            ToolbarAction.Monitor -> onOpenMonitor
                             ToolbarAction.Snippets -> state::requestSnippetPalette
                             ToolbarAction.Runbook -> state::requestRunbookPalette
                             ToolbarAction.Record -> state::requestRecordingToggle
@@ -443,22 +448,22 @@ internal fun MenuActionRow(icon: String, label: String, onClick: () -> Unit) {
 private val ToolbarAction.icon: String
     get() = when (this) {
         ToolbarAction.Files -> "folder"
+        ToolbarAction.Monitor -> "monitoring"
         ToolbarAction.Snippets -> "bolt"
         ToolbarAction.Runbook -> "checklist"
         ToolbarAction.Record -> "radio_button_checked"
         ToolbarAction.Play -> "play_circle"
         ToolbarAction.Share -> "cast"
-        ToolbarAction.Info -> "info"
     }
 
 /** The action's own tooltip, reused as its label in the overflow menu. */
 private val ToolbarAction.label: StringResource
     get() = when (this) {
         ToolbarAction.Files -> Res.string.shell_tip_files
+        ToolbarAction.Monitor -> Res.string.shell_tip_monitor
         ToolbarAction.Snippets -> Res.string.shell_tip_snippets
         ToolbarAction.Runbook -> Res.string.runbook_toolbar_tip
         ToolbarAction.Record -> Res.string.shell_tip_record
         ToolbarAction.Share -> Res.string.share_session
         ToolbarAction.Play -> Res.string.shell_tip_play
-        ToolbarAction.Info -> Res.string.shell_tip_info
     }

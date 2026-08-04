@@ -35,8 +35,6 @@ import app.skerry.ui.vault.AutoLockDuration
  */
 @Stable
 class DesktopSettingsState(
-    initialInfoPanel: Boolean = true,
-    private val onInfoPanelChange: (Boolean) -> Unit = {},
     initialTerminalFont: TerminalFont = TerminalFont.DEFAULT,
     private val onTerminalFontChange: (TerminalFont) -> Unit = {},
     initialTerminalFontSize: Int = DEFAULT_TERMINAL_FONT_SIZE,
@@ -78,9 +76,6 @@ class DesktopSettingsState(
     initialRecentLimit: Int = MAX_RECENT_HOSTS,
     private val onRecentLimitChange: (Int) -> Unit = {},
 ) {
-    /** Whether the host info panel is shown beside the work area. */
-    var infoPanel: Boolean by mutableStateOf(initialInfoPanel); private set
-
     /** Selected terminal font (Appearance → Font). Threaded via [app.skerry.ui.terminal.LocalTerminalAppearance]. */
     var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set
 
@@ -157,12 +152,6 @@ class DesktopSettingsState(
 
     /** How many recent hosts to display (1..[MAX_RECENT_HOSTS]); trims display only, not storage. */
     var recentLimit: Int by mutableStateOf(initialRecentLimit.coerceIn(1, MAX_RECENT_HOSTS)); private set
-
-    /** Show/hide the host info panel and report outward (for persistence). */
-    fun toggleInfoPanel() {
-        infoPanel = !infoPanel
-        onInfoPanelChange(infoPanel)
-    }
 
     /** Choose the terminal font and report outward (for persistence). */
     fun chooseTerminalFont(font: TerminalFont) {

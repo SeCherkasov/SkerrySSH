@@ -26,8 +26,14 @@ data class HostMetrics(
     // unavailable. Rates are derived from the delta between polls by HostMetricsController.
     val netRxBytes: Long? = null,
     val netTxBytes: Long? = null,
+    /** Interface that carries most of the traffic — what the network card names. */
+    val netInterface: String? = null,
     val disks: List<DiskUsage> = emptyList(),
     val processes: List<ProcessSample> = emptyList(),
+    // Only in a full poll (see HostMetricsController): empty on a host without systemd/containers,
+    // and on the cheap polls in between, where the controller carries the previous lists over.
+    val services: List<ServiceUnit> = emptyList(),
+    val containers: List<ContainerSample> = emptyList(),
 ) {
     val cpuFraction: Float get() = (cpuPercent / 100f).coerceIn(0f, 1f)
     val memFraction: Float get() = if (memTotalBytes > 0) (memUsedBytes.toFloat() / memTotalBytes).coerceIn(0f, 1f) else 0f
@@ -40,8 +46,34 @@ data class DiskUsage(val mount: String, val usedBytes: Long, val totalBytes: Lon
     val fraction: Float get() = (percent / 100f).coerceIn(0f, 1f)
 }
 
-/** One row of the remote `ps` top list. [command] is sanitized host output — safe to draw as is. */
-data class ProcessSample(val pid: Int, val cpuPercent: Float, val memPercent: Float, val command: String)
+/**
+ * One row of the remote `ps` top list. [command] is sanitized host output — safe to draw as is;
+ * [rssBytes] is the resident set size (`ps` reports it in KiB, this is bytes).
+ */
+data class ProcessSample(
+    val pid: Int,
+    val cpuPercent: Float,
+    val memPercent: Float,
+    val rssBytes: Long,
+    val command: String,
+)
+
+/**
+ * What `systemctl` says about a unit. Only the states worth showing are collected (see
+ * [HostMetricsController.FULL_METRICS_COMMAND]); [Other] is the fallback for a word we don't know,
+ * which is drawn plainly rather than coloured as good or bad news.
+ */
+enum class ServiceState { Active, Activating, Failed, Other }
+
+/** One systemd unit: its name, its ACTIVE column, and the SUB column ("running", "start", "failed"). */
+data class ServiceUnit(val name: String, val state: ServiceState, val sub: String)
+
+/**
+ * One container from `docker ps` (or `podman ps`). [cpuPercent] comes from a separate `stats` call
+ * and is `null` when that call found nothing for this container — the column then says so instead
+ * of claiming an idle container.
+ */
+data class ContainerSample(val name: String, val image: String, val status: String, val cpuPercent: Float?)
 
 /** Uptime seconds to `HH:MM:SS` (with an `Nd ` prefix if >= a day). Negative values clamp to zero. */
 fun formatUptime(seconds: Long): String {
@@ -66,6 +98,9 @@ fun formatUptime(seconds: Long): String {
  * @DISK
  * <df -Pk: data lines with a Use% column and a mount point>
  * ```
+ *
+ * A full poll adds `@SERVICES` (systemd units), `@CONTAINERS` and `@CSTATS` (tab-separated docker
+ * rows); a cheap poll leaves them out and the corresponding lists come back empty.
  *
  * CPU is computed from the delta of two /proc/stat samples (non-idle fraction over the interval);
  * with a single sample, it's instantaneous since system start. Returns `null` if memory
@@ -105,6 +140,9 @@ fun parseHostMetrics(raw: String): HostMetrics? {
         ?.split(WHITESPACE)?.firstOrNull()?.toDoubleOrNull()?.toLong()
     val loadAverage = section(lines, "@LOAD").firstOrNull()
         ?.split(WHITESPACE)?.take(3)?.takeIf { it.size == 3 }?.joinToString(" ")
+        // Same treatment as OS/kernel: the exec answer is whatever the host chose to send, and this
+        // string reaches the CPU tile, the System card and the alert feed.
+        ?.let { hostText(it, FACT_MAX_LEN) }
     // OS/kernel come from the remote (trusted but potentially misbehaving) host — cap the length
     // so an anomalously long string can't break the info panel layout (defence-in-depth).
     val osName = section(lines, "@OS").firstOrNull { it.startsWith("PRETTY_NAME=") }
@@ -113,6 +151,8 @@ fun parseHostMetrics(raw: String): HostMetrics? {
     val cpuCount = section(lines, "@CPU").firstOrNull()?.toIntOrNull()
     val net = parseNetCounters(section(lines, "@NET"))
     val processes = parseProcesses(section(lines, "@PROC"))
+    val services = parseServices(section(lines, "@SERVICES"))
+    val containers = parseContainers(section(lines, "@CONTAINERS"), parseContainerCpu(section(lines, "@CSTATS")))
 
     return HostMetrics(
         cpuPercent = cpuPercent,
@@ -126,10 +166,13 @@ fun parseHostMetrics(raw: String): HostMetrics? {
         cpuCount = cpuCount,
         swapUsedBytes = swapUsed,
         swapTotalBytes = swapTotal,
-        netRxBytes = net?.first,
-        netTxBytes = net?.second,
+        netRxBytes = net?.rxBytes,
+        netTxBytes = net?.txBytes,
+        netInterface = net?.busiest,
         disks = disks,
         processes = processes,
+        services = services,
+        containers = containers,
     )
 }
 
@@ -139,11 +182,44 @@ private val WHITESPACE = Regex("\\s+")
 private const val FACT_MAX_LEN = 120
 
 /** All output section markers — [section] uses these to find the boundary of "its" section. */
-private val SECTION_MARKERS = setOf("@MEM", "@DISK", "@NET", "@PROC", "@UPTIME", "@LOAD", "@OS", "@KERNEL", "@CPU")
+private val SECTION_MARKERS = setOf(
+    "@MEM", "@DISK", "@NET", "@PROC", "@UPTIME", "@LOAD", "@OS", "@KERNEL", "@CPU",
+    "@SERVICES", "@CONTAINERS", "@CSTATS",
+)
 
 /** Max length of a mount path / process command line drawn in the monitor list. */
 private const val MOUNT_MAX_LEN = 40
 private const val COMMAND_MAX_LEN = 40
+
+/** Max length of a unit / container / image name drawn in the monitor cards. */
+private const val NAME_MAX_LEN = 40
+
+/**
+ * How many rows a single card is willing to list. The shell command asks the host for this many,
+ * but the answer is the host's to write: the cap belongs on this side too, or a hostile host draws
+ * a thousand rows into a non-lazy column.
+ */
+private const val LIST_MAX_ROWS = 8
+
+/**
+ * A string coming from the remote host, made safe to draw: control characters (escape sequences
+ * that would repaint the screen) removed and the length capped so one anomalous line can't stretch
+ * a card. Blank input yields null — the caller drops the row rather than drawing an empty one.
+ */
+private fun hostText(raw: String, max: Int): String? =
+    raw.filter { it.code >= 0x20 && it.code !in INVISIBLE_CODES && it.code !in BIDI_CODES }
+        .take(max)
+        .takeIf { it.isNotBlank() }
+
+/** DEL and the C1 control block — invisible, and a terminal would act on some of them. */
+private val INVISIBLE_CODES = (0x7F..0x9F) + listOf(0x200B, 0x200C, 0x200D, 0xFEFF)
+
+/**
+ * Bidirectional and other Unicode format controls. A process or container named with a
+ * RIGHT-TO-LEFT OVERRIDE draws its own row backwards, which is how a busy process passes for an
+ * idle one at a glance.
+ */
+private val BIDI_CODES = (0x200E..0x200F) + (0x202A..0x202E) + (0x2060..0x2069)
 
 /**
  * Kernel-backed filesystems `df` reports next to the real ones. They're either RAM (tmpfs), a
@@ -163,51 +239,100 @@ private fun parseDisks(diskSection: List<String>): List<DiskUsage> = diskSection
     val totalKb = t[1].toLongOrNull() ?: return@mapNotNull null
     val usedKb = t[2].toLongOrNull() ?: return@mapNotNull null
     val percent = t[4].takeIf { it.endsWith("%") }?.dropLast(1)?.toIntOrNull() ?: return@mapNotNull null
-    val mount = t.drop(5).joinToString(" ").take(MOUNT_MAX_LEN)
+    val mount = hostText(t.drop(5).joinToString(" "), MOUNT_MAX_LEN) ?: return@mapNotNull null
     if (t[0] in PSEUDO_FILESYSTEMS || mount.startsWith("/snap")) return@mapNotNull null
     DiskUsage(mount, usedKb * 1024, totalKb * 1024, percent.coerceIn(0, 100))
-}
+}.take(LIST_MAX_ROWS)
+
+/** Host-wide network counters plus the interface that carries most of the received traffic. */
+private data class NetCounters(val rxBytes: Long, val txBytes: Long, val busiest: String?)
 
 /**
  * Cumulative receive/transmit bytes summed over the `/proc/net/dev` interfaces, loopback excluded
  * (it's local traffic and would double-count). Returns null if the section holds no interface rows
- * — the two header lines have no `iface:` prefix and are skipped.
+ * — the two header lines have no `iface:` prefix and are skipped. The busiest interface by received
+ * bytes names the network card, the way `ens3` does in the mockup.
  */
-private fun parseNetCounters(netSection: List<String>): Pair<Long, Long>? {
+private fun parseNetCounters(netSection: List<String>): NetCounters? {
     var rx = 0L
     var tx = 0L
     var seen = false
+    var busiest: String? = null
+    var busiestRx = -1L
     for (line in netSection) {
         val colon = line.indexOf(':')
         if (colon <= 0) continue
-        if (line.take(colon).trim() == "lo") continue
+        val name = line.take(colon).trim()
+        if (name == "lo") continue
         val values = line.substring(colon + 1).split(WHITESPACE).mapNotNull { it.toLongOrNull() }
         if (values.size < 9) continue
         rx += values[0]
         tx += values[8] // /proc/net/dev: 8 receive columns, then transmit bytes
         seen = true
+        if (values[0] > busiestRx) {
+            busiestRx = values[0]
+            busiest = hostText(name, NAME_MAX_LEN)
+        }
     }
-    return if (seen) rx to tx else null
+    return if (seen) NetCounters(rx, tx, busiest) else null
 }
 
 /**
- * Rows of `ps -eo pid=,pcpu=,pmem=,comm=` into [ProcessSample], in the order the host sorted them.
- * Unparsable rows are dropped rather than failing the snapshot. The command comes from the remote
- * host, so control characters (escape sequences that would repaint the panel) are stripped and the
- * length is capped.
+ * Rows of `ps -eo pid=,pcpu=,pmem=,rss=,comm=` into [ProcessSample], in the order the host sorted
+ * them. Unparsable rows are dropped rather than failing the snapshot. The command comes from the
+ * remote host, so it goes through [hostText].
  */
-private fun parseProcesses(procSection: List<String>): List<ProcessSample> = procSection.mapNotNull { line ->
+private fun parseProcesses(procSection: List<String>): List<ProcessSample> = procSection.take(LIST_MAX_ROWS).mapNotNull { line ->
     val t = line.split(WHITESPACE)
-    if (t.size < 4) return@mapNotNull null
+    if (t.size < 5) return@mapNotNull null
     val pid = t[0].toIntOrNull() ?: return@mapNotNull null
     val cpu = t[1].toFloatOrNull() ?: return@mapNotNull null
     val mem = t[2].toFloatOrNull() ?: return@mapNotNull null
-    val command = t.drop(3).joinToString(" ")
-        .filter { it.code >= 0x20 && it.code != 0x7F }
-        .take(COMMAND_MAX_LEN)
-        .takeIf { it.isNotBlank() } ?: return@mapNotNull null
-    ProcessSample(pid, cpu, mem, command)
+    val rssKb = t[3].toLongOrNull() ?: return@mapNotNull null
+    val command = hostText(t.drop(4).joinToString(" "), COMMAND_MAX_LEN) ?: return@mapNotNull null
+    ProcessSample(pid, cpu, mem, rssKb * 1024, command)
 }
+
+/**
+ * Rows of `systemctl list-units --plain --no-legend` (UNIT LOAD ACTIVE SUB DESCRIPTION) into
+ * [ServiceUnit]. A host without systemd answers with an error on stderr and no rows here, so the
+ * card simply isn't drawn.
+ */
+private fun parseServices(section: List<String>): List<ServiceUnit> = section.take(LIST_MAX_ROWS).mapNotNull { line ->
+    val t = line.split(WHITESPACE)
+    if (t.size < 4) return@mapNotNull null
+    val name = hostText(t[0], NAME_MAX_LEN) ?: return@mapNotNull null
+    val state = when (t[2]) {
+        "active" -> ServiceState.Active
+        "activating", "reloading", "deactivating" -> ServiceState.Activating
+        "failed" -> ServiceState.Failed
+        else -> ServiceState.Other
+    }
+    ServiceUnit(name, state, hostText(t[3], NAME_MAX_LEN).orEmpty())
+}
+
+/**
+ * Tab-separated `docker ps` rows (name, image, status) into [ContainerSample], with the CPU share
+ * from [cpuByName] (a separate `docker stats` call) joined in by container name.
+ */
+private fun parseContainers(section: List<String>, cpuByName: Map<String, Float>): List<ContainerSample> =
+    section.take(LIST_MAX_ROWS).mapNotNull { line ->
+        val t = line.split('\t')
+        if (t.size < 3) return@mapNotNull null
+        val name = hostText(t[0].trim(), NAME_MAX_LEN) ?: return@mapNotNull null
+        val image = hostText(t[1].trim(), NAME_MAX_LEN).orEmpty()
+        val status = hostText(t[2].trim(), NAME_MAX_LEN).orEmpty()
+        ContainerSample(name, image, status, cpuByName[name])
+    }
+
+/** Tab-separated `docker stats --no-stream` rows (name, "4.10%") into a name → percent map. */
+private fun parseContainerCpu(section: List<String>): Map<String, Float> = section.mapNotNull { line ->
+    val t = line.split('\t')
+    if (t.size < 2) return@mapNotNull null
+    val name = hostText(t[0].trim(), NAME_MAX_LEN) ?: return@mapNotNull null
+    val percent = t[1].trim().removeSuffix("%").toFloatOrNull() ?: return@mapNotNull null
+    name to percent
+}.toMap()
 
 /** Lines of section [marker]: from it (exclusive) to the next marker (or end). Empty if absent. */
 private fun section(lines: List<String>, marker: String): List<String> {

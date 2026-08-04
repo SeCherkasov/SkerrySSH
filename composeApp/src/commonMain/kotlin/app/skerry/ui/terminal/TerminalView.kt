@@ -138,25 +138,12 @@ fun TerminalView(state: DesktopDesignState) {
                 else -> PaneGrid(sessions, tab, state)
             }
         }
-        // Same treatment as the hosts sidebar: the panel slides out of the right edge instead of
-        // popping into the layout. shrinkTowards = Start keeps its left edge leading, so the
-        // terminal reflows smoothly as the panel widens. Both panels are siblings of the work area,
-        // not of the terminal inside it: they run the full height beside the bar, not under it.
-        // The panel is entirely about the active session (host / cipher / metrics), so with no
-        // active session it would be a column of "—" placeholders next to the empty-state screen —
-        // hide it there, like the pane headers. Mock preview keeps it.
-        AnimatedVisibility(
-            visible = state.settings.infoPanel && infoPanelAvailable(
-                hasSession = tab != null,
-                watched = tab?.focusedPane?.controller?.isWatched == true,
-                mock = sessions == null,
-            ),
-            enter = expandHorizontally(expandFrom = Alignment.Start),
-            exit = shrinkHorizontally(shrinkTowards = Alignment.Start),
-        ) { InfoPanel() }
-        // The assistant sits beside the terminal, the same way the info panel does: it is about this
-        // session, and a question is asked while its output is in view. Nothing to talk about
-        // without a session, so it stays closed there.
+        // The assistant sits beside the terminal: it is about this session, and a question is asked
+        // while its output is in view. Nothing to talk about without a session, so it stays closed
+        // there. It slides out of the right edge instead of popping into the layout —
+        // shrinkTowards = Start keeps its left edge leading, so the terminal reflows smoothly as
+        // the panel widens. The panel is a sibling of the work area, not of the terminal inside it:
+        // it runs the full height beside the bar, not under it.
         AnimatedVisibility(
             visible = assistantVisible,
             enter = expandHorizontally(expandFrom = Alignment.Start),

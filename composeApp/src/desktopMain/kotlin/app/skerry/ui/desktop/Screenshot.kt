@@ -101,6 +101,8 @@ fun main() {
         seedFakeHome()
         sessions?.setActiveView(SessionView.Sftp)
     }
+    // Same for the monitor: a sub-view of the active session, not a rail item of its own.
+    if (viewName == "Monitor") sessions?.setActiveView(SessionView.Monitor)
     // Assistant panel open over the live terminal (-Dskerry.screenshot.assistantPanel=true): checks
     // that the pinned action row steps aside for the panel's own header.
     if (System.getProperty("skerry.screenshot.assistantPanel", "false").toBoolean()) state.toggleAssistant()
@@ -211,23 +213,7 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     val scene = ImageComposeScene(width = 780, height = 1688, density = Density(2f)) {
         SkerryTheme(mode = themeMode) {
             MobileDesignApp(deps = deps, state = state, sessions = sessions, aiOverride = ai, updatesOverride = updates)
-            // overlay=monitor: the host-monitor sheet on a fixed snapshot. The sheet is opened from
-            // the terminal's menu at runtime, which an offscreen render can't tap, and the live
-            // poller publishes from a background dispatcher that never reaches this scene.
-            if (overlay == "monitor") {
-                // Drawn beside the app, so it needs its own font set (the app provides LocalFonts
-                // only inside its own tree).
-                GateScreenPreview {
-                    MobileHostMonitorSheet(
-                        metrics = PREVIEW_HOST_METRICS,
-                        history = PREVIEW_METRICS_HISTORY,
-                        netRxRate = PREVIEW_RX_RATE,
-                        netTxRate = PREVIEW_TX_RATE,
-                        availability = MetricsAvailability.Live,
-                        onDismiss = {},
-                    )
-                }
-            }
+            if (overlay == "monitor") MonitorSheetOverlay()
         }
     }
     var img = scene.render(0)
@@ -240,4 +226,29 @@ private fun renderMobile(out: String, viewName: String, overlay: String, live: B
     scene.close()
     sessions?.disconnectAll() // detach fake session collectors before exit
     println("screenshot(mobile) → $out (${File(out).length()} bytes)")
+}
+
+/**
+ * overlay=monitor: the host-monitor sheet on a fixed snapshot. The sheet is opened from the
+ * terminal's menu at runtime, which an offscreen render can't tap, and the live poller publishes
+ * from a background dispatcher that never reaches this scene. Drawn beside the app, so it needs its
+ * own font set (the app provides LocalFonts only inside its own tree).
+ */
+@Composable
+private fun MonitorSheetOverlay() {
+    GateScreenPreview {
+        MobileHostMonitorSheet(
+            metrics = PREVIEW_HOST_METRICS,
+            history = PREVIEW_METRICS_HISTORY,
+            netRxRate = PREVIEW_RX_RATE,
+            netTxRate = PREVIEW_TX_RATE,
+            availability = MetricsAvailability.Live,
+            alerts = emptyList(),
+            intervalMs = 5_000,
+            // Fixed stamp: an offscreen render must come out identical between runs, and the alert
+            // ages are the only thing here that reads a clock.
+            nowMillis = 0,
+            onDismiss = {},
+        )
+    }
 }

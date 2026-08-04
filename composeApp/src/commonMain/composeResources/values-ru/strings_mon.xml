@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mon_tip_back">Назад в терминал</string>
+    <string name="mon_tip_refresh">Обновить сейчас</string>
+    <string name="mon_tip_interval">Интервал опроса</string>
+    <string name="mon_subtitle_pending">мониторинг · ждём данные</string>
+    <string name="mon_subtitle_seconds">мониторинг · обновлено %1$d с назад</string>
+    <string name="mon_subtitle_minutes">мониторинг · обновлено %1$d мин назад</string>
+    <string name="mon_no_session">Подключитесь к хосту, чтобы видеть его ресурсы.</string>
+
+    <string name="mon_stat_cpu">CPU</string>
+    <string name="mon_stat_memory">Память</string>
+    <string name="mon_stat_disk">Диск /</string>
+    <string name="mon_stat_network">Сеть</string>
+    <string name="mon_unit_percent">%</string>
+    <string name="mon_foot_cpu">%1$d ядер · загрузка %2$s</string>
+    <string name="mon_foot_memory">%1$s / %2$s · подкачка %3$s</string>
+    <string name="mon_foot_disk">%1$s / %2$s · %3$s свободно</string>
+    <string name="mon_foot_network">%1$s · ↑ %2$s ↓ %3$s</string>
+
+    <string name="mon_card_processes">Топ процессов</string>
+    <string name="mon_col_command">Команда</string>
+    <string name="mon_col_pid">PID</string>
+    <string name="mon_col_cpu">CPU</string>
+    <string name="mon_col_rss">RSS</string>
+
+    <string name="mon_card_services">Сервисы и точки монтирования</string>
+    <string name="mon_mounts">Точки монтирования</string>
+    <string name="mon_no_services">Юниты systemd не получены</string>
+    <string name="mon_service_state">%1$s (%2$s)</string>
+
+    <string name="mon_card_containers">Контейнеры</string>
+    <string name="mon_col_name">Имя</string>
+    <string name="mon_col_image">Образ</string>
+    <string name="mon_col_status">Статус</string>
+
+    <string name="mon_card_alerts">Оповещения</string>
+    <string name="mon_no_alerts">Пороги не превышены</string>
+    <string name="mon_collection">Сбор</string>
+    <string name="mon_interval">Интервал</string>
+    <string name="mon_interval_seconds">%1$d с</string>
+    <string name="mon_interval_value">%1$d с · один вызов exec</string>
+    <string name="mon_source">Источник</string>
+    <string name="mon_source_value">/proc, df, systemctl</string>
+
+    <string name="mon_alert_disk">Диск %1$s выше порога</string>
+    <string name="mon_alert_disk_ok">Диск %1$s вернулся под порог</string>
+    <string name="mon_alert_memory">Память на %1$s%%</string>
+    <string name="mon_alert_memory_ok">Память вернулась в норму</string>
+    <string name="mon_alert_swap">Подкачка на %1$s%%</string>
+    <string name="mon_alert_swap_ok">Подкачка вернулась в норму</string>
+    <string name="mon_alert_load">Загрузка %1$s выше числа ядер</string>
+    <string name="mon_alert_load_ok">Загрузка вернулась под число ядер</string>
+
+    <string name="mon_age_now">сейчас</string>
+    <string name="mon_age_minutes">%1$d мин назад</string>
+    <string name="mon_age_hours">%1$d ч назад</string>
+    <string name="mon_age_yesterday">вчера</string>
+    <string name="mon_age_days">%1$d дн назад</string>
+
+    <string name="mon_card_connection">Соединение</string>
+    <string name="mon_card_system">Система</string>
+</resources>

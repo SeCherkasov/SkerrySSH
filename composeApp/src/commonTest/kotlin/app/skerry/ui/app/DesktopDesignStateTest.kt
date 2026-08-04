@@ -34,7 +34,6 @@ class DesktopDesignStateTest {
         assertEquals("prod-web-01", s.selectedHost)
         assertEquals(0, s.activeTab)
         assertEquals(4, s.tabs.size)
-        assertTrue(s.settings.infoPanel)
         assertTrue(s.sanitize && s.preview && s.confirm)
     }
 
@@ -184,7 +183,6 @@ class DesktopDesignStateTest {
         val s = DesktopDesignState()
         s.toggleSanitize(); assertFalse(s.sanitize)
         s.toggleSplit(); assertTrue(s.split)
-        s.settings.toggleInfoPanel(); assertFalse(s.settings.infoPanel)
         s.lock(); assertTrue(s.locked)
         s.unlock(); assertFalse(s.locked)
     }

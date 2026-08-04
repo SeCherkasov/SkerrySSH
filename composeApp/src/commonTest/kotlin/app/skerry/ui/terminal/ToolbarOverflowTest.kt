@@ -139,28 +139,35 @@ class ToolbarAvailabilityTest {
     }
 }
 
-/** Which panes the info panel is offered for (see [infoPanelAvailable]). */
-class InfoPanelAvailabilityTest {
+/** Which panes the monitor is offered for (see [monitorAvailable]). */
+class MonitorAvailabilityTest {
 
     @Test
-    fun `a session of our own gets the info panel`() {
-        assertTrue(infoPanelAvailable(hasSession = true, watched = false, mock = false))
+    fun `a session of our own gets the monitor`() {
+        assertTrue(monitorAvailable(hasSession = true, watched = false, mock = false))
     }
 
     @Test
     fun `a pane watching a colleague's session does not`() {
-        // Host, cipher, uptime and metrics all come from a connection this app owns; a viewer has
-        // none of them, and the panel would be a column of dashes.
-        assertFalse(infoPanelAvailable(hasSession = true, watched = true, mock = false))
+        // Every number on that screen comes from a connection this app owns; a viewer has none of
+        // them, so the button is left out rather than opening a screen full of dashes.
+        assertFalse(monitorAvailable(hasSession = true, watched = true, mock = false))
     }
 
     @Test
-    fun `with no session there is nothing to describe`() {
-        assertFalse(infoPanelAvailable(hasSession = false, watched = false, mock = false))
+    fun `with no session there is nothing to poll`() {
+        assertFalse(monitorAvailable(hasSession = false, watched = false, mock = false))
     }
 
     @Test
-    fun `the mock path keeps its static panel`() {
-        assertTrue(infoPanelAvailable(hasSession = false, watched = false, mock = true))
+    fun `the mock path keeps its static screen`() {
+        assertTrue(monitorAvailable(hasSession = false, watched = false, mock = true))
+    }
+
+    @Test
+    fun `a row without the monitor neither draws nor overflows it`() {
+        val shown = availableActions(hasSession = true, monitorShown = false)
+        assertFalse(ToolbarAction.Monitor in shown)
+        assertFalse(ToolbarAction.Monitor in overflowedActions(available = 150.dp, syncShown = false, monitorShown = false))
     }
 }
