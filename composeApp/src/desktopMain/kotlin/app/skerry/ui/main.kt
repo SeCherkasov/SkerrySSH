@@ -600,8 +600,6 @@ fun main(args: Array<String>) {
                     // every recomposition would only re-read prefs and throw the result away.
                     settings = remember {
                         DesktopSettingsState(
-                            initialInfoPanel = prefs.bool("info_panel", true),
-                            onInfoPanelChange = { prefs.set("info_panel", it) },
                             initialTerminalFont = prefs.id("terminal_font", TerminalFont.DEFAULT, TerminalFont::fromId),
                             onTerminalFontChange = { prefs.set("terminal_font", it.id) },
                             initialTerminalFontSize = readTerminalFontSize(prefs),

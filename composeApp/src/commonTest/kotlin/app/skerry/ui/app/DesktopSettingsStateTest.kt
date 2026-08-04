@@ -54,22 +54,6 @@ class DesktopSettingsStateTest {
     }
 
     @Test
-    fun info_panel_honours_initial_value() {
-        assertFalse(DesktopSettingsState(initialInfoPanel = false).infoPanel)
-        assertTrue(DesktopSettingsState(initialInfoPanel = true).infoPanel)
-    }
-
-    @Test
-    fun toggleInfo_reports_new_value_to_callback() {
-        val seen = mutableListOf<Boolean>()
-        val s = DesktopSettingsState(initialInfoPanel = true, onInfoPanelChange = { seen += it })
-        s.toggleInfoPanel() // true → false
-        s.toggleInfoPanel() // false → true
-        assertEquals(listOf(false, true), seen)
-        assertTrue(s.infoPanel)
-    }
-
-    @Test
     fun recent_visibility_defaults_shown_full_cap() {
         val s = DesktopSettingsState()
         assertTrue(s.showRecent)

@@ -35,7 +35,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 
 /** Left rail / top-level views of the layout. */
-enum class DesktopView { Terminal, Sftp, Ports, Snippets, Runbooks, Vault, Known, Teams }
+enum class DesktopView { Terminal, Sftp, Monitor, Ports, Snippets, Runbooks, Vault, Known, Teams }
 
 /**
  * App-level views not tied to a specific SSH session: Ports(Tunnels)/Snippets/Vault/Known/Teams.
@@ -52,6 +52,7 @@ val DesktopView.isAppLevel: Boolean
 /** Rail item → session sub-view; app-level/Terminal map to Terminal. */
 fun DesktopView.asSessionView(): SessionView = when (this) {
     DesktopView.Sftp -> SessionView.Sftp
+    DesktopView.Monitor -> SessionView.Monitor
     else -> SessionView.Terminal
 }
 
@@ -59,6 +60,7 @@ fun DesktopView.asSessionView(): SessionView = when (this) {
 fun SessionView.asDesktopView(): DesktopView = when (this) {
     SessionView.Terminal -> DesktopView.Terminal
     SessionView.Sftp -> DesktopView.Sftp
+    SessionView.Monitor -> DesktopView.Monitor
     // VNC and the recording player have no dedicated rail item (they're work-area views, like
     // Terminal); don't highlight one.
     SessionView.Vnc -> DesktopView.Terminal

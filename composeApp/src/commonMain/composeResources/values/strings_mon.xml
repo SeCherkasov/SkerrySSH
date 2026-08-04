@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mon_tip_back">Back to terminal</string>
+    <string name="mon_tip_refresh">Refresh now</string>
+    <string name="mon_tip_interval">Poll interval</string>
+    <string name="mon_subtitle_pending">monitoring · waiting for data</string>
+    <string name="mon_subtitle_seconds">monitoring · refreshed %1$d s ago</string>
+    <string name="mon_subtitle_minutes">monitoring · refreshed %1$d m ago</string>
+    <string name="mon_no_session">Connect to a host to watch its resources.</string>
+
+    <string name="mon_stat_cpu">CPU</string>
+    <string name="mon_stat_memory">Memory</string>
+    <string name="mon_stat_disk">Disk /</string>
+    <string name="mon_stat_network">Network</string>
+    <string name="mon_unit_percent">%</string>
+    <string name="mon_foot_cpu">%1$d cores · load %2$s</string>
+    <string name="mon_foot_memory">%1$s / %2$s · swap %3$s</string>
+    <string name="mon_foot_disk">%1$s / %2$s · %3$s free</string>
+    <string name="mon_foot_network">%1$s · ↑ %2$s ↓ %3$s</string>
+
+    <string name="mon_card_processes">Top processes</string>
+    <string name="mon_col_command">Command</string>
+    <string name="mon_col_pid">PID</string>
+    <string name="mon_col_cpu">CPU</string>
+    <string name="mon_col_rss">RSS</string>
+
+    <string name="mon_card_services">Services and mounts</string>
+    <string name="mon_mounts">Mounts</string>
+    <string name="mon_no_services">No systemd units reported</string>
+    <string name="mon_service_state">%1$s (%2$s)</string>
+
+    <string name="mon_card_containers">Containers</string>
+    <string name="mon_col_name">Name</string>
+    <string name="mon_col_image">Image</string>
+    <string name="mon_col_status">Status</string>
+
+    <string name="mon_card_alerts">Alerts</string>
+    <string name="mon_no_alerts">No thresholds crossed</string>
+    <string name="mon_collection">Collection</string>
+    <string name="mon_interval">Interval</string>
+    <string name="mon_interval_seconds">%1$d s</string>
+    <string name="mon_interval_value">%1$d s · one exec round-trip</string>
+    <string name="mon_source">Source</string>
+    <string name="mon_source_value">/proc, df, systemctl</string>
+
+    <string name="mon_alert_disk">Disk %1$s above the limit</string>
+    <string name="mon_alert_disk_ok">Disk %1$s back under the limit</string>
+    <string name="mon_alert_memory">Memory at %1$s%%</string>
+    <string name="mon_alert_memory_ok">Memory back to normal</string>
+    <string name="mon_alert_swap">Swap at %1$s%%</string>
+    <string name="mon_alert_swap_ok">Swap back to normal</string>
+    <string name="mon_alert_load">Load %1$s above the core count</string>
+    <string name="mon_alert_load_ok">Load back under the core count</string>
+
+    <string name="mon_age_now">now</string>
+    <string name="mon_age_minutes">%1$d m ago</string>
+    <string name="mon_age_hours">%1$d h ago</string>
+    <string name="mon_age_yesterday">yesterday</string>
+    <string name="mon_age_days">%1$d d ago</string>
+
+    <string name="mon_card_connection">Connection</string>
+    <string name="mon_card_system">System</string>
+</resources>

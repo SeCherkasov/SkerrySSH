@@ -7,6 +7,7 @@ import app.skerry.ui.app.DesktopView
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.known.KnownHostsView
 import app.skerry.ui.app.LocalSessions
+import app.skerry.ui.metrics.MonitorView
 import app.skerry.ui.sftp.SftpView
 import app.skerry.ui.runbook.RunbooksView
 import app.skerry.ui.snippet.SnippetsView
@@ -50,6 +51,7 @@ fun Viewport(state: DesktopDesignState) {
                     when (view) {
                         SessionView.Terminal -> TerminalView(state)
                         SessionView.Sftp -> SftpView()
+                        SessionView.Monitor -> MonitorView(state)
                         // A remote desktop never renders here (see activeTerminal); keep the branch total.
                         SessionView.Vnc -> TerminalView(state)
                         SessionView.Player -> CastPlayerView()

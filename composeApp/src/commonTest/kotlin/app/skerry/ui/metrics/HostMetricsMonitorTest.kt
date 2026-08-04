@@ -29,8 +29,8 @@ class HostMetricsMonitorTest {
           eth0: 5000000    500    0    0    0     0          0         0  2000000     200
           eth1:  500000     50    0    0    0     0          0         0   100000      10
         @PROC
-        1234  12.5  3.4 postgres
-         987   4.0  1.2 nginx
+        1234  12.5  3.4 1258291 postgres
+         987   4.0  1.2  188416 nginx
         @UPTIME
         372765.42 1488907.15
     """.trimIndent()
@@ -105,7 +105,7 @@ class HostMetricsMonitorTest {
             @DISK
             /dev/sda1  100 87 13 87% /
             @PROC
-            42  1.0  1.0 ${"\u001b[31mevil"}${"X".repeat(200)}
+            42  1.0  1.0 4096 ${"\u001b[31mevil"}${"X".repeat(200)}
         """.trimIndent()
         val cmd = parseHostMetrics(out)!!.processes.single().command
         assertTrue(cmd.length <= 40, "command must be capped, was ${cmd.length}")
@@ -122,7 +122,7 @@ class HostMetricsMonitorTest {
             /dev/sda1  100 87 13 87% /
             @PROC
             not-a-pid  x  y
-            77  2.0  1.0 sshd
+            77  2.0  1.0 12288 sshd
         """.trimIndent()
         val procs = parseHostMetrics(out)!!.processes
         assertEquals(listOf("sshd"), procs.map { it.command })

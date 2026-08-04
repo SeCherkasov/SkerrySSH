@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mon_tip_back">返回终端</string>
+    <string name="mon_tip_refresh">立即刷新</string>
+    <string name="mon_tip_interval">采集间隔</string>
+    <string name="mon_subtitle_pending">监控 · 等待数据</string>
+    <string name="mon_subtitle_seconds">监控 · %1$d 秒前刷新</string>
+    <string name="mon_subtitle_minutes">监控 · %1$d 分钟前刷新</string>
+    <string name="mon_no_session">连接主机后即可查看其资源。</string>
+
+    <string name="mon_stat_cpu">CPU</string>
+    <string name="mon_stat_memory">内存</string>
+    <string name="mon_stat_disk">磁盘 /</string>
+    <string name="mon_stat_network">网络</string>
+    <string name="mon_unit_percent">%</string>
+    <string name="mon_foot_cpu">%1$d 核 · 负载 %2$s</string>
+    <string name="mon_foot_memory">%1$s / %2$s · 交换 %3$s</string>
+    <string name="mon_foot_disk">%1$s / %2$s · 剩余 %3$s</string>
+    <string name="mon_foot_network">%1$s · ↑ %2$s ↓ %3$s</string>
+
+    <string name="mon_card_processes">进程占用榜</string>
+    <string name="mon_col_command">命令</string>
+    <string name="mon_col_pid">PID</string>
+    <string name="mon_col_cpu">CPU</string>
+    <string name="mon_col_rss">RSS</string>
+
+    <string name="mon_card_services">服务与挂载</string>
+    <string name="mon_mounts">挂载点</string>
+    <string name="mon_no_services">未获取到 systemd 单元</string>
+    <string name="mon_service_state">%1$s (%2$s)</string>
+
+    <string name="mon_card_containers">容器</string>
+    <string name="mon_col_name">名称</string>
+    <string name="mon_col_image">镜像</string>
+    <string name="mon_col_status">状态</string>
+
+    <string name="mon_card_alerts">告警</string>
+    <string name="mon_no_alerts">未触发任何阈值</string>
+    <string name="mon_collection">采集</string>
+    <string name="mon_interval">间隔</string>
+    <string name="mon_interval_seconds">%1$d 秒</string>
+    <string name="mon_interval_value">%1$d 秒 · 单次 exec 往返</string>
+    <string name="mon_source">来源</string>
+    <string name="mon_source_value">/proc、df、systemctl</string>
+
+    <string name="mon_alert_disk">磁盘 %1$s 超过阈值</string>
+    <string name="mon_alert_disk_ok">磁盘 %1$s 回到阈值以下</string>
+    <string name="mon_alert_memory">内存占用 %1$s%%</string>
+    <string name="mon_alert_memory_ok">内存恢复正常</string>
+    <string name="mon_alert_swap">交换占用 %1$s%%</string>
+    <string name="mon_alert_swap_ok">交换恢复正常</string>
+    <string name="mon_alert_load">负载 %1$s 高于核心数</string>
+    <string name="mon_alert_load_ok">负载回到核心数以下</string>
+
+    <string name="mon_age_now">刚刚</string>
+    <string name="mon_age_minutes">%1$d 分钟前</string>
+    <string name="mon_age_hours">%1$d 小时前</string>
+    <string name="mon_age_yesterday">昨天</string>
+    <string name="mon_age_days">%1$d 天前</string>
+
+    <string name="mon_card_connection">连接</string>
+    <string name="mon_card_system">系统</string>
+</resources>
