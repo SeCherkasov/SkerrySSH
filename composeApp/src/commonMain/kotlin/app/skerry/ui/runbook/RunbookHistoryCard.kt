@@ -21,8 +21,6 @@ import app.skerry.shared.runbook.RunbookRunOutcome
 import app.skerry.shared.runbook.RunbookRunRecord
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.runbook_dur_minutes
-import app.skerry.ui.generated.resources.runbook_dur_seconds
 import app.skerry.ui.generated.resources.runbook_history
 import app.skerry.ui.generated.resources.runbook_history_empty
 import app.skerry.ui.generated.resources.runbook_history_failed_at

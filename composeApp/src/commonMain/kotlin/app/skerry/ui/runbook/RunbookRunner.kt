@@ -6,10 +6,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.runbook.ResolvedRunbookStep
 import app.skerry.shared.runbook.Runbook
-import app.skerry.shared.runbook.RunbookHostOutcome
 import app.skerry.shared.runbook.RunbookMarker
 import app.skerry.shared.runbook.RunbookPolicy
-import app.skerry.shared.runbook.RunbookRunOutcome
 import app.skerry.shared.runbook.RunbookRunRecord
 import app.skerry.shared.runbook.RunbookScript
 import app.skerry.shared.runbook.RunbookTransferDirection
@@ -487,10 +485,13 @@ class RunbookRunner(
         )
     }
 
-    /** Hands the parked record over, outside the lock. Does nothing when there is none. */
+    /**
+     * Hands the parked record over, outside the lock. Does nothing when there is none. The take is
+     * itself under the lock: a watcher leaving the critical section and the user's Close landing at
+     * that moment would otherwise both read the same record and write the log twice.
+     */
     private fun flushReport() {
-        val record = pendingReport ?: return
-        pendingReport = null
+        val record = synchronized(lock) { pendingReport.also { pendingReport = null } } ?: return
         onFinished(record)
     }
 }
