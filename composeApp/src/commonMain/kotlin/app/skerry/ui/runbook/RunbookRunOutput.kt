@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.runbook.RunbookParallelism
 import app.skerry.shared.snippet.stripUnsafeFormatChars
+import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.generated.resources.Res
@@ -123,6 +125,12 @@ internal fun RunbookRunCards(
     mono: FontFamily,
     onPickHost: (String) -> Unit,
 ) {
+    // Re-read when the run ends: a finished run writes its own row, and the card is right there.
+    val history = LocalRunbookHistory.current
+    val runbookId = runner.runbook?.id
+    val records = remember(runbookId, runner.phase) {
+        if (history == null || runbookId == null) emptyList() else history.forRunbook(runbookId)
+    }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(
             Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(Skerry.colors.card)
@@ -151,6 +159,7 @@ internal fun RunbookRunCards(
                 )
             }
         }
+        RunbookHistoryCard(records, mono, Modifier.weight(1f))
     }
 }
 

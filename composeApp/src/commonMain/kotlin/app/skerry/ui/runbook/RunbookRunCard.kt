@@ -31,6 +31,7 @@ import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.snippet.captureSnippetRunEnvironment
 import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
@@ -47,6 +48,7 @@ import app.skerry.ui.generated.resources.lib_snippets_runs_on
 import app.skerry.ui.generated.resources.lib_snippets_variables
 import app.skerry.ui.generated.resources.runbook_delete
 import app.skerry.ui.generated.resources.runbook_edit
+import app.skerry.ui.generated.resources.runbook_history_last
 import app.skerry.ui.generated.resources.runbook_policy
 import app.skerry.ui.generated.resources.runbook_policy_parallel_all
 import app.skerry.ui.generated.resources.runbook_policy_parallel_one
@@ -63,6 +65,7 @@ import app.skerry.ui.generated.resources.runbook_step_n
 import app.skerry.ui.generated.resources.runbook_steps
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.host.HostSection
+import app.skerry.ui.sftp.fileDateText
 import app.skerry.ui.snippet.snippetTagLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
@@ -96,6 +99,9 @@ internal fun RunbookRunCard(
     val variables = remember(runbook) {
         RunbookScript.of(runbook, captureSnippetRunEnvironment()).variables.map { it.name }.distinct()
     }
+    val history = LocalRunbookHistory.current
+    // Re-read when a run ends (the runner's phase changes) — the newest row is this runbook's own.
+    val records = remember(runbook.id, runner?.phase) { history?.forRunbook(runbook.id).orEmpty() }
     // A run needs both halves of the session; keeping them in one value keeps the click handler flat.
     val target = if (session != null && terminal != null) runbookTarget(session.id, terminal, session.controller) else null
     val recording = terminal?.recording == true
@@ -144,6 +150,13 @@ internal fun RunbookRunCard(
 
         FieldLabel(labelUppercase(stringResource(Res.string.runbook_policy)), top = 14.dp, bottom = 7.dp)
         PolicyChips(entry)
+
+        records.firstOrNull()?.let { last ->
+            Txt(
+                stringResource(Res.string.runbook_history_last, fileDateText(last.startedAt / 1_000)),
+                color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(top = 10.dp),
+            )
+        }
 
         FieldLabel(labelUppercase(stringResource(Res.string.lib_snippets_runs_on)), top = 14.dp, bottom = 7.dp)
         // The section is app-level and can be open with no session at all; say why Run is inert

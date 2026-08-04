@@ -556,9 +556,13 @@ class MainActivity : FragmentActivity() {
         val runbooks = app.skerry.ui.runbook.RunbookManager(
             app.skerry.shared.runbook.VaultRunbookStore(vault, trash),
         ) { UUID.randomUUID().toString() }
+        // History of past runs: RUNBOOK_RUN records next to the runbooks themselves, capped per
+        // runbook. Outcomes and timings only — never a command line or its output.
+        val runbookHistory = app.skerry.shared.runbook.VaultRunbookRunStore(vault)
         val runbookRunner = app.skerry.ui.runbook.RunbookRunner(
             scope = scope,
             newId = { UUID.randomUUID().toString() },
+            onFinished = runbookHistory::record,
         )
         // Self-hosted sync: coordinator ties together the network client (Ktor+SRP), crypto, and vault.
         // Server binding is persisted in sync.json (non-secret: URL/accountId/deviceId); tokens and
@@ -748,6 +752,7 @@ class MainActivity : FragmentActivity() {
             snippets = snippets,
             runbooks = runbooks,
             runbookRunner = runbookRunner,
+            runbookHistory = runbookHistory,
             sync = sync,
             teams = teams,
             sessionShare = sessionShare,

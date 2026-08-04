@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.EmptyState
@@ -103,6 +104,7 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
     var selectedId by remember { mutableStateOf<String?>(null) }
     var mode by remember { mutableStateOf<RunbookPanelMode>(RunbookPanelMode.Run) }
     var query by remember { mutableStateOf("") }
+    val history = LocalRunbookHistory.current
 
     val all = manager.runbooks
     // Not memoized: RunbookManager.save() updates an entry in place, so neither `all` nor `query`
@@ -170,7 +172,12 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
                             state = state,
                             mono = mono,
                             onEdit = { mode = RunbookPanelMode.Edit(selected.id) },
-                            onDelete = { manager.delete(selected.id); selectedId = null },
+                            onDelete = {
+                            manager.delete(selected.id)
+                            // The runbook is gone; its run log has nothing left to belong to.
+                            history?.forget(selected.id)
+                            selectedId = null
+                        },
                         )
                     }
                 }

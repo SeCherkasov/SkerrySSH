@@ -117,4 +117,10 @@
     <string name="runbook_connecting">Подключение: %1$s</string>
     <string name="runbook_unreachable">Не отвечают: %1$s</string>
     <string name="runbook_run_rest">Запустить на остальных</string>
+
+    <!-- Run history -->
+    <string name="runbook_history">Прошлые прогоны</string>
+    <string name="runbook_history_empty">Прогонов ещё не было</string>
+    <string name="runbook_history_failed_at">сбой на шаге %1$d</string>
+    <string name="runbook_history_last">последний прогон %1$s</string>
 </resources>

@@ -69,6 +69,8 @@ data class AppDependencies(
     val runbooks: app.skerry.ui.runbook.RunbookManager? = null,
     /** The one in-flight runbook run, app-wide; `null` if not wired up. */
     val runbookRunner: app.skerry.ui.runbook.RunbookRunner? = null,
+    /** Log of past runs; `null` if not wired up. */
+    val runbookHistory: app.skerry.shared.runbook.VaultRunbookRunStore? = null,
     /** Biometric vault unlock; `null` on a platform without biometrics. */
     val biometrics: VaultBiometrics? = null,
     /** Self-hosted sync coordinator; `null` if sync isn't wired up on this platform. */

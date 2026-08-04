@@ -113,4 +113,10 @@
     <string name="runbook_connecting">Connecting: %1$s</string>
     <string name="runbook_unreachable">No answer: %1$s</string>
     <string name="runbook_run_rest">Run on the rest</string>
+
+    <!-- Run history -->
+    <string name="runbook_history">Previous runs</string>
+    <string name="runbook_history_empty">No runs yet</string>
+    <string name="runbook_history_failed_at">failed at step %1$d</string>
+    <string name="runbook_history_last">last run %1$s</string>
 </resources>

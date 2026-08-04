@@ -11,7 +11,8 @@ import app.skerry.shared.vault.VaultRecord
  * (see the push in [SyncEngine.sync]). A type joins this set when it ships and leaves it once every
  * supported server release accepts it.
  */
-private val TYPES_NEWER_THAN_SOME_SERVERS = setOf(RecordType.TRASH, RecordType.RUNBOOK, RecordType.TRUSTED_CA)
+private val TYPES_NEWER_THAN_SOME_SERVERS =
+    setOf(RecordType.TRASH, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN, RecordType.TRUSTED_CA)
 
 /** Where the delta sync cursor (`lastSyncVersion`) is stored, per device/account. */
 interface SyncStateStore {

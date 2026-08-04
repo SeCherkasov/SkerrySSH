@@ -8,7 +8,10 @@ import app.skerry.shared.runbook.ResolvedRunbookStep
 import app.skerry.shared.runbook.Runbook
 import app.skerry.shared.runbook.RunbookMarker
 import app.skerry.shared.runbook.RunbookParallelism
+import app.skerry.shared.runbook.RunbookHostOutcome
 import app.skerry.shared.runbook.RunbookPolicy
+import app.skerry.shared.runbook.RunbookRunOutcome
+import app.skerry.shared.runbook.RunbookRunRecord
 import app.skerry.shared.runbook.RunbookScript
 import app.skerry.shared.runbook.RunbookTransferDirection
 import app.skerry.shared.sftp.SftpProgress
@@ -69,6 +72,11 @@ class RunbookRunner(
     private val pollIntervalMillis: Long = 120L,
     /** Wall clock behind step durations; injected so tests can run on virtual time. */
     private val now: () -> Long = ::epochMillis,
+    /**
+     * Called once when a run ends, whichever way it ends — what the history log is written from.
+     * The record carries no command lines and no output: see [RunbookRunRecord].
+     */
+    private val onFinished: (RunbookRunRecord) -> Unit = {},
 ) {
     var runbook: Runbook? by mutableStateOf(null)
         private set
@@ -107,6 +115,10 @@ class RunbookRunner(
     private var contextValue: (SnippetSegment.Variable) -> String = { "" }
     private var policy: RunbookPolicy = RunbookPolicy()
     private var runId: String = ""
+    private var startedAt: Long = 0L
+
+    /** Whether the run in hand has already been handed to [onFinished] — it is reported once. */
+    private var reported: Boolean = false
 
     /** Watcher per host, keyed by session id — one step per host is ever in flight. */
     private val jobs = mutableMapOf<String, Job>()
@@ -184,6 +196,8 @@ class RunbookRunner(
         this.contextValue = contextValue
         this.script = request.script
         this.runId = newId()
+        this.startedAt = now()
+        this.reported = false
         this.hosts = request.targets.map { RunbookHostRun(it, request.runbook.steps) }
         phase = RunbookPhase.RUNNING
         when (policy.parallelism) {
@@ -229,6 +243,7 @@ class RunbookRunner(
             hosts.forEach { host -> if (host.phase != RunbookPhase.DONE) stopHost(host) }
         }
         phase = RunbookPhase.STOPPED
+        report()
     }
 
     /** Dismisses the run entirely (stopping it first if needed) and forgets its resolved values. */
@@ -500,6 +515,41 @@ class RunbookRunner(
             phases.any { it == RunbookPhase.STOPPED } -> RunbookPhase.STOPPED
             else -> RunbookPhase.DONE
         }
+        report()
+    }
+
+    /**
+     * Hands a finished run to [onFinished], once. Called from both endings a run has: the last host
+     * reporting in ([refreshPhase]) and the user stopping it ([stop]).
+     */
+    private fun report() {
+        val phase = phase ?: return
+        if (reported || phase == RunbookPhase.RUNNING || phase == RunbookPhase.AWAITING_CONFIRM) return
+        val runbook = runbook ?: return
+        reported = true
+        onFinished(
+            RunbookRunRecord(
+                id = runId,
+                runbookId = runbook.id,
+                startedAt = startedAt,
+                durationMillis = now() - startedAt,
+                outcome = when {
+                    phase == RunbookPhase.FAILED -> RunbookRunOutcome.FAILED
+                    phase == RunbookPhase.STOPPED -> RunbookRunOutcome.STOPPED
+                    hadFailures -> RunbookRunOutcome.DONE_WITH_FAILURES
+                    else -> RunbookRunOutcome.DONE
+                },
+                hosts = hosts.map { host ->
+                    RunbookHostOutcome(
+                        label = host.label,
+                        stepsDone = host.finishedCount,
+                        stepsTotal = host.steps.size,
+                        // 1-based, the way the run screen numbers steps.
+                        failedStep = host.steps.firstOrNull { it.status == RunbookStepStatus.FAILED }?.let { it.index + 1 },
+                    )
+                },
+            ),
+        )
     }
 }
 
