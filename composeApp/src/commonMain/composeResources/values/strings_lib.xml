@@ -202,7 +202,6 @@
     <string name="lib_teams_share_snippet_title">Share snippet with team</string>
     <string name="lib_teams_share_empty">Nothing left to share</string>
     <string name="lib_teams_nothing_shared">Nothing shared yet</string>
-    <string name="lib_teams_sync_now">Sync</string>
     <string name="lib_teams_no_key">The team key has not arrived on this device yet</string>
     <string name="lib_teams_remove_member_title">Remove member</string>
     <string name="lib_teams_remove_member_message">Remove %1$s from the team? Server access is revoked at once. Rotate shared secrets if they should no longer be trusted.</string>
@@ -239,4 +238,45 @@
     <string name="lib_teams_scope_members_count">%1$d with access</string>
     <string name="lib_teams_err_already_shared">This record is already shared into another scope of this team — unshare it there first</string>
     <string name="lib_teams_err_scopes_unsupported">This sync server is too old for access scopes — update the server</string>
+    <!-- Teams screen: header, member table, summary cards (see TeamsView) -->
+    <string name="lib_teams_header_title">Team</string>
+    <!-- %1$s — team name, %2$d — member count -->
+    <string name="lib_teams_header_subtitle">%1$s · %2$d members · shared vault</string>
+    <string name="lib_teams_col_member">Member</string>
+    <string name="lib_teams_col_role">Role</string>
+    <string name="lib_teams_col_last_seen">Last seen</string>
+    <string name="lib_teams_seen_never">never</string>
+    <string name="lib_teams_seen_now">now</string>
+    <!-- %1$s — time of day, UTC -->
+    <string name="lib_teams_seen_today">today, %1$s</string>
+    <string name="lib_teams_seen_yesterday">yesterday, %1$s</string>
+    <string name="lib_teams_synced_never">not synced yet</string>
+    <string name="lib_teams_synced_sec">synced %1$d s ago</string>
+    <string name="lib_teams_synced_min">synced %1$d min ago</string>
+    <string name="lib_teams_synced_hour">synced %1$d h ago</string>
+    <string name="lib_teams_synced_day">synced %1$d d ago</string>
+    <string name="lib_teams_card_vault">Shared vault</string>
+    <string name="lib_teams_card_items">Items</string>
+    <string name="lib_teams_card_encryption">Encryption</string>
+    <string name="lib_teams_card_encryption_value">per-member key wrap</string>
+    <string name="lib_teams_card_last_rekey">Last rekey</string>
+    <string name="lib_teams_card_server">Server</string>
+    <string name="lib_teams_card_endpoint">Endpoint</string>
+    <string name="lib_teams_card_storage">Storage</string>
+    <string name="lib_teams_card_storage_value">ciphertext only</string>
+    <string name="lib_teams_card_version">Version</string>
+    <string name="lib_teams_card_devices">Devices</string>
+    <string name="lib_teams_card_devices_value">%1$d paired</string>
+    <string name="lib_teams_card_shared">Shared with the team</string>
+    <string name="lib_teams_card_hosts">Hosts</string>
+    <string name="lib_teams_card_snippets">Snippets</string>
+    <string name="lib_teams_card_runbooks">Runbooks</string>
+    <string name="lib_teams_card_live">Live sessions</string>
+    <string name="lib_teams_card_live_value">%1$d shared now</string>
+    <string name="lib_teams_share_runbook">Share runbook</string>
+    <string name="lib_teams_share_runbook_title">Share runbook with team</string>
+    <string name="lib_teams_shared_runbooks_count">Shared runbooks · %1$d</string>
+    <string name="lib_teams_runbook_steps">%1$d steps</string>
+    <string name="lib_teams_record_runbook">runbook</string>
+    <string name="lib_teams_scope_access_unknown">Access list unavailable — the server did not answer</string>
 </resources>

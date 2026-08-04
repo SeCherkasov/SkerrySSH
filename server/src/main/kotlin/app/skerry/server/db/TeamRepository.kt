@@ -2,6 +2,7 @@ package app.skerry.server.db
 
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.core.statements.api.ExposedBlob
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -80,6 +81,19 @@ class TeamRepository(private val db: Database) {
 
     suspend fun members(teamId: String): List<TeamMemberRow> = dbTransaction(db) {
         TeamMembers.selectAll().where { TeamMembers.teamId eq teamId }.map { it.toMemberRow() }
+    }
+
+    /**
+     * Newest device activity of each of [accountIds] (epoch millis), for the members list. One query
+     * for the whole team rather than a lookup per member, and accounts with no device row are simply
+     * absent from the map — the endpoint reports them as never seen.
+     */
+    suspend fun lastSeenByAccount(accountIds: Collection<String>): Map<String, Long> = dbTransaction(db) {
+        if (accountIds.isEmpty()) return@dbTransaction emptyMap()
+        Devices.selectAll()
+            .where { Devices.accountId inList accountIds.toSet() }
+            .groupingBy { it[Devices.accountId] }
+            .fold(0L) { newest, row -> maxOf(newest, row[Devices.lastSeenAt]) }
     }
 
     suspend fun membership(teamId: String, accountId: String): TeamMemberRow? = dbTransaction(db) {

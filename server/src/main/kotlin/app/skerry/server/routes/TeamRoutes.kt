@@ -47,7 +47,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.put
 
 /** Types synced in team scope: secrets and structure, excluding SETTINGS/KNOWN_HOST (per-account). */
-private val TEAM_ALLOWED_TYPES = setOf("HOST", "GROUP", "IDENTITY", "CREDENTIAL", "SNIPPET", "TUNNEL")
+private val TEAM_ALLOWED_TYPES = setOf("HOST", "GROUP", "IDENTITY", "CREDENTIAL", "SNIPPET", "RUNBOOK", "TUNNEL")
 
 /** Public X25519 key is exactly 32 bytes; a crypto_box_seal envelope is 48 bytes overhead + payload. */
 private const val PUBLIC_KEY_BYTES = 32
@@ -134,8 +134,10 @@ fun Route.teamRoutes(services: Services) {
         val principal = call.jwtPrincipal()
         val teamId = call.requiredPathId("id") ?: return@get
         call.requireActiveMember(services, teamId, principal.accountId) ?: return@get
-        val members = services.teams.members(teamId).map {
-            TeamMemberDto(it.accountId, it.role, it.status, it.createdAt)
+        val rows = services.teams.members(teamId)
+        val lastSeen = services.teams.lastSeenByAccount(rows.map { it.accountId })
+        val members = rows.map {
+            TeamMemberDto(it.accountId, it.role, it.status, it.createdAt, lastSeen[it.accountId])
         }
         call.respond(TeamMembersResponse(members))
     }

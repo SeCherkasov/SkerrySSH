@@ -1,5 +1,6 @@
 package app.skerry.ui.sync
 
+import app.skerry.shared.sync.AccountSummary
 import app.skerry.shared.sync.DeviceInfo
 import app.skerry.shared.sync.InMemorySyncStateStore
 import app.skerry.shared.sync.PairingResult
@@ -91,6 +92,7 @@ class SyncCoordinatorReactivationTest {
         override suspend fun ping(): Boolean = true
         override suspend fun close() {}
         override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = emptyList()
+        override suspend fun accountSummary(session: SyncSession): AccountSummary = error("unused")
         override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean = false
         override suspend fun refresh(session: SyncSession): SyncSession = throw NotImplementedError()
         // The rotation itself isn't what these tests are about: they need the activation that follows it,

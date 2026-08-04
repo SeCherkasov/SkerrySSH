@@ -1,12 +1,13 @@
 package app.skerry.server.routes
 
+import app.skerry.server.SERVER_VERSION
 import app.skerry.server.Services
 import app.skerry.server.accountId
 import app.skerry.server.jwtPrincipal
 import app.skerry.server.model.AccountActivityDto
 import app.skerry.server.model.AccountActivityResponse
-import app.skerry.server.model.AccountSummaryResponse
 import app.skerry.server.model.ErrorResponse
+import app.skerry.sync.wire.AccountSummaryResponse
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -42,6 +43,7 @@ fun Route.accountRoutes(services: Services) {
                 tombstones = summary.tombstones,
                 storageBytes = summary.storageBytes,
                 lastSeenAt = summary.lastSeenAt,
+                serverVersion = SERVER_VERSION,
             ),
         )
     }

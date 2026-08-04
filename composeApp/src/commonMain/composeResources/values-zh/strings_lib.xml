@@ -201,7 +201,6 @@
     <string name="lib_teams_share_snippet_title">与团队共享片段</string>
     <string name="lib_teams_share_empty">没有可共享的内容</string>
     <string name="lib_teams_nothing_shared">暂无共享内容</string>
-    <string name="lib_teams_sync_now">同步</string>
     <string name="lib_teams_no_key">团队密钥尚未到达此设备</string>
     <string name="lib_teams_remove_member_title">移除成员</string>
     <string name="lib_teams_remove_member_message">将 %1$s 移出团队？服务器访问权限立即撤销。若不再信任，请轮换共享密钥。</string>
@@ -238,4 +237,45 @@
     <string name="lib_teams_scope_members_count">%1$d 人可访问</string>
     <string name="lib_teams_err_already_shared">该记录已共享到此团队的另一个范围 — 请先在那里取消共享</string>
     <string name="lib_teams_err_scopes_unsupported">此同步服务器版本过旧，不支持访问范围 — 请更新服务器</string>
+    <!-- 团队界面：标题栏、成员表、汇总卡片（见 TeamsView） -->
+    <string name="lib_teams_header_title">团队</string>
+    <!-- %1$s — 团队名称，%2$d — 成员数 -->
+    <string name="lib_teams_header_subtitle">%1$s · %2$d 名成员 · 共享保险库</string>
+    <string name="lib_teams_col_member">成员</string>
+    <string name="lib_teams_col_role">角色</string>
+    <string name="lib_teams_col_last_seen">最近活动</string>
+    <string name="lib_teams_seen_never">从未</string>
+    <string name="lib_teams_seen_now">刚刚</string>
+    <!-- %1$s — 时间（UTC） -->
+    <string name="lib_teams_seen_today">今天 %1$s</string>
+    <string name="lib_teams_seen_yesterday">昨天 %1$s</string>
+    <string name="lib_teams_synced_never">尚未同步</string>
+    <string name="lib_teams_synced_sec">%1$d 秒前同步</string>
+    <string name="lib_teams_synced_min">%1$d 分钟前同步</string>
+    <string name="lib_teams_synced_hour">%1$d 小时前同步</string>
+    <string name="lib_teams_synced_day">%1$d 天前同步</string>
+    <string name="lib_teams_card_vault">共享保险库</string>
+    <string name="lib_teams_card_items">条目</string>
+    <string name="lib_teams_card_encryption">加密</string>
+    <string name="lib_teams_card_encryption_value">按成员封装密钥</string>
+    <string name="lib_teams_card_last_rekey">上次轮换</string>
+    <string name="lib_teams_card_server">服务器</string>
+    <string name="lib_teams_card_endpoint">地址</string>
+    <string name="lib_teams_card_storage">存储</string>
+    <string name="lib_teams_card_storage_value">仅密文</string>
+    <string name="lib_teams_card_version">版本</string>
+    <string name="lib_teams_card_devices">设备</string>
+    <string name="lib_teams_card_devices_value">已配对 %1$d 台</string>
+    <string name="lib_teams_card_shared">团队共享</string>
+    <string name="lib_teams_card_hosts">主机</string>
+    <string name="lib_teams_card_snippets">片段</string>
+    <string name="lib_teams_card_runbooks">运行手册</string>
+    <string name="lib_teams_card_live">实时会话</string>
+    <string name="lib_teams_card_live_value">当前 %1$d 个</string>
+    <string name="lib_teams_share_runbook">共享运行手册</string>
+    <string name="lib_teams_share_runbook_title">与团队共享运行手册</string>
+    <string name="lib_teams_shared_runbooks_count">共享的运行手册 · %1$d</string>
+    <string name="lib_teams_runbook_steps">%1$d 步</string>
+    <string name="lib_teams_record_runbook">运行手册</string>
+    <string name="lib_teams_scope_access_unknown">无法获取访问列表 — 服务器未响应</string>
 </resources>

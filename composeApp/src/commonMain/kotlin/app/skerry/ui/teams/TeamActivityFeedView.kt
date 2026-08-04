@@ -77,6 +77,7 @@ import app.skerry.ui.generated.resources.lib_teams_record_group
 import app.skerry.ui.generated.resources.lib_teams_record_host
 import app.skerry.ui.generated.resources.lib_teams_record_identity
 import app.skerry.ui.generated.resources.lib_teams_record_other
+import app.skerry.ui.generated.resources.lib_teams_record_runbook
 import app.skerry.ui.generated.resources.lib_teams_record_snippet
 import app.skerry.ui.generated.resources.lib_teams_record_tunnel
 import app.skerry.ui.generated.resources.shell_cancel
@@ -189,7 +190,7 @@ private fun ActivityFilterChips(selected: TeamActivityCategory, onSelect: (TeamA
 
 /** One event: icon, what happened (with the record's name), who and where, and the time. */
 @Composable
-private fun ActivityRow(row: TeamActivityRow, mono: androidx.compose.ui.text.font.FontFamily) {
+internal fun ActivityRow(row: TeamActivityRow, mono: androidx.compose.ui.text.font.FontFamily) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -270,6 +271,7 @@ private fun eventLabel(row: TeamActivityRow): String = when (row.kind) {
 private fun recordNoun(type: RecordType?): String = when (type) {
     RecordType.HOST -> stringResource(Res.string.lib_teams_record_host)
     RecordType.SNIPPET -> stringResource(Res.string.lib_teams_record_snippet)
+    RecordType.RUNBOOK -> stringResource(Res.string.lib_teams_record_runbook)
     RecordType.CREDENTIAL -> stringResource(Res.string.lib_teams_record_credential)
     RecordType.IDENTITY -> stringResource(Res.string.lib_teams_record_identity)
     RecordType.TUNNEL -> stringResource(Res.string.lib_teams_record_tunnel)
@@ -318,13 +320,13 @@ private fun rowColor(kind: TeamActivityKind): Color = when (kind) {
 
 /** Day header: Today/Yesterday, else the date (UTC, like the row times). */
 @Composable
-private fun dayLabel(dayIndex: Long, todayIndex: Long, anyTimestampOfDay: Long): String = when (todayIndex - dayIndex) {
+internal fun dayLabel(dayIndex: Long, todayIndex: Long, anyTimestampOfDay: Long): String = when (todayIndex - dayIndex) {
     0L -> stringResource(Res.string.lib_teams_feed_day_today)
     1L -> stringResource(Res.string.lib_teams_feed_day_yesterday)
     else -> formatEpochUtc(anyTimestampOfDay).substringBefore(' ')
 }
 
 /** `HH:MM` of a timestamp, from the same UTC formatter the rest of the feed uses. */
-private fun timeOfDay(millis: Long): String = formatEpochUtc(millis).substringAfter(' ')
+internal fun timeOfDay(millis: Long): String = formatEpochUtc(millis).substringAfter(' ')
 
-private const val MILLIS_PER_DAY = 86_400_000L
+internal const val MILLIS_PER_DAY = 86_400_000L

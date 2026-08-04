@@ -1,5 +1,6 @@
 package app.skerry.shared.team
 
+import app.skerry.shared.sync.AccountSummary
 import app.skerry.shared.sync.DeviceInfo
 import app.skerry.shared.sync.PairingResult
 import app.skerry.shared.sync.PairingTicket
@@ -33,6 +34,7 @@ class TeamScopedSyncClient(
     override suspend fun changePassword(accountId: String, currentAuthKey: ByteArray, newAuthKey: ByteArray, newWrappedDataKey: ByteArray, device: DeviceInfo): SyncSession = unsupported()
     override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray = unsupported()
     override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = unsupported()
+    override suspend fun accountSummary(session: SyncSession): AccountSummary = unsupported()
     override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean = unsupported()
     override suspend fun refresh(session: SyncSession): SyncSession = unsupported()
     override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = unsupported()

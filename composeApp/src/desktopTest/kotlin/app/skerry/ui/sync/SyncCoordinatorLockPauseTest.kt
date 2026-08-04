@@ -1,5 +1,6 @@
 package app.skerry.ui.sync
 
+import app.skerry.shared.sync.AccountSummary
 import app.skerry.shared.sync.DeviceInfo
 import app.skerry.shared.sync.PairingResult
 import app.skerry.shared.sync.PairingTicket
@@ -81,6 +82,7 @@ class SyncCoordinatorLockPauseTest {
         override suspend fun pull(session: SyncSession, since: Long): RecordPage = nope()
         override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage = nope()
         override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = nope()
+        override suspend fun accountSummary(session: SyncSession): AccountSummary = nope()
         override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean = nope()
         override suspend fun refresh(session: SyncSession): SyncSession = nope()
         override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = nope()
