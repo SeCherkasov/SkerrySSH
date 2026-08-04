@@ -326,7 +326,7 @@ private fun parseContainers(section: List<String>, cpuByName: Map<String, Float>
     }
 
 /** Tab-separated `docker stats --no-stream` rows (name, "4.10%") into a name → percent map. */
-private fun parseContainerCpu(section: List<String>): Map<String, Float> = section.mapNotNull { line ->
+private fun parseContainerCpu(section: List<String>): Map<String, Float> = section.take(LIST_MAX_ROWS).mapNotNull { line ->
     val t = line.split('\t')
     if (t.size < 2) return@mapNotNull null
     val name = hostText(t[0].trim(), NAME_MAX_LEN) ?: return@mapNotNull null

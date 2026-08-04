@@ -308,6 +308,9 @@ class HostMetricsTest {
         // every row it is given, so the cap belongs here too, not only in the shell command.
         val procs = (1..40).joinToString("\n") { "$it  1.0  1.0 4096 proc$it" }
         val disks = (1..40).joinToString("\n") { "/dev/sd$it  100 50 50 50% /mnt/$it" }
+        val units = (1..40).joinToString("\n") { "unit$it.service loaded active running Unit $it" }
+        val containers = (1..40).joinToString("\n") { "box$it${'\t'}img:$it${'\t'}Up 3 days" }
+        val stats = (1..40).joinToString("\n") { "box$it${'\t'}1.0%" }
         val out = """
             cpu  100 0 100 800 0 0 0 0
             @MEM
@@ -316,10 +319,18 @@ class HostMetricsTest {
             $disks
             @PROC
             $procs
+            @SERVICES
+            $units
+            @CONTAINERS
+            $containers
+            @CSTATS
+            $stats
         """.trimIndent()
         val m = parseHostMetrics(out)!!
         assertTrue(m.processes.size <= 8, "processes must be capped, was ${m.processes.size}")
         assertTrue(m.disks.size <= 8, "filesystems must be capped, was ${m.disks.size}")
+        assertTrue(m.services.size <= 8, "units must be capped, was ${m.services.size}")
+        assertTrue(m.containers.size <= 8, "containers must be capped, was ${m.containers.size}")
     }
 
     @Test
