@@ -20,6 +20,7 @@ internal open class FakeSyncClient(var serverRecords: List<RemoteRecord> = empty
     override suspend fun changePassword(accountId: String, currentAuthKey: ByteArray, newAuthKey: ByteArray, newWrappedDataKey: ByteArray, device: DeviceInfo): SyncSession = error("unused")
     override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray = error("unused")
     override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = error("unused")
+    override suspend fun accountSummary(session: SyncSession): AccountSummary = error("unused")
     override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean = error("unused")
     override suspend fun refresh(session: SyncSession): SyncSession = error("unused")
     override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = error("unused")

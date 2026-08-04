@@ -204,7 +204,6 @@
     <string name="lib_teams_share_snippet_title">Поделиться сниппетом с командой</string>
     <string name="lib_teams_share_empty">Делиться больше нечем</string>
     <string name="lib_teams_nothing_shared">Пока ничем не поделились</string>
-    <string name="lib_teams_sync_now">Синхронизировать</string>
     <string name="lib_teams_no_key">Ключ команды ещё не доехал до этого устройства</string>
     <string name="lib_teams_remove_member_title">Удалить участника</string>
     <string name="lib_teams_remove_member_message">Удалить %1$s из команды? Доступ на сервере отзывается сразу. Если доверять больше нельзя — ротируйте общие секреты.</string>
@@ -241,4 +240,45 @@
     <string name="lib_teams_scope_members_count">с доступом: %1$d</string>
     <string name="lib_teams_err_already_shared">Эта запись уже расшарена в другой области этой команды — сначала уберите её оттуда</string>
     <string name="lib_teams_err_scopes_unsupported">Этот sync-сервер слишком старый для областей доступа — обновите сервер</string>
+    <!-- Экран команды: шапка, таблица участников, карточки (см. TeamsView) -->
+    <string name="lib_teams_header_title">Команда</string>
+    <!-- %1$s — название команды, %2$d — число участников -->
+    <string name="lib_teams_header_subtitle">%1$s · участников: %2$d · общее хранилище</string>
+    <string name="lib_teams_col_member">Участник</string>
+    <string name="lib_teams_col_role">Роль</string>
+    <string name="lib_teams_col_last_seen">Последний вход</string>
+    <string name="lib_teams_seen_never">никогда</string>
+    <string name="lib_teams_seen_now">сейчас</string>
+    <!-- %1$s — время суток, UTC -->
+    <string name="lib_teams_seen_today">сегодня, %1$s</string>
+    <string name="lib_teams_seen_yesterday">вчера, %1$s</string>
+    <string name="lib_teams_synced_never">ещё не синхронизировано</string>
+    <string name="lib_teams_synced_sec">синхронизировано %1$d с назад</string>
+    <string name="lib_teams_synced_min">синхронизировано %1$d мин назад</string>
+    <string name="lib_teams_synced_hour">синхронизировано %1$d ч назад</string>
+    <string name="lib_teams_synced_day">синхронизировано %1$d дн назад</string>
+    <string name="lib_teams_card_vault">Общее хранилище</string>
+    <string name="lib_teams_card_items">Записей</string>
+    <string name="lib_teams_card_encryption">Шифрование</string>
+    <string name="lib_teams_card_encryption_value">ключ на участника</string>
+    <string name="lib_teams_card_last_rekey">Смена ключа</string>
+    <string name="lib_teams_card_server">Сервер</string>
+    <string name="lib_teams_card_endpoint">Адрес</string>
+    <string name="lib_teams_card_storage">Хранит</string>
+    <string name="lib_teams_card_storage_value">только шифртекст</string>
+    <string name="lib_teams_card_version">Версия</string>
+    <string name="lib_teams_card_devices">Устройства</string>
+    <string name="lib_teams_card_devices_value">привязано: %1$d</string>
+    <string name="lib_teams_card_shared">Общее в команде</string>
+    <string name="lib_teams_card_hosts">Хосты</string>
+    <string name="lib_teams_card_snippets">Сниппеты</string>
+    <string name="lib_teams_card_runbooks">Сценарии</string>
+    <string name="lib_teams_card_live">Живые сессии</string>
+    <string name="lib_teams_card_live_value">сейчас: %1$d</string>
+    <string name="lib_teams_share_runbook">Поделиться сценарием</string>
+    <string name="lib_teams_share_runbook_title">Поделиться сценарием с командой</string>
+    <string name="lib_teams_shared_runbooks_count">Общие сценарии · %1$d</string>
+    <string name="lib_teams_runbook_steps">шагов: %1$d</string>
+    <string name="lib_teams_record_runbook">сценарий</string>
+    <string name="lib_teams_scope_access_unknown">Список доступа не получен — сервер не ответил</string>
 </resources>

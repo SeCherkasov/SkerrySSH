@@ -1,11 +1,12 @@
 package app.skerry.server.routes
 
+import app.skerry.server.SERVER_VERSION
 import app.skerry.server.configureServer
 import app.skerry.server.model.AccountActivityResponse
-import app.skerry.server.model.AccountSummaryResponse
 import app.skerry.server.model.HealthResponse
 import app.skerry.server.model.VaultEnvelopesResponse
 import app.skerry.server.model.b64
+import app.skerry.sync.wire.AccountSummaryResponse
 import app.skerry.sync.wire.RecordDto
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -52,6 +53,20 @@ class AccountProjectionRoutesTest {
         assertEquals(1, summary.devices)
         assertEquals(1, summary.activeDevices)
         assertNotNull(summary.lastSeenAt)
+    }
+
+    @Test
+    fun `the summary names the server version`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokens = client.registerAccount(account, password)
+
+        val summary: AccountSummaryResponse = client.get("/account/summary") { bearerAuth(tokens.accessToken) }.body()
+
+        // The client shows it in the Teams screen's Server card; /admin/health is admin-only, so
+        // this is the only place an ordinary member can learn which server they are talking to.
+        assertEquals(SERVER_VERSION, summary.serverVersion)
     }
 
     @Test

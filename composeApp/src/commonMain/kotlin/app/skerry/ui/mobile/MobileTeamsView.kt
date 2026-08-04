@@ -56,9 +56,7 @@ import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
 import app.skerry.shared.team.TeamScopeRef
 import app.skerry.shared.vault.RecordType
-import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
-import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.ConfirmActionDialog
@@ -92,40 +90,42 @@ import app.skerry.ui.share.rememberJoinSharedSession
 import app.skerry.ui.generated.resources.lib_teams_members_count
 import app.skerry.ui.generated.resources.lib_teams_need_sync
 import app.skerry.ui.generated.resources.lib_teams_no_key
-import app.skerry.ui.generated.resources.lib_teams_nothing_shared
 import app.skerry.ui.generated.resources.lib_teams_remove_member_message
 import app.skerry.ui.generated.resources.lib_teams_remove_member_title
 import app.skerry.ui.generated.resources.lib_teams_history
-import app.skerry.ui.generated.resources.lib_teams_share_empty
 import app.skerry.ui.generated.resources.lib_teams_share_host
-import app.skerry.ui.generated.resources.lib_teams_share_host_title
 import app.skerry.ui.generated.resources.lib_teams_share_snippet
-import app.skerry.ui.generated.resources.lib_teams_share_snippet_title
 import app.skerry.ui.generated.resources.lib_teams_shared_hosts_count
 import app.skerry.ui.generated.resources.lib_teams_shared_snippets_count
-import app.skerry.ui.generated.resources.lib_teams_status_invited
-import app.skerry.ui.generated.resources.lib_teams_sync_now
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_create
 import app.skerry.ui.generated.resources.shell_route_team
 import app.skerry.ui.teams.HistoryTarget
 import app.skerry.ui.teams.TeamActivityDialog
 import app.skerry.ui.teams.InviteMemberDialog
-import app.skerry.ui.teams.RoleBadge
 import app.skerry.ui.teams.RolePickerDialog
-import app.skerry.ui.teams.canModifyMember
-import app.skerry.ui.teams.roleBadgeColors
-import app.skerry.ui.teams.teamRoleLabel
 import app.skerry.ui.teams.InvitePreview
-import app.skerry.ui.teams.ShareItem
-import app.skerry.ui.teams.SharePickerDialog
+import app.skerry.ui.teams.SharedRecordUi
 import app.skerry.ui.teams.TeamScopeUi
 import app.skerry.ui.teams.TeamUi
 import app.skerry.ui.teams.CreateScopeDialog
+import app.skerry.ui.teams.ScopeAccess
 import app.skerry.ui.teams.ScopeAccessDialog
 import app.skerry.ui.teams.ScopeSection
 import app.skerry.ui.teams.TeamsCoordinator
 import app.skerry.ui.teams.teamsFailureText
+import app.skerry.ui.teams.SyncPill
+import app.skerry.ui.teams.SharePicker
+import app.skerry.ui.teams.runbookSummary
+import app.skerry.ui.teams.scopeGrants
+import app.skerry.shared.runbook.VaultRunbookStore
+import app.skerry.shared.terminal.epochMillis
+import app.skerry.ui.generated.resources.lib_teams_share_runbook
+import app.skerry.ui.generated.resources.lib_teams_shared_runbooks_count
+import app.skerry.ui.teams.TeamSummaryCardsStacked
+import app.skerry.ui.teams.teamCards
+import app.skerry.ui.teams.teamFeed
+import app.skerry.ui.teams.teamMemberRows
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -217,6 +217,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     val teams by tc.teams.collectAsState()
     val busy by tc.busy.collectAsState()
     val error by tc.lastError.collectAsState()
+    val syncStamps by tc.lastSyncedAt.collectAsState()
     var selectedId by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { tc.refresh(); tc.syncAll(); tick++ }
@@ -264,6 +265,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
                 scopeId = selected.scopes.firstOrNull { it.id == selectedScope }?.id ?: "",
                 tick = tick,
                 busy = busy,
+                lastSyncedAt = syncStamps[selected.id],
                 onInvite = { showInvite = true; invitePreview = null },
                 onShare = { sharePicker = it },
                 onConfirm = { confirm = it },
@@ -295,8 +297,9 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     val accessScope = scopeAccess
     if (accessScope != null && scopeTeam != null) {
         val scopeMembers by produceState(emptyList<TeamMember>(), scopeTeam.id, tick) { value = tc.members(scopeTeam.id) }
-        val granted by produceState(emptySet<String>(), scopeTeam.id, accessScope.id, tick) {
-            value = tc.scopeGrants(scopeTeam.id, accessScope.id).toSet()
+        val granted by produceState<ScopeAccess>(ScopeAccess.Loading, scopeTeam.id, accessScope.id, tick) {
+            value = tc.scopeGrants(scopeTeam.id, accessScope.id)
+                ?.let { ScopeAccess.Known(it.toSet()) } ?: ScopeAccess.Unavailable
         }
         ScopeAccessDialog(
             scopeName = accessScope.name,
@@ -368,7 +371,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     val shareKind = sharePicker
     if (shareKind != null && shareTeam != null) {
         val shareRef = TeamScopeRef(shareTeam.id, shareTeam.scopes.firstOrNull { it.id == selectedScope }?.id ?: "")
-        MobileSharePicker(tc, shareRef, shareKind, tick, onDone = { sharePicker = null; tick++ }, onDismiss = { sharePicker = null })
+        SharePicker(tc, shareRef, shareKind, tick, onDone = { sharePicker = null; tick++ }, onDismiss = { sharePicker = null })
     }
     confirm?.let { c ->
         val (title, message) = when (c) {
@@ -403,45 +406,13 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
 }
 
 @Composable
-private fun MobileSharePicker(
-    tc: TeamsCoordinator,
-    ref: TeamScopeRef,
-    kind: RecordType,
-    tick: Int,
-    onDone: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val scope = rememberCoroutineScope()
-    val hosts = LocalHosts.current
-    val snippets = LocalSnippets.current
-    // Across every space of the team, not just the selected one: a record lives in exactly one space.
-    val sharedIds = remember(ref, kind, tick) { tc.sharedRecordIds(ref.teamId, kind) }
-    val items = if (kind == RecordType.HOST) {
-        (hosts?.hosts ?: emptyList()).filter { it.id !in sharedIds }.map { ShareItem(it.id, it.label, "${it.username}@${it.address}") }
-    } else {
-        (snippets?.snippets ?: emptyList()).filter { it.id !in sharedIds }.map { ShareItem(it.id, it.snippet.label, it.snippet.command) }
-    }
-    SharePickerDialog(
-        title = if (kind == RecordType.HOST) stringResource(Res.string.lib_teams_share_host_title) else stringResource(Res.string.lib_teams_share_snippet_title),
-        items = items,
-        emptyText = stringResource(Res.string.lib_teams_share_empty),
-        onPick = { item ->
-            scope.launch {
-                tc.shareRecord(ref, item.id, kind, if (kind == RecordType.HOST) HOST_SHARE_STRIP else emptySet())
-                onDone()
-            }
-        },
-        onDismiss = onDismiss,
-    )
-}
-
-@Composable
 private fun MobileTeamDetail(
     tc: TeamsCoordinator,
     team: TeamUi,
     scopeId: String,
     tick: Int,
     busy: Boolean,
+    lastSyncedAt: Long?,
     onInvite: () -> Unit,
     onShare: (RecordType) -> Unit,
     onConfirm: (MobileTeamsConfirm) -> Unit,
@@ -456,7 +427,6 @@ private fun MobileTeamDetail(
     onNewScope: () -> Unit,
     onScopeAccess: (TeamScopeUi) -> Unit,
 ) {
-    val mono = LocalFonts.current.mono
     val invited = team.status == TeamMemberStatus.INVITED
     val owner = team.role == TeamRole.OWNER && !invited
     val canManage = team.role.canManageMembers && !invited
@@ -466,6 +436,7 @@ private fun MobileTeamDetail(
     val members by produceState(emptyList<TeamMember>(), team.id, team.memberCount, tick) {
         value = tc.members(team.id)
     }
+    val grants = scopeGrants(tc, team, tick, canManage)
     // Records of the selected space only; a scope we hold no key for has nothing readable to show.
     val spaceVault = if (!invited && team.hasKey && (scopeId.isEmpty() || activeScope?.hasKey == true)) {
         tc.spaceVault(TeamScopeRef(team.id, scopeId))
@@ -474,6 +445,7 @@ private fun MobileTeamDetail(
     }
     val sharedHosts = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultHostStore(it).all() } ?: emptyList() }
     val sharedSnippets = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultSnippetStore(it).all() } ?: emptyList() }
+    val sharedRunbooks = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultRunbookStore(it).all() } ?: emptyList() }
 
     Txt(team.name, color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
     Txt(stringResource(Res.string.lib_teams_members_count, team.memberCount), color = Skerry.colors.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
@@ -503,8 +475,9 @@ private fun MobileTeamDetail(
         Txt(stringResource(Res.string.lib_teams_no_key), color = Skerry.colors.amber, size = 12.sp, modifier = Modifier.padding(top = 10.dp))
     }
 
-    Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        GhostButton(stringResource(Res.string.lib_teams_sync_now), onClick = onSync, icon = "sync")
+    Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        // How stale the screen is, and the way to fix that — the same pill the desktop header carries.
+        SyncPill(lastSyncedAt, onSync)
         if (canAudit) GhostButton(stringResource(Res.string.lib_teams_history), onClick = onShowHistory, icon = "history")
         if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
     }
@@ -523,113 +496,64 @@ private fun MobileTeamDetail(
     MobileTeamsSectionLabel(stringResource(Res.string.share_live_sessions))
     SharedSessionsList(team.id, LocalSharedSessions.current, onJoin = rememberJoinSharedSession(), modifier = Modifier.padding(bottom = 14.dp))
     MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_members))
+    val rows = remember(team, members, grants, canManage) {
+        teamMemberRows(team, members, grants?.byScope.orEmpty(), canManage, grants?.complete ?: true)
+    }
+    val now = remember(tick, members) { epochMillis() }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        members.forEach { m ->
-            val modifiable = canManage && m.accountId != team.ownerAccountId && canModifyMember(team.role, m.role)
+        rows.forEach { row ->
             MobileMemberRow(
-                m,
-                isOwnerRow = m.accountId == team.ownerAccountId,
-                canManageMember = modifiable,
-                onChangeRole = { onChangeRole(m) },
-                onRemove = { onConfirm(MobileTeamsConfirm.Remove(team.id, m.accountId)) },
+                row,
+                now = now,
+                onChangeRole = { onChangeRole(row.member) },
+                onRemove = { onConfirm(MobileTeamsConfirm.Remove(team.id, row.member.accountId)) },
             )
         }
     }
 
-    MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size))
-    if (sharedHosts.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
-    sharedHosts.forEach { host ->
-        MobileSharedRow(
-            host.label, host.rowSubtitle(),
-            canUnshare = canWrite,
-            onHistory = if (canAudit) { { onShowRecordHistory(HistoryTarget(host.id, host.label)) } } else null,
-            onUnshare = { onUnshare(host.id) },
-        )
-    }
-    if (canWrite) {
-        GhostButton(stringResource(Res.string.lib_teams_share_host), onClick = { onShare(RecordType.HOST) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
-    }
+    MobileSharedSection(
+        heading = stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size),
+        items = sharedHosts.map { SharedRecordUi(it.id, it.label, it.rowSubtitle()) },
+        shareLabel = stringResource(Res.string.lib_teams_share_host).takeIf { canWrite },
+        onShare = { onShare(RecordType.HOST) },
+        canUnshare = canWrite,
+        canAudit = canAudit,
+        onUnshare = onUnshare,
+        onShowRecordHistory = onShowRecordHistory,
+    )
+    MobileSharedSection(
+        heading = stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size),
+        items = sharedSnippets.map { SharedRecordUi(it.id, it.label, it.command) },
+        shareLabel = stringResource(Res.string.lib_teams_share_snippet).takeIf { canWrite },
+        onShare = { onShare(RecordType.SNIPPET) },
+        canUnshare = canWrite,
+        canAudit = canAudit,
+        onUnshare = onUnshare,
+        onShowRecordHistory = onShowRecordHistory,
+    )
+    MobileSharedSection(
+        heading = stringResource(Res.string.lib_teams_shared_runbooks_count, sharedRunbooks.size),
+        items = sharedRunbooks.map { SharedRecordUi(it.id, it.label, runbookSummary(it.steps.size)) },
+        shareLabel = stringResource(Res.string.lib_teams_share_runbook).takeIf { canWrite },
+        onShare = { onShare(RecordType.RUNBOOK) },
+        canUnshare = canWrite,
+        canAudit = canAudit,
+        onUnshare = onUnshare,
+        onShowRecordHistory = onShowRecordHistory,
+    )
 
-    MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size))
-    if (sharedSnippets.isEmpty()) Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.faint, size = 11.5.sp)
-    sharedSnippets.forEach { snippet ->
-        MobileSharedRow(
-            snippet.label, snippet.command,
-            canUnshare = canWrite,
-            onHistory = if (canAudit) { { onShowRecordHistory(HistoryTarget(snippet.id, snippet.label)) } } else null,
-            onUnshare = { onUnshare(snippet.id) },
-        )
-    }
-    if (canWrite) {
-        GhostButton(stringResource(Res.string.lib_teams_share_snippet), onClick = { onShare(RecordType.SNIPPET) }, icon = "add", modifier = Modifier.padding(top = 10.dp))
-    }
+    // The same three summary cards as the desktop screen, stacked; the lists they lead to on the
+    // desktop are already on this screen, so the counts here are plain facts.
+    TeamSummaryCardsStacked(
+        cards = teamCards(tc, team, scopeId, tick, teamFeed(tc, team, tick, canAudit)),
+        modifier = Modifier.padding(top = 24.dp),
+    )
 
     Row(Modifier.padding(top = 24.dp)) {
         if (owner) {
             GhostButton(stringResource(Res.string.lib_teams_delete), onClick = { onConfirm(MobileTeamsConfirm.Delete(team.id)) }, icon = "delete", fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.4f))
         } else {
             GhostButton(stringResource(Res.string.lib_teams_leave), onClick = { onConfirm(MobileTeamsConfirm.Leave(team.id)) }, icon = "logout", fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.4f))
-        }
-    }
-}
-
-@Composable
-private fun MobileTeamsSectionLabel(text: String) {
-    Txt(text.uppercase(), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 24.dp, bottom = 10.dp))
-}
-
-@Composable
-private fun MobileTeamChip(team: TeamUi, active: Boolean, onClick: () -> Unit) {
-    val invited = team.status == TeamMemberStatus.INVITED
-    val fg = when {
-        active -> Skerry.colors.cyanBright
-        invited -> Skerry.colors.amber
-        else -> Skerry.colors.dim
-    }
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(if (active) Skerry.colors.cyan10 else Color.Transparent)
-            .border(1.dp, if (active) Skerry.colors.cyan14 else Skerry.colors.line, RoundedCornerShape(18.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        Sym(if (invited) "mail" else "group", size = 15.sp, color = fg)
-        Txt(team.name, color = fg, size = 12.5.sp)
-    }
-}
-
-@Composable
-private fun MobileMemberRow(
-    m: TeamMember,
-    isOwnerRow: Boolean,
-    canManageMember: Boolean,
-    onChangeRole: () -> Unit,
-    onRemove: () -> Unit,
-) {
-    val mono = LocalFonts.current.mono
-    val invited = m.status == TeamMemberStatus.INVITED
-    val (roleFg, roleBg) = roleBadgeColors(m.role)
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(Modifier.size(28.dp).clip(CircleShape).background(if (isOwnerRow) Skerry.colors.cyan else Skerry.colors.moss), contentAlignment = Alignment.Center) {
-            Txt(m.accountId.take(2).uppercase(), color = Skerry.colors.ink, size = 11.5.sp, weight = FontWeight.SemiBold)
-        }
-        Txt(m.accountId, color = Skerry.colors.text, size = 12.5.sp, font = mono, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
-        if (invited) {
-            RoleBadge(stringResource(Res.string.lib_teams_status_invited), Skerry.colors.cyanBright, Skerry.colors.cyan.copy(alpha = 0.12f))
-        }
-        val badgeModifier = if (canManageMember) Modifier.clip(RoundedCornerShape(20.dp)).clickable(onClick = onChangeRole) else Modifier
-        RoleBadge(teamRoleLabel(m.role), roleFg, roleBg, modifier = badgeModifier)
-        if (canManageMember) {
-            Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(4.dp)) {
-                Sym("close", size = 15.sp, color = Skerry.colors.faint)
-            }
         }
     }
 }
@@ -724,35 +648,5 @@ private fun MobileTeamHostRow(host: Host, mono: androidx.compose.ui.text.font.Fo
             Txt(host.rowSubtitle(), color = Skerry.colors.dim, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
-    }
-}
-
-@Composable
-private fun MobileSharedRow(
-    label: String,
-    detail: String,
-    canUnshare: Boolean,
-    onHistory: (() -> Unit)? = null,
-    onUnshare: () -> Unit,
-) {
-    val mono = LocalFonts.current.mono
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        Txt(label, color = Skerry.colors.textBright, size = 12.5.sp, font = mono)
-        Txt(detail, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.weight(1f))
-        // "What happened to this one" — only for readers who may see the audit log at all.
-        if (onHistory != null) {
-            Box(Modifier.clip(CircleShape).clickable(onClick = onHistory).padding(3.dp)) {
-                Sym("history", size = 14.sp, color = Skerry.colors.faint)
-            }
-        }
-        if (canUnshare) {
-            Box(Modifier.clip(CircleShape).clickable(onClick = onUnshare).padding(3.dp)) {
-                Sym("close", size = 14.sp, color = Skerry.colors.faint)
-            }
-        }
     }
 }

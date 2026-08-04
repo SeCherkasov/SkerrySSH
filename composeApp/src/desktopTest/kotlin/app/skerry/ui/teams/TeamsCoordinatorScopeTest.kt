@@ -187,6 +187,39 @@ class TeamsCoordinatorScopeTest {
         TeamKeyStore(f.vault).also { it.put(teamId, "Ops", TeamRole.OWNER, crypto.newDataKey(), epoch = 0) }
 
     @Test
+    fun `a finished sync stamps when the team was last in step with the server`() = runBlocking<Unit> {
+        initializeVaultCrypto()
+        val f = newFixture()
+        seedTeam(f)
+        val coord = coordinator(f, FakeTeamClient(self, teamId), listOf("prod").iterator())
+        assertNull(coord.lastSyncedAt.value[teamId], "nothing has synced yet")
+
+        coord.syncTeam(teamId)
+
+        // The header's "synced N ago" pill reads this; without it the screen can only claim freshness.
+        assertNotNull(coord.lastSyncedAt.value[teamId])
+        // Per team, not per account: a team that never synced must not inherit another's freshness.
+        assertNull(coord.lastSyncedAt.value["other-team"])
+    }
+
+    @Test
+    fun `an access list that cannot be read is null, never an empty one`() = runBlocking<Unit> {
+        initializeVaultCrypto()
+        val f = newFixture()
+        seedTeam(f)
+        val failing = object : TeamClient by FakeTeamClient(self, teamId) {
+            override suspend fun scopeGrants(session: SyncSession, teamId: String, scopeId: String): List<TeamScopeGrantEntry> =
+                throw SyncException(SyncException.Kind.NETWORK, "offline")
+        }
+        val coord = coordinator(f, failing, listOf("prod").iterator())
+
+        // "Nobody holds this scope" and "we couldn't find out" must not be the same answer — the
+        // member table renders the first as a fact and the second as unknown.
+        assertNull(coord.scopeGrants(teamId, "prod"))
+        assertEquals(TeamsFailure.Network, coord.lastError.value)
+    }
+
+    @Test
     fun `creating a scope stores its own key and lists it on the team`() = runBlocking {
         initializeVaultCrypto()
         val f = newFixture()
