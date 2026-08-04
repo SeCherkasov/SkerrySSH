@@ -69,7 +69,7 @@ import org.jetbrains.compose.resources.stringResource
 internal val SEARCH_FIELD_WIDTH = 200.dp
 
 /**
- * Search panel over the terminal's output ([TerminalScreenState.search.query] and friends): query
+ * Search panel over the terminal's output ([TerminalOutputSearch.query] and friends): query
  * field, hit counter, case/regex toggles, and previous/next/close controls. Sits at the pane's top
  * edge the way a browser's find bar sits over the page; the highlight itself is painted onto the
  * cell grid by [TerminalScreen].
