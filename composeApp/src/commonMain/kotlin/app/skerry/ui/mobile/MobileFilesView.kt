@@ -201,7 +201,7 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                         onOpenEditor = openEditor,
                         modifier = Modifier.weight(1f),
                     )
-                    MobileTransferCard(c.transfer, mono, onDismiss = c::clearTransfer)
+                    MobileTransferCard(c.transfer, mono, onDismiss = c::dismissCompleted)
                     Spacer(Modifier.height(88.dp)) // room for the floating FAB (push screen has no tab bar)
                 }
             }

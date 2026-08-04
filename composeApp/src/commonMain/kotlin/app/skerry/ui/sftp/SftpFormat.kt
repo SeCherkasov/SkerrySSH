@@ -76,6 +76,56 @@ fun sizeText(parts: SizeParts): String = when (parts.unit) {
 @Composable
 fun humanSize(bytes: Long): String = sizeText(sizeParts(bytes))
 
+// Transfer queue: progress of one running entry.
+
+/**
+ * Percentage of [transferred] against [total], clamped to 0..100. `null` when [total] is unknown
+ * (0) — a size the source never reported must not read as "0% done", and a source that overshoots
+ * its promise must not read as "104%".
+ */
+fun transferPercent(transferred: Long, total: Long): Int? {
+    if (total <= 0) return null
+    return (transferred * 100 / total).coerceIn(0, 100).toInt()
+}
+
+/** Below this the elapsed time is too short to divide by: the number would jump every frame. */
+private const val SPEED_FLOOR_MILLIS = 250L
+
+/**
+ * Bytes per second of an operation that has moved [bytesDone] in [elapsedMillis]. The average over
+ * the whole operation, not the last frame — a rate that flickers is unreadable. `null` until there
+ * is enough of both to divide.
+ */
+fun transferSpeed(bytesDone: Long, elapsedMillis: Long): Long? {
+    if (bytesDone <= 0 || elapsedMillis < SPEED_FLOOR_MILLIS) return null
+    return bytesDone * 1000 / elapsedMillis
+}
+
+// Row icon.
+
+/** Extensions that earn an icon of their own; everything else is a plain document. */
+private val ICON_BY_EXTENSION: Map<String, String> = buildMap {
+    listOf("gz", "tgz", "zip", "xz", "bz2", "7z", "rar", "tar", "zst").forEach { put(it, "archive") }
+    listOf("key", "pem", "pub", "crt", "cer", "p12", "pfx").forEach { put(it, "key") }
+    listOf("png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico").forEach { put(it, "image") }
+    listOf("sh", "bash", "zsh", "fish", "ps1", "bat", "cmd").forEach { put(it, "terminal") }
+}
+
+/**
+ * Material icon ([Sym] ligature) for a listing row: the type decides for everything that isn't a
+ * plain file, a file is read by its extension ([ICON_BY_EXTENSION]). A leading dot is part of the
+ * name, not an extension — `.env` is a document, not an "env" type.
+ */
+fun sftpFileIcon(name: String, type: FileItemType): String = when (type) {
+    FileItemType.Directory -> "folder"
+    FileItemType.Symlink -> "link"
+    FileItemType.File, FileItemType.Other -> {
+        val dot = name.lastIndexOf('.')
+        val extension = if (dot > 0) name.substring(dot + 1).lowercase() else ""
+        ICON_BY_EXTENSION[extension] ?: "description"
+    }
+}
+
 // Permissions column (ls -l long format).
 
 private val PERMISSION_TRIPLETS = listOf(6, 3, 0) // shift of the owner/group/other rwx triplet

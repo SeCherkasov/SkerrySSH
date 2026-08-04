@@ -2,12 +2,17 @@
     <!-- SFTP / file transfer: двухпанельный desktop (SftpView) и мобильный Files (MobileFilesView) -->
 
     <!-- Заголовки и шапка -->
-    <string name="sftp_title">文件传输</string>
-    <string name="sftp_subtitle_host">%1$s · SFTP</string>
+    <string name="sftp_wbar_subtitle">SFTP · %1$s</string>
     <string name="sftp_files_title">文件</string>
 
+    <!-- Tooltips of the work-bar icons -->
+    <string name="sftp_tip_back">返回终端 (F10)</string>
+    <string name="sftp_tip_refresh">刷新两个面板 (F9)</string>
+    <string name="sftp_tip_filter">筛选列表 (Ctrl+F)</string>
+    <string name="sftp_tip_upload">上传所选 (F5)</string>
+    <string name="sftp_tip_download">下载所选 (F5)</string>
+
     <!-- Действия тулбара / FAB -->
-    <string name="sftp_upload">上传</string>
     <string name="sftp_new_folder">新建文件夹</string>
     <string name="sftp_create">创建</string>
     <string name="sftp_create_directory">创建目录</string>
@@ -65,8 +70,12 @@
     <!-- 内置查看器/编辑器（F3/F4） -->
     <!-- Listing columns (modified date / permissions) and the quick name filter -->
     <string name="sftp_columns">显示列</string>
+    <string name="sftp_col_name">名称</string>
+    <string name="sftp_col_size">大小</string>
     <string name="sftp_col_modified">修改时间</string>
     <string name="sftp_col_permissions">权限</string>
+    <!-- Caption over the permissions column: the full word does not fit the slot -->
+    <string name="sftp_col_permissions_short">权限</string>
     <string name="sftp_filter_hint">筛选（名称或 *.掩码）</string>
     <string name="sftp_meta_joined">%1$s · %2$s</string>
     <string name="sftp_date_recent">%1$s%2$d日 %3$s</string>
@@ -99,4 +108,8 @@
     <string name="sftp_edit_discard">放弃</string>
     <string name="sftp_edit_conflict_q">文件在源端已被修改？</string>
     <string name="sftp_edit_conflict_body">「%1$s」在你打开后已更改。保存将用你的版本覆盖它。</string>
+
+    <!-- Transfer queue under the panes -->
+    <string name="sftp_queue_progress">%1$d%% · %2$s / %3$s</string>
+    <string name="sftp_queue_done">完成</string>
 </resources>

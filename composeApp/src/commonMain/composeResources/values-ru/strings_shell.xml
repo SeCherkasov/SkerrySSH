@@ -105,7 +105,6 @@
     <string name="shell_tip_more_actions">Ещё действия</string>
     <string name="shell_tip_sync_panes">Синхронизация ввода между панелями</string>
     <string name="shell_tip_files">Файлы (SFTP)</string>
-    <string name="shell_tip_ports">Проброс портов</string>
     <string name="shell_tip_snippets">Сниппеты</string>
     <string name="shell_tip_record">Записать сессию</string>
     <string name="shell_tip_record_stop">Остановить запись</string>

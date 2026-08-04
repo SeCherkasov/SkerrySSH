@@ -2,12 +2,17 @@
     <!-- SFTP / передача файлов -->
 
     <!-- Заголовки и шапка -->
-    <string name="sftp_title">Передача файлов</string>
-    <string name="sftp_subtitle_host">%1$s · SFTP</string>
+    <string name="sftp_wbar_subtitle">SFTP · %1$s</string>
     <string name="sftp_files_title">Файлы</string>
 
+    <!-- Tooltips of the work-bar icons -->
+    <string name="sftp_tip_back">Вернуться в терминал (F10)</string>
+    <string name="sftp_tip_refresh">Обновить обе панели (F9)</string>
+    <string name="sftp_tip_filter">Фильтр списка (Ctrl+F)</string>
+    <string name="sftp_tip_upload">Загрузить выбранное (F5)</string>
+    <string name="sftp_tip_download">Скачать выбранное (F5)</string>
+
     <!-- Действия тулбара / FAB -->
-    <string name="sftp_upload">Загрузить</string>
     <string name="sftp_new_folder">Новая папка</string>
     <string name="sftp_create">Создать</string>
     <string name="sftp_create_directory">Создать директорию</string>
@@ -65,8 +70,12 @@
     <!-- Встроенный просмотрщик/редактор (F3/F4) -->
     <!-- Колонки списка (дата изменения / права) и быстрый фильтр по имени -->
     <string name="sftp_columns">Колонки</string>
+    <string name="sftp_col_name">Имя</string>
+    <string name="sftp_col_size">Размер</string>
     <string name="sftp_col_modified">Дата изменения</string>
     <string name="sftp_col_permissions">Права</string>
+    <!-- Caption over the permissions column: the full word does not fit the slot -->
+    <string name="sftp_col_permissions_short">Права</string>
     <string name="sftp_filter_hint">Фильтр (имя или маска *.conf)</string>
     <string name="sftp_meta_joined">%1$s · %2$s</string>
     <string name="sftp_date_recent">%2$d %1$s %3$s</string>
@@ -99,4 +108,8 @@
     <string name="sftp_edit_discard">Отменить</string>
     <string name="sftp_edit_conflict_q">Файл изменился в источнике?</string>
     <string name="sftp_edit_conflict_body">«%1$s» изменился после того, как вы его открыли. Сохранение перезапишет его вашей версией.</string>
+
+    <!-- Transfer queue under the panes -->
+    <string name="sftp_queue_progress">%1$d%% · %2$s / %3$s</string>
+    <string name="sftp_queue_done">готово</string>
 </resources>
