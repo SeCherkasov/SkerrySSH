@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,7 +29,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.files.FileItem
@@ -44,11 +41,8 @@ import app.skerry.ui.files.FileEditorScreen
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.files.platformLocalBrowser
-import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.ftail_file_fallback
 import app.skerry.ui.generated.resources.ftail_open_failed
-import app.skerry.ui.generated.resources.ftail_transfer_counter
 import app.skerry.ui.generated.resources.sftp_create
 import app.skerry.ui.generated.resources.sftp_overwrite
 import app.skerry.ui.generated.resources.sftp_overwrite_many
@@ -61,18 +55,14 @@ import app.skerry.ui.generated.resources.sftp_pane_remote
 import app.skerry.ui.generated.resources.sftp_rename
 import app.skerry.ui.generated.resources.sftp_unavailable
 import app.skerry.ui.session.SessionView
-import app.skerry.ui.sftp.TransferDirection
-import app.skerry.ui.sftp.humanSize
 import app.skerry.ui.sftp.pickUploadSource
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 import app.skerry.ui.design.HLine
-import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSftpPrefs
-import app.skerry.ui.design.MeterBar
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
@@ -80,15 +70,6 @@ import app.skerry.ui.theme.Skerry
 import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.terminal.WorkBarLabel
 import app.skerry.ui.generated.resources.sftp_wbar_subtitle
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.runtime.key
-import app.skerry.ui.files.TransferEntry
-import app.skerry.ui.files.TransferStatus
-import app.skerry.ui.generated.resources.sftp_queue_done
-import app.skerry.ui.generated.resources.sftp_queue_progress
-import app.skerry.ui.generated.resources.sftp_queue_speed
-import app.skerry.ui.generated.resources.sftp_meta_joined
 
 /**
  * SFTP view (two-pane, Total Commander style): header + Local pane (local FS) + Remote pane (host) +
@@ -293,9 +274,12 @@ private fun LiveSftpView(
         // keeps only the title while it is up.
         SftpWorkBar(
             onBack = onQuit,
+            // Until the coordinator opens (or when it failed to) there is no remote path to name,
+            // and "SFTP ·" with nothing after it reads as a truncated title — the session's own
+            // address stands in.
             label = WorkBarLabel.Solo(
                 hostName,
-                stringResource(Res.string.sftp_wbar_subtitle, c?.remote?.path.orEmpty()),
+                c?.remote?.path?.let { stringResource(Res.string.sftp_wbar_subtitle, it) } ?: hostLabel,
                 status,
             ),
         ) {
@@ -475,116 +459,8 @@ private fun LiveSftpView(
     }
 }
 
-/**
- * A live listing row (icon + name + size, no ⋮). Left-click just places the cursor (doesn't mark or
- * enter a directory) — responds instantly on press ([onPress]) so there's no double-click recognition
- * delay. A double click enters the directory ([onDoubleClick]). Selection — RMB press/drag (rubber-band,
- * [RowRubberBand]) or Space/Insert. No context menu: actions go through the bottom F-key bar.
- */
 /** Which of the two panes is active (receives the keyboard and cursor highlight). */
 private enum class ActivePane { Local, Remote }
-
-/**
- * Transfer queue under the panes: one row per operation — what is moving now, and the last few
- * that finished, so the outcome of a transfer is still readable after it ends. Empty queue, no
- * strip. [onDismiss] drops a finished row by its id.
- */
-@Composable
-private fun TransferQueueStrip(queue: List<TransferEntry>, mono: FontFamily, onDismiss: (Long) -> Unit) {
-    if (queue.isEmpty()) return
-    HLine()
-    Column(
-        Modifier.fillMaxWidth().background(Skerry.colors.surface).padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        queue.forEach { entry -> key(entry.id) { TransferQueueRow(entry, mono, onDismiss) } }
-    }
-}
-
-/** Name column of a queue row — wide enough for a release archive, fixed so the bars line up. */
-private val QUEUE_NAME_WIDTH = 180.dp
-
-@Composable
-private fun TransferQueueRow(entry: TransferEntry, mono: FontFamily, onDismiss: (Long) -> Unit) {
-    val done = entry.status == TransferStatus.Done
-    val failed = entry.status as? TransferStatus.Failed
-    val active = entry.status == TransferStatus.Active
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        val up = entry.direction == TransferDirection.Upload
-        Sym(
-            if (failed != null) "error" else if (up) "upload" else "download",
-            size = 15.sp,
-            color = when {
-                failed != null -> Skerry.colors.sunset
-                done -> Skerry.colors.moss
-                else -> Skerry.colors.teal
-            },
-        )
-        val title = if (entry.fileCount > 1) {
-            stringResource(Res.string.ftail_transfer_counter, entry.name, entry.fileIndex, entry.fileCount)
-        } else {
-            entry.name.ifBlank { stringResource(Res.string.ftail_file_fallback) }
-        }
-        Txt(
-            title,
-            color = if (active) Skerry.colors.textBright else Skerry.colors.dim,
-            size = 11.5.sp,
-            font = mono,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(QUEUE_NAME_WIDTH),
-        )
-        val percent = transferPercent(entry.transferred, entry.total)
-        MeterBar(
-            if (done) 1f else (percent ?: 0) / 100f,
-            when {
-                failed != null -> Skerry.colors.sunset
-                done -> Skerry.colors.moss
-                else -> Skerry.colors.cyan
-            },
-            Modifier.weight(1f),
-        )
-        Txt(
-            transferTailText(entry),
-            color = when {
-                failed != null -> Skerry.colors.sunset
-                done -> Skerry.colors.moss
-                else -> Skerry.colors.dim
-            },
-            size = 11.sp,
-            font = mono,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-        // A finished row is the user's to clear; a running one has nothing to dismiss yet.
-        if (active) Box(Modifier.size(22.dp)) else IconBtn("close", onClick = { onDismiss(entry.id) }, box = 22, icon = 14.sp)
-    }
-}
-
-/** Right-hand text of a queue row: the failure, "done", or percent · bytes · speed while running. */
-@Composable
-private fun transferTailText(entry: TransferEntry): String {
-    (entry.status as? TransferStatus.Failed)?.let { return transferFailureText(it.failure) }
-    if (entry.status == TransferStatus.Done) return stringResource(Res.string.sftp_queue_done)
-    val speed = transferSpeed(entry.bytesDone, entry.elapsedMillis)
-    val speedText = speed?.let { stringResource(Res.string.sftp_queue_speed, humanSize(it)) }
-    val percent = transferPercent(entry.transferred, entry.total)
-    // Without a reported size there is no percentage and no "of": what is left is how much has
-    // moved so far, and how fast.
-    val progress = if (percent != null) {
-        stringResource(Res.string.sftp_queue_progress, percent, humanSize(entry.transferred), humanSize(entry.total))
-    } else {
-        humanSize(entry.transferred)
-    }
-    return if (speedText != null) stringResource(Res.string.sftp_meta_joined, progress, speedText) else progress
-}
-
-// Dialogs.
 
 /** Centered notice in the listing area (opening/error/no session). */
 @Composable

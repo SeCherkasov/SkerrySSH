@@ -755,6 +755,53 @@ class TransferCoordinatorTest {
     }
 
     @Test
+    fun `dismissing the finished entries leaves a running one alone`() = runTest {
+        val remote = remoteFake().apply { uploadSize = 10 }
+        val r = rig(remote = remote)
+        // One transfer all the way through, then a second held open: the bulk dismiss has to tell
+        // them apart, not simply clear or spare the whole list.
+        r.local.toggle(r.local.entry("a.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+        remote.transferGate = CompletableDeferred()
+        r.local.toggle(r.local.entry("b.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+        assertEquals(2, r.coordinator.queue.size)
+
+        r.coordinator.dismissCompleted()
+
+        val left = r.coordinator.queue.single()
+        assertEquals(TransferStatus.Active, left.status)
+        assertEquals("b.txt", left.name)
+        remote.transferGate!!.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `a picked upload that fails still lands on the queue`() = runTest {
+        // The fallback upload path (native picker, nothing selected in the local pane) had only
+        // success coverage: its failure has to reach the queue like any other.
+        val remote = remoteFake().apply { uploadError = "disk full" }
+        val r = rig(remote = remote)
+        val source = object : UploadSource {
+            override val name = "picked.txt"
+            override val stagingPath = "/tmp/picked.txt"
+            var cleaned = false
+            override suspend fun cleanup() { cleaned = true }
+        }
+
+        r.coordinator.uploadSource(source)
+        advanceUntilIdle()
+
+        val status = assertIs<TransferStatus.Failed>(r.coordinator.queue.single().status)
+        assertEquals(FileTransferFailure.Transfer, status.failure)
+        // The staged copy the picker made is the coordinator's to delete on the way out — a failed
+        // upload leaves it behind otherwise, and nothing else ever comes back for it.
+        assertTrue(source.cleaned)
+    }
+
+    @Test
     fun `dismissing a finished entry drops it from the queue`() = runTest {
         val r = rig()
         r.local.toggle(r.local.entry("a.txt"))

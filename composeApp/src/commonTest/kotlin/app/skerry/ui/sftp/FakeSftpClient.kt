@@ -151,7 +151,12 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
         onProgress.onProgress(total, total)
     }
 
+    /** How many times a directory creation was attempted (tests that pin mkdir-first ordering). */
+    var mkdirCalls = 0
+        private set
+
     override suspend fun mkdir(path: String) {
+        mkdirCalls++
         val norm = realpathSync(path)
         val parent = children[parentOf(norm)] ?: throw SftpException("No parent for $path")
         if (nameOf(norm) in parent) throw SftpException("Path taken: $path")

@@ -111,6 +111,5 @@
 
     <!-- Transfer queue under the panes -->
     <string name="sftp_queue_progress">%1$d%% · %2$s / %3$s</string>
-    <string name="sftp_queue_speed">%1$s/с</string>
     <string name="sftp_queue_done">готово</string>
 </resources>

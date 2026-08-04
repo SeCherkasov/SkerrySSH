@@ -105,7 +105,6 @@
     <string name="shell_tip_more_actions">More actions</string>
     <string name="shell_tip_sync_panes">Synchronized input between panes</string>
     <string name="shell_tip_files">Files (SFTP)</string>
-    <string name="shell_tip_ports">Port forwarding</string>
     <string name="shell_tip_snippets">Snippets</string>
     <string name="shell_tip_record">Record session</string>
     <string name="shell_tip_record_stop">Stop recording</string>
