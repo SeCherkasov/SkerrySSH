@@ -39,4 +39,13 @@
     <string name="rd_audio">Звук</string>
     <string name="rd_audio_device_lost">Аудиоустройство перестало принимать звук. Выберите другой вывод в профиле и переподключитесь.</string>
     <string name="rd_clipboard_share">Общий буфер обмена</string>
+    <string name="rd_display">Экран</string>
+    <string name="rd_fullscreen">Во всё окно</string>
+    <string name="rd_fullscreen_exit">Выйти из полного окна</string>
+    <string name="rd_disconnect">Отключиться</string>
+    <string name="rd_bar_pin">Закрепить панель</string>
+    <string name="rd_bar_unpin">Открепить панель</string>
+    <string name="rd_bar_hide">Скрыть панель</string>
+    <string name="rd_ctrl_alt_del_view_only">Только просмотр — ввод не отправляется</string>
+    <string name="rd_clipboard_failed">Системный буфер обмена недоступен</string>
 </resources>

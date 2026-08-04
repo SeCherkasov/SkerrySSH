@@ -84,6 +84,15 @@ fun workAreaSection(active: Tab?, section: HostSection): HostSection = when {
     else -> HostSection.Terminal
 }
 
+/**
+ * Whether the app chrome (titlebar, rail, status bar, hosts sidebar) gives way to the remote
+ * desktop. The flag alone is not enough: the picture has to be the thing on screen, so a session is
+ * required ([desktopSession]) and an app-level view over the work area ([overlayOpen]) takes the
+ * chrome back — it has no floating bar of its own to leave the mode with.
+ */
+fun remoteChromeHidden(immersive: Boolean, desktopSession: Boolean, overlayOpen: Boolean): Boolean =
+    immersive && desktopSession && !overlayOpen
+
 /** Settings panel tabs. */
 enum class SettingsTab { AI, Sync, Security, Appearance, Terminal, Keyboard, Trash, About }
 
@@ -220,8 +229,12 @@ class DesktopDesignState(
     /** Whether the terminal's left host sidebar is hidden (toggled from the icon rail). */
     var sidebarHidden: Boolean by mutableStateOf(false); private set
 
-    /** Whether the session panel beside a live remote desktop is hidden. */
-    var remotePanelHidden: Boolean by mutableStateOf(false); private set
+    /**
+     * Whether a live remote desktop is shown without the app's own chrome — no titlebar, rail,
+     * status bar or hosts sidebar, only the picture and its floating bar. Session-scoped and not
+     * persisted: it is entered for a piece of work, not left standing.
+     */
+    var remoteImmersive: Boolean by mutableStateOf(false); private set
 
     /**
      * Which catalog the work area is showing: terminal-style connections or remote desktops (the
@@ -431,7 +444,14 @@ class DesktopDesignState(
     fun toggleSplit() { split = !split }
     fun toggleSidebar() { sidebarHidden = !sidebarHidden }
 
-    fun toggleRemotePanel() { remotePanelHidden = !remotePanelHidden }
+    fun toggleRemoteImmersive() { remoteImmersive = !remoteImmersive }
+
+    /**
+     * Leave immersive mode. Called when the desktop the mode was entered for goes off screen — the
+     * flag must not outlive it, or coming back to another tab would find the window stripped with
+     * nothing on it explaining why.
+     */
+    fun exitRemoteImmersive() { remoteImmersive = false }
 
     fun toggleAssistant() { assistantPanel = !assistantPanel }
 

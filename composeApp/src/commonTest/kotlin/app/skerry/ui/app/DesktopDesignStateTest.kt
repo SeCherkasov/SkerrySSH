@@ -471,15 +471,36 @@ class DesktopDesignStateTest {
         assertEquals(null, s.groupDialog)
     }
     @Test
-    fun the_remote_desktop_panel_hides_and_comes_back() {
+    fun a_remote_desktop_takes_the_whole_window_and_gives_it_back() {
         val s = DesktopDesignState()
 
-        assertFalse(s.remotePanelHidden)
-        s.toggleRemotePanel()
-        assertTrue(s.remotePanelHidden)
-        // Independent of the hosts sidebar: they are different edges of the same screen.
+        assertFalse(s.remoteImmersive)
+        s.toggleRemoteImmersive()
+        assertTrue(s.remoteImmersive)
+        // Independent of the hosts sidebar: the sidebar keeps its own collapsed state for the
+        // sections that still have chrome.
         assertFalse(s.sidebarHidden)
-        s.toggleRemotePanel()
-        assertFalse(s.remotePanelHidden)
+        s.toggleRemoteImmersive()
+        assertFalse(s.remoteImmersive)
+    }
+
+    @Test
+    fun leaving_the_desktop_session_leaves_immersive_mode() {
+        val s = DesktopDesignState()
+        s.toggleRemoteImmersive()
+
+        s.exitRemoteImmersive()
+
+        assertFalse(s.remoteImmersive)
+    }
+
+    @Test
+    fun the_chrome_only_goes_away_over_a_live_desktop_with_nothing_on_top() {
+        assertTrue(remoteChromeHidden(immersive = true, desktopSession = true, overlayOpen = false))
+        // No session behind the flag: hiding the rail would strand the user on an empty screen.
+        assertFalse(remoteChromeHidden(immersive = true, desktopSession = false, overlayOpen = false))
+        // An app-level view (Vault/Teams) renders in place of the desktop and needs its own chrome.
+        assertFalse(remoteChromeHidden(immersive = true, desktopSession = true, overlayOpen = true))
+        assertFalse(remoteChromeHidden(immersive = false, desktopSession = true, overlayOpen = false))
     }
 }

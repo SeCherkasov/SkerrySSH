@@ -27,6 +27,11 @@ class WindowChrome(
     val onMinimize: () -> Unit,
     val onToggleMaximize: () -> Unit,
     val onClose: () -> Unit,
+    /**
+     * Puts the window on the whole screen (no OS chrome, no app chrome) and takes it back to where
+     * it was. Driven by the full-window remote desktop; a no-op on a decorated window.
+     */
+    val setFullscreen: (Boolean) -> Unit = {},
     /** Wraps [content] in a window-drag area (empty space drags, double-click toggles maximize). */
     val dragArea: @Composable (content: @Composable () -> Unit) -> Unit,
 )

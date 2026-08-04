@@ -2,6 +2,8 @@ package app.skerry.ui.mobile
 
 import app.skerry.ui.remote.remoteKeyEvent
 import app.skerry.ui.remote.RemoteDesktopPanel
+import app.skerry.ui.remote.rememberClipboardActions
+import app.skerry.ui.remote.rememberScreenshotAction
 import app.skerry.ui.remote.RemoteDesktopScreenState
 import app.skerry.ui.remote.RemoteDesktopUiState
 import app.skerry.ui.remote.ReportOutputVisibility
@@ -11,13 +13,11 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,8 +34,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,26 +48,17 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.MobileDesignState
-import app.skerry.ui.design.AnchoredDropdown
-import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vnc_connecting
 import app.skerry.ui.generated.resources.vnc_connection_lost
-import app.skerry.ui.generated.resources.vnc_quality
-import app.skerry.ui.generated.resources.vnc_reset_zoom
-import app.skerry.ui.generated.resources.vnc_resize_to_window
 import app.skerry.ui.generated.resources.vnc_session_closed
-import app.skerry.ui.generated.resources.vnc_view_only
 import app.skerry.ui.immersive.ImmersiveScreen
 import app.skerry.ui.immersive.hiddenSystemBarsPadding
 import app.skerry.ui.vnc.VncTouchSurface
-import app.skerry.ui.vnc.keySymFor
-import app.skerry.ui.vnc.label
 import androidx.compose.ui.input.key.Key
 import app.skerry.ui.vnc.vncFailureText
 import kotlinx.coroutines.delay
@@ -167,6 +158,10 @@ fun MobileVncScreen(state: MobileDesignState) {
         // the panel would vanish rather than leave.
         var lastScreen by remember { mutableStateOf(connected) }
         if (connected != null) lastScreen = connected
+        // Remembered here rather than in the panel, which slides away and would take an in-flight
+        // save with it (see [rememberScreenshotAction]).
+        val screenshot = rememberScreenshotAction(lastScreen)
+        val clipboardActions = rememberClipboardActions(lastScreen)
         // The panel slides over the picture rather than beside it: on a phone a column of its width
         // would leave the desktop a strip.
         AnimatedVisibility(
@@ -178,6 +173,8 @@ fun MobileVncScreen(state: MobileDesignState) {
             lastScreen?.let {
                 RemoteDesktopPanel(
                     it,
+                    screenshot = screenshot,
+                    clipboardActions = clipboardActions,
                     onHide = { panelOpen = false },
                     modifier = Modifier.hiddenSystemBarsPadding(),
                     // Pinch-zoom is real here, so the fit can be off and worth resetting.
