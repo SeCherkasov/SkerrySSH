@@ -232,7 +232,10 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
         SharePicker(tc, TeamScopeRef(shareTeam.id, scopeId), shareKind, tick, onDone = { sharePicker = null; afterOp() }, onDismiss = { sharePicker = null })
     }
     val sharedTeam = selected
-    val openShared = sharedView
+    // The picker opens from this list, so the list steps aside while it is up — two stacked cards
+    // would leave the one underneath visible and clickable through the gaps. It comes back on
+    // dismiss, showing whatever was just shared.
+    val openShared = sharedView.takeIf { shareKind == null }
     if (openShared != null && sharedTeam != null) {
         SharedRecordsView(
             tc = tc,
