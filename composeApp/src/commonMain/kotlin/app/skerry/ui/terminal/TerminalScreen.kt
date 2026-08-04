@@ -91,6 +91,8 @@ import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermStyle
+import app.skerry.shared.terminal.highlight.HighlightKind
+import app.skerry.shared.terminal.highlight.applyTo
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.searchTerminal
 import app.skerry.shared.terminal.TerminalState
@@ -405,7 +407,9 @@ fun TerminalScreen(
     // Glyph TextStyle cache keyed by TermStyle: toGlyphStyle does merge() (SpanStyle+TextStyle
     // allocation) per run. There are hundreds of rows/runs per frame but few distinct styles, so
     // memoize. Reset on a base style or palette (OSC 4/104) change — the result depends on them.
-    val glyphStyleCache = remember(textStyle, state.palette, termTheme) { HashMap<TermStyle, TextStyle>() }
+    // Keyed by TermStyle, then by highlight category: looking up a highlighted run must not build a
+    // derived TermStyle first, or every frame of a drag would allocate one per run just to hit the cache.
+    val glyphStyleCache = remember(textStyle, state.palette, termTheme) { HashMap<TermStyle, Array<TextStyle?>>() }
 
     // textStyle-derived styles are computed once per font/theme change, not in the draw phase: the
     // cursor overlay repaints every blink half-period, where copy() would allocate a new TextStyle per
@@ -611,6 +615,7 @@ fun TerminalScreen(
                   ).matches.groupBy { it.row }
               }
           }
+          val highlightByRow = rememberRowHighlights(state, screen, searchWindow)
           // clipToBounds after padding: the scrollback row at the scroll boundary is drawn at top=-chh and
           // would otherwise spill into the top padding zone (desktop has no default clip, unlike Android)
           // — after `clear` the command row would peek there. The clip cuts it at the content edge.
@@ -661,10 +666,13 @@ fun TerminalScreen(
                   // (mc box-drawing, CJK, symbols) is drawn at its own column separately: a fallback font
                   // gives a non-cellWidth advance, and a long run would accumulate drift (ragged box
                   // horizontals, colored rows sliding). A wide cell — span=2.
-                  for (run in glyphRuns(row)) {
+                  for (run in glyphRuns(row, highlightByRow[r])) {
                       val x = run.col * cw
                       if (run.text.isNotBlank()) {
-                          val style = glyphStyleCache.getOrPut(run.style) { run.style.toGlyphStyle(textStyle, palette, termTheme) }
+                          val byKind = glyphStyleCache.getOrPut(run.style) { arrayOfNulls(HIGHLIGHT_KIND_COUNT) }
+                          val style = byKind[run.kind.ordinal]
+                              ?: run.kind.applyTo(run.style).toGlyphStyle(textStyle, palette, termTheme)
+                                  .also { byKind[run.kind.ordinal] = it }
                           drawGlyphText(measurer, run.text, Offset(x, top), style)
                       }
                       // Draw the underline across the full run width, including under spaces (like xterm).

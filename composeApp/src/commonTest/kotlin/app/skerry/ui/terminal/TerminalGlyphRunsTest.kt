@@ -3,6 +3,7 @@ package app.skerry.ui.terminal
 import app.skerry.shared.terminal.CellWidth
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermStyle
+import app.skerry.shared.terminal.highlight.HighlightKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -76,5 +77,34 @@ class TerminalGlyphRunsTest {
         assertEquals(GlyphRun(0, "a", 1, TermStyle()), runs[0])
         assertEquals(GlyphRun(1, "中", 2, TermStyle()), runs[1])
         assertEquals(GlyphRun(3, "b", 1, TermStyle()), runs[2])
+    }
+
+    @Test
+    fun `a highlight category breaks the run at the token boundary`() {
+        val cells = row(TermCell('l'), TermCell('s'), TermCell(' '), TermCell('x'))
+        val highlight = RowHighlight.of(listOf(ColumnSpan(0, 2, HighlightKind.Command)))
+        val runs = glyphRuns(cells, highlight)
+        assertEquals(listOf("ls", " x"), runs.map { it.text })
+        assertEquals(HighlightKind.Command, runs[0].kind)
+        assertEquals(HighlightKind.None, runs[1].kind)
+    }
+
+    @Test
+    fun `without a highlight the segmentation is unchanged`() {
+        val cells = row(TermCell('l'), TermCell('s'), TermCell(' '), TermCell('x'))
+        assertEquals(glyphRuns(cells), glyphRuns(cells, null))
+        assertEquals(1, glyphRuns(cells).size)
+        assertEquals(HighlightKind.None, glyphRuns(cells).single().kind)
+    }
+
+    @Test
+    fun `a wide glyph carries its category`() {
+        val cells = row(
+            TermCell("\u4f60", TermStyle(), CellWidth.Wide),
+            TermCell("", TermStyle(), CellWidth.Continuation),
+        )
+        val runs = glyphRuns(cells, RowHighlight.of(listOf(ColumnSpan(0, 1, HighlightKind.StringLit))))
+        assertEquals(1, runs.size)
+        assertEquals(HighlightKind.StringLit, runs.single().kind)
     }
 }

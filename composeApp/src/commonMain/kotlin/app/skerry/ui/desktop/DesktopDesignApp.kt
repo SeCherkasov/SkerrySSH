@@ -36,6 +36,8 @@ import app.skerry.ui.runbook.RunbookRunner
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.terminal.LocalTerminalAppearance
+import app.skerry.ui.terminal.LocalTerminalHighlight
+import app.skerry.ui.terminal.TerminalHighlight
 import app.skerry.ui.terminal.LocalTerminalTheme
 import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.theme.ThemeMode
@@ -370,6 +372,11 @@ fun DesktopDesignApp(
         LocalSftpPrefs provides sftpPrefs,
         // Terminal appearance from settings: font + size, read by [app.skerry.ui.terminal.TerminalScreen].
         LocalTerminalAppearance provides terminalAppearance,
+        // Client-side syntax highlighting (Settings → Terminal), read by TerminalScreen's draw layer.
+        LocalTerminalHighlight provides TerminalHighlight(
+            commandLine = state.settings.highlightCommandLine,
+            output = state.settings.highlightOutput,
+        ),
         // Terminal color theme: the app theme's twin, or the separately-picked one (Appearance → cards).
         LocalTerminalTheme provides effectiveTerminalTheme,
         // The open vault + biometrics behind the gate — needed for re-authentication before copying

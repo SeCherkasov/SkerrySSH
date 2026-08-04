@@ -181,6 +181,10 @@ class MainActivity : FragmentActivity() {
                     onReportTeamSessionsChange = { writeReportTeamSessions(dir, it) },
                     initialOpenFilePathsInSftp = readOpenFilePaths(dir),
                     onOpenFilePathsInSftpChange = { writeOpenFilePaths(dir, it) },
+                    initialHighlightCommandLine = readHighlightInput(dir),
+                    onHighlightCommandLineChange = { writeHighlightInput(dir, it) },
+                    initialHighlightOutput = readHighlightOutput(dir),
+                    onHighlightOutputChange = { writeHighlightOutput(dir, it) },
                     initialConfirmProductionWarnings = readProdWarnings(dir),
                     onConfirmProductionWarningsChange = { writeProdWarnings(dir, it) },
                     initialUiLanguage = currentUiLanguage.value,
@@ -307,6 +311,28 @@ class MainActivity : FragmentActivity() {
     private fun writeOpenFilePaths(dir: File, enabled: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_open_paths").writeText(enabled.toString()) }
+        }
+    }
+
+    /** Command-line syntax highlighting: `terminal_highlight_input`, default on. */
+    private fun readHighlightInput(dir: File): Boolean = runCatching {
+        File(dir, "terminal_highlight_input").readText().trim().toBoolean()
+    }.getOrDefault(true)
+
+    private fun writeHighlightInput(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_highlight_input").writeText(enabled.toString()) }
+        }
+    }
+
+    /** Log-level highlighting in output: `terminal_highlight_output`, default off. */
+    private fun readHighlightOutput(dir: File): Boolean = runCatching {
+        File(dir, "terminal_highlight_output").readText().trim().toBoolean()
+    }.getOrDefault(false)
+
+    private fun writeHighlightOutput(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_highlight_output").writeText(enabled.toString()) }
         }
     }
 

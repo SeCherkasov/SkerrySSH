@@ -66,7 +66,24 @@ object ProductionGuard {
      * Prompt terminator: the `$`/`#`/`%`/`>` (and the usual powerline/starship arrows) followed by a
      * space that separates a shell prompt from what was typed after it.
      */
-    private val PROMPT_TERMINATOR = Regex("""[$#%>❯➜»›]\s""")
+    /**
+     * Characters that end a shell prompt. Exposed because the syntax highlighter needs the same set
+     * for its allocation-free prescan: a second hand-written copy would silently drift from this one
+     * the day a prompt glyph is added, and rows the guard cuts would stop being highlighted.
+     */
+    const val PROMPT_TERMINATORS = "$#%>❯➜»›"
+
+    private val PROMPT_TERMINATOR = Regex("[$PROMPT_TERMINATORS]\\s")
+
+    /**
+     * Index just past the prompt in [line], or 0 when it doesn't look like a prompt at all. Shared
+     * with the syntax highlighter, which needs the *position* of the cut rather than the text after
+     * it — one heuristic, so the guard and the highlighter never disagree on where a command starts.
+     *
+     * The cut is at the FIRST terminator, not the last: `cat img > /dev/sda` contains a `>` of its
+     * own, and cutting there would leave `/dev/sda` and lose the very command worth stopping.
+     */
+    fun promptEnd(line: String): Int = PROMPT_TERMINATOR.find(line)?.let { it.range.last + 1 } ?: 0
 
     /** Whether [tags] make a host production (carries [PROD_TAG]). */
     fun isProduction(tags: List<String>): Boolean = PROD_TAG in tags
@@ -131,17 +148,15 @@ object ProductionGuard {
 
     /**
      * Command candidates from a raw screen line: the line itself plus, when it looks like a prompt,
-     * the tail after the prompt. Both are kept — cutting is a guess, and the uncut line still holds
-     * the command.
-     *
-     * The cut is at the FIRST prompt terminator, not the last: `cat img > /dev/sda` contains a `>`
-     * of its own, and cutting there would leave `/dev/sda` and lose the very command worth stopping.
+     * the tail after the prompt ([promptEnd]). Both are kept — cutting is a guess, and the uncut
+     * line still holds the command.
      */
     fun promptCandidates(rawLine: String): List<String> {
         val line = rawLine.trim().take(MAX_GUARDED_COMMAND_LENGTH)
         if (line.isEmpty()) return emptyList()
-        val match = PROMPT_TERMINATOR.find(line) ?: return listOf(line)
-        val tail = line.substring(match.range.last + 1).trim()
+        val cut = promptEnd(line)
+        if (cut == 0) return listOf(line)
+        val tail = line.substring(cut).trim()
         return if (tail.isEmpty() || tail == line) listOf(line) else listOf(line, tail)
     }
 }

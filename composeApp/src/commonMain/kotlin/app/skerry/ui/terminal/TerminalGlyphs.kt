@@ -41,6 +41,7 @@ import app.skerry.shared.terminal.TermColor
 import app.skerry.shared.terminal.TermStyle
 import app.skerry.shared.terminal.UnderlineStyle
 import app.skerry.shared.terminal.TerminalSelection
+import app.skerry.shared.terminal.highlight.HighlightKind
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
@@ -182,9 +183,18 @@ internal fun cellBgColor(style: TermStyle, palette: Palette, theme: TerminalThem
 
 /**
  * One glyph run to draw: text, start column [col], number of columns occupied [span] (for underline:
- * Wide=2, ASCII run = cell count), and style.
+ * Wide=2, ASCII run = cell count), style, and the client-side highlight category over it ([kind]).
+ *
+ * [kind] stays separate from [style] so the run keeps the server's own attributes for the underline
+ * pass — the highlight recolors the glyph, not the line under it.
  */
-internal data class GlyphRun(val col: Int, val text: String, val span: Int, val style: TermStyle)
+internal data class GlyphRun(
+    val col: Int,
+    val text: String,
+    val span: Int,
+    val style: TermStyle,
+    val kind: HighlightKind = HighlightKind.None,
+)
 
 /**
  * Printable ASCII (a single BMP char 0x20..0x7e) — in JetBrains Mono guaranteed a cellWidth advance.
@@ -199,28 +209,38 @@ private fun TermCell.isPlainAscii(): Boolean = text.length == 1 && text[0].code 
  * run that accumulates drift (ragged box horizontals, colored rows sliding by a column). A wide cell — a
  * separate two-column run; a Continuation carries no glyph. The run's column is the physical cell index,
  * so a Continuation "hole" doesn't shift the next run.
+ *
+ * [highlight] adds the client's own syntax categories: a run also breaks where the category changes,
+ * so a token boundary inside otherwise identical cells becomes a boundary between runs.
  */
-internal fun glyphRuns(row: List<TermCell>): List<GlyphRun> {
+internal fun glyphRuns(row: List<TermCell>, highlight: RowHighlight? = null): List<GlyphRun> {
     val runs = ArrayList<GlyphRun>()
+    fun kindAt(col: Int) = highlight?.kindAt(col) ?: HighlightKind.None
     var g = 0
     while (g < row.size) {
         val cell = row[g]
         when {
             cell.width == CellWidth.Continuation -> g++
             cell.width == CellWidth.Wide -> {
-                runs.add(GlyphRun(g, cell.text, 2, cell.style)); g++
+                runs.add(GlyphRun(g, cell.text, 2, cell.style, kindAt(g))); g++
             }
             !cell.isPlainAscii() -> {
-                runs.add(GlyphRun(g, cell.text, 1, cell.style)); g++
+                runs.add(GlyphRun(g, cell.text, 1, cell.style, kindAt(g))); g++
             }
             else -> {
                 val st = cell.style
+                val kind = kindAt(g)
                 val start = g
                 val sb = StringBuilder()
-                while (g < row.size && row[g].width == CellWidth.Single && row[g].style == st && row[g].isPlainAscii()) {
+                fun continuesRun(at: Int): Boolean {
+                    if (at >= row.size) return false
+                    val c = row[at]
+                    return c.width == CellWidth.Single && c.style == st && c.isPlainAscii() && kindAt(at) == kind
+                }
+                while (continuesRun(g)) {
                     sb.append(row[g].text); g++
                 }
-                runs.add(GlyphRun(start, sb.toString(), g - start, st))
+                runs.add(GlyphRun(start, sb.toString(), g - start, st, kind))
             }
         }
     }

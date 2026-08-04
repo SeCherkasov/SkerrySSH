@@ -455,6 +455,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
             prefs.set("terminal_show_title", false)
             prefs.set("terminal_clipboard_write", false)
             prefs.set("terminal_prod_warnings", false)
+            prefs.set("terminal_highlight_input", true)
+            prefs.set("terminal_highlight_output", false)
             prefs.set("auto_lock", AutoLockDuration.DEFAULT.id)
         }
         hosts.reload()
@@ -636,6 +638,10 @@ fun main(args: Array<String>) {
                             onReportTeamSessionsChange = { prefs.set("teams_report_sessions", it) },
                             initialOpenFilePathsInSftp = prefs.bool("terminal_open_paths", true),
                             onOpenFilePathsInSftpChange = { prefs.set("terminal_open_paths", it) },
+                            initialHighlightCommandLine = prefs.bool("terminal_highlight_input", true),
+                            onHighlightCommandLineChange = { prefs.set("terminal_highlight_input", it) },
+                            initialHighlightOutput = prefs.bool("terminal_highlight_output", false),
+                            onHighlightOutputChange = { prefs.set("terminal_highlight_output", it) },
                             initialConfirmProductionWarnings = prefs.bool("terminal_prod_warnings", false),
                             onConfirmProductionWarningsChange = { prefs.set("terminal_prod_warnings", it) },
                             initialAutoLock = prefs.id("auto_lock", AutoLockDuration.DEFAULT, AutoLockDuration::fromId),
