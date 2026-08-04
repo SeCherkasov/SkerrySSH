@@ -2,6 +2,7 @@ package app.skerry.ui.files
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.files.FileBrowser
@@ -15,6 +16,7 @@ import app.skerry.shared.sftp.SftpEntryType
 import app.skerry.ui.sftp.DownloadTarget
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.UploadSource
+import app.skerry.ui.sync.nowMillis
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -84,6 +86,39 @@ sealed interface TransferState {
  */
 class OverwriteConflict(val names: List<String>, val proceed: () -> Unit)
 
+/** Where a queue entry stands: still moving bytes, finished, or stopped by a failure. */
+sealed interface TransferStatus {
+    data object Active : TransferStatus
+    data object Done : TransferStatus
+    data class Failed(val failure: FileTransferFailure) : TransferStatus
+}
+
+/**
+ * One line of the transfer queue: a single operation (F5/F6, a picked upload, a download to a
+ * target), which may cover several files. [name] is the file currently moving ([fileIndex] of
+ * [fileCount]), [transferred] of [total] its bytes ([total] = 0 when the source doesn't report a
+ * size). [bytesDone] and [elapsedMillis] count the whole operation and are what the speed is read
+ * off ([app.skerry.ui.sftp.transferSpeed]).
+ */
+data class TransferEntry(
+    val id: Long,
+    val direction: TransferDirection,
+    val name: String,
+    val fileIndex: Int,
+    val fileCount: Int,
+    val transferred: Long,
+    val total: Long,
+    val bytesDone: Long,
+    val elapsedMillis: Long,
+    val status: TransferStatus,
+)
+
+/**
+ * How many finished entries the queue keeps. The strip is a live view of what is moving, with just
+ * enough history to see how the last transfers ended — not a transfer log.
+ */
+const val MAX_COMPLETED_TRANSFERS = 3
+
 /**
  * Coordinates file transfer between the [local] and [remote] panes over a single [SftpClient].
  * Transfer is always local-FS-to-SFTP, so it maps directly onto `SftpClient.download`/`upload`.
@@ -101,9 +136,38 @@ class TransferCoordinator(
     val remote: FilePaneController,
     private val remoteBrowser: FileContentBrowser,
     private val scope: CoroutineScope,
+    // Wall clock behind the entries' elapsed time (hence the speed); injected so tests pin it.
+    private val now: () -> Long = ::nowMillis,
 ) {
-    var transfer: TransferState by mutableStateOf(TransferState.Idle)
-        private set
+    private val entries = mutableStateListOf<TransferEntry>()
+
+    /** The transfer queue, oldest first: what is moving now plus the last few finished entries. */
+    val queue: List<TransferEntry> get() = entries
+
+    /**
+     * What a single-line view (the mobile Files card) shows: the state of the *latest* operation
+     * only. Reading the latest entry rather than the latest failing one is the point — a transfer
+     * that failed and was then retried successfully must stop showing an error, or the user retries
+     * something that already went through. Derived from [queue], so the strip and the card can
+     * never disagree.
+     */
+    val transfer: TransferState
+        get() {
+            val last = entries.lastOrNull() ?: return TransferState.Idle
+            return when (val status = last.status) {
+                // The running operation is always the newest entry (transfers are serialized).
+                TransferStatus.Active ->
+                    TransferState.Active(last.name, last.direction, last.fileIndex, last.fileCount, last.transferred, last.total)
+                TransferStatus.Done -> TransferState.Idle
+                is TransferStatus.Failed -> TransferState.Failed(last.name, status.failure)
+            }
+        }
+
+    private var nextEntryId = 1L
+
+    /** When the running operation started, and how many bytes its finished files already moved. */
+    private var operationStartedAt = 0L
+    private var operationBytesDone = 0L
 
     /**
      * Overwrite conflict awaiting confirmation: the destination directory already has entries
@@ -131,6 +195,72 @@ class TransferCoordinator(
     /** Suspends until no editor write is in flight. Called before the transport is closed. */
     suspend fun awaitEditorWrites() {
         editorWrites.withLock { }
+    }
+
+    // Queue bookkeeping. One entry per operation: opened by the operation itself (it knows the
+    // direction), closed by [launchExclusive] — success, failure and cancellation all pass there,
+    // so no path can leave an entry stuck on Active.
+
+    /** Opens the queue entry of an operation about to start. */
+    private fun beginOperation(direction: TransferDirection) {
+        operationStartedAt = now()
+        operationBytesDone = 0
+        entries += TransferEntry(
+            id = nextEntryId++,
+            direction = direction,
+            name = "",
+            fileIndex = 0,
+            fileCount = 0,
+            transferred = 0,
+            total = 0,
+            bytesDone = 0,
+            elapsedMillis = 0,
+            status = TransferStatus.Active,
+        )
+    }
+
+    /** Progress of the file the running operation is on ([index] of [count] in the operation). */
+    private fun stepFile(name: String, index: Int, count: Int, transferred: Long, total: Long) {
+        updateActive {
+            it.copy(
+                name = name,
+                fileIndex = index,
+                fileCount = count,
+                transferred = transferred,
+                total = total,
+                bytesDone = operationBytesDone + transferred,
+                elapsedMillis = now() - operationStartedAt,
+            )
+        }
+    }
+
+    /**
+     * Carries a finished file's bytes into the operation's running total (the speed reads it).
+     * The entry is updated here too: a source that reports no progress callbacks would otherwise
+     * leave the total at whatever the last callback said — nothing, for the whole operation.
+     */
+    private fun fileFinished(bytes: Long) {
+        operationBytesDone += bytes
+        updateActive { it.copy(bytesDone = operationBytesDone, elapsedMillis = now() - operationStartedAt) }
+    }
+
+    /** Marks the running operation as failed with a typed reason, naming the item it stopped on. */
+    private fun failOperation(name: String, failure: FileTransferFailure) {
+        endOperation(TransferStatus.Failed(failure), name)
+    }
+
+    /** Closes the running entry (if any is still open) and trims the finished ones. */
+    private fun endOperation(status: TransferStatus, name: String? = null) {
+        updateActive { it.copy(status = status, name = name ?: it.name, elapsedMillis = now() - operationStartedAt) }
+        // Oldest finished entries go first; the running one is never touched.
+        while (entries.count { it.status != TransferStatus.Active } > MAX_COMPLETED_TRANSFERS) {
+            entries.removeAt(entries.indexOfFirst { it.status != TransferStatus.Active })
+        }
+    }
+
+    private fun updateActive(edit: (TransferEntry) -> TransferEntry) {
+        val index = entries.indexOfLast { it.status == TransferStatus.Active }
+        if (index >= 0) entries[index] = edit(entries[index])
     }
 
     /**
@@ -189,7 +319,7 @@ class TransferCoordinator(
                     val failed = deleteSources(items) { localBrowser.delete(it) }
                     remote.refresh()
                     local.refresh()
-                    if (failed == null) local.clearSelection() else transfer = failed
+                    if (failed == null) local.clearSelection() else failOperation(failed.name, FileTransferFailure.DeleteSource)
                 }
             }
         } else {
@@ -208,7 +338,7 @@ class TransferCoordinator(
                     val failed = deleteSources(items) { remoteBrowser.delete(it.copy(path = safeRemoteChild(it.name, remoteDir))) }
                     local.refresh()
                     remote.refresh()
-                    if (failed == null) remote.clearSelection() else transfer = failed
+                    if (failed == null) remote.clearSelection() else failOperation(failed.name, FileTransferFailure.DeleteSource)
                 }
             }
         }
@@ -216,16 +346,16 @@ class TransferCoordinator(
 
     /**
      * Deletes source [items] after a successful transfer. A deletion failure doesn't lose data
-     * (files already reached the destination) but leaves a partially-moved state; returns
-     * [TransferState.Failed] naming the specific failed item ([transfer] is already Idle by this
-     * point). Null means all sources were deleted. [CancellationException] propagates.
+     * (files already reached the destination) but leaves a partially-moved state; returns the item
+     * that could not be removed, so the caller can name it on the queue entry. Null means all
+     * sources were deleted. [CancellationException] propagates.
      */
-    private suspend fun deleteSources(items: List<FileItem>, delete: suspend (FileItem) -> Unit): TransferState.Failed? {
+    private suspend fun deleteSources(items: List<FileItem>, delete: suspend (FileItem) -> Unit): FileItem? {
         for (item in items) {
             try {
                 delete(item)
             } catch (_: FileBrowserException) {
-                return TransferState.Failed(item.name, FileTransferFailure.DeleteSource)
+                return item
             }
         }
         return null
@@ -244,12 +374,12 @@ class TransferCoordinator(
         if (item.type != FileItemType.File) return
         launchExclusive {
             try {
-                transfer = TransferState.Active(target.displayName, TransferDirection.Download, 1, 1, 0, item.size)
+                beginOperation(TransferDirection.Download)
+                stepFile(target.displayName, 1, 1, 0, item.size)
                 sftp.download(item.path, target.stagingPath) { transferred, total ->
-                    transfer = TransferState.Active(target.displayName, TransferDirection.Download, 1, 1, transferred, total)
+                    stepFile(target.displayName, 1, 1, transferred, total)
                 }
                 target.finalize()
-                transfer = TransferState.Idle
             } catch (e: Exception) { // Includes CancellationException — staging is cleaned up either way.
                 runCatching { target.discard() }
                 throw e
@@ -279,11 +409,11 @@ class TransferCoordinator(
     private fun runUploadSource(source: UploadSource, destDir: String) {
         launchExclusive(onFinally = { runCatching { source.cleanup() } }) {
             val target = childPath(destDir, source.name)
-            transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, 0, 0)
+            beginOperation(TransferDirection.Upload)
+            stepFile(source.name, 1, 1, 0, 0)
             sftp.upload(source.stagingPath, target) { transferred, total ->
-                transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, transferred, total)
+                stepFile(source.name, 1, 1, transferred, total)
             }
-            transfer = TransferState.Idle
             remote.refresh()
         }
     }
@@ -311,9 +441,14 @@ class TransferCoordinator(
         ).also { it.open() }
     }
 
-    /** Closes the transfer bar (resets to [TransferState.Idle]); doesn't touch an active transfer. */
-    fun clearTransfer() {
-        if (transfer !is TransferState.Active) transfer = TransferState.Idle
+    /** Drops one finished queue entry ([id]); a transfer still running is left alone. */
+    fun dismissTransfer(id: Long) {
+        entries.removeAll { it.id == id && it.status != TransferStatus.Active }
+    }
+
+    /** Drops every finished entry at once, leaving only what is still running. */
+    fun dismissCompleted() {
+        entries.removeAll { it.status != TransferStatus.Active }
     }
 
     /**
@@ -355,13 +490,18 @@ class TransferCoordinator(
         scope.launch {
             try {
                 block()
+                // A block can finish normally having already closed its own entry as failed
+                // (a move whose transfer went through but whose source delete didn't) — that
+                // verdict wins, so the entry is only marked done while it is still open.
+                if (entries.lastOrNull()?.status == TransferStatus.Active) endOperation(TransferStatus.Done)
             } catch (e: CancellationException) {
+                // A cancelled operation is over too: leaving the entry Active would show a
+                // progress bar that never moves again.
+                endOperation(TransferStatus.Failed(FileTransferFailure.Transfer))
                 throw e
             } catch (e: Exception) {
-                // Blank name = no file was active yet; the UI fills in a localized placeholder.
-                val name = (transfer as? TransferState.Active)?.name.orEmpty()
                 val failure = (e as? FileBrowserException)?.failure?.toTransferFailure() ?: FileTransferFailure.Transfer
-                transfer = TransferState.Failed(name, failure)
+                endOperation(TransferStatus.Failed(failure))
             } finally {
                 onFinally()
                 busy = false
@@ -376,16 +516,17 @@ class TransferCoordinator(
      * [launchExclusive] block.
      */
     private suspend fun runUpload(items: List<FileItem>, remoteDir: String) {
+        beginOperation(TransferDirection.Upload)
         val plan = buildUploadPlan(items, remoteDir)
         // Directories are created in pre-order: parent always before children.
         plan.dirs.forEach { ensureDir(remoteBrowser, it) }
         plan.files.forEachIndexed { index, task ->
-            transfer = TransferState.Active(task.name, TransferDirection.Upload, index + 1, plan.files.size, 0, task.size)
+            stepFile(task.name, index + 1, plan.files.size, 0, task.size)
             sftp.upload(task.localPath, task.remotePath) { transferred, total ->
-                transfer = TransferState.Active(task.name, TransferDirection.Upload, index + 1, plan.files.size, transferred, total)
+                stepFile(task.name, index + 1, plan.files.size, transferred, total)
             }
+            fileFinished(task.size)
         }
-        transfer = TransferState.Idle
     }
 
     /**
@@ -395,16 +536,17 @@ class TransferCoordinator(
      * [launchExclusive] block.
      */
     private suspend fun runDownload(items: List<FileItem>, localDir: String, remoteDir: String) {
+        beginOperation(TransferDirection.Download)
         val plan = buildDownloadPlan(items, localDir, remoteDir)
         // Directories are created in pre-order: parent always before children.
         plan.dirs.forEach { ensureDir(localBrowser, it) }
         plan.files.forEachIndexed { index, task ->
-            transfer = TransferState.Active(task.name, TransferDirection.Download, index + 1, plan.files.size, 0, task.size)
+            stepFile(task.name, index + 1, plan.files.size, 0, task.size)
             sftp.download(task.remotePath, task.localPath) { transferred, total ->
-                transfer = TransferState.Active(task.name, TransferDirection.Download, index + 1, plan.files.size, transferred, total)
+                stepFile(task.name, index + 1, plan.files.size, transferred, total)
             }
+            fileFinished(task.size)
         }
-        transfer = TransferState.Idle
     }
 
     /** One download task: [name] for the progress bar, remote [remotePath] to local [localPath]. */

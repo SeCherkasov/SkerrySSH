@@ -43,14 +43,12 @@ import app.skerry.ui.files.FKeyBar
 import app.skerry.ui.files.FileEditorScreen
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.TransferCoordinator
-import app.skerry.ui.files.TransferState
 import app.skerry.ui.files.platformLocalBrowser
 import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ftail_file_fallback
 import app.skerry.ui.generated.resources.ftail_open_failed
 import app.skerry.ui.generated.resources.ftail_transfer_counter
-import app.skerry.ui.generated.resources.ftail_transfer_progress
 import app.skerry.ui.generated.resources.sftp_create
 import app.skerry.ui.generated.resources.sftp_overwrite
 import app.skerry.ui.generated.resources.sftp_overwrite_many
@@ -61,8 +59,6 @@ import app.skerry.ui.generated.resources.sftp_opening
 import app.skerry.ui.generated.resources.sftp_pane_local
 import app.skerry.ui.generated.resources.sftp_pane_remote
 import app.skerry.ui.generated.resources.sftp_rename
-import app.skerry.ui.generated.resources.sftp_title
-import app.skerry.ui.generated.resources.sftp_transfer_error
 import app.skerry.ui.generated.resources.sftp_unavailable
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.sftp.TransferDirection
@@ -81,6 +77,18 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.session.SessionStatus
+import app.skerry.ui.terminal.WorkBarLabel
+import app.skerry.ui.generated.resources.sftp_wbar_subtitle
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.key
+import app.skerry.ui.files.TransferEntry
+import app.skerry.ui.files.TransferStatus
+import app.skerry.ui.generated.resources.sftp_queue_done
+import app.skerry.ui.generated.resources.sftp_queue_progress
+import app.skerry.ui.generated.resources.sftp_queue_speed
+import app.skerry.ui.generated.resources.sftp_meta_joined
 
 /**
  * SFTP view (two-pane, Total Commander style): header + Local pane (local FS) + Remote pane (host) +
@@ -98,26 +106,14 @@ fun SftpView() {
         sessions == null -> MockSftpView(mono)
         active != null && active.controller.uiState is ConnectionUiState.Connected ->
             LiveSftpView(
-                active.controller,
-                active.subtitle,
-                mono,
+                controller = active.controller,
+                hostLabel = active.subtitle,
+                hostName = active.title,
+                status = active.status,
+                mono = mono,
                 onQuit = { sessions.setActiveView(SessionView.Terminal) },
             )
-        else -> NoSessionSftpView(mono)
-    }
-}
-
-/** View top bar: icon + "File transfer" + session subtitle. */
-@Composable
-internal fun SftpTopBar(subtitle: String, mono: FontFamily) {
-    Row(
-        Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 18.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Sym("drive_file_move", size = 18.sp, color = Skerry.colors.cyanBright)
-        Txt(stringResource(Res.string.sftp_title), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.SemiBold)
-        Txt(subtitle, color = Skerry.colors.faint, size = 11.5.sp, font = mono)
+        else -> NoSessionSftpView(onBack = { sessions.setActiveView(SessionView.Terminal) })
     }
 }
 
@@ -126,13 +122,16 @@ internal fun SftpTopBar(subtitle: String, mono: FontFamily) {
 /**
  * Live two-pane SFTP over the session's cached [TransferCoordinator]. The coordinator is opened once
  * ([ConnectionController.openTransferCoordinator]) and lives on the session scope — switching views
- * doesn't reset the panes' path/selection, `disconnect()` closes the channel. [subtitle] is the remote
- * pane's label.
+ * doesn't reset the panes' path/selection, `disconnect()` closes the channel. [hostLabel] is the
+ * session's address (it names the remote browser); [hostName] is the host's catalog name, which
+ * titles the bar and badges the remote pane.
  */
 @Composable
 private fun LiveSftpView(
     controller: ConnectionController,
-    subtitle: String,
+    hostLabel: String,
+    hostName: String,
+    status: SessionStatus,
     mono: FontFamily,
     onQuit: () -> Unit,
 ) {
@@ -173,7 +172,7 @@ private fun LiveSftpView(
     LaunchedEffect(controller) {
         openError = null
         try {
-            coord = controller.openTransferCoordinator(platformLocalBrowser(), subtitle)
+            coord = controller.openTransferCoordinator(platformLocalBrowser(), hostLabel)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -289,26 +288,36 @@ private fun LiveSftpView(
             }
             .focusable(),
     ) {
-        // The panel's header is hidden while the editor is open: the editor brings its own, and two
-        // stacked bars over one file — the upper one offering Upload/New folder that do nothing
-        // there — are noise.
-        if (editor == null) {
-            LivePaneHeader(
-                subtitle = subtitle,
-                mono = mono,
-                onUpload = {
-                    val coord = c
-                    if (coord != null) {
-                        if (coord.local.selection.isNotEmpty()) {
-                            coord.uploadSelection()
-                        } else {
+        // The bar's actions are the panel's own (refresh/mkdir/filter/columns/transfer) and mean
+        // nothing over an open file — the editor brings its own header and key bar, so the bar
+        // keeps only the title while it is up.
+        SftpWorkBar(
+            onBack = onQuit,
+            label = WorkBarLabel.Solo(
+                hostName,
+                stringResource(Res.string.sftp_wbar_subtitle, c?.remote?.path.orEmpty()),
+                status,
+            ),
+        ) {
+            if (editor == null) {
+                SftpWorkBarActions(
+                    localActive = active == ActivePane.Local,
+                    enabled = c != null,
+                    onRefresh = { fKey(9) },
+                    onNewFolder = { fKey(7) },
+                    onFilter = { if (active == ActivePane.Local) localFilterTick++ else remoteFilterTick++ },
+                    onTransfer = {
+                        val coord = c
+                        // Nothing marked on the local side and no cursor to fall back on: the
+                        // native picker is the way in, the way the old Upload button worked.
+                        if (coord != null && active == ActivePane.Local && coord.local.hasNoOperand()) {
                             uiScope.launch { pickUploadSource()?.let { coord.uploadSource(it) } }
+                        } else {
+                            fKey(5)
                         }
-                    }
-                },
-                onNewFolder = { if (c != null) creatingFolder = true },
-            )
-            HLine()
+                    },
+                )
+            }
         }
         val openEditor = editor
         when {
@@ -328,7 +337,8 @@ private fun LiveSftpView(
             else -> {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     LivePane(
-                        c.local, "computer", Skerry.colors.dim, stringResource(Res.string.sftp_pane_local), mono,
+                        c.local, "computer", Skerry.colors.dim,
+                        badge = stringResource(Res.string.sftp_pane_local), badgeAccent = false, mono = mono,
                         listState = localList,
                         active = active == ActivePane.Local,
                         onActivate = { active = ActivePane.Local; focus.requestFocus() },
@@ -341,7 +351,8 @@ private fun LiveSftpView(
                     )
                     VLine(Skerry.colors.line)
                     LivePane(
-                        c.remote, "dns", Skerry.colors.moss, stringResource(Res.string.sftp_pane_remote), mono,
+                        c.remote, "dns", Skerry.colors.moss,
+                        badge = hostName, badgeAccent = true, mono = mono,
                         listState = remoteList,
                         active = active == ActivePane.Remote,
                         onActivate = { active = ActivePane.Remote; focus.requestFocus() },
@@ -353,7 +364,7 @@ private fun LiveSftpView(
                         modifier = Modifier.weight(1f),
                     )
                 }
-                LiveTransferStrip(c.transfer, mono, onDismiss = c::clearTransfer)
+                TransferQueueStrip(c.queue, mono, onDismiss = c::dismissTransfer)
             }
         }
         // The editor brings its own key bar (Save/Edit/Search/Quit) — the panel's would be a legend
@@ -473,62 +484,104 @@ private fun LiveSftpView(
 /** Which of the two panes is active (receives the keyboard and cursor highlight). */
 private enum class ActivePane { Local, Remote }
 
-/** Transfer progress bar: active (bar + counter), error (with a close), or nothing when Idle. */
+/**
+ * Transfer queue under the panes: one row per operation — what is moving now, and the last few
+ * that finished, so the outcome of a transfer is still readable after it ends. Empty queue, no
+ * strip. [onDismiss] drops a finished row by its id.
+ */
 @Composable
-private fun LiveTransferStrip(transfer: TransferState, mono: FontFamily, onDismiss: () -> Unit) {
-    when (transfer) {
-        TransferState.Idle -> Unit
-
-        is TransferState.Active -> {
-            HLine()
-            Row(
-                Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                val up = transfer.direction == TransferDirection.Upload
-                Sym(if (up) "upload" else "download", size = 16.sp, color = Skerry.colors.cyan)
-                val title = if (transfer.fileCount > 1) {
-                    stringResource(Res.string.ftail_transfer_counter, transfer.name, transfer.fileIndex, transfer.fileCount)
-                } else {
-                    transfer.name
-                }
-                Txt(title, color = Skerry.colors.textBright, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val fraction = if (transfer.total > 0) transfer.transferred.toFloat() / transfer.total else 0f
-                MeterBar(fraction, Skerry.colors.cyan, Modifier.weight(1f))
-                val tail = if (transfer.total > 0) {
-                    stringResource(Res.string.ftail_transfer_progress, humanSize(transfer.transferred), humanSize(transfer.total))
-                } else {
-                    humanSize(transfer.transferred)
-                }
-                Txt(tail, color = Skerry.colors.dim, size = 11.sp, font = mono)
-            }
-        }
-
-        is TransferState.Failed -> {
-            HLine()
-            Row(
-                Modifier.fillMaxWidth().background(Skerry.colors.surface2).padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Sym("error", size = 16.sp, color = Skerry.colors.sunset)
-                Txt(
-                    stringResource(
-                        Res.string.sftp_transfer_error,
-                        transfer.name.ifBlank { stringResource(Res.string.ftail_file_fallback) },
-                        transferFailureText(transfer.failure),
-                    ),
-                    color = Skerry.colors.sunset,
-                    size = 11.5.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                IconBtn("close", onClick = onDismiss, box = 26, icon = 16.sp)
-            }
-        }
+private fun TransferQueueStrip(queue: List<TransferEntry>, mono: FontFamily, onDismiss: (Long) -> Unit) {
+    if (queue.isEmpty()) return
+    HLine()
+    Column(
+        Modifier.fillMaxWidth().background(Skerry.colors.surface).padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        queue.forEach { entry -> key(entry.id) { TransferQueueRow(entry, mono, onDismiss) } }
     }
+}
+
+/** Name column of a queue row — wide enough for a release archive, fixed so the bars line up. */
+private val QUEUE_NAME_WIDTH = 180.dp
+
+@Composable
+private fun TransferQueueRow(entry: TransferEntry, mono: FontFamily, onDismiss: (Long) -> Unit) {
+    val done = entry.status == TransferStatus.Done
+    val failed = entry.status as? TransferStatus.Failed
+    val active = entry.status == TransferStatus.Active
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        val up = entry.direction == TransferDirection.Upload
+        Sym(
+            if (failed != null) "error" else if (up) "upload" else "download",
+            size = 15.sp,
+            color = when {
+                failed != null -> Skerry.colors.sunset
+                done -> Skerry.colors.moss
+                else -> Skerry.colors.teal
+            },
+        )
+        val title = if (entry.fileCount > 1) {
+            stringResource(Res.string.ftail_transfer_counter, entry.name, entry.fileIndex, entry.fileCount)
+        } else {
+            entry.name.ifBlank { stringResource(Res.string.ftail_file_fallback) }
+        }
+        Txt(
+            title,
+            color = if (active) Skerry.colors.textBright else Skerry.colors.dim,
+            size = 11.5.sp,
+            font = mono,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(QUEUE_NAME_WIDTH),
+        )
+        val percent = transferPercent(entry.transferred, entry.total)
+        MeterBar(
+            if (done) 1f else (percent ?: 0) / 100f,
+            when {
+                failed != null -> Skerry.colors.sunset
+                done -> Skerry.colors.moss
+                else -> Skerry.colors.cyan
+            },
+            Modifier.weight(1f),
+        )
+        Txt(
+            transferTailText(entry),
+            color = when {
+                failed != null -> Skerry.colors.sunset
+                done -> Skerry.colors.moss
+                else -> Skerry.colors.dim
+            },
+            size = 11.sp,
+            font = mono,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        // A finished row is the user's to clear; a running one has nothing to dismiss yet.
+        if (active) Box(Modifier.size(22.dp)) else IconBtn("close", onClick = { onDismiss(entry.id) }, box = 22, icon = 14.sp)
+    }
+}
+
+/** Right-hand text of a queue row: the failure, "done", or percent · bytes · speed while running. */
+@Composable
+private fun transferTailText(entry: TransferEntry): String {
+    (entry.status as? TransferStatus.Failed)?.let { return transferFailureText(it.failure) }
+    if (entry.status == TransferStatus.Done) return stringResource(Res.string.sftp_queue_done)
+    val speed = transferSpeed(entry.bytesDone, entry.elapsedMillis)
+    val speedText = speed?.let { stringResource(Res.string.sftp_queue_speed, humanSize(it)) }
+    val percent = transferPercent(entry.transferred, entry.total)
+    // Without a reported size there is no percentage and no "of": what is left is how much has
+    // moved so far, and how fast.
+    val progress = if (percent != null) {
+        stringResource(Res.string.sftp_queue_progress, percent, humanSize(entry.transferred), humanSize(entry.total))
+    } else {
+        humanSize(entry.transferred)
+    }
+    return if (speedText != null) stringResource(Res.string.sftp_meta_joined, progress, speedText) else progress
 }
 
 // Dialogs.

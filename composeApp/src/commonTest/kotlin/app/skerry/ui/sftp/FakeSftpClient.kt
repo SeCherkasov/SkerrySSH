@@ -159,7 +159,11 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
         children[norm] = mutableMapOf()
     }
 
+    /** When set, the next [remove] throws [SftpException] with this text (tests a failed delete). */
+    var removeError: String? = null
+
     override suspend fun remove(path: String) {
+        removeError?.let { throw SftpException(it) }
         val norm = realpathSync(path)
         val parent = children[parentOf(norm)] ?: throw SftpException("No parent for $path")
         val entry = parent[nameOf(norm)] ?: throw SftpException("No file $path")

@@ -21,6 +21,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlinx.coroutines.cancel
 
 private const val LHOME = "/local/home"
 private const val RHOME = "/remote/app"
@@ -57,13 +58,14 @@ class TransferCoordinatorTest {
     private fun TestScope.rig(
         local: FakeSftpClient = localFake(),
         remote: FakeSftpClient = remoteFake(),
+        now: () -> Long = { 0L },
     ): Rig {
         val localBrowser = SftpFileBrowser(local, "This Mac")
         val remoteBrowser = SftpFileBrowser(remote, "prod-web-01")
         val localCtl = FilePaneController(localBrowser, scope())
         val remoteCtl = FilePaneController(remoteBrowser, scope())
         localCtl.start(); remoteCtl.start(); advanceUntilIdle()
-        val coordinator = TransferCoordinator(remote, localCtl, localBrowser, remoteCtl, remoteBrowser, scope())
+        val coordinator = TransferCoordinator(remote, localCtl, localBrowser, remoteCtl, remoteBrowser, scope(), now)
         return Rig(localCtl, remoteCtl, local, remote, coordinator)
     }
 
@@ -489,5 +491,294 @@ class TransferCoordinatorTest {
         assertTrue(released)
         assertEquals("after\n", remote.contentOf("$RHOME/nginx.conf"))
         waiter.cancel()
+    }
+
+    // Transfer queue: what the bottom strip lists. One entry per operation, kept after it ends so
+    // the result of a finished transfer is still on screen.
+
+    @Test
+    fun `a finished upload stays in the queue as a completed entry`() = runTest {
+        val r = rig()
+        r.local.toggle(r.local.entry("a.txt"))
+
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+
+        val entry = r.coordinator.queue.single()
+        assertEquals(TransferDirection.Upload, entry.direction)
+        assertEquals("a.txt", entry.name)
+        assertEquals(TransferStatus.Done, entry.status)
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+    }
+
+    @Test
+    fun `a running transfer is the queue's active entry, with its byte counts`() = runTest {
+        val remote = remoteFake().apply { uploadSize = 10 }
+        val gate = CompletableDeferred<Unit>()
+        remote.transferGate = gate
+        val r = rig(remote = remote)
+        r.local.toggle(r.local.entry("a.txt"))
+        r.local.toggle(r.local.entry("b.txt"))
+
+        r.coordinator.uploadSelection()
+        advanceUntilIdle() // blocks on the gate at the first file
+
+        val entry = r.coordinator.queue.single()
+        assertEquals(TransferStatus.Active, entry.status)
+        assertEquals(1, entry.fileIndex)
+        assertEquals(2, entry.fileCount)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(TransferStatus.Done, r.coordinator.queue.single().status)
+    }
+
+    @Test
+    fun `a failed transfer names its reason in the queue`() = runTest {
+        val remote = remoteFake().apply { uploadError = "disk full" }
+        val r = rig(remote = remote)
+        r.local.toggle(r.local.entry("a.txt"))
+
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+
+        val status = assertIs<TransferStatus.Failed>(r.coordinator.queue.single().status)
+        assertEquals(FileTransferFailure.Transfer, status.failure)
+    }
+
+    @Test
+    fun `the queue counts the whole operation's bytes and the time it took`() = runTest {
+        // Speed is read off these two numbers, so they are the coordinator's job: the clock is
+        // injected, the total is the sum over the operation's files, not the last one's. The gate
+        // holds the transfer mid-flight so the clock can move while it runs.
+        var clock = 1_000L
+        val remote = remoteFake().apply { uploadSize = 10 }
+        val gate = CompletableDeferred<Unit>()
+        remote.transferGate = gate
+        val r = rig(remote = remote, now = { clock })
+        r.local.toggle(r.local.entry("a.txt")) // 10 bytes
+        r.local.toggle(r.local.entry("b.txt")) // 20 bytes
+
+        r.coordinator.uploadSelection()
+        advanceUntilIdle() // waiting on the gate, inside the first file
+        clock = 3_000L
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        val entry = r.coordinator.queue.single()
+        assertEquals(30, entry.bytesDone)
+        assertEquals(2_000, entry.elapsedMillis)
+    }
+
+    @Test
+    fun `the queue keeps only the last few finished entries, dropping the oldest`() = runTest {
+        val r = rig()
+        val seen = mutableListOf<Long>()
+        repeat(MAX_COMPLETED_TRANSFERS + 2) { index ->
+            r.local.toggle(r.local.entry("a.txt"))
+            r.coordinator.uploadSelection()
+            advanceUntilIdle()
+            // Each round overwrites the same remote name — confirm the conflict so it runs.
+            r.coordinator.overwrite?.let { r.coordinator.resolveOverwrite(true) }
+            advanceUntilIdle()
+            assertTrue(r.coordinator.queue.size <= MAX_COMPLETED_TRANSFERS, "round $index")
+            seen += r.coordinator.queue.last().id
+        }
+        // What survives is the tail of the history, in order — eviction takes the oldest, never
+        // the entry the user just watched finish.
+        assertEquals(seen.takeLast(MAX_COMPLETED_TRANSFERS), r.coordinator.queue.map { it.id })
+    }
+
+    @Test
+    fun `a successful transfer clears the error left by the one before it`() = runTest {
+        // The single-line view (mobile card) reads `transfer`. A failure followed by a success must
+        // read as "nothing wrong": showing the old error after a working retry sends the user
+        // retrying something that already went through.
+        val remote = remoteFake().apply { uploadError = "disk full" }
+        val r = rig(remote = remote)
+        r.local.toggle(r.local.entry("a.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+        assertIs<TransferState.Failed>(r.coordinator.transfer)
+
+        remote.uploadError = null
+        r.local.toggle(r.local.entry("b.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+
+        assertEquals(TransferState.Idle, r.coordinator.transfer)
+        assertEquals(2, r.coordinator.queue.size, "the failed entry stays in the queue's history")
+    }
+
+    @Test
+    fun `the single-line state and the queue describe the same running transfer`() = runTest {
+        val remote = remoteFake().apply { uploadSize = 10 }
+        val gate = CompletableDeferred<Unit>()
+        remote.transferGate = gate
+        val r = rig(remote = remote)
+        r.local.toggle(r.local.entry("a.txt"))
+        r.local.toggle(r.local.entry("b.txt"))
+
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+
+        val entry = r.coordinator.queue.single { it.status == TransferStatus.Active }
+        val active = assertIs<TransferState.Active>(r.coordinator.transfer)
+        assertEquals(entry.name, active.name)
+        assertEquals(entry.direction, active.direction)
+        assertEquals(entry.fileIndex, active.fileIndex)
+        assertEquals(entry.fileCount, active.fileCount)
+        assertEquals(entry.transferred, active.transferred)
+        assertEquals(entry.total, active.total)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `a move that transferred but could not delete the source ends as a failure`() = runTest {
+        // The block closes its own entry (failOperation) and then returns normally, so the
+        // operation-wide "done" that follows must not flip it back to success.
+        val local = localFake().apply { removeError = "permission denied" }
+        val r = rig(local = local)
+        r.local.toggle(r.local.entry("a.txt"))
+
+        r.coordinator.moveSelection(fromLocal = true)
+        advanceUntilIdle()
+
+        val status = assertIs<TransferStatus.Failed>(r.coordinator.queue.single().status)
+        assertEquals(FileTransferFailure.DeleteSource, status.failure)
+    }
+
+    @Test
+    fun `a cancelled transfer does not leave its entry running forever`() = runTest {
+        val remote = remoteFake().apply { uploadSize = 10 }
+        remote.transferGate = CompletableDeferred()
+        val scope = scope()
+        val localBrowser = SftpFileBrowser(localFake(), "This Mac")
+        val remoteBrowser = SftpFileBrowser(remote, "prod-web-01")
+        val localCtl = FilePaneController(localBrowser, scope)
+        val remoteCtl = FilePaneController(remoteBrowser, scope)
+        localCtl.start(); remoteCtl.start(); advanceUntilIdle()
+        val coordinator = TransferCoordinator(remote, localCtl, localBrowser, remoteCtl, remoteBrowser, scope)
+        localCtl.toggle((localCtl.state as FilePaneState.Loaded).entries.first { it.name == "a.txt" })
+
+        coordinator.uploadSelection()
+        advanceUntilIdle() // waiting on the gate
+        assertEquals(TransferStatus.Active, coordinator.queue.single().status)
+
+        scope.cancel() // the session goes away mid-transfer
+        advanceUntilIdle()
+
+        assertIs<TransferStatus.Failed>(coordinator.queue.single().status)
+    }
+
+    @Test
+    fun `a second transfer requested while one runs does not open a second entry`() = runTest {
+        val remote = remoteFake().apply { uploadSize = 10 }
+        remote.transferGate = CompletableDeferred()
+        val r = rig(remote = remote)
+        r.local.toggle(r.local.entry("a.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+
+        r.local.toggle(r.local.entry("b.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+
+        assertEquals(1, r.coordinator.queue.size)
+        remote.transferGate!!.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    @Test
+    fun `a download counts its bytes on the queue entry too`() = runTest {
+        val remote = remoteFake()
+        val r = rig(remote = remote)
+        r.remote.toggle(r.remote.entry("r.txt")) // 30 bytes
+
+        r.coordinator.downloadSelection()
+        advanceUntilIdle()
+
+        val entry = r.coordinator.queue.single()
+        assertEquals(TransferDirection.Download, entry.direction)
+        assertEquals(30, entry.bytesDone)
+    }
+
+    @Test
+    fun `a picked upload and a download to a target each get their own queue entry`() = runTest {
+        val r = rig()
+        val source = object : UploadSource {
+            override val name = "picked.txt"
+            override val stagingPath = "/tmp/picked.txt"
+            override suspend fun cleanup() = Unit
+        }
+
+        r.coordinator.uploadSource(source)
+        advanceUntilIdle()
+
+        val uploaded = r.coordinator.queue.single()
+        assertEquals("picked.txt", uploaded.name)
+        assertEquals(TransferDirection.Upload, uploaded.direction)
+        assertEquals(TransferStatus.Done, uploaded.status)
+
+        val target = object : DownloadTarget {
+            override val displayName = "r.txt"
+            override val stagingPath = "/tmp/r.txt"
+            override suspend fun finalize() = Unit
+            override suspend fun discard() = Unit
+        }
+        r.coordinator.downloadToTarget(r.remote.entry("r.txt"), target)
+        advanceUntilIdle()
+
+        val downloaded = r.coordinator.queue.last()
+        assertEquals("r.txt", downloaded.name)
+        assertEquals(TransferDirection.Download, downloaded.direction)
+        assertEquals(TransferStatus.Done, downloaded.status)
+        assertEquals(2, r.coordinator.queue.size)
+    }
+
+    @Test
+    fun `dismissing the finished entries clears them all at once`() = runTest {
+        val r = rig()
+        r.local.toggle(r.local.entry("a.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+        r.local.toggle(r.local.entry("b.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+        assertEquals(2, r.coordinator.queue.size)
+
+        r.coordinator.dismissCompleted()
+
+        assertTrue(r.coordinator.queue.isEmpty())
+    }
+
+    @Test
+    fun `dismissing a finished entry drops it from the queue`() = runTest {
+        val r = rig()
+        r.local.toggle(r.local.entry("a.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+
+        r.coordinator.dismissTransfer(r.coordinator.queue.single().id)
+
+        assertTrue(r.coordinator.queue.isEmpty())
+    }
+
+    @Test
+    fun `dismissing does not touch a transfer still running`() = runTest {
+        val remote = remoteFake().apply { uploadSize = 10 }
+        remote.transferGate = CompletableDeferred()
+        val r = rig(remote = remote)
+        r.local.toggle(r.local.entry("a.txt"))
+        r.coordinator.uploadSelection()
+        advanceUntilIdle()
+
+        r.coordinator.dismissTransfer(r.coordinator.queue.single().id)
+
+        assertEquals(1, r.coordinator.queue.size)
+        remote.transferGate!!.complete(Unit)
+        advanceUntilIdle()
     }
 }

@@ -124,8 +124,7 @@ fun TerminalView(state: DesktopDesignState) {
             WorkBar(
                 label = activeWorkBarLabel(state, tab, soloPlaceholder = stringResource(Res.string.term_select_host_placeholder)),
                 tabKey = tab?.id,
-                sidebarHidden = state.sidebarHidden,
-                onToggleSidebar = state::toggleSidebar,
+                leading = WorkBarLeading.sidebarToggle(state.sidebarHidden, state::toggleSidebar),
                 onPickHost = soloHostPicker(state, tab),
                 actions = {
                     SessionActions(state, available = workAreaWidth, assistantShown = assistantController != null)
