@@ -34,6 +34,7 @@ import app.skerry.ui.generated.resources.term_wbar_panes
 import app.skerry.ui.generated.resources.term_wbar_sync
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.theme.Skerry
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -42,6 +43,22 @@ import org.jetbrains.compose.resources.stringResource
  * their own content at the same line, so the three read as one row across the window.
  */
 val WORK_BAR_HEIGHT = 38.dp
+
+/**
+ * The bar's leftmost button. What it does depends on what the work area holds: the terminal
+ * collapses the hosts sidebar there ([sidebarToggle] — the chevron points the way the panel will
+ * travel, and it is the terminal's only sidebar handle), a view that fills the whole work area and
+ * shows no sidebar leaves the terminal instead ([back]). Whatever the button does, it stays in the
+ * same place across views.
+ */
+data class WorkBarLeading(val icon: String, val tooltip: StringResource, val onClick: () -> Unit) {
+    companion object {
+        fun sidebarToggle(hidden: Boolean, onToggle: () -> Unit) =
+            WorkBarLeading(if (hidden) "chevron_right" else "chevron_left", Res.string.term_tip_sidebar, onToggle)
+
+        fun back(tooltip: StringResource, onBack: () -> Unit) = WorkBarLeading("chevron_left", tooltip, onBack)
+    }
+}
 
 /**
  * The strip above the work area: what is open on the left, what can be done to it on the right.
@@ -61,8 +78,7 @@ val WORK_BAR_HEIGHT = 38.dp
 fun WorkBar(
     label: WorkBarLabel?,
     tabKey: Any?,
-    sidebarHidden: Boolean,
-    onToggleSidebar: () -> Unit,
+    leading: WorkBarLeading,
     onPickHost: ((Host) -> Unit)?,
     actions: @Composable RowScope.() -> Unit,
 ) {
@@ -72,14 +88,11 @@ fun WorkBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // Collapses the hosts sidebar and brings it back; the chevron points the way the panel
-            // will travel. This is the terminal's only sidebar handle — there is no reopen strip at
-            // the work area's edge any more.
             IconBtn(
-                if (sidebarHidden) "chevron_right" else "chevron_left",
-                onClick = onToggleSidebar,
+                leading.icon,
+                onClick = leading.onClick,
                 box = 26,
-                tooltip = stringResource(Res.string.term_tip_sidebar),
+                tooltip = stringResource(leading.tooltip),
             )
             WorkBarTitle(label, tabKey, onPickHost, Modifier.weight(1f))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp), content = actions)

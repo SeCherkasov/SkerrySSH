@@ -105,7 +105,6 @@
     <string name="shell_tip_more_actions">更多操作</string>
     <string name="shell_tip_sync_panes">窗格间输入同步</string>
     <string name="shell_tip_files">文件 (SFTP)</string>
-    <string name="shell_tip_ports">端口转发</string>
     <string name="shell_tip_snippets">代码片段</string>
     <string name="shell_tip_record">录制会话</string>
     <string name="shell_tip_record_stop">停止录制</string>

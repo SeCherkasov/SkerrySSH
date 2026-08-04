@@ -4,17 +4,16 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.FileBrowserException
 import app.skerry.shared.files.FileBrowserFailure
 import app.skerry.shared.files.FileContentBrowser
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.sftp.SftpClient
-import app.skerry.shared.sftp.SftpEntryType
 import app.skerry.ui.sftp.DownloadTarget
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sftp.UploadSource
+import app.skerry.ui.sync.nowMillis
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -101,9 +100,19 @@ class TransferCoordinator(
     val remote: FilePaneController,
     private val remoteBrowser: FileContentBrowser,
     private val scope: CoroutineScope,
+    // Wall clock behind the entries' elapsed time (hence the speed); injected so tests pin it.
+    private val now: () -> Long = ::nowMillis,
 ) {
-    var transfer: TransferState by mutableStateOf(TransferState.Idle)
-        private set
+    private val transfers = TransferQueue(now)
+
+    /** The transfer queue, oldest first: what is moving now plus the last few finished entries. */
+    val queue: List<TransferEntry> get() = transfers.list
+
+    /**
+     * What a single-line view (the mobile Files card) shows: the state of the latest operation.
+     * Derived from [queue], so the strip and the card can never disagree.
+     */
+    val transfer: TransferState get() = transfers.latest
 
     /**
      * Overwrite conflict awaiting confirmation: the destination directory already has entries
@@ -189,7 +198,7 @@ class TransferCoordinator(
                     val failed = deleteSources(items) { localBrowser.delete(it) }
                     remote.refresh()
                     local.refresh()
-                    if (failed == null) local.clearSelection() else transfer = failed
+                    if (failed == null) local.clearSelection() else transfers.fail(failed.name, FileTransferFailure.DeleteSource)
                 }
             }
         } else {
@@ -208,7 +217,7 @@ class TransferCoordinator(
                     val failed = deleteSources(items) { remoteBrowser.delete(it.copy(path = safeRemoteChild(it.name, remoteDir))) }
                     local.refresh()
                     remote.refresh()
-                    if (failed == null) remote.clearSelection() else transfer = failed
+                    if (failed == null) remote.clearSelection() else transfers.fail(failed.name, FileTransferFailure.DeleteSource)
                 }
             }
         }
@@ -216,16 +225,16 @@ class TransferCoordinator(
 
     /**
      * Deletes source [items] after a successful transfer. A deletion failure doesn't lose data
-     * (files already reached the destination) but leaves a partially-moved state; returns
-     * [TransferState.Failed] naming the specific failed item ([transfer] is already Idle by this
-     * point). Null means all sources were deleted. [CancellationException] propagates.
+     * (files already reached the destination) but leaves a partially-moved state; returns the item
+     * that could not be removed, so the caller can name it on the queue entry. Null means all
+     * sources were deleted. [CancellationException] propagates.
      */
-    private suspend fun deleteSources(items: List<FileItem>, delete: suspend (FileItem) -> Unit): TransferState.Failed? {
+    private suspend fun deleteSources(items: List<FileItem>, delete: suspend (FileItem) -> Unit): FileItem? {
         for (item in items) {
             try {
                 delete(item)
             } catch (_: FileBrowserException) {
-                return TransferState.Failed(item.name, FileTransferFailure.DeleteSource)
+                return item
             }
         }
         return null
@@ -244,12 +253,12 @@ class TransferCoordinator(
         if (item.type != FileItemType.File) return
         launchExclusive {
             try {
-                transfer = TransferState.Active(target.displayName, TransferDirection.Download, 1, 1, 0, item.size)
+                transfers.begin(TransferDirection.Download)
+                transfers.step(target.displayName, 1, 1, 0, item.size)
                 sftp.download(item.path, target.stagingPath) { transferred, total ->
-                    transfer = TransferState.Active(target.displayName, TransferDirection.Download, 1, 1, transferred, total)
+                    transfers.step(target.displayName, 1, 1, transferred, total)
                 }
                 target.finalize()
-                transfer = TransferState.Idle
             } catch (e: Exception) { // Includes CancellationException — staging is cleaned up either way.
                 runCatching { target.discard() }
                 throw e
@@ -278,12 +287,14 @@ class TransferCoordinator(
 
     private fun runUploadSource(source: UploadSource, destDir: String) {
         launchExclusive(onFinally = { runCatching { source.cleanup() } }) {
+            // Opened first, like every other operation: whatever the block does afterwards, the
+            // entry exists to carry the outcome.
+            transfers.begin(TransferDirection.Upload)
             val target = childPath(destDir, source.name)
-            transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, 0, 0)
+            transfers.step(source.name, 1, 1, 0, 0)
             sftp.upload(source.stagingPath, target) { transferred, total ->
-                transfer = TransferState.Active(source.name, TransferDirection.Upload, 1, 1, transferred, total)
+                transfers.step(source.name, 1, 1, transferred, total)
             }
-            transfer = TransferState.Idle
             remote.refresh()
         }
     }
@@ -311,9 +322,14 @@ class TransferCoordinator(
         ).also { it.open() }
     }
 
-    /** Closes the transfer bar (resets to [TransferState.Idle]); doesn't touch an active transfer. */
-    fun clearTransfer() {
-        if (transfer !is TransferState.Active) transfer = TransferState.Idle
+    /** Drops one finished queue entry ([id]); a transfer still running is left alone. */
+    fun dismissTransfer(id: Long) {
+        transfers.dismiss(id)
+    }
+
+    /** Drops every finished entry at once, leaving only what is still running. */
+    fun dismissCompleted() {
+        transfers.dismissCompleted()
     }
 
     /**
@@ -355,13 +371,18 @@ class TransferCoordinator(
         scope.launch {
             try {
                 block()
+                // A block can finish normally having already closed its own entry as failed
+                // (a move whose transfer went through but whose source delete didn't) — that
+                // verdict wins, so the entry is only marked done while it is still open.
+                if (transfers.hasOpenEntry) transfers.end(TransferStatus.Done)
             } catch (e: CancellationException) {
+                // A cancelled operation is over too: leaving the entry Active would show a
+                // progress bar that never moves again.
+                transfers.end(TransferStatus.Failed(FileTransferFailure.Transfer))
                 throw e
             } catch (e: Exception) {
-                // Blank name = no file was active yet; the UI fills in a localized placeholder.
-                val name = (transfer as? TransferState.Active)?.name.orEmpty()
                 val failure = (e as? FileBrowserException)?.failure?.toTransferFailure() ?: FileTransferFailure.Transfer
-                transfer = TransferState.Failed(name, failure)
+                transfers.end(TransferStatus.Failed(failure))
             } finally {
                 onFinally()
                 busy = false
@@ -376,16 +397,17 @@ class TransferCoordinator(
      * [launchExclusive] block.
      */
     private suspend fun runUpload(items: List<FileItem>, remoteDir: String) {
-        val plan = buildUploadPlan(items, remoteDir)
+        transfers.begin(TransferDirection.Upload)
+        val plan = buildUploadPlan(localBrowser, items, remoteDir)
         // Directories are created in pre-order: parent always before children.
         plan.dirs.forEach { ensureDir(remoteBrowser, it) }
         plan.files.forEachIndexed { index, task ->
-            transfer = TransferState.Active(task.name, TransferDirection.Upload, index + 1, plan.files.size, 0, task.size)
+            transfers.step(task.name, index + 1, plan.files.size, 0, task.size)
             sftp.upload(task.localPath, task.remotePath) { transferred, total ->
-                transfer = TransferState.Active(task.name, TransferDirection.Upload, index + 1, plan.files.size, transferred, total)
+                transfers.step(task.name, index + 1, plan.files.size, transferred, total)
             }
+            transfers.fileFinished(task.size)
         }
-        transfer = TransferState.Idle
     }
 
     /**
@@ -395,152 +417,16 @@ class TransferCoordinator(
      * [launchExclusive] block.
      */
     private suspend fun runDownload(items: List<FileItem>, localDir: String, remoteDir: String) {
-        val plan = buildDownloadPlan(items, localDir, remoteDir)
+        transfers.begin(TransferDirection.Download)
+        val plan = buildDownloadPlan(sftp, items, localDir, remoteDir)
         // Directories are created in pre-order: parent always before children.
         plan.dirs.forEach { ensureDir(localBrowser, it) }
         plan.files.forEachIndexed { index, task ->
-            transfer = TransferState.Active(task.name, TransferDirection.Download, index + 1, plan.files.size, 0, task.size)
+            transfers.step(task.name, index + 1, plan.files.size, 0, task.size)
             sftp.download(task.remotePath, task.localPath) { transferred, total ->
-                transfer = TransferState.Active(task.name, TransferDirection.Download, index + 1, plan.files.size, transferred, total)
+                transfers.step(task.name, index + 1, plan.files.size, transferred, total)
             }
-        }
-        transfer = TransferState.Idle
-    }
-
-    /** One download task: [name] for the progress bar, remote [remotePath] to local [localPath]. */
-    private data class DownloadTask(val name: String, val remotePath: String, val localPath: String, val size: Long)
-
-    /** Recursive download plan: [dirs] are local directories in creation order, [files] are the files. */
-    private class DownloadPlan {
-        val dirs = mutableListOf<String>()
-        val files = mutableListOf<DownloadTask>()
-    }
-
-    /**
-     * Builds the download plan for top-level [items] from remote [remoteDir] into local
-     * [localDir]. The top-level remote path is rebuilt ourselves ([childPath] from [remoteDir] +
-     * name), not trusted from the listing's `item.path` — same as for children in [walkDownload].
-     */
-    private suspend fun buildDownloadPlan(items: List<FileItem>, localDir: String, remoteDir: String): DownloadPlan {
-        val plan = DownloadPlan()
-        items.forEach { walkDownload(it.name, childPath(remoteDir, it.name), it.type, it.size, localDir, plan) }
-        return plan
-    }
-
-    /**
-     * Walks a remote tree entry, filling [plan]. A file becomes a download task; a directory adds
-     * a local subdirectory and recurses; symlinks/other are skipped.
-     *
-     * Path-traversal guard against an untrusted server: [name] must be a plain name (no `/`/`\`
-     * separators, not `.`/`..`, not empty). Child remote paths are rebuilt from the parent + a
-     * validated name ([childPath]), never trusted from the listing's `child.path` — otherwise the
-     * server could redirect the walk (and writes) outside the target tree.
-     */
-    private suspend fun walkDownload(
-        name: String,
-        remotePath: String,
-        type: FileItemType,
-        size: Long,
-        localDir: String,
-        plan: DownloadPlan,
-    ) {
-        if (isUnsafeListingName(name)) {
-            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
-        }
-        val localPath = childPath(localDir, name)
-        when (type) {
-            FileItemType.File -> plan.files += DownloadTask(name, remotePath, localPath, size)
-            FileItemType.Directory -> {
-                plan.dirs += localPath
-                sftp.list(remotePath).forEach { child ->
-                    walkDownload(child.name, childPath(remotePath, child.name), child.type.toItemType(), child.size, localPath, plan)
-                }
-            }
-            FileItemType.Symlink, FileItemType.Other -> Unit
+            transfers.fileFinished(task.size)
         }
     }
-
-    /**
-     * Creates directory [path] in [browser] (local or remote) if missing. `mkdir` without `-p`
-     * throws on an already-existing directory, which is normal on a repeat transfer: a listing
-     * check confirms the directory exists before the error is ignored; otherwise (no permission/
-     * it's a file) the original mkdir error is rethrown.
-     */
-    private suspend fun ensureDir(browser: FileBrowser, path: String) {
-        try {
-            browser.mkdir(path)
-        } catch (e: FileBrowserException) {
-            try {
-                browser.list(path)
-            } catch (_: FileBrowserException) {
-                throw e
-            }
-        }
-    }
-
-    /** One upload task: [name] for the progress bar, local [localPath] to remote [remotePath]. */
-    private data class UploadTask(val name: String, val localPath: String, val remotePath: String, val size: Long)
-
-    /** Recursive upload plan: [dirs] are remote directories in creation order, [files] are the files. */
-    private class UploadPlan {
-        val dirs = mutableListOf<String>()
-        val files = mutableListOf<UploadTask>()
-    }
-
-    /** Builds the upload plan for top-level [items] into remote directory [remoteDir]. */
-    private suspend fun buildUploadPlan(items: List<FileItem>, remoteDir: String): UploadPlan {
-        val plan = UploadPlan()
-        items.forEach { walkUpload(it.name, it.path, it.type, it.size, remoteDir, plan) }
-        return plan
-    }
-
-    /**
-     * Walks a local tree entry, filling [plan] (mirrors [walkDownload]). A file becomes an upload
-     * task; a directory adds a remote subdirectory and recurses ([localBrowser] lists the local
-     * FS); symlinks/other are skipped. Remote paths are rebuilt from [remoteDir] + a validated
-     * name; local paths come from the trusted local listing.
-     */
-    private suspend fun walkUpload(
-        name: String,
-        localPath: String,
-        type: FileItemType,
-        size: Long,
-        remoteDir: String,
-        plan: UploadPlan,
-    ) {
-        if (isUnsafeListingName(name)) {
-            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
-        }
-        val remotePath = childPath(remoteDir, name)
-        when (type) {
-            FileItemType.File -> plan.files += UploadTask(name, localPath, remotePath, size)
-            FileItemType.Directory -> {
-                plan.dirs += remotePath
-                localBrowser.list(localPath).forEach { child ->
-                    walkUpload(child.name, child.path, child.type, child.size, remotePath, plan)
-                }
-            }
-            FileItemType.Symlink, FileItemType.Other -> Unit
-        }
-    }
-
-    /**
-     * Safe remote path of [name] under [remoteDir] for delete operations: validates that [name]
-     * is a plain name, then rebuilds the path from [remoteDir] (a pane directory snapshot),
-     * never trusting server-controlled `item.path`.
-     */
-    private fun safeRemoteChild(name: String, remoteDir: String): String {
-        if (isUnsafeListingName(name)) {
-            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
-        }
-        return childPath(remoteDir, name)
-    }
-}
-
-/** Maps an SFTP entry type to the neutral [FileItemType] (for the download tree walk). */
-private fun SftpEntryType.toItemType(): FileItemType = when (this) {
-    SftpEntryType.File -> FileItemType.File
-    SftpEntryType.Directory -> FileItemType.Directory
-    SftpEntryType.Symlink -> FileItemType.Symlink
-    SftpEntryType.Other -> FileItemType.Other
 }
