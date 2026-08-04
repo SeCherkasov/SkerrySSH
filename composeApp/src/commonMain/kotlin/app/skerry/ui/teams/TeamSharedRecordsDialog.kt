@@ -19,7 +19,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.LocalSharedSessions
-import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
@@ -27,7 +26,6 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_nothing_shared
 import app.skerry.ui.generated.resources.share_live_sessions
-import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.share.SharedSessionsList
 import app.skerry.ui.share.rememberJoinSharedSession
 import app.skerry.ui.theme.Skerry
@@ -53,7 +51,7 @@ internal fun TeamSharedRecordsDialog(
 ) {
     val mono = LocalFonts.current.mono
     TeamsDialogCard(onDismiss) {
-        Txt(title, color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp, modifier = Modifier.padding(bottom = 12.dp))
+        DialogTitleRow(title, onDismiss)
         if (items.isEmpty()) {
             Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.dim, size = 12.5.sp)
         } else {
@@ -83,13 +81,14 @@ internal fun TeamSharedRecordsDialog(
                 }
             }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (shareLabel != null) GhostButton(shareLabel, onClick = onShare, icon = "add")
-            CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
+        if (shareLabel != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GhostButton(shareLabel, onClick = onShare, icon = "add")
+            }
         }
     }
 }
@@ -101,17 +100,30 @@ internal fun TeamSharedRecordsDialog(
 @Composable
 internal fun TeamLiveSessionsDialog(teamId: String, onDismiss: () -> Unit) {
     TeamsDialogCard(onDismiss) {
-        Txt(
-            stringResource(Res.string.share_live_sessions),
-            color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
-            modifier = Modifier.padding(bottom = 12.dp),
-        )
+        DialogTitleRow(stringResource(Res.string.share_live_sessions), onDismiss)
         SharedSessionsList(teamId, LocalSharedSessions.current, onJoin = rememberJoinSharedSession())
-        Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
-        ) {
-            CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
+    }
+}
+
+/**
+ * Title of a list dialog, with the way out on the same line. These dialogs show what is already
+ * shared rather than ask for a decision, so a bottom "Cancel" would offer to abandon something the
+ * user never started; closing belongs in the corner.
+ */
+@Composable
+private fun DialogTitleRow(title: String, onDismiss: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Txt(
+            title,
+            color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
+            modifier = Modifier.weight(1f),
+        )
+        Box(Modifier.clip(CircleShape).clickable(onClick = onDismiss).padding(4.dp)) {
+            Sym("close", size = 16.sp, color = Skerry.colors.dim)
         }
     }
 }
