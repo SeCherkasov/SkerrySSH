@@ -27,7 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.runbook.RunbookParallelism
 import app.skerry.shared.runbook.RunbookTransferDirection
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.GhostButton
@@ -50,8 +49,6 @@ import app.skerry.ui.generated.resources.runbook_ph_name
 import app.skerry.ui.generated.resources.runbook_ph_remote
 import app.skerry.ui.generated.resources.runbook_ph_tags
 import app.skerry.ui.generated.resources.runbook_policy
-import app.skerry.ui.generated.resources.runbook_policy_parallel_all
-import app.skerry.ui.generated.resources.runbook_policy_parallel_one
 import app.skerry.ui.generated.resources.runbook_policy_stop
 import app.skerry.ui.generated.resources.runbook_policy_watchdog
 import app.skerry.ui.generated.resources.runbook_policy_watchdog_off
@@ -156,22 +153,6 @@ private fun PolicyFields(form: RunbookFormState) {
                     active = form.watchdogMinutes == minutes,
                     onClick = { form.watchdogMinutes = minutes },
                 )
-            }
-        }
-    }
-    Box(Modifier.padding(top = 12.dp)) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            RunbookParallelism.entries.forEach { mode ->
-                key(mode) {
-                    Chip(
-                        when (mode) {
-                            RunbookParallelism.ONE_HOST_AT_A_TIME -> stringResource(Res.string.runbook_policy_parallel_one)
-                            RunbookParallelism.ALL_HOSTS_AT_ONCE -> stringResource(Res.string.runbook_policy_parallel_all)
-                        },
-                        active = form.parallelism == mode,
-                        onClick = { form.parallelism = mode },
-                    )
-                }
             }
         }
     }

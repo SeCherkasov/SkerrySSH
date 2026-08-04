@@ -39,7 +39,6 @@
     <string name="runbook_panel_running">Выполняется</string>
     <string name="runbook_panel_stalled">Ни вывода, ни статуса — оболочка может ждать ввода. Посмотрите в терминал.</string>
     <string name="runbook_panel_waiting">Ждёт вас</string>
-    <string name="runbook_panel_waiting_host">Ждёт очереди</string>
     <string name="runbook_panel_done">Завершён</string>
     <string name="runbook_panel_done_with_failures">Завершён с ошибками</string>
     <string name="runbook_panel_failed">Остановлен из-за ошибки</string>
@@ -88,16 +87,12 @@
     <string name="runbook_policy_watchdog">Сторож</string>
     <string name="runbook_policy_watchdog_value">%1$d мин</string>
     <string name="runbook_policy_watchdog_off">Выкл.</string>
-    <string name="runbook_policy_parallel_one">По одному хосту</string>
-    <string name="runbook_policy_parallel_all">Все хосты сразу</string>
 
     <!-- Run screen -->
     <string name="runbook_run_kind">сценарий</string>
     <string name="runbook_run_step_of">шаг %1$d из %2$d</string>
     <string name="runbook_run_output">Вывод</string>
     <string name="runbook_run_no_output">Пока ничего не выведено</string>
-    <string name="runbook_run_hosts">Хосты в прогоне</string>
-    <string name="runbook_run_parallelism">Параллелизм</string>
     <string name="runbook_run_back">Назад в терминал</string>
     <string name="runbook_run_open">Открыть прогон</string>
     <string name="runbook_status_waiting">ожидает</string>
@@ -116,7 +111,6 @@
     <string name="runbook_targets_none">Выберите хотя бы один хост.</string>
     <string name="runbook_connecting">Подключение: %1$s</string>
     <string name="runbook_unreachable">Не отвечают: %1$s</string>
-    <string name="runbook_run_rest">Запустить на остальных</string>
 
     <!-- Run history -->
     <string name="runbook_history">Прошлые прогоны</string>

@@ -18,7 +18,7 @@ class VaultRunbookRunStoreTest {
         startedAt = startedAt,
         durationMillis = 72_000,
         outcome = RunbookRunOutcome.DONE,
-        hosts = listOf(RunbookHostOutcome(label = "web-01", stepsDone = 7, stepsTotal = 7)),
+        host = RunbookHostOutcome(label = "web-01", stepsDone = 7, stepsTotal = 7),
     )
 
     @Test
@@ -90,12 +90,12 @@ class VaultRunbookRunStoreTest {
         store.record(
             run("r1").copy(
                 outcome = RunbookRunOutcome.FAILED,
-                hosts = listOf(RunbookHostOutcome(label = "web-01", stepsDone = 5, stepsTotal = 7, failedStep = 6)),
+                host = RunbookHostOutcome(label = "web-01", stepsDone = 5, stepsTotal = 7, failedStep = 6),
             ),
         )
 
         val record = store.forRunbook("rb").single()
         assertEquals(RunbookRunOutcome.FAILED, record.outcome)
-        assertEquals(6, record.hosts.single().failedStep)
+        assertEquals(6, record.host.failedStep)
     }
 }

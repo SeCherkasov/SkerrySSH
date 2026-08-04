@@ -39,7 +39,6 @@
     <string name="runbook_panel_running">Running</string>
     <string name="runbook_panel_stalled">No output and no status yet — the shell may be waiting for input. Check the terminal.</string>
     <string name="runbook_panel_waiting">Waiting for you</string>
-    <string name="runbook_panel_waiting_host">Waiting for its turn</string>
     <string name="runbook_panel_done">Finished</string>
     <string name="runbook_panel_done_with_failures">Finished with failures</string>
     <string name="runbook_panel_failed">Stopped on a failure</string>
@@ -84,16 +83,12 @@
     <string name="runbook_policy_watchdog">Watchdog</string>
     <string name="runbook_policy_watchdog_value">%1$d min</string>
     <string name="runbook_policy_watchdog_off">Off</string>
-    <string name="runbook_policy_parallel_one">One host at a time</string>
-    <string name="runbook_policy_parallel_all">All hosts at once</string>
 
     <!-- Run screen -->
     <string name="runbook_run_kind">runbook</string>
     <string name="runbook_run_step_of">step %1$d of %2$d</string>
     <string name="runbook_run_output">Output</string>
     <string name="runbook_run_no_output">Nothing printed yet</string>
-    <string name="runbook_run_hosts">Hosts in this run</string>
-    <string name="runbook_run_parallelism">Parallelism</string>
     <string name="runbook_run_back">Back to the terminal</string>
     <string name="runbook_run_open">Open the run</string>
     <string name="runbook_status_waiting">waiting</string>
@@ -112,7 +107,6 @@
     <string name="runbook_targets_none">Pick at least one host.</string>
     <string name="runbook_connecting">Connecting: %1$s</string>
     <string name="runbook_unreachable">No answer: %1$s</string>
-    <string name="runbook_run_rest">Run on the rest</string>
 
     <!-- Run history -->
     <string name="runbook_history">Previous runs</string>

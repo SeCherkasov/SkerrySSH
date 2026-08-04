@@ -4,7 +4,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.skerry.shared.runbook.RunbookParallelism
 import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.runbook.RunbookTransferDirection
@@ -94,7 +93,6 @@ class RunbookFormState private constructor(private val editingId: String?) {
     /** Run policy — the chips above the step list ([RunbookPolicy]). */
     var stopOnFirstFailure: Boolean by mutableStateOf(RunbookPolicy().stopOnFirstFailure)
     var watchdogMinutes: Int by mutableStateOf(RunbookPolicy().watchdogMinutes)
-    var parallelism: RunbookParallelism by mutableStateOf(RunbookPolicy().parallelism)
 
     /** A runbook needs a name and something to run; empty rows are dropped on save. */
     val canSave: Boolean get() = label.isNotBlank() && steps.any { it.filled }
@@ -140,11 +138,7 @@ class RunbookFormState private constructor(private val editingId: String?) {
         description = description.trim(),
         steps = steps.map { it.toStep() },
         tags = (tags + parseSnippetTags(tagDraft)).distinct(),
-        policy = RunbookPolicy(
-            stopOnFirstFailure = stopOnFirstFailure,
-            watchdogMinutes = watchdogMinutes,
-            parallelism = parallelism,
-        ),
+        policy = RunbookPolicy(stopOnFirstFailure = stopOnFirstFailure, watchdogMinutes = watchdogMinutes),
     )
 
     companion object {
@@ -157,7 +151,6 @@ class RunbookFormState private constructor(private val editingId: String?) {
                 tags = runbook.tags
                 stopOnFirstFailure = runbook.policy.stopOnFirstFailure
                 watchdogMinutes = runbook.policy.watchdogMinutes
-                parallelism = runbook.policy.parallelism
                 if (runbook.steps.isNotEmpty()) steps = runbook.steps.map { it.toDraft() }
             }
     }

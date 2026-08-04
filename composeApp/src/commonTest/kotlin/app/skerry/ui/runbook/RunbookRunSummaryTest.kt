@@ -78,8 +78,8 @@ class RunbookRunSummaryTest {
         }
     }
 
-    private fun RunbookRunner.startNow(runbook: Runbook, vararg hosts: FakeHost): Boolean =
-        requestStart(runbook, hosts.map { it.target() }) && confirmStart { "" }
+    private fun RunbookRunner.startNow(runbook: Runbook, host: FakeHost): Boolean =
+        requestStart(runbook, host.target()) && confirmStart { "" }
 
     @Test
     fun a_clean_run_is_logged_as_done() = runnerTest { r, host, logged ->
@@ -93,8 +93,8 @@ class RunbookRunSummaryTest {
         val record = logged.single()
         assertEquals("rb", record.runbookId)
         assertEquals(RunbookRunOutcome.DONE, record.outcome)
-        assertEquals(listOf(2 to 2), record.hosts.map { it.stepsDone to it.stepsTotal })
-        assertEquals("web-01", record.hosts.single().label)
+        assertEquals(2 to 2, record.host.stepsDone to record.host.stepsTotal)
+        assertEquals("web-01", record.host.label)
         assertTrue(record.durationMillis >= 5_000, "took ${record.durationMillis} ms")
     }
 
@@ -109,7 +109,7 @@ class RunbookRunSummaryTest {
         val record = logged.single()
         assertEquals(RunbookRunOutcome.FAILED, record.outcome)
         // 1-based, as the run screen numbers steps.
-        assertEquals(2, record.hosts.single().failedStep)
+        assertEquals(2, record.host.failedStep)
     }
 
     @Test

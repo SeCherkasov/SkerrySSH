@@ -40,28 +40,12 @@ data class Runbook(
  * (an unterminated here-doc, a command still waiting on stdin, a shell without `$?`). It never ends
  * a step — `sleep 3600` and a silent migration look identical from outside — it only says so.
  * `0` turns the warning off.
- *
- * [parallelism] applies when the run has more than one host.
  */
 @Serializable
 data class RunbookPolicy(
     val stopOnFirstFailure: Boolean = true,
     val watchdogMinutes: Int = 2,
-    val parallelism: RunbookParallelism = RunbookParallelism.ONE_HOST_AT_A_TIME,
 )
-
-/** How a multi-host run is spread across its hosts. */
-enum class RunbookParallelism {
-    /**
-     * Hosts are run through the whole procedure one after another. The default: a rolling deploy is
-     * the reason to have more than one host on a run at all, and taking every node out of the
-     * balancer at once is exactly what it is trying to avoid.
-     */
-    ONE_HOST_AT_A_TIME,
-
-    /** Every host runs the same step at the same time — for checks and read-only sweeps. */
-    ALL_HOSTS_AT_ONCE,
-}
 
 /** Which way a [RunbookStep.Transfer] moves its file. */
 enum class RunbookTransferDirection { UPLOAD, DOWNLOAD }

@@ -17,7 +17,7 @@ class RunbookTarget(
     val readOutput: () -> String,
     /** How the host names itself in the run — the pane's title. */
     val label: String = sessionId,
-    /** Whether the session is still open; a dropped session ends this host's part of the run. */
+    /** Whether the session is still open; a dropped session ends the run. */
     val isLive: () -> Boolean = { true },
     /**
      * Opens an SFTP channel on the same connection, for [RunbookStep.Transfer] steps. `null` where
@@ -59,12 +59,8 @@ enum class RunbookStepStatus {
     STOPPED,
 }
 
-/**
- * Where a run — or one host's part of it — stands. [WAITING] only happens on a host: with
- * [app.skerry.shared.runbook.RunbookParallelism.ONE_HOST_AT_A_TIME] the hosts after the current one
- * have not been touched yet.
- */
-enum class RunbookPhase { WAITING, AWAITING_CONFIRM, RUNNING, DONE, FAILED, STOPPED }
+/** Where a run stands. */
+enum class RunbookPhase { AWAITING_CONFIRM, RUNNING, DONE, FAILED, STOPPED }
 
 /** One step's live state on one host. */
 @Stable
@@ -124,30 +120,27 @@ class RunbookStepState internal constructor(val index: Int, val step: RunbookSte
 }
 
 /**
- * One host's part of a run: its own copy of the step list, its own place in the procedure. Hosts are
- * separate because they genuinely diverge — with
- * [app.skerry.shared.runbook.RunbookParallelism.ALL_HOSTS_AT_ONCE] a fast host is three steps ahead
- * of a slow one, and a failure on one may or may not end the others (see
- * [app.skerry.shared.runbook.RunbookPolicy.stopOnFirstFailure]).
+ * A run inside one session: its copy of the step list, where it stands, and which tab it belongs to.
+ * Held apart from [RunbookRunner] so the screens can read one live object instead of six fields.
  */
 @Stable
-class RunbookHostRun internal constructor(internal val target: RunbookTarget, steps: List<RunbookStep>) {
+class RunbookSessionRun internal constructor(internal val target: RunbookTarget, steps: List<RunbookStep>) {
 
     val sessionId: String get() = target.sessionId
 
-    /** How the host names itself in the run's host list. */
+    /** How the session names itself — the pane's title, shown in the bar and in the log. */
     val label: String get() = target.label
 
     val steps: List<RunbookStepState> = steps.mapIndexed { index, step -> RunbookStepState(index, step) }
 
-    var phase: RunbookPhase by mutableStateOf(RunbookPhase.WAITING)
+    var phase: RunbookPhase by mutableStateOf(RunbookPhase.RUNNING)
         internal set
 
-    /** Step this host is on (sent or awaiting confirmation); -1 before the first one. */
+    /** Step the run is on (sent or awaiting confirmation); -1 before the first one. */
     var currentIndex: Int by mutableStateOf(-1)
         internal set
 
-    /** Whether any step on this host failed, including ones the runbook tolerates. */
+    /** Whether any step failed, including ones the runbook tolerates. */
     var hadFailures: Boolean by mutableStateOf(false)
         internal set
 

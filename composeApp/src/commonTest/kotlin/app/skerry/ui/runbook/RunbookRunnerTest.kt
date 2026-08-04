@@ -111,8 +111,8 @@ class RunbookRunnerTest {
         }
     }
 
-    /** The single host of these runs — multi-host behaviour has its own test class. */
-    private val RunbookRunner.only: RunbookHostRun get() = hosts.single()
+    /** The run in hand — every run here has exactly one session. */
+    private val RunbookRunner.only: RunbookSessionRun get() = run!!
 
     /** Prepare + confirm in one call: the dialog step has its own coverage in the UI layer. */
     private fun RunbookRunner.startNow(
@@ -405,7 +405,7 @@ class RunbookRunnerTest {
         r.close()
         assertNull(r.phase)
         assertNull(r.runbook)
-        assertTrue(r.hosts.isEmpty())
+        assertNull(r.run)
     }
 
     @Test

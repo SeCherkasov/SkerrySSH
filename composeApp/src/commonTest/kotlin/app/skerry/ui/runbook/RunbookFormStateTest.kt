@@ -1,7 +1,6 @@
 package app.skerry.ui.runbook
 
 import app.skerry.shared.runbook.Runbook
-import app.skerry.shared.runbook.RunbookParallelism
 import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.runbook.RunbookTransferDirection
@@ -159,22 +158,17 @@ class RunbookFormStateTest {
                 id = "rb",
                 label = "Deploy",
                 steps = listOf(RunbookStep.Command(id = "s1", command = "uptime")),
-                policy = RunbookPolicy(
-                    stopOnFirstFailure = false,
-                    watchdogMinutes = 5,
-                    parallelism = RunbookParallelism.ALL_HOSTS_AT_ONCE,
-                ),
+                policy = RunbookPolicy(stopOnFirstFailure = false, watchdogMinutes = 5),
             ),
         )
 
         val form = RunbookFormState.fromEntry(entry)
         assertFalse(form.stopOnFirstFailure)
         assertEquals(5, form.watchdogMinutes)
-        assertEquals(RunbookParallelism.ALL_HOSTS_AT_ONCE, form.parallelism)
 
         form.watchdogMinutes = 10
         assertEquals(10, form.toDraft().policy.watchdogMinutes)
-        assertEquals(RunbookParallelism.ALL_HOSTS_AT_ONCE, form.toDraft().policy.parallelism)
+        assertEquals(false, form.toDraft().policy.stopOnFirstFailure)
     }
 
     @Test

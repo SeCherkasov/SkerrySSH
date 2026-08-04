@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,9 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -25,7 +22,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.runbook.RunbookParallelism
 import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.design.Txt
@@ -42,13 +38,8 @@ import app.skerry.ui.generated.resources.runbook_panel_running
 import app.skerry.ui.generated.resources.runbook_panel_stopped
 import app.skerry.ui.generated.resources.runbook_panel_transfer_failed
 import app.skerry.ui.generated.resources.runbook_panel_waiting
-import app.skerry.ui.generated.resources.runbook_panel_waiting_host
-import app.skerry.ui.generated.resources.runbook_policy_parallel_all
-import app.skerry.ui.generated.resources.runbook_policy_parallel_one
-import app.skerry.ui.generated.resources.runbook_run_hosts
 import app.skerry.ui.generated.resources.runbook_run_no_output
 import app.skerry.ui.generated.resources.runbook_run_output
-import app.skerry.ui.generated.resources.runbook_run_parallelism
 import app.skerry.ui.generated.resources.runbook_status_confirm
 import app.skerry.ui.generated.resources.runbook_status_running
 import app.skerry.ui.generated.resources.runbook_status_skipped
@@ -71,14 +62,14 @@ private val OUTPUT_WIDTH = 420.dp
  * panel — the panel is the readable part, not the record.
  */
 @Composable
-internal fun RunbookOutputPanel(host: RunbookHostRun, mono: FontFamily) {
-    val step = host.steps.getOrNull(host.currentIndex) ?: host.steps.lastOrNull()
+internal fun RunbookOutputPanel(run: RunbookSessionRun, mono: FontFamily) {
+    val step = run.steps.getOrNull(run.currentIndex) ?: run.steps.lastOrNull()
     Column(
         Modifier.width(OUTPUT_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Txt(
-            labelUppercase(stringResource(Res.string.runbook_run_output)) + " · " + host.label.uppercase(),
+            labelUppercase(stringResource(Res.string.runbook_run_output)) + " · " + run.label.uppercase(),
             color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
         )
         Box(
@@ -117,50 +108,16 @@ private fun failureText(failure: RunbookStepFailure?): String = when (failure) {
     null -> ""
 }
 
-/** The cards under the step list: which hosts the run covers and how it is spread across them. */
+/** The card under the step list: what this runbook did the last few times it ran. */
 @Composable
-internal fun RunbookRunCards(
-    runner: RunbookRunner,
-    selected: RunbookHostRun,
-    mono: FontFamily,
-    onPickHost: (String) -> Unit,
-) {
+internal fun RunbookHistoryRow(runner: RunbookRunner, mono: FontFamily) {
     // Re-read when the run ends: a finished run writes its own row, and the card is right there.
     val history = LocalRunbookHistory.current
     val runbookId = runner.runbook?.id
     val records = remember(runbookId, runner.phase) {
         if (history == null || runbookId == null) emptyList() else history.forRunbook(runbookId)
     }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        Column(
-            Modifier.weight(1f).clip(RoundedCornerShape(11.dp)).background(Skerry.colors.card)
-                .border(1.dp, Skerry.colors.line, RoundedCornerShape(11.dp)).padding(14.dp),
-        ) {
-            Txt(
-                stringResource(Res.string.runbook_run_hosts), color = Skerry.colors.text, size = 12.5.sp,
-                weight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp),
-            )
-            runner.hosts.forEach { host ->
-                key(host.sessionId) {
-                    RunbookHostRow(host, host === selected, mono) { onPickHost(host.sessionId) }
-                }
-            }
-            Row(
-                Modifier.fillMaxWidth().padding(top = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Txt(stringResource(Res.string.runbook_run_parallelism), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.weight(1f))
-                Txt(
-                    when (runner.runbook?.policy?.parallelism) {
-                        RunbookParallelism.ALL_HOSTS_AT_ONCE -> stringResource(Res.string.runbook_policy_parallel_all)
-                        else -> stringResource(Res.string.runbook_policy_parallel_one)
-                    },
-                    color = Skerry.colors.text, size = 11.5.sp,
-                )
-            }
-        }
-        RunbookHistoryCard(records, mono, Modifier.weight(1f))
-    }
+    RunbookHistoryCard(records, mono, Modifier.fillMaxWidth())
 }
 
 /** Status text at the right-hand end of a step row: a duration once there is one, a state until then. */
@@ -195,7 +152,6 @@ private fun durationText(millis: Long): String = when (val duration = runbookDur
 
 @Composable
 internal fun runPhaseLabel(phase: RunbookPhase, hadFailures: Boolean): String = when (phase) {
-    RunbookPhase.WAITING -> stringResource(Res.string.runbook_panel_waiting_host)
     RunbookPhase.AWAITING_CONFIRM -> stringResource(Res.string.runbook_panel_waiting)
     RunbookPhase.RUNNING -> stringResource(Res.string.runbook_panel_running)
     RunbookPhase.DONE ->
@@ -207,7 +163,6 @@ internal fun runPhaseLabel(phase: RunbookPhase, hadFailures: Boolean): String = 
 
 @Composable
 internal fun runPhaseColor(phase: RunbookPhase, hadFailures: Boolean): Color = when (phase) {
-    RunbookPhase.WAITING -> Skerry.colors.dim
     RunbookPhase.AWAITING_CONFIRM -> Skerry.colors.cyanBright
     RunbookPhase.RUNNING -> Skerry.colors.cyan
     RunbookPhase.DONE -> if (hadFailures) Skerry.colors.storm else Skerry.colors.moss
@@ -237,7 +192,7 @@ internal fun runStatusIcon(status: RunbookStepStatus): String? = when (status) {
 }
 
 internal fun phaseIcon(phase: RunbookPhase): String = when (phase) {
-    RunbookPhase.WAITING, RunbookPhase.AWAITING_CONFIRM -> "pause_circle"
+    RunbookPhase.AWAITING_CONFIRM -> "pause_circle"
     RunbookPhase.RUNNING -> "timer"
     RunbookPhase.DONE -> "check_circle"
     RunbookPhase.FAILED -> "error"

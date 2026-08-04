@@ -19,9 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.runbook.RunbookRunOutcome
 import app.skerry.shared.runbook.RunbookRunRecord
-import app.skerry.shared.runbook.failedStep
-import app.skerry.shared.runbook.stepsDone
-import app.skerry.shared.runbook.stepsTotal
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_dur_minutes
@@ -79,11 +76,11 @@ private fun HistoryRow(record: RunbookRunRecord, mono: FontFamily) {
 /** The right-hand half of a history row: what the run got through, or where it stopped. */
 @Composable
 private fun runOutcomeText(record: RunbookRunRecord): String {
-    val failed = record.failedStep
+    val failed = record.host.failedStep
     if (record.outcome == RunbookRunOutcome.FAILED && failed != null) {
         return stringResource(Res.string.runbook_history_failed_at, failed)
     }
-    val progress = stringResource(Res.string.runbook_panel_progress, record.stepsDone, record.stepsTotal)
+    val progress = stringResource(Res.string.runbook_panel_progress, record.host.stepsDone, record.host.stepsTotal)
     return progress + " · " + historyDurationText(record.durationMillis)
 }
 

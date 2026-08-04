@@ -19,8 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Turning picked panes into run targets. The run walks the list in the order given — with one host
- * at a time that order is the rollout — and a pane that is no longer connected must not become a
+ * Turning a picked pane into a run target. A pane that is no longer connected must not become a
  * target that could only fail on its first step.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -49,17 +48,16 @@ class RunbookTargetsTest {
         open(hostId = hostId, title = hostId, subtitle = "u@h:22", target = target, auth = auth)
 
     @Test
-    fun `targets keep the order they were picked in`() = runTest {
+    fun `a target carries the pane it runs in and the name it goes by`() = runTest {
         val (sessions, scope) = sessions()
         sessions.openHost("web-01")
-        sessions.openHost("web-02")
         advanceUntilIdle()
-        val panes = sessions.tabs.map { it.focusedPane.id }
+        val pane = sessions.tabs.single().focusedPane.id
 
-        val targets = runbookTargets(sessions, listOf(panes[1], panes[0]))
+        val target = runbookTargets(sessions, listOf(pane)).single()
 
-        assertEquals(listOf(panes[1], panes[0]), targets.map { it.sessionId })
-        assertEquals(listOf("web-02", "web-01"), targets.map { it.label })
+        assertEquals(pane, target.sessionId)
+        assertEquals("web-01", target.label)
         scope.cancel()
     }
 

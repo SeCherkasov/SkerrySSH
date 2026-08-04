@@ -39,7 +39,6 @@
     <string name="runbook_panel_running">执行中</string>
     <string name="runbook_panel_stalled">既无输出也无状态——外壳可能在等待输入。请查看终端。</string>
     <string name="runbook_panel_waiting">等待确认</string>
-    <string name="runbook_panel_waiting_host">等待轮到本主机</string>
     <string name="runbook_panel_done">已完成</string>
     <string name="runbook_panel_done_with_failures">完成，但有失败</string>
     <string name="runbook_panel_failed">因失败而停止</string>
@@ -82,16 +81,12 @@
     <string name="runbook_policy_watchdog">看门狗</string>
     <string name="runbook_policy_watchdog_value">%1$d 分钟</string>
     <string name="runbook_policy_watchdog_off">关闭</string>
-    <string name="runbook_policy_parallel_one">每次一台主机</string>
-    <string name="runbook_policy_parallel_all">所有主机同时</string>
 
     <!-- Run screen -->
     <string name="runbook_run_kind">运行手册</string>
     <string name="runbook_run_step_of">第 %1$d / %2$d 步</string>
     <string name="runbook_run_output">输出</string>
     <string name="runbook_run_no_output">尚无输出</string>
-    <string name="runbook_run_hosts">本次运行的主机</string>
-    <string name="runbook_run_parallelism">并行方式</string>
     <string name="runbook_run_back">返回终端</string>
     <string name="runbook_run_open">打开运行</string>
     <string name="runbook_status_waiting">等待中</string>
@@ -110,7 +105,6 @@
     <string name="runbook_targets_none">请至少选择一台主机。</string>
     <string name="runbook_connecting">正在连接：%1$s</string>
     <string name="runbook_unreachable">无响应：%1$s</string>
-    <string name="runbook_run_rest">在其余主机上运行</string>
 
     <!-- Run history -->
     <string name="runbook_history">历史运行</string>

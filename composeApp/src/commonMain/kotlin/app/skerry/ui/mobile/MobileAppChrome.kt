@@ -264,11 +264,11 @@ internal fun MobileChrome(
                 // Not gated on the terminal route: a run paused on a confirmation would otherwise
                 // lose its only Run/Skip/Stop buttons the moment the user opened another screen,
                 // and nothing would say a procedure is half-finished.
-                val host = LocalSessions.current?.activeTerminal?.id?.let(runner::hostFor)
-                if (host != null) {
+                val run = LocalSessions.current?.activeTerminal?.id?.let(runner::runIn)
+                if (run != null) {
                     RunbookRunPanel(
                         runner,
-                        host,
+                        run,
                         modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp),
                     )
                 }

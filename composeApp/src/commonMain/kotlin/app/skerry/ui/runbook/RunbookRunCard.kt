@@ -25,7 +25,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.runbook.RunbookParallelism
 import app.skerry.shared.runbook.RunbookScript
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.snippet.captureSnippetRunEnvironment
@@ -50,8 +49,6 @@ import app.skerry.ui.generated.resources.runbook_delete
 import app.skerry.ui.generated.resources.runbook_edit
 import app.skerry.ui.generated.resources.runbook_history_last
 import app.skerry.ui.generated.resources.runbook_policy
-import app.skerry.ui.generated.resources.runbook_policy_parallel_all
-import app.skerry.ui.generated.resources.runbook_policy_parallel_one
 import app.skerry.ui.generated.resources.runbook_policy_stop
 import app.skerry.ui.generated.resources.runbook_policy_watchdog
 import app.skerry.ui.generated.resources.runbook_policy_watchdog_off
@@ -247,11 +244,5 @@ private fun PolicyChips(entry: RunbookEntry) {
     ) {
         if (policy.stopOnFirstFailure) Chip(stringResource(Res.string.runbook_policy_stop))
         Chip(watchdog)
-        Chip(
-            when (policy.parallelism) {
-                RunbookParallelism.ONE_HOST_AT_A_TIME -> stringResource(Res.string.runbook_policy_parallel_one)
-                RunbookParallelism.ALL_HOSTS_AT_ONCE -> stringResource(Res.string.runbook_policy_parallel_all)
-            },
-        )
     }
 }

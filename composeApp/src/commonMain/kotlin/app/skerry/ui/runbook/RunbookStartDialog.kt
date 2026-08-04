@@ -47,7 +47,6 @@ import app.skerry.ui.generated.resources.lib_snippet_vars_secret_note
 import app.skerry.ui.generated.resources.runbook_panel_shell_note
 import app.skerry.ui.generated.resources.runbook_connecting
 import app.skerry.ui.generated.resources.runbook_run
-import app.skerry.ui.generated.resources.runbook_run_rest
 import app.skerry.ui.generated.resources.runbook_unreachable
 import app.skerry.ui.generated.resources.runbook_run_title
 import app.skerry.ui.generated.resources.runbook_step_n
@@ -85,18 +84,18 @@ fun RunbookStartDialog(runner: RunbookRunner) {
         val catalog = hostManager?.hosts.orEmpty()
             .filter { it.section == HostSection.Terminal && it.id !in openHostIds }
             .map { RunbookLaunchTarget.CatalogHost(it.id, it.label) }
-        var picked by remember { mutableStateOf(request.targets.map { it.sessionId }.toSet()) }
+        var picked by remember { mutableStateOf<String?>(request.target.sessionId) }
         // Captured when Run is pressed, not read later: a clipboard that changes while a host is
         // still connecting must not rewrite the line that eventually runs (coding-guidelines §3).
         var captured by remember { mutableStateOf<Map<SnippetSegment.Variable, String>?>(null) }
 
-        // The launch watches the session list: a host comes up as a connected pane, and once every
-        // picked host has one the run starts on all of them at once.
+        // The launch watches the session list: a picked catalog host comes up as a connected pane,
+        // and the run starts the moment it does.
         LaunchedEffect(launch.state, sessions?.tabs?.map { tab -> tab.panes.map { it.id } }) {
             launch.refresh { hostId -> connectedPaneOf(sessions, hostId) }
-            val ready = (launch.state as? RunbookLaunchState.Ready)?.paneIds ?: return@LaunchedEffect
+            val paneId = (launch.state as? RunbookLaunchState.Ready)?.paneId ?: return@LaunchedEffect
             val values = captured ?: return@LaunchedEffect
-            startRun(runner, sessions, ready, values)
+            startRun(runner, sessions, paneId, values)
             launch.cancel()
         }
 
@@ -105,19 +104,12 @@ fun RunbookStartDialog(runner: RunbookRunner) {
             sessions = openPanes,
             catalog = catalog,
             picked = picked,
-            onToggle = { id -> picked = if (id in picked) picked - id else picked + id },
+            onPick = { id -> picked = id },
             launchState = launch.state,
             onConfirm = { values ->
+                val target = pickedLaunchTarget(openPanes, catalog, picked) ?: return@RunbookStartDialogContent
                 captured = values
-                launch.begin(pickedLaunchTargets(openPanes, catalog, picked)) { hostId ->
-                    hostManager?.find(hostId)?.let(connectHost)
-                }
-            },
-            onRunTheRest = {
-                val ready = (launch.state as? RunbookLaunchState.Unreachable)?.ready.orEmpty()
-                val values = captured
-                if (values != null) startRun(runner, sessions, ready, values)
-                launch.cancel()
+                launch.begin(target) { hostId -> hostManager?.find(hostId)?.let(connectHost) }
             },
             onDismiss = { launch.cancel(); runner.dismissStart() },
         )
@@ -125,19 +117,18 @@ fun RunbookStartDialog(runner: RunbookRunner) {
 }
 
 /**
- * Starts the run on [paneIds] and puts the run screen up on every tab it touches — including the
- * ones the user isn't looking at, so switching to a host mid-run lands on its progress rather than
- * on a terminal quietly being typed into.
+ * Starts the run in [paneId] and puts the run screen up on the tab that holds it — which may not be
+ * the active one when the host was just connected for this run.
  */
 private fun startRun(
     runner: RunbookRunner,
     sessions: SessionsController?,
-    paneIds: List<String>,
+    paneId: String,
     values: Map<SnippetSegment.Variable, String>,
 ) {
-    val targets = sessions?.let { runbookTargets(it, paneIds) }.orEmpty()
-    if (runner.confirmStart(targets) { variable -> values[variable].orEmpty() }) {
-        sessions?.setViewForPanes(runner.hosts.map { it.sessionId }, SessionView.Runbook)
+    val target = sessions?.let { runbookTargets(it, listOf(paneId)) }?.singleOrNull() ?: return
+    if (runner.confirmStart(target) { variable -> values[variable].orEmpty() }) {
+        sessions.setViewForPanes(listOf(paneId), SessionView.Runbook)
     }
 }
 
@@ -150,11 +141,11 @@ private fun paneHostId(sessions: SessionsController?, paneId: String): String? =
 private fun RunbookLaunchNote(state: RunbookLaunchState) {
     when (state) {
         is RunbookLaunchState.Connecting -> Txt(
-            stringResource(Res.string.runbook_connecting, state.pending.joinToString(", ")),
+            stringResource(Res.string.runbook_connecting, state.host),
             color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 12.dp),
         )
         is RunbookLaunchState.Unreachable -> Txt(
-            stringResource(Res.string.runbook_unreachable, state.unreachable.joinToString(", ")),
+            stringResource(Res.string.runbook_unreachable, state.host),
             color = Skerry.colors.sunset, size = 11.5.sp, modifier = Modifier.padding(top = 12.dp),
         )
         else -> Unit
@@ -166,11 +157,10 @@ private fun RunbookStartDialogContent(
     request: RunbookStartRequest,
     sessions: List<RunbookLaunchTarget.Session>,
     catalog: List<RunbookLaunchTarget.CatalogHost>,
-    picked: Set<String>,
-    onToggle: (String) -> Unit,
+    picked: String?,
+    onPick: (String) -> Unit,
     launchState: RunbookLaunchState,
     onConfirm: (Map<SnippetSegment.Variable, String>) -> Unit,
-    onRunTheRest: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val mono = LocalFonts.current.mono
@@ -178,7 +168,7 @@ private fun RunbookStartDialogContent(
     val values = rememberTemplateVariableValues(request, variables)
 
     val connecting = launchState is RunbookLaunchState.Connecting
-    val canRun = values.canRun && picked.isNotEmpty() && !connecting
+    val canRun = values.canRun && picked != null && !connecting
     val confirm = {
         // The values are read once, here, and handed over as a snapshot.
         if (canRun) onConfirm(variables.associateWith { values.value(it, masked = false) })
@@ -262,7 +252,7 @@ private fun RunbookStartDialogContent(
                         size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp),
                     )
                 }
-                RunbookTargetPicker(sessions, catalog, picked, onToggle)
+                RunbookTargetPicker(sessions, catalog, picked, onPick)
             }
             RunbookLaunchNote(launchState)
             Row(
@@ -271,11 +261,7 @@ private fun RunbookStartDialogContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                if (launchState is RunbookLaunchState.Unreachable && launchState.ready.isNotEmpty()) {
-                    PrimaryButton(stringResource(Res.string.runbook_run_rest), onClick = onRunTheRest)
-                } else {
-                    PrimaryButton(stringResource(Res.string.runbook_run), onClick = confirm, enabled = canRun)
-                }
+                PrimaryButton(stringResource(Res.string.runbook_run), onClick = confirm, enabled = canRun)
             }
         }
     }

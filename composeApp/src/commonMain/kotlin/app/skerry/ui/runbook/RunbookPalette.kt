@@ -81,7 +81,7 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
     if (manager == null || runner == null) return
     // While this tab is part of a run, the icon is the way back to the run screen rather than a
     // palette: a second runbook can't start anyway, and the run is what the icon now stands for.
-    val inRun = active?.id?.let(runner::hostFor)
+    val inRun = active?.id?.let(runner::runIn)
     if (inRun != null) {
         val sessions = LocalSessions.current
         IconBtn(

@@ -24,21 +24,19 @@ import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Where the run will happen: the sessions already open, and the hosts from the catalog that aren't.
- * Picking a catalog host means the run opens a session for it first — the same connect path as
- * clicking the host in the sidebar, password prompt and production guard included.
+ * Where the run will happen: one of the sessions already open, or a host from the catalog that
+ * isn't. Picking a catalog host means the run opens a session for it first — the same connect path
+ * as clicking the host in the sidebar, password prompt and production guard included.
  *
- * Order matters and is the order of the lists as drawn: with
- * [app.skerry.shared.runbook.RunbookParallelism.ONE_HOST_AT_A_TIME] the run walks the hosts in
- * exactly this sequence.
+ * One host per run, deliberately: see [RunbookRunner].
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun RunbookTargetPicker(
     sessions: List<RunbookLaunchTarget.Session>,
     catalog: List<RunbookLaunchTarget.CatalogHost>,
-    picked: Set<String>,
-    onToggle: (String) -> Unit,
+    picked: String?,
+    onPick: (String) -> Unit,
 ) {
     FieldLabel(labelUppercase(stringResource(Res.string.runbook_targets)), top = 14.dp, bottom = 7.dp)
     if (sessions.isEmpty() && catalog.isEmpty()) {
@@ -50,7 +48,7 @@ internal fun RunbookTargetPicker(
             stringResource(Res.string.runbook_targets_sessions), color = Skerry.colors.faint, size = 11.sp,
             modifier = Modifier.padding(bottom = 6.dp),
         )
-        TargetChips(sessions.map { it.paneId to it.label }, picked, onToggle)
+        TargetChips(sessions.map { it.paneId to it.label }, picked, onPick)
     }
     if (catalog.isNotEmpty()) {
         Column(Modifier.padding(top = 10.dp)) {
@@ -58,32 +56,32 @@ internal fun RunbookTargetPicker(
                 stringResource(Res.string.runbook_targets_catalog), color = Skerry.colors.faint, size = 11.sp,
                 modifier = Modifier.padding(bottom = 6.dp),
             )
-            TargetChips(catalog.map { it.hostId to it.label }, picked, onToggle)
+            TargetChips(catalog.map { it.hostId to it.label }, picked, onPick)
         }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TargetChips(items: List<Pair<String, String>>, picked: Set<String>, onToggle: (String) -> Unit) {
+private fun TargetChips(items: List<Pair<String, String>>, picked: String?, onPick: (String) -> Unit) {
     FlowRow(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         items.forEach { (id, label) ->
-            key(id) { Chip(label, active = id in picked, onClick = { onToggle(id) }) }
+            key(id) { Chip(label, active = id == picked, onClick = { onPick(id) }) }
         }
     }
 }
 
 /**
- * The targets [picked] stands for, in the order the picker draws them — sessions first, then catalog
- * hosts. An id that no longer resolves (a tab closed while the dialog was open) simply drops out.
+ * The target [picked] stands for, or `null` when it resolves to nothing — a tab closed while the
+ * dialog was open leaves its id behind in the pick.
  */
-internal fun pickedLaunchTargets(
+internal fun pickedLaunchTarget(
     sessions: List<RunbookLaunchTarget.Session>,
     catalog: List<RunbookLaunchTarget.CatalogHost>,
-    picked: Set<String>,
-): List<RunbookLaunchTarget> =
-    sessions.filter { it.paneId in picked } + catalog.filter { it.hostId in picked }
+    picked: String?,
+): RunbookLaunchTarget? =
+    sessions.firstOrNull { it.paneId == picked } ?: catalog.firstOrNull { it.hostId == picked }

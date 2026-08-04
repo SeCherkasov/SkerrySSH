@@ -42,7 +42,7 @@ class RunbookFormatTest {
 
         assertEquals(RunbookPolicy(), runbook.policy)
         assertTrue(runbook.policy.stopOnFirstFailure)
-        assertEquals(RunbookParallelism.ONE_HOST_AT_A_TIME, runbook.policy.parallelism)
+        assertEquals(2, runbook.policy.watchdogMinutes)
     }
 
     @Test
@@ -81,11 +81,7 @@ class RunbookFormatTest {
         val runbook = Runbook(
             id = "rb",
             label = "Deploy",
-            policy = RunbookPolicy(
-                stopOnFirstFailure = false,
-                watchdogMinutes = 5,
-                parallelism = RunbookParallelism.ALL_HOSTS_AT_ONCE,
-            ),
+            policy = RunbookPolicy(stopOnFirstFailure = false, watchdogMinutes = 5),
         )
 
         val decoded = json.decodeFromString(Runbook.serializer(), json.encodeToString(Runbook.serializer(), runbook))
