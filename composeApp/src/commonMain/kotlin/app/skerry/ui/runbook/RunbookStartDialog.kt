@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.stripUnsafeFormatChars
+import app.skerry.shared.snippet.SnippetSegment
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
@@ -55,13 +56,13 @@ import org.jetbrains.compose.resources.stringResource
  * mid-procedure can't rewrite step 5 (TOCTOU rule, coding-guidelines §3).
  */
 @Composable
-fun RunbookStartDialog(runner: RunbookRunner) {
+fun RunbookStartDialog(runner: RunbookRunner, onStarted: () -> Unit = {}) {
     val request = runner.pending ?: return
     // Keyed per request: a new run must not inherit the previous dialog's fields.
     key(request) {
         RunbookStartDialogContent(
             request = request,
-            onConfirm = { values -> runner.confirmStart(values) },
+            onConfirm = { values -> if (runner.confirmStart(values)) onStarted() },
             onDismiss = runner::dismissStart,
         )
     }
@@ -70,7 +71,7 @@ fun RunbookStartDialog(runner: RunbookRunner) {
 @Composable
 private fun RunbookStartDialogContent(
     request: RunbookStartRequest,
-    onConfirm: ((app.skerry.shared.snippet.SnippetSegment.Variable) -> String) -> Unit,
+    onConfirm: ((SnippetSegment.Variable) -> String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val mono = LocalFonts.current.mono
@@ -79,7 +80,8 @@ private fun RunbookStartDialogContent(
 
     val canRun = values.canRun
     val confirm = {
-        if (canRun) onConfirm { variable -> values.value(variable, masked = false) }
+        // The values are read once, here, and handed over as a snapshot.
+        if (canRun) onConfirm(runbookValueSnapshot(variables) { values.value(it, masked = false) })
     }
 
     ModalScrim(onDismiss = onDismiss) {
@@ -132,7 +134,7 @@ private fun RunbookStartDialogContent(
                                 if (step.continueOnError) Sym("skip_next", size = 13.sp, color = Skerry.colors.dim)
                             }
                             Txt(
-                                request.script.line(index) { values.value(it, masked = true) },
+                                request.script.resolve(index) { values.value(it, masked = true) }?.summaryLine().orEmpty(),
                                 color = Skerry.colors.textBright, size = 12.sp, font = mono, lineHeight = 17.sp,
                                 modifier = Modifier
                                     .padding(top = 4.dp)

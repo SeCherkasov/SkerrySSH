@@ -1,7 +1,6 @@
 <resources>
     <!-- Runbooks (RunbooksView, MobileRunbooksView, RunbookRunPanel) -->
     <string name="runbook_section">Сценарии</string>
-    <string name="runbook_library">СЦЕНАРИИ</string>
     <string name="runbook_new">Новый сценарий</string>
     <string name="runbook_untitled">Без названия</string>
     <string name="runbook_palette_placeholder">Запустить сценарий…</string>
@@ -50,4 +49,63 @@
     <string name="runbook_panel_exit_code">код %1$d</string>
     <string name="runbook_panel_progress">%1$d из %2$d</string>
     <string name="runbook_panel_shell_note">Шаги выполняются в шелле этой сессии; код возврата возвращается строкой-маркером.</string>
+    <string name="runbook_panel_transfer_failed">Передача не удалась: %1$s</string>
+    <string name="runbook_panel_no_sftp">У этой сессии нет SFTP-канала.</string>
+
+    <!-- Library screen -->
+    <string name="runbook_edit">Изменить</string>
+    <string name="runbook_cancel">Отмена</string>
+    <plurals name="runbook_count">
+        <item quantity="one">%1$d сценарий</item>
+        <item quantity="few">%1$d сценария</item>
+        <item quantity="many">%1$d сценариев</item>
+        <item quantity="other">%1$d сценария</item>
+    </plurals>
+    <plurals name="runbook_steps_total">
+        <item quantity="one">%1$d шаг</item>
+        <item quantity="few">%1$d шага</item>
+        <item quantity="many">%1$d шагов</item>
+        <item quantity="other">%1$d шага</item>
+    </plurals>
+
+    <!-- Step kinds -->
+    <string name="runbook_kind_command">Команда</string>
+    <string name="runbook_kind_transfer">Файл</string>
+    <string name="runbook_step_local">Локальный путь</string>
+    <string name="runbook_step_remote">Путь на хосте</string>
+    <string name="runbook_ph_local">build/app-0.2.1.tar.gz</string>
+    <string name="runbook_ph_remote">/var/www/app/releases</string>
+    <string name="runbook_direction_upload">Отправить</string>
+    <string name="runbook_direction_download">Забрать</string>
+    <string name="runbook_transfer_note">Передача идёт по SFTP-каналу той же сессии.</string>
+    <string name="runbook_vars_hint">${{name}} спросит значение перед запуском; ${{vault:запись}} и ${{clipboard}} подставятся сами.</string>
+
+    <!-- Run policy -->
+    <string name="runbook_policy">Политика прогона</string>
+    <string name="runbook_policy_stop">Стоп на первой ошибке</string>
+    <string name="runbook_policy_watchdog">Сторож</string>
+    <string name="runbook_policy_watchdog_value">%1$d мин</string>
+    <string name="runbook_policy_watchdog_off">Выкл.</string>
+
+    <!-- Run screen -->
+    <string name="runbook_run_kind">сценарий</string>
+    <string name="runbook_run_step_of">шаг %1$d из %2$d</string>
+    <string name="runbook_run_output">Вывод</string>
+    <string name="runbook_run_no_output">Пока ничего не выведено</string>
+    <string name="runbook_run_back">Назад в терминал</string>
+    <string name="runbook_run_open">Открыть прогон</string>
+    <string name="runbook_status_waiting">ожидает</string>
+    <string name="runbook_status_running">выполняется</string>
+    <string name="runbook_status_skipped">пропущен</string>
+    <string name="runbook_status_stopped">остановлен</string>
+    <string name="runbook_status_confirm">нужно подтверждение</string>
+    <string name="runbook_dur_seconds">%1$s с</string>
+    <string name="runbook_dur_minutes">%1$d мин %2$d с</string>
+    <string name="runbook_transfer_of">%1$s из %2$s</string>
+
+    <!-- Run history -->
+    <string name="runbook_history">Прошлые прогоны</string>
+    <string name="runbook_history_empty">Прогонов ещё не было</string>
+    <string name="runbook_history_failed_at">сбой на шаге %1$d</string>
+    <string name="runbook_history_last">последний прогон %1$s</string>
 </resources>

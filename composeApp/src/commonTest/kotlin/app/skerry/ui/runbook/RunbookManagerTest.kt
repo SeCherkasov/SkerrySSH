@@ -1,6 +1,7 @@
 package app.skerry.ui.runbook
 
 import app.skerry.shared.runbook.Runbook
+import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.runbook.RunbookStore
 import kotlin.test.Test
@@ -25,7 +26,7 @@ class RunbookManagerTest {
     private fun draft(label: String = "Deploy", vararg commands: String) = RunbookDraft(
         label = label,
         description = "",
-        steps = commands.mapIndexed { i, c -> RunbookStep(id = "s$i", command = c) },
+        steps = commands.mapIndexed { i, c -> RunbookStep.Command(id = "s$i", command = c) },
         tags = listOf("Ops"),
     )
 
@@ -37,7 +38,7 @@ class RunbookManagerTest {
 
         assertEquals("id-1", id)
         assertEquals(listOf("Deploy"), m.runbooks.map { it.runbook.label })
-        assertEquals(listOf("uptime"), store.items.getValue(id).steps.map { it.command })
+        assertEquals(listOf("uptime"), store.items.getValue(id).steps.map { it.summaryLine() })
     }
 
     @Test
@@ -61,7 +62,7 @@ class RunbookManagerTest {
     fun `steps without an id get one so reordering keeps them apart`() {
         val m = manager()
         val id = m.save(
-            RunbookDraft(label = "Deploy", steps = listOf(RunbookStep(id = "", command = "a"), RunbookStep(id = "", command = "b"))),
+            RunbookDraft(label = "Deploy", steps = listOf(RunbookStep.Command(id = "", command = "a"), RunbookStep.Command(id = "", command = "b"))),
         )
         val ids = m.find(id)!!.runbook.steps.map { it.id }
         assertEquals(2, ids.distinct().size, "step ids must be unique: $ids")
@@ -74,10 +75,40 @@ class RunbookManagerTest {
         val id = m.save(
             RunbookDraft(
                 label = "Deploy",
-                steps = listOf(RunbookStep(id = "a", command = "uptime"), RunbookStep(id = "b", command = "   ")),
+                steps = listOf(RunbookStep.Command(id = "a", command = "uptime"), RunbookStep.Command(id = "b", command = "   ")),
             ),
         )
-        assertEquals(listOf("uptime"), m.find(id)!!.runbook.steps.map { it.command })
+        assertEquals(listOf("uptime"), m.find(id)!!.runbook.steps.map { it.summaryLine() })
+    }
+
+    @Test
+    fun `a transfer step with no destination is dropped like a blank command`() {
+        val m = manager()
+        val id = m.save(
+            RunbookDraft(
+                label = "Deploy",
+                steps = listOf(
+                    RunbookStep.Transfer(id = "a", localPath = "app.tgz", remotePath = "/srv/app.tgz"),
+                    RunbookStep.Transfer(id = "b", localPath = "app.tgz", remotePath = "  "),
+                ),
+            ),
+        )
+
+        assertEquals(listOf("sftp: app.tgz → /srv/app.tgz"), m.find(id)!!.runbook.steps.map { it.summaryLine() })
+    }
+
+    @Test
+    fun `the run policy is saved with the runbook`() {
+        val store = MemoryStore()
+        val m = manager(store)
+        val id = m.save(
+            draft(commands = arrayOf("uptime")).copy(
+                policy = RunbookPolicy(stopOnFirstFailure = false, watchdogMinutes = 5),
+            ),
+        )
+
+        assertEquals(false, store.items.getValue(id).policy.stopOnFirstFailure)
+        assertEquals(5, store.items.getValue(id).policy.watchdogMinutes)
     }
 
     @Test
@@ -96,7 +127,7 @@ class RunbookManagerTest {
     fun `reload picks up what the store gained behind our back`() {
         val store = MemoryStore()
         val m = manager(store)
-        store.put(Runbook(id = "x", label = "Synced", steps = listOf(RunbookStep(id = "s", command = "uptime"))))
+        store.put(Runbook(id = "x", label = "Synced", steps = listOf(RunbookStep.Command(id = "s", command = "uptime"))))
 
         assertTrue(m.runbooks.isEmpty())
         m.reload()

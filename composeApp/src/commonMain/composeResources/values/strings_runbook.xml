@@ -1,7 +1,6 @@
 <resources>
     <!-- Runbooks (RunbooksView, MobileRunbooksView, RunbookRunPanel) -->
     <string name="runbook_section">Runbooks</string>
-    <string name="runbook_library">RUNBOOKS</string>
     <string name="runbook_new">New runbook</string>
     <string name="runbook_untitled">Untitled runbook</string>
     <string name="runbook_palette_placeholder">Run a runbook…</string>
@@ -50,4 +49,59 @@
     <string name="runbook_panel_exit_code">exit %1$d</string>
     <string name="runbook_panel_progress">%1$d of %2$d</string>
     <string name="runbook_panel_shell_note">Steps run in the shell of this session; the exit code comes back through a marker line.</string>
+    <string name="runbook_panel_transfer_failed">Transfer failed: %1$s</string>
+    <string name="runbook_panel_no_sftp">This session has no SFTP channel.</string>
+
+    <!-- Library screen -->
+    <string name="runbook_edit">Edit</string>
+    <string name="runbook_cancel">Cancel</string>
+    <plurals name="runbook_count">
+        <item quantity="one">%1$d runbook</item>
+        <item quantity="other">%1$d runbooks</item>
+    </plurals>
+    <plurals name="runbook_steps_total">
+        <item quantity="one">%1$d step</item>
+        <item quantity="other">%1$d steps</item>
+    </plurals>
+
+    <!-- Step kinds -->
+    <string name="runbook_kind_command">Command</string>
+    <string name="runbook_kind_transfer">File</string>
+    <string name="runbook_step_local">Local path</string>
+    <string name="runbook_step_remote">Remote path</string>
+    <string name="runbook_ph_local">build/app-0.2.1.tar.gz</string>
+    <string name="runbook_ph_remote">/var/www/app/releases</string>
+    <string name="runbook_direction_upload">Upload</string>
+    <string name="runbook_direction_download">Download</string>
+    <string name="runbook_transfer_note">Transfers use the SFTP channel of the same session.</string>
+    <string name="runbook_vars_hint">${{name}} asks for a value before the run; ${{vault:entry}} and ${{clipboard}} fill themselves in.</string>
+
+    <!-- Run policy -->
+    <string name="runbook_policy">Run policy</string>
+    <string name="runbook_policy_stop">Stop on first failure</string>
+    <string name="runbook_policy_watchdog">Watchdog</string>
+    <string name="runbook_policy_watchdog_value">%1$d min</string>
+    <string name="runbook_policy_watchdog_off">Off</string>
+
+    <!-- Run screen -->
+    <string name="runbook_run_kind">runbook</string>
+    <string name="runbook_run_step_of">step %1$d of %2$d</string>
+    <string name="runbook_run_output">Output</string>
+    <string name="runbook_run_no_output">Nothing printed yet</string>
+    <string name="runbook_run_back">Back to the terminal</string>
+    <string name="runbook_run_open">Open the run</string>
+    <string name="runbook_status_waiting">waiting</string>
+    <string name="runbook_status_running">running</string>
+    <string name="runbook_status_skipped">skipped</string>
+    <string name="runbook_status_stopped">stopped</string>
+    <string name="runbook_status_confirm">needs a go-ahead</string>
+    <string name="runbook_dur_seconds">%1$s s</string>
+    <string name="runbook_dur_minutes">%1$d m %2$d s</string>
+    <string name="runbook_transfer_of">%1$s of %2$s</string>
+
+    <!-- Run history -->
+    <string name="runbook_history">Previous runs</string>
+    <string name="runbook_history_empty">No runs yet</string>
+    <string name="runbook_history_failed_at">failed at step %1$d</string>
+    <string name="runbook_history_last">last run %1$s</string>
 </resources>

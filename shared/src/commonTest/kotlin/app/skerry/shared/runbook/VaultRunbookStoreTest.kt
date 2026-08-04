@@ -9,7 +9,7 @@ class VaultRunbookStoreTest {
     private fun runbook(id: String, label: String = id) = Runbook(
         id = id,
         label = label,
-        steps = listOf(RunbookStep(id = "$id-1", title = "Check", command = "uptime")),
+        steps = listOf(RunbookStep.Command(id = "$id-1", title = "Check", command = "uptime")),
         tags = listOf("ops"),
     )
 
@@ -18,7 +18,10 @@ class VaultRunbookStoreTest {
         val store = VaultRunbookStore(FakeVault())
         store.put(runbook("r1", "Deploy"))
         assertEquals(listOf("r1"), store.all().map { it.id })
-        assertEquals(listOf("uptime"), store.all().single().steps.map { it.command })
+        assertEquals(
+            listOf("uptime"),
+            store.all().single().steps.map { (it as RunbookStep.Command).command },
+        )
     }
 
     @Test

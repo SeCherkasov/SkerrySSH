@@ -64,6 +64,8 @@ import app.skerry.ui.app.LocalTrustedCas
 import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSftpPrefs
+import app.skerry.shared.runbook.VaultRunbookRunStore
+import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSnippets
@@ -166,6 +168,7 @@ fun DesktopDesignApp(
     // Runbook library + the one in-flight run. `null` on the mock path (no vault behind them).
     runbooks: RunbookManager? = null,
     runbookRunner: RunbookRunner? = null,
+    runbookHistory: VaultRunbookRunStore? = null,
     // Self-hosted sync coordinator. `null` — sync not connected on the platform / mock path: the Sync
     // settings section draws a static mock, the onboarding modal isn't shown.
     sync: SyncCoordinator? = null,
@@ -361,6 +364,7 @@ fun DesktopDesignApp(
         LocalSnippets provides snippets,
         LocalRunbooks provides runbooks,
         LocalRunbookRunner provides runbookRunner,
+        LocalRunbookHistory provides runbookHistory,
         LocalTerminalHistory provides termHistory,
         LocalFeatures provides features,
         LocalSftpPrefs provides sftpPrefs,

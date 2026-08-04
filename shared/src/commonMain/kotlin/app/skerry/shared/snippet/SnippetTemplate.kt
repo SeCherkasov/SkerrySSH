@@ -27,6 +27,14 @@ sealed interface SnippetSegment {
     ) : SnippetSegment
 }
 
+/**
+ * What makes two placeholders the same variable to a caller that asks for values once and reuses
+ * them: kind, name and format. [SnippetSegment.Variable.raw] is deliberately left out — `${'$'}{{svc}}`
+ * and `${'$'}{{svc:}}` parse to the same variable with different original text, and keying by the whole
+ * segment would ask for one and fail to find it for the other.
+ */
+fun SnippetSegment.Variable.identity(): String = kind.name + "/" + name + "/" + format
+
 /** Local wall-clock moment a snippet run resolves date/time/timestamp against. */
 data class SnippetMoment(
     val year: Int,

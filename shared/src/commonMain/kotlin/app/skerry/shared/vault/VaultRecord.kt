@@ -15,6 +15,12 @@ enum class RecordType {
     RUNBOOK,
 
     /**
+     * One past run of a runbook — when it ran, how long it took, how it ended
+     * (see [app.skerry.shared.runbook.RunbookRunRecord]). Capped per runbook by its store.
+     */
+    RUNBOOK_RUN,
+
+    /**
      * A certificate authority trusted to vouch for host keys — the `@cert-authority` entry
      * (see [app.skerry.shared.ssh.TrustedCa]).
      */

@@ -5,8 +5,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.runbook.Runbook
+import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.runbook.RunbookStore
+import app.skerry.shared.runbook.isRunnable
+import app.skerry.shared.runbook.withId
 import app.skerry.shared.tag.normalizeTags
 
 /**
@@ -19,6 +22,7 @@ data class RunbookDraft(
     val description: String = "",
     val steps: List<RunbookStep> = emptyList(),
     val tags: List<String> = emptyList(),
+    val policy: RunbookPolicy = RunbookPolicy(),
 )
 
 /** One row of the runbook list: the saved [runbook], updated via [RunbookManager.save]. */
@@ -57,21 +61,22 @@ class RunbookManager(
 
     /**
      * Create (if [RunbookDraft.id] == null) or update a runbook and write it to the store. Returns
-     * the assigned id. Steps with a blank command are dropped — an empty row is how the editor
+     * the assigned id. Steps that say nothing to do are dropped — an empty row is how the editor
      * starts a step, not something to run — and every surviving step is given an id if it lacks one,
      * so the editor can key rows through a reorder.
      */
     fun save(draft: RunbookDraft): String {
         val id = draft.id ?: newId()
         val steps = draft.steps
-            .filter { it.command.isNotBlank() }
-            .map { if (it.id.isBlank()) it.copy(id = newId()) else it }
+            .filter { it.isRunnable }
+            .map { if (it.id.isBlank()) it.withId(newId()) else it }
         val runbook = Runbook(
             id = id,
             label = draft.label.trim(),
             description = draft.description.trim(),
             steps = steps,
             tags = normalizeTags(draft.tags),
+            policy = draft.policy,
         )
         store.put(runbook)
         val existing = find(id)

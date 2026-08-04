@@ -55,7 +55,7 @@ import org.jetbrains.compose.resources.stringResource
  * Renders nothing when no run is in flight, so a caller can place it unconditionally.
  */
 @Composable
-fun RunbookRunPanel(runner: RunbookRunner, modifier: Modifier = Modifier) {
+fun RunbookRunPanel(runner: RunbookRunner, run: RunbookSessionRun, modifier: Modifier = Modifier) {
     val phase = runner.phase ?: return
     val runbook = runner.runbook ?: return
     val mono = LocalFonts.current.mono
@@ -70,7 +70,7 @@ fun RunbookRunPanel(runner: RunbookRunner, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym("checklist", size = 16.sp, color = phaseColor(phase, runner.hadFailures))
+            Sym("checklist", size = 16.sp, color = runPhaseColor(phase, runner.hadFailures))
             Column(Modifier.weight(1f)) {
                 Txt(
                     runbook.label.ifBlank { stringResource(Res.string.runbook_untitled) },
@@ -78,9 +78,9 @@ fun RunbookRunPanel(runner: RunbookRunner, modifier: Modifier = Modifier) {
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Txt(
-                    phaseLabel(phase, runner.hadFailures) + " · " +
-                        stringResource(Res.string.runbook_panel_progress, finishedCount(runner), runner.steps.size),
-                    color = phaseColor(phase, runner.hadFailures), size = 11.sp,
+                    runPhaseLabel(phase, runner.hadFailures) + " · " +
+                        stringResource(Res.string.runbook_panel_progress, run.finishedCount, run.steps.size),
+                    color = runPhaseColor(phase, runner.hadFailures), size = 11.sp,
                 )
             }
         }
@@ -89,7 +89,7 @@ fun RunbookRunPanel(runner: RunbookRunner, modifier: Modifier = Modifier) {
             Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            runner.steps.forEach { state -> key(state) { StepRow(state, mono) } }
+            run.steps.forEach { state -> key(state) { StepRow(state, mono) } }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -114,7 +114,7 @@ fun RunbookRunPanel(runner: RunbookRunner, modifier: Modifier = Modifier) {
 
 @Composable
 private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font.FontFamily) {
-    val color = statusColor(state.status)
+    val color = runStatusColor(state.status)
     Row(
         Modifier
             .fillMaxWidth()
@@ -128,12 +128,12 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
             // Bidi/format characters are stripped: this row is the last thing read before "Run this
             // step" is clicked, and a runbook can arrive over sync — it must not be able to render
             // one command and run another (Trojan Source).
-            val title = stripUnsafeFormatChars(state.step.title.ifBlank { state.step.command })
+            val title = stripUnsafeFormatChars(state.step.title.ifBlank { state.step.summaryLine() })
             Txt(title, color = Skerry.colors.text, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            // The command as written, not as resolved: a `${{vault}}` value has no business on screen.
+            // The step as written, not as resolved: a `${{vault}}` value has no business on screen.
             if (state.step.title.isNotBlank()) {
                 Txt(
-                    stripUnsafeFormatChars(state.step.command), color = Skerry.colors.faint, size = 10.5.sp,
+                    stripUnsafeFormatChars(state.step.summaryLine()), color = Skerry.colors.faint, size = 10.5.sp,
                     font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -145,6 +145,11 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
                     color = Skerry.colors.amber, size = 10.5.sp,
                 )
             }
+            // A transfer step has no exit code to fail with, so without this the row would go red
+            // and say nothing at all about why.
+            state.failure?.let { failure ->
+                Txt(failureText(failure), color = Skerry.colors.sunset, size = 10.5.sp, lineHeight = 14.sp)
+            }
         }
         state.exitCode?.let { code ->
             Box(Modifier.padding(top = 1.dp)) {
@@ -152,37 +157,6 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
             }
         }
     }
-}
-
-@Composable
-private fun phaseLabel(phase: RunbookPhase, hadFailures: Boolean): String = when (phase) {
-    RunbookPhase.AWAITING_CONFIRM -> stringResource(Res.string.runbook_panel_waiting)
-    RunbookPhase.RUNNING -> stringResource(Res.string.runbook_panel_running)
-    RunbookPhase.DONE ->
-        if (hadFailures) stringResource(Res.string.runbook_panel_done_with_failures)
-        else stringResource(Res.string.runbook_panel_done)
-    RunbookPhase.FAILED -> stringResource(Res.string.runbook_panel_failed)
-    RunbookPhase.STOPPED -> stringResource(Res.string.runbook_panel_stopped)
-}
-
-@Composable
-private fun phaseColor(phase: RunbookPhase, hadFailures: Boolean): Color = when (phase) {
-    RunbookPhase.AWAITING_CONFIRM -> Skerry.colors.cyanBright
-    RunbookPhase.RUNNING -> Skerry.colors.cyan
-    RunbookPhase.DONE -> if (hadFailures) Skerry.colors.storm else Skerry.colors.moss
-    RunbookPhase.FAILED -> Skerry.colors.sunset
-    RunbookPhase.STOPPED -> Skerry.colors.dim
-}
-
-@Composable
-private fun statusColor(status: RunbookStepStatus): Color = when (status) {
-    RunbookStepStatus.PENDING -> Skerry.colors.faint
-    RunbookStepStatus.AWAITING_CONFIRM -> Skerry.colors.cyanBright
-    RunbookStepStatus.RUNNING -> Skerry.colors.cyan
-    RunbookStepStatus.SUCCEEDED -> Skerry.colors.moss
-    RunbookStepStatus.FAILED -> Skerry.colors.sunset
-    RunbookStepStatus.SKIPPED -> Skerry.colors.dim
-    RunbookStepStatus.STOPPED -> Skerry.colors.dim
 }
 
 private fun statusIcon(status: RunbookStepStatus): String = when (status) {
@@ -195,9 +169,3 @@ private fun statusIcon(status: RunbookStepStatus): String = when (status) {
     RunbookStepStatus.STOPPED -> "stop_circle"
 }
 
-/** Steps that already have a verdict — what "3 of 7" counts. */
-private fun finishedCount(runner: RunbookRunner): Int = runner.steps.count {
-    it.status == RunbookStepStatus.SUCCEEDED ||
-        it.status == RunbookStepStatus.FAILED ||
-        it.status == RunbookStepStatus.SKIPPED
-}
