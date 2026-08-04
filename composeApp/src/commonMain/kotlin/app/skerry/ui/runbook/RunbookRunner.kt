@@ -4,13 +4,19 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.runbook.ResolvedRunbookStep
 import app.skerry.shared.runbook.Runbook
 import app.skerry.shared.runbook.RunbookMarker
+import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookScript
 import app.skerry.shared.runbook.RunbookStep
+import app.skerry.shared.runbook.RunbookTransferDirection
+import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.sftp.SftpProgress
 import app.skerry.shared.snippet.SnippetRunEnvironment
 import app.skerry.shared.snippet.SnippetSegment
 import app.skerry.shared.snippet.captureSnippetRunEnvironment
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -26,7 +32,23 @@ class RunbookTarget(
     val readOutput: () -> String,
     /** Whether the session is still open; a dropped session aborts the run. */
     val isLive: () -> Boolean = { true },
+    /**
+     * Opens an SFTP channel on the same connection, for [RunbookStep.Transfer] steps. `null` where
+     * the transport has none (local shell, telnet, serial) — such a step fails with
+     * [RunbookStepFailure.NoSftpChannel] rather than waiting for something that can't happen.
+     */
+    val openSftp: (suspend () -> SftpClient)? = null,
 )
+
+/** Why a step ended without an exit code of its own. */
+sealed interface RunbookStepFailure {
+
+    /** The step wanted SFTP and this session has none. */
+    data object NoSftpChannel : RunbookStepFailure
+
+    /** The transfer itself failed; [message] is what the SFTP layer reported. */
+    data class Transfer(val message: String) : RunbookStepFailure
+}
 
 /** Where a step of the current run stands. */
 enum class RunbookStepStatus {
@@ -87,6 +109,18 @@ class RunbookStepState internal constructor(val index: Int, val step: RunbookSte
      */
     var stalled: Boolean by mutableStateOf(false)
         internal set
+
+    /** Why the step ended without an exit code (transfer steps only); `null` for the ordinary path. */
+    var failure: RunbookStepFailure? by mutableStateOf(null)
+        internal set
+
+    /** Bytes moved so far by a [RunbookStep.Transfer]; `null` before the transfer reports anything. */
+    var transferredBytes: Long? by mutableStateOf(null)
+        internal set
+
+    /** Size the transfer is working towards, as the SFTP layer reports it. */
+    var totalBytes: Long? by mutableStateOf(null)
+        internal set
 }
 
 /**
@@ -116,12 +150,6 @@ class RunbookRunner(
      * quick step doesn't feel stalled, large enough that scanning the tail is free in comparison.
      */
     private val pollIntervalMillis: Long = 120L,
-    /**
-     * How long a running step may print nothing before it is marked as possibly stuck
-     * ([RunbookStepState.stalled]). Long enough that an ordinary quiet stretch — a package download,
-     * a `sleep`, a compile that only speaks at the end — passes unremarked.
-     */
-    private val stallAfterMillis: Long = 120_000L,
 ) {
     var runbook: Runbook? by mutableStateOf(null)
         private set
@@ -157,6 +185,9 @@ class RunbookRunner(
     private var script: RunbookScript? = null
     private var contextValue: (SnippetSegment.Variable) -> String = { "" }
     private var target: RunbookTarget? = null
+
+    /** Policy of the runbook being run; the default only stands in while nothing is running. */
+    private var policy: RunbookPolicy = RunbookPolicy()
     private var runId: String = ""
     private var watchJob: Job? = null
 
@@ -212,6 +243,7 @@ class RunbookRunner(
             watchJob = null
         }
         this.runbook = request.runbook
+        this.policy = request.runbook.policy
         this.target = request.target
         this.contextValue = contextValue
         this.script = request.script
@@ -226,7 +258,7 @@ class RunbookRunner(
     /** The user approved the step the run is paused on. No-op if it isn't paused on one. */
     fun confirmStep() {
         if (phase != RunbookPhase.AWAITING_CONFIRM) return
-        sendStep(currentIndex)
+        dispatchStep(currentIndex)
     }
 
     /** The user skipped the step the run is paused on; the run continues with the next one. */
@@ -296,21 +328,69 @@ class RunbookRunner(
             state.status = RunbookStepStatus.AWAITING_CONFIRM
             phase = RunbookPhase.AWAITING_CONFIRM
         } else {
-            sendStep(index)
+            dispatchStep(index)
         }
     }
 
-    private fun sendStep(index: Int) {
+    /** Starts step [index] the way its kind is run: typed into the shell, or moved over SFTP. */
+    private fun dispatchStep(index: Int) {
         val state = steps.getOrNull(index) ?: return
-        val script = script ?: return
         val target = target ?: return
-        val token = RunbookMarker.token(runId, index)
-        val line = RunbookMarker.probeLine(script.line(index, contextValue), token)
+        val resolved = script?.resolve(index, contextValue) ?: return
         state.status = RunbookStepStatus.RUNNING
         phase = RunbookPhase.RUNNING
         currentIndex = index
-        target.send(line + "\n")
-        watch(index, token, target)
+        when (resolved) {
+            is ResolvedRunbookStep.Command -> {
+                val token = RunbookMarker.token(runId, index)
+                target.send(RunbookMarker.probeLine(resolved.line, token) + "\n")
+                watch(index, token, target)
+            }
+            is ResolvedRunbookStep.Transfer -> transfer(index, resolved, target)
+        }
+    }
+
+    /**
+     * Moves a [RunbookStep.Transfer]'s file over the session's own SFTP channel. Unlike a command,
+     * there is no shell and no exit code here: the SFTP call either returns or throws, and the
+     * throw is what the step reports ([RunbookStepFailure.Transfer]).
+     *
+     * Cancellation is the same story as [watch]: Stop bumps the generation and cancels the job, and
+     * the result is only applied while the stamp still matches — a transfer that completed just as
+     * the user hit Stop must not advance the run into the next command.
+     */
+    private fun transfer(index: Int, step: ResolvedRunbookStep.Transfer, target: RunbookTarget) {
+        val generationAtStart = synchronized(lock) { generation }
+        val job = scope.launch {
+            val outcome = runCatching {
+                val open = target.openSftp ?: throw NoSftpChannelException()
+                val client = open()
+                val progress = SftpProgress { done, total -> publishProgress(index, generationAtStart, done, total) }
+                when (step.direction) {
+                    RunbookTransferDirection.UPLOAD -> client.upload(step.localPath, step.remotePath, progress)
+                    RunbookTransferDirection.DOWNLOAD -> client.download(step.remotePath, step.localPath, progress)
+                }
+            }
+            // A cancelled transfer is Stop's business, not a failure of the step: rethrow so the
+            // coroutine ends cancelled and nothing below reports on a run that is already over.
+            outcome.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+            synchronized(lock) {
+                if (generationAtStart != generation) return@launch
+                val error = outcome.exceptionOrNull()
+                if (error == null) finishStep(index, exitCode = 0) else failStep(index, failureOf(error))
+            }
+        }
+        synchronized(lock) {
+            if (generationAtStart == generation) watchJob = job else job.cancel()
+        }
+    }
+
+    /** Publishes transfer progress under the generation guard the rest of the run uses. */
+    private fun publishProgress(index: Int, generationAtStart: Int, done: Long, total: Long) = synchronized(lock) {
+        if (generationAtStart != generation) return@synchronized
+        val state = steps.getOrNull(index) ?: return@synchronized
+        state.transferredBytes = done
+        state.totalBytes = total
     }
 
     /**
@@ -323,7 +403,7 @@ class RunbookRunner(
      * never report (a shell without `$?`, a command still waiting on stdin) is ended by the user
      * with [stop] — so the run says when a step looks like that one
      * ([RunbookStepState.stalled]) instead of waiting silently forever: no output for
-     * [stallAfterMillis] and no marker. Only the terminal's size and hash are kept between polls,
+     * [RunbookPolicy.watchdogMinutes] and no marker. Only the terminal's size and hash are kept between polls,
      * never its text — a step's resolved line can carry a `${'$'}{{vault}}` secret and the run stores none.
      */
     private fun watch(index: Int, token: String, target: RunbookTarget) {
@@ -344,7 +424,8 @@ class RunbookRunner(
                 lastPrint = print
                 val code = RunbookMarker.exitCodeIn(text, token)
                 if (code == null) {
-                    markStalled(index, generationAtStart, quietMillis >= stallAfterMillis)
+                    val watchdog = policy.watchdogMinutes
+                    markStalled(index, generationAtStart, watchdog > 0 && quietMillis >= watchdog * MILLIS_PER_MINUTE)
                     continue
                 }
                 // Check-then-act under the lock: without it a Stop landing between the check and
@@ -385,8 +466,33 @@ class RunbookRunner(
             advance(index + 1)
             return
         }
-        state.status = RunbookStepStatus.FAILED
-        hadFailures = true
-        if (state.step.continueOnError) advance(index + 1) else phase = RunbookPhase.FAILED
+        failStep(index, failure = null)
     }
+
+    /**
+     * Ends step [index] as failed and decides where the run goes from there: on to the next step
+     * when the step tolerates its own failure ([RunbookStep.continueOnError]) or the runbook doesn't
+     * stop on failures at all ([RunbookPolicy.stopOnFirstFailure]), otherwise the run ends here.
+     */
+    private fun failStep(index: Int, failure: RunbookStepFailure?) {
+        val state = steps.getOrNull(index) ?: return
+        state.status = RunbookStepStatus.FAILED
+        state.failure = failure
+        state.stalled = false
+        hadFailures = true
+        val carryOn = state.step.continueOnError || !policy.stopOnFirstFailure
+        if (carryOn) advance(index + 1) else phase = RunbookPhase.FAILED
+    }
+}
+
+/** How long a watchdog minute is; the policy is in minutes, the poll loop counts milliseconds. */
+private const val MILLIS_PER_MINUTE = 60_000L
+
+/** Raised in place of opening a channel the session doesn't have — reported, never surfaced raw. */
+private class NoSftpChannelException : Exception("This session has no SFTP channel")
+
+/** What a failed transfer is reported as; the UI turns this into its own wording. */
+private fun failureOf(error: Throwable): RunbookStepFailure = when (error) {
+    is NoSftpChannelException -> RunbookStepFailure.NoSftpChannel
+    else -> RunbookStepFailure.Transfer(error.message ?: error::class.simpleName.orEmpty())
 }

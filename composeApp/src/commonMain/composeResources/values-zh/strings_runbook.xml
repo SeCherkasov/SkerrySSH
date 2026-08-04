@@ -50,4 +50,37 @@
     <string name="runbook_panel_exit_code">退出码 %1$d</string>
     <string name="runbook_panel_progress">%1$d / %2$d</string>
     <string name="runbook_panel_shell_note">步骤在本会话的 shell 中执行；退出码通过一行标记返回。</string>
+    <string name="runbook_panel_transfer_failed">传输失败：%1$s</string>
+    <string name="runbook_panel_no_sftp">本会话没有 SFTP 通道。</string>
+
+    <!-- Library screen -->
+    <string name="runbook_screen_title">运行手册</string>
+    <string name="runbook_edit">编辑</string>
+    <string name="runbook_cancel">取消</string>
+    <plurals name="runbook_count">
+        <item quantity="other">%1$d 个运行手册</item>
+    </plurals>
+    <plurals name="runbook_steps_total">
+        <item quantity="other">%1$d 个步骤</item>
+    </plurals>
+
+    <!-- Step kinds -->
+    <string name="runbook_kind_command">命令</string>
+    <string name="runbook_kind_transfer">文件</string>
+    <string name="runbook_step_local">本地路径</string>
+    <string name="runbook_step_remote">远程路径</string>
+    <string name="runbook_ph_local">build/app-0.2.1.tar.gz</string>
+    <string name="runbook_ph_remote">/var/www/app/releases</string>
+    <string name="runbook_direction_upload">上传</string>
+    <string name="runbook_direction_download">下载</string>
+    <string name="runbook_transfer_note">传输使用同一会话的 SFTP 通道。</string>
+
+    <!-- Run policy -->
+    <string name="runbook_policy">运行策略</string>
+    <string name="runbook_policy_stop">首次失败即停止</string>
+    <string name="runbook_policy_watchdog">看门狗</string>
+    <string name="runbook_policy_watchdog_value">%1$d 分钟</string>
+    <string name="runbook_policy_watchdog_off">关闭</string>
+    <string name="runbook_policy_parallel_one">每次一台主机</string>
+    <string name="runbook_policy_parallel_all">所有主机同时</string>
 </resources>

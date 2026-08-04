@@ -50,4 +50,43 @@
     <string name="runbook_panel_exit_code">код %1$d</string>
     <string name="runbook_panel_progress">%1$d из %2$d</string>
     <string name="runbook_panel_shell_note">Шаги выполняются в шелле этой сессии; код возврата возвращается строкой-маркером.</string>
+    <string name="runbook_panel_transfer_failed">Передача не удалась: %1$s</string>
+    <string name="runbook_panel_no_sftp">У этой сессии нет SFTP-канала.</string>
+
+    <!-- Library screen -->
+    <string name="runbook_screen_title">Сценарии</string>
+    <string name="runbook_edit">Изменить</string>
+    <string name="runbook_cancel">Отмена</string>
+    <plurals name="runbook_count">
+        <item quantity="one">%1$d сценарий</item>
+        <item quantity="few">%1$d сценария</item>
+        <item quantity="many">%1$d сценариев</item>
+        <item quantity="other">%1$d сценария</item>
+    </plurals>
+    <plurals name="runbook_steps_total">
+        <item quantity="one">%1$d шаг</item>
+        <item quantity="few">%1$d шага</item>
+        <item quantity="many">%1$d шагов</item>
+        <item quantity="other">%1$d шага</item>
+    </plurals>
+
+    <!-- Step kinds -->
+    <string name="runbook_kind_command">Команда</string>
+    <string name="runbook_kind_transfer">Файл</string>
+    <string name="runbook_step_local">Локальный путь</string>
+    <string name="runbook_step_remote">Путь на хосте</string>
+    <string name="runbook_ph_local">build/app-0.2.1.tar.gz</string>
+    <string name="runbook_ph_remote">/var/www/app/releases</string>
+    <string name="runbook_direction_upload">Отправить</string>
+    <string name="runbook_direction_download">Забрать</string>
+    <string name="runbook_transfer_note">Передача идёт по SFTP-каналу той же сессии.</string>
+
+    <!-- Run policy -->
+    <string name="runbook_policy">Политика прогона</string>
+    <string name="runbook_policy_stop">Стоп на первой ошибке</string>
+    <string name="runbook_policy_watchdog">Сторож</string>
+    <string name="runbook_policy_watchdog_value">%1$d мин</string>
+    <string name="runbook_policy_watchdog_off">Выкл.</string>
+    <string name="runbook_policy_parallel_one">По одному хосту</string>
+    <string name="runbook_policy_parallel_all">Все хосты сразу</string>
 </resources>

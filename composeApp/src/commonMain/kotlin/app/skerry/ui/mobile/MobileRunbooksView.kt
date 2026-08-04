@@ -146,7 +146,7 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
                     if (runner == null || session == null || terminal == null) return@run
                     val started = runner.requestStart(
                         entry.runbook,
-                        runbookTarget(session.id, terminal),
+                        runbookTarget(session.id, terminal, session.controller),
                         recording = terminal.recording,
                     )
                     adding = false; editing = null
@@ -214,7 +214,7 @@ private fun MobileRunbookEditSheet(
                 color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 18.dp),
             )
-            RunbookEditorFields(form, mono)
+            RunbookEditorFields(form, mono, horizontalPadding = 18.dp)
             Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (entry != null) {
                     MobileSheetButton(

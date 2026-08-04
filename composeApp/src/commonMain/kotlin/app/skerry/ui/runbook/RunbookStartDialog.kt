@@ -132,7 +132,7 @@ private fun RunbookStartDialogContent(
                                 if (step.continueOnError) Sym("skip_next", size = 13.sp, color = Skerry.colors.dim)
                             }
                             Txt(
-                                request.script.line(index) { values.value(it, masked = true) },
+                                request.script.resolve(index) { values.value(it, masked = true) }?.summaryLine().orEmpty(),
                                 color = Skerry.colors.textBright, size = 12.sp, font = mono, lineHeight = 17.sp,
                                 modifier = Modifier
                                     .padding(top = 4.dp)

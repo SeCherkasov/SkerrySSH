@@ -2,10 +2,15 @@ package app.skerry.ui.runbook
 
 import app.skerry.shared.runbook.Runbook
 import app.skerry.shared.runbook.RunbookMarker
+import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookStep
+import app.skerry.shared.runbook.RunbookTransferDirection
+import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.snippet.SnippetMoment
+import app.skerry.ui.sftp.FakeSftpClient
 import app.skerry.shared.snippet.SnippetRunEnvironment
 import app.skerry.shared.snippet.SnippetSegment
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -15,6 +20,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -27,7 +33,9 @@ import kotlin.test.assertTrue
 class RunbookRunnerTest {
 
     private val poll = 100L
-    private val stallAfter = 5_000L
+
+    /** The runbooks under test carry a one-minute watchdog; time is virtual, so the wait is free. */
+    private val stallAfter = 60_000L
 
     private class FakeTerminal {
         val sent = mutableListOf<String>()
@@ -35,11 +43,15 @@ class RunbookRunnerTest {
         var live: Boolean = true
         var reads: Int = 0
 
+        /** SFTP side of the same session; `null` stands for a connection without one. */
+        var sftp: FakeSftpClient? = null
+
         fun target(sessionId: String = "tab-1") = RunbookTarget(
             sessionId = sessionId,
             send = { line -> sent += line; buffer += line }, // the PTY echoes the typed line
             readOutput = { reads++; buffer },
             isLive = { live },
+            openSftp = sftp?.let { client -> suspend { client as SftpClient } },
         )
 
         /** The shell finished the step and printed the marker. */
@@ -54,11 +66,28 @@ class RunbookRunnerTest {
         randomChars = { n -> "r".repeat(n) },
     )
 
-    private fun runbook(vararg steps: RunbookStep) =
-        Runbook(id = "rb", label = "Deploy", steps = steps.toList())
+    private fun runbook(vararg steps: RunbookStep, policy: RunbookPolicy = RunbookPolicy(watchdogMinutes = 1)) =
+        Runbook(id = "rb", label = "Deploy", steps = steps.toList(), policy = policy)
 
     private fun step(id: String, command: String, confirm: Boolean = false, continueOnError: Boolean = false) =
-        RunbookStep(id = id, title = id, command = command, confirm = confirm, continueOnError = continueOnError)
+        RunbookStep.Command(id = id, title = id, command = command, confirm = confirm, continueOnError = continueOnError)
+
+    private fun transfer(
+        id: String,
+        localPath: String = "/tmp/release.tgz",
+        remotePath: String = "/srv/incoming/release.tgz",
+        direction: RunbookTransferDirection = RunbookTransferDirection.UPLOAD,
+        confirm: Boolean = false,
+        continueOnError: Boolean = false,
+    ) = RunbookStep.Transfer(
+        id = id,
+        title = id,
+        localPath = localPath,
+        remotePath = remotePath,
+        direction = direction,
+        confirm = confirm,
+        continueOnError = continueOnError,
+    )
 
     /**
      * Shared setup and — the point of the helper — shared teardown: a watcher still polling on the
@@ -73,7 +102,6 @@ class RunbookRunnerTest {
             newId = { RUN_ID },
             environment = ::environment,
             pollIntervalMillis = poll,
-            stallAfterMillis = stallAfter,
         )
         try {
             body(runner, term)
@@ -375,6 +403,152 @@ class RunbookRunnerTest {
         assertNull(r.phase)
         assertNull(r.runbook)
         assertTrue(r.steps.isEmpty())
+    }
+
+    @Test
+    fun a_watchdog_turned_off_never_flags_a_quiet_step() = runnerTest { r, term ->
+        r.startNow(
+            runbook(step("s1", "cat <<EOF"), policy = RunbookPolicy(watchdogMinutes = 0)),
+            term.target(),
+        ) { "" }
+
+        testScheduler.advanceTimeBy(stallAfter * 10); testScheduler.runCurrent()
+
+        assertFalse(r.steps[0].stalled)
+        assertEquals(RunbookStepStatus.RUNNING, r.steps[0].status)
+    }
+
+    @Test
+    fun a_run_that_does_not_stop_on_failure_carries_on_to_the_next_step() = runnerTest { r, term ->
+        r.startNow(
+            runbook(step("s1", "migrate"), step("s2", "restart"), policy = RunbookPolicy(stopOnFirstFailure = false)),
+            term.target(),
+        ) { "" }
+        term.complete(0, 1)
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.FAILED, r.steps[0].status)
+        assertEquals(RunbookStepStatus.RUNNING, r.steps[1].status)
+        assertTrue(r.hadFailures)
+    }
+
+    @Test
+    fun a_transfer_step_uploads_over_the_session_sftp_channel() = runnerTest { r, term ->
+        val sftp = FakeSftpClient()
+        sftp.seedDir("/srv/incoming")
+        sftp.uploadSize = 2048
+        term.sftp = sftp
+
+        r.startNow(runbook(transfer("s1")), term.target()) { "" }
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals("/tmp/release.tgz" to "/srv/incoming/release.tgz", sftp.lastUpload)
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.steps[0].status)
+        assertEquals(0, r.steps[0].exitCode)
+        assertEquals(RunbookPhase.DONE, r.phase)
+        assertTrue(term.sent.isEmpty(), "a transfer must not type anything into the shell")
+    }
+
+    @Test
+    fun a_transfer_step_reports_its_progress() = runnerTest { r, term ->
+        val sftp = FakeSftpClient()
+        sftp.seedDir("/srv/incoming")
+        sftp.uploadSize = 4096
+        term.sftp = sftp
+
+        r.startNow(runbook(transfer("s1")), term.target()) { "" }
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals(4096L, r.steps[0].transferredBytes)
+        assertEquals(4096L, r.steps[0].totalBytes)
+    }
+
+    @Test
+    fun a_download_step_pulls_the_file_the_other_way() = runnerTest { r, term ->
+        val sftp = FakeSftpClient()
+        sftp.seedDir("/var/log/app")
+        sftp.seedFile("/var/log/app/last.log", size = 512)
+        term.sftp = sftp
+
+        r.startNow(
+            runbook(
+                transfer(
+                    "s1",
+                    localPath = "/tmp/last.log",
+                    remotePath = "/var/log/app/last.log",
+                    direction = RunbookTransferDirection.DOWNLOAD,
+                ),
+            ),
+            term.target(),
+        ) { "" }
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals("/var/log/app/last.log" to "/tmp/last.log", sftp.lastDownload)
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.steps[0].status)
+    }
+
+    @Test
+    fun a_failing_transfer_stops_the_run_and_says_why() = runnerTest { r, term ->
+        val sftp = FakeSftpClient()
+        sftp.seedDir("/srv/incoming")
+        sftp.uploadError = "Permission denied"
+        term.sftp = sftp
+
+        r.startNow(runbook(transfer("s1"), step("s2", "systemctl restart app")), term.target()) { "" }
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.FAILED, r.steps[0].status)
+        val failure = assertIs<RunbookStepFailure.Transfer>(r.steps[0].failure)
+        assertTrue(failure.message.contains("Permission denied"), failure.message)
+        assertEquals(RunbookPhase.FAILED, r.phase)
+        assertTrue(term.sent.isEmpty(), "the next step must not run after a failed transfer")
+    }
+
+    @Test
+    fun a_transfer_on_a_connection_without_sftp_fails_the_step_instead_of_hanging() = runnerTest { r, term ->
+        // A local shell, a telnet or a serial session has no SFTP channel to open.
+        term.sftp = null
+
+        r.startNow(runbook(transfer("s1")), term.target()) { "" }
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.FAILED, r.steps[0].status)
+        assertEquals(RunbookStepFailure.NoSftpChannel, r.steps[0].failure)
+        assertEquals(RunbookPhase.FAILED, r.phase)
+    }
+
+    @Test
+    fun a_transfer_step_resolves_its_paths_from_the_run_values() = runnerTest { r, term ->
+        val sftp = FakeSftpClient()
+        sftp.seedDir("/srv/releases")
+        term.sftp = sftp
+
+        r.startNow(
+            runbook(transfer("s1", localPath = "/tmp/\${{tag}}.tgz", remotePath = "/srv/releases/\${{tag}}.tgz")),
+            term.target(),
+        ) { "0.2.1" }
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals("/tmp/0.2.1.tgz" to "/srv/releases/0.2.1.tgz", sftp.lastUpload)
+    }
+
+    @Test
+    fun stopping_during_a_transfer_leaves_the_step_stopped() = runnerTest { r, term ->
+        val sftp = FakeSftpClient()
+        sftp.seedDir("/srv/incoming")
+        sftp.uploadSize = 4096
+        sftp.transferGate = CompletableDeferred()
+        term.sftp = sftp
+
+        r.startNow(runbook(transfer("s1"), step("s2", "uptime")), term.target()) { "" }
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        r.stop()
+        sftp.transferGate?.complete(Unit)
+        testScheduler.advanceTimeBy(poll * 5); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.STOPPED, r.steps[0].status)
+        assertEquals(RunbookPhase.STOPPED, r.phase)
+        assertTrue(term.sent.isEmpty(), "the step after a stopped transfer must not be sent")
     }
 
     private companion object {

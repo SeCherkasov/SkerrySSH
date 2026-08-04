@@ -95,7 +95,7 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
                 RunbookPalette(manager) { entry ->
                     runner.requestStart(
                         entry.runbook,
-                        runbookTarget(active.id, terminal),
+                        runbookTarget(active.id, terminal, active.controller),
                         recording = terminal.recording,
                     )
                     open = false

@@ -128,12 +128,12 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
             // Bidi/format characters are stripped: this row is the last thing read before "Run this
             // step" is clicked, and a runbook can arrive over sync — it must not be able to render
             // one command and run another (Trojan Source).
-            val title = stripUnsafeFormatChars(state.step.title.ifBlank { state.step.command })
+            val title = stripUnsafeFormatChars(state.step.title.ifBlank { state.step.summaryLine() })
             Txt(title, color = Skerry.colors.text, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            // The command as written, not as resolved: a `${{vault}}` value has no business on screen.
+            // The step as written, not as resolved: a `${{vault}}` value has no business on screen.
             if (state.step.title.isNotBlank()) {
                 Txt(
-                    stripUnsafeFormatChars(state.step.command), color = Skerry.colors.faint, size = 10.5.sp,
+                    stripUnsafeFormatChars(state.step.summaryLine()), color = Skerry.colors.faint, size = 10.5.sp,
                     font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
