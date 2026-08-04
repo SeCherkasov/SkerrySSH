@@ -102,4 +102,13 @@
     <string name="runbook_dur_seconds">%1$s 秒</string>
     <string name="runbook_dur_minutes">%1$d 分 %2$d 秒</string>
     <string name="runbook_transfer_of">%1$s / %2$s</string>
+
+    <!-- Target picking -->
+    <string name="runbook_targets">运行于</string>
+    <string name="runbook_targets_sessions">已打开的会话</string>
+    <string name="runbook_targets_catalog">主机</string>
+    <string name="runbook_targets_none">请至少选择一台主机。</string>
+    <string name="runbook_connecting">正在连接：%1$s</string>
+    <string name="runbook_unreachable">无响应：%1$s</string>
+    <string name="runbook_run_rest">在其余主机上运行</string>
 </resources>

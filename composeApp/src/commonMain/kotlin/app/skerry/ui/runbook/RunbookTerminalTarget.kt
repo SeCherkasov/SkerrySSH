@@ -3,6 +3,8 @@ package app.skerry.ui.runbook
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.session.SessionsController
 import app.skerry.ui.terminal.TerminalScreenState
 
 /**
@@ -32,6 +34,47 @@ fun runbookTarget(
     readOutput = { terminal.tailText(TAIL_ROWS) },
     isLive = { terminal.state.value !is TerminalState.Closed },
     openSftp = controller?.let(::sftpOpener),
+)
+
+/**
+ * Run targets for [paneIds], in the order given — which, with
+ * [app.skerry.shared.runbook.RunbookParallelism.ONE_HOST_AT_A_TIME], is the rollout order.
+ *
+ * A pane that has gone away or dropped its connection between the pick and the start is left out
+ * rather than turned into a target that could never send anything; the caller sees a shorter list
+ * and can say so.
+ */
+fun runbookTargets(sessions: SessionsController, paneIds: List<String>): List<RunbookTarget> {
+    val panes = sessions.tabs.flatMap { it.panes }.associateBy { it.id }
+    return paneIds.mapNotNull { id ->
+        val pane = panes[id] ?: return@mapNotNull null
+        val terminal = (pane.controller.uiState as? ConnectionUiState.Connected)?.terminal ?: return@mapNotNull null
+        runbookTarget(pane.id, terminal, pane.controller).withLabel(pane.displayTitle)
+    }
+}
+
+/** Panes a run can be pointed at: connected terminals, remote desktops and players excluded. */
+fun connectedRunbookPanes(sessions: SessionsController?): List<RunbookLaunchTarget.Session> =
+    sessions?.tabs.orEmpty().flatMap { tab -> tab.panes }
+        .filter { pane -> !pane.isVnc && !pane.isPlayer && pane.controller.uiState is ConnectionUiState.Connected }
+        .map { pane -> RunbookLaunchTarget.Session(pane.id, pane.displayTitle) }
+
+/** A connected pane of [hostId], or `null` while that host has none — what a launch waits on. */
+fun connectedPaneOf(sessions: SessionsController?, hostId: String): String? =
+    sessions?.tabs.orEmpty().flatMap { tab -> tab.panes }
+        .firstOrNull { pane ->
+            pane.hostId == hostId && !pane.isVnc && !pane.isPlayer &&
+                pane.controller.uiState is ConnectionUiState.Connected
+        }?.id
+
+/** The same target under the name the run should call it by (the pane's title). */
+private fun RunbookTarget.withLabel(label: String): RunbookTarget = RunbookTarget(
+    sessionId = sessionId,
+    send = send,
+    readOutput = readOutput,
+    label = label,
+    isLive = isLive,
+    openSftp = openSftp,
 )
 
 /**

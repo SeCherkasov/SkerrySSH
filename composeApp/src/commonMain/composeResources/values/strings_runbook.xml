@@ -104,4 +104,13 @@
     <string name="runbook_dur_seconds">%1$s s</string>
     <string name="runbook_dur_minutes">%1$d m %2$d s</string>
     <string name="runbook_transfer_of">%1$s of %2$s</string>
+
+    <!-- Target picking -->
+    <string name="runbook_targets">Run on</string>
+    <string name="runbook_targets_sessions">Open sessions</string>
+    <string name="runbook_targets_catalog">Hosts</string>
+    <string name="runbook_targets_none">Pick at least one host.</string>
+    <string name="runbook_connecting">Connecting: %1$s</string>
+    <string name="runbook_unreachable">No answer: %1$s</string>
+    <string name="runbook_run_rest">Run on the rest</string>
 </resources>

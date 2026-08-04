@@ -108,4 +108,13 @@
     <string name="runbook_dur_seconds">%1$s с</string>
     <string name="runbook_dur_minutes">%1$d мин %2$d с</string>
     <string name="runbook_transfer_of">%1$s из %2$s</string>
+
+    <!-- Target picking -->
+    <string name="runbook_targets">Запустить на</string>
+    <string name="runbook_targets_sessions">Открытые сессии</string>
+    <string name="runbook_targets_catalog">Хосты</string>
+    <string name="runbook_targets_none">Выберите хотя бы один хост.</string>
+    <string name="runbook_connecting">Подключение: %1$s</string>
+    <string name="runbook_unreachable">Не отвечают: %1$s</string>
+    <string name="runbook_run_rest">Запустить на остальных</string>
 </resources>

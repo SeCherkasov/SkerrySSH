@@ -157,6 +157,21 @@ class RunbookRunner(
         return start(request, contextValue)
     }
 
+    /**
+     * The start dialog was confirmed on a different set of hosts than the run was requested with —
+     * the dialog is where the user picks them, and a catalog host only becomes a target once its
+     * session is up. [targets] replaces the requested one; an empty list starts nothing.
+     */
+    fun confirmStart(targets: List<RunbookTarget>, contextValue: (SnippetSegment.Variable) -> String): Boolean {
+        val request = pending ?: return false
+        if (targets.isEmpty()) return false
+        pending = null
+        return start(
+            RunbookStartRequest(request.runbook, request.script, targets, request.recording),
+            contextValue,
+        )
+    }
+
     /** Starts a prepared [request]. Returns false (changing nothing) if a run is already in flight. */
     fun start(request: RunbookStartRequest, contextValue: (SnippetSegment.Variable) -> String): Boolean {
         if (active) return false
