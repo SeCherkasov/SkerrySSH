@@ -326,7 +326,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 Spacer(Modifier.height(14.dp))
                 Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                     if (activeTerminal != null) {
-                        // Desktop parity ([infoPanelAvailable]): a pane watching a colleague's shared
+                        // Desktop parity ([monitorAvailable]): a pane watching a colleague's shared
                         // session has no connection to poll, so the monitor isn't offered at all.
                         if (active?.controller?.isWatched != true) {
                             MobileSheetButton(

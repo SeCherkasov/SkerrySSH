@@ -109,7 +109,7 @@
     <string name="shell_tip_record">录制会话</string>
     <string name="shell_tip_record_stop">停止录制</string>
     <string name="shell_tip_play">播放录制</string>
-    <string name="shell_tip_info">会话详情</string>
+    <string name="shell_tip_monitor">监控</string>
     <string name="shell_tip_disconnect">断开连接</string>
     <string name="shell_no_hosts_yet">还没有主机</string>
     <string name="shell_add_first_host">添加连接后会显示在这里。</string>

@@ -18,14 +18,27 @@ internal val PREVIEW_HOST_METRICS = HostMetrics(
     swapTotalBytes = 2_000_000_000,
     netRxBytes = 1,
     netTxBytes = 1,
+    netInterface = "ens3",
     disks = listOf(
         DiskUsage("/", 42_000_000_000, 49_000_000_000, 87),
-        DiskUsage("/var", 120_000_000_000, 210_000_000_000, 62),
+        DiskUsage("/var/lib/docker", 18_400_000_000, 40_000_000_000, 46),
+        DiskUsage("/mnt/backup", 210_000_000_000, 500_000_000_000, 42),
     ),
     processes = listOf(
-        ProcessSample(2481, 12.4f, 8.1f, "postgres"),
-        ProcessSample(991, 4.2f, 2.3f, "nginx"),
-        ProcessSample(1204, 1.8f, 5.7f, "node"),
+        ProcessSample(2481, 12.4f, 8.1f, 1_288_490_188, "postgres"),
+        ProcessSample(991, 4.2f, 2.3f, 192_937_984, "nginx"),
+        ProcessSample(1204, 1.8f, 5.7f, 536_870_912, "node"),
+    ),
+    services = listOf(
+        ServiceUnit("nginx.service", ServiceState.Active, "running"),
+        ServiceUnit("postgresql@15.service", ServiceState.Active, "running"),
+        ServiceUnit("docker.service", ServiceState.Active, "running"),
+        ServiceUnit("unattended-upgrades.service", ServiceState.Activating, "start"),
+    ),
+    containers = listOf(
+        ContainerSample("app-web", "app:0.2.1", "Up 3 days", 4.1f),
+        ContainerSample("app-worker", "app:0.2.1", "Up 3 days", 2.6f),
+        ContainerSample("redis", "redis:7", "Up 12 days", 0.9f),
     ),
 )
 

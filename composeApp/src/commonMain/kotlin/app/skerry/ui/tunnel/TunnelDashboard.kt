@@ -1,11 +1,8 @@
 package app.skerry.ui.tunnel
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -13,16 +10,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.design.Card
 import app.skerry.ui.design.Sparkline
 import app.skerry.ui.design.Txt
 import app.skerry.ui.forward.humanRate
@@ -82,7 +78,7 @@ private fun ThroughputCard(telemetry: TunnelTelemetry, mono: FontFamily, modifie
     val peak = history.maxOfOrNull { it.up + it.down } ?: 0L
     val scale = max(peak, RATE_SCALE_FLOOR) * SCALE_HEADROOM
 
-    DashCard(stringResource(Res.string.ports_card_throughput), modifier) {
+    Card(modifier, stringResource(Res.string.ports_card_throughput)) {
         Sparkline(
             values = history.map { (it.up + it.down) / scale },
             color = Skerry.colors.cyan,
@@ -112,7 +108,7 @@ private fun RowScope.RateStat(value: String, caption: String, mono: FontFamily) 
 @Composable
 private fun AutostartCard(entries: List<TunnelEntry>, hostLabel: (String) -> String, modifier: Modifier) {
     val grouped = autostartByHost(entries)
-    DashCard(stringResource(Res.string.ports_autostart), modifier) {
+    Card(modifier, stringResource(Res.string.ports_autostart)) {
         if (grouped.isEmpty()) {
             CardNote(stringResource(Res.string.ports_autostart_none))
         } else {
@@ -126,7 +122,7 @@ private fun AutostartCard(entries: List<TunnelEntry>, hostLabel: (String) -> Str
 @Composable
 private fun ErrorsCard(telemetry: TunnelTelemetry, modifier: Modifier) {
     val events = telemetry.events
-    DashCard(stringResource(Res.string.ports_card_errors), modifier) {
+    Card(modifier, stringResource(Res.string.ports_card_errors)) {
         if (events.isEmpty()) {
             CardNote(stringResource(Res.string.ports_errors_none))
         } else {
@@ -139,20 +135,6 @@ private fun ErrorsCard(telemetry: TunnelTelemetry, modifier: Modifier) {
                 Skerry.colors.dim,
             )
         }
-    }
-}
-
-@Composable
-private fun DashCard(title: String, modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(Skerry.colors.surface2)
-            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(10.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    ) {
-        Txt(title, color = Skerry.colors.text, size = 12.sp, weight = FontWeight.SemiBold)
-        content()
     }
 }
 

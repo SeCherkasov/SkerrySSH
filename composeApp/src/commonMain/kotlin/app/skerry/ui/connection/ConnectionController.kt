@@ -228,6 +228,14 @@ class ConnectionController(
     private var transferCoordinator: TransferCoordinator? = null
     private val sftpMutex = Mutex()
     private var metrics: HostMetricsController? = null
+
+    /**
+     * Bumped whenever the session's pollers are torn down, so a screen holding one can tell that
+     * its instance is dead: the controller itself outlives a reconnect, and a `remember` keyed on
+     * it alone would keep rendering a stopped poller after the link came back.
+     */
+    var metricsEpoch: Int by mutableStateOf(0)
+        private set
     private var throughput: ThroughputController? = null
     private var ping: PingController? = null
     // A session shown but not owned (see [attachSession]); released with the pane, since the pane
@@ -648,6 +656,7 @@ class ConnectionController(
      * cleaned-up controller is safe.
      */
     private fun releaseSessionResources() {
+        metricsEpoch++
         val conn = connection
         val watched = attached
         attached = null

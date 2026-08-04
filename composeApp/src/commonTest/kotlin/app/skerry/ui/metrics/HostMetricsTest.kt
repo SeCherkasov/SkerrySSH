@@ -182,6 +182,176 @@ class HostMetricsTest {
     }
 
     @Test
+    fun parses_processes_with_resident_memory() {
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @PROC
+            1841  18.4  12.5 1258291 postgres
+            2210   7.1   1.4  188416 nginx
+        """.trimIndent()
+        val processes = parseHostMetrics(out)!!.processes
+        assertEquals(2, processes.size)
+        assertEquals(1841, processes[0].pid)
+        assertEquals(18.4f, processes[0].cpuPercent, 0.01f)
+        // ps reports RSS in KiB — the snapshot carries bytes.
+        assertEquals(1_258_291L * 1024, processes[0].rssBytes)
+        assertEquals("postgres", processes[0].command)
+    }
+
+    @Test
+    fun parses_systemd_units_with_their_state() {
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @SERVICES
+            nginx.service loaded active running A high performance web server
+            unattended-upgrades.service loaded activating start Unattended Upgrades Shutdown
+            fail2ban.service loaded failed failed Fail2Ban Service
+        """.trimIndent()
+        val services = parseHostMetrics(out)!!.services
+        assertEquals(3, services.size)
+        assertEquals("nginx.service", services[0].name)
+        assertEquals(ServiceState.Active, services[0].state)
+        assertEquals("running", services[0].sub)
+        assertEquals(ServiceState.Activating, services[1].state)
+        assertEquals(ServiceState.Failed, services[2].state)
+    }
+
+    @Test
+    fun parses_containers_and_joins_their_cpu_share() {
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @CONTAINERS
+            app-web${'\t'}app:0.2.1${'\t'}Up 3 days
+            redis${'\t'}redis:7${'\t'}Up 12 days
+            @CSTATS
+            app-web${'\t'}4.10%
+        """.trimIndent()
+        val containers = parseHostMetrics(out)!!.containers
+        assertEquals(2, containers.size)
+        assertEquals("app-web", containers[0].name)
+        assertEquals("app:0.2.1", containers[0].image)
+        assertEquals("Up 3 days", containers[0].status)
+        assertEquals(4.1f, containers[0].cpuPercent!!, 0.01f)
+        // No stats row for this one — the column says so instead of claiming an idle container.
+        assertNull(containers[1].cpuPercent)
+    }
+
+    @Test
+    fun services_and_containers_are_empty_when_their_sections_absent() {
+        val m = parseHostMetrics(fullOutput)!!
+        assertTrue(m.services.isEmpty())
+        assertTrue(m.containers.isEmpty())
+    }
+
+    @Test
+    fun names_from_the_host_are_stripped_of_control_characters_and_capped() {
+        val long = "c".repeat(200)
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @SERVICES
+            ${'\u001B'}[31mnginx.service loaded active running Web
+            @CONTAINERS
+            $long${'\t'}$long${'\t'}Up 3 days
+        """.trimIndent()
+        val m = parseHostMetrics(out)!!
+        assertEquals("[31mnginx.service", m.services[0].name)
+        assertTrue(m.containers[0].name.length <= 40)
+        assertTrue(m.containers[0].image.length <= 40)
+    }
+
+    @Test
+    fun load_average_from_the_host_is_sanitized_like_the_other_facts() {
+        // The exec answer is whatever the host chooses to send, not necessarily /proc/loadavg:
+        // escape sequences and unbounded length must not reach the tiles or the alert feed.
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @LOAD
+            ${''}[2J0.42 ${"9".repeat(300)} 0.48
+        """.trimIndent()
+        val load = parseHostMetrics(out)!!.loadAverage!!
+        assertTrue(load.none { it.code < 0x20 }, "control characters must be stripped: $load")
+        assertTrue(load.length <= 120, "load average must be length capped, was ${load.length}")
+    }
+
+    @Test
+    fun invisible_and_direction_changing_characters_are_stripped_from_host_names() {
+        // A right-to-left override in a process or container name reverses what the row reads as —
+        // a plain spoof of which process is really busy.
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @PROC
+            42  1.0  1.0 4096 ssh${'‮'}d${'​'}
+            @CONTAINERS
+            web${'‮'}app${'\t'}img${'﻿'}:1${'\t'}Up 3 days
+        """.trimIndent()
+        val m = parseHostMetrics(out)!!
+        assertEquals("sshd", m.processes.single().command)
+        assertEquals("webapp", m.containers.single().name)
+        assertEquals("img:1", m.containers.single().image)
+    }
+
+    @Test
+    fun the_row_count_of_every_list_is_capped_on_our_side() {
+        // The host is asked for 8 rows; it is free to answer with a thousand. The screen draws
+        // every row it is given, so the cap belongs here too, not only in the shell command.
+        val procs = (1..40).joinToString("\n") { "$it  1.0  1.0 4096 proc$it" }
+        val disks = (1..40).joinToString("\n") { "/dev/sd$it  100 50 50 50% /mnt/$it" }
+        val units = (1..40).joinToString("\n") { "unit$it.service loaded active running Unit $it" }
+        val containers = (1..40).joinToString("\n") { "box$it${'\t'}img:$it${'\t'}Up 3 days" }
+        val stats = (1..40).joinToString("\n") { "box$it${'\t'}1.0%" }
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @DISK
+            $disks
+            @PROC
+            $procs
+            @SERVICES
+            $units
+            @CONTAINERS
+            $containers
+            @CSTATS
+            $stats
+        """.trimIndent()
+        val m = parseHostMetrics(out)!!
+        assertTrue(m.processes.size <= 8, "processes must be capped, was ${m.processes.size}")
+        assertTrue(m.disks.size <= 8, "filesystems must be capped, was ${m.disks.size}")
+        assertTrue(m.services.size <= 8, "units must be capped, was ${m.services.size}")
+        assertTrue(m.containers.size <= 8, "containers must be capped, was ${m.containers.size}")
+    }
+
+    @Test
+    fun picks_the_busiest_interface_as_the_primary_one() {
+        val out = """
+            cpu  100 0 100 800 0 0 0 0
+            @MEM
+            Mem:  4000000000 2100000000 1000000000
+            @NET
+            Inter-|   Receive                                                |  Transmit
+                lo: 900000000 10 0 0 0 0 0 0 900000000 10 0 0 0 0 0 0
+              ens3: 500000000 10 0 0 0 0 0 0 100000000 10 0 0 0 0 0 0
+              eth1:      1000 10 0 0 0 0 0 0      1000 10 0 0 0 0 0 0
+        """.trimIndent()
+        val m = parseHostMetrics(out)!!
+        // Loopback is excluded from both the counters and the name.
+        assertEquals("ens3", m.netInterface)
+        assertEquals(500_001_000L, m.netRxBytes)
+    }
+
+    @Test
     fun clamps_fractions_into_unit_range() {
         val m = HostMetrics(cpuPercent = 150, memUsedBytes = 9, memTotalBytes = 4, diskPercent = -5)
         assertEquals(1f, m.cpuFraction)
