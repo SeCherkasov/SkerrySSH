@@ -93,6 +93,35 @@ class SessionsControllerTest {
     }
 
     @Test
+    fun `setViewForPanes points every tab of a run at the run screen, active or not`() = runTest {
+        // A runbook across two hosts puts its screen up on both tabs: switching to the second host
+        // mid-run must land on its progress, not on a terminal being typed into behind the user.
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val first = sessions.open(hostId = "host-a")
+        val second = sessions.open(hostId = "host-b")
+        val untouched = sessions.open(hostId = "host-c")
+
+        val runPanes = listOf(first, second).map { id -> sessions.tabs.first { it.id == id }.focusedPane.id }
+        sessions.setViewForPanes(runPanes, SessionView.Runbook)
+
+        assertEquals(SessionView.Runbook, sessions.tabs.first { it.id == first }.view)
+        assertEquals(SessionView.Runbook, sessions.tabs.first { it.id == second }.view)
+        assertEquals(SessionView.Terminal, sessions.tabs.first { it.id == untouched }.view)
+        scope.cancel()
+    }
+
+    @Test
+    fun `setViewForPanes ignores a pane no tab holds`() = runTest {
+        val (sessions, scope) = sessionsWith(FakeTransport())
+        val id = sessions.open(hostId = "host-a")
+
+        sessions.setViewForPanes(listOf("gone"), SessionView.Runbook)
+
+        assertEquals(SessionView.Terminal, sessions.tabs.first { it.id == id }.view)
+        scope.cancel()
+    }
+
+    @Test
     fun `open adds a session, makes it active and connects`() = runTest {
         val (sessions, scope) = sessionsWith(FakeTransport())
 

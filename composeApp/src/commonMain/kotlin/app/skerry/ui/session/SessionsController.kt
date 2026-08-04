@@ -23,7 +23,7 @@ import app.skerry.ui.terminal.TerminalScreenState
  * framebuffer tab (remote desktop) and [Player] a recording being replayed — neither has
  * terminal/SFTP sub-views.
  */
-enum class SessionView { Terminal, Sftp, Monitor, Vnc, Player }
+enum class SessionView { Terminal, Sftp, Monitor, Vnc, Player, Runbook }
 
 /**
  * One session — a single connection with its own [ConnectionController] (one shell per session),
@@ -460,6 +460,17 @@ class SessionsController(
         // VNC and player tabs are locked to their own view — there is no shell behind them.
         if (tab.isVnc || tab.isPlayer) return
         tab.setView(view)
+    }
+
+    /**
+     * Point every tab holding one of [paneIds] at [view] — how a runbook run puts its own screen up
+     * on each host it touches, not only on the tab that happens to be active. VNC and player tabs
+     * are left alone for the same reason [setActiveView] leaves them alone.
+     */
+    fun setViewForPanes(paneIds: Collection<String>, view: SessionView) {
+        tabs.forEach { tab ->
+            if (!tab.isVnc && !tab.isPlayer && paneIds.any { tab.pane(it) != null }) tab.setView(view)
+        }
     }
 
     /** Make tab [id] active; an unknown id is ignored. */

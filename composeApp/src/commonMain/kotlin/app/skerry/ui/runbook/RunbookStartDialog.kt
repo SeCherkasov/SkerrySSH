@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.stripUnsafeFormatChars
+import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
@@ -42,6 +43,7 @@ import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.snippet.TemplateVariableFields
 import app.skerry.ui.snippet.rememberTemplateVariableValues
+import app.skerry.ui.session.SessionView
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -57,11 +59,19 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun RunbookStartDialog(runner: RunbookRunner) {
     val request = runner.pending ?: return
+    val sessions = LocalSessions.current
     // Keyed per request: a new run must not inherit the previous dialog's fields.
     key(request) {
         RunbookStartDialogContent(
             request = request,
-            onConfirm = { values -> runner.confirmStart(values) },
+            onConfirm = { values ->
+                if (runner.confirmStart(values)) {
+                    // Every tab the run touches puts the run screen up — including the ones the user
+                    // isn't looking at, so switching to a host mid-run lands on its progress rather
+                    // than on a terminal quietly being typed into.
+                    sessions?.setViewForPanes(runner.hosts.map { it.sessionId }, SessionView.Runbook)
+                }
+            },
             onDismiss = runner::dismissStart,
         )
     }

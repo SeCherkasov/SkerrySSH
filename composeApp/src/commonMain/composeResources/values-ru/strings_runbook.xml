@@ -90,4 +90,22 @@
     <string name="runbook_policy_watchdog_off">Выкл.</string>
     <string name="runbook_policy_parallel_one">По одному хосту</string>
     <string name="runbook_policy_parallel_all">Все хосты сразу</string>
+
+    <!-- Run screen -->
+    <string name="runbook_run_kind">сценарий</string>
+    <string name="runbook_run_step_of">шаг %1$d из %2$d</string>
+    <string name="runbook_run_output">Вывод</string>
+    <string name="runbook_run_no_output">Пока ничего не выведено</string>
+    <string name="runbook_run_hosts">Хосты в прогоне</string>
+    <string name="runbook_run_parallelism">Параллелизм</string>
+    <string name="runbook_run_back">Назад в терминал</string>
+    <string name="runbook_run_open">Открыть прогон</string>
+    <string name="runbook_status_waiting">ожидает</string>
+    <string name="runbook_status_running">выполняется</string>
+    <string name="runbook_status_skipped">пропущен</string>
+    <string name="runbook_status_stopped">остановлен</string>
+    <string name="runbook_status_confirm">нужно подтверждение</string>
+    <string name="runbook_dur_seconds">%1$s с</string>
+    <string name="runbook_dur_minutes">%1$d мин %2$d с</string>
+    <string name="runbook_transfer_of">%1$s из %2$s</string>
 </resources>

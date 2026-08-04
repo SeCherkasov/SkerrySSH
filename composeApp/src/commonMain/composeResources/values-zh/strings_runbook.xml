@@ -84,4 +84,22 @@
     <string name="runbook_policy_watchdog_off">关闭</string>
     <string name="runbook_policy_parallel_one">每次一台主机</string>
     <string name="runbook_policy_parallel_all">所有主机同时</string>
+
+    <!-- Run screen -->
+    <string name="runbook_run_kind">运行手册</string>
+    <string name="runbook_run_step_of">第 %1$d / %2$d 步</string>
+    <string name="runbook_run_output">输出</string>
+    <string name="runbook_run_no_output">尚无输出</string>
+    <string name="runbook_run_hosts">本次运行的主机</string>
+    <string name="runbook_run_parallelism">并行方式</string>
+    <string name="runbook_run_back">返回终端</string>
+    <string name="runbook_run_open">打开运行</string>
+    <string name="runbook_status_waiting">等待中</string>
+    <string name="runbook_status_running">执行中</string>
+    <string name="runbook_status_skipped">已跳过</string>
+    <string name="runbook_status_stopped">已停止</string>
+    <string name="runbook_status_confirm">待确认</string>
+    <string name="runbook_dur_seconds">%1$s 秒</string>
+    <string name="runbook_dur_minutes">%1$d 分 %2$d 秒</string>
+    <string name="runbook_transfer_of">%1$s / %2$s</string>
 </resources>

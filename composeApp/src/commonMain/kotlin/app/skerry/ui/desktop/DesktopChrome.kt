@@ -51,7 +51,6 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.PaneSyncBinder
 import app.skerry.ui.session.SessionsController
-import app.skerry.ui.runbook.RunbookRunPanel
 import app.skerry.ui.runbook.RunbookStartDialog
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetRunDialog
@@ -495,21 +494,6 @@ internal fun DesktopChrome(
             // silently direct). Set by openResolved for all three connect paths.
             jumpProblem?.let { problem ->
                 JumpErrorDialog(problem, onDismiss = { jumpProblem = null })
-            }
-            // Live runbook progress, docked over the work area of the tab the run belongs to. Not
-            // modal and placed before the dialogs below, so the terminal underneath stays readable
-            // and any modal still covers it.
-            LocalRunbookRunner.current?.let { runner ->
-                // Any pane of the active tab: a run started in a split pane is still this tab's.
-                // With several hosts in one run, each tab shows its own host's progress.
-                val host = runner.hosts.firstOrNull { sessions?.activeTerminal?.pane(it.sessionId) != null }
-                if (host != null) {
-                    RunbookRunPanel(
-                        runner,
-                        host,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 46.dp),
-                    )
-                }
             }
             // Confirmation for a snippet with ${{…}} variables — every launch path (palette,
             // hotkey, "Run on host", library) parks such a run in SnippetManager.pendingRun.
