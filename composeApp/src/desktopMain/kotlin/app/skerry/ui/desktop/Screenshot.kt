@@ -1,9 +1,14 @@
 package app.skerry.ui.desktop
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.unit.Density
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.background
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.terminal.TerminalThemes
@@ -14,6 +19,10 @@ import app.skerry.ui.AppDependencies
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.session.SessionsController
+import app.skerry.shared.ssh.isVnc
+import app.skerry.shared.vnc.VncAuth
+import app.skerry.ui.connection.connectionSubtitle
+import app.skerry.ui.connection.toTarget
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.theme.SkerryTheme
 import app.skerry.ui.theme.ThemeMode
@@ -103,6 +112,15 @@ fun main() {
     }
     // Same for the monitor: a sub-view of the active session, not a rail item of its own.
     if (viewName == "Monitor") sessions?.setActiveView(SessionView.Monitor)
+    // A remote desktop lives in a tab of its own: opening the section alone would render its empty
+    // state, so the offscreen run dials the seeded VNC host over the fake session.
+    if (viewName == "RemoteDesktops" && hosts != null) {
+        hosts.hosts.firstOrNull { it.connectionType.isVnc }?.let { desktop ->
+            sessions?.openVnc(
+                desktop.id, desktop.label, desktop.connectionSubtitle(), desktop.toTarget(), VncAuth.None,
+            )
+        }
+    }
     // Assistant panel open over the live terminal (-Dskerry.screenshot.assistantPanel=true): checks
     // that the pinned action row steps aside for the panel's own header.
     if (System.getProperty("skerry.screenshot.assistantPanel", "false").toBoolean()) state.toggleAssistant()
@@ -146,7 +164,11 @@ fun main() {
     // Theme for visual review: -Dskerry.screenshot.theme=<system|light|dark> (default dark).
     val themeMode = ThemeMode.fromId(System.getProperty("skerry.screenshot.theme", "dark"))
     val scene = ImageComposeScene(width = 1280, height = 820, density = Density(1f)) {
-        SkerryTheme(mode = themeMode) { content() }
+        // A live remote desktop reports whether anyone can see it, which reads the lifecycle owner
+        // the window would supply. Offscreen there is no window, so a resumed stub stands in.
+        CompositionLocalProvider(LocalLifecycleOwner provides ScreenshotLifecycleOwner()) {
+            SkerryTheme(mode = themeMode) { content() }
+        }
     }
     // Pumps frames with a real pause so compose-resources can load fonts (async IO) and the fake
     // session can flush its output to the terminal.
@@ -251,4 +273,12 @@ private fun MonitorSheetOverlay() {
             onDismiss = {},
         )
     }
+}
+
+/** Resumed stand-in for the window's lifecycle owner, for the offscreen scenes. */
+@Suppress("VisibleForTests")
+private class ScreenshotLifecycleOwner : LifecycleOwner {
+    // createUnsafe: the offscreen render runs on the JVM main thread, not on the UI dispatcher the
+    // registry enforces, and there is no window here to own a real lifecycle anyway.
+    override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
 }

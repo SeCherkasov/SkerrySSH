@@ -39,4 +39,13 @@
     <string name="rd_audio">Sound</string>
     <string name="rd_audio_device_lost">The audio device stopped taking sound. Pick another output in the profile, then reconnect.</string>
     <string name="rd_clipboard_share">Share the clipboard</string>
+    <string name="rd_display">Display</string>
+    <string name="rd_fullscreen">Fill the window</string>
+    <string name="rd_fullscreen_exit">Leave full window</string>
+    <string name="rd_disconnect">Disconnect</string>
+    <string name="rd_bar_pin">Keep the bar open</string>
+    <string name="rd_bar_unpin">Let the bar hide itself</string>
+    <string name="rd_bar_hide">Hide the bar</string>
+    <string name="rd_ctrl_alt_del_view_only">View only — input is not sent</string>
+    <string name="rd_clipboard_failed">The system clipboard refused</string>
 </resources>

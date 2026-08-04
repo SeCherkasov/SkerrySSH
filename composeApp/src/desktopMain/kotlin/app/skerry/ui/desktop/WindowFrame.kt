@@ -49,11 +49,13 @@ fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit)
         // On X11 the WM moves the window itself (smooth, compositor-driven — see NativeWindowMove);
         // elsewhere fall back to moving it frame by frame from the app thread.
         val useNativeMove = NativeWindowMove.isAvailable()
+        val fullscreen = FullscreenToggle({ state.placement }, { state.placement = it })
         WindowChrome(
             isMaximized = { state.placement == WindowPlacement.Maximized },
             onMinimize = { state.isMinimized = true },
             onToggleMaximize = toggleMaximize,
             onClose = exit,
+            setFullscreen = fullscreen::apply,
             dragArea = { content ->
                 val doubleClick = Modifier.onUnconsumedDoubleClick(toggleMaximize)
                 Box(doubleClick.then(Modifier.titlebarDrag(awtWindow, state, useNativeMove))) { content() }
