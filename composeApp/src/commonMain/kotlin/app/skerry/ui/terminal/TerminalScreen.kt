@@ -735,21 +735,21 @@ fun TerminalScreen(
                     return@onPreviewKeyEvent true
                 }
                 // --- Reverse history search (Ctrl-R): while the overlay is open, keys drive it, not the PTY ---
-                if (state.reverseSearchQuery != null) {
+                if (state.reverseSearch.query != null) {
                     when {
-                        event.key == Key.Escape -> state.closeReverseSearch()
-                        event.key == Key.Enter -> state.reverseSearchAccept()
+                        event.key == Key.Escape -> state.reverseSearch.close()
+                        event.key == Key.Enter -> state.reverseSearch.accept()
                         // Another Ctrl-R (or ↑) — to the next (older) match; ↓ — to newer.
                         (event.isCtrlPressed && event.key == Key.R) || event.key == Key.DirectionUp ->
-                            state.reverseSearchNext()
-                        event.key == Key.DirectionDown -> state.reverseSearchPrev()
+                            state.reverseSearch.next()
+                        event.key == Key.DirectionDown -> state.reverseSearch.prev()
                         // Delete — remove the selected command from history (manual cleanup), overlay open.
-                        event.key == Key.Delete -> state.reverseSearchDeleteSelected()
-                        event.key == Key.Backspace -> state.reverseSearchBackspace()
+                        event.key == Key.Delete -> state.reverseSearch.deleteSelected()
+                        event.key == Key.Backspace -> state.reverseSearch.backspace()
                         else -> {
                             val cp = event.utf16CodePoint
                             if (cp in 0x20..0xFFFF && !event.isCtrlPressed && !event.isAltPressed) {
-                                state.reverseSearchAppend(cp.toChar().toString())
+                                state.reverseSearch.append(cp.toChar().toString())
                             }
                         }
                     }
@@ -757,7 +757,7 @@ fun TerminalScreen(
                 }
                 // Ctrl-R — open reverse history search (intercept from the shell, show our own overlay).
                 if (event.isCtrlPressed && event.key == Key.R) {
-                    state.openReverseSearch()
+                    state.reverseSearch.open()
                     return@onPreviewKeyEvent true
                 }
                 // Shift+Tab — cycle autocomplete suggestion alternatives. Swallowed whenever a ghost
@@ -1136,9 +1136,9 @@ fun TerminalScreen(
 
       // Reverse history search overlay (Ctrl-R): a bottom panel with the current query and matches
       // (selected — cyan). Enter inserts, Esc closes, another Ctrl-R/arrows page through.
-      val rsQuery = state.reverseSearchQuery
+      val rsQuery = state.reverseSearch.query
       if (rsQuery != null && !closed) {
-          val matches = state.reverseSearchResults
+          val matches = state.reverseSearch.results
           val shown = matches.take(REVERSE_SEARCH_ROWS)
           Column(
               Modifier
@@ -1155,7 +1155,7 @@ fun TerminalScreen(
                   Text(stringResource(Res.string.terminal_reverse_search_no_matches), style = textStyle.copy(color = Skerry.colors.faint))
               } else {
                   shown.forEachIndexed { i, cmd ->
-                      val selected = i == state.reverseSearchIndex.mod(matches.size.coerceAtLeast(1))
+                      val selected = i == state.reverseSearch.index.mod(matches.size.coerceAtLeast(1))
                       Text(
                           text = cmd,
                           maxLines = 1,
@@ -1201,11 +1201,11 @@ fun TerminalScreen(
                       textToolbar.hide()
                       // While reverse-search is open — the soft keyboard edits the query, not the PTY:
                       // DEL → backspace, Enter(CR) → accept, printable chars → into the query.
-                      if (state.reverseSearchQuery != null) {
+                      if (state.reverseSearch.query != null) {
                           for (ch in out) when (ch.code) {
-                              127, 8 -> state.reverseSearchBackspace() // DEL / BS
-                              13, 10 -> state.reverseSearchAccept() // CR / LF — accept
-                              else -> if (ch.code >= 0x20) state.reverseSearchAppend(ch.toString())
+                              127, 8 -> state.reverseSearch.backspace() // DEL / BS
+                              13, 10 -> state.reverseSearch.accept() // CR / LF — accept
+                              else -> if (ch.code >= 0x20) state.reverseSearch.append(ch.toString())
                           }
                       } else {
                           state.typeInput(out) // feeds autocomplete (soft keyboard), then goes to the PTY

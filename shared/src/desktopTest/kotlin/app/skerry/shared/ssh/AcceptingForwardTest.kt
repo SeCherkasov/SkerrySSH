@@ -5,9 +5,10 @@ import java.io.Closeable
 import java.io.IOException
 import java.net.ServerSocket
 import java.net.Socket
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -36,12 +37,17 @@ class AcceptingForwardTest {
         override fun handle(socket: Socket) = Unit
     }
 
-    /** A live resource whose teardown is slow enough to be observable from another thread. */
+    /**
+     * A live resource whose teardown is slow enough to be observable from another thread, and which
+     * records *who* tore it down. The thread name is the whole point: asserting only that it ended
+     * up closed cannot tell "close() waited for the accept loop's teardown" from "close() did the
+     * teardown itself", which is exactly the ownership handoff under test.
+     */
     private class SlowCloseable : Closeable {
-        val closed = AtomicBoolean(false)
+        val closedBy = AtomicReference<String?>(null)
         override fun close() {
             Thread.sleep(TEARDOWN_MILLIS)
-            closed.set(true)
+            closedBy.set(Thread.currentThread().name)
         }
     }
 
@@ -74,13 +80,22 @@ class AcceptingForwardTest {
 
         forward.close()
 
-        // close() returning is the caller's signal that every live resource is settled. If it
-        // returns early just because the accept loop won the race to claim the teardown, that
-        // guarantee silently holds only on the path where nothing went wrong.
-        assertTrue(slow.closed.get(), "close() returned while the accept loop was still tearing down")
+        // Two claims, and the second is the one worth having. That the resource is closed at all
+        // would also hold if close() had simply done the teardown itself; that it was closed on the
+        // ACCEPTOR thread is what says the loop owned the teardown — and close() still did not
+        // return until that teardown finished.
+        val closer = slow.closedBy.get()
+        assertNotNull(closer, "close() returned while the accept loop was still tearing down")
+        assertTrue(
+            closer.startsWith(ACCEPTOR_THREAD_PREFIX),
+            "the teardown ran on \"$closer\", so close() did it rather than waiting for the accept loop",
+        )
     }
 
     private companion object {
         const val TEARDOWN_MILLIS = 300L
+
+        /** [AcceptingForward] names its accept thread "<threadName>-<port>". */
+        const val ACCEPTOR_THREAD_PREFIX = "test-forward-"
     }
 }

@@ -648,11 +648,11 @@ class TerminalScreenStateTest {
             FakeTerminalSession(), scope,
             initialHistory = listOf("docker ps", "git status"),
         )
-        state.openReverseSearch()
-        state.reverseSearchAppend("git")
-        assertEquals("git status", state.reverseSearchSelection)
-        state.reverseSearchAccept()
-        assertEquals(null, state.reverseSearchQuery) // overlay closed after accepting
+        state.reverseSearch.open()
+        state.reverseSearch.append("git")
+        assertEquals("git status", state.reverseSearch.selection)
+        state.reverseSearch.accept()
+        assertEquals(null, state.reverseSearch.query) // overlay closed after accepting
         scope.cancel()
     }
 
@@ -665,11 +665,11 @@ class TerminalScreenStateTest {
             initialHistory = listOf("gti status", "git status"),
             onHistoryChanged = { snapshots += it },
         )
-        state.openReverseSearch()
-        state.reverseSearchAppend("gti") // pick the typo entry
-        assertEquals("gti status", state.reverseSearchSelection)
-        state.reverseSearchDeleteSelected()
-        assertEquals(emptyList(), state.reverseSearchResults) // "gti" is no longer found
+        state.reverseSearch.open()
+        state.reverseSearch.append("gti") // pick the typo entry
+        assertEquals("gti status", state.reverseSearch.selection)
+        state.reverseSearch.deleteSelected()
+        assertEquals(emptyList(), state.reverseSearch.results) // "gti" is no longer found
         assertEquals(listOf("git status"), snapshots.last()) // persisted without the typo
         scope.cancel()
     }
@@ -866,11 +866,11 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(session, scope, initialHistory = listOf("uptime"))
 
         session.emit("hit\r\n".encodeToByteArray())
-        state.openReverseSearch()
+        state.reverseSearch.open()
         state.search.open()
-        assertEquals(null, state.reverseSearchQuery)
+        assertEquals(null, state.reverseSearch.query)
 
-        state.openReverseSearch()
+        state.reverseSearch.open()
         assertEquals(null, state.search.query)
         scope.cancel()
     }

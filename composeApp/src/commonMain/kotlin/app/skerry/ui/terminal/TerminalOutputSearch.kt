@@ -267,3 +267,13 @@ class TerminalOutputSearch(
         return stepped
     }
 }
+
+/**
+ * How often a published snapshot may rebuild the search match list. Long enough that streaming
+ * output cannot stall the emulator's coroutine with full-buffer passes, short enough that the
+ * counter never looks frozen. The on-screen highlight does not wait for this (see [TerminalScreen]).
+ */
+const val SEARCH_REFRESH_INTERVAL_MS = 300L
+
+/** Longest accepted search query: past this it is not a search term but a paste accident. */
+const val MAX_SEARCH_QUERY_LENGTH = 512

@@ -213,12 +213,12 @@ internal fun MobileKeybar(
     ) {
         // While reverse-search (Ctrl-R) is open, the panel shows its controls; the query is typed on the
         // soft keyboard (routed to TerminalScreen). Otherwise — the normal layout.
-        if (terminal.reverseSearchQuery != null) {
-            KeyCap("esc") { terminal.closeReverseSearch(); onCtrlArmedChange(false) }
-            KeyCapIcon("expand_more") { terminal.reverseSearchNext() } // next (older)
-            KeyCapIcon("expand_less") { terminal.reverseSearchPrev() } // previous (newer)
-            KeyCapIcon("delete") { terminal.reverseSearchDeleteSelected() } // remove from history
-            KeyCap("insert", accent = true) { terminal.reverseSearchAccept(); onCtrlArmedChange(false) }
+        if (terminal.reverseSearch.query != null) {
+            KeyCap("esc") { terminal.reverseSearch.close(); onCtrlArmedChange(false) }
+            KeyCapIcon("expand_more") { terminal.reverseSearch.next() } // next (older)
+            KeyCapIcon("expand_less") { terminal.reverseSearch.prev() } // previous (newer)
+            KeyCapIcon("delete") { terminal.reverseSearch.deleteSelected() } // remove from history
+            KeyCap("insert", accent = true) { terminal.reverseSearch.accept(); onCtrlArmedChange(false) }
             return@Row
         }
         // The AI input lives behind this key instead of taking a permanent row (see MobileAiBarInput).
@@ -235,7 +235,7 @@ internal fun MobileKeybar(
             KeyCapIcon("autorenew") { terminal.cycleSuggestion() }
         }
         // Reverse history search (Ctrl-R): open the search overlay (query typed on the soft keyboard).
-        KeyCapIcon("search") { terminal.openReverseSearch() }
+        KeyCapIcon("search") { terminal.reverseSearch.open() }
         // Find in output (desktop ⌘F parity): opens the search panel over the terminal, which takes
         // the soft keyboard for its query field.
         KeyCapIcon("find_in_page") { terminal.search.open() }

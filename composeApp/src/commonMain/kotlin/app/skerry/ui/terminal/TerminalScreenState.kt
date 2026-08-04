@@ -4,7 +4,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.Snapshot
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.AutocompleteEngine
 import app.skerry.shared.terminal.CommandHistory
@@ -18,25 +17,19 @@ import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermColor
 import app.skerry.shared.terminal.TerminalEmulator
-import app.skerry.shared.terminal.TerminalMatch
 import app.skerry.shared.terminal.TerminalPos
-import app.skerry.shared.terminal.TerminalSearchError
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.terminal.bracketedPasteWrap
 import app.skerry.shared.terminal.encodeMouseReport
 import app.skerry.shared.terminal.lineSelectionAt
-import app.skerry.shared.terminal.matchNearestTo
-import app.skerry.shared.terminal.searchTerminal
 import app.skerry.shared.terminal.wordSelectionAt
 import kotlin.concurrent.Volatile
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -295,12 +288,29 @@ class TerminalScreenState(
      * Find-in-scrollback panel state. Its own class: the panel owns a coroutine, a throttle and a
      * six-field publish of its own, none of which the buffer or the PTY care about.
      */
-    val search = TerminalOutputSearch(
+    // Each overlay's onOpen closes the other, so neither type can be inferred from the other and
+    // both are spelled out — that is a compile-time need, not the safety argument. What makes the
+    // forward reference safe is that neither constructor invokes its callbacks: they run only when
+    // something calls open(), which cannot happen before this constructor returns.
+    val search: TerminalOutputSearch = TerminalOutputSearch(
         scope = scope,
         nowMillis = nowMillis,
         buffer = { screen },
         // The two overlays cannot both hold the keyboard.
-        onOpen = { closeReverseSearch() },
+        onOpen = { reverseSearch.close() },
+    )
+
+    /**
+     * Ctrl-R overlay over the shell line. Its own class: it is a picker over command history with
+     * a query and a cursor, and shares nothing with the buffer or the PTY beyond the history it
+     * reads and the command it hands back.
+     */
+    val reverseSearch: TerminalReverseSearch = TerminalReverseSearch(
+        canOpen = { !altScreen },
+        matches = { q -> autocomplete.commandHistory.search(q) },
+        onOpen = { search.close() },
+        onAccept = { applyHistoryCommand(it) },
+        onForget = { forgetHistoryCommand(it) },
     )
 
     init {
@@ -724,91 +734,15 @@ class TerminalScreenState(
         refreshSuggestion()
     }
 
-    // --- Reverse search (Ctrl-R): overlay state lives here so desktop keys and the mobile
-    // panel/IME drive it uniformly, and the render overlay reads a single source. ---
-
-    /** Current reverse-search query, or `null` if the overlay is closed. */
-    var reverseSearchQuery: String? by mutableStateOf(null)
-        private set
-
-    /** Index of the selected match in [reverseSearchResults]. */
-    var reverseSearchIndex: Int by mutableStateOf(0)
-        private set
-
-    /** Matches for the current query (newest to oldest), or empty if the overlay is closed. */
-    val reverseSearchResults: List<String>
-        get() = reverseSearchQuery?.let { autocomplete.commandHistory.search(it) } ?: emptyList()
-
-    /** Selected match (at [reverseSearchIndex]) or `null`. */
-    val reverseSearchSelection: String?
-        get() {
-            val r = reverseSearchResults
-            return if (r.isEmpty()) null else r[reverseSearchIndex.mod(r.size)]
-        }
-
-    /** Open reverse search (empty query). No-op in alt-screen (no line history there). */
-    fun openReverseSearch() {
-        if (altScreen) return
-        // Only one overlay can own the keyboard: the find bar's field would keep focus and leave
-        // this overlay visible but deaf to its own keys.
-        search.close()
-        reverseSearchQuery = ""
-        reverseSearchIndex = 0
-    }
-
-    /** Close the reverse-search overlay without inserting anything. */
-    fun closeReverseSearch() {
-        reverseSearchQuery = null
-        reverseSearchIndex = 0
-    }
-
-    /** Append [text] to the reverse-search query (resets selection to the first match). */
-    fun reverseSearchAppend(text: String) {
-        val q = reverseSearchQuery ?: return
-        reverseSearchQuery = q + text
-        reverseSearchIndex = 0
-    }
-
-    /** Remove the last character of the reverse-search query. */
-    fun reverseSearchBackspace() {
-        val q = reverseSearchQuery ?: return
-        reverseSearchQuery = q.dropLast(1)
-        reverseSearchIndex = 0
-    }
-
-    /** Move to the next (older) match. */
-    fun reverseSearchNext() {
-        val n = reverseSearchResults.size
-        if (n > 0) reverseSearchIndex = (reverseSearchIndex + 1) % n
-    }
-
-    /** Move to the previous (newer) match. */
-    fun reverseSearchPrev() {
-        val n = reverseSearchResults.size
-        if (n > 0) reverseSearchIndex = (reverseSearchIndex - 1 + n) % n
-    }
-
-    /** Accept the selected match (insert via [applyHistoryCommand]) and close the overlay. */
-    fun reverseSearchAccept() {
-        reverseSearchSelection?.let { applyHistoryCommand(it) }
-        closeReverseSearch()
-    }
-
     /**
      * Remove [command] from the autocomplete history (manual cleanup of typos/unwanted commands)
      * and persist the update. Adjusts the reverse-search index to stay in bounds.
      */
     fun forgetHistoryCommand(command: String) {
         if (!autocomplete.forget(command)) return
-        val n = reverseSearchResults.size
-        if (n == 0) reverseSearchIndex = 0 else if (reverseSearchIndex >= n) reverseSearchIndex = n - 1
+        reverseSearch.clampIndex()
         onHistoryChanged?.invoke(autocomplete.commandHistory.commands)
         refreshSuggestion()
-    }
-
-    /** Remove the currently selected reverse-search match from history; overlay stays open. */
-    fun reverseSearchDeleteSelected() {
-        reverseSearchSelection?.let { forgetHistoryCommand(it) }
     }
 
     /**
@@ -1034,16 +968,6 @@ class TerminalScreenState(
  * typed input feeds its autocomplete, a paste gets that pane's own bracketed-paste wrapping.
  */
 enum class MirroredInput { Typed, Pasted }
-
-/**
- * How often a published snapshot may rebuild the search match list. Long enough that streaming
- * output cannot stall the emulator's coroutine with full-buffer passes, short enough that the
- * counter never looks frozen. The on-screen highlight does not wait for this (see [TerminalScreen]).
- */
-const val SEARCH_REFRESH_INTERVAL_MS = 300L
-
-/** Longest accepted search query: past this it is not a search term but a paste accident. */
-const val MAX_SEARCH_QUERY_LENGTH = 512
 
 /** Process start mark: the default monotonic clock behind [TerminalScreenState]'s refresh throttle. */
 private val STARTED_AT = TimeSource.Monotonic.markNow()

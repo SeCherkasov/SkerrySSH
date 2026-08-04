@@ -347,6 +347,7 @@ private fun DisconnectedBanner(state: ConnectionUiState.Disconnected, modifier: 
         state.cleanExit -> stringResource(Res.string.term_session_closed)
         state.reconnecting -> stringResource(Res.string.term_reconnecting, state.attempt)
         // Transport text in English, like the connect-error detail: it names what actually refused.
+        // Already sanitised and length-capped where it was captured (see reconnectFailureDetail).
         state.lastError != null -> stringResource(Res.string.term_connection_lost_detail, state.lastError)
         else -> stringResource(Res.string.term_connection_lost)
     }

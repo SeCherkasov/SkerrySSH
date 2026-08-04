@@ -262,8 +262,10 @@ class ConnectionController(
                 val serial = e as? SerialUnavailableException ?: e.cause as? SerialUnavailableException
                 uiState = ConnectionUiState.Error(
                     // Transport text is diagnostics only: the view shows a localized base and keeps
-                    // this as a parenthetical detail (sshj/okio messages are always English).
-                    message = e.message.orEmpty(),
+                    // this as a parenthetical detail (sshj/okio messages are always English). It is
+                    // still the server's own words, so it crosses the same sanitising boundary the
+                    // reconnect banner uses.
+                    message = serverFailureDetail(e).orEmpty(),
                     moshReason = (e as? MoshSetupException)?.reason,
                     moshDetail = (e as? MoshSetupException)?.detail,
                     serialProblem = serial?.problem,
@@ -626,7 +628,7 @@ class ConnectionController(
                     // user sees, and without a reason it cannot distinguish a dead route from a
                     // rejected credential. Overwritten each attempt — the last one is the current
                     // truth about the host.
-                    lastError = e.message
+                    lastError = serverFailureDetail(e)
                     attempt++
                 }
             }
