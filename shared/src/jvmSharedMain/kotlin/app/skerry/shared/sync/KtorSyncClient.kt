@@ -1,5 +1,6 @@
 package app.skerry.shared.sync
 
+import app.skerry.sync.wire.AccountSummaryResponse
 import app.skerry.sync.wire.ChallengeRequest
 import app.skerry.sync.wire.ChallengeResponse
 import app.skerry.sync.wire.ChangePasswordRequest
@@ -239,6 +240,11 @@ class KtorSyncClient(
         return resp.devices.map { RemoteDevice(it.id, it.name, it.createdAt, it.lastSeenAt, it.revoked, it.current) }
     }
 
+    override suspend fun accountSummary(session: SyncSession): AccountSummary {
+        val resp: AccountSummaryResponse = get("/account/summary") { bearerAuth(session.accessToken) }.bodyChecked()
+        return AccountSummary(resp.devices, resp.activeDevices, resp.records, resp.storageBytes, resp.serverVersion)
+    }
+
     override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean {
         val resp = http.delete("$serverUrl/devices/$deviceId") { bearerAuth(session.accessToken) }
         return when (resp.status) {
@@ -358,7 +364,7 @@ class KtorSyncClient(
             bearerAuth(session.accessToken)
         }.bodyChecked()
         return resp.members.map {
-            TeamMember(it.accountId, TeamRole.fromWire(it.role), TeamMemberStatus.fromWire(it.status), it.createdAt)
+            TeamMember(it.accountId, TeamRole.fromWire(it.role), TeamMemberStatus.fromWire(it.status), it.createdAt, it.lastSeenAt)
         }
     }
 

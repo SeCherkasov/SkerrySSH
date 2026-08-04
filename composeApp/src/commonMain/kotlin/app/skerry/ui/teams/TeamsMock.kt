@@ -1,9 +1,7 @@
 package app.skerry.ui.teams
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,10 +9,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -22,18 +18,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.lib_teams_invite
-import app.skerry.ui.generated.resources.lib_teams_members
-import app.skerry.ui.generated.resources.lib_teams_recent_activity
-import app.skerry.ui.generated.resources.lib_teams_sidebar
-import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.Dot
-import app.skerry.ui.design.LocalFonts
+import app.skerry.shared.team.TeamActivityEntry
+import app.skerry.shared.team.TeamMember
+import app.skerry.shared.team.TeamMemberStatus
+import app.skerry.shared.team.TeamRole
+import app.skerry.shared.team.buildTeamActivityFeed
+import app.skerry.shared.terminal.epochMillis
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SIDEBAR_WIDTH
 import app.skerry.ui.design.SectionHeader
@@ -41,171 +33,117 @@ import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_teams_header_subtitle
+import app.skerry.ui.generated.resources.lib_teams_header_title
+import app.skerry.ui.generated.resources.lib_teams_invite
+import app.skerry.ui.generated.resources.lib_teams_sidebar
 import app.skerry.ui.theme.Skerry
+import org.jetbrains.compose.resources.stringResource
 
-private data class Member(val initials: String, val avatar: Color, val name: String, val email: String, val role: String, val roleBg: Color, val roleFg: Color)
-private data class SharedHost(val name: String, val members: String, val online: Boolean)
-private data class Activity(val icon: String, val iconColor: Color, val prefix: String, val target: String, val time: String)
+// Preview path (LocalTeams == null): the same composables the live screen is built from, fed with
+// placeholder rows — so a layout change can't quietly apply to only one of the two.
 
-// Mock rows resolve their colors from the active theme, so they are built inside the composable.
-@Composable
-private fun mockMembers(): List<Member> {
-    val c = Skerry.colors
-    return listOf(
-        Member("MK", c.cyan, "Maya Kovac", "maya@skerry.dev", "OWNER", c.amberSoft, c.amber),
-        Member("TR", c.moss, "Theo Reyes", "theo@skerry.dev", "ADMIN", c.cyan.copy(alpha = 0.12f), c.cyanBright),
-        Member("JL", c.dim, "June Lin", "june@skerry.dev", "MEMBER", c.overlayMed, c.dim),
-    )
-}
+private const val MOCK_TEAM = "skerry-ops"
+private const val HOUR_MS = 3_600_000L
+private const val DAY_MS = 24 * HOUR_MS
 
-private val SHARED_HOSTS = listOf(
-    SharedHost("prod-web-01", "5 members", true),
-    SharedHost("prod-web-02", "5 members", true),
-    SharedHost("db-master", "3 members", true),
-    SharedHost("k3s-control", "2 members", false),
+private val MOCK_SCOPES = listOf(
+    TeamScopeUi(id = "s-prod", name = "prod", memberCount = 2, hasKey = true),
+    TeamScopeUi(id = "s-db", name = "db", memberCount = 2, hasKey = true),
 )
 
-@Composable
-private fun mockActivity(): List<Activity> {
-    val c = Skerry.colors
-    return listOf(
-        Activity("login", c.moss, "Theo connected to ", "prod-web-02", "3 min ago"),
-        Activity("add", c.cyan, "Maya shared host ", "k3s-control", "1 h ago"),
-        Activity("key", c.amber, "June rotated key ", "deploy_ci", "Yesterday"),
-    )
-}
+private fun mockTeam() = TeamUi(
+    id = "team-mock",
+    name = MOCK_TEAM,
+    ownerAccountId = "sergey@skerry.dev",
+    role = TeamRole.OWNER,
+    status = TeamMemberStatus.ACTIVE,
+    memberCount = 5,
+    hasKey = true,
+    scopes = MOCK_SCOPES,
+)
 
-/** Static Teams layout — mock/preview path (LocalTeams == null), renders placeholder data. */
+private fun mockMembers(now: Long) = listOf(
+    TeamMember("sergey@skerry.dev", TeamRole.OWNER, TeamMemberStatus.ACTIVE, 0, now),
+    TeamMember("anna@skerry.dev", TeamRole.ADMIN, TeamMemberStatus.ACTIVE, 0, now - 3 * HOUR_MS),
+    TeamMember("dmitry@skerry.dev", TeamRole.EDITOR, TeamMemberStatus.ACTIVE, 0, now - DAY_MS),
+    TeamMember("marina@skerry.dev", TeamRole.VIEWER, TeamMemberStatus.ACTIVE, 0, now - 6 * DAY_MS),
+    TeamMember("pavel@skerry.dev", TeamRole.VIEWER, TeamMemberStatus.INVITED, 0, null),
+)
+
+private fun mockGrants() = mapOf(
+    "s-prod" to setOf("anna@skerry.dev"),
+    "s-db" to setOf("anna@skerry.dev", "marina@skerry.dev"),
+)
+
+private fun mockEntries(now: Long) = listOf(
+    TeamActivityEntry("anna@skerry.dev", "team.record_share", "", now - 2 * HOUR_MS, recordId = "h1", recordType = "HOST"),
+    TeamActivityEntry("sergey@skerry.dev", "team.rekey", "", now - DAY_MS),
+    TeamActivityEntry("sergey@skerry.dev", "team.invite", "pavel@skerry.dev", now - 2 * DAY_MS),
+)
+
+/** Static Teams layout — mock/preview path, rendered from the same building blocks as the live one. */
 @Composable
 internal fun TeamsMockView() {
-    val mono = LocalFonts.current.mono
+    val now = epochMillis()
+    val team = mockTeam()
+    val feed = buildTeamActivityFeed(mockEntries(now), selfAccountId = team.ownerAccountId)
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).padding(horizontal = 8.dp, vertical = 14.dp)) {
             SidebarSectionTitle(stringResource(Res.string.lib_teams_sidebar), modifier = Modifier.padding(start = 10.dp, bottom = 10.dp))
-            TeamRow("rocket_launch", "Platform crew", active = true)
-            TeamRow("database", "Data team")
+            MockTeamRow(MOCK_TEAM, active = true)
+            MockTeamRow("data-team")
             Spacer(Modifier.weight(1f))
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.moss.copy(alpha = 0.06f)).padding(horizontal = 10.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                Sym("sync", size = 15.sp, color = Skerry.colors.moss)
-                Txt("Synced 2 min ago", color = Skerry.colors.moss, size = 11.5.sp)
-            }
         }
         VLine(Skerry.colors.line)
-        Column(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
+        Column(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg)) {
             SectionHeader(
-                title = "Platform crew",
-                subtitle = "5 members · 9 shared hosts · 2 shared vaults",
-                actions = {
-                    PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = {}, icon = "person_add")
-                },
+                title = stringResource(Res.string.lib_teams_header_title),
+                subtitle = stringResource(Res.string.lib_teams_header_subtitle, team.name, team.memberCount),
+                actions = { PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = {}, icon = "person_add") },
             )
-            Column(Modifier.padding(horizontal = 24.dp, vertical = 20.dp)) {
-                SectionLabel(stringResource(Res.string.lib_teams_members))
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    mockMembers().forEach { MemberRow(it) }
+            Row(Modifier.fillMaxSize()) {
+                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                    TeamMemberTable(
+                        rows = teamMemberRows(team, mockMembers(now), mockGrants(), canManage = true),
+                        now = now,
+                        onChangeRole = {},
+                        onRemove = {},
+                    )
+                    TeamSummaryCards(
+                        cards = TeamCards(
+                            items = 33,
+                            lastRekeyAt = now - DAY_MS,
+                            endpoint = "sync.skerry.local",
+                            serverVersion = "0.2.1",
+                            devices = 9,
+                            hosts = 14,
+                            snippets = 18,
+                            runbooks = 4,
+                            liveSessions = 2,
+                        ),
+                        onOpen = {},
+                        modifier = Modifier.padding(horizontal = 22.dp, vertical = 16.dp),
+                    )
                 }
-                Row(Modifier.padding(top = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        SectionLabel("Shared hosts · 9")
-                        SHARED_HOSTS.forEach { SharedHostRow(it, mono) }
-                    }
-                    Column(Modifier.weight(1f)) {
-                        SectionLabel("Shared vaults · 2")
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SharedVaultRow(Skerry.colors.cyanBright, "Production secrets", "12 items · read-only for members")
-                            SharedVaultRow(Skerry.colors.amber, "CI / deploy keys", "4 items · admins only")
-                        }
-                    }
-                }
-                Box(Modifier.padding(top = 24.dp))
-                SectionLabel(stringResource(Res.string.lib_teams_recent_activity))
-                mockActivity().forEach { ActivityRow(it, mono) }
+                TeamActivityPanel(feed, onOpenFull = {})
             }
         }
     }
 }
 
 @Composable
-private fun TeamRow(icon: String, name: String, active: Boolean = false) {
+private fun MockTeamRow(name: String, active: Boolean = false) {
+    val fg = if (active) Skerry.colors.cyanBright else Skerry.colors.dim
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(if (active) Skerry.colors.cyan10 else Color.Transparent).padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp))
+            .background(if (active) Skerry.colors.cyan10 else Color.Transparent)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym(icon, size = 16.sp, color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim)
-        Txt(name, color = if (active) Skerry.colors.cyanBright else Skerry.colors.dim, size = 12.5.sp)
-    }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Txt(text.uppercase(), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 12.dp))
-}
-
-@Composable
-private fun MemberRow(m: Member) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 14.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(Modifier.size(32.dp).clip(CircleShape).background(m.avatar), contentAlignment = Alignment.Center) {
-            Txt(m.initials, color = Skerry.colors.ink, size = 13.sp, weight = FontWeight.SemiBold)
-        }
-        Column(Modifier.weight(1f)) {
-            Txt(m.name, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(m.email, color = Skerry.colors.faint, size = 11.5.sp)
-        }
-        Box(Modifier.clip(RoundedCornerShape(20.dp)).background(m.roleBg).padding(horizontal = 9.dp, vertical = 2.dp)) {
-            Txt(m.role, color = m.roleFg, size = 10.sp, weight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
-private fun SharedHostRow(h: SharedHost, mono: FontFamily) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        Dot(if (h.online) Skerry.colors.moss else Skerry.colors.faint)
-        Txt(h.name, color = Skerry.colors.textBright, size = 12.sp, font = mono, modifier = Modifier.weight(1f))
-        Txt(h.members, color = Skerry.colors.faint, size = 10.sp)
-    }
-}
-
-@Composable
-private fun SharedVaultRow(iconColor: Color, title: String, subtitle: String) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(horizontal = 13.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Sym("folder_shared", size = 18.sp, color = iconColor)
-        Column(Modifier.weight(1f)) {
-            Txt(title, color = Skerry.colors.text, size = 12.5.sp, weight = FontWeight.Medium)
-            Txt(subtitle, color = Skerry.colors.faint, size = 10.5.sp)
-        }
-    }
-}
-
-@Composable
-private fun ActivityRow(a: Activity, mono: FontFamily) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Sym(a.icon, size = 16.sp, color = a.iconColor)
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Txt(a.prefix, color = Skerry.colors.textBright, size = 12.sp)
-            Txt(a.target, color = Skerry.colors.cyanBright, size = 12.sp, font = mono)
-        }
-        Txt(a.time, color = Skerry.colors.faint, size = 11.sp)
+        Sym("group", size = 16.sp, color = fg)
+        Txt(name, color = fg, size = 12.5.sp)
     }
 }

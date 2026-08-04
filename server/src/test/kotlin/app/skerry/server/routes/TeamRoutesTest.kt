@@ -32,6 +32,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class TeamRoutesTest {
 
@@ -164,6 +165,57 @@ class TeamRoutesTest {
         val members: TeamMembersResponse = client.get("/teams/$teamId/members") { bearerAuth(bobTokens.accessToken) }.body()
         assertEquals(setOf(alice, bob), members.members.map { it.accountId }.toSet())
         assertNotNull(members.members.single { it.role == "owner" && it.accountId == alice })
+    }
+
+    @Test
+    fun `a runbook is a shareable team record, an unknown type still is not`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val aliceTokens = client.registerAccount(alice, password)
+        client.createTeam(aliceTokens.accessToken)
+
+        suspend fun push(type: String) = client.put("/teams/$teamId/records") {
+            bearerAuth(aliceTokens.accessToken)
+            contentType(ContentType.Application.Json)
+            setBody(PushRequest(listOf(record("r-$type", type = type))))
+        }
+
+        // Runbooks are shared with a team like hosts and snippets; the client offers it, so the
+        // server has to accept it — otherwise the share writes a local copy nobody else ever sees.
+        assertEquals(HttpStatusCode.OK, push("RUNBOOK").status)
+        val delta: RecordsResponse = client.get("/teams/$teamId/records?since=0") { bearerAuth(aliceTokens.accessToken) }.body()
+        assertEquals("r-RUNBOOK", delta.records.single().id)
+        // The allowlist is still an allowlist: a type the team zone knows nothing about is refused.
+        assertEquals(HttpStatusCode.BadRequest, push("TERMINAL_HISTORY").status)
+    }
+
+    @Test
+    fun `members report when each account was last seen, across all of its devices`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val before = System.currentTimeMillis()
+        val aliceTokens = client.registerAccount(alice, password)
+        val bobTokens = client.registerAccount(bob, password, deviceId = "dev-bob")
+        client.createTeam(aliceTokens.accessToken)
+        client.invite(aliceTokens.accessToken, bob, byteArrayOf(1))
+        client.post("/teams/$teamId/accept") { bearerAuth(bobTokens.accessToken) }
+
+        // Bob signs in on a second device; the freshest of an account's devices is what the team sees.
+        val secondLogin = System.currentTimeMillis()
+        client.srpLogin(bob, password, deviceId = "dev-bob-2", deviceName = "Phone")
+
+        val members: TeamMembersResponse = client.get("/teams/$teamId/members") { bearerAuth(aliceTokens.accessToken) }.body()
+        val aliceSeen = members.members.single { it.accountId == alice }.lastSeenAt
+        val bobSeen = members.members.single { it.accountId == bob }.lastSeenAt
+
+        assertNotNull(aliceSeen)
+        assertTrue(aliceSeen >= before)
+        assertNotNull(bobSeen)
+        assertTrue(bobSeen >= secondLogin, "the newer device's activity must win: $bobSeen < $secondLogin")
     }
 
     @Test

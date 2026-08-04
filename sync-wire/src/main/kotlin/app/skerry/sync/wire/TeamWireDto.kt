@@ -62,6 +62,13 @@ data class TeamMemberDto(
     val role: String,
     val status: String,
     val createdAt: Long,
+    /**
+     * Most recent activity across the member's devices (epoch millis), or null when the server
+     * predates the field or the account has no device rows. Metadata the team already implies —
+     * membership is public inside the team — and the only thing it says is whether a colleague is
+     * still around.
+     */
+    val lastSeenAt: Long? = null,
 )
 
 @Serializable

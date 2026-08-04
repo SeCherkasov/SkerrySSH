@@ -1,6 +1,7 @@
 package app.skerry.ui.sync
 
 import app.skerry.shared.platformName
+import app.skerry.shared.sync.AccountSummary
 import app.skerry.shared.sync.DeviceInfo
 import app.skerry.shared.sync.RemoteDevice
 import app.skerry.shared.sync.SyncClient
@@ -1386,6 +1387,24 @@ class SyncCoordinator(
             throw e
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    /**
+     * The server's own view of this account — device count, stored ciphertext, instance version — for
+     * the Teams screen's Server card. Null without a session or when the call fails: the card then
+     * shows what it knows (the endpoint) and dashes for the rest, which is what an unreachable server
+     * actually means.
+     */
+    suspend fun serverSummary(): AccountSummary? {
+        val c = client ?: return null
+        val s = session ?: return null
+        return try {
+            c.accountSummary(s)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
         }
     }
 

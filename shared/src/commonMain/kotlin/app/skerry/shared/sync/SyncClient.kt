@@ -55,6 +55,19 @@ data class RemoteDevice(
     val current: Boolean,
 )
 
+/**
+ * What the server holds for the signed-in account, as it sees it: counts, ciphertext size, and the
+ * version of the instance answering ([serverVersion] is empty on a server too old to report one).
+ * Metadata only — the server has nothing else to tell about an account.
+ */
+data class AccountSummary(
+    val devices: Int,
+    val activeDevices: Int,
+    val records: Int,
+    val storageBytes: Long,
+    val serverVersion: String,
+)
+
 /** Quick pairing ticket (variant B): a QR code and its expiry. */
 data class PairingTicket(val code: String, val expiresAt: Long)
 
@@ -109,6 +122,9 @@ interface SyncClient {
     suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage
 
     suspend fun listDevices(session: SyncSession): List<RemoteDevice>
+
+    /** The account's own totals as the server holds them (`GET /account/summary`). */
+    suspend fun accountSummary(session: SyncSession): AccountSummary
 
     suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean
 

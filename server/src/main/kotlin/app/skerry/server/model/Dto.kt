@@ -95,23 +95,9 @@ data class AdminRecordsResponse(
 
 // --- account zone ---
 
-/**
- * `GET /account/summary`: the caller's own totals, the same aggregates `/admin/accounts` reports for
- * one row. [records] counts tombstones too ([tombstones] is how many of them are); [lastSeenAt] is
- * the most recent activity across the account's devices, null for an account that never synced.
- */
-@Serializable
-data class AccountSummaryResponse(
-    val accountId: String,
-    val createdAt: Long,
-    val syncSeq: Long,
-    val devices: Int,
-    val activeDevices: Int,
-    val records: Int,
-    val tombstones: Int,
-    val storageBytes: Long,
-    val lastSeenAt: Long?,
-)
+// `GET /account/summary` answers with [app.skerry.sync.wire.AccountSummaryResponse]: the app reads
+// the same endpoint for the Teams screen's Server card, so its shape belongs to the wire contract
+// rather than to the server's own admin DTOs.
 
 /** `GET /account/activity`: one row of the caller's own log. No accountId — every row is theirs. */
 @Serializable

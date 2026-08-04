@@ -1,5 +1,6 @@
 package app.skerry.ui.sync
 
+import app.skerry.shared.sync.AccountSummary
 import app.skerry.shared.sync.DeviceInfo
 import app.skerry.shared.sync.PairingResult
 import app.skerry.shared.sync.PairingTicket
@@ -88,6 +89,7 @@ class SyncCoordinatorTokenRefreshTest {
         override suspend fun ping(): Boolean = true
         override suspend fun close() { closeCalls.incrementAndGet() }
         override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = emptyList()
+        override suspend fun accountSummary(session: SyncSession): AccountSummary = error("unused")
         override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean = false
         override suspend fun changePassword(accountId: String, currentAuthKey: ByteArray, newAuthKey: ByteArray, newWrappedDataKey: ByteArray, device: DeviceInfo): SyncSession = throw NotImplementedError()
         override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = throw NotImplementedError()

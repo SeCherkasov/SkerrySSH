@@ -37,6 +37,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_scope_access_hint
 import app.skerry.ui.generated.resources.lib_teams_scope_access_title
+import app.skerry.ui.generated.resources.lib_teams_scope_access_unknown
 import app.skerry.ui.generated.resources.lib_teams_scope_delete
 import app.skerry.ui.generated.resources.lib_teams_scope_no_key
 import app.skerry.ui.generated.resources.lib_teams_scope_access
@@ -174,6 +175,17 @@ internal fun CreateScopeDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit
 }
 
 /**
+ * One scope's access list as the dialog sees it. Loading and failed are separate states on purpose:
+ * telling the user "the server did not answer" while the request is still in flight is a lie that
+ * looks exactly like the truth.
+ */
+internal sealed interface ScopeAccess {
+    data object Loading : ScopeAccess
+    data class Known(val accounts: Set<String>) : ScopeAccess
+    data object Unavailable : ScopeAccess
+}
+
+/**
  * Who may read a scope. Granting seals the scope key to the member, so only someone who holds the
  * key can hand it out — a manager without a grant sees the list but can't add to it ([canGrant]).
  */
@@ -181,7 +193,7 @@ internal fun CreateScopeDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit
 internal fun ScopeAccessDialog(
     scopeName: String,
     members: List<TeamMember>,
-    granted: Set<String>,
+    granted: ScopeAccess,
     canGrant: Boolean,
     busy: Boolean,
     onGrant: (String) -> Unit,
@@ -201,7 +213,7 @@ internal fun ScopeAccessDialog(
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             members.forEach { member ->
-                val has = member.accountId in granted
+                val has = granted is ScopeAccess.Known && member.accountId in granted.accounts
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -219,16 +231,24 @@ internal fun ScopeAccessDialog(
                             fg = Skerry.colors.sunset,
                             border = Skerry.colors.sunset.copy(alpha = 0.3f),
                         )
-                    } else if (canGrant) {
+                    } else if (canGrant && granted is ScopeAccess.Known) {
                         GhostButton(stringResource(Res.string.lib_teams_scope_grant), onClick = { if (!busy) onGrant(member.accountId) })
                     }
                 }
             }
         }
-        Txt(
-            stringResource(Res.string.lib_teams_scope_members_count, granted.size),
-            color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(top = 10.dp),
-        )
+        when (granted) {
+            is ScopeAccess.Known -> Txt(
+                stringResource(Res.string.lib_teams_scope_members_count, granted.accounts.size),
+                color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.padding(top = 10.dp),
+            )
+            ScopeAccess.Unavailable -> Txt(
+                stringResource(Res.string.lib_teams_scope_access_unknown),
+                color = Skerry.colors.amber, size = 11.sp, modifier = Modifier.padding(top = 10.dp),
+            )
+            // Loading says nothing: the count and the failure line would both be guesses.
+            ScopeAccess.Loading -> Unit
+        }
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),

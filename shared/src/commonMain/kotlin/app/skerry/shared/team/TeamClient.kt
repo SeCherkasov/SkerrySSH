@@ -95,6 +95,11 @@ class TeamMember(
     val role: TeamRole,
     val status: TeamMemberStatus,
     val createdAt: Long,
+    /**
+     * When the account was last active on any of its devices (epoch millis), or null on a server
+     * that doesn't report it — the member table then shows nothing rather than inventing a time.
+     */
+    val lastSeenAt: Long? = null,
 )
 
 /** An account's published Teams identity keys (both public halves; see [TeamClient.fetchPublicKey]). */

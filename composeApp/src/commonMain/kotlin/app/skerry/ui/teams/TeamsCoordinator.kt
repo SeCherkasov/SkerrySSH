@@ -37,7 +37,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import app.skerry.shared.team.stripShareFields
+import app.skerry.shared.terminal.epochMillis
 import app.skerry.shared.host.VaultHostStore
+import app.skerry.shared.runbook.VaultRunbookStore
 import app.skerry.shared.snippet.VaultSnippetStore
 
 /** Typed cause of a Teams operation failure (text in the UI layer, syncFailureText style). */
@@ -147,6 +149,14 @@ class TeamsCoordinator(
 
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy
+
+    /**
+     * When each team last completed a sync cycle, `teamId -> epoch millis`; absent until one does.
+     * Per team rather than one stamp for the account: [syncAll] runs every team, and one of them
+     * failing must not let the others' freshness vouch for it in the header pill.
+     */
+    private val _lastSyncedAt = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val lastSyncedAt: StateFlow<Map<String, Long>> = _lastSyncedAt
 
     private val _lastError = MutableStateFlow<TeamsFailure?>(null)
     val lastError: StateFlow<TeamsFailure?> = _lastError
@@ -427,6 +437,7 @@ class TeamsCoordinator(
             val names = buildMap {
                 VaultHostStore(vault).all().forEach { put(it.id, it.label) }
                 VaultSnippetStore(vault).all().forEach { put(it.id, it.label) }
+                VaultRunbookStore(vault).all().forEach { put(it.id, it.label) }
             }
             if (names.isEmpty()) null else ref.scopeId to names
         }.toMap()
@@ -582,17 +593,22 @@ class TeamsCoordinator(
         }
     }
 
-    /** Accounts holding a grant on the scope (managers only); empty list plus [lastError] on failure. */
-    suspend fun scopeGrants(teamId: String, scopeId: String): List<String> {
-        val s = session() ?: return emptyList()
-        val c = client() ?: return emptyList()
+    /**
+     * Accounts holding a grant on the scope (managers only), or **null** when the list couldn't be
+     * read — the failure is also surfaced in [lastError]. Null rather than an empty list on purpose:
+     * "nobody has access" and "we don't know who has access" are different answers, and a screen that
+     * renders the second as the first tells a manager the scope is unshared when it may not be.
+     */
+    suspend fun scopeGrants(teamId: String, scopeId: String): List<String>? {
+        val s = session() ?: return null
+        val c = client() ?: return null
         return try {
             c.scopeGrants(s, teamId, scopeId).map { it.accountId }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             markError(e.toFailure())
-            emptyList()
+            null
         }
     }
 
@@ -668,6 +684,7 @@ class TeamsCoordinator(
                 // local share/unshare bump revision explicitly, and a push-all with no incoming delta
                 // doesn't change section contents.
                 if (outcome.pulled > 0) _revision.value++
+                _lastSyncedAt.update { it + (ref.teamId to epochMillis()) }
                 onTeamsChanged()
             } catch (e: CancellationException) {
                 throw e
@@ -706,6 +723,7 @@ class TeamsCoordinator(
         teamVaults.resetTeam(teamId) // the team's vault and every scope vault under it
         spaceKeys.forEach { teamState.setCursor(it, 0) }
         verifiedInvites.update { it - teamId } // decline/leave: drop any cached invite for this team
+        _lastSyncedAt.update { it - teamId }
     }
 
     /** refresh() without re-acquiring [opMutex] — for calls from inside op{} blocks. */
