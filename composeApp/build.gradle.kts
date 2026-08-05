@@ -257,8 +257,9 @@ compose.desktop {
             linux { iconFile.set(project.file("icons/skerry.png")) }
             windows {
                 iconFile.set(project.file("icons/skerry.ico"))
-                // Space-free install path (%LOCALAPPDATA%\Skerry): goterl/ionspin's isJarFile()
-                // throws on the space in "C:\Program Files" and then crashes libsodium init.
+                // Per-user install (%LOCALAPPDATA%\Skerry): no admin rights needed to install or
+                // update. It also predates the resource-loader 2.1.0 bump, which is what actually
+                // fixed libsodium init from paths with spaces or non-ASCII characters.
                 perUserInstall = true
                 menu = true
                 shortcut = true
@@ -309,8 +310,7 @@ tasks.register<Exec>("packageAppImage") {
 
 // Portable build: zip the jpackage app-image (createDistributable) as-is — no installer, the
 // user extracts and runs Skerry.exe. Used by the release workflow for the Windows portable
-// asset (the arch suffix is appended there, like for the msi). The bundled README warns about
-// paths with spaces — libsodium's loader (goterl) fails to initialize from them.
+// asset (the arch suffix is appended there, like for the msi).
 tasks.register<Zip>("packagePortableZip") {
     group = "compose desktop"
     description = "Build a portable .zip from the jpackage app-image"

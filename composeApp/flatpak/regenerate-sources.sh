@@ -6,6 +6,10 @@
 #
 # It drives the flatpak-gradle-generator plugin via an init script so the production build files
 # stay untouched. -PdesktopOnly matches exactly what the sandbox build resolves.
+#
+# --rerun-tasks is mandatory: the generator task declares no inputs, so Gradle calls it up-to-date
+# and the merge silently reuses a months-old artifact list — reverting dependency bumps and
+# resurrecting versions that were deliberately held back.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -13,7 +17,7 @@ FLATPAK_DIR="$REPO_ROOT/composeApp/flatpak"
 cd "$REPO_ROOT"
 
 echo "==> Resolving dependencies with flatpak-gradle-generator"
-./gradlew --no-configuration-cache -PdesktopOnly \
+./gradlew --no-configuration-cache -PdesktopOnly --rerun-tasks \
   --init-script "$FLATPAK_DIR/tools/flatpak-gen.init.gradle.kts" \
   :sync-wire:flatpakGradleGenerator \
   :shared:flatpakGradleGenerator \
