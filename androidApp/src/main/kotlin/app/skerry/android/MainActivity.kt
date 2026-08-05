@@ -618,6 +618,9 @@ class MainActivity : FragmentActivity() {
             crypto = crypto,
             vault = vault,
             configStore = AndroidSyncConfigStore(File(dir, "sync.json")),
+            // Reactivation rebuilds this device still owes — beside the link, not on it: a disconnect or a
+            // connect to another server must not take a debt the reconcile never paid (issue #170).
+            debtStore = AndroidReconcileDebtStore(File(dir, "sync-reconcile")),
             // Persistent delta-sync cursor: survives restart, otherwise every start would be a full re-pull since 0.
             syncState = FileSyncStateStore(File(dir, "sync-cursor.json").toPath()),
             deviceIdProvider = { deviceId(dir) },

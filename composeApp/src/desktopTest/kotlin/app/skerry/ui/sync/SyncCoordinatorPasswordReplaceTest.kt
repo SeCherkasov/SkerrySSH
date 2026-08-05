@@ -164,14 +164,17 @@ class SyncCoordinatorPasswordReplaceTest {
         vault: Vault,
         client: SyncClient,
         configStore: SyncConfigStore = InMemorySyncConfigStore(),
+        debtStore: ReconcileDebtStore = InMemoryReconcileDebtStore(),
     ): SyncCoordinator = SyncCoordinator(
         clientFactory = { client },
         crypto = crypto,
         vault = vault,
         configStore = configStore,
+        debtStore = debtStore,
         deviceIdProvider = { "dev-local" },
         engineFactory = { _ -> SyncRunner { _ -> SyncOutcome(pulled = 0, pushed = 0, cursor = 0L) } },
     )
+
 
     /** Sync already configured for [account] on [serverUrl] (so [SyncCoordinator.changeAccountPassword] runs). */
     private fun configuredStore(): SyncConfigStore = InMemorySyncConfigStore().apply {
@@ -363,7 +366,8 @@ class SyncCoordinatorPasswordReplaceTest {
         vault.put("r1", RecordType.HOST, "stale".encodeToByteArray())
         val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
         val store = InMemorySyncConfigStore()
-        val sut = coordinator(vault, client, store)
+        val debts = InMemoryReconcileDebtStore()
+        val sut = coordinator(vault, client, store, debts)
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
             sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
@@ -374,7 +378,7 @@ class SyncCoordinatorPasswordReplaceTest {
             sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
             assertTrue(sut.status.value is SyncStatus.Online, "was ${sut.status.value}")
             assertFalse(vault.records().any { it.id == "r1" }, "the reactivated device must rebuild from the server before it pushes")
-            assertEquals(false, store.load()?.pendingReconcile, "the completed reconcile retires the marker")
+            assertFalse(debts.owes(serverUrl, account), "the completed reconcile retires the debt")
         } finally {
             sut.close()
         }
@@ -405,27 +409,25 @@ class SyncCoordinatorPasswordReplaceTest {
     }
 
     /**
-     * The pause is not a reason to withhold the marker from a link this device ALREADY has: recording it
-     * there creates no new state and takes nothing back from the user, and the device owes the rebuild
-     * whatever it decides about the password. Only the fields the reactivation is about may change —
-     * the deviceId and the keep-connected token belong to a link that is still valid.
+     * The pause is not a reason to withhold the debt: recording it takes nothing back from the user, and
+     * the device owes the rebuild whatever it decides about the password. The link this device already has
+     * must come through untouched — the deviceId and the keep-connected token belong to a link that is
+     * still valid, and the debt is not kept on it.
      */
     @Test
-    fun `a reactivating verify marks the link this device already has`() = runBlocking {
+    fun `a reactivating verify records the debt without touching the saved link`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
         val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
         val linked = SyncConfig(serverUrl, account, deviceId = "dev-local", keepConnected = true, sealedRefreshToken = "sealed")
         val store = InMemorySyncConfigStore().apply { save(linked) }
-        val sut = coordinator(vault, client, store)
+        val debts = InMemoryReconcileDebtStore()
+        val sut = coordinator(vault, client, store, debts)
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
             sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
-            assertEquals(
-                linked.copy(pendingReconcile = true),
-                store.load(),
-                "the marker goes onto the existing link, and nothing else about it changes",
-            )
+            assertEquals(linked, store.load(), "nothing about the existing link changes")
+            assertTrue(debts.owes(serverUrl, account), "and the rebuild it owes is recorded beside it")
         } finally {
             sut.close()
         }
@@ -443,9 +445,9 @@ class SyncCoordinatorPasswordReplaceTest {
      * The third early return of issue #168: the confirmed replace logs in, the account key turns out to
      * already be ours, and re-wrapping the vault under the account password fails. The connect stops
      * there — but the reactivation the paused connect carried is already the server's last word on the
-     * subject, so it must be on the device's link by then rather than die with the failed re-key. (The
-     * device is linked here, which is what a rotation from another device leaves behind: the account
-     * password moved on and this vault still holds the old one.)
+     * subject, so it must be recorded by then rather than die with the failed re-key. (The device is
+     * linked here, which is what a rotation from another device leaves behind: the account password moved
+     * on and this vault still holds the old one.)
      */
     @Test
     fun `a confirmed replace that fails on the re-key keeps the reactivation`() = runBlocking {
@@ -453,7 +455,8 @@ class SyncCoordinatorPasswordReplaceTest {
         val vault = localVault()
         val client = FakeAccountClient(existingAccountPassword = accountPassword, accountDataKey = vault.exportDataKey(), revoked = true)
         val store = configuredStore()
-        val sut = coordinator(RewrapUnderFailingVault(vault), client, store)
+        val debts = InMemoryReconcileDebtStore()
+        val sut = coordinator(RewrapUnderFailingVault(vault), client, store, debts)
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
             sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
@@ -464,28 +467,28 @@ class SyncCoordinatorPasswordReplaceTest {
                 (sut.status.value as? SyncStatus.Failed)?.reason,
                 "was ${sut.status.value}",
             )
-            assertEquals(true, store.load()?.pendingReconcile, "the rebuild is owed even though the re-key failed")
+            assertTrue(debts.owes(serverUrl, account), "the rebuild is owed even though the re-key failed")
         } finally {
             sut.close()
         }
     }
 
     /**
-     * Recording the reactivation can fail — the config file is on a full disk — and that failure travels
-     * out through the catch-all rather than a return of its own. The client the verify opened must not go
-     * with it: nothing else holds a reference, so every retry would strand another socket pool.
+     * Recording the reactivation can fail — the debt file is on a full disk — and that failure travels out
+     * through the catch-all rather than a return of its own. The client the verify opened must not go with
+     * it: nothing else holds a reference, so every retry would strand another socket pool.
      */
     @Test
     fun `a refused reactivation write still closes the client the verify opened`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
         val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
-        // The link is already there, so the reactivation has somewhere to be written — and that write fails.
         val linked = InMemorySyncConfigStore().apply { save(SyncConfig(serverUrl, account, deviceId = "dev-local")) }
-        val store = object : SyncConfigStore by linked {
-            override fun save(config: SyncConfig): Unit = error("config write failed")
+        val debts = object : ReconcileDebtStore {
+            override fun load(): Set<ServerLink> = emptySet()
+            override fun save(debts: Set<ServerLink>): Unit = error("debt write failed")
         }
-        val sut = coordinator(vault, client, store)
+        val sut = coordinator(vault, client, linked, debts)
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
             sut.status.awaitStatus("the connect to fail on the refused write") { it is SyncStatus.Failed }

@@ -26,14 +26,48 @@ data class SyncConfig(
     val keepConnected: Boolean = false,
     val sealedRefreshToken: String? = null,
     /**
-     * Durable "this device must rebuild from the server before pushing" marker for the revoked→reactivated
-     * flow. The server clears revocation on the SRP verify that reports `reactivated`, so it never reports
-     * it again; persisting the intent here (set before the vault is cleared, cleared only after the first
-     * sync succeeds) means an interrupted reconcile is retried on the next connect/restore — or on the
-     * unlock that lets a failed clear through — instead of silently resurrecting a purged record. Default `false`; older config files without the key load as `false`.
+     * The reactivation reconcile marker as versions up to 0.2.1 wrote it, when the intent lived on the
+     * saved link itself. Read from an older config file and migrated into [ReconcileDebtStore] once, at
+     * startup ([SyncCoordinator]'s init); never written again. A config holds ONE link, so a connect to
+     * another server saved a config without the previous link's marker and the debt died with the
+     * process — issue #170.
      */
-    val pendingReconcile: Boolean = false,
+    val legacyPendingReconcile: Boolean = false,
 )
+
+/**
+ * One server link — what a reactivation reconcile debt belongs to. A LINK, not an account id: the same
+ * user-chosen id names different accounts on a home and a work instance, and rebuilding the wrong one
+ * throws away records nobody purged.
+ */
+data class ServerLink(val serverUrl: String, val accountId: String)
+
+/**
+ * Durable set of links this device owes a reactivation rebuild to — records dropped and re-pulled from
+ * the server before it may push again.
+ *
+ * Separate from [SyncConfigStore] because the debt outlives the link it was learned on: the server
+ * reports `reactivated` exactly once (the SRP verify that reports it is what clears the revocation), the
+ * connect that heard it may fail before it reaches a session, and the config holds a single link — so a
+ * connect to another server, or a [SyncCoordinator.disconnect], must not take the debt with it.
+ */
+interface ReconcileDebtStore {
+    /**
+     * The debts recorded on this device. Best-effort like [SyncConfigStore.load]: an unreadable store
+     * yields an empty set. That direction is deliberate — the alternative (refuse to sync until the file
+     * reads) is a dead end the user cannot resolve, since nothing but a reconcile retires a debt.
+     */
+    fun load(): Set<ServerLink>
+
+    /** Replace the recorded debts. Throws if the write is refused — the caller must not go on as if it landed. */
+    fun save(debts: Set<ServerLink>)
+}
+
+class InMemoryReconcileDebtStore : ReconcileDebtStore {
+    private var debts: Set<ServerLink> = emptySet()
+    override fun load(): Set<ServerLink> = debts
+    override fun save(debts: Set<ServerLink>) { this.debts = debts }
+}
 
 class InMemorySyncConfigStore : SyncConfigStore {
     private var config: SyncConfig? = null
@@ -149,7 +183,7 @@ enum class SyncFailureReason {
     RegistrationRefusedSignInFailed,
     TooManyRequests,       // the server's rate limiter turned the request away — retrying later works
     ServerError,           // the server (or the proxy in front of it) is broken or restarting
-    // This device still owes the reactivation rebuild ([SyncConfig.pendingReconcile]) and its vault was
+    // This device still owes the reactivation rebuild ([ReconcileDebtStore]) and its vault was
     // never cleared, so every sync cycle is refused rather than push records the account purged. Redoing
     // the reconcile takes a reconnect, a keep-connected restore, or the unlock of a vault that was locked
     // when the clear ran — hence a named reason and not the silent Configured that reads as "vault locked".
