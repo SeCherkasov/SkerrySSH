@@ -87,6 +87,10 @@
     <string name="settings_terminal_open_paths">Открытие файловых путей в SFTP</string>
     <string name="settings_terminal_open_paths_desc">Ctrl+клик по пути в выводе открывает его в файловой панели.</string>
     <string name="settings_terminal_open_paths_desc_mobile">Долгое нажатие на путь в выводе, затем «Открыть в Файлах».</string>
+    <string name="settings_terminal_highlight_input">Подсветка командной строки</string>
+    <string name="settings_terminal_highlight_input_desc">Раскрашивает команды, флаги, строки в кавычках, пути и операторы при вводе.</string>
+    <string name="settings_terminal_highlight_output">Подсветка уровней логов в выводе</string>
+    <string name="settings_terminal_highlight_output_desc">Отмечает ERROR/WARN/INFO, IP-адреса и метки времени в выводе, который сервер не раскрасил сам.</string>
     <string name="settings_terminal_host_connect">Подключение к хосту</string>
     <string name="settings_terminal_host_connect_single">Одинарный клик</string>
     <string name="settings_terminal_host_connect_double">Двойной клик (клик выделяет)</string>

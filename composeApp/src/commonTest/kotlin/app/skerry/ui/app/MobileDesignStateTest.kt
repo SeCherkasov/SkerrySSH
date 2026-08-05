@@ -48,6 +48,26 @@ class MobileDesignStateTest {
     }
 
     @Test
+    fun toggleHighlightCommandLine_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = MobileDesignState(onHighlightCommandLineChange = { seen += it })
+        assertEquals(true, s.highlightCommandLine) // on by default (desktop parity)
+        s.toggleHighlightCommandLine()
+        assertEquals(false, s.highlightCommandLine)
+        assertEquals(listOf(false), seen)
+    }
+
+    @Test
+    fun toggleHighlightOutput_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = MobileDesignState(onHighlightOutputChange = { seen += it })
+        assertEquals(false, s.highlightOutput) // off by default (desktop parity)
+        s.toggleHighlightOutput()
+        assertEquals(true, s.highlightOutput)
+        assertEquals(listOf(true), seen)
+    }
+
+    @Test
     fun toggleOpenFilePathsInSftp_flips_and_reports() {
         val seen = mutableListOf<Boolean>()
         val s = MobileDesignState(onOpenFilePathsInSftpChange = { seen += it })

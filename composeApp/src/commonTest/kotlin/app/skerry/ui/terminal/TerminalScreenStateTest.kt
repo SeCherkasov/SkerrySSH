@@ -26,6 +26,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -955,6 +956,70 @@ class TerminalScreenStateTest {
 
         assertEquals("hit", state.search.query)
         assertEquals(1, state.search.matches.size)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a committed command joins the vocabulary and the executed set`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        assertFalse(state.vocabulary.isCommand("pveversion"), "unknown before it is ever run")
+        state.typeInput("pveversion -v")
+        state.typeInput("\r")
+
+        assertEquals(setOf("pveversion -v"), state.executedCommands)
+        assertTrue(state.vocabulary.isCommand("pveversion"), "the host's own tool is known after one run")
+        scope.cancel()
+    }
+
+    @Test
+    fun `input typed at a password prompt never reaches the executed set`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        session.echoOff = true
+        state.typeInput("hunter2")
+        state.typeInput("\r")
+
+        assertEquals(emptySet(), state.executedCommands)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the executed set stays bounded over a long session`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        repeat(MAX_EXECUTED_COMMANDS + 50) { i ->
+            state.typeInput("cmd$i")
+            state.typeInput("\r")
+        }
+
+        assertEquals(MAX_EXECUTED_COMMANDS, state.executedCommands.size)
+        assertTrue("cmd0" !in state.executedCommands, "the oldest command is dropped, not kept forever")
+        assertTrue("cmd${MAX_EXECUTED_COMMANDS + 49}" in state.executedCommands, "the newest is kept")
+        scope.cancel()
+    }
+
+    /**
+     * Construction must survive output arriving before the constructor returns. The session below
+     * emits at collection time, and with an unconfined dispatcher the init coroutine runs straight
+     * through publishSnapshot -> refreshSuggestion — which writes state properties. If the init
+     * block is ever moved above them, their `by mutableStateOf` delegates do not exist yet and this
+     * throws a NullPointerException inside setValue.
+     */
+    @Test
+    fun `a chunk arriving during construction does not break initialization`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = EagerOutputSession("hello\r\n".encodeToByteArray())
+        val state = TerminalScreenState(session, scope)
+
+        assertTrue(state.screen.isNotEmpty(), "the eager chunk was applied")
+        assertFalse(state.hasSuggestion)
         scope.cancel()
     }
 
@@ -1896,4 +1961,17 @@ private class FakeTerminalSession : TerminalSession {
         _state.value = TerminalState.Closed()
         emissions.close()
     }
+}
+
+/**
+ * A session whose output is already available the moment it is collected — the shape that makes a
+ * PTY chunk land while [TerminalScreenState] is still being constructed.
+ */
+private class EagerOutputSession(private vararg val chunks: ByteArray) : TerminalSession {
+    private val _state = MutableStateFlow<TerminalState>(TerminalState.Open)
+    override val state: StateFlow<TerminalState> = _state
+    override val output: Flow<ByteArray> = flow { chunks.forEach { emit(it) } }
+    override suspend fun send(data: ByteArray) {}
+    override suspend fun resize(size: PtySize) {}
+    override suspend fun close() {}
 }

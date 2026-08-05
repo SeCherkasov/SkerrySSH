@@ -50,6 +50,10 @@ import app.skerry.ui.generated.resources.appearance_custom_term_theme_desc
 import app.skerry.ui.generated.resources.appearance_section_terminal
 import app.skerry.ui.generated.resources.settings_terminal_open_paths
 import app.skerry.ui.generated.resources.settings_terminal_open_paths_desc_mobile
+import app.skerry.ui.generated.resources.settings_terminal_highlight_input
+import app.skerry.ui.generated.resources.settings_terminal_highlight_input_desc
+import app.skerry.ui.generated.resources.settings_terminal_highlight_output
+import app.skerry.ui.generated.resources.settings_terminal_highlight_output_desc
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
 import app.skerry.ui.generated.resources.settings_terminal_cursor_style
@@ -161,45 +165,45 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             // Clickable file paths in output (desktop parity): here the affordance is a chip over a
             // selected path rather than Ctrl+click, and this switch governs both.
             HLine()
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Txt(stringResource(Res.string.settings_terminal_open_paths), color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
-                    Txt(stringResource(Res.string.settings_terminal_open_paths_desc_mobile), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
-                }
-                Toggle(on = state.openFilePathsInSftp, onToggle = state::toggleOpenFilePathsInSftp)
-            }
+            MobileToggleRow(
+                title = stringResource(Res.string.settings_terminal_open_paths),
+                desc = stringResource(Res.string.settings_terminal_open_paths_desc_mobile),
+                on = state.openFilePathsInSftp,
+                onToggle = state::toggleOpenFilePathsInSftp,
+            )
+            // Client-side syntax highlighting (desktop parity): input on by default, output off.
+            HLine()
+            MobileToggleRow(
+                title = stringResource(Res.string.settings_terminal_highlight_input),
+                desc = stringResource(Res.string.settings_terminal_highlight_input_desc),
+                on = state.highlightCommandLine,
+                onToggle = state::toggleHighlightCommandLine,
+            )
+            HLine()
+            MobileToggleRow(
+                title = stringResource(Res.string.settings_terminal_highlight_output),
+                desc = stringResource(Res.string.settings_terminal_highlight_output_desc),
+                on = state.highlightOutput,
+                onToggle = state::toggleHighlightOutput,
+            )
             // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host
             // from silently overwriting the system clipboard. Applies to new and already-open sessions.
             HLine()
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Txt(stringResource(Res.string.settings_terminal_clipboard_write), color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
-                    Txt(stringResource(Res.string.settings_terminal_clipboard_write_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
-                }
-                Toggle(on = state.allowServerClipboardWrite, onToggle = state::toggleAllowServerClipboardWrite)
-            }
+            MobileToggleRow(
+                title = stringResource(Res.string.settings_terminal_clipboard_write),
+                desc = stringResource(Res.string.settings_terminal_clipboard_write_desc),
+                on = state.allowServerClipboardWrite,
+                onToggle = state::toggleAllowServerClipboardWrite,
+            )
             // Production guard threshold (desktop parity): dangerous commands always confirm, the
             // warnings on top of them are opt-in.
             HLine()
-            Row(
-                Modifier.fillMaxWidth().padding(vertical = 11.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Txt(stringResource(Res.string.settings_terminal_prod_warnings), color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
-                    Txt(stringResource(Res.string.settings_terminal_prod_warnings_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
-                }
-                Toggle(on = state.confirmProductionWarnings, onToggle = state::toggleConfirmProductionWarnings)
-            }
+            MobileToggleRow(
+                title = stringResource(Res.string.settings_terminal_prod_warnings),
+                desc = stringResource(Res.string.settings_terminal_prod_warnings_desc),
+                on = state.confirmProductionWarnings,
+                onToggle = state::toggleConfirmProductionWarnings,
+            )
             Txt(stringResource(Res.string.appearance_section_interface), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))
             FontSettingRow(stringResource(Res.string.appearance_language)) {
                 MobileLanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage)
@@ -433,4 +437,24 @@ private fun MobileCursorStylePicker(current: TerminalCursorStyle, onPick: (Termi
             }
         },
     )
+}
+
+/**
+ * One settings switch on mobile: title, secondary line, toggle. The same row shape appears for every
+ * behaviour setting on this screen, so it lives here once — the desktop twin is
+ * [app.skerry.ui.settings.SettingToggleRow], which differs only in its type scale.
+ */
+@Composable
+private fun MobileToggleRow(title: String, desc: String, on: Boolean, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Txt(title, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+            Txt(desc, color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        Toggle(on = on, onToggle = onToggle)
+    }
 }

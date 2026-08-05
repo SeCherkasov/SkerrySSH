@@ -51,6 +51,10 @@ import app.skerry.ui.generated.resources.settings_terminal_cursor_underline_blin
 import app.skerry.ui.generated.resources.settings_terminal_cursor_underline_steady
 import app.skerry.ui.generated.resources.settings_terminal_open_paths
 import app.skerry.ui.generated.resources.settings_terminal_open_paths_desc
+import app.skerry.ui.generated.resources.settings_terminal_highlight_input
+import app.skerry.ui.generated.resources.settings_terminal_highlight_input_desc
+import app.skerry.ui.generated.resources.settings_terminal_highlight_output
+import app.skerry.ui.generated.resources.settings_terminal_highlight_output_desc
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
 import app.skerry.ui.generated.resources.settings_terminal_scrollback
@@ -192,6 +196,22 @@ internal fun TerminalSection(state: DesktopDesignState) {
         stringResource(Res.string.settings_terminal_open_paths_desc),
         on = state.settings.openFilePathsInSftp,
         onToggle = state.settings::toggleOpenFilePathsInSftp,
+    )
+    HLine()
+    // Client-side syntax highlighting. Two switches, not one: the first colors what the user types,
+    // the second repaints what the server printed — and only cells the server left uncolored.
+    SettingToggleRow(
+        stringResource(Res.string.settings_terminal_highlight_input),
+        stringResource(Res.string.settings_terminal_highlight_input_desc),
+        on = state.settings.highlightCommandLine,
+        onToggle = state.settings::toggleHighlightCommandLine,
+    )
+    HLine()
+    SettingToggleRow(
+        stringResource(Res.string.settings_terminal_highlight_output),
+        stringResource(Res.string.settings_terminal_highlight_output_desc),
+        on = state.settings.highlightOutput,
+        onToggle = state.settings::toggleHighlightOutput,
     )
     HLine()
     // OSC 52 clipboard-write gate (default off, like xterm/kitty): keeps an untrusted host from

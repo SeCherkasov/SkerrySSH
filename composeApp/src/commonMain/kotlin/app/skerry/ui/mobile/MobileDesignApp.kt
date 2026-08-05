@@ -24,6 +24,8 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.SyncOnboardingScreen
 import app.skerry.ui.terminal.LocalTerminalAppearance
+import app.skerry.ui.terminal.LocalTerminalHighlight
+import app.skerry.ui.terminal.TerminalHighlight
 import app.skerry.ui.terminal.LocalTerminalTheme
 import app.skerry.ui.terminal.TerminalAppearance
 import app.skerry.ui.terminal.TerminalSessionPrefs
@@ -253,6 +255,11 @@ fun MobileDesignApp(
         LocalFonts provides fonts,
         // Terminal appearance from settings (More → Appearance): font + size read by TerminalScreen.
         LocalTerminalAppearance provides terminalAppearance,
+        // Client-side syntax highlighting (More → Terminal), read by TerminalScreen's draw layer.
+        LocalTerminalHighlight provides TerminalHighlight(
+            commandLine = state.highlightCommandLine,
+            output = state.highlightOutput,
+        ),
         // Terminal color theme: the app theme's twin, or the separately-picked one (More → Appearance → cards).
         LocalTerminalTheme provides effectiveTerminalTheme,
         LocalHosts provides deps.hosts,

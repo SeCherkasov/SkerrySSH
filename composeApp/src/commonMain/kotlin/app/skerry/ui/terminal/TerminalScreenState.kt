@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.AutocompleteEngine
 import app.skerry.shared.terminal.CommandHistory
+import app.skerry.shared.terminal.highlight.CommandVocabulary
+import app.skerry.shared.terminal.highlight.SessionVocabulary
 import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.DEFAULT_MAX_SCROLLBACK
 import app.skerry.shared.terminal.MouseButton
@@ -313,47 +315,6 @@ class TerminalScreenState(
         onForget = { forgetHistoryCommand(it) },
     )
 
-    init {
-        // Sole collector of PTY output; forwards chunks into the command queue. Closes the queue
-        // when output ends (EOF/session close), otherwise the owner loop below would hang forever
-        // in `for (cmd in commands)`.
-        scope.launch {
-            try {
-                session.output.collect { chunk -> commands.send(TerminalCommand.Feed(chunk)) }
-            } finally {
-                commands.close()
-            }
-        }
-        // Sole owner of the emulator: feed and resize run strictly in order. Publishes one snapshot
-        // per batch of immediately-available commands: under heavy output (build, cat) the PTY
-        // delivers many chunks in a row, and publishSnapshot copies the whole scrollback, so doing
-        // it per chunk is expensive (freezes/GC, especially on Android). When the queue is empty,
-        // behavior is unchanged (snapshot right away), so interactive latency does not grow.
-        scope.launch {
-            try {
-                for (cmd in commands) {
-                    applyCommand(cmd)
-                    while (true) {
-                        val next = commands.tryReceive().getOrNull() ?: break
-                        applyCommand(next)
-                    }
-                    publishSnapshot()
-                }
-            } finally {
-                // Cancellation can leave a stop-recording queued with nobody to answer it; hand the
-                // take over here rather than leave the exporting caller awaiting forever.
-                while (true) {
-                    val left = commands.tryReceive().getOrNull() ?: break
-                    if (left is TerminalCommand.StopRecording) left.cast.complete(recorder?.finish())
-                }
-            }
-        }
-        // Sole consumer of outbound bytes: guarantees FIFO write order to the PTY regardless of how
-        // many coroutines call send/sendBytes. All sends go through [outbound].
-        scope.launch {
-            for (bytes in outbound) session.send(bytes)
-        }
-    }
 
     /** Apply one command to the emulator (does not publish a snapshot; the caller batches that). */
     private suspend fun applyCommand(cmd: TerminalCommand) {
@@ -518,6 +479,26 @@ class TerminalScreenState(
     )
 
     /**
+     * What the syntax highlighter is allowed to call a command. Rebuilt when a command is committed,
+     * not per keystroke: it is a set built off the whole history, and the answer can only change
+     * once a new command has actually run.
+     */
+    var vocabulary: CommandVocabulary by mutableStateOf(SessionVocabulary(initialHistory))
+        private set
+
+    /**
+     * Commands this session has run, for keeping an executed command colored after Enter. A set of
+     * exact command texts, not a heuristic: matching a scrollback line against it is what stops
+     * output that merely contains a `$ ` from being colored as input.
+     */
+    var executedCommands: Set<String> by mutableStateOf(emptySet())
+        private set
+
+    // Insertion-ordered so the oldest entry can be dropped once the cap is reached; only commands
+    // still on screen can ever match, so keeping every command of a week-old session buys nothing.
+    private val executed = LinkedHashSet<String>()
+
+    /**
      * What to draw in gray at the cursor of the published snapshot: the rest of the suggested command
      * after the part the host has echoed back. `null` when there is nothing to continue there — the
      * echo has not started, the line wrapped onto the next row, or the shell redrew it. The
@@ -596,7 +577,18 @@ class TerminalScreenState(
         // other panes only once it is confirmed (this runs again on confirm), never on the hold.
         if (mirror) inputMirror?.invoke(text, MirroredInput.Typed)
         // Command was committed with Enter (and was echoed): persist the history snapshot for this host.
-        if (committed != null) onHistoryChanged?.invoke(autocomplete.commandHistory.commands)
+        if (committed != null) {
+            val commands = autocomplete.commandHistory.commands
+            onHistoryChanged?.invoke(commands)
+            // The host's own tooling becomes a known command after its first run.
+            vocabulary = SessionVocabulary(commands)
+            // Only commands run *here* count: a preloaded history belongs to earlier sessions whose
+            // lines are not on this screen, and matching against them could color unrelated output.
+            executed.remove(committed)
+            executed.add(committed)
+            while (executed.size > MAX_EXECUTED_COMMANDS) executed.remove(executed.first())
+            executedCommands = executed.toSet()
+        }
     }
 
     // --- Production guard ---
@@ -959,6 +951,54 @@ class TerminalScreenState(
      */
     fun applyClipboardWriteEnabled(enabled: Boolean) {
         commands.trySend(TerminalCommand.SetClipboardWriteEnabled(enabled))
+    }
+
+    // The init block sits at the very END of the class body on purpose: it starts coroutines
+    // that call publishSnapshot -> refreshSuggestion, which writes state properties declared
+    // further down. Kotlin runs initializers in declaration order, so an init block placed above
+    // them would let the first PTY chunk land before their `by mutableStateOf` delegates exist —
+    // a NullPointerException inside setValue, which is what happened when a property whose
+    // initializer took a moment was added between the two.
+    init {
+        // Sole collector of PTY output; forwards chunks into the command queue. Closes the queue
+        // when output ends (EOF/session close), otherwise the owner loop below would hang forever
+        // in `for (cmd in commands)`.
+        scope.launch {
+            try {
+                session.output.collect { chunk -> commands.send(TerminalCommand.Feed(chunk)) }
+            } finally {
+                commands.close()
+            }
+        }
+        // Sole owner of the emulator: feed and resize run strictly in order. Publishes one snapshot
+        // per batch of immediately-available commands: under heavy output (build, cat) the PTY
+        // delivers many chunks in a row, and publishSnapshot copies the whole scrollback, so doing
+        // it per chunk is expensive (freezes/GC, especially on Android). When the queue is empty,
+        // behavior is unchanged (snapshot right away), so interactive latency does not grow.
+        scope.launch {
+            try {
+                for (cmd in commands) {
+                    applyCommand(cmd)
+                    while (true) {
+                        val next = commands.tryReceive().getOrNull() ?: break
+                        applyCommand(next)
+                    }
+                    publishSnapshot()
+                }
+            } finally {
+                // Cancellation can leave a stop-recording queued with nobody to answer it; hand the
+                // take over here rather than leave the exporting caller awaiting forever.
+                while (true) {
+                    val left = commands.tryReceive().getOrNull() ?: break
+                    if (left is TerminalCommand.StopRecording) left.cast.complete(recorder?.finish())
+                }
+            }
+        }
+        // Sole consumer of outbound bytes: guarantees FIFO write order to the PTY regardless of how
+        // many coroutines call send/sendBytes. All sends go through [outbound].
+        scope.launch {
+            for (bytes in outbound) session.send(bytes)
+        }
     }
 }
 

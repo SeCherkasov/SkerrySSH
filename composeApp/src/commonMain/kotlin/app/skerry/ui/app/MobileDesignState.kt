@@ -122,6 +122,11 @@ class MobileDesignState(
     // Desktop parity (Ctrl+click there). On by default; persisted on Android.
     initialOpenFilePathsInSftp: Boolean = true,
     private val onOpenFilePathsInSftpChange: (Boolean) -> Unit = {},
+    // Client-side syntax highlighting (More → Terminal). Desktop parity; persisted on Android.
+    initialHighlightCommandLine: Boolean = true,
+    private val onHighlightCommandLineChange: (Boolean) -> Unit = {},
+    initialHighlightOutput: Boolean = false,
+    private val onHighlightOutputChange: (Boolean) -> Unit = {},
     // Production guard: also confirm Warn-level commands (Settings → Terminal). Off by default.
     initialConfirmProductionWarnings: Boolean = false,
     private val onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
@@ -355,6 +360,18 @@ class MobileDesignState(
     var openFilePathsInSftp: Boolean by mutableStateOf(initialOpenFilePathsInSftp); private set
 
     /**
+     * Whether the client colors the command line being typed (More → Terminal). On by default;
+     * desktop parity, see [app.skerry.ui.app.DesktopDesignState.highlightCommandLine].
+     */
+    var highlightCommandLine: Boolean by mutableStateOf(initialHighlightCommandLine); private set
+
+    /**
+     * Whether the client marks log levels in output (More → Terminal). Off by default; desktop
+     * parity, see [app.skerry.ui.app.DesktopDesignState.highlightOutput].
+     */
+    var highlightOutput: Boolean by mutableStateOf(initialHighlightOutput); private set
+
+    /**
      * Whether the production guard also confirms Warn-level commands (More → Terminal). Off by
      * default — desktop parity, see [app.skerry.ui.app.DesktopDesignState.confirmProductionWarnings].
      */
@@ -416,6 +433,18 @@ class MobileDesignState(
     fun toggleOpenFilePathsInSftp() {
         openFilePathsInSftp = !openFilePathsInSftp
         onOpenFilePathsInSftpChange(openFilePathsInSftp)
+    }
+
+    /** Toggle command-line syntax highlighting and report outward (for persistence). */
+    fun toggleHighlightCommandLine() {
+        highlightCommandLine = !highlightCommandLine
+        onHighlightCommandLineChange(highlightCommandLine)
+    }
+
+    /** Toggle log-level highlighting in output and report outward (for persistence). */
+    fun toggleHighlightOutput() {
+        highlightOutput = !highlightOutput
+        onHighlightOutputChange(highlightOutput)
     }
 
     /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */
