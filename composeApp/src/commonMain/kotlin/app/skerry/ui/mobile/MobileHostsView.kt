@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -36,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -79,6 +77,7 @@ import app.skerry.ui.host.hostChipLabel
 import app.skerry.ui.host.icon
 import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.sessionDotColor
+import app.skerry.ui.session.sessionStatusText
 import app.skerry.ui.host.draggableFolderHeader
 import app.skerry.ui.host.draggableHostRow
 import app.skerry.ui.theme.Skerry
@@ -217,7 +216,7 @@ private fun MobileHostFolder(
         }
         // A collapsed folder shows only its header; the host list (and its drag targets) is hidden.
         if (!collapsed) {
-            Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Column(Modifier.padding(horizontal = 22.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 folder.hosts.forEach { host ->
                     key(host.id) {
                         if (host.id == lineBeforeId) MobileDropLine(horizontal = 0.dp)
@@ -414,7 +413,7 @@ private fun MobileFolderHeader(
     onEdit: (() -> Unit)?,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
+        Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 16.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -431,8 +430,10 @@ private fun MobileFolderHeader(
         ) {
             Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
         }
+        // Template form: "PRODUCTION · 3" — the count rides with the name instead of sitting on the
+        // far right, where it read as a column of unrelated numbers down the screen.
         Txt(
-            name.uppercase(),
+            "${name.uppercase()} · $count",
             color = if (dropTarget) Skerry.colors.cyanBright else Skerry.colors.faint,
             size = 12.sp,
             weight = FontWeight.SemiBold,
@@ -454,61 +455,35 @@ private fun MobileFolderHeader(
             }
         }
         Spacer(Modifier.weight(1f))
-        Txt(count.toString(), color = Skerry.colors.faint, size = 11.sp)
     }
 }
 
 /**
- * Host row: icon tile + name + monospace `user@address` + status dot. The tile carries the
- * profile's protocol ([app.skerry.ui.host.icon], same symbol as the desktop sidebar and the
- * connection form); the dot color is live, taken from the host's latest session status
- * ([SessionsController.sessionStatusFor]) via the desktop-shared [sessionDotColor] (live → green,
- * connecting → amber, error/dropped → sunset, no session → dim). Reading uiState inside the
+ * Host row, per the mobile template: a flat line — icon tile, monospace label over a monospace
+ * `user@address:port`, status dot at the right edge. No card and no border; the list is separated by
+ * whitespace, and the tile is the only filled shape (a frame around every profile turned the
+ * catalog into a stack of boxes and left the eye nothing to follow).
+ *
+ * The tile carries the profile's protocol ([app.skerry.ui.host.icon], same symbol as the desktop
+ * sidebar and the connection form); the dot color is live, taken from the host's latest session
+ * status ([SessionsController.sessionStatusFor]) via the desktop-shared [sessionDotColor] (live →
+ * green, connecting → amber, error/dropped → sunset, no session → dim). Reading uiState inside the
  * composition subscribes the row to status changes so the dot updates on connect.
+ *
+ * A production host keeps its [ProdBadge] beside the label: the template models no such host, and
+ * the badge is the marking that survives losing the frame the red outline used to live on.
  */
 @Composable
 private fun MobileHostRow(host: Host, onClick: () -> Unit) {
-    val dotColor = sessionDotColor(LocalSessions.current?.sessionStatusFor(host.id) ?: SessionStatus.Idle)
-    val prod = isProdHost(host)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Skerry.colors.card)
-            .border(1.dp, if (prod) Skerry.colors.sunset else Skerry.colors.cyan08, RoundedCornerShape(14.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            )
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(13.dp),
-    ) {
-        Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(Skerry.colors.cyan.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Sym(host.connectionType.icon, size = 21.sp, color = Skerry.colors.cyanBright)
-        }
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Txt(
-                    host.label, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold,
-                    maxLines = 1, modifier = Modifier.weight(1f, fill = false),
-                )
-                if (prod) ProdBadge()
-            }
-            Spacer(Modifier.height(2.dp))
-            Txt(
-                host.rowSubtitle(),
-                color = Skerry.colors.dim,
-                size = 11.5.sp,
-                font = LocalFonts.current.mono,
-                maxLines = 1,
-            )
-        }
-        Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
-    }
+    val status = LocalSessions.current?.sessionStatusFor(host.id) ?: SessionStatus.Idle
+    MobileCatalogRow(
+        icon = host.connectionType.icon,
+        label = host.label,
+        subtitle = host.rowSubtitle(),
+        dotColor = sessionDotColor(status),
+        statusText = sessionStatusText(status),
+        onClick = onClick,
+        badge = if (isProdHost(host)) ({ ProdBadge() }) else null,
+    )
 }
 

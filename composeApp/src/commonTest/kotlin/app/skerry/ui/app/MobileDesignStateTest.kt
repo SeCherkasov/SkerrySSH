@@ -195,14 +195,14 @@ class MobileDesignStateTest {
 
     @Test
     fun four_tabs_in_template_order() {
-        // Bottom navigation: 4 root tabs in this order — the two catalogs first, then the vault and
-        // the More hub. Files isn't in the bar (SFTP is a push screen from the host card), and
-        // neither is the snippet library ([MobileRoute.Snippets], reached from More).
+        // Bottom navigation: 4 root tabs in this order — the two catalogs, then what is already
+        // open, then the More hub. The vault is not in the bar (it is a push screen from More,
+        // [MobileRoute.Vault]), and neither is the snippet library or SFTP.
         assertEquals(
             listOf(
                 MobileTab.Hosts,
                 MobileTab.Desktops,
-                MobileTab.Vault,
+                MobileTab.Sessions,
                 MobileTab.More,
             ),
             MobileTab.entries.toList(),
@@ -233,8 +233,8 @@ class MobileDesignStateTest {
     @Test
     fun select_switches_tab() {
         val s = MobileDesignState()
-        s.select(MobileTab.Vault)
-        assertEquals(MobileTab.Vault, s.tab)
+        s.select(MobileTab.Sessions)
+        assertEquals(MobileTab.Sessions, s.tab)
     }
 
     @Test
@@ -263,9 +263,21 @@ class MobileDesignStateTest {
     fun select_tab_clears_any_open_route() {
         val s = MobileDesignState()
         s.push(MobileRoute.HostDetail)
-        s.select(MobileTab.Vault)
-        assertEquals(MobileTab.Vault, s.tab)
+        s.select(MobileTab.Sessions)
+        assertEquals(MobileTab.Sessions, s.tab)
         assertNull(s.route)
+    }
+
+    @Test
+    fun the_vault_is_a_push_screen_of_the_more_hub() {
+        // It lost its root tab to Sessions: opened from More, back returns there and not to Hosts.
+        val s = MobileDesignState()
+        s.select(MobileTab.More)
+        s.push(MobileRoute.Vault)
+        assertFalse(s.showTabs)
+        assertEquals(MobileBackAction.PopRoute, mobileBackAction(s.route, s.tab))
+        s.pop()
+        assertEquals(MobileTab.More, s.tab)
     }
 
     @Test
@@ -456,6 +468,103 @@ class MobileDesignStateTest {
         assertTrue(seen.isEmpty())
     }
 
+    // Hiding the phone's system bars inside a session (More → Appearance → Interface)
+
+    @Test
+    fun session_system_bars_are_visible_by_default() {
+        // The status bar is the phone's, not ours: the clock and the battery stay readable inside a
+        // session unless the user asks for the pixels back.
+        assertFalse(MobileDesignState().hideSessionSystemBars)
+    }
+
+    @Test
+    fun toggling_the_system_bars_reports_every_change_outward() {
+        val seen = mutableListOf<Boolean>()
+        val s = MobileDesignState(
+            initialHideSessionSystemBars = false,
+            onHideSessionSystemBarsChange = { seen += it },
+        )
+        s.toggleHideSessionSystemBars()
+        assertTrue(s.hideSessionSystemBars)
+        s.toggleHideSessionSystemBars()
+        assertFalse(s.hideSessionSystemBars)
+        assertEquals(listOf(true, false), seen)
+    }
+
+    @Test
+    fun a_persisted_choice_to_hide_the_bars_is_honored_at_startup() {
+        assertTrue(MobileDesignState(initialHideSessionSystemBars = true).hideSessionSystemBars)
+    }
+
+    // Bottom navigation over a push screen (mobileRouteKeepsTabBar / mobileActiveTab)
+
+    @Test
+    fun the_terminal_keeps_the_bottom_navigation_and_the_remote_desktop_does_not() {
+        // Template: the terminal is a place you step out of in one tap. A framebuffer wants the
+        // whole display and carries its own floating bar.
+        assertTrue(mobileRouteKeepsTabBar(MobileRoute.Terminal))
+        assertFalse(mobileRouteKeepsTabBar(MobileRoute.Vnc))
+        assertFalse(mobileRouteKeepsTabBar(MobileRoute.Files))
+        assertFalse(mobileRouteKeepsTabBar(null))
+    }
+
+    @Test
+    fun the_bar_steps_aside_for_the_keyboard_and_for_a_modal() {
+        // "The terminal keeps the bar" is not "the bar is there": it would sit as a second bar above
+        // the keyboard, or float over a dialog. Whatever is bottom-most owns the navigation-bar
+        // inset, so this also decides whether the terminal's key panel reserves it.
+        assertTrue(mobileTabBarUnderRoute(MobileRoute.Terminal, modalOpen = false, keyboardVisible = false))
+        assertFalse(mobileTabBarUnderRoute(MobileRoute.Terminal, modalOpen = false, keyboardVisible = true))
+        assertFalse(mobileTabBarUnderRoute(MobileRoute.Terminal, modalOpen = true, keyboardVisible = false))
+        assertFalse(mobileTabBarUnderRoute(MobileRoute.Vnc, modalOpen = false, keyboardVisible = false))
+    }
+
+    @Test
+    fun a_session_screen_lights_the_sessions_tab() {
+        // Whatever tab it was opened from: the user is inside a session, and an unlit bar reads as
+        // having fallen out of the app's navigation.
+        assertEquals(MobileTab.Sessions, mobileActiveTab(MobileTab.Hosts, MobileRoute.Terminal))
+        assertEquals(MobileTab.Sessions, mobileActiveTab(MobileTab.Desktops, MobileRoute.Vnc))
+    }
+
+    @Test
+    fun a_root_screen_lights_its_own_tab() {
+        assertEquals(MobileTab.Hosts, mobileActiveTab(MobileTab.Hosts, route = null))
+        assertEquals(MobileTab.More, mobileActiveTab(MobileTab.More, route = null))
+    }
+
+    @Test
+    fun any_other_push_screen_lights_nothing() {
+        // It belongs to the tab underneath, which is no longer on screen.
+        assertNull(mobileActiveTab(MobileTab.More, MobileRoute.Vault))
+        assertNull(mobileActiveTab(MobileTab.Hosts, MobileRoute.Files))
+    }
+
+    // Which screens run edge to edge (mobileSessionFullBleed)
+
+    @Test
+    fun no_screen_runs_edge_to_edge_while_the_setting_is_off() {
+        // The default. Dropping the setting from this decision would put terminal output back under
+        // the phone's clock, which is the bug the setting exists to fix.
+        assertFalse(mobileSessionFullBleed(hideSessionSystemBars = false, route = MobileRoute.Terminal))
+        assertFalse(mobileSessionFullBleed(hideSessionSystemBars = false, route = MobileRoute.Vnc))
+    }
+
+    @Test
+    fun the_setting_makes_session_screens_edge_to_edge() {
+        assertTrue(mobileSessionFullBleed(hideSessionSystemBars = true, route = MobileRoute.Terminal))
+        assertTrue(mobileSessionFullBleed(hideSessionSystemBars = true, route = MobileRoute.Vnc))
+    }
+
+    @Test
+    fun the_setting_does_not_touch_screens_that_are_not_sessions() {
+        // It buys pixels back for a session, not for a list — a host list under the status bar is
+        // unreadable and was never what was asked for.
+        assertFalse(mobileSessionFullBleed(hideSessionSystemBars = true, route = null))
+        assertFalse(mobileSessionFullBleed(hideSessionSystemBars = true, route = MobileRoute.Files))
+        assertFalse(mobileSessionFullBleed(hideSessionSystemBars = true, route = MobileRoute.Vault))
+    }
+
     // System back: where it leads based on navigation state (mobileBackAction)
 
     @Test
@@ -474,9 +583,9 @@ class MobileDesignStateTest {
 
     @Test
     fun back_on_non_hosts_tab_goes_home() {
-        // From a non-root tab (Desktops/Vault/More), back returns to Hosts instead of exiting the app.
+        // From a non-root tab (Desktops/Sessions/More), back returns to Hosts instead of exiting the app.
         assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Desktops))
-        assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Vault))
+        assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.Sessions))
         assertEquals(MobileBackAction.GoHome, mobileBackAction(route = null, tab = MobileTab.More))
     }
 

@@ -133,7 +133,7 @@ import app.skerry.ui.vault.unbindCredential
 import app.skerry.ui.theme.Skerry
 
 /**
- * Vault root tab: three keychain categories (SSH keys/Passwords/Certificates) switched by pills, plus
+ * Vault push screen (More → Vault): three keychain categories (SSH keys/Passwords/Certificates) switched by pills, plus
  * key generation / add password / import certificate. Tapping a secret opens a detail sheet (public
  * key/fingerprint/principals, used-by hosts) with Copy/Export/Delete.
  *
@@ -143,7 +143,7 @@ import app.skerry.ui.theme.Skerry
 @Composable
 fun MobileVaultScreen(state: MobileDesignState) {
     when (val credentials = LocalCredentials.current) {
-        null -> MobileVaultMock()
+        null -> MobileVaultMock(onBack = state::pop)
         else -> MobileVaultLive(state, credentials)
     }
 }
@@ -196,9 +196,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
-            Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-                MobileScreenTitle(stringResource(Res.string.vault_title))
-            }
+            MobilePushHeader(stringResource(Res.string.vault_title), onBack = state::pop, plainBack = true)
             MobileVaultSummary(allCreds.size)
             MobileCategoryPills(category, allCreds) { category = it; selectedId = null }
             MobileVaultAction(
@@ -627,14 +625,12 @@ private fun MobileSecretDetailSheet(
 
 // Preview (mock).
 
-/** Static mock of the Vault tab (offscreen/preview without an unlocked keychain). */
+/** Static mock of the Vault screen (offscreen/preview without an unlocked keychain). */
 @Composable
-private fun MobileVaultMock() {
+private fun MobileVaultMock(onBack: () -> Unit) {
     val mono = LocalFonts.current.mono
     Column(Modifier.fillMaxSize().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
-        Box(Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 10.dp)) {
-            MobileScreenTitle(stringResource(Res.string.vault_title))
-        }
+        MobilePushHeader(stringResource(Res.string.vault_title), onBack = onBack, plainBack = true)
         MobileVaultSummary(itemCount = mockSecrets().size)
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
             mockSecrets().forEach { (credential, meta) ->

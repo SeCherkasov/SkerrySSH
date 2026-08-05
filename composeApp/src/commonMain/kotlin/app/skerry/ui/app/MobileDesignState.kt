@@ -29,28 +29,72 @@ import app.skerry.ui.terminal.TerminalThemes
 
 /**
  * Bottom navigation — exactly 4 root tabs ([showTabs]=true). [icon] is a Material Symbols ligature
- * (see [Sym]), aligned with the desktop rail ([RAIL]) where the section matches (Hosts/Desktops/Vault).
+ * (see [Sym]), aligned with the desktop rail ([RAIL]) where the section matches (Hosts/Desktops).
  * No Files tab: SFTP opens as a push screen ([MobileRoute.Files]) from a host card's SFTP button —
  * a separate root tab would duplicate the terminal.
  *
- * Snippets is not a root tab either: the bar holds four, and the two catalogs (hosts and remote
- * desktops) come first — the library is reached from More ([MobileRoute.Snippets]) and, in the
- * moment it is actually needed, from the terminal's snippet palette.
+ * The two catalogs come first, then [Sessions] — what is already open, which on a phone is otherwise
+ * only reachable by tapping the host that opened it. The vault and the snippet library are not root
+ * tabs: they are push screens off the More hub ([MobileRoute.Vault]/[MobileRoute.Snippets]), and the
+ * library is also reached mid-session from the terminal's snippet palette.
  */
 // Labels are not part of the enum: they are localized in the tab bar (nav_tab_* resources).
 enum class MobileTab(val icon: String) {
     Hosts("dns"),
     Desktops("desktop_windows"),
-    Vault("vpn_key"),
+    Sessions("terminal"),
     More("more_horiz"),
 }
 
 /**
  * Full-screen push screens over the tab navigation (tab bar hidden): terminal and host detail open
- * from Hosts, the framebuffer from Desktops, SFTP (Files) via the host card's SFTP button, and
- * Snippets/Ports/Known/Team from the More tab.
+ * from Hosts, the framebuffer from Desktops or Sessions, SFTP (Files) via the host card's SFTP
+ * button, and Vault/Snippets/Ports/Known/Team from the More tab.
  */
-enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Snippets, Runbooks, Ports, Known, Team, Appearance, Sync, Ai, Security, Trash, About }
+enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Vault, Snippets, Runbooks, Ports, Known, Team, Appearance, Sync, Ai, Security, Trash, About }
+
+/**
+ * Push screens that keep the bottom navigation up. The terminal is one: per the template it is a
+ * place you work in and step out of, not a mode you have to escape — leaving for the catalog is one
+ * tap. The remote desktop is not: its picture wants the whole display and it carries its own
+ * floating bar.
+ */
+fun mobileRouteKeepsTabBar(route: MobileRoute?): Boolean = route == MobileRoute.Terminal
+
+/**
+ * Whether the bottom navigation is actually laid out under [route] right now. It disappears while a
+ * modal is up (it would float over the dialog) and while the soft keyboard is up (it would sit as a
+ * second bar above it), so "the terminal keeps the bar" is not the same as "the bar is there".
+ *
+ * The distinction matters beyond drawing: whatever is bottom-most owns the system navigation-bar
+ * inset. With the bar present that is the bar; without it, the terminal's key panel — and in
+ * immersive mode ([mobileSessionFullBleed]) nothing else reserves that space, so a swipe that
+ * transiently reveals the system bars would land on top of the keys.
+ */
+fun mobileTabBarUnderRoute(route: MobileRoute?, modalOpen: Boolean, keyboardVisible: Boolean): Boolean =
+    mobileRouteKeepsTabBar(route) && !modalOpen && !keyboardVisible
+
+/**
+ * Bottom-nav item drawn as active, or `null` when none is. A session screen highlights
+ * [MobileTab.Sessions] — it is what the user is inside of, and leaving the bar unlit while the
+ * terminal is up reads as having fallen out of the app's navigation. Any other push screen lights
+ * nothing: it belongs to the tab underneath, which the user can no longer see.
+ */
+fun mobileActiveTab(tab: MobileTab, route: MobileRoute?): MobileTab? = when (route) {
+    null -> tab
+    MobileRoute.Terminal, MobileRoute.Vnc -> MobileTab.Sessions
+    else -> null
+}
+
+/**
+ * Whether a screen runs edge to edge, giving up the safe area to the session on it. Only the two
+ * session screens ever do, and only when the user asked for it (More → Appearance → Interface):
+ * a catalog under the phone's status bar is unreadable, and a terminal under it was the bug the
+ * setting exists to fix. Read by the shell for its root inset padding, and mirrored by the screens
+ * themselves through [app.skerry.ui.immersive.ImmersiveScreen].
+ */
+fun mobileSessionFullBleed(hideSessionSystemBars: Boolean, route: MobileRoute?): Boolean =
+    hideSessionSystemBars && (route == MobileRoute.Terminal || route == MobileRoute.Vnc)
 
 /** What the system back gesture should do in the mobile shell. */
 enum class MobileBackAction {
@@ -130,6 +174,12 @@ class MobileDesignState(
     // Production guard: also confirm Warn-level commands (Settings → Terminal). Off by default.
     initialConfirmProductionWarnings: Boolean = false,
     private val onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
+    // Whether a session screen hides the phone's status/navigation bars (More → Appearance →
+    // Interface). Off by default: the bars belong to the phone, and a session that swallows the
+    // clock and the battery gets them back only by a swipe the user has to know about. Opting in
+    // buys the pixels back. Persisted on Android; no-op default for previews/tests.
+    initialHideSessionSystemBars: Boolean = false,
+    private val onHideSessionSystemBarsChange: (Boolean) -> Unit = {},
     // UI language (More -> Appearance -> Language). Initial value is read from persistence at
     // startup, the callback writes it back — the choice survives restart. Defaults (System, no-op)
     // auto-detect from the OS locale for previews/tests.
@@ -377,6 +427,13 @@ class MobileDesignState(
      */
     var confirmProductionWarnings: Boolean by mutableStateOf(initialConfirmProductionWarnings); private set
 
+    /**
+     * Whether a session screen (terminal, remote desktop) hides the phone's system bars (More →
+     * Appearance → Interface). Off by default; read by the mobile shell to decide both the immersive
+     * request ([app.skerry.ui.immersive.ImmersiveScreen]) and whether those screens run edge to edge.
+     */
+    var hideSessionSystemBars: Boolean by mutableStateOf(initialHideSessionSystemBars); private set
+
     /** UI language (More -> Appearance -> Language). Threaded to the root via [app.skerry.ui.i18n.AppLocaleProvider]. */
     var uiLanguage: UiLanguage by mutableStateOf(initialUiLanguage); private set
 
@@ -427,6 +484,12 @@ class MobileDesignState(
     fun toggleConfirmProductionWarnings() {
         confirmProductionWarnings = !confirmProductionWarnings
         onConfirmProductionWarningsChange(confirmProductionWarnings)
+    }
+
+    /** Toggle hiding the phone's system bars inside a session and report outward (for persistence). */
+    fun toggleHideSessionSystemBars() {
+        hideSessionSystemBars = !hideSessionSystemBars
+        onHideSessionSystemBarsChange(hideSessionSystemBars)
     }
 
     /** Toggle offering "Open in Files" for a selected file path and report outward (for persistence). */

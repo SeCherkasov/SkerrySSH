@@ -80,7 +80,7 @@
 
     <!-- Mobile hosts list (MobileHostsView.kt) -->
     <string name="shell_hosts">Хосты</string>
-    <string name="shell_search_hosts">Поиск хостов, тегов…</string>
+    <string name="shell_search_hosts">Поиск хостов, тегов, IP…</string>
 
     <!-- Mobile route placeholder (MobileDesignApp.kt) -->
     <string name="shell_route_team">Команды</string>
@@ -117,4 +117,11 @@
     <string name="shell_kbdint_jump">Запрашивает промежуточный хост</string>
     <string name="shell_kbdint_continue">Продолжить</string>
     <string name="shell_kbdint_asks">Запрос от сервера:</string>
+
+    <!-- Корневой таб «Сессии» (MobileSessionsView.kt): что открыто сейчас -->
+    <string name="shell_sessions_title">Сессии</string>
+    <string name="shell_sessions_count">Открыто: %1$d</string>
+    <string name="shell_sessions_none">Открытых сессий нет</string>
+    <string name="shell_sessions_none_hint">Подключитесь из каталога — сессия останется здесь, пока вы её не закроете.</string>
+    <string name="shell_sessions_close">Закрыть сессию</string>
 </resources>

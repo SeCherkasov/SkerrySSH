@@ -99,7 +99,7 @@ internal fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
     when (state.tab) {
         MobileTab.Hosts -> MobileHostsScreen(state)
         MobileTab.Desktops -> MobileDesktopsScreen(state)
-        MobileTab.Vault -> MobileVaultScreen(state)
+        MobileTab.Sessions -> MobileSessionsScreen(state)
         MobileTab.More -> MobileMoreScreen(state, onLock)
     }
 }
@@ -115,6 +115,7 @@ internal fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
         MobileRoute.Terminal -> MobileTerminalScreen(state)
         MobileRoute.Vnc -> MobileVncScreen(state)
         MobileRoute.Files -> MobileFilesScreen(onBack = state::pop)
+        MobileRoute.Vault -> MobileVaultScreen(state)
         MobileRoute.Snippets -> MobileSnippetsScreen(state)
         MobileRoute.Runbooks -> MobileRunbooksScreen(state)
         MobileRoute.Ports -> MobilePortsScreen(state)

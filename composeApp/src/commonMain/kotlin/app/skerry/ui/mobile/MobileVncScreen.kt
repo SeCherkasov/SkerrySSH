@@ -87,7 +87,9 @@ fun MobileVncScreen(state: MobileDesignState) {
     // schedule — a swipe would then be answered by the bar vanishing a moment later.
     var revealNonce by remember { mutableStateOf(0) }
 
-    ImmersiveScreen()
+    // Full-bleed only on request (More → Appearance → Interface); off, the phone keeps its bars
+    // and the shell keeps this screen inside the safe area (see MobileChrome.fullBleed).
+    ImmersiveScreen(state.hideSessionSystemBars)
 
     // Auto-hide, restarted by every reveal. Held open while the keyboard is up: the button that puts
     // it away lives on the bar, and hiding the bar under the user's hands would strand them.
