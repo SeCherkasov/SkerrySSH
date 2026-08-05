@@ -78,6 +78,22 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="0.3.0" date="2026-08-05">
+      <description>
+        <p>Feature and fix release:</p>
+        <ul>
+          <li>Host monitoring screen: resource history, processes, systemd units, containers and threshold alerts</li>
+          <li>Runbooks: a run screen with per-step state and output, file-transfer steps, and a log of past runs</li>
+          <li>Terminal: syntax highlighting for the command line and output, one work bar per session</li>
+          <li>Assistant panel beside the session, replacing the terminal AI bar</li>
+          <li>SFTP, Vault, Snippets, Tunnels and Teams screens rebuilt from the design mockups</li>
+          <li>Tunnels that raise themselves once the vault is unlocked</li>
+          <li>Remote desktop: a floating action bar and a full-window mode</li>
+          <li>Sync server: a web account zone with its own password; sync fixes around revoked devices</li>
+          <li>Fixes: libsodium on non-ASCII install paths, HiDPI scaling on first launch, window drag on a scaled session</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.1" date="2026-07-30">
       <description>
         <p>Feature and fix release:</p>
