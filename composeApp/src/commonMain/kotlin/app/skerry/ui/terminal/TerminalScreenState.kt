@@ -24,6 +24,7 @@ import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.shared.terminal.TerminalStepMark
 import app.skerry.shared.terminal.bracketedPasteWrap
 import app.skerry.shared.terminal.encodeMouseReport
 import app.skerry.shared.terminal.lineSelectionAt
@@ -86,6 +87,20 @@ class TerminalScreenState(
     /** Text the application asks to place on the system clipboard (OSC 52). UI collects and writes it. */
     val clipboardCopies: SharedFlow<String> = _clipboardCopies
 
+    // Last step mark the shell reported (OSC 8375, see TerminalStepMark) — a runbook step's exit
+    // code and the output it printed. Written from the emulator's owner coroutine and read by the
+    // run watcher's poll on another one, hence @Volatile rather than Compose state: the run must not
+    // wait for a snapshot to be applied before it can advance. Declared above the emulator, which
+    // captures it in a callback that can fire during the first feed.
+    @Volatile
+    private var stepMark: TerminalStepMark? = null
+
+    // Batches of PTY output fed so far. The only thing the runbook watchdog needs from the buffer:
+    // "did anything print since the last poll" — cheap, and unlike hashing the visible tail it also
+    // counts output that a redraw overwrote in place.
+    @Volatile
+    private var feedCount: Long = 0L
+
     private val emulator = TerminalEmulator(
         maxScrollback = scrollback,
         initialCursorShape = cursorShape,
@@ -99,6 +114,9 @@ class TerminalScreenState(
         // writes to the system clipboard. Gated in the emulator by [clipboardWriteEnabled].
         onClipboardCopy = { text -> _clipboardCopies.tryEmit(text) },
         clipboardWriteEnabled = clipboardWriteEnabled,
+        // Also called synchronously from feed(). Parked for the runbook watcher to pick up; only the
+        // newest one is kept, because only the step the run is waiting on can still use it.
+        onStepMark = { mark -> stepMark = mark },
     )
 
     /** Screen snapshot (rows top to bottom) for rendering. */
@@ -271,6 +289,39 @@ class TerminalScreenState(
             .joinToString("\n") { row -> buildString { row.forEach { append(it.text) } }.trimEnd() }
             .trimEnd('\n')
 
+    /**
+     * Counts batches of output received from the host. Monotonic and meaningless in itself — what it
+     * is for is telling "nothing has printed since I last looked" apart from "the screen looks the
+     * same but the host is talking" ([app.skerry.ui.runbook.RunbookRunner]'s watchdog).
+     */
+    val outputVersion: Long get() = feedCount
+
+    /**
+     * Declares the step this terminal is running, so the emulator reports that step and hides the
+     * echo of [hiddenEcho] — the probes framing it, which are protocol the user never typed.
+     * `null` ends it: nothing is captured, nothing is hidden, and a parked report is dropped.
+     *
+     * Queued with the output it is about to meet, not applied on the spot: the emulator belongs to
+     * the collector coroutine, and the echo of the step arrives strictly after this call.
+     */
+    fun expectStepMark(token: String?, hiddenEcho: List<String> = emptyList()) {
+        commands.trySend(TerminalCommand.ExpectStep(token, hiddenEcho))
+    }
+
+    /**
+     * Takes the step mark for [token], once the shell has reported that step. `null` while the step
+     * is still running.
+     *
+     * Consuming, and a mark for another token is dropped rather than queued: it can only come from a
+     * step the run has already abandoned, and its output — which may carry as much of a secret as
+     * the command line did — has no reason to sit in memory afterwards.
+     */
+    fun takeStepMark(token: String): TerminalStepMark? {
+        val mark = stepMark ?: return null
+        stepMark = null
+        return mark.takeIf { it.token == token }
+    }
+
     val state: StateFlow<TerminalState> get() = session.state
 
     // The emulator is single-threaded: feed and resize must not be called from different coroutines.
@@ -327,6 +378,7 @@ class TerminalScreenState(
                     if (it.truncated && !recordingTruncated) recordingTruncated = true
                 }
                 emulator.feed(cmd.chunk)
+                feedCount++
             }
             is TerminalCommand.StartRecording -> {
                 // Elapsed time comes off a monotonic source: a wall clock can step backwards (NTP,
@@ -348,6 +400,7 @@ class TerminalScreenState(
             is TerminalCommand.SetCursorDefault -> emulator.applyCursorDefault(cmd.shape, cmd.blink)
             is TerminalCommand.SetMaxScrollback -> emulator.applyMaxScrollback(cmd.lines)
             is TerminalCommand.SetClipboardWriteEnabled -> emulator.applyClipboardWrite(cmd.enabled)
+            is TerminalCommand.ExpectStep -> applyExpectStep(cmd.token, cmd.hiddenEcho)
             is TerminalCommand.Resize -> {
                 // PTY is resized first, the emulator only on success: otherwise the grid would be
                 // wider than the application knows and the tail of rows would stay undrawn. A PTY
@@ -363,6 +416,16 @@ class TerminalScreenState(
                 }
             }
         }
+    }
+
+    /**
+     * Applies a step declaration on the emulator's own coroutine: which mark to report, and the echo
+     * to hide. Ending a step also drops a report nobody collected — with no step expected, a
+     * captured command's output (a resolved secret possibly among it) has no reason to stay resident.
+     */
+    private fun applyExpectStep(token: String?, hiddenEcho: List<String>) {
+        emulator.expectStep(token, hiddenEcho)
+        if (token == null) stepMark = null
     }
 
     /** Publish the emulator snapshot into Compose state (after feed/resize). */
@@ -1041,6 +1104,9 @@ private sealed interface TerminalCommand {
 
     /** New OSC 52 clipboard-write gate state (setting changed while the session is open). */
     class SetClipboardWriteEnabled(val enabled: Boolean) : TerminalCommand
+
+    /** The runbook step the terminal should report, and the echo of its probes to hide. */
+    class ExpectStep(val token: String?, val hiddenEcho: List<String>) : TerminalCommand
 }
 
 /**

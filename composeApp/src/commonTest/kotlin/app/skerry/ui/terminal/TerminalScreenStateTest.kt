@@ -13,6 +13,8 @@ import app.skerry.shared.terminal.wrapsToNextRow
 import app.skerry.shared.terminal.TerminalSearchError
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.shared.terminal.TerminalStepMark
+import app.skerry.shared.terminal.STEP_MARK_OSC
 import app.skerry.ui.session.paneSyncTargets
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -31,6 +33,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -1957,6 +1960,90 @@ class TerminalScreenStateTest {
         assertTrue(sameScreen(wrapped, listOf(TermSnapshotRow(cells, wrapped = true))))
         assertFalse(sameScreen(wrapped, plain))
         assertFalse(sameScreen(plain, listOf<List<TermCell>>(listOf(TermCell('a')))))
+    }
+
+    // --- Runbook step marks ---
+
+    @Test
+    fun `a step report is taken once, by the step it belongs to`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar()
+        val bel = 7.toChar()
+        fun step(token: String, output: String, exitCode: Int) =
+            "$esc]$STEP_MARK_OSC;$token;$bel$output\r\n$esc]$STEP_MARK_OSC;$token;$exitCode$bel"
+
+        state.expectStepMark("sk_run_0")
+        session.emit(step("sk_run_0", "healthz 200 OK", 0).encodeToByteArray())
+
+        assertNull(state.takeStepMark("sk_run_1"), "another step's report is not this step's")
+        assertNull(state.takeStepMark("sk_run_0"), "and taking it dropped it — it is not queued")
+
+        state.expectStepMark("sk_run_1")
+        session.emit(step("sk_run_1", "denied", 13).encodeToByteArray())
+        val mark = assertNotNull(state.takeStepMark("sk_run_1"))
+
+        assertEquals(TerminalStepMark("sk_run_1", 13, "denied"), mark)
+        assertNull(state.takeStepMark("sk_run_1"), "the report is consumed, not kept in memory")
+        // Nothing of the protocol reached the screen.
+        assertEquals("healthz 200 OK\ndenied", state.output)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a terminal that is not running a step reports nothing and parks nothing`() = runTest {
+        // Every session parses the sequence, not just one running a runbook: a host that emits it
+        // must not be able to park a copy of the screen in a field nothing ever clears.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar()
+        val bel = 7.toChar()
+
+        session.emit("$esc]$STEP_MARK_OSC;sk_run_0;${bel}secret\r\n$esc]$STEP_MARK_OSC;sk_run_0;0$bel".encodeToByteArray())
+
+        assertNull(state.takeStepMark("sk_run_0"))
+        assertEquals("secret", state.output, "the output itself is drawn as usual")
+        scope.cancel()
+    }
+
+    @Test
+    fun `ending the step drops the report the run never collected`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        val esc = 27.toChar()
+        val bel = 7.toChar()
+        state.expectStepMark("sk_run_0")
+        session.emit("$esc]$STEP_MARK_OSC;sk_run_0;${bel}vault secret\r\n$esc]$STEP_MARK_OSC;sk_run_0;0$bel".encodeToByteArray())
+
+        state.expectStepMark(null) // the run was stopped before it read the report
+
+        assertNull(state.takeStepMark("sk_run_0"), "a captured command's output has no reason to linger")
+        scope.cancel()
+    }
+
+    @Test
+    fun `output version moves on every batch from the host`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        val start = state.outputVersion
+        session.emit("a".encodeToByteArray())
+        // A window title leaves the screen exactly as it was — the host is talking all the same, and
+        // that is the difference between this counter and hashing the visible tail.
+        session.emit("${27.toChar()}]0;deploy${7.toChar()}".encodeToByteArray())
+        // Same bytes as a moment ago, redrawn in place (a progress line rewriting its own row): the
+        // screen is identical, the step is very much alive, and the watchdog must not call it quiet.
+        session.emit("\r50%".encodeToByteArray())
+        val redrawn = state.output
+        session.emit("\r50%".encodeToByteArray())
+
+        assertEquals(redrawn, state.output, "the screen really is unchanged")
+        assertEquals(start + 4, state.outputVersion)
+        scope.cancel()
     }
 }
 

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.stripUnsafeFormatChars
+import app.skerry.shared.terminal.UNREADABLE_STATUS
 import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.labelUppercase
@@ -35,11 +36,13 @@ import app.skerry.ui.generated.resources.runbook_panel_exit_code
 import app.skerry.ui.generated.resources.runbook_panel_failed
 import app.skerry.ui.generated.resources.runbook_panel_no_sftp
 import app.skerry.ui.generated.resources.runbook_panel_running
+import app.skerry.ui.generated.resources.runbook_panel_status_unreadable
 import app.skerry.ui.generated.resources.runbook_panel_stopped
 import app.skerry.ui.generated.resources.runbook_panel_transfer_failed
 import app.skerry.ui.generated.resources.runbook_panel_waiting
 import app.skerry.ui.generated.resources.runbook_run_no_output
 import app.skerry.ui.generated.resources.runbook_run_output
+import app.skerry.ui.generated.resources.runbook_run_output_lost
 import app.skerry.ui.generated.resources.runbook_status_confirm
 import app.skerry.ui.generated.resources.runbook_status_running
 import app.skerry.ui.generated.resources.runbook_status_skipped
@@ -54,8 +57,8 @@ import org.jetbrains.compose.resources.stringResource
 private val OUTPUT_WIDTH = 420.dp
 
 /**
- * What a step printed, read out of the terminal between the echo of the typed line and the marker
- * that ended it ([runbookStepOutput]). [shownStep] is the step clicked in the list; with none the
+ * What a step printed, cut out of the terminal between the step's opening and closing marks
+ * ([RunbookStepState.output]). [shownStep] is the step clicked in the list; with none the
  * panel follows the run, so a finished run rests on its last step. A transfer prints nothing at all,
  * so it reports its bytes instead.
  *
@@ -83,7 +86,12 @@ internal fun RunbookOutputPanel(run: RunbookSessionRun, mono: FontFamily, shownS
         ) {
             val text = step?.let { outputText(it) }
             if (text.isNullOrEmpty()) {
-                Txt(stringResource(Res.string.runbook_run_no_output), color = Skerry.colors.faint, size = 11.5.sp, font = mono)
+                // "Nothing printed" is a claim about the command; a lost capture is a fact about the
+                // terminal, and an operator reading an empty panel has to be able to tell them apart.
+                val empty =
+                    if (step?.outputLost == true) Res.string.runbook_run_output_lost
+                    else Res.string.runbook_run_no_output
+                Txt(stringResource(empty), color = Skerry.colors.faint, size = 11.5.sp, font = mono)
             } else {
                 // Output comes from the remote host: bidi/format characters are stripped here too,
                 // or a crafted log line could reorder what the operator reads before the next step.
@@ -104,6 +112,16 @@ private fun outputText(state: RunbookStepState): String? = when {
     )
     else -> state.output
 }
+
+/**
+ * What a step's status reads as. [UNREADABLE_STATUS] is not an exit code and must not be printed as
+ * one: a shell's `$?` is 0..255, so "exit -1" would send the operator debugging their command when
+ * what actually happened is that the terminal could not read what the host sent.
+ */
+@Composable
+internal fun exitCodeText(code: Int): String =
+    if (code == UNREADABLE_STATUS) stringResource(Res.string.runbook_panel_status_unreadable)
+    else stringResource(Res.string.runbook_panel_exit_code, code)
 
 /** Why a step failed, in words — a transfer has no exit code to show instead. */
 @Composable
@@ -135,7 +153,7 @@ internal fun stepStatusText(state: RunbookStepState): String {
         val code = state.exitCode
         val text = runbookDurationText(duration)
         return if (state.status == RunbookStepStatus.FAILED && code != null && code != 0) {
-            stringResource(Res.string.runbook_panel_exit_code, code) + " · " + text
+            exitCodeText(code) + " · " + text
         } else {
             text
         }

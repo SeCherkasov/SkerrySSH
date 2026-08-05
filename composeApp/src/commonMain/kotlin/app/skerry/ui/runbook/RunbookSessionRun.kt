@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.sftp.SftpClient
+import app.skerry.shared.terminal.TerminalStepMark
 
 /** Where a run is happening: one terminal session, addressed only through what the runner needs. */
 class RunbookTarget(
@@ -13,8 +14,22 @@ class RunbookTarget(
     val sessionId: String,
     /** Sends a line to that terminal (bound to the guarded input path, production guard included). */
     val send: (String) -> Unit,
-    /** Recent terminal text to look for the step's marker in (a tail, not the whole scrollback). */
-    val readOutput: () -> String,
+    /**
+     * Declares the step about to be sent: which token the terminal should report, and the fragments
+     * of the line that are protocol rather than the operator's command, so their echo is not drawn.
+     * `null` ends it — nothing is captured or hidden until the next step.
+     */
+    val expectStep: (String?, List<String>) -> Unit,
+    /**
+     * Takes the step's report once its probe has emitted it — exit code plus what the command
+     * printed ([TerminalStepMark]). `null` while the step is still running.
+     */
+    val takeMark: (String) -> TerminalStepMark?,
+    /**
+     * Counter of output batches from the host. Only the watchdog reads it: a step that has printed
+     * nothing for long enough and still hasn't reported is flagged as possibly stuck.
+     */
+    val outputVersion: () -> Long,
     /** How the host names itself in the run — the pane's title. */
     val label: String = sessionId,
     /** Whether the session is still open; a dropped session ends the run. */
@@ -74,9 +89,9 @@ class RunbookStepState internal constructor(val index: Int, val step: RunbookSte
 
     /**
      * The step has printed nothing for a long while and still hasn't reported a status — the shape
-     * a step takes when nothing will ever print its marker: an unterminated here-doc or quote leaves
-     * the shell at its continuation prompt, `exec` replaces the shell that would have printed it, a
-     * non-POSIX shell never had `$?` to print.
+     * a step takes when its closing probe will never run: an unterminated here-doc or quote leaves
+     * the shell at its continuation prompt, `exec` replaces the shell that would have run it, a
+     * non-POSIX shell has no `$?` to report.
      *
      * A guess, deliberately: `sleep 3600` and a silent migration look identical from here. So it
      * only marks the step, never ends it — see [RunbookRunner].
@@ -108,14 +123,24 @@ class RunbookStepState internal constructor(val index: Int, val step: RunbookSte
         }
 
     /**
-     * What the command printed, cut out of the terminal between its echo and its marker
-     * ([runbookStepOutput]). Held only for as long as the run is on screen and never written
+     * What the command printed, cut out of the terminal between the step's two marks
+     * ([TerminalStepMark]). Held only for as long as the run is on screen and never written
      * anywhere: a command's output can carry as much of a secret as its command line.
      *
      * `null` for a step that hasn't finished and for a transfer, which prints nothing — its progress
      * is [transferredBytes] instead.
      */
     var output: String? by mutableStateOf(null)
+        internal set
+
+    /**
+     * Whether the step finished with its output lost rather than empty: the rows it printed are not
+     * there to quote ([TerminalStepMark]) — the terminal was resized, cleared or reset while it ran,
+     * the step ran on the alt screen, or its opening mark never arrived.
+     * The panel says so instead of reporting a silent command — the difference is what an operator
+     * asking "why did this succeed with no logs?" needs.
+     */
+    var outputLost: Boolean by mutableStateOf(false)
         internal set
 }
 

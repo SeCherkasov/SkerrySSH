@@ -1,63 +1,101 @@
 package app.skerry.shared.runbook
 
+import app.skerry.shared.terminal.STEP_MARK_OSC
+import app.skerry.shared.terminal.TerminalStepMark
+
 /**
  * How a runbook step learns whether it succeeded.
  *
  * A step runs in the user's own interactive shell — not over an exec channel — so its `cd`, exported
  * variables and `sudo` credentials carry over to the next step, and the human watches it happen.
  * The price is that a PTY reports no exit status: the shell only writes bytes. So the step is sent
- * as `<command>; <probe>`, where the probe prints a one-off marker carrying `$?`, and the runner
- * reads the code back out of the terminal buffer ([exitCodeIn]).
+ * as `<opening probe>; <command>; <closing probe>`, and both probes write an escape sequence the
+ * terminal parses and never draws (OSC [STEP_MARK_OSC], see [TerminalStepMark]): the opening one
+ * says where the step's output starts, the closing one carries `$?`.
  *
- * The probe is `printf` with the token passed as an *argument* (`%s`), never spliced into the
- * format: the PTY echoes the line the moment it is typed, long before the command has run, and that
- * echo must not read as a result. Passing the token through `%s` means the echoed text never
- * contains `token:` at all — only the printed output does. [exitCodeIn] is what proves it.
+ * The status used to be a printed line, which left the marker and a blank row on screen for every
+ * step. Nothing of the protocol is drawn now: the marks themselves are escape sequences, and the
+ * echo of the probes — which a PTY produces the moment the line is typed — is hidden by the terminal
+ * ([app.skerry.shared.terminal.TerminalEchoFilter], fed from [echoFragments]). What the operator
+ * sees is their own command after the prompt, and nothing else.
  *
- * Assumes a POSIX-ish shell (`sh`/`bash`/`zsh`/`ash`): `$?` and a `printf` builtin. Under `fish` or
- * PowerShell no marker ever appears and the step stays running until the user stops the run.
+ * The token is spliced into the format rather than passed as an argument: the echo carries the
+ * *characters* `\033`, never the escape byte, so it can never be mistaken for a real mark. The
+ * status a mark carries is the host's own word — see [TerminalStepMark].
+ *
+ * Assumes a POSIX-ish shell (`sh`/`bash`/`zsh`/`ash`): `$?` and a `printf` builtin that understands
+ * `\033`/`\a`. Under `fish` or PowerShell no mark ever appears and the step stays running until the
+ * user stops the run.
  */
 object RunbookMarker {
 
     /**
      * Marker token for step [stepIndex] of run [runId]. Reduced to `[a-z0-9_]` so it needs no shell
-     * quoting and can be searched literally; the run id makes it unique across runs, the index
-     * across steps, so a marker left in the scrollback by an earlier step is never mistaken for
-     * this one's.
+     * quoting and cannot contain the `;` that separates the fields of the mark; the run id makes it
+     * unique across runs, the index across steps, so a mark left over by an abandoned step is never
+     * mistaken for this one's.
      */
     fun token(runId: String, stepIndex: Int): String =
-        PREFIX + runId.lowercase().filter { it in 'a'..'z' || it in '0'..'9' }.take(ID_CHARS) +
-            "_" + stepIndex + "__"
-
-    /** The probe command alone: prints `<token>:<exit code>` on a line of its own. */
-    fun probe(token: String): String = "printf '\\n%s:%s\\n' '$token' \"\$?\""
+        PREFIX + runId.lowercase().filter { it in 'a'..'z' || it in '0'..'9' }.take(ID_CHARS) + "_" + stepIndex
 
     /**
-     * The line actually sent to the terminal for a step: [command] followed by the probe, so `$?`
-     * is the command's own status. A multi-line command keeps its shape and gets the probe on a new
-     * line (its `$?` is then the last line's, as when pasting a script); a command already ending in
-     * `;` or `&` isn't given a second separator.
+     * The probe that opens a step: everything printed after it is the step's output. It carries the
+     * token like the closing one does, so a window can only be opened and closed by the same step.
      */
-    fun probeLine(command: String, token: String): String {
+    fun startProbe(token: String): String = "printf '$OSC;$token;$BEL'"
+
+    /** The probe that closes a step: reports `$?` under [token]. */
+    fun probe(token: String): String = "printf '$OSC;$token;%s$BEL' \"\$?\""
+
+    /**
+     * The line actually sent to the terminal for a step: [command] between the two probes, so `$?`
+     * is the command's own status. A multi-line command keeps its shape and gets the closing probe
+     * on a new line (its `$?` is then the last line's, as when pasting a script); a command already
+     * ending in `;` or `&` isn't given a second separator.
+     *
+     * The opening probe always leads, on the first line: it stands before anything the step could
+     * do to what follows it.
+     */
+    fun probeLine(command: String, token: String): String =
+        opening(token) + command.trimEnd() + closing(command, token)
+
+    /**
+     * The parts of [probeLine] that are protocol rather than the operator's command — what the
+     * terminal hides from the echo of the line ([app.skerry.shared.terminal.TerminalEchoFilter]).
+     * Built here, from the same pieces, so the two can never disagree about where the command ends.
+     *
+     * Line breaks are left out of the fragments on purpose: a PTY echoes one as CR LF and the shell
+     * prints its continuation prompt (`> `) before the next line, so a fragment spanning a break
+     * could never match. Each fragment is then matched inside one echoed line, wherever in the
+     * stream it turns up — for a multi-line step the closing one arrives after the shell has already
+     * started running the first line. What stays visible is the shell's own prompt, not the probes.
+     */
+    fun echoFragments(command: String, token: String): List<String> =
+        listOf(opening(token), closing(command, token).trimStart('\n'))
+
+    private fun opening(token: String): String = "${startProbe(token)}; "
+
+    /** What follows the command: the separator its shape requires, then the closing probe. */
+    private fun closing(command: String, token: String): String {
         val probe = probe(token)
         val trimmed = command.trimEnd()
         if (trimmed.isEmpty()) return probe
         // A trailing backslash continues the line and swallows whichever separator comes next, so
         // both `cmd \; probe` and `cmd \` + newline + probe hand the probe to `cmd` as arguments and
-        // no marker is ever printed. A blank line is what ends such a command: the continuation
-        // joins with the empty line, and the newline after that terminates it. Checked before the
+        // no mark is ever emitted. A blank line is what ends such a command: the continuation joins
+        // with the empty line, and the newline after that terminates it. Checked before the
         // multi-line branch below, because what matters is how the text ends, not whether it already
         // spans lines.
-        if (endsInLineContinuation(trimmed)) return "$trimmed\n\n$probe"
-        if (trimmed.contains('\n')) return "$trimmed\n$probe"
+        if (endsInLineContinuation(trimmed)) return "\n\n$probe"
+        if (trimmed.contains('\n')) return "\n$probe"
         // Anything the probe cannot legally follow on the same line goes onto the next one, exactly
         // as if the step had been pasted as a two-line script. Both cases are silent killers when
         // got wrong: after a trailing comment the probe is swallowed and never runs, and after a
         // dangling `&&`/`;;` the appended `;` is a syntax error that makes the shell drop the WHOLE
-        // line — in both cases no marker is ever printed and the run waits forever.
-        if (endsInComment(trimmed) || endsInDanglingOperator(trimmed)) return "$trimmed\n$probe"
+        // line — in both cases no mark is ever emitted and the run waits forever.
+        if (endsInComment(trimmed) || endsInDanglingOperator(trimmed)) return "\n$probe"
         val last = trimmed.last()
-        return if (last == ';' || last == '&') "$trimmed $probe" else "$trimmed; $probe"
+        return if (last == ';' || last == '&') " $probe" else "; $probe"
     }
 
     /**
@@ -88,26 +126,6 @@ object RunbookMarker {
         DANGLING_OPERATORS.any { line.endsWith(it) }
 
     /**
-     * Exit code printed by [token]'s probe in [text] (terminal buffer), or `null` if the step hasn't
-     * finished. The last marker wins — a repeated token can only come from the same step, and the
-     * newest print is the current truth. Only ASCII digits count: a value that isn't a plain number
-     * (or overflows an `Int`) is treated as "no answer yet" rather than as a fabricated status.
-     */
-    fun exitCodeIn(text: String, token: String): Int? {
-        val needle = "$token:"
-        var found: Int? = null
-        var at = text.indexOf(needle)
-        while (at >= 0) {
-            val start = at + needle.length
-            var end = start
-            while (end < text.length && text[end] in '0'..'9') end++
-            if (end > start) text.substring(start, end).toIntOrNull()?.let { found = it }
-            at = text.indexOf(needle, at + needle.length)
-        }
-        return found
-    }
-
-    /**
      * Whether [text] ends in an unescaped `\`, which continues the line onto the next one. Only an
      * odd number of trailing backslashes does: `cmd \\` ends in a literal backslash and is a
      * complete command.
@@ -124,9 +142,14 @@ object RunbookMarker {
 
     private val DANGLING_OPERATORS = listOf("&&", "||", "|", ";;")
 
-    private const val PREFIX = "__skerry_rb_"
-    // Short on purpose: the printed marker must fit one terminal row, or a wrap would split it in
-    // two and the runner would never see the step finish. 8 hex characters of a UUID are already
-    // more than enough to separate one run's markers from another's.
+    // Written as printf's own escapes (`\033`, `\a`), not as bytes: an invisible control character
+    // in a Kotlin source file is unreadable in a diff and silently lost on edit.
+    private const val OSC = "\\033]$STEP_MARK_OSC"
+    private const val BEL = "\\a"
+
+    private const val PREFIX = "sk_"
+    // Short on purpose: the token rides in the probe the PTY echoes onto the screen, so every
+    // character of it is noise the user reads. 8 hex characters of a UUID already separate one
+    // run's marks from another's.
     private const val ID_CHARS = 8
 }
