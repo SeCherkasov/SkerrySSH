@@ -43,6 +43,10 @@ bouncycastle = "1.85"
 sshd = "2.19.0"
 # multiplatform libsodium binding (KMP, Argon2id + XChaCha20-Poly1305) for a single VaultCrypto
 ionspin-libsodium = "0.9.5"
+# goterl resource-loader: ionspin's transitive pin (2.0.2) feeds percent-encoded URL paths into
+# new JarFile() — crashes libsodium init on Chinese/space install paths (isJarFile bug). v2.1.0
+# fixed it (URL→URI decoding); ionspin 0.9.5 still pins 2.0.2, so we override here. Desktop only.
+goterl-resource-loader = "2.1.0"
 # okio — cross-platform file I/O behind FileSystem (FileVault in commonMain, FakeFileSystem in tests)
 okio = "3.18.0"
 # atomicfu — multiplatform locks (kotlinx.atomicfu.locks) instead of JVM-only @Synchronized
@@ -147,6 +151,7 @@ bouncycastle-pkix = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = 
 sshd-core = { module = "org.apache.sshd:sshd-core", version.ref = "sshd" }
 sshd-sftp = { module = "org.apache.sshd:sshd-sftp", version.ref = "sshd" }
 ionspin-libsodium = { module = "com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings", version.ref = "ionspin-libsodium" }
+goterl-resource-loader = { module = "com.goterl:resource-loader", version.ref = "goterl-resource-loader" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 okio-fakefilesystem = { module = "com.squareup.okio:okio-fakefilesystem", version.ref = "okio" }
 kotlinx-atomicfu = { module = "org.jetbrains.kotlinx:atomicfu", version.ref = "atomicfu" }

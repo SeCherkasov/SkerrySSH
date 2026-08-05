@@ -1660,24 +1660,24 @@
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/goterl/resource-loader/2.0.2/resource-loader-2.0.2.jar",
-    "sha512": "92d65330989744888360265fb8f8f5d010f8193b4ddbc06dc68dc72d3ebf753257e2a3f7c15c917264377d7ba7019dd471fd38fe40fe534ee0d250923f5ee69c",
-    "dest": "offline-repository/com/goterl/resource-loader/2.0.2",
-    "dest-filename": "resource-loader-2.0.2.jar"
+    "url": "https://repo.maven.apache.org/maven2/com/goterl/resource-loader/2.1.0/resource-loader-2.1.0.jar",
+    "sha512": "896ddeab1f25ac5038076975230c7c88bc9ca17a62772cab85a676b58fdbefa668dd41d397be0f093599a490ca076b393cb9e17cafaf491434ba29c6717db5f7",
+    "dest": "offline-repository/com/goterl/resource-loader/2.1.0",
+    "dest-filename": "resource-loader-2.1.0.jar"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/goterl/resource-loader/2.0.2/resource-loader-2.0.2.module",
-    "sha512": "e8b6b0484d0106d0bb6b9d1da079e5c8fbd69174e419a072513c8952d45b7b7117562283e50394b3042310a580cc5fc50c0d5887ba26fe39f5c76969aed7fabf",
-    "dest": "offline-repository/com/goterl/resource-loader/2.0.2",
-    "dest-filename": "resource-loader-2.0.2.module"
+    "url": "https://repo.maven.apache.org/maven2/com/goterl/resource-loader/2.1.0/resource-loader-2.1.0.module",
+    "sha512": "d51cf6001b1c57e8e337571c7a430c1086e7230e9ed03552714bb966122bee22147fa0f393b48a382d325e86d7d12fac8220aeb352c6ff0dd39d2c1d04119513",
+    "dest": "offline-repository/com/goterl/resource-loader/2.1.0",
+    "dest-filename": "resource-loader-2.1.0.module"
   },
   {
     "type": "file",
-    "url": "https://repo.maven.apache.org/maven2/com/goterl/resource-loader/2.0.2/resource-loader-2.0.2.pom",
-    "sha512": "b82d0fc5a3401031d89593c73486aad92f224394c358fb424aa5fb2b413c9e775fb19088e27f3763a9c48b87113caec9e9290c1f573aee331e7f08b36c579205",
-    "dest": "offline-repository/com/goterl/resource-loader/2.0.2",
-    "dest-filename": "resource-loader-2.0.2.pom"
+    "url": "https://repo.maven.apache.org/maven2/com/goterl/resource-loader/2.1.0/resource-loader-2.1.0.pom",
+    "sha512": "1297ba7ec9c7a7b3ef24c0985f5699e3c3daf4507173dd3c50b2bdadd27091e2d1b090ce48fff126961c453bbb0f05dc0eb6571c07d64f67d1d481c1f09fbb84",
+    "dest": "offline-repository/com/goterl/resource-loader/2.1.0",
+    "dest-filename": "resource-loader-2.1.0.pom"
   },
   {
     "type": "file",
