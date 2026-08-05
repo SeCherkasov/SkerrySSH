@@ -30,6 +30,7 @@ import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -62,9 +63,13 @@ class SyncCoordinatorReactivationTest {
      */
     private inner class ReactivatingClient(
         private val ownWrappedKey: ByteArray,
-        private val reactivated: Boolean = true,
+        reactivated: Boolean = true,
         /** Makes the reconcile's own first cycle fail, leaving the rebuild to a later sync. */
         private val failFirstPull: Boolean = false,
+        /** How many key fetches serve an unopenable wrap — a connect that fails AFTER the login. */
+        private val corruptWraps: Int = 0,
+        /** The first key fetch dies on the network — a connect that THROWS after the login. */
+        private val throwOnFirstFetch: Boolean = false,
     ) : SyncClient {
         val pushed = mutableListOf<RemoteRecord>()
 
@@ -72,11 +77,20 @@ class SyncCoordinatorReactivationTest {
         val pulledSince = mutableListOf<Long>()
         private val pulls = AtomicInteger(0)
 
+        // The reactivation is reported exactly once, like the server does it: the verify that reports it
+        // is the one that clears the revocation, so every later login of this device is an ordinary one.
+        private val revoked = AtomicBoolean(reactivated)
+        private val fetches = AtomicInteger(0)
+
         override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession =
             throw SyncException(SyncException.Kind.CONFLICT, "account exists")
         override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession =
-            SyncSession(accountId, accessToken = "access", refreshToken = "refresh", reactivated = reactivated)
-        override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray = ownWrappedKey.copyOf()
+            SyncSession(accountId, accessToken = "access", refreshToken = "refresh", reactivated = revoked.getAndSet(false))
+        override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray {
+            val n = fetches.getAndIncrement()
+            if (throwOnFirstFetch && n == 0) throw SyncException(SyncException.Kind.NETWORK, "unreachable")
+            return if (n < corruptWraps) ByteArray(ownWrappedKey.size) else ownWrappedKey.copyOf()
+        }
         override suspend fun pull(session: SyncSession, since: Long): RecordPage {
             pulledSince += since
             // Not a SyncException(NETWORK): that one arms the backoff retry loop, and the test wants the
@@ -89,12 +103,18 @@ class SyncCoordinatorReactivationTest {
             return RecordPage(emptyList(), 1)
         }
         override fun changes(session: SyncSession): Flow<SyncSignal> = emptyFlow()
-        override suspend fun ping(): Boolean = true
+
+        // Unreachable on purpose: a health ping that comes up drives the coordinator's own self-heal
+        // ([SyncCoordinator]'s init — no session, so `restoreSession`), which would race the connects these
+        // tests drive and re-save the config from under the assertions. Reachability is covered elsewhere.
+        override suspend fun ping(): Boolean = false
         override suspend fun close() {}
         override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = emptyList()
         override suspend fun accountSummary(session: SyncSession): AccountSummary = error("unused")
         override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean = false
-        override suspend fun refresh(session: SyncSession): SyncSession = throw NotImplementedError()
+        // The silent restore of a keep-connected device: a token exchange, with no `reactivated` in it.
+        override suspend fun refresh(session: SyncSession): SyncSession =
+            SyncSession(session.accountId, accessToken = "access2", refreshToken = "refresh2")
         // The rotation itself isn't what these tests are about: they need the activation that follows it,
         // which re-publishes the session WITHOUT reconciling. Accepts any current password.
         override suspend fun changePassword(accountId: String, currentAuthKey: ByteArray, newAuthKey: ByteArray, newWrappedDataKey: ByteArray, device: DeviceInfo): SyncSession =
@@ -119,6 +139,20 @@ class SyncCoordinatorReactivationTest {
             if (attempts.getAndIncrement() < failures) error("vault is locked")
             delegate.clearRecords(types)
         }
+    }
+
+    /** Config store that refuses exactly the write RAISING the reconcile marker (a full disk). */
+    private class MarkerRaiseFailingStore(private val delegate: SyncConfigStore) : SyncConfigStore {
+        /** Cleared once the test wants the disk to have room again. */
+        @Volatile
+        var refuse = true
+
+        override fun load(): SyncConfig? = delegate.load()
+        override fun save(config: SyncConfig) {
+            if (refuse && config.pendingReconcile && delegate.load()?.pendingReconcile != true) error("config write failed")
+            delegate.save(config)
+        }
+        override fun clear() = delegate.clear()
     }
 
     /** Config store that refuses exactly the write retiring the reconcile marker (a full disk). */
@@ -193,6 +227,301 @@ class SyncCoordinatorReactivationTest {
             assertFalse(vault.records().any { it.id == "r1" }, "a pending reconcile must still rebuild the vault")
             assertFalse(client.pushed.any { it.id == "r1" }, "a pending reconcile must not let the stale record push")
             assertEquals(false, config.load()?.pendingReconcile, "the redone reconcile clears the marker")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * Issue #168: the login succeeds and reports the reactivation, then the connect fails on its way to
+     * the session — here on an account wrap that doesn't open (issue #133's refusal). The server already
+     * cleared the revocation on that verify and will never report it again, so an intent persisted only
+     * by a connect that reaches the end is no intent at all: the next connect would look like an ordinary
+     * incremental reconnect and push the pre-revocation records straight back.
+     */
+    @Test
+    fun `a connect that fails after the login keeps the reactivation it was told about`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = InMemorySyncConfigStore()
+        // The first connect's key fetch serves an unopenable wrap; the second one is served the real key.
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true, corruptWraps = 1)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the unopenable wrap") { it is SyncStatus.Failed }
+            assertEquals(
+                SyncFailureReason.AccountKeyNotAdopted,
+                (sut.status.value as? SyncStatus.Failed)?.reason,
+                "was ${sut.status.value}",
+            )
+            assertEquals(null, config.load(), "a connect that never reached a session must not save a link")
+
+            // The repaired server state, and a login that reports nothing: the connect that failed is the
+            // only thing that still knows a rebuild is owed.
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the repaired connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "was ${sut.status.value}")
+            assertFalse(vault.records().any { it.id == "r1" }, "the deferred reconcile must still drop the pre-revocation record")
+            assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must never be pushed back")
+            assertEquals(false, config.load()?.pendingReconcile, "the completed reconcile retires the marker")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The device that gets reactivated normally still HAS its link — that is the production shape of the
+     * write, and the one the fresh-store tests never take. Only the reconcile marker may change: the
+     * deviceId identifies this device to the account, and the keep-connected token is what lets the next
+     * launch restore without a password. Rebuilding the config from the connect's own parameters instead
+     * of marking the saved one would drop both and no other test would notice.
+     */
+    @Test
+    fun `marking a reactivation preserves the link it is written onto`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+
+        val linked = SyncConfig(serverUrl, account, deviceId = "devA", keepConnected = true, sealedRefreshToken = "sealed")
+        val config = InMemorySyncConfigStore().also { it.save(linked) }
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true, corruptWraps = 1)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the unopenable wrap") { it is SyncStatus.Failed }
+            assertEquals(linked.copy(pendingReconcile = true), config.load(), "only the marker may change")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The connect need not fail with a status of its own to lose the signal: a network error while
+     * fetching the account key throws straight past every early return into the catch-all. The marker
+     * has to be down on disk before that fetch, not after it.
+     */
+    @Test
+    fun `a connect that throws after the login keeps the reactivation`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = InMemorySyncConfigStore().also { it.save(SyncConfig(serverUrl, account, deviceId = "devA")) }
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true, throwOnFirstFetch = true)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the key fetch") { it is SyncStatus.Failed }
+            assertEquals(true, config.load()?.pendingReconcile, "a throw after the login must not take the reactivation with it")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * A keep-connected device recovers without a password: the next launch refreshes its saved token
+     * instead of logging in, and `refresh` carries no `reactivated` signal at all. The marker raised by
+     * the failed connect is the only thing that can make that silent restore rebuild the vault first —
+     * which is the whole reason the intent is durable rather than kept in memory.
+     */
+    @Test
+    fun `a keep-connected restore finishes the reconcile a failed connect left owed`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        // The link a keep-connected device already has — the failed connect below never reaches a session,
+        // so it seals no token of its own.
+        val dataKey = vault.exportDataKey()!!
+        val sealed = SealedTokenCodec(crypto).seal(dataKey, "refresh").also { dataKey.zeroize() }
+        val config = InMemorySyncConfigStore().also {
+            it.save(SyncConfig(serverUrl, account, deviceId = "devA", keepConnected = true, sealedRefreshToken = sealed))
+        }
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true, corruptWraps = 1)
+        val failed = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            failed.connect(serverUrl, account, password.toCharArray(), keepConnected = true)
+            failed.status.awaitStatus("the connect to fail on the unopenable wrap") { it is SyncStatus.Failed }
+        } finally {
+            failed.close()
+        }
+        assertEquals(true, config.load()?.pendingReconcile, "the failed connect left the rebuild owed")
+
+        // A new process: no coordinator state survives, only the config file and the vault.
+        val restored = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            restored.restoreSession()
+            restored.status.awaitStatus("the silent restore to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(restored.status.value is SyncStatus.Online, "was ${restored.status.value}")
+            assertFalse(vault.records().any { it.id == "r1" }, "the restore must run the reconcile the connect never got to")
+            assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must never be pushed back")
+            assertEquals(false, config.load()?.pendingReconcile, "the completed reconcile retires the marker")
+        } finally {
+            restored.close()
+        }
+    }
+
+    /**
+     * The marker is written onto the saved link, and a connect that hasn't succeeded yet has not earned
+     * one: a failed connect to another account must leave the link — its deviceId and its keep-connected
+     * token — exactly as it was, rather than trade a device that is still fine for a reconcile intent that
+     * cannot even be read for that account. The signal is carried live instead (`reactivated`), and the
+     * connect that succeeds writes its own link with the marker.
+     */
+    @Test
+    fun `a failed connect does not overwrite the link to another account`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+
+        val linked = SyncConfig(serverUrl, "other-account", deviceId = "devOther", keepConnected = true, sealedRefreshToken = "sealed")
+        val config = InMemorySyncConfigStore().also { it.save(linked) }
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true, corruptWraps = 1)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the unopenable wrap") { it is SyncStatus.Failed }
+            assertEquals(linked, config.load(), "a failed connect must leave the saved link untouched")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * Disconnect erases the link, and with it the durable marker — but it rebuilds nothing: the records
+     * the reconcile was supposed to drop are still in the vault. A debt that was never actually paid must
+     * therefore survive it, or the reconnect after a disconnect is the ordinary incremental one and pushes
+     * the purged records straight back. (Here the reconcile's clear failed, which is exactly the state in
+     * which a user reaches for Disconnect.)
+     */
+    @Test
+    fun `a disconnect does not pay a rebuild that never ran`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = InMemorySyncConfigStore().also { it.save(SyncConfig(serverUrl, account, deviceId = "devA")) }
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val sut = SyncCoordinator(
+            clientFactory = { client },
+            crypto = crypto,
+            vault = ClearFailingVault(vault, failures = 1),
+            configStore = config,
+        )
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the clear") { it is SyncStatus.Failed }
+
+            sut.disconnect()
+            sut.status.awaitStatus("the link to be erased") { it is SyncStatus.Disabled }
+            assertEquals(null, config.load(), "disconnect erases the link — and the durable marker with it")
+
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the reconnect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "was ${sut.status.value}")
+            assertFalse(vault.records().any { it.id == "r1" }, "the rebuild is still owed — disconnect ran no reconcile")
+            assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must never be pushed back")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The account id is chosen by the user and says nothing about which server it belongs to — the same
+     * one names two accounts on a home and a work instance. A rebuild owed to one of them must not be
+     * charged to the other: the vault would be wiped of records the other server never purged, and they
+     * were never pushed to it either.
+     */
+    @Test
+    fun `a rebuild owed to one server is not charged to another`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        // Linked to the home instance, so the failed connect below marks THAT link — the marker and the
+        // in-memory debt both have to stay charged to it.
+        val config = InMemorySyncConfigStore()
+            .also { it.save(SyncConfig("https://home.test", account, deviceId = "devA")) }
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true, corruptWraps = 1)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            // The home instance: this device was revoked there, and the connect fails after the login.
+            sut.connect("https://home.test", account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the unopenable wrap") { it is SyncStatus.Failed }
+
+            // The work instance, same account id: an ordinary connect that owes nothing.
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the second connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "was ${sut.status.value}")
+            assertTrue(vault.records().any { it.id == "r1" }, "another server's reactivation must not clear this vault")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The reactivation is reported, the marker write is refused (a full disk), and the connect fails
+     * loudly — but the device is keep-connected, so what happens next is a silent restore that never
+     * logs in again. It has to see the rebuild is owed from the only place it was recorded: this
+     * process's memory. Otherwise the session comes Online and pushes the purged records back.
+     */
+    @Test
+    fun `a restore honors a rebuild whose marker could not be written`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val dataKey = vault.exportDataKey()!!
+        val sealed = SealedTokenCodec(crypto).seal(dataKey, "refresh").also { dataKey.zeroize() }
+        val config = MarkerRaiseFailingStore(
+            InMemorySyncConfigStore().also {
+                it.save(SyncConfig(serverUrl, account, deviceId = "devA", keepConnected = true, sealedRefreshToken = sealed))
+            },
+        )
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray(), keepConnected = true)
+            sut.status.awaitStatus("the connect to fail on the refused write") { it is SyncStatus.Failed }
+            assertEquals(false, config.load()?.pendingReconcile, "the marker never made it to disk")
+
+            config.refuse = false // the disk has room again by the time the restore runs
+            sut.restoreSession()
+            sut.status.awaitStatus("the silent restore to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "was ${sut.status.value}")
+            assertFalse(vault.records().any { it.id == "r1" }, "the restore must rebuild — the debt is still owed")
+            assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must never be pushed back")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * Standing down from the write is not the same as forgetting: the server said this device was
+     * reactivated and will never say it again, so the retry that finally connects must still rebuild —
+     * even though the intent had nowhere on disk to wait (the saved link is another account's, and a
+     * refused write leaves the same nothing behind).
+     */
+    @Test
+    fun `a reactivation with nowhere to be saved still reconciles on the next connect`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = InMemorySyncConfigStore()
+            .also { it.save(SyncConfig(serverUrl, "other-account", deviceId = "devOther")) }
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true, corruptWraps = 1)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the unopenable wrap") { it is SyncStatus.Failed }
+
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the retry to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "was ${sut.status.value}")
+            assertFalse(vault.records().any { it.id == "r1" }, "the retry must rebuild — the signal is gone from the server")
+            assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must never be pushed back")
         } finally {
             sut.close()
         }
@@ -533,6 +862,42 @@ class SyncCoordinatorReactivationTest {
         try {
             sut.connect(serverUrl, account, password.toCharArray())
             sut.status.awaitStatus("the connect to fail on the clear") { it is SyncStatus.Failed }
+
+            assertEquals(
+                AccountPasswordChange.Success,
+                sut.changeAccountPassword(password.toCharArray(), "vault-B".toCharArray()),
+            )
+            assertEquals(
+                SyncStatus.Failed(SyncFailureReason.ReconcileRequired),
+                sut.status.value,
+                "an activation that doesn't reconcile must not sync a vault that still owes one",
+            )
+            assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must not reach the server")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The refusal guard reads the durable marker, so a debt that never reached disk must be visible to it
+     * too. A password rotation re-publishes the session without reconciling: with nothing to see, its first
+     * cycle would push the pre-revocation records the failed connect never got to drop.
+     */
+    @Test
+    fun `a rotation cannot sync over a rebuild whose marker could not be written`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val config = MarkerRaiseFailingStore(
+            InMemorySyncConfigStore().also { it.save(SyncConfig(serverUrl, account, deviceId = "devA")) },
+        )
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, configStore = config)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the refused write") { it is SyncStatus.Failed }
+            assertEquals(false, config.load()?.pendingReconcile, "the marker never made it to disk")
 
             assertEquals(
                 AccountPasswordChange.Success,
