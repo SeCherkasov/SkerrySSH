@@ -38,6 +38,9 @@ import kotlin.test.assertTrue
  *  - connecting with the password of an EXISTING account (different from the vault's) re-keys this
  *    device to the account password — but only after the user confirms it.
  *
+ * Either way the device must end up holding the ACCOUNT's dataKey: a wrap that doesn't open under the
+ * password the server just accepted fails the connect on both paths (issue #133).
+ *
  * The account vault is a real [FileVault] over the system filesystem and crypto is real
  * [IonspinVaultCrypto] (Argon2id) — the whole point is password/key wrapping, so nothing is faked
  * there; only the network ([SyncClient]) is stubbed to model the server's account state.
@@ -123,9 +126,13 @@ class SyncCoordinatorPasswordReplaceTest {
             return SyncSession(accountId, accessToken = "access2", refreshToken = "refresh2")
         }
 
+        var closeCalls = 0; private set
+
         override fun changes(session: SyncSession): Flow<SyncSignal> = emptyFlow()
         override suspend fun ping(): Boolean = true
-        override suspend fun close() {}
+        override suspend fun close() {
+            closeCalls++
+        }
         override suspend fun pull(session: SyncSession, since: Long): RecordPage = nope()
         override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage = nope()
         override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = nope()
@@ -291,8 +298,42 @@ class SyncCoordinatorPasswordReplaceTest {
             sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
             sut.confirmPasswordReplace()
             sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
-            assertTrue(sut.status.value is SyncStatus.Failed, "must not report success on a replace that didn't happen")
+            assertEquals(
+                SyncFailureReason.AccountKeyNotAdopted,
+                (sut.status.value as? SyncStatus.Failed)?.reason,
+                "must not report success on a replace that didn't happen, was ${sut.status.value}",
+            )
             assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "the vault password is left as it was")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * Issue #133, the same refusal on the ordinary reconnect path (vault password == account password,
+     * register → CONFLICT → login). The SRP login already proved the typed password IS the account
+     * password, so a wrap that doesn't open means the account's records live under a dataKey this device
+     * doesn't have (a corrupted or partially restored server record). Syncing anyway pulls records we
+     * can't decrypt and pushes records the other devices can't — silently. Fail the connect instead.
+     */
+    @Test
+    fun `reconnecting fails loudly when the account key cannot be adopted`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = vaultPassword, corruptWrap = true)
+        val sut = coordinator(vault, client)
+        try {
+            sut.connect(serverUrl, account, vaultPassword.toCharArray())
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertEquals(
+                SyncFailureReason.AccountKeyNotAdopted,
+                (sut.status.value as? SyncStatus.Failed)?.reason,
+                "must not sync under a key that isn't the account's, was ${sut.status.value}",
+            )
+            assertTrue(vault.verifyPassword(vaultPassword.toCharArray()), "the vault password is left as it was")
+            // Opened by this connect and adopted by nothing downstream: left behind it leaks a Ktor pool
+            // per attempt.
+            assertEquals(1, client.closeCalls, "the client must be closed on the way out")
         } finally {
             sut.close()
         }
