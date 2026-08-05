@@ -23,7 +23,7 @@ hood, Compose Multiplatform UI on top. One core codebase and one UI across
 |---|---|---|---|---|
 | **Open source** | ✅ GPL-3.0 · AGPL-3.0 | ❌ | ✅ MIT | ✅ MIT |
 | **Platforms** | Linux · Windows · macOS · Android | Windows · macOS · Linux · iOS · Android | Windows · Unix | Windows · macOS · Linux |
-| **First release** | 2026 (v0.2.x) | 2011 | 1999 | 2017 |
+| **First release** | 2026 (v0.3.x) | 2011 | 1999 | 2017 |
 | **Price** | free | free tier · paid from $10/mo | free | free |
 | **Works without an account** | ✅ | ⚠️ local only <sup>1</sup> | ✅ | ✅ |
 | **Encrypted vault** | ✅ always on <sup>2</sup> | ✅ | ❌ | ⚠️ opt-in |
@@ -101,9 +101,10 @@ Building it yourself is also easy — see [Building from source](#building-from-
 - **Connections** — SSH with jump hosts (ProxyJump), SSH certificates (loaded from the vault or
   read from disk on every connection), host-key certificates signed by a CA, and
   keyboard-interactive 2FA challenges; Mosh; SFTP (dual-pane commander with a built-in file
-  viewer/editor, sortable columns and a quick name filter); port forwarding: local, remote,
-  dynamic/SOCKS, plus discovery of listening services with one-tap forwarding; Docker and
-  Kubernetes exec (pick a container/pod on the host and drop into its shell); Telnet; serial
+  viewer/editor, sortable columns, a quick name filter and a transfer queue); port forwarding:
+  local, remote, dynamic/SOCKS, forwards that raise themselves once the vault is unlocked, plus
+  discovery of listening services with one-tap forwarding; Docker and Kubernetes exec (pick a
+  container/pod on the host and drop into its shell); Telnet; serial
   (desktop and Android USB-OTG); a local shell in a tab, without any connection at all.
   Existing hosts can be imported from `~/.ssh/config`.
 - **Remote desktops** — VNC and RDP in a section of their own, both on a client stack written
@@ -112,9 +113,13 @@ Building it yourself is also easy — see [Building from source](#building-from-
   the machine can decode it — Android always can; a desktop needs `ffmpeg` on PATH, and without
   one the session simply runs on the other codecs.
 - **Terminal** — custom grid emulation, session tabs with up to four tiled panes and
-  synchronized input, SSH auto-reconnect, scrollback search, live host metrics, a command
-  palette over the history, broadcast input to several sessions, file paths from the output
-  opened straight in the SFTP panel, and session recording (asciinema v2) with in-app playback.
+  synchronized input, SSH auto-reconnect, scrollback search, syntax highlighting for the
+  command line and the output, a command palette over the history, broadcast input to several
+  sessions, file paths from the output opened straight in the SFTP panel, clickable URLs even
+  when they wrap, and session recording (asciinema v2) with in-app playback.
+- **Host monitoring** — a screen of its own beside the terminal: CPU, memory and network with
+  their history, disk and swap as levels, the top processes, systemd units and mounts, running
+  containers, and threshold alerts derived on the device.
 - **Session sharing** — stream a live terminal to a teammate end-to-end encrypted, read-only or
   with the keyboard handed over.
 - **Production guard** — hosts tagged `prod` score every command for risk and stop the dangerous
@@ -122,19 +127,24 @@ Building it yourself is also easy — see [Building from source](#building-from-
 - **Themes** — dark and light app themes with a card-based catalog; the terminal follows
   the app theme, and the System mode tracks the OS live.
 - **Vault** — always-on encryption (Argon2id + XChaCha20-Poly1305) for keys, passwords,
-  identities, and certificates; biometric unlock on Android. Deleted hosts, keys, snippets,
-  and tunnels stay restorable in the trash for 30 days, on every synced device.
+  identities, and certificates; biometric unlock on Android. Each secret states what it is —
+  algorithm, fingerprint, validity, what depends on it, and when it was last used. Deleted hosts,
+  keys, snippets, and tunnels stay restorable in the trash for 30 days, on every synced device.
 - **Sync** — optional and self-hosted, zero-knowledge, live push over WebSocket, device
-  pairing via QR. See [Sync server](#sync-server).
-- **Teams** — end-to-end encrypted sharing of hosts and snippets within a team, with access
-  scopes per member and an activity feed of who changed which host and who opened a session.
+  pairing via QR, and a browser account zone behind a separate web password that reads metadata
+  and can revoke a device, nothing else. See [Sync server](#sync-server).
+- **Teams** — end-to-end encrypted sharing of hosts, snippets and runbooks within a team, with
+  access scopes per member and an activity feed of who changed which host and who opened a
+  session.
 - **Snippets & AI** — command library with type-ahead in the terminal; dynamic `${{…}}`
   variables (date/time, uuid, random, clipboard, vault secrets, prompted parameters) resolved
-  at run time behind a confirmation preview; AI assistant with
-  per-host policies — bring your own OpenAI key or run a local model.
+  at run time behind a confirmation preview; an assistant with per-host policies — a panel
+  beside the session on desktop, a bar on mobile — bring your own OpenAI key or run a local model.
   See [AI and privacy](#ai-and-privacy).
-- **Runbooks** — saved procedures run one step at a time in a live session: each step can pause
-  for your go-ahead, and a step that exits non-zero stops the run instead of carrying on.
+- **Runbooks** — saved procedures run one step at a time in a live session: a step is a command
+  or a file moved over SFTP, it can pause for your go-ahead, and a step that exits non-zero
+  stops the run instead of carrying on. The run screen shows each step's state, duration and
+  output, and every finished run is kept in a per-runbook log.
 - **Localization** — English, Russian, and Simplified Chinese UI; the assistant replies in
   the UI language.
 
