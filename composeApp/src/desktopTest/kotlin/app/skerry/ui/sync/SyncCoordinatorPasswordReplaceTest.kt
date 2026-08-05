@@ -15,6 +15,7 @@ import app.skerry.shared.sync.SyncSignal
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
+import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.initializeVaultCrypto
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +24,7 @@ import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -65,6 +67,8 @@ class SyncCoordinatorPasswordReplaceTest {
         accountDataKey: DataKey? = null,
         /** Serve a wrap that can't be unwrapped, modelling a corrupted/mismatched server record. */
         private val corruptWrap: Boolean = false,
+        /** This device is revoked on the account: the first successful login reactivates it and says so once. */
+        revoked: Boolean = false,
     ) : SyncClient {
         // var: a password rotation ([changePassword]) swaps both to the new password's material.
         private var expectedAuthKey: ByteArray?
@@ -87,6 +91,10 @@ class SyncCoordinatorPasswordReplaceTest {
 
         var registered = false; private set
 
+        // Cleared by the verify that reports it, exactly as the server does it (re-authentication
+        // reactivates the device), so a later login of the same device carries nothing.
+        private val revoked = AtomicBoolean(revoked)
+
         override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession {
             if (expectedAuthKey != null) throw SyncException(SyncException.Kind.CONFLICT, "account exists")
             registered = true
@@ -95,7 +103,7 @@ class SyncCoordinatorPasswordReplaceTest {
 
         override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession {
             if (expectedAuthKey != null && authKey.contentEquals(expectedAuthKey)) {
-                return SyncSession(accountId, accessToken = "access", refreshToken = "refresh")
+                return SyncSession(accountId, accessToken = "access", refreshToken = "refresh", reactivated = revoked.getAndSet(false))
             }
             throw SyncException(SyncException.Kind.UNAUTHORIZED, "wrong password") // server hides "no such account"
         }
@@ -334,6 +342,154 @@ class SyncCoordinatorPasswordReplaceTest {
             // Opened by this connect and adopted by nothing downstream: left behind it leaks a Ktor pool
             // per attempt.
             assertEquals(1, client.closeCalls, "the client must be closed on the way out")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * Issue #168 on the replace path. The login that only VERIFIES the typed password is a full SRP
+     * verify: it reactivates this revoked device server-side and consumes the one-shot signal, and then
+     * the connect pauses for the user's confirmation. By the time the confirmed re-run logs in again the
+     * server sees an ordinary live device and reports nothing — so unless the paused connect carries the
+     * signal across the confirmation, the rebuild the reactivation owes never happens and this device
+     * pushes back the records the account purged while it was locked out.
+     */
+    @Test
+    fun `a reactivation reported by the verify-only login survives the confirmation`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        // Held LIVE through the revocation — the server purged it in the meantime.
+        vault.put("r1", RecordType.HOST, "stale".encodeToByteArray())
+        val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
+        val store = InMemorySyncConfigStore()
+        val sut = coordinator(vault, client, store)
+        try {
+            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
+            // A password the user has only typed is not a link: nothing may be saved before they confirm.
+            assertEquals(null, store.load(), "a paused connect must not save a link the user hasn't confirmed")
+
+            sut.confirmPasswordReplace()
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "was ${sut.status.value}")
+            assertFalse(vault.records().any { it.id == "r1" }, "the reactivated device must rebuild from the server before it pushes")
+            assertEquals(false, store.load()?.pendingReconcile, "the completed reconcile retires the marker")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The other half of the same pause. Declining must leave the device exactly as it was — the verify
+     * login was a password probe, not a link — so the reactivation carried across the pause has to live
+     * with the paused connect and die with it, not on disk. Otherwise Cancel leaves the app "Configured"
+     * for an account the user refused to join, and armed to wipe the vault whenever it does connect.
+     */
+    @Test
+    fun `declining the confirmation leaves no link behind after a reactivating verify`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
+        val store = InMemorySyncConfigStore()
+        val sut = coordinator(vault, client, store)
+        try {
+            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
+            sut.cancelPasswordReplace()
+            sut.status.awaitStatus("the status to come Disabled") { it is SyncStatus.Disabled }
+            assertEquals(null, store.load(), "a declined connect must not leave a saved link")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The pause is not a reason to withhold the marker from a link this device ALREADY has: recording it
+     * there creates no new state and takes nothing back from the user, and the device owes the rebuild
+     * whatever it decides about the password. Only the fields the reactivation is about may change —
+     * the deviceId and the keep-connected token belong to a link that is still valid.
+     */
+    @Test
+    fun `a reactivating verify marks the link this device already has`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
+        val linked = SyncConfig(serverUrl, account, deviceId = "dev-local", keepConnected = true, sealedRefreshToken = "sealed")
+        val store = InMemorySyncConfigStore().apply { save(linked) }
+        val sut = coordinator(vault, client, store)
+        try {
+            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
+            assertEquals(
+                linked.copy(pendingReconcile = true),
+                store.load(),
+                "the marker goes onto the existing link, and nothing else about it changes",
+            )
+        } finally {
+            sut.close()
+        }
+    }
+
+    /** A vault that refuses the re-wrap the confirmed replace needs (`VaultRekeyFailed`). */
+    private class RewrapUnderFailingVault(private val delegate: Vault) : Vault by delegate {
+        override fun rewrapUnder(password: CharArray): Boolean {
+            password.fill(' ')
+            return false
+        }
+    }
+
+    /**
+     * The third early return of issue #168: the confirmed replace logs in, the account key turns out to
+     * already be ours, and re-wrapping the vault under the account password fails. The connect stops
+     * there — but the reactivation the paused connect carried is already the server's last word on the
+     * subject, so it must be on the device's link by then rather than die with the failed re-key. (The
+     * device is linked here, which is what a rotation from another device leaves behind: the account
+     * password moved on and this vault still holds the old one.)
+     */
+    @Test
+    fun `a confirmed replace that fails on the re-key keeps the reactivation`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = accountPassword, accountDataKey = vault.exportDataKey(), revoked = true)
+        val store = configuredStore()
+        val sut = coordinator(RewrapUnderFailingVault(vault), client, store)
+        try {
+            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
+            sut.confirmPasswordReplace()
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertEquals(
+                SyncFailureReason.VaultRekeyFailed,
+                (sut.status.value as? SyncStatus.Failed)?.reason,
+                "was ${sut.status.value}",
+            )
+            assertEquals(true, store.load()?.pendingReconcile, "the rebuild is owed even though the re-key failed")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * Recording the reactivation can fail — the config file is on a full disk — and that failure travels
+     * out through the catch-all rather than a return of its own. The client the verify opened must not go
+     * with it: nothing else holds a reference, so every retry would strand another socket pool.
+     */
+    @Test
+    fun `a refused reactivation write still closes the client the verify opened`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
+        // The link is already there, so the reactivation has somewhere to be written — and that write fails.
+        val linked = InMemorySyncConfigStore().apply { save(SyncConfig(serverUrl, account, deviceId = "dev-local")) }
+        val store = object : SyncConfigStore by linked {
+            override fun save(config: SyncConfig): Unit = error("config write failed")
+        }
+        val sut = coordinator(vault, client, store)
+        try {
+            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            sut.status.awaitStatus("the connect to fail on the refused write") { it is SyncStatus.Failed }
+            assertEquals(1, client.closeCalls, "the verify's client must be closed even when the write throws")
         } finally {
             sut.close()
         }
