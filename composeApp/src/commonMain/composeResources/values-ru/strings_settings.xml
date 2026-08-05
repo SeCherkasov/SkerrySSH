@@ -84,6 +84,8 @@
     <string name="settings_terminal_show_title">Показывать заголовок терминала на вкладках</string>
     <string name="settings_terminal_show_title_desc">Шелл может переименовывать вкладку (OSC-заголовок). Выкл — показывается имя хоста.</string>
     <string name="settings_terminal_clipboard_write">Разрешить серверу писать в буфер обмена (OSC 52)</string>
+    <string name="settings_hide_system_bars">Скрывать системные панели в сессии</string>
+    <string name="settings_hide_system_bars_desc">Терминал и удалённый рабочий стол занимают весь экран. Панели возвращаются свайпом от края.</string>
     <string name="settings_terminal_open_paths">Открытие файловых путей в SFTP</string>
     <string name="settings_terminal_open_paths_desc">Ctrl+клик по пути в выводе открывает его в файловой панели.</string>
     <string name="settings_terminal_open_paths_desc_mobile">Долгое нажатие на путь в выводе, затем «Открыть в Файлах».</string>

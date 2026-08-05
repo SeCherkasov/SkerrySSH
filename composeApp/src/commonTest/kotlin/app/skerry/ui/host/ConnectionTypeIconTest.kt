@@ -13,7 +13,8 @@ class ConnectionTypeIconTest {
 
     @Test
     fun every_connection_type_maps_to_its_symbol() {
-        assertEquals("lan", ConnectionType.SSH.icon)
+        // Server rack, matching the mobile Hosts tab: the row names the machine, not the wire.
+        assertEquals("dns", ConnectionType.SSH.icon)
         assertEquals("bolt", ConnectionType.MOSH.icon)
         assertEquals("terminal", ConnectionType.TELNET.icon)
         assertEquals("cable", ConnectionType.SERIAL.icon)

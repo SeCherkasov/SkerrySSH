@@ -80,7 +80,7 @@
 
     <!-- 移动端主机列表 (MobileHostsView.kt) -->
     <string name="shell_hosts">主机</string>
-    <string name="shell_search_hosts">搜索主机、标签…</string>
+    <string name="shell_search_hosts">搜索主机、标签、IP…</string>
 
     <!-- 移动端路由占位 (MobileDesignApp.kt) -->
     <string name="shell_route_team">团队</string>
@@ -117,4 +117,11 @@
     <string name="shell_kbdint_jump">由跳板主机请求</string>
     <string name="shell_kbdint_continue">继续</string>
     <string name="shell_kbdint_asks">服务器请求：</string>
+
+    <!-- 会话根标签页（MobileSessionsView.kt） -->
+    <string name="shell_sessions_title">会话</string>
+    <string name="shell_sessions_count">已打开 %1$d 个</string>
+    <string name="shell_sessions_none">没有打开的会话</string>
+    <string name="shell_sessions_none_hint">从目录中连接 — 会话会保留在这里，直到你关闭它。</string>
+    <string name="shell_sessions_close">关闭会话</string>
 </resources>

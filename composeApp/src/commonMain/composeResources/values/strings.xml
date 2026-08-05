@@ -35,7 +35,7 @@
 
     <!-- Нижняя навигация (mobile): подписи корневых табов. -->
     <string name="nav_tab_hosts">Hosts</string>
-    <string name="nav_tab_vault">Vault</string>
+    <string name="nav_tab_sessions">Sessions</string>
     <string name="nav_tab_more">More</string>
 
     <!-- Левый icon-rail desktop-оболочки: подписи пунктов. -->

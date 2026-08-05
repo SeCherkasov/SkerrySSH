@@ -80,7 +80,7 @@
 
     <!-- Mobile hosts list (MobileHostsView.kt) -->
     <string name="shell_hosts">Hosts</string>
-    <string name="shell_search_hosts">Search hosts, tags…</string>
+    <string name="shell_search_hosts">Search hosts, tags, IPs…</string>
 
     <!-- Mobile route placeholder (MobileDesignApp.kt) -->
     <string name="shell_route_team">Team</string>
@@ -117,4 +117,11 @@
     <string name="shell_kbdint_jump">Requested by the jump host</string>
     <string name="shell_kbdint_continue">Continue</string>
     <string name="shell_kbdint_asks">The server is asking:</string>
+
+    <!-- Sessions root tab (MobileSessionsView.kt): what is open right now -->
+    <string name="shell_sessions_title">Sessions</string>
+    <string name="shell_sessions_count">%1$d open</string>
+    <string name="shell_sessions_none">No open sessions</string>
+    <string name="shell_sessions_none_hint">Connect from a catalog — the session stays here until you close it.</string>
+    <string name="shell_sessions_close">Close session</string>
 </resources>

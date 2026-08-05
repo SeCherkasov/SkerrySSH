@@ -187,6 +187,8 @@ class MainActivity : FragmentActivity() {
                     onHighlightOutputChange = { writeHighlightOutput(dir, it) },
                     initialConfirmProductionWarnings = readProdWarnings(dir),
                     onConfirmProductionWarningsChange = { writeProdWarnings(dir, it) },
+                    initialHideSessionSystemBars = readHideSystemBars(dir),
+                    onHideSessionSystemBarsChange = { writeHideSystemBars(dir, it) },
                     initialUiLanguage = currentUiLanguage.value,
                     onUiLanguageChange = { currentUiLanguage.value = it; writeUiLanguage(dir, it) },
                     initialAutoLock = readAutoLock(dir),
@@ -344,6 +346,20 @@ class MainActivity : FragmentActivity() {
     private fun writeProdWarnings(dir: File, enabled: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_prod_warnings").writeText(enabled.toString()) }
+        }
+    }
+
+    /**
+     * Hiding the phone's system bars inside a session (More → Appearance → Interface):
+     * `hide_system_bars`, default off — the bars belong to the phone.
+     */
+    private fun readHideSystemBars(dir: File): Boolean = runCatching {
+        File(dir, "hide_system_bars").readText().trim().toBoolean()
+    }.getOrDefault(false)
+
+    private fun writeHideSystemBars(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "hide_system_bars").writeText(enabled.toString()) }
         }
     }
 
@@ -725,6 +741,7 @@ class MainActivity : FragmentActivity() {
                 writeClipboardWrite(dir, false)
                 writeReportTeamSessions(dir, true)
                 writeProdWarnings(dir, false)
+                writeHideSystemBars(dir, false)
                 writeUiLanguage(dir, UiLanguage.DEFAULT)
                 writeAutoLock(dir, AutoLockDuration.DEFAULT)
             }

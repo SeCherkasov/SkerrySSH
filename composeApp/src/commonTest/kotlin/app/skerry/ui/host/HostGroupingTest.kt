@@ -155,8 +155,17 @@ class HostSectionTest {
 class HostRowSubtitleTest {
 
     @Test
-    fun a_profile_with_a_user_shows_user_at_host() {
-        val h = host("a", type = ConnectionType.SSH).copy(username = "root", address = "10.0.0.1")
+    fun a_profile_with_a_user_shows_user_at_host_and_port() {
+        // The port is part of the address the row identifies a profile by: two hosts on the same
+        // machine differ only by it, and the list would show them as the same line.
+        val h = host("a", type = ConnectionType.SSH).copy(username = "root", address = "10.0.0.1", port = 22)
+        assertEquals("root@10.0.0.1:22", h.rowSubtitle())
+    }
+
+    @Test
+    fun a_profile_with_no_port_at_all_shows_just_user_at_host() {
+        // A local shell or an imported profile can carry port 0 — ":0" would be a lie.
+        val h = host("a2", type = ConnectionType.SSH).copy(username = "root", address = "10.0.0.1", port = 0)
         assertEquals("root@10.0.0.1", h.rowSubtitle())
     }
 
