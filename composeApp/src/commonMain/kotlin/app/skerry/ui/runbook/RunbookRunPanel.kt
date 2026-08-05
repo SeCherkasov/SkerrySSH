@@ -33,7 +33,6 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_panel_close
 import app.skerry.ui.generated.resources.runbook_panel_done
 import app.skerry.ui.generated.resources.runbook_panel_done_with_failures
-import app.skerry.ui.generated.resources.runbook_panel_exit_code
 import app.skerry.ui.generated.resources.runbook_panel_failed
 import app.skerry.ui.generated.resources.runbook_panel_progress
 import app.skerry.ui.generated.resources.runbook_panel_run_step
@@ -153,7 +152,7 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
         }
         state.exitCode?.let { code ->
             Box(Modifier.padding(top = 1.dp)) {
-                Txt(stringResource(Res.string.runbook_panel_exit_code, code), color = color, size = 10.5.sp, font = mono)
+                Txt(exitCodeText(code), color = color, size = 10.5.sp, font = mono)
             }
         }
     }

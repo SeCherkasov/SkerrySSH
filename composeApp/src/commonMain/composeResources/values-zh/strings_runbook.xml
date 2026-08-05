@@ -47,8 +47,9 @@
     <string name="runbook_panel_stop">停止运行</string>
     <string name="runbook_panel_close">关闭</string>
     <string name="runbook_panel_exit_code">退出码 %1$d</string>
+    <string name="runbook_panel_status_unreadable">状态无法读取</string>
     <string name="runbook_panel_progress">%1$d / %2$d</string>
-    <string name="runbook_panel_shell_note">步骤在本会话的 shell 中执行；退出码通过一行标记返回。</string>
+    <string name="runbook_panel_shell_note">步骤在本会话的 shell 中执行；退出码通过带外序列返回，不会有任何输出。</string>
     <string name="runbook_panel_transfer_failed">传输失败：%1$s</string>
     <string name="runbook_panel_no_sftp">本会话没有 SFTP 通道。</string>
 
@@ -86,6 +87,7 @@
     <string name="runbook_run_step_of">第 %1$d / %2$d 步</string>
     <string name="runbook_run_output">输出</string>
     <string name="runbook_run_no_output">尚无输出</string>
+    <string name="runbook_run_output_lost">未捕获输出——步骤执行期间终端缓冲区已变化</string>
     <string name="runbook_run_back">返回终端</string>
     <string name="runbook_run_open">打开运行</string>
     <string name="runbook_status_waiting">等待中</string>

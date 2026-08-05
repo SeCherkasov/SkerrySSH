@@ -56,7 +56,9 @@ class RunbookActiveTabTest {
     private fun runbookTarget(sessionId: String) = RunbookTarget(
         sessionId = sessionId,
         send = {},
-        readOutput = { "" },
+        expectStep = { _, _ -> },
+        takeMark = { null },
+        outputVersion = { 0L },
         isLive = { true },
         openSftp = null,
     )

@@ -157,6 +157,8 @@ const val DEFAULT_MAX_SCROLLBACK = 5000
  * @param clipboardWriteEnabled whether OSC 52 clipboard writes are honored. Default off (like
  *   xterm/kitty): an untrusted server must not silently overwrite the system clipboard without the
  *   user opting in. Mutable so a live settings change applies to an already-open session.
+ * @param onStepMark called when a step's closing mark arrives (OSC [STEP_MARK_OSC]) — a runbook
+ *   step reporting its exit code and what it printed. Called synchronously from [feed].
  */
 class TerminalEmulator(
     cols: Int = 80,
@@ -171,6 +173,7 @@ class TerminalEmulator(
     private val onBell: () -> Unit = {},
     private val onClipboardCopy: (String) -> Unit = {},
     clipboardWriteEnabled: Boolean = false,
+    private val onStepMark: (TerminalStepMark) -> Unit = {},
 ) {
     /**
      * OSC 52 write gate: when off (default), a server's clipboard writes are dropped. Flipped by a
@@ -287,7 +290,7 @@ class TerminalEmulator(
      */
     fun applyMaxScrollback(lines: Int) {
         maxScrollback = lines.coerceAtLeast(0)
-        scrollback.trimTo(maxScrollback)
+        trimScrollback()
     }
 
     /**
@@ -324,6 +327,19 @@ class TerminalEmulator(
 
     // Active OSC 8 hyperlink (URI) — attached to printed cells until closed by an empty URI.
     private var currentHyperlink: String? = null
+
+    // The step the runner is waiting on, and the echo of the probes that frame it. Both are set by
+    // the client itself (never by the host): a mark for any other token is ignored, so a step is
+    // captured only while something is actually waiting for it — an ordinary session parks nothing.
+    private var expectedStepToken: String? = null
+    private val echo = TerminalEchoFilter()
+
+    // Where the output of the currently open runbook step begins (absolute row + column in it), or
+    // [NO_STEP_MARK] when no step is open. Follows the buffer: rows trimmed off history shift it
+    // down, and anything that rebuilds history (reflow, RIS, `clear`'s ED 3) drops it — the rows it
+    // pointed at no longer exist, and quoting whatever landed at that index would be an invention.
+    private var stepMarkRow = NO_STEP_MARK
+    private var stepMarkCol = 0
 
     // Palette overrides (OSC 4): index 0..255 → Rgb. Empty means theme defaults are used.
     // The renderer consults this layer when resolving TermColor.Indexed.
@@ -375,7 +391,54 @@ class TerminalEmulator(
     private var pendingDesignation = -1
 
     fun feed(data: ByteArray) {
-        for (b in data) process(b.toInt() and 0xff)
+        for (b in data) {
+            val byte = b.toInt() and 0xff
+            if (echo.active && parser == State.Ground) filterEcho(byte) else process(byte)
+        }
+    }
+
+    /**
+     * Runs [b] past the echo filter before the parser sees it: the probes framing a runbook step are
+     * text this client typed a moment ago, and drawing them would put protocol on the user's screen.
+     *
+     * Only printable ASCII and the line feed are offered — an escape sequence or a multi-byte
+     * character means the shell is doing something of its own, so whatever was held back is drawn
+     * and the byte takes the ordinary path.
+     */
+    private fun filterEcho(b: Int) {
+        if (b == 0x0a || (b in 0x20..0x7e)) {
+            replay(echo.filter(b.toChar()))
+            return
+        }
+        replay(echo.flushPartial())
+        process(b)
+    }
+
+    /** Feeds text the filter handed back (it decided it isn't ours) to the parser, in order. */
+    private fun replay(text: String) {
+        for (ch in text) process(ch.code)
+    }
+
+    /**
+     * Draws text the filter handed back, straight through the printing path rather than through the
+     * parser. A step mark is dispatched from inside the OSC handler, where the parser is still
+     * mid-sequence, and [replay] would feed the text into that sequence instead of onto the screen.
+     * Safe because the filter is only ever offered printable ASCII and the line feed.
+     */
+    private fun drawHeldEcho(text: String) {
+        for (ch in text) ground(ch.code)
+    }
+
+    /**
+     * Declares which step the terminal should report, and the echo of that step's probes to hide.
+     * `null` stops both: nothing is captured and nothing is filtered until the next step is sent.
+     * Called by the runbook runner on the emulator's own coroutine, like every other entry point.
+     */
+    fun expectStep(token: String?, hiddenEcho: List<String> = emptyList()) {
+        expectedStepToken = token
+        stepMarkRow = NO_STEP_MARK
+        drawHeldEcho(echo.stop())
+        if (token != null) echo.expect(hiddenEcho)
     }
 
     private fun process(b: Int) {
@@ -521,7 +584,68 @@ class TerminalEmulator(
             8 -> setHyperlink(rest)   // OSC 8 ; params ; URI
             52 -> setClipboard(rest)  // OSC 52 ; Pc ; Pd
             104 -> resetPalette(rest) // OSC 104 [ ; index ... ]  (empty = whole palette)
+            STEP_MARK_OSC -> stepMark(rest) // OSC 8375 ; token ; exit code  (runbook step boundary)
         }
+    }
+
+    /**
+     * OSC [STEP_MARK_OSC]: `<token>;<exit code>`. Both fields empty open a step (the output starts
+     * at the cursor), a token with a status close it — see [TerminalStepMark].
+     *
+     * Only ASCII digits count as a status: `toIntOrNull` would take a Devanagari or Arabic-Indic
+     * digit too, and an exit code is what the shell printed, not what a locale can parse. Anything
+     * else closes the step as [UNREADABLE_STATUS] rather than being dropped. A token never contains
+     * `;` (the runbook builds it out of `[a-z0-9_]`), so splitting on the first one is unambiguous.
+     */
+    private fun stepMark(rest: String) {
+        val sep = rest.indexOf(';')
+        if (sep < 0) return
+        val token = rest.substring(0, sep)
+        val status = rest.substring(sep + 1)
+        // A mark for a step nobody is waiting on is not this client's business — and a host that
+        // guessed or read the token off the screen must not be able to close a window it never
+        // opened, blanking the output the run screen would have shown.
+        if (token.isEmpty() || token.length > MAX_STEP_MARK_TOKEN || token != expectedStepToken) return
+        if (status.isEmpty()) return openStepMark()
+        // The length is checked before the digits: a hostile host must not make this scan the whole
+        // 4 MiB an OSC may carry. A status that is not one still closes the step — the probe that
+        // sent it has run, and a dropped mark would leave the run waiting for a second one.
+        val exitCode = if (status.length > MAX_STEP_MARK_STATUS || status.any { it !in '0'..'9' }) {
+            UNREADABLE_STATUS
+        } else {
+            status.toIntOrNull() ?: UNREADABLE_STATUS
+        }
+        closeStepMark(token, exitCode)
+    }
+
+    /** The step's output starts at the cursor. The alt screen has no rows of its own to quote. */
+    private fun openStepMark() {
+        stepMarkRow = if (altScreen) NO_STEP_MARK else scrollback.size + cy
+        stepMarkCol = cx
+        // The echo is NOT over: a multi-line step runs its first line — which emits this mark —
+        // while the rest of the line, closing probe included, is still coming back. Only the partial
+        // match in hand is given up (it is the command's output from here on); the closing fragment
+        // stays armed, or that probe would be drawn on the operator's screen.
+        drawHeldEcho(echo.flushPartial())
+    }
+
+    /** The step finished: hand over its status and the rows it printed since [openStepMark]. */
+    private fun closeStepMark(token: String, exitCode: Int) {
+        // The whole line has been echoed by now, so nothing of this step is left to hide. Drawn
+        // first: the text is this step's output, and drawing it can trim history — which shifts the
+        // opening mark, so the row is read after the draw rather than before it.
+        drawHeldEcho(echo.stop())
+        val start = stepMarkRow
+        stepMarkRow = NO_STEP_MARK
+        expectedStepToken = null // reported once; the runner declares the next step itself
+        val output = if (start == NO_STEP_MARK || altScreen) {
+            null // the rows are gone (or were never this step's): lost, which is not the same as empty
+        } else {
+            stepMarkOutput(first = start, firstCol = stepMarkCol, last = scrollback.size + cy, lastCol = cx) {
+                if (it < scrollback.size) scrollback.rows[it] else grid[it - scrollback.size]
+            }
+        }
+        onStepMark(TerminalStepMark(token, exitCode, output))
     }
 
     /**
@@ -944,7 +1068,23 @@ class TerminalEmulator(
 
     private fun pushScrollback(row: TermRow) {
         scrollback.push(row)
-        scrollback.trimTo(maxScrollback)
+        trimScrollback()
+    }
+
+    /**
+     * Trims history to [maxScrollback] and moves the open step mark down by however many rows went
+     * with it. A step that printed more than the whole scrollback loses the head of its output
+     * (clamped to the oldest row that is left) rather than the whole of it — the tail is the part
+     * the run screen shows anyway.
+     */
+    private fun trimScrollback() {
+        val dropped = scrollback.trimTo(maxScrollback)
+        if (dropped == 0 || stepMarkRow == NO_STEP_MARK) return
+        val shifted = stepMarkRow - dropped
+        stepMarkRow = shifted.coerceAtLeast(0)
+        // The row the column was measured on is gone, and the surviving oldest row starts at its own
+        // beginning — keeping the old column would cut the first characters off a line.
+        if (shifted < 0) stepMarkCol = 0
     }
 
     // --- Erase / insert / delete ------------------------------------------
@@ -970,7 +1110,7 @@ class TerminalEmulator(
             // ED 3 is "erase saved lines" — history goes. `clear` sends it right after ED 2, which is
             // what makes that command drop the output instead of only paging past it. Not from the alt
             // screen: a TUI resetting its display would take history it never owned with it.
-            3 -> if (!altScreen) scrollback.clear()
+            3 -> if (!altScreen) { scrollback.clear(); stepMarkRow = NO_STEP_MARK }
         }
     }
 
@@ -1122,6 +1262,11 @@ class TerminalEmulator(
         pendingWrap = false
         lastPrintedCp = null
         currentHyperlink = null
+        // The buffer the capture pointed into is gone, and so is whatever echo was being matched —
+        // but the step itself is not: its probe has yet to run, and the run needs that status. RIS
+        // is the host resetting the terminal, not the runner abandoning the step.
+        stepMarkRow = NO_STEP_MARK
+        echo.expect(emptyList())
         paletteOverrides.clear()
         paletteDirty = true
         style = TermStyle()
@@ -1214,6 +1359,7 @@ class TerminalEmulator(
             trackCursor = trackCursor,
         )
         scrollback.clear()
+        stepMarkRow = NO_STEP_MARK // reflow rebuilds history: the row the mark pointed at is gone
         result.scrollback.forEach { scrollback.push(it) } // already ≤ maxScrollback after reflow
         primaryGrid = result.grid
         return Pair(result.cursorRow, result.cursorCol)
@@ -1269,6 +1415,9 @@ class TerminalEmulator(
     private companion object {
         /** OSC string length cap (OOM guard on untrusted output); 4 MiB with headroom for OSC 52. */
         const val MAX_OSC_LEN = 4 * 1024 * 1024
+
+        /** [stepMarkRow] when no runbook step is open — nothing to cut the output out of. */
+        private const val NO_STEP_MARK = -1
 
         /** CSI params buffer length cap (OOM guard: a server pours digits with no final byte). */
         const val MAX_CSI_PARAMS_LEN = 1024
@@ -1348,7 +1497,9 @@ private class ScrollbackBuffer {
         }
     }
 
-    fun trimTo(max: Int) {
+    /** Drops the oldest rows down to [max] and answers how many went — see [TerminalEmulator.trimScrollback]. */
+    fun trimTo(max: Int): Int {
+        val before = rows.size
         while (rows.size > max) {
             rows.removeFirst()
             if (sealed.isNotEmpty()) {
@@ -1361,6 +1512,7 @@ private class ScrollbackBuffer {
                 tail.removeAt(0)
             }
         }
+        return before - rows.size
     }
 
     fun clear() {
