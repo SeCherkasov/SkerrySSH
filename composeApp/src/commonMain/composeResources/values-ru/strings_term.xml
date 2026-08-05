@@ -117,4 +117,11 @@
     <string name="term_pane_menu">Действия панели</string>
     <string name="term_pane_change_host">Сменить хост</string>
     <string name="term_pane_close">Закрыть панель</string>
+
+    <!-- Иконки шапки терминала (MobileTerminalChrome.kt): озвучиваемые имена для голых глифов -->
+    <string name="term_header_back">Назад</string>
+    <string name="term_header_files">Файлы</string>
+    <string name="term_header_monitor">Мониторинг хоста</string>
+    <string name="term_header_menu">Меню сессии</string>
+    <string name="term_session_new">Новая сессия</string>
 </resources>

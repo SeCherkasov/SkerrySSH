@@ -1,8 +1,5 @@
 package app.skerry.ui.mobile
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,9 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -24,9 +22,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,10 +44,10 @@ import app.skerry.ui.share.shareableTeams
 import app.skerry.ui.share.viewersMayOnlyWatch
 import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_snippets_screen_title
 import app.skerry.ui.generated.resources.term_mobile_title_fallback
 import app.skerry.ui.generated.resources.runbook_section
 import app.skerry.ui.generated.resources.term_broadcast_title
-import app.skerry.ui.generated.resources.term_monitor_title
 import app.skerry.ui.generated.resources.term_record_start
 import app.skerry.ui.generated.resources.term_record_stop
 import app.skerry.ui.generated.resources.term_palette_title
@@ -72,10 +69,11 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTerminalHistory
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
+import app.skerry.ui.app.MobileTab
+import app.skerry.ui.app.mobileTabBarUnderRoute
 import app.skerry.ui.design.Txt
 import app.skerry.ui.terminal.filePathFromSelection
 import app.skerry.ui.session.broadcastTargets
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import app.skerry.shared.terminal.castFileName
 import app.skerry.shared.terminal.recordingStamp
@@ -88,10 +86,6 @@ import app.skerry.ui.host.rememberProductionLookup
 /** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
 internal const val ESC = "\u001b"
 
-private const val HEADER_AUTO_HIDE_MS = 3000L
-// Where the header's reveal strip starts and how tall it is: clear of the system's edge-swipe zone.
-private val SYSTEM_EDGE_GESTURE = 40.dp
-private val TOP_EDGE_STRIP = 72.dp
 
 /**
  * Full-screen mobile terminal push-screen (a live SSH session over the PTY core). Header with host name
@@ -133,11 +127,6 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     // The AI input is off by default and raised by the sparkle key: on a phone it is a whole row of
     // screen that most sessions never use, and the terminal wants every line it can get.
     var aiOpen by remember(active?.id) { mutableStateOf(false) }
-    // Session chrome auto-hides like the VNC screen's bar; a swipe down near the top brings it back.
-    var headerVisible by remember(active?.id) { mutableStateOf(true) }
-    // See MobileVncScreen: keyed into the auto-hide effect so a swipe restarts the timer even when
-    // the header is already up.
-    var revealNonce by remember(active?.id) { mutableStateOf(0) }
     // Callbacks are stabilized by remember (keyed on session), else a fresh lambda per PTY chunk would
     // repaint the key panel/terminal for nothing. `ctrlArmed` is compose-state, so the lambda body sees
     // its live value even through remember.
@@ -176,22 +165,46 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
 
-    ImmersiveScreen()
-    // Held open while a sheet launched from it is up: the header is where they were opened from, and
-    // hiding it under an open menu reads as the app losing its place.
-    LaunchedEffect(headerVisible, menuOpen, paletteOpen, revealNonce) {
-        if (headerVisible && !menuOpen && !paletteOpen) {
-            delay(HEADER_AUTO_HIDE_MS)
-            headerVisible = false
-        }
-    }
-
+    // Full-bleed only on request (More → Appearance → Interface); off, the phone keeps its bars
+    // and the shell keeps this screen inside the safe area (see MobileChrome.fullBleed).
+    ImmersiveScreen(state.hideSessionSystemBars)
+    // Whether the bottom navigation is laid out under this screen right now — the same predicate the
+    // shell uses, so the key panel and the bar never both claim (or both skip) the system inset.
+    // Outside full-bleed the root padding already consumed the keyboard inset, so this reads false
+    // and the panel reserves nothing; that is correct, the root reserved it for the whole screen.
+    val tabBarBelow = mobileTabBarUnderRoute(
+        state.route,
+        state.modalOpen,
+        keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0,
+    )
     // Red frame around a production session (desktop parity): the phone has no tab row to carry the
     // marker, so the screen edge is the only always-visible place for it.
     Box(Modifier.fillMaxSize().background(Skerry.colors.terminalBg).prodOutline(isProdHostId(active?.hostId))) {
-        // imePadding here, not at the app root: this screen opts out of the root safeDrawing padding
-        // to run edge to edge, so lifting the content above the soft keyboard is its own job now.
+        // imePadding here, not at the app root: with "hide system bars" on this screen opts out of
+        // the root safeDrawing padding to run edge to edge, so lifting the content above the soft
+        // keyboard becomes its own job. With the setting off the root padding already consumed the
+        // keyboard inset and this is a no-op.
         Column(Modifier.fillMaxSize().imePadding()) {
+            MobileTerminalHeader(
+                title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
+                subtitle = active?.subtitle.orEmpty(),
+                status = active?.controller?.uiState,
+                controller = active?.controller,
+                onBack = state::pop,
+                // Same rule as the path chip in output: a session with no SFTP channel (Telnet,
+                // serial, container, a watched share) has no files to open.
+                onFiles = if (active?.controller?.supportsSftp == true) ({ state.push(MobileRoute.Files) }) else null,
+                // Desktop parity ([monitorAvailable]): a pane watching a colleague's session has no
+                // connection of its own to poll.
+                onMonitor = if (activeTerminal != null && active?.controller?.isWatched != true) ({ monitorOpen = true }) else null,
+                onMenu = { menuOpen = true },
+            )
+            MobileSessionStrip(
+                chips = mobileTerminalStrip(sessions?.tabs.orEmpty().map { it.toSessionInfo() }, sessions?.activeId),
+                onSelect = { id -> sessions?.activate(id) },
+                // A blank terminal is useless on a phone, so "+" leads to where a session starts.
+                onNew = { state.select(MobileTab.Hosts) },
+            )
             when (val st = active?.controller?.uiState) {
                 null, ConnectionUiState.Form ->
                     MobileTerminalNotice("terminal", stringResource(Res.string.term_no_active_session), stringResource(Res.string.term_mobile_open_host_connect))
@@ -248,6 +261,8 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                         onCtrlArmedChange = setCtrlArmed,
                         aiOpen = aiOpen,
                         onToggleAi = if (aiController != null) ({ aiOpen = !aiOpen }) else null,
+                        // The tab bar below owns the navigation-bar inset whenever it is there.
+                        reserveSystemBars = !tabBarBelow,
                     )
                 }
                 is ConnectionUiState.Error ->
@@ -257,32 +272,6 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 is ConnectionUiState.Disconnected ->
                     TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth())
             }
-        }
-        // Swipe down near the top brings the header back. Starts below the edge: a swipe from the very
-        // edge is the system's own gesture for restoring the hidden bars and never reaches us.
-        Box(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                .padding(top = SYSTEM_EDGE_GESTURE).height(TOP_EDGE_STRIP)
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures { _, dy ->
-                        if (dy > 0f) { headerVisible = true; revealNonce++ }
-                    }
-                },
-        )
-        AnimatedVisibility(
-            visible = headerVisible,
-            modifier = Modifier.align(Alignment.TopCenter),
-            enter = slideInVertically { -it },
-            exit = slideOutVertically { -it },
-        ) {
-            MobileTerminalHeader(
-                title = active?.displayTitle ?: stringResource(Res.string.term_mobile_title_fallback),
-                status = active?.controller?.uiState,
-                controller = active?.controller,
-                onBack = state::pop,
-                onMenu = { menuOpen = true },
-                onSnippets = if (canRunSnippet) ({ paletteOpen = true }) else null,
-            )
         }
         if (paletteOpen && snippets != null && activeTerminal != null) {
             MobileSnippetRunSheet(
@@ -326,22 +315,20 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 Spacer(Modifier.height(14.dp))
                 Column(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                     if (activeTerminal != null) {
-                        // Desktop parity ([monitorAvailable]): a pane watching a colleague's shared
-                        // session has no connection to poll, so the monitor isn't offered at all.
-                        if (active?.controller?.isWatched != true) {
-                            MobileSheetButton(
-                                label = stringResource(Res.string.term_monitor_title),
-                                onClick = { menuOpen = false; monitorOpen = true },
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                                icon = "monitoring",
-                                filled = false,
-                            )
-                        }
                         MobileSheetButton(
                             label = stringResource(Res.string.term_palette_title),
                             onClick = { menuOpen = false; historyOpen = true },
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                             icon = "history",
+                            filled = false,
+                        )
+                    }
+                    if (canRunSnippet) {
+                        MobileSheetButton(
+                            label = stringResource(Res.string.lib_snippets_screen_title),
+                            onClick = { menuOpen = false; paletteOpen = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            icon = "bolt",
                             filled = false,
                         )
                     }

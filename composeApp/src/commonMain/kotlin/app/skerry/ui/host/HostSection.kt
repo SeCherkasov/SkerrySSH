@@ -29,6 +29,9 @@ fun List<Host>.inSection(section: HostSection): List<Host> = filter { it.section
  * the suffix, leaving just the shell path (blank for the system default).
  */
 fun Host.rowSubtitle(): String = when {
+    // The port belongs to the address a row identifies a profile by: two profiles on the same
+    // machine (a jump host and a container gateway, 22 and 2222) are otherwise the same line.
+    username.isNotBlank() && port > 0 -> "$username@$address:$port"
     username.isNotBlank() -> "$username@$address"
     port > 0 -> "$address:$port"
     else -> address

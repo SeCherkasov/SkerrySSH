@@ -234,15 +234,12 @@ private fun LiveKnownRow(entry: KnownHostEntry, mono: FontFamily, onForget: () -
 
 /** Empty state: no trusted keys yet (the first connect will record one via TOFU). */
 @Composable
-private fun MobileEmptyKnown() {
-    Box(Modifier.fillMaxWidth().padding(top = 60.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym("fingerprint", size = 28.sp, color = Skerry.colors.faint)
-            Txt(stringResource(Res.string.lib_known_empty_title), color = Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.lib_known_empty_desc_mobile), color = Skerry.colors.faint, size = 12.sp)
-        }
-    }
-}
+private fun MobileEmptyKnown() = MobileEmptyNote(
+    icon = "fingerprint",
+    title = stringResource(Res.string.lib_known_empty_title),
+    subtitle = stringResource(Res.string.lib_known_empty_desc_mobile),
+    topPadding = 60.dp,
+)
 
 // Shared layout pieces.
 

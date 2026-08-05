@@ -312,15 +312,11 @@ private fun TunnelStatusControl(entry: TunnelEntry, onToggle: () -> Unit) {
 
 /** Empty state (no tunnels yet); added via the New tunnel button below. */
 @Composable
-private fun MobileEmptyTunnels() {
-    Box(Modifier.fillMaxWidth().padding(top = 50.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Sym("lan", size = 28.sp, color = Skerry.colors.faint)
-            Txt(stringResource(Res.string.ports_no_tunnels_yet), color = Skerry.colors.text, size = 14.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.ports_add_tunnel_below), color = Skerry.colors.faint, size = 12.sp)
-        }
-    }
-}
+private fun MobileEmptyTunnels() = MobileEmptyNote(
+    icon = "lan",
+    title = stringResource(Res.string.ports_no_tunnels_yet),
+    subtitle = stringResource(Res.string.ports_add_tunnel_below),
+)
 
 // Tunnel editor (sheet).
 

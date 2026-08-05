@@ -3,6 +3,7 @@ package app.skerry.ui.vault
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.vault.RecordType
@@ -165,9 +168,21 @@ private fun EmptyTrash() {
     }
 }
 
+/**
+ * Width a trash row needs before Restore / Delete forever fit beside the label. Not a breakpoint
+ * system — a guard: the two buttons are unweighted children of the row, so below this they eat the
+ * whole line and the weighted label is measured at ~zero (it rendered one character per line).
+ * Generous on purpose, and generous in the safe direction: too high only stacks a row that could
+ * have stayed inline.
+ */
+internal val TRASH_ROW_INLINE_MIN_WIDTH = 480.dp
+
+/** Whether a trash row of [rowWidth] must move its actions to a line of their own. */
+internal fun trashActionsStacked(rowWidth: Dp): Boolean = rowWidth < TRASH_ROW_INLINE_MIN_WIDTH
+
 @Composable
 private fun TrashRow(item: TrashItem, onRestore: () -> Unit, onForget: () -> Unit) {
-    Row(
+    BoxWithConstraints(
         Modifier
             .fillMaxWidth()
             .padding(bottom = 8.dp)
@@ -175,27 +190,56 @@ private fun TrashRow(item: TrashItem, onRestore: () -> Unit, onForget: () -> Uni
             .background(Skerry.colors.card)
             .border(1.dp, Skerry.colors.line, RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Sym(item.type.trashIcon(), size = 17.sp, color = Skerry.colors.cyanBright)
-        Column(Modifier.weight(1f)) {
-            Txt(item.label, color = Skerry.colors.text, size = 13.sp, maxLines = 1)
-            val daysLeft = stringResource(Res.string.settings_trash_days_left, item.daysLeft)
-            val kind = item.type.trashKind()
-            Txt(
-                if (kind.isEmpty()) daysLeft else "$kind · $daysLeft",
-                color = Skerry.colors.dim,
-                size = 11.5.sp,
-                modifier = Modifier.padding(top = 2.dp),
+        val actions: @Composable () -> Unit = {
+            GhostButton(stringResource(Res.string.settings_trash_restore), onClick = onRestore, icon = "restart_alt")
+            GhostButton(
+                stringResource(Res.string.settings_trash_forget),
+                onClick = onForget,
+                icon = "delete",
+                fg = Skerry.colors.sunset,
             )
         }
-        GhostButton(stringResource(Res.string.settings_trash_restore), onClick = onRestore, icon = "restart_alt")
-        GhostButton(
-            stringResource(Res.string.settings_trash_forget),
-            onClick = onForget,
-            icon = "delete",
-            fg = Skerry.colors.sunset,
+        if (trashActionsStacked(maxWidth)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Sym(item.type.trashIcon(), size = 17.sp, color = Skerry.colors.cyanBright)
+                    TrashRowLabel(item, Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { actions() }
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Sym(item.type.trashIcon(), size = 17.sp, color = Skerry.colors.cyanBright)
+                TrashRowLabel(item, Modifier.weight(1f))
+                actions()
+            }
+        }
+    }
+}
+
+/** Name of the deleted record over its kind and how long it has left. */
+@Composable
+private fun TrashRowLabel(item: TrashItem, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Txt(item.label, color = Skerry.colors.text, size = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        val daysLeft = stringResource(Res.string.settings_trash_days_left, item.daysLeft)
+        val kind = item.type.trashKind()
+        Txt(
+            if (kind.isEmpty()) daysLeft else "$kind · $daysLeft",
+            color = Skerry.colors.dim,
+            size = 11.5.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp),
         )
     }
 }

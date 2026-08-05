@@ -42,7 +42,11 @@ import app.skerry.ui.generated.resources.more_trash
 import app.skerry.ui.generated.resources.more_title
 import app.skerry.ui.generated.resources.settings_security_title
 import app.skerry.ui.generated.resources.settings_update_status
+import app.skerry.ui.generated.resources.vault_item_count
+import app.skerry.ui.generated.resources.vault_title
+import app.skerry.ui.app.LocalCredentials
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.generated.resources.term_player_open
 import app.skerry.ui.generated.resources.conn_import_action
@@ -87,6 +91,18 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             val known = if (preview) mobileMoreKnownSubtitle(1) else knownSubtitle()
             val knownWarn = if (preview) true else knownChanged() > 0
 
+            // Keychain: it lost its root tab to Sessions and lives here now. Subtitle is the number
+            // of secrets in the open vault; without one (preview/locked) the row still opens the
+            // screen, which says the same thing in full.
+            val vaultCount = LocalCredentials.current?.credentials?.size
+            val vaultSubtitle = if (vaultCount == null) null else {
+                pluralStringResource(Res.plurals.vault_item_count, vaultCount, vaultCount)
+            }
+            MoreRow(
+                "vpn_key", Skerry.colors.cyanBright, stringResource(Res.string.vault_title),
+                vaultSubtitle, Skerry.colors.dim,
+                onClick = { state.push(MobileRoute.Vault) },
+            )
             // Snippet library: it lost its root tab to the remote-desktops one, so this is its home
             // in the shell (the terminal's snippet palette still reaches it mid-session).
             MoreRow("code_blocks", Skerry.colors.cyanBright, stringResource(Res.string.lib_snippets_screen_title), null, Skerry.colors.dim, onClick = { state.push(MobileRoute.Snippets) })

@@ -34,7 +34,7 @@
 
     <!-- Нижняя навигация (mobile): подписи корневых табов. -->
     <string name="nav_tab_hosts">Хосты</string>
-    <string name="nav_tab_vault">Хранилище</string>
+    <string name="nav_tab_sessions">Сессии</string>
     <string name="nav_tab_more">Ещё</string>
 
     <!-- Левый icon-rail desktop-оболочки: подписи пунктов. -->

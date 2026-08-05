@@ -48,6 +48,8 @@ import app.skerry.ui.generated.resources.appearance_section_theme
 import app.skerry.ui.generated.resources.appearance_custom_term_theme
 import app.skerry.ui.generated.resources.appearance_custom_term_theme_desc
 import app.skerry.ui.generated.resources.appearance_section_terminal
+import app.skerry.ui.generated.resources.settings_hide_system_bars
+import app.skerry.ui.generated.resources.settings_hide_system_bars_desc
 import app.skerry.ui.generated.resources.settings_terminal_open_paths
 import app.skerry.ui.generated.resources.settings_terminal_open_paths_desc_mobile
 import app.skerry.ui.generated.resources.settings_terminal_highlight_input
@@ -208,6 +210,15 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
             FontSettingRow(stringResource(Res.string.appearance_language)) {
                 MobileLanguagePicker(state.uiLanguage, onPick = state::chooseUiLanguage)
             }
+            HLine()
+            // Whether a session takes the phone's status/navigation bars with it. Off by default —
+            // they are the phone's, not ours; on, a swipe from the edge brings them back.
+            MobileToggleRow(
+                title = stringResource(Res.string.settings_hide_system_bars),
+                desc = stringResource(Res.string.settings_hide_system_bars_desc),
+                on = state.hideSessionSystemBars,
+                onToggle = state::toggleHideSessionSystemBars,
+            )
             HLine()
             // App theme cards in a 2xN grid — the chrome counterpart of the terminal cards above.
             Txt(stringResource(Res.string.appearance_section_theme), color = Skerry.colors.faint, size = 11.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp))

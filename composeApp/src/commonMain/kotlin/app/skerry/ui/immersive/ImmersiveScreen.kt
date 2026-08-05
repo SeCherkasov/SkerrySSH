@@ -30,15 +30,21 @@ expect fun Modifier.hiddenSystemBarsPadding(top: Boolean = true, bottom: Boolean
 private val immersiveController = SecureFlagController(::applyPlatformImmersive)
 
 /**
- * Marks a screen as full-bleed: while this composable is in composition the system bars are hidden,
- * and they return when it leaves. Used by the session screens (VNC, terminal), where content shown
- * at anything less than the whole display wastes the scarcest thing on a phone — pixels — and where
- * the status bar sat on top of the picture in landscape.
+ * Marks a screen as full-bleed: while this composable is in composition with [enabled] the system
+ * bars are hidden, and they return when it leaves or the flag goes false. Used by the session
+ * screens (VNC, terminal), where content shown at anything less than the whole display wastes the
+ * scarcest thing on a phone — pixels — and where the status bar sat on top of the picture in
+ * landscape.
+ *
+ * [enabled] is the user's setting (More → Appearance → Interface), off by default: the bars are the
+ * phone's, and swallowing the clock and the battery is worth doing only on request. `false` claims
+ * nothing from the reference count, so a screen that opts out cannot hold the bars down for a later
+ * one that did opt in.
  */
 @Composable
-fun ImmersiveScreen() {
-    DisposableEffect(Unit) {
-        immersiveController.acquire()
-        onDispose { immersiveController.release() }
+fun ImmersiveScreen(enabled: Boolean = true) {
+    DisposableEffect(enabled) {
+        if (enabled) immersiveController.acquire()
+        onDispose { if (enabled) immersiveController.release() }
     }
 }

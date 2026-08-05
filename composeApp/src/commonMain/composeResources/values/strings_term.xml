@@ -115,4 +115,11 @@
     <string name="term_pane_menu">Pane actions</string>
     <string name="term_pane_change_host">Change host</string>
     <string name="term_pane_close">Close pane</string>
+
+    <!-- Terminal header icons (MobileTerminalChrome.kt): spoken names for bare glyphs -->
+    <string name="term_header_back">Back</string>
+    <string name="term_header_files">Files</string>
+    <string name="term_header_monitor">Host monitor</string>
+    <string name="term_header_menu">Session menu</string>
+    <string name="term_session_new">New session</string>
 </resources>

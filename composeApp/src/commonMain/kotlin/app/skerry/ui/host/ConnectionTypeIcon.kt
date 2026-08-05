@@ -9,7 +9,9 @@ import app.skerry.shared.ssh.ConnectionType
  */
 val ConnectionType.icon: String
     get() = when (this) {
-        ConnectionType.SSH -> "lan"
+        // Server rack, the same mark the mobile Hosts tab carries: "lan" drew a network topology,
+        // which named the wire rather than the machine at the end of it.
+        ConnectionType.SSH -> "dns"
         ConnectionType.MOSH -> "bolt"
         ConnectionType.TELNET -> "terminal"
         ConnectionType.SERIAL -> "cable"

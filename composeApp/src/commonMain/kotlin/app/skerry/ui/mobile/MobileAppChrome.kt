@@ -3,8 +3,10 @@ package app.skerry.ui.mobile
 import app.skerry.ui.connection.toRdpPassword
 import app.skerry.shared.ssh.isRdp
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -61,6 +63,8 @@ import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.app.MobileTab
 import app.skerry.ui.app.mobileBackAction
+import app.skerry.ui.app.mobileSessionFullBleed
+import app.skerry.ui.app.mobileTabBarUnderRoute
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.host.ProdConnectDialog
 import app.skerry.ui.host.ProdConnectRequest
@@ -234,19 +238,29 @@ internal fun MobileChrome(
         // lifts all content above the keyboard, and the tab bar (BottomCenter) would otherwise float
         // as a bar right above it.
         val keyboardVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-        // Session screens run full-bleed: they hide the system bars and use the whole display (a phone
-        // has no pixels to spare for chrome, and in landscape the status bar sat on top of the remote
-        // picture). Their own floating chrome keeps clear of the insets, and they handle the keyboard
-        // inset themselves — see ImmersiveScreen / hiddenSystemBarsPadding.
-        val fullBleed = state.route == MobileRoute.Vnc || state.route == MobileRoute.Terminal
+        // Session screens run full-bleed only when the user asked for it (More → Appearance →
+        // Interface): then they hide the system bars and use the whole display, their own floating
+        // chrome keeps clear of the insets, and they handle the keyboard inset themselves — see
+        // ImmersiveScreen / hiddenSystemBarsPadding. With the setting off (the default) the bars
+        // stay up and this screen stays inside the safe area, or terminal output would run under
+        // the phone's clock.
+        val fullBleed = mobileSessionFullBleed(state.hideSessionSystemBars, state.route)
         Box(Modifier.fillMaxSize().then(if (fullBleed) Modifier else Modifier.windowInsetsPadding(WindowInsets.safeDrawing))) {
             val route = state.route
-            Box(Modifier.fillMaxSize()) {
-                if (route != null) {
-                    MobileRoutePane(state, route)
-                } else {
-                    MobileTabPane(state, onLock)
+            // The terminal keeps the bar ([mobileRouteKeepsTabBar]) and gets it as a sibling below
+            // the screen, not floating over it: a translucent strip works over a scrolling list, but
+            // over terminal output it would hide the last lines. Root tabs keep the overlay they
+            // were laid out for (their content reserves the space at the end).
+            val tabsUnderRoute = mobileTabBarUnderRoute(route, state.modalOpen, keyboardVisible)
+            Column(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    if (route != null) {
+                        MobileRoutePane(state, route)
+                    } else {
+                        MobileTabPane(state, onLock)
+                    }
                 }
+                if (tabsUnderRoute) MobileTabBar(state)
             }
             if (state.showTabs && !keyboardVisible) {
                 MobileTabBar(state, Modifier.align(Alignment.BottomCenter))

@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -32,7 +31,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -67,6 +65,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.sessionDotColor
+import app.skerry.ui.session.sessionStatusText
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_accept
 import app.skerry.ui.generated.resources.lib_teams_create
@@ -597,56 +596,40 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>, section: HostSec
     )
     sections.forEach { (name, shared) ->
         Row(
-            Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
+            Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 16.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Sym("group", size = 15.sp, color = Skerry.colors.cyanBright)
+            // Same "NAME · N" form as a personal folder header (see MobileFolderHeader).
             Txt(
-                name.uppercase(),
+                "${name.uppercase()} · ${shared.size}",
                 color = Skerry.colors.faint, size = 12.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
             )
-            Txt(shared.size.toString(), color = Skerry.colors.faint, size = 11.sp)
         }
-        Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+        Column(Modifier.padding(horizontal = 22.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             shared.forEach { host ->
-                key("team-${host.id}") { MobileTeamHostRow(host, mono, onClick = { connect(host) }) }
+                key("team-${host.id}") { MobileTeamHostRow(host, onClick = { connect(host) }) }
             }
         }
     }
 }
 
 /**
- * A team shared-host row — a card modeled on the personal [MobileHostRow] (panel, border,
- * `user@address` monospaced, status dot) but with a `group` icon instead of `dns` to mark its
- * team-vault origin. Tap connects via [LocalConnectHost].
+ * A team shared-host row — the shared catalog line ([MobileCatalogRow]) so it reads like a personal
+ * profile, with a `group` icon instead of the protocol's to mark its team-vault origin. Tap connects
+ * via [LocalConnectHost].
  */
 @Composable
-private fun MobileTeamHostRow(host: Host, mono: androidx.compose.ui.text.font.FontFamily, onClick: () -> Unit) {
-    val dotColor = sessionDotColor(LocalSessions.current?.sessionStatusFor(host.id) ?: SessionStatus.Idle)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(Skerry.colors.card)
-            .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(13.dp),
-    ) {
-        Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(11.dp)).background(Skerry.colors.cyan.copy(alpha = 0.1f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Sym("group", size = 21.sp, color = Skerry.colors.cyanBright)
-        }
-        Column(Modifier.weight(1f)) {
-            Txt(host.label, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(2.dp))
-            Txt(host.rowSubtitle(), color = Skerry.colors.dim, size = 11.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
-    }
+private fun MobileTeamHostRow(host: Host, onClick: () -> Unit) {
+    val status = LocalSessions.current?.sessionStatusFor(host.id) ?: SessionStatus.Idle
+    MobileCatalogRow(
+        icon = "group",
+        label = host.label,
+        subtitle = host.rowSubtitle(),
+        dotColor = sessionDotColor(status),
+        statusText = sessionStatusText(status),
+        onClick = onClick,
+    )
 }
