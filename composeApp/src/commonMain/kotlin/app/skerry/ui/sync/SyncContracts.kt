@@ -137,7 +137,7 @@ enum class SyncFailureReason {
     LocalVaultCorrupted,
     PairingFailed,         // other pairing failures (no detail: don't expose crypto/Ktor internals)
     VaultRekeyFailed,      // vault couldn't be re-wrapped under the account password
-    AccountKeyNotAdopted,  // the account key didn't open, so the confirmed replace didn't happen
+    AccountKeyNotAdopted,  // the account's wrap didn't open under the account password — we'd sync unreadable records
     SaveSettingsFailed,    // sync settings didn't save (detail: cause)
     SyncFailed,            // sync cycle failure (detail: cause)
     RevokeFailed,          // device revoke failed (detail: cause)
