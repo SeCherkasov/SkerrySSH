@@ -381,7 +381,22 @@ class SyncCoordinator(
                     }
                     reactivated = s.reactivated
                     // Same password on both sides: nothing to re-wrap, only a possible key change.
-                    adoptedKey = adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf()) == KeyAdoption.Adopted
+                    when (adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())) {
+                        KeyAdoption.Adopted -> adoptedKey = true
+                        KeyAdoption.AlreadyOurs -> Unit // our own key came back — an ordinary reconnect
+                        // The login above already proved the typed password IS the account password, so
+                        // the account's wrap must open under it. One that doesn't means the account's
+                        // records are encrypted under a dataKey this device doesn't have (the wrap and
+                        // the verifier disagree — corrupted or partially restored server state; a
+                        // rotation can't do it, the server writes both in one transaction). Connecting
+                        // would pull records we can't decrypt and push records no other device can, with
+                        // nothing on screen to say so — issue #133.
+                        KeyAdoption.Undecryptable -> {
+                            runCatching { syncClient.close() }
+                            _status.value = SyncStatus.Failed(SyncFailureReason.AccountKeyNotAdopted)
+                            return
+                        }
+                    }
                     s
                 }
             } else if (!allowPasswordReplace) {

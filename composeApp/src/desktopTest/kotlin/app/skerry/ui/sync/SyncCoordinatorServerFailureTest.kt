@@ -51,6 +51,8 @@ class SyncCoordinatorServerFailureTest {
         private val kind: SyncException.Kind,
         private val loginSession: SyncSession? = null,
         private val loginFailure: SyncException? = null,
+        /** The account's wrapped dataKey — only a login that succeeds ever gets this far. */
+        private val wrappedDataKey: ByteArray = ByteArray(0),
     ) : SyncClient {
         @Volatile
         var loginCalls = 0
@@ -76,11 +78,7 @@ class SyncCoordinatorServerFailureTest {
             return loginSession ?: nope()
         }
         override suspend fun changePassword(accountId: String, currentAuthKey: ByteArray, newAuthKey: ByteArray, newWrappedDataKey: ByteArray, device: DeviceInfo): SyncSession = nope()
-        // An empty wrap can't be unwrapped, so adoptAccountDataKey returns Undecryptable — which the
-        // matchesVault branch treats as "key not ours to adopt" and connects anyway. That is the only
-        // reason this stub reaches Online; the tests here are about the register/login handshake, not
-        // about key adoption.
-        override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray = ByteArray(0)
+        override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray = wrappedDataKey.copyOf()
         override suspend fun pull(session: SyncSession, since: Long): RecordPage = nope()
         override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage = nope()
         override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = nope()
@@ -211,11 +209,21 @@ class SyncCoordinatorServerFailureTest {
     fun `a closed instance still lets existing accounts log in via the login fallback`() {
         val result = runBlocking {
             initializeVaultCrypto()
+            val vault = localVault()
             val session = SyncSession(accountId = account, accessToken = "at", refreshToken = "rt")
+            // The account publishes THIS vault's key, wrapped under the account master key: a wrap that
+            // doesn't open is a refusal of its own (issue #133) and would mask the handshake under test.
+            val wrap = vault.exportDataKey()!!.let { key ->
+                try {
+                    crypto.wrapDataKey(syncAccountKey(crypto, password, account), key)
+                } finally {
+                    key.zeroize()
+                }
+            }
             val sut = SyncCoordinator(
-                clientFactory = { RejectingClient(SyncException.Kind.FORBIDDEN, loginSession = session) },
+                clientFactory = { RejectingClient(SyncException.Kind.FORBIDDEN, loginSession = session, wrappedDataKey = wrap) },
                 crypto = crypto,
-                vault = localVault(),
+                vault = vault,
                 engineFactory = { _ -> SyncRunner { _ -> SyncOutcome(pulled = 0, pushed = 0, cursor = 0L) } },
             )
             try {
