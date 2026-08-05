@@ -87,6 +87,10 @@
     <string name="settings_terminal_open_paths">在 SFTP 中打开文件路径</string>
     <string name="settings_terminal_open_paths_desc">按住 Ctrl 点击输出中的路径，即可在文件面板中定位。</string>
     <string name="settings_terminal_open_paths_desc_mobile">长按输出中的路径，然后点按“在文件中打开”。</string>
+    <string name="settings_terminal_highlight_input">命令行语法高亮</string>
+    <string name="settings_terminal_highlight_input_desc">输入时为命令、参数、引号字符串、路径和操作符着色。</string>
+    <string name="settings_terminal_highlight_output">高亮输出中的日志级别</string>
+    <string name="settings_terminal_highlight_output_desc">标记服务器未着色输出中的 ERROR/WARN/INFO、IP 地址和时间戳。</string>
     <string name="settings_terminal_host_connect">连接主机方式</string>
     <string name="settings_terminal_host_connect_single">单击</string>
     <string name="settings_terminal_host_connect_double">双击（单击选中）</string>

@@ -87,6 +87,10 @@
     <string name="settings_terminal_open_paths">Open file paths in SFTP</string>
     <string name="settings_terminal_open_paths_desc">Ctrl+click a file path in the output to reveal it in the file panel.</string>
     <string name="settings_terminal_open_paths_desc_mobile">Long-press a file path in the output, then tap "Open in Files".</string>
+    <string name="settings_terminal_highlight_input">Highlight the command line</string>
+    <string name="settings_terminal_highlight_input_desc">Colors commands, flags, quoted strings, paths and operators as you type.</string>
+    <string name="settings_terminal_highlight_output">Highlight log levels in output</string>
+    <string name="settings_terminal_highlight_output_desc">Marks ERROR/WARN/INFO, IP addresses and timestamps in output the server left uncolored.</string>
     <string name="settings_terminal_host_connect">Connect to host on</string>
     <string name="settings_terminal_host_connect_single">Single click</string>
     <string name="settings_terminal_host_connect_double">Double click (click selects)</string>

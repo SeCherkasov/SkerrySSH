@@ -39,6 +39,31 @@ class DesktopSettingsStateTest {
     }
 
     @Test
+    fun toggleHighlightCommandLine_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = DesktopSettingsState(onHighlightCommandLineChange = { seen += it })
+        assertEquals(true, s.highlightCommandLine) // on by default: it only paints the user's own input
+        s.toggleHighlightCommandLine()
+        assertEquals(false, s.highlightCommandLine)
+        s.toggleHighlightCommandLine()
+        assertEquals(true, s.highlightCommandLine)
+        assertEquals(listOf(false, true), seen)
+    }
+
+    @Test
+    fun toggleHighlightOutput_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = DesktopSettingsState(onHighlightOutputChange = { seen += it })
+        // Off by default: it repaints what the server printed, so it is opt-in.
+        assertEquals(false, s.highlightOutput)
+        s.toggleHighlightOutput()
+        assertEquals(true, s.highlightOutput)
+        s.toggleHighlightOutput()
+        assertEquals(false, s.highlightOutput)
+        assertEquals(listOf(true, false), seen)
+    }
+
+    @Test
     fun toggleConfirmProductionWarnings_flips_and_reports() {
         val seen = mutableListOf<Boolean>()
         val s = DesktopSettingsState(onConfirmProductionWarningsChange = { seen += it })

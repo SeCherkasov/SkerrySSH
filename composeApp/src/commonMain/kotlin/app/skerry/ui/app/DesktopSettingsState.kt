@@ -59,6 +59,10 @@ class DesktopSettingsState(
     private val onReportTeamSessionsChange: (Boolean) -> Unit = {},
     initialOpenFilePathsInSftp: Boolean = true,
     private val onOpenFilePathsInSftpChange: (Boolean) -> Unit = {},
+    initialHighlightCommandLine: Boolean = true,
+    private val onHighlightCommandLineChange: (Boolean) -> Unit = {},
+    initialHighlightOutput: Boolean = false,
+    private val onHighlightOutputChange: (Boolean) -> Unit = {},
     initialConfirmProductionWarnings: Boolean = false,
     private val onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
     initialTerminalTheme: TerminalTheme = TerminalThemes.DEFAULT,
@@ -135,6 +139,20 @@ class DesktopSettingsState(
      * output makes the Ctrl+hover highlight a distraction.
      */
     var openFilePathsInSftp: Boolean by mutableStateOf(initialOpenFilePathsInSftp); private set
+
+    /**
+     * Whether the client colors the command line being typed (Terminal → Highlight the command
+     * line). On by default: it only ever paints the user's own input, and only where the server
+     * left the cells uncolored.
+     */
+    var highlightCommandLine: Boolean by mutableStateOf(initialHighlightCommandLine); private set
+
+    /**
+     * Whether the client marks log levels, addresses and timestamps in output (Terminal → Highlight
+     * log levels in output). Off by default — unlike the command line, this repaints text the
+     * server printed, which is an opinion the user should ask for.
+     */
+    var highlightOutput: Boolean by mutableStateOf(initialHighlightOutput); private set
 
     /**
      * Whether the production guard also confirms [app.skerry.shared.ai.CommandRisk.Warn] commands
@@ -267,6 +285,18 @@ class DesktopSettingsState(
     fun toggleOpenFilePathsInSftp() {
         openFilePathsInSftp = !openFilePathsInSftp
         onOpenFilePathsInSftpChange(openFilePathsInSftp)
+    }
+
+    /** Toggle command-line syntax highlighting and report outward (for persistence). */
+    fun toggleHighlightCommandLine() {
+        highlightCommandLine = !highlightCommandLine
+        onHighlightCommandLineChange(highlightCommandLine)
+    }
+
+    /** Toggle log-level highlighting in output and report outward (for persistence). */
+    fun toggleHighlightOutput() {
+        highlightOutput = !highlightOutput
+        onHighlightOutputChange(highlightOutput)
     }
 
     /** Toggle honoring server OSC 52 clipboard writes and report outward (for persistence). */

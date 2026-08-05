@@ -34,20 +34,53 @@ internal fun trimTrailingPunct(token: String, punct: String): String {
 }
 
 /**
- * Runs [detect] over a grid row's text and returns its spans in **column** coordinates: a wide glyph
- * occupies two columns (its continuation cell has empty text), so string index and column diverge,
- * and clicks would otherwise miss the match. Callers do their own allocation-free "could this row
- * match at all" prescan first — this builds a StringBuilder, and on a draw pass most rows can't
- * match anything.
+ * A grid row flattened to plain [text], with [colOf] mapping each string index back to the column it
+ * came from. The two diverge because a wide glyph occupies two columns (its continuation cell has
+ * empty text) and a cell may hold a combining sequence — without the map, matches would land a
+ * column or two off.
+ */
+internal class RowText(val text: String, private val colOf: IntArray) {
+
+    /** Column the character at string index [index] was drawn in. */
+    fun column(index: Int): Int = colOf[index]
+
+    /** Converts a string-index span into the column span `[start, endExclusive)` it covers. */
+    fun columns(start: Int, endExclusive: Int): IntRange = colOf[start]..colOf[endExclusive - 1]
+}
+
+/**
+ * Flattens a grid row for text-level detectors, or `null` when the row holds no characters at all.
+ * Callers do their own allocation-free "could this row match at all" prescan first — this builds a
+ * StringBuilder, and on a draw pass most rows can't match anything.
+ */
+internal fun rowText(row: List<TermCell>): RowText? {
+    val sb = StringBuilder(row.size)
+    // IntArray with a counter rather than ArrayList<Int>: this runs for every visible row of every
+    // snapshot, and boxing one Integer per character showed up as steady GC pressure while output
+    // streams. A row can hold combining sequences, so the array is grown rather than sized once.
+    var colOf = IntArray(row.size)
+    var n = 0
+    for (c in row.indices) {
+        for (ch in row[c].text) {
+            if (n == colOf.size) colOf = colOf.copyOf(n * 2 + 1)
+            sb.append(ch)
+            colOf[n++] = c
+        }
+    }
+    if (n == 0) return null
+    return RowText(sb.toString(), if (n == colOf.size) colOf else colOf.copyOf(n))
+}
+
+/**
+ * Runs [detect] over a grid row's text and returns its spans in **column** coordinates (see
+ * [RowText]), so a click lands on the match rather than beside it.
  */
 internal fun rowTextSpans(row: List<TermCell>, detect: (String) -> List<TextLinkSpan>): List<TextLinkSpan> {
-    val sb = StringBuilder(row.size)
-    val colOf = ArrayList<Int>(row.size)
-    for (c in row.indices) {
-        for (ch in row[c].text) { sb.append(ch); colOf.add(c) }
-    }
-    if (colOf.isEmpty()) return emptyList()
-    val found = detect(sb.toString())
+    val flat = rowText(row) ?: return emptyList()
+    val found = detect(flat.text)
     if (found.isEmpty()) return emptyList()
-    return found.map { s -> TextLinkSpan(colOf[s.start], colOf[s.endExclusive - 1] + 1, s.uri) }
+    return found.map { s ->
+        val cols = flat.columns(s.start, s.endExclusive)
+        TextLinkSpan(cols.first, cols.last + 1, s.uri)
+    }
 }
