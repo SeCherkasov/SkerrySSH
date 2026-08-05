@@ -1,6 +1,7 @@
 package app.skerry.ui.terminal
 
 import app.skerry.shared.terminal.TermCell
+import app.skerry.shared.terminal.TermSnapshotRow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -97,8 +98,8 @@ class TerminalLinksTest {
 
     @Test
     fun `maps a url onto its grid columns`() {
-        val cells = row("x https://a.test y")
-        val span = rowLinkSpans(cells).single()
+        val screen = listOf(row("x https://a.test y"))
+        val span = rowLinkSpans(screen, 0).single()
         assertEquals(2, span.start)                 // 'h' column
         assertEquals(2 + "https://a.test".length, span.endExclusive)
         assertEquals("https://a.test", span.uri)
@@ -106,10 +107,10 @@ class TerminalLinksTest {
 
     @Test
     fun `linkAt returns the uri only under the url columns`() {
-        val cells = row("go https://a.test")
-        assertNull(linkAt(cells, 0))                // 'g'
-        assertEquals("https://a.test", linkAt(cells, 3))  // 'h'
-        assertEquals("https://a.test", linkAt(cells, cells.lastIndex))
+        val screen = listOf(row("go https://a.test"))
+        assertNull(linkAt(screen, 0, 0))                        // 'g'
+        assertEquals("https://a.test", linkAt(screen, 0, 3))    // 'h'
+        assertEquals("https://a.test", linkAt(screen, 0, screen[0].lastIndex))
     }
 
     @Test
@@ -117,12 +118,164 @@ class TerminalLinksTest {
         // A cell may already carry an OSC 8 URI; rowLinkSpans still reports the bare text URL. Which one
         // wins (and the no-double-underline skip) is decided by the renderer/click layer, not here.
         val cells = "https://a.test".map { TermCell(it.toString(), hyperlink = "https://osc8.test") }
-        assertEquals("https://a.test", rowLinkSpans(cells).single().uri)
+        assertEquals("https://a.test", rowLinkSpans(listOf(cells), 0).single().uri)
     }
 
     @Test
     fun `plain rows without a scheme allocate nothing and yield no spans`() {
-        assertTrue(rowLinkSpans(row("total 42  drwxr-xr-x  root:root  10:30")).isEmpty())
+        assertTrue(rowLinkSpans(listOf(row("total 42  drwxr-xr-x  root:root  10:30")), 0).isEmpty())
+    }
+
+    // --- URLs split by a soft wrap: detection runs over the joined logical line ---
+
+    /** A row the emulator marked as soft-wrapped (the logical line continues on the next row). */
+    private fun wrapped(text: String): List<TermCell> = TermSnapshotRow(text.map { TermCell(it) }, wrapped = true)
+
+    @Test
+    fun `a url split by a soft wrap is one link on both rows`() {
+        val screen = listOf(wrapped("see https://a.test/docs/rate-li"), row("mits#new-certs and more"))
+        val uri = "https://a.test/docs/rate-limits#new-certs"
+        val top = rowLinkSpans(screen, 0).single()
+        assertEquals(uri, top.uri)
+        assertEquals(4, top.start)
+        assertEquals(screen[0].size, top.endExclusive) // underlined to the wrap point
+        val bottom = rowLinkSpans(screen, 1).single()
+        assertEquals(uri, bottom.uri)
+        assertEquals(0, bottom.start)
+        assertEquals("mits#new-certs".length, bottom.endExclusive)
+        // Ctrl+click on the tail opens the whole URL, not the fragment under the pointer.
+        assertEquals(uri, linkAt(screen, 1, 2))
+        assertEquals(uri, linkAt(screen, 0, 4))
+        assertNull(linkAt(screen, 1, "mits#new-certs".length + 1))
+    }
+
+    @Test
+    fun `a url spanning three wrapped rows is linked on the middle row too`() {
+        val screen = listOf(wrapped("https://a.test/aaaa"), wrapped("bbbb"), row("cccc end"))
+        val uri = "https://a.test/aaaabbbbcccc"
+        assertEquals(uri, rowLinkSpans(screen, 1).single().uri)
+        assertEquals(0, rowLinkSpans(screen, 1).single().start)
+        assertEquals(4, rowLinkSpans(screen, 1).single().endExclusive)
+        assertEquals(uri, linkAt(screen, 2, 0))
+    }
+
+    @Test
+    fun `a hard line break keeps the two rows apart`() {
+        val screen = listOf(row("see https://a.test/docs/rate-li"), row("mits#new-certs"))
+        assertEquals("https://a.test/docs/rate-li", rowLinkSpans(screen, 0).single().uri)
+        assertTrue(rowLinkSpans(screen, 1).isEmpty())
+        assertNull(linkAt(screen, 1, 2))
+    }
+
+    @Test
+    fun `a url whose scheme separator straddles the wrap is still linked`() {
+        // The `://` itself lands on the row boundary — a per-row scan sees no scheme on either row.
+        val screen = listOf(wrapped("see https:"), row("//a.test/x rest"))
+        assertEquals("https://a.test/x", rowLinkSpans(screen, 0).single().uri)
+        assertEquals("https://a.test/x", linkAt(screen, 1, 0))
+    }
+
+    @Test
+    fun `a url running past the chain cap is dropped, not opened truncated`() {
+        // 12 wrapped rows: from the head the join stops at the clamp, so the URL's tail is unknown —
+        // reporting the joined prefix would open an address the server never printed.
+        val screen = buildList {
+            add(wrapped("https://a.test/aaaaa"))
+            repeat(11) { add(wrapped("bbbbbbbbbbbbbbbbbbbb")) }
+            add(row("tail"))
+        }
+        assertTrue(rowLinkSpans(screen, 0).isEmpty())
+        assertNull(linkAt(screen, 0, 3))
+        assertTrue(rowLinkSpans(screen, 12).isEmpty())
+    }
+
+    @Test
+    fun `a url spanning exactly the chain cap is still linked`() {
+        // 8 wraps = 9 rows, the longest chain the clamp lets through whole.
+        val screen = buildList {
+            add(wrapped("https://a.test/aaaaa"))
+            repeat(7) { add(wrapped("bbbbbbbbbbbbbbbbbbbb")) }
+            add(row("cccc"))
+        }
+        val uri = "https://a.test/aaaaa" + "bbbbbbbbbbbbbbbbbbbb".repeat(7) + "cccc"
+        assertEquals(uri, rowLinkSpans(screen, 0).single().uri)
+        assertEquals(uri, linkAt(screen, 8, 0))
+    }
+
+    @Test
+    fun `a draw window reports the wrapped url on every row it crosses`() {
+        val screen = listOf(wrapped("see https://a.test/docs/rate-li"), row("mits#new-certs"), row("plain row"))
+        assertEquals(setOf(0, 1), linkSpansByRow(screen, 0..2).keys)
+    }
+
+    @Test
+    fun `a long chain resolves the same from a draw window and from a single row`() {
+        // 13 rows of one logical line: the underline (computed for the whole window) and the hand
+        // cursor (computed for the pointed row) must agree on every cell, whatever the scroll offset.
+        val screen = buildList {
+            add(wrapped("https://a.test/aaaaa"))          // runs past the first block's edge — unlinkable
+            repeat(8) { add(wrapped("bbbbbbbbbbbbbbbbbbbb")) }
+            add(wrapped("x https://a.test/q y"))          // wholly inside the second block — linkable
+            repeat(2) { add(wrapped("cccccccccccccccccccc")) }
+            add(row("tail"))
+        }
+        val whole = linkSpansByRow(screen, 0..12)
+        val scrolled = linkSpansByRow(screen, 4..12)
+        // Not a vacuous comparison: the second block really does carry a link.
+        assertEquals("https://a.test/q", whole.getValue(9).single().uri)
+        for (r in 0..12) {
+            assertEquals(whole[r].orEmpty(), rowLinkSpans(screen, r), "row $r")
+            if (r >= 4) assertEquals(whole[r].orEmpty(), scrolled[r].orEmpty(), "row $r scrolled")
+        }
+    }
+
+    @Test
+    fun `a scheme marker on the last row of a chain is found from any row`() {
+        val screen = listOf(wrapped("plain text here"), wrapped("still plain"), row("go https://a.test"))
+        assertTrue(rowLinkSpans(screen, 0).isEmpty())
+        assertEquals("https://a.test", rowLinkSpans(screen, 2).single().uri)
+    }
+
+    @Test
+    fun `an out-of-range row yields nothing`() {
+        val screen = listOf(row("go https://a.test"))
+        assertTrue(rowLinkSpans(screen, 5).isEmpty())
+        assertNull(linkAt(screen, 5, 0))
+    }
+
+    @Test
+    fun `a wide glyph before the wrap keeps the columns aligned on both rows`() {
+        // 世 occupies columns 0-1, so the URL on the first row starts at column 2, not 1.
+        val head = TermSnapshotRow(
+            buildList {
+                add(TermCell("世", width = app.skerry.shared.terminal.CellWidth.Wide))
+                add(TermCell("", width = app.skerry.shared.terminal.CellWidth.Continuation))
+                "https://a.test/pa".forEach { add(TermCell(it)) }
+            },
+            wrapped = true,
+        )
+        val screen = listOf(head, row("th x"))
+        val top = rowLinkSpans(screen, 0).single()
+        assertEquals(2, top.start)
+        assertEquals(head.size, top.endExclusive)
+        assertEquals("https://a.test/path", top.uri)
+        assertEquals("https://a.test/path", linkAt(screen, 1, 1))
+    }
+
+    @Test
+    fun `a url wrapped by a real emulator is one link end to end`() {
+        val emu = app.skerry.shared.terminal.TerminalEmulator(cols = 20, rows = 4)
+        emu.feed("see https://a.test/docs/rate-limits done".encodeToByteArray())
+        val screen = emu.lines
+        assertEquals("https://a.test/docs/rate-limits", rowLinkSpans(screen, 0).single().uri)
+        assertEquals("https://a.test/docs/rate-limits", linkAt(screen, 1, 0))
+    }
+
+    @Test
+    fun `a url wholly inside a wrapped row is reported on that row only`() {
+        val screen = listOf(wrapped("go https://a.test now padding"), row("tail of the line"))
+        assertEquals("https://a.test", rowLinkSpans(screen, 0).single().uri)
+        assertTrue(rowLinkSpans(screen, 1).isEmpty())
     }
 
     @Test
@@ -134,8 +287,8 @@ class TerminalLinksTest {
             add(TermCell(' '))
             "https://a.test".forEach { add(TermCell(it)) }
         }
-        val span = rowLinkSpans(cells).single()
+        val span = rowLinkSpans(listOf(cells), 0).single()
         assertEquals(3, span.start)                 // url starts after wide glyph (cols 0,1) + space (col 2)
-        assertEquals("https://a.test", linkAt(cells, 3))
+        assertEquals("https://a.test", linkAt(listOf(cells), 0, 3))
     }
 }

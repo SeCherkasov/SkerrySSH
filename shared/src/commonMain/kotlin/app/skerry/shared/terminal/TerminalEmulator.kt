@@ -101,6 +101,25 @@ class TermRow(
     var wrapped: Boolean = false,
 ) : MutableList<TermCell> by cells
 
+/**
+ * A row as published in a render snapshot ([TerminalEmulator.lines]): immutable cells plus the
+ * [wrapped] flag copied off the [TermRow] it came from. Extends [AbstractList] rather than
+ * delegating, so a snapshot row still compares element-wise with a plain list — snapshot equality is
+ * what lets an unchanged screen skip recomposition.
+ */
+class TermSnapshotRow(private val cells: List<TermCell>, val wrapped: Boolean) : AbstractList<TermCell>() {
+    override val size: Int get() = cells.size
+
+    override fun get(index: Int): TermCell = cells[index]
+}
+
+/**
+ * Whether this row soft-wraps into the next one — an auto-wrap (DECAWM) cut the logical line here,
+ * an honest `\n` did not (see [TermRow]). Rows outside a render snapshot (hand-built lists in tests,
+ * selection fragments) carry no flag and answer `false`.
+ */
+fun List<TermCell>.wrapsToNextRow(): Boolean = this is TermSnapshotRow && wrapped
+
 /** Mouse reporting mode to the application (DEC private modes). Encoding is chosen by [TerminalEmulator.mouseSgr]. */
 enum class MouseTracking { Off, X10, Normal, ButtonEvent, AnyEvent }
 
@@ -205,7 +224,8 @@ class TerminalEmulator(
      */
     val lines: List<List<TermCell>>
         get() {
-            val screenRows = ArrayList<List<TermCell>>(grid.size).apply { grid.forEach { add(it.toList()) } }
+            val screenRows = ArrayList<List<TermCell>>(grid.size)
+                .apply { grid.forEach { add(TermSnapshotRow(it.toList(), it.wrapped)) } }
             return if (altScreen) screenRows else SnapshotLines(scrollback.frozen(), screenRows)
         }
 
@@ -1321,7 +1341,7 @@ private class ScrollbackBuffer {
 
     fun push(row: TermRow) {
         rows.addLast(row)
-        tail.add(row.toList())
+        tail.add(TermSnapshotRow(row.toList(), row.wrapped))
         if (tail.size == SCROLLBACK_CHUNK) {
             sealed.addLast(tail)
             tail = ArrayList(SCROLLBACK_CHUNK)

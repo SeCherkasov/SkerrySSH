@@ -1160,6 +1160,41 @@ class TerminalEmulatorTest {
     }
 
     @Test
+    fun `snapshot rows expose the soft-wrap flag`() {
+        // cols=4: "ABCDEF" autowraps — the render snapshot must say so, or the UI cannot tell a soft
+        // wrap from a hard newline (a URL split by the wrap would be two unrelated fragments).
+        val emu = emulate(cols = 4, rows = 6, chunks = arrayOf("ABCDEF"))
+        assertTrue(emu.lines[0].wrapsToNextRow())
+        assertFalse(emu.lines[1].wrapsToNextRow())
+        assertFalse(emulate(cols = 10, rows = 6, chunks = arrayOf("AB\r\nCD")).lines[0].wrapsToNextRow())
+    }
+
+    @Test
+    fun `a wide glyph pushed off the margin also marks the row wrapped`() {
+        // cols=4: 中 doesn't fit in the last column, so it moves to the next row — a soft wrap set by
+        // a different code path than the ordinary end-of-row one.
+        val emu = emulate(cols = 4, rows = 4, chunks = arrayOf("ABC中"))
+        assertTrue(emu.lines[0].wrapsToNextRow())
+    }
+
+    @Test
+    fun `the alt screen publishes the soft-wrap flag too`() {
+        val emu = emulate(cols = 4, rows = 4, chunks = arrayOf("$esc[?1049h", "ABCDEF"))
+        assertTrue(emu.lines[0].wrapsToNextRow())
+        assertFalse(emu.lines[1].wrapsToNextRow())
+    }
+
+    @Test
+    fun `the soft-wrap flag survives into scrollback`() {
+        // rows=2: the wrapped row is pushed to history, where the snapshot reads a frozen copy of it.
+        val emu = TerminalEmulator(cols = 4, rows = 2, maxScrollback = 100)
+        emu.feed("ABCDEF\r\nX".encodeToByteArray())
+        assertEquals(3, emu.lines.size)
+        assertTrue(emu.lines[0].wrapsToNextRow())
+        assertFalse(emu.lines[1].wrapsToNextRow())
+    }
+
+    @Test
     fun `widening does not merge across a hard newline`() {
         val emu = emulate(cols = 10, rows = 6, chunks = arrayOf("AB\r\nCD"))
         emu.resize(40, 6)

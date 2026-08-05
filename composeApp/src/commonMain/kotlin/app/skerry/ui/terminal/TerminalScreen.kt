@@ -447,8 +447,9 @@ fun TerminalScreen(
     // Is there an openable link (OSC 8 or bare text URL) under this cell? Mirrors the Ctrl+click
     // resolution so the hand cursor appears exactly where a click would open something.
     fun linkUnderPos(pos: TerminalPos): Boolean {
-        val row = state.screen.getOrNull(pos.row) ?: return false
-        val uri = row.getOrNull(pos.col)?.hyperlink ?: linkAt(row, pos.col)
+        // One snapshot for both lookups: the cell's own OSC 8 URI and the wrap-chain text around it.
+        val snap = state.screen
+        val uri = snap.getOrNull(pos.row)?.getOrNull(pos.col)?.hyperlink ?: linkAt(snap, pos.row, pos.col)
         return uri != null && isSafeLinkUri(uri)
     }
 
@@ -627,7 +628,11 @@ fun TerminalScreen(
               // spill): walking all of scrollback per repaint is O(history) of wasted work
               // whenever output streams while the user sits scrolled up in history. The search
               // highlight above derives its window from the same helper.
-              for (r in visibleRowWindow(scrollPx, size.height, chh, screen.size)) {
+              val drawWindow = visibleRowWindow(scrollPx, size.height, chh, screen.size)
+              // Plain-text URLs for the whole window at once (pass 5 below): a URL cut by a soft wrap
+              // spans several rows, and its chain is joined and matched once rather than per row.
+              val linksByRow = linkSpansByRow(screen, drawWindow)
+              for (r in drawWindow) {
                   val top = r * chh - scrollPx
                   val row = screen[r]
                   // 1) Cell backgrounds — collapse same-color runs; stretch the trailing run to the viewport edge.
@@ -698,7 +703,9 @@ fun TerminalScreen(
                   // 5) Plain-text URLs (no OSC 8) — http(s)/ftp printed as bare text (MOTD, curl output)
                   // are underlined like hyperlinks so Ctrl+click can open them; skip cells already
                   // carrying an OSC 8 URI (pass 4) or an app underline (pass 3) to avoid a double line.
-                  for (link in rowLinkSpans(row)) {
+                  // Spans come from the whole soft-wrap chain, so a URL cut at the right margin keeps
+                  // its underline on the row it continues on.
+                  for (link in linksByRow[r].orEmpty()) {
                       var k = link.start
                       while (k < link.endExclusive) {
                           if (row[k].hyperlink != null || row[k].style.underline) { k++; continue }
@@ -1012,9 +1019,9 @@ fun TerminalScreen(
                         // row text. The URI comes from an untrusted server — open only safe web schemes,
                         // blocking file:/javascript:/anything else that could harm locally.
                         if (mods.isCtrlPressed) {
-                            val cellRow = state.screen.getOrNull(pos.row)
-                            val uri = cellRow?.getOrNull(pos.col)?.hyperlink
-                                ?: cellRow?.let { linkAt(it, pos.col) }
+                            val snap = state.screen
+                            val uri = snap.getOrNull(pos.row)?.getOrNull(pos.col)?.hyperlink
+                                ?: linkAt(snap, pos.row, pos.col)
                             if (uri != null && isSafeLinkUri(uri)) {
                                 runCatching { uriHandler.openUri(uri) }
                                 down.consume()

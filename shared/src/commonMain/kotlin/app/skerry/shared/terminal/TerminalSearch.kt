@@ -61,8 +61,10 @@ data class TerminalSearchResult(
  * Finds [query] in the terminal buffer [screen] (scrollback + screen rows, as published by
  * [TerminalEmulator.lines]).
  *
- * Each row is searched on its own: rows are physical, so a hit spanning a soft wrap is not found —
- * the render snapshot carries no `wrapped` flag (see [TermRow]) and joining rows would need it.
+ * Each row is searched on its own: rows are physical, so a hit spanning a soft wrap is not found.
+ * The snapshot does carry the flag ([wrapsToNextRow]) — joining rows here is possible and simply out
+ * of scope: the hit list is a row/column range the render highlights, and a match crossing a wrap
+ * would have to become several of them.
  * Trailing blank cells are ignored, as when copying a selection: grid rows are padded to the
  * terminal width, and searching the padding would match spaces on every row.
  *
