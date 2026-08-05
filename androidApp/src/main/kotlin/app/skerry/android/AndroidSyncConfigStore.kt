@@ -31,7 +31,9 @@ class AndroidSyncConfigStore(private val file: File) : SyncConfigStore {
                 deviceId = device,
                 keepConnected = map["keepConnected"] == "true",
                 sealedRefreshToken = map["sealedRefreshToken"]?.takeIf { it.isNotEmpty() },
-                pendingReconcile = map["pendingReconcile"] == "true", // absent in older files → false
+                // Written by 0.2.1 and earlier; migrated into [AndroidReconcileDebtStore] at startup and
+                // dropped by the next save. Absent in every other file → false.
+                legacyPendingReconcile = map["pendingReconcile"] == "true",
             )
         }.getOrNull()
     }
@@ -43,7 +45,6 @@ class AndroidSyncConfigStore(private val file: File) : SyncConfigStore {
             appendLine("deviceId=${URLEncoder.encode(config.deviceId, "UTF-8")}")
             appendLine("keepConnected=${config.keepConnected}")
             config.sealedRefreshToken?.let { appendLine("sealedRefreshToken=${URLEncoder.encode(it, "UTF-8")}") }
-            if (config.pendingReconcile) appendLine("pendingReconcile=true")
         }
         // Atomic write: write to a temp file then rename, so a process kill mid-write can't leave a truncated sync.json.
         val tmp = File(file.parentFile, "${file.name}.tmp")
