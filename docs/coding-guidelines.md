@@ -27,6 +27,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | "Just a stream" transport (telnet/serial) | `ssh/StreamOnlyConnection` (jvmShared) |
 | Blocking read loop of a shell channel (ssh/telnet/serial) | `ssh/StreamShellChannel` |
 | SGR parsing, glyph metrics, reflow | `terminal/SgrParser`, `CharMetrics`, `TerminalReflow` |
+| Out-of-band step status from the shell, and hiding the echo of what the client typed | `terminal/TerminalStepMark` (`STEP_MARK_OSC`, `TerminalStepMark`) + `TerminalEmulator.expectStep`, `terminal/TerminalEchoFilter` — the runbook layer only builds the probes (`runbook/RunbookMarker`) |
 | Sync client⇆server wire DTO | module `:sync-wire` (`app.skerry.sync.wire`) — never mirror by hand |
 | Remote-desktop session as the UI sees it (pixels, updates, input) | `graphics/RemoteDesktopSession`, `RemoteDesktopUpdate`, `RemoteKeyEvent`, `RemoteDesktopQuality`, `RemoteDesktopCapabilities` — RDP and VNC adapters both implement this, protocol types stay behind it |
 | ARGB pixel buffer (resize/blit/fill/copyRect) | `graphics/RemoteFramebuffer` |

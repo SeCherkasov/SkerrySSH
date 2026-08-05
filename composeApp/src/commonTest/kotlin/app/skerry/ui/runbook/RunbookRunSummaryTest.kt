@@ -6,6 +6,7 @@ import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookRunOutcome
 import app.skerry.shared.runbook.RunbookRunRecord
 import app.skerry.shared.runbook.RunbookStep
+import app.skerry.shared.terminal.TerminalStepMark
 import app.skerry.shared.snippet.SnippetMoment
 import app.skerry.shared.snippet.SnippetRunEnvironment
 import kotlinx.coroutines.CoroutineScope
@@ -28,19 +29,25 @@ class RunbookRunSummaryTest {
     private val poll = 100L
 
     private class FakeHost(val id: String) {
-        var buffer: String = ""
         var live = true
+        private var mark: TerminalStepMark? = null
 
         fun target() = RunbookTarget(
             sessionId = id,
             label = id,
-            send = { line -> buffer += line },
-            readOutput = { buffer },
+            send = {},
+            expectStep = { _, _ -> },
+            takeMark = { token ->
+                val parked = mark
+                mark = null
+                parked?.takeIf { it.token == token }
+            },
+            outputVersion = { 0L },
             isLive = { live },
         )
 
         fun complete(stepIndex: Int, exitCode: Int) {
-            buffer += "\n" + RunbookMarker.token(RUN_ID, stepIndex) + ":" + exitCode + "\n"
+            mark = TerminalStepMark(RunbookMarker.token(RUN_ID, stepIndex), exitCode, "")
         }
     }
 

@@ -47,8 +47,9 @@
     <string name="runbook_panel_stop">Остановить</string>
     <string name="runbook_panel_close">Закрыть</string>
     <string name="runbook_panel_exit_code">код %1$d</string>
+    <string name="runbook_panel_status_unreadable">статус не прочитан</string>
     <string name="runbook_panel_progress">%1$d из %2$d</string>
-    <string name="runbook_panel_shell_note">Шаги выполняются в шелле этой сессии; код возврата возвращается строкой-маркером.</string>
+    <string name="runbook_panel_shell_note">Шаги выполняются в шелле этой сессии; код возврата приходит служебной последовательностью и ничего не печатает.</string>
     <string name="runbook_panel_transfer_failed">Передача не удалась: %1$s</string>
     <string name="runbook_panel_no_sftp">У этой сессии нет SFTP-канала.</string>
 
@@ -92,6 +93,7 @@
     <string name="runbook_run_step_of">шаг %1$d из %2$d</string>
     <string name="runbook_run_output">Вывод</string>
     <string name="runbook_run_no_output">Пока ничего не выведено</string>
+    <string name="runbook_run_output_lost">Вывод не сохранён — буфер терминала изменился во время шага</string>
     <string name="runbook_run_back">Назад в терминал</string>
     <string name="runbook_run_open">Открыть прогон</string>
     <string name="runbook_status_waiting">ожидает</string>

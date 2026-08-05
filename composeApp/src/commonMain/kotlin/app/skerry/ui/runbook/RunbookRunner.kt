@@ -49,8 +49,9 @@ class RunbookStartRequest internal constructor(
  * Command steps go through the ordinary terminal input path rather than an exec channel, so `cd`,
  * exported variables and a cached `sudo` ticket carry from step to step, everything is visible in
  * the session the user is watching, and the production guard applies exactly as it does to typed
- * input. The exit code comes back through a marker printed after the command (see [RunbookMarker]),
- * which the runner polls for — a PTY has no other way to report status. Transfer steps have no
+ * input. The exit code comes back through an escape sequence the step's probe emits and the terminal
+ * never draws (see [RunbookMarker]), which the runner polls for — a PTY has no other way to report
+ * status. Transfer steps have no
  * shell involved at all: they move a file over the session's SFTP channel and report what the
  * transfer threw, if anything.
  *
@@ -68,8 +69,8 @@ class RunbookRunner(
     private val newId: () -> String,
     private val environment: () -> SnippetRunEnvironment = ::captureSnippetRunEnvironment,
     /**
-     * How often the terminal tail is searched for the current step's marker. Small enough that a
-     * quick step doesn't feel stalled, large enough that scanning the tail is free in comparison.
+     * How often the terminal is asked for the current step's mark. Small enough that a quick step
+     * doesn't feel stalled, large enough that the poll costs nothing.
      */
     private val pollIntervalMillis: Long = 120L,
     /** Wall clock behind step durations; injected so tests can run on virtual time. */
@@ -210,6 +211,9 @@ class RunbookRunner(
      */
     fun stop() {
         if (!active) return
+        // The step will never report now: the terminal stops watching for it and drops whatever it
+        // captured — that text is the command's output, which can carry a secret.
+        run?.target?.expectStep(null, emptyList())
         // The step's own state is settled inside the same critical section as the generation bump:
         // markStalled re-reads the generation under this lock, so a poll racing Stop is refused
         // rather than allowed to re-flag a step this call has just finished with.
@@ -278,6 +282,9 @@ class RunbookRunner(
         when (resolved) {
             is ResolvedRunbookStep.Command -> {
                 val token = RunbookMarker.token(runId, index)
+                // Declared before the line is sent, never after: the terminal reports only the step
+                // it was told to expect, and the echo it must hide starts arriving immediately.
+                run.target.expectStep(token, RunbookMarker.echoFragments(resolved.line, token))
                 run.target.send(RunbookMarker.probeLine(resolved.line, token) + "\n")
                 watch(run, index, token)
             }
@@ -286,23 +293,23 @@ class RunbookRunner(
     }
 
     /**
-     * Waits for step [index]'s marker to show up in the terminal. Polling rather than reacting to
-     * output: the run must survive the screen leaving composition, and the marker sits in the buffer
-     * once printed, so a poll can't miss it the way a dropped event would.
+     * Waits for step [index]'s mark to arrive from the terminal. Polling rather than reacting to
+     * output: the run must survive the screen leaving composition, and the mark waits in the
+     * terminal's channel once emitted, so a poll can't miss it the way a dropped event would.
      *
      * There is deliberately no per-step timeout — a migration or a package build legitimately takes
      * an hour, and killing the procedure on a guess would be worse than waiting. A step that can
      * never report (a shell without `${'$'}?`, a command still waiting on stdin) is ended by the user
      * with [stop] — so the run says when a step looks like that one ([RunbookStepState.stalled])
      * instead of waiting silently forever: no output for [RunbookPolicy.watchdogMinutes] and no
-     * marker. Only the terminal's size and hash are kept between polls, never its text; the step's
-     * own output is read once, when its marker finally arrives.
+     * mark. Nothing of the buffer is kept between polls — only a counter of output batches; the
+     * step's own output comes with the mark, cut by the terminal at the moment it arrived.
      */
     private fun watch(run: RunbookSessionRun, index: Int, token: String) {
         val generationAtStart = synchronized(lock) { generation }
         val target = run.target
         val job = scope.launch {
-            var lastPrint: Pair<Int, Int>? = null
+            var lastVersion = target.outputVersion()
             var quietMillis = 0L
             while (true) {
                 delay(pollIntervalMillis)
@@ -311,23 +318,24 @@ class RunbookRunner(
                     stop()
                     return@launch
                 }
-                val text = target.readOutput()
-                val print = text.length to text.hashCode()
-                if (print == lastPrint) quietMillis += pollIntervalMillis else quietMillis = 0
-                lastPrint = print
-                val code = RunbookMarker.exitCodeIn(text, token)
-                if (code == null) {
+                val mark = target.takeMark(token)
+                if (mark == null) {
+                    val version = target.outputVersion()
+                    if (version == lastVersion) quietMillis += pollIntervalMillis else quietMillis = 0
+                    lastVersion = version
                     val watchdog = policy.watchdogMinutes
                     markStalled(run, index, generationAtStart, watchdog > 0 && quietMillis >= watchdog * MILLIS_PER_MINUTE)
                     continue
                 }
-                val output = runbookStepOutput(text, token)
                 // Check-then-act under the lock: without it a Stop landing between the check and
                 // finishStep would still let the run advance and send the next command.
                 synchronized(lock) {
                     if (generationAtStart != generation) return@launch
-                    run.steps.getOrNull(index)?.output = output
-                    finishStep(index, code)
+                    run.steps.getOrNull(index)?.let { step ->
+                        step.output = mark.output
+                        step.outputLost = mark.output == null
+                    }
+                    finishStep(index, mark.exitCode)
                 }
                 // Outside the lock: writing the run log encrypts and rewrites the vault, and Stop
                 // comes from the UI thread through the same lock.
