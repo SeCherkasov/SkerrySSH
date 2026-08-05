@@ -112,6 +112,12 @@ kotlin {
                 // size, raw mode on Linux/macOS/Windows. Bundles its own natives + JNA (compatible
                 // with the JNA already on the classpath). Desktop only — Android uses a native helper.
                 implementation(libs.pty4j)
+                // Desktop libsodium loads its native library through goterl resource-loader
+                // (ionspin transitive). Its pinned 2.0.2 breaks on non-ASCII install paths (Chinese
+                // dirs/usernames, spaces) — isJarFile() passes percent-encoded URLs to new JarFile().
+                // Override to 2.1.0 which decodes via URI; otherwise libsodium init crashes at
+                // startup on Chinese paths. Android loads libsodium via JNA directly, unaffected.
+                implementation(libs.goterl.resource.loader)
             }
         }
         androidMain.dependencies {
