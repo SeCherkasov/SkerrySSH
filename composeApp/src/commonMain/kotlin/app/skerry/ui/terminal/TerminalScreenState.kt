@@ -3,6 +3,7 @@ package app.skerry.ui.terminal
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SnapshotMutationPolicy
 import androidx.compose.runtime.setValue
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.AutocompleteEngine
@@ -27,6 +28,7 @@ import app.skerry.shared.terminal.bracketedPasteWrap
 import app.skerry.shared.terminal.encodeMouseReport
 import app.skerry.shared.terminal.lineSelectionAt
 import app.skerry.shared.terminal.wordSelectionAt
+import app.skerry.shared.terminal.wrapsToNextRow
 import kotlin.concurrent.Volatile
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
@@ -100,7 +102,7 @@ class TerminalScreenState(
     )
 
     /** Screen snapshot (rows top to bottom) for rendering. */
-    var screen: List<List<TermCell>> by mutableStateOf(emptyList())
+    var screen: List<List<TermCell>> by mutableStateOf(emptyList(), SCREEN_SNAPSHOT_POLICY)
         private set
 
     /**
@@ -1097,3 +1099,18 @@ internal fun lastCommandBlocks(text: String, count: Int): List<String> {
 }
 
 internal fun lastCommandBlock(text: String): String? = lastCommandBlocks(text, 1).firstOrNull()
+
+/**
+ * Whether two screen snapshots are the same as far as the UI is concerned — cell content **and** the
+ * soft-wrap flags. Compose skips a state write whose new value is equivalent to the old one, and list
+ * equality only compares cells: a row can drop its wrap without any cell changing (`ESC[K` over an
+ * already-blank tail), and publishing that as "no change" would leave [TerminalScreen]'s link joining
+ * reading wrap flags that no longer hold.
+ */
+internal fun sameScreen(a: List<List<TermCell>>, b: List<List<TermCell>>): Boolean =
+    a == b && a.indices.all { a[it].wrapsToNextRow() == b[it].wrapsToNextRow() }
+
+/** [sameScreen] as the equivalence Compose uses to decide whether publishing a snapshot is a no-op. */
+private val SCREEN_SNAPSHOT_POLICY = object : SnapshotMutationPolicy<List<List<TermCell>>> {
+    override fun equivalent(a: List<List<TermCell>>, b: List<List<TermCell>>): Boolean = sameScreen(a, b)
+}

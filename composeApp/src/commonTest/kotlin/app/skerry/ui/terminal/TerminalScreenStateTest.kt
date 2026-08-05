@@ -6,7 +6,10 @@ import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
+import app.skerry.shared.terminal.TermCell
+import app.skerry.shared.terminal.TermSnapshotRow
 import app.skerry.shared.terminal.TerminalPos
+import app.skerry.shared.terminal.wrapsToNextRow
 import app.skerry.shared.terminal.TerminalSearchError
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
@@ -1921,6 +1924,39 @@ class TerminalScreenStateTest {
 
         assertEquals(null, state.selectedText())
         scope.cancel()
+    }
+
+    @Test
+    fun `clearing a soft wrap republishes the screen even when no cell changes`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.resize(PtySize(cols = 4, rows = 4))
+
+        // 中 does not fit in the last column: row 0 is marked wrapped and its column 3 stays blank.
+        session.emit("ABC中".encodeToByteArray())
+        assertTrue(state.screen[0].wrapsToNextRow())
+
+        // ESC[1;4H ESC[K erases from that blank column — every cell keeps its value, only the wrap
+        // goes away. A snapshot compared on cells alone would look unchanged and never be published.
+        session.emit("${27.toChar()}[1;4H${27.toChar()}[K".encodeToByteArray())
+        assertFalse(state.screen[0].wrapsToNextRow())
+        scope.cancel()
+    }
+
+    @Test
+    fun `a snapshot differing only in the soft-wrap flag is not treated as unchanged`() {
+        // Compose skips a state write when the new value is equivalent to the old one, and list
+        // equality only sees cells. A row can lose its wrap (EL over an already-blank tail) without a
+        // single cell changing — publishing that as "no change" would leave link joining on stale flags.
+        val cells = listOf(TermCell('a'), TermCell('b'))
+        val wrapped = listOf<List<TermCell>>(TermSnapshotRow(cells, wrapped = true))
+        val plain = listOf<List<TermCell>>(TermSnapshotRow(cells, wrapped = false))
+
+        assertTrue(sameScreen(wrapped, listOf(TermSnapshotRow(cells, wrapped = true))))
+        assertFalse(sameScreen(wrapped, plain))
+        assertFalse(sameScreen(plain, listOf<List<TermCell>>(listOf(TermCell('a')))))
     }
 }
 

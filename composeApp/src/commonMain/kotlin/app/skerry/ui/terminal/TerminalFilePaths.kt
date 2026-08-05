@@ -115,6 +115,10 @@ private fun rowHasPathMarker(row: List<TermCell>): Boolean {
  * Same detection as [detectFilePaths] over a grid row, returning spans in **column** coordinates
  * (see [rowTextSpans]). Spans touching a cell that already carries an OSC 8 hyperlink are dropped —
  * the hyperlink owns those cells.
+ *
+ * Unlike URLs ([linkSpansByRow]), a path is detected within one row only: the affordance is the
+ * Ctrl+hover underline, which is painted on the pointed row, so joining a soft-wrap chain here would
+ * underline part of a path and open the whole of it. A path cut by a wrap stays unclickable.
  */
 internal fun rowFilePathSpans(row: List<TermCell>): List<TextLinkSpan> {
     // Runs per visible row on every Canvas draw — bail out with zero allocation on rows that cannot

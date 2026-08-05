@@ -34,41 +34,92 @@ internal fun trimTrailingPunct(token: String, punct: String): String {
 }
 
 /**
- * A grid row flattened to plain [text], with [colOf] mapping each string index back to the column it
- * came from. The two diverge because a wide glyph occupies two columns (its continuation cell has
- * empty text) and a cell may hold a combining sequence — without the map, matches would land a
- * column or two off.
+ * Grid rows flattened to plain [text], with every character mapped back to the grid row and column it
+ * was drawn at. String indices and columns diverge because a wide glyph occupies two columns (its
+ * continuation cell has empty text) and a cell may hold a combining sequence — without the map,
+ * matches would land a column or two off.
+ *
+ * More than one row at a time because auto-wrap cuts a logical line at the right margin: a URL split
+ * there is still one URL, so it must be detected over the joined text and painted per row.
  */
-internal class RowText(val text: String, private val colOf: IntArray) {
+internal class RowText(val text: String, private val rowOf: IntArray?, private val colOf: IntArray) {
 
-    /** Column the character at string index [index] was drawn in. */
+    /** Column the character at string index [index] was drawn in (single-row callers). */
     fun column(index: Int): Int = colOf[index]
 
-    /** Converts a string-index span into the column span `[start, endExclusive)` it covers. */
-    fun columns(start: Int, endExclusive: Int): IntRange = colOf[start]..colOf[endExclusive - 1]
+    /**
+     * The part of the string span `[start, endExclusive)` that landed on grid [row], as a column
+     * range, or `null` when the span does not touch that row. Columns are contiguous within a row —
+     * the span is a substring of one logical line.
+     */
+    fun columnsOn(row: Int, start: Int, endExclusive: Int): IntRange? {
+        // A single-row flatten keeps no row map — every character came from the one row it was built from.
+        if (rowOf == null) return if (row != 0) null else colOf[start]..colOf[endExclusive - 1]
+        var from = -1
+        var to = -1
+        for (i in start until endExclusive) {
+            if (rowOf[i] != row) continue
+            if (from < 0) from = colOf[i]
+            to = colOf[i]
+        }
+        return if (from < 0) null else from..to
+    }
 }
 
 /**
- * Flattens a grid row for text-level detectors, or `null` when the row holds no characters at all.
- * Callers do their own allocation-free "could this row match at all" prescan first — this builds a
- * StringBuilder, and on a draw pass most rows can't match anything.
+ * Flattens a single grid row for text-level detectors, or `null` when it holds no characters at all.
+ * Its only row is numbered 0. Callers do their own allocation-free "could this row match at all"
+ * prescan first — this builds a StringBuilder, and on a draw pass most rows can't match anything.
  */
 internal fun rowText(row: List<TermCell>): RowText? {
-    val sb = StringBuilder(row.size)
-    // IntArray with a counter rather than ArrayList<Int>: this runs for every visible row of every
-    // snapshot, and boxing one Integer per character showed up as steady GC pressure while output
-    // streams. A row can hold combining sequences, so the array is grown rather than sized once.
-    var colOf = IntArray(row.size)
-    var n = 0
-    for (c in row.indices) {
-        for (ch in row[c].text) {
-            if (n == colOf.size) colOf = colOf.copyOf(n * 2 + 1)
-            sb.append(ch)
-            colOf[n++] = c
-        }
+    val builder = RowTextBuilder(row.size, trackRows = false)
+    builder.append(row, 0)
+    return builder.build()
+}
+
+/**
+ * Flattens grid rows [rows] of [screen] (a soft-wrap chain) into one text, or `null` when they hold
+ * no characters at all. Rows are joined with nothing between them: a soft wrap is not a character, so
+ * the logical line reads exactly as the server printed it.
+ */
+internal fun rowsText(screen: List<List<TermCell>>, rows: IntRange): RowText? {
+    var capacity = 0
+    for (r in rows) capacity += screen[r].size
+    val builder = RowTextBuilder(capacity, trackRows = true)
+    for (r in rows) builder.append(screen[r], r)
+    return builder.build()
+}
+
+/**
+ * Accumulator behind [rowText] and [rowsText]: text plus the index maps, grown together. IntArray with a
+ * counter rather than ArrayList<Int> — this runs for every visible row of every snapshot, and boxing
+ * one Integer per character showed up as steady GC pressure while output streams. A row can hold
+ * combining sequences, so the arrays are grown rather than sized once.
+ */
+private class RowTextBuilder(capacity: Int, trackRows: Boolean) {
+    private val text = StringBuilder(capacity)
+    // Only a multi-row flatten needs the row map; single-row callers (highlighting, prompt scan) run
+    // per visible row per frame, and a second array of the same size there is pure waste.
+    private var rowOf = if (trackRows) IntArray(capacity) else null
+    private var colOf = IntArray(capacity)
+    private var n = 0
+
+    fun append(row: List<TermCell>, r: Int) {
+        for (c in row.indices) for (ch in row[c].text) add(ch, r, c)
     }
-    if (n == 0) return null
-    return RowText(sb.toString(), if (n == colOf.size) colOf else colOf.copyOf(n))
+
+    fun build(): RowText? = if (n == 0) null else RowText(text.toString(), rowOf, colOf)
+
+    private fun add(ch: Char, r: Int, c: Int) {
+        if (n == colOf.size) {
+            colOf = colOf.copyOf(n * 2 + 1)
+            rowOf = rowOf?.copyOf(n * 2 + 1)
+        }
+        text.append(ch)
+        rowOf?.set(n, r)
+        colOf[n] = c
+        n++
+    }
 }
 
 /**
@@ -77,10 +128,16 @@ internal fun rowText(row: List<TermCell>): RowText? {
  */
 internal fun rowTextSpans(row: List<TermCell>, detect: (String) -> List<TextLinkSpan>): List<TextLinkSpan> {
     val flat = rowText(row) ?: return emptyList()
-    val found = detect(flat.text)
+    return flat.spansOn(0, detect(flat.text))
+}
+
+/**
+ * Maps string-index spans onto the columns they cover on grid [row], dropping those that miss it.
+ * The URI travels unchanged, so a match split across rows opens whole from any of its parts.
+ */
+internal fun RowText.spansOn(row: Int, found: List<TextLinkSpan>): List<TextLinkSpan> {
     if (found.isEmpty()) return emptyList()
-    return found.map { s ->
-        val cols = flat.columns(s.start, s.endExclusive)
-        TextLinkSpan(cols.first, cols.last + 1, s.uri)
+    return found.mapNotNull { s ->
+        columnsOn(row, s.start, s.endExclusive)?.let { TextLinkSpan(it.first, it.last + 1, s.uri) }
     }
 }
