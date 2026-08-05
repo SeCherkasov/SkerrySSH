@@ -48,6 +48,7 @@ import app.skerry.shared.snippet.VaultSnippetStore
 import app.skerry.shared.sync.FileSyncStateStore
 import app.skerry.shared.sync.KtorSyncClient
 import app.skerry.shared.tunnel.VaultTunnelStore
+import app.skerry.ui.sync.FileReconcileDebtStore
 import app.skerry.ui.sync.FileSyncConfigStore
 import app.skerry.shared.ai.AiSettingsStore
 import app.skerry.shared.ai.local.IsolatedLlmRuntime
@@ -274,6 +275,9 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         crypto = IonspinVaultCrypto(),
         vault = vault,
         configStore = FileSyncConfigStore(dir.resolve("sync.json")),
+        // Reactivation rebuilds this device still owes — beside the link, not on it: a disconnect or a
+        // connect to another server must not take a debt the reconcile never paid (issue #170).
+        debtStore = FileReconcileDebtStore(dir.resolve("sync-reconcile")),
         // Persistent delta-sync cursor: survives restarts, otherwise every start would be a full re-pull since 0.
         syncState = FileSyncStateStore(dir.resolve("sync-cursor.json")),
         deviceIdProvider = { deviceId(dir) },

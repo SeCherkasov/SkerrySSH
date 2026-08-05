@@ -53,6 +53,8 @@ class SyncCoordinator(
     private val crypto: VaultCrypto,
     private val vault: Vault,
     private val configStore: SyncConfigStore = InMemorySyncConfigStore(),
+    /** Where the reactivation rebuilds this device still owes are persisted (see [ReconcileDebtStore]). */
+    private val debtStore: ReconcileDebtStore = InMemoryReconcileDebtStore(),
     private val syncState: SyncStateStore = InMemorySyncStateStore(),
     private val deviceIdProvider: () -> String = { randomDeviceId(crypto) },
     private val deviceName: String = "Skerry device",
@@ -95,12 +97,6 @@ class SyncCoordinator(
      */
     private val _biometricResetNeeded = MutableStateFlow(false)
     val biometricResetNeeded: StateFlow<Boolean> = _biometricResetNeeded.asStateFlow()
-
-    /**
-     * One server link — what a reconcile debt belongs to. [SyncConfig] pairs the two for the saved link;
-     * this is the same pair for the debts that have no saved link to sit on ([unsavedReactivations]).
-     */
-    private data class ServerAccount(val serverUrl: String, val accountId: String)
 
     /**
      * Connect paused on [SyncStatus.NeedsPasswordReplaceConfirm]: the params to re-run the connect once the
@@ -212,26 +208,25 @@ class SyncCoordinator(
     private var retryJob: Job? = null
 
     // Whether THIS coordinator has actually started a reactivation reconcile (records dropped, cursor
-    // reset) — the permission [clearPendingReconcile] needs before it may retire the durable marker.
-    // The marker alone isn't enough: it is persisted before the vault is touched, so it can be up while
+    // reset) — the permission [retireDischargedDebt] needs before it may retire a recorded debt.
+    // The debt alone isn't enough: it is recorded before the vault is touched, so it can stand while
     // nothing was cleared. Every read and write is under [syncMutex].
     @Volatile
     private var reconcileArmed = false
 
-    // Links a login reported as reactivated while [rememberReactivation] had nowhere durable to put the
-    // intent: this device has no saved link for them (nothing to mark, and a connect that never reached a
-    // session must not create one), or the config write was refused. The server never repeats the signal,
-    // so the debt is held here for the lifetime of the process — a later connect to the same link still
-    // owes the rebuild. A debt whose marker gets overwritten has nothing else either: [SyncConfig] holds
-    // ONE link, so connecting to another one saves a config without the previous link's marker. An entry is dropped only by the reconcile that discharges it ([reconcileLocked], after
-    // the records are actually gone) — [disconnect] deliberately leaves it, because erasing a link
-    // rebuilds nothing. A LINK, not an account id: the same id names different accounts on two servers, and
-    // rebuilding the wrong one throws away records nobody purged. Replaced whole rather than mutated; every
-    // write is under [syncMutex], which is also what serializes the read in [reconcileOwed] (reached from
-    // sync cycles that hold no [opMutex]). The [doConnect]/[restoreSession] reads run under [opMutex] alone,
-    // and @Volatile is what publishes the field across those coroutines.
+    // Links this device owes a reactivation rebuild to — the in-memory half of [debtStore], which holds the
+    // same set across restarts. A login that reports `reactivated` records the debt here and on disk before
+    // anything that can still fail ([rememberReactivation]); it is dropped only by the reconcile that
+    // discharges it, once a sync cycle over the rebuilt vault has actually succeeded ([retireDischargedDebt]).
+    // Neither a connect to another link nor a [disconnect] may take it: the first saves a config that has no
+    // room for it and the second rebuilds nothing, while the server reports the reactivation exactly once
+    // (issues #168, #170). Memory is written first and unconditionally — a refused disk write must not also
+    // lose the signal for this process. Replaced whole rather than mutated; every write is under [syncMutex],
+    // which is also what serializes the read in [reconcileOwed] (reached from sync cycles that hold no
+    // [opMutex]). The [doConnect]/[restoreSession] reads run under [opMutex] alone, and @Volatile is what
+    // publishes the field across those coroutines.
     @Volatile
-    private var unsavedReactivations: Set<ServerAccount> = emptySet()
+    private var reconcileDebts: Set<ServerLink> = debtStore.load()
 
     // Set by [pauseForLock], cleared by [resumeAfterUnlock]: which of the two the coordinator should end
     // up obeying when they queue up behind a long operation holding [opMutex], regardless of the order
@@ -259,6 +254,7 @@ class SyncCoordinator(
     private val pairMutex = Mutex()
 
     init {
+        migrateLegacyReconcileMarker()
         // Restore the link after a restart: no session/tokens in memory, but show the saved
         // server/account as Configured — the UI offers "reconnect" with one password, no retyping.
         // Disconnect erases the config → back to Disabled.
@@ -362,7 +358,7 @@ class SyncCoordinator(
             // and whether the unlock password changes (issue #28). verifyPassword runs Argon2id over the
             // vault salt; a rare user-initiated connect, so the extra derivation is acceptable.
             val matchesVault = vault.verifyPassword(masterPassword.copyOf())
-            val link = ServerAccount(serverUrl, accountId)
+            val link = ServerLink(serverUrl, accountId)
             var adoptedKey = false
             // Set when the server reports this device was revoked and this login reactivated it: the vault
             // may still hold records the server purged while we were locked out, so we must re-mirror the
@@ -445,8 +441,9 @@ class SyncCoordinator(
                 runCatching { syncClient.close() }
                 // The verify above is a full SRP login: it reactivates a revoked device server-side and
                 // consumes the one-shot signal, so the confirmed re-run's login reports an ordinary live
-                // device and only what is recorded here reaches it. Nothing is written for a link this
-                // device doesn't have — the user has merely typed a password and may still take it back.
+                // device and only what is recorded here reaches it. The debt is recorded whether or not
+                // this device is linked — it belongs to the link, not to the config, and declining the
+                // password is an answer about the password, not about the revocation ([cancelPasswordReplace]).
                 // After the close, not before: a refused write throws, and it must not strand the client.
                 if (s.reactivated) rememberReactivation(link)
                 stashPendingReplace(PendingReplace(serverUrl, accountId, masterPassword.copyOf(), keepConnected))
@@ -459,7 +456,7 @@ class SyncCoordinator(
                 // Normally the reactivation was reported to the paused connect's verify login and cleared
                 // server-side there, so it reaches this second login only as a debt in memory. This session
                 // is read too — a device revoked again while the confirmation was on screen.
-                reactivated = s.reactivated || link in unsavedReactivations
+                reactivated = s.reactivated || link in reconcileDebts
                 if (reactivated) rememberReactivation(link)
                 when (adoptAccountDataKey(syncClient, s, mk, masterPassword.copyOf())) {
                     KeyAdoption.Adopted -> adoptedKey = true
@@ -499,16 +496,13 @@ class SyncCoordinator(
             // (onVaultReset) and adoptedKey.
             // A reactivated (formerly revoked) device forces a full re-pull like an adopted key, and first
             // discards its pre-revocation records so a stale live copy can't re-push a server-purged record.
-            // The server reports `reactivated` only once (it clears revocation on this verify), so we also
-            // honor a durable pendingReconcile — raised by [rememberReactivation] the moment the login
-            // reported it, or left up by a reconcile that was interrupted before its first sync succeeded.
-            // The live `reactivated` still counts on its own, and so does a debt from an earlier connect
-            // this process that had nowhere to write it ([unsavedReactivations]).
-            // Matched on the whole link, like the write: a marker raised for this account on another server
-            // says nothing about this one, and honoring it would rebuild a vault nobody purged records from.
-            val pendingReconcile = configStore.load()
-                ?.takeIf { it.serverUrl == serverUrl && it.accountId == accountId }?.pendingReconcile == true
-            val mustReconcile = reactivated || pendingReconcile || link in unsavedReactivations
+            // The server reports `reactivated` only once (it clears revocation on this verify), so a debt
+            // recorded earlier counts the same: raised by [rememberReactivation] the moment a login reported
+            // it — this launch or any before it — or left standing by a reconcile that was interrupted
+            // before its first sync succeeded. Matched on the whole link, like the write: a debt owed for
+            // this account on another server says nothing about this one, and paying it here would rebuild
+            // a vault nobody purged records from.
+            val mustReconcile = reactivated || link in reconcileDebts
             activateSession(
                 syncClient,
                 newSession,
@@ -556,14 +550,14 @@ class SyncCoordinator(
         // and the reconcile below is what makes it safe to sync: split into two sections, the mutex is
         // free in between, and any cycle that wins it there (the previous session's watch/push, a manual
         // syncNow, a retry tick — all of which read the live [client]/[session] fields) runs over the
-        // just-published session with the vault not yet cleared and the marker not yet persisted, so even
+        // just-published session with the vault not yet cleared and the debt not yet recorded, so even
         // [reconcileOwed] cannot see that it must stand down. That cycle pushes the pre-revocation
         // records: issue #142 again, through a narrower window.
         //
         // Sharing the lock with the 401 recovery ([refreshSessionLocked]) is the other reason it is held
         // here at all: that path rotates/nulls the session and rewrites the config under syncMutex only,
         // and a refresh in flight would otherwise resolve after this activation and clobber the session
-        // and config it just published (including the pendingReconcile marker).
+        // and config it just published.
         //
         // Lock order holds: we're under opMutex, syncMutex nests inside it.
         val superseded: SyncClient?
@@ -582,16 +576,16 @@ class SyncCoordinator(
             } else {
                 if (resetCursor) syncState.setCursor(config.accountId, 0)
                 configStore.save(config)
-                // Disarm only if the config just saved carries no marker for this account. A re-activation
-                // that doesn't reconcile ([doChangeAccountPassword]) can still carry one — a reconcile that
-                // ran here but whose marker write was refused — and the records it dropped stay dropped.
-                // Disarming there would make [reconcileOwed] refuse every later cycle, including the one
-                // that would finally retire the marker.
-                reconcileArmed = reconcileArmed && config.pendingReconcile
+                // Disarm only if this link owes nothing. A re-activation that doesn't reconcile
+                // ([doChangeAccountPassword]) can still land on a debt — a reconcile that ran here but whose
+                // retiring write was refused — and the records it dropped stay dropped. Disarming there
+                // would make [reconcileOwed] refuse every later cycle, including the one that would finally
+                // retire the debt.
+                reconcileArmed = reconcileArmed && ServerLink(config.serverUrl, config.accountId) in reconcileDebts
             }
         }
         health.setTarget(config.serverUrl)
-        // The marker raised above is dropped by the sync cycle itself ([clearPendingReconcile]) — not
+        // The debt recorded above is retired by the sync cycle itself ([retireDischargedDebt]) — not
         // here, because a first cycle that fails leaves it to a later retry to finish the reconcile.
         runSync()
         startWatch()
@@ -621,33 +615,70 @@ class SyncCoordinator(
      * like an ordinary incremental reconnect — the vault was never rebuilt and the records the account
      * purged while this device was revoked were pushed back (issue #168; issue #142 through another door).
      *
-     * The marker goes onto the saved link when this device has one for [link], and nowhere else: a connect
-     * that never reached a session must not leave a link behind (the password-replace pause is the sharp
-     * case — the user can still decline it), and a link to another server or account belongs to a device
-     * that is fine. Everything the marker cannot reach is held in [unsavedReactivations] instead, which is
-     * why that is set first and unconditionally: the write below can also be refused outright.
+     * The debt is charged to the LINK and kept beside the config rather than on it ([ReconcileDebtStore]):
+     * a connect that never reached a session must not leave a link behind (the password-replace pause is
+     * the sharp case — the user can still decline it), and the one saved link cannot hold the intent of
+     * another one, which is how a later connect to a different server used to drop it (issue #170).
      *
      * A store that refuses the write fails the connect (uncaught, like [reconcileLocked]'s): a device that
      * cannot record what it owes must not go on to sync as if it owed nothing.
      *
      * The cost of the earlier write is a longer wait between "the rebuild is owed" and "the rebuild runs":
-     * the marker can now sit through a failed connect and everything the user does after it, and the clear
+     * the debt can now sit through a failed connect and everything the user does after it, and the clear
      * that eventually discharges it takes every sync-capable record with it, including ones created since
      * (they were never pushed — the connect failed). The alternative is worse and silent: records the
      * account purged coming back on every device.
      *
-     * Under [syncMutex] like every other config write — a cycle of the session this connect is about to
-     * supersede rewrites the same config ([clearPendingReconcile], [refreshSessionLocked]). Called from
-     * [doConnect] under [opMutex], which [syncMutex] nests inside.
+     * Under [syncMutex] like every other debt write — a cycle of the session this connect is about to
+     * supersede retires the same debt ([retireDischargedDebt]). Called from [doConnect] under [opMutex],
+     * which [syncMutex] nests inside.
      */
-    private suspend fun rememberReactivation(link: ServerAccount) {
-        syncMutex.withLock {
-            // In memory first, and whatever happens below: the write can be refused (a full disk) or have
-            // nowhere to go, and there is no second chance to learn this from the server.
-            unsavedReactivations = unsavedReactivations + link
-            val saved = configStore.load()?.takeIf { it.serverUrl == link.serverUrl && it.accountId == link.accountId }
-                ?: return@withLock
-            configStore.save(saved.copy(pendingReconcile = true))
+    private suspend fun rememberReactivation(link: ServerLink) {
+        syncMutex.withLock { recordDebt(link) }
+    }
+
+    /**
+     * Record a reconcile debt: in memory first and whatever happens next, because the disk write can be
+     * refused (a full disk) and the server never reports the reactivation twice — a debt this process knows
+     * about still stops the cycle that would push purged records back ([reconcileOwed]).
+     *
+     * Throws whatever the store throws: every caller treats a refused write as a failure of the operation
+     * it is part of, never as a debt that quietly went away. Call under [syncMutex] — or from `init`, where
+     * no cycle exists yet to race it.
+     */
+    private fun recordDebt(link: ServerLink) {
+        reconcileDebts = reconcileDebts + link
+        debtStore.save(reconcileDebts)
+    }
+
+    /**
+     * Retire a discharged debt — disk FIRST, the mirror image of [recordDebt]: both keep the debt when the
+     * write is refused. Dropping it from memory first would leave the store the only place that still knows,
+     * and nothing reads it again until the next launch: the retry [retireDischargedDebt] arms would find
+     * nothing to retire and the debt would sit on disk for good, rebuilding the vault on every later connect.
+     * Call under [syncMutex].
+     */
+    private fun retireDebt(link: ServerLink) {
+        val next = reconcileDebts - link
+        debtStore.save(next)
+        reconcileDebts = next
+    }
+
+    /**
+     * Move a reconcile marker written by an older version (0.2.1 and earlier kept it on the saved link, see
+     * [SyncConfig.legacyPendingReconcile]) into [debtStore], once, at startup — an upgrade in the middle of
+     * an owed rebuild must not drop it.
+     *
+     * The debt is written before the config so a failure in between only repeats the migration on the next
+     * launch; clearing the flag on the config is what stops the marker from being re-imported after the debt
+     * is discharged. Best-effort: an unwritable store must not keep the app from starting, and the marker
+     * stays on the link for the next attempt.
+     */
+    private fun migrateLegacyReconcileMarker() {
+        val cfg = configStore.load()?.takeIf { it.legacyPendingReconcile } ?: return
+        runCatching {
+            recordDebt(ServerLink(cfg.serverUrl, cfg.accountId))
+            configStore.save(cfg.copy(legacyPendingReconcile = false))
         }
     }
 
@@ -665,7 +696,7 @@ class SyncCoordinator(
      * history) are kept.
      *
      * Throws whatever the clear throws — a vault locked at this moment ([Vault.clearRecords] needs an
-     * unlocked one) leaves the marker up over an un-cleared vault, which is what [reconcileOwed] reads.
+     * unlocked one) leaves the debt standing over an un-cleared vault, which is what [reconcileOwed] reads.
      *
      * Call with [syncMutex] held (kotlinx [Mutex] is not reentrant): both callers — [activateSession] and
      * the redo in [resumeAfterUnlock] — take it themselves, and every [reconcileArmed]/cursor/config write
@@ -674,16 +705,16 @@ class SyncCoordinator(
     private fun reconcileLocked(config: SyncConfig) {
         // Persist the reconcile intent BEFORE mutating the vault: the server clears revocation on the
         // verify that reported `reactivated` and never reports it again, so a crash between here and
-        // the first successful sync would otherwise lose the signal and let the stale records push.
-        configStore.save(config.copy(pendingReconcile = true))
+        // the first successful sync would otherwise lose the signal and let the stale records push. The
+        // debt is usually already recorded ([rememberReactivation]) — a set write, so re-recording it is
+        // free; the paths that reach a reconcile without one (a restore driven by an older launch's debt)
+        // get it written here.
+        recordDebt(ServerLink(config.serverUrl, config.accountId))
+        configStore.save(config)
         val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
         vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet())
-        // Discharged only once the records are actually gone, and only for the link being reconciled: a
-        // clear that threw leaves the debt owed (the durable marker alone would not survive a [disconnect]),
-        // and a debt held for another link is not this reconcile's to retire.
-        unsavedReactivations = unsavedReactivations - ServerAccount(config.serverUrl, config.accountId)
         syncState.setCursor(config.accountId, 0) // reactivation always full-pulls to rebuild from the server
-        reconcileArmed = true // only now — see [clearPendingReconcile]
+        reconcileArmed = true // only now — see [retireDischargedDebt]
     }
 
     /**
@@ -746,7 +777,7 @@ class SyncCoordinator(
      * kept password and return to the prior state (Configured if a link is saved, else Disabled). The account
      * is untouched and the local vault keeps its current password. No-op if nothing is pending.
      *
-     * What the decline does NOT undo is a reactivation the verify login reported ([unsavedReactivations]):
+     * What the decline does NOT undo is a reactivation the verify login reported ([reconcileDebts]):
      * the server cleared the revocation on that login and won't mention it again, so this device still owes
      * that account a rebuild whenever it does connect. Declining is an answer about the password, not about
      * the revocation.
@@ -1130,7 +1161,7 @@ class SyncCoordinator(
         }
         // This device owes a reconcile it never performed (see [reconcileOwed]): its vault still holds
         // the records the server purged while it was revoked, and pushing them is exactly the
-        // resurrection the marker exists to prevent — silently, under an Online status. Refuse the cycle
+        // resurrection the debt exists to prevent — silently, under an Online status. Refuse the cycle
         // and name the reason: nothing but a connect/restore/unlock redoes the reconcile, so the user has
         // to act, and a bare Configured would render as "vault locked" over a vault that is open. The session stays
         // published (tearing it down needs [opMutex], which nests outside this lock) but is inert —
@@ -1207,28 +1238,28 @@ class SyncCoordinator(
     }
 
     /**
-     * Whether a reactivation reconcile is owed on this account but was never performed here: the durable
-     * marker ([SyncConfig.pendingReconcile]) is up while [reconcileArmed] is down.
+     * Whether a reactivation reconcile is owed on this account but was never performed here: a debt for the
+     * saved link stands ([reconcileDebts]) while [reconcileArmed] is down.
      *
      * [activateSession] publishes the session and reconciles in one locked section, so a cycle can no
      * longer slip in mid-reconcile — but the clear itself can throw (an auto-lock landing inside the
-     * connect: [Vault.clearRecords] needs an unlocked vault), and the marker is persisted before the
+     * connect: [Vault.clearRecords] needs an unlocked vault), and the debt is persisted before the
      * vault is touched. That leaves a live session over a vault full of pre-revocation records, as does
-     * any activation that doesn't reconcile at all ([doChangeAccountPassword]) while the marker is up.
+     * any activation that doesn't reconcile at all ([doChangeAccountPassword]) while a debt stands.
      * Issue #142.
      *
-     * A debt this process could not write down ([unsavedReactivations]) counts exactly like the marker: it
-     * is the same obligation, and without it a store that refused the write would leave the guard blind —
-     * every cycle would run over the un-rebuilt vault.
+     * A debt whose disk write was refused counts exactly the same — it is the same obligation, held in
+     * memory — which is why [reconcileDebts] and not the store is what this reads: otherwise a full disk
+     * would leave the guard blind and every cycle would run over the un-rebuilt vault.
      *
-     * Read under [syncMutex] like [reconcileArmed] itself, and matched on [accountId] — a marker saved
-     * for another account says nothing about this session.
+     * Read under [syncMutex] like [reconcileArmed] itself, and matched on the saved link — a debt owed by
+     * this device to another server, or another account, says nothing about this session.
      */
     private fun reconcileOwed(accountId: String): Boolean {
         if (reconcileArmed) return false
         val cfg = configStore.load() ?: return false
         if (cfg.accountId != accountId) return false
-        return cfg.pendingReconcile || ServerAccount(cfg.serverUrl, cfg.accountId) in unsavedReactivations
+        return ServerLink(cfg.serverUrl, cfg.accountId) in reconcileDebts
     }
 
     /** Park the status on Configured (the vault-locked resting state); Disabled without a link. */
@@ -1270,7 +1301,7 @@ class SyncCoordinator(
     // One sync attempt + the Online bookkeeping; exceptions propagate to runSyncLocked.
     private suspend fun runSyncAttempt(c: SyncClient, s: SyncSession) {
         val outcome = engineFactory(c).sync(s)
-        clearPendingReconcile(s.accountId)
+        retireDischargedDebt(s.accountId)
         _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
         // Pulled records from the server → refresh list managers, else synced data isn't visible until reopen.
         if (outcome.pulled > 0) {
@@ -1280,35 +1311,40 @@ class SyncCoordinator(
     }
 
     /**
-     * Drop the durable reactivation marker ([SyncConfig.pendingReconcile]) once a sync cycle for that
-     * account has actually succeeded. [reconcileArmed] says this coordinator dropped the local records
-     * and reset the cursor, so the cycle that just finished IS the full re-pull the marker is waiting
+     * Retire the reactivation debt for the saved link once a sync cycle for that account has actually
+     * succeeded. [reconcileArmed] says this coordinator dropped the local records
+     * and reset the cursor, so the cycle that just finished IS the full re-pull the debt is waiting
      * for — including one reached by a later retry (backoff loop, reachability trigger, manual sync)
      * after the reconcile's own first cycle failed.
      *
-     * The marker on its own would be the wrong permission: [activateSession] persists it BEFORE it
-     * touches the vault (a crash in between must not lose the signal), so a clear that threw — an
-     * auto-lock landing inside the connect — leaves it up over a vault nothing was dropped from, on a
-     * session that is already published. Retiring it there would strand the pre-revocation records; that
-     * session's cycles are refused ([reconcileOwed]) and the reconcile is redone instead — by the next
-     * connect/restore, or by the unlock that hands the clear the vault it needed
-     * ([redoOwedReconcileLocked]).
+     * The debt on its own would be the wrong permission: it is recorded BEFORE the vault is touched (a
+     * crash in between must not lose the signal), so a clear that threw — an auto-lock landing inside the
+     * connect — leaves it standing over a vault nothing was dropped from, on a session that is already
+     * published. Retiring it there would strand the pre-revocation records; that session's cycles are
+     * refused ([reconcileOwed]) and the reconcile is redone instead — by the next connect/restore, or by
+     * the unlock that hands the clear the vault it needed ([redoOwedReconcileLocked]).
      *
      * Called before the status is published: [SyncStatus.Online] is what every observer reacts to, and
-     * clearing the marker afterwards leaves a window in which Online is on screen while the saved config
-     * still says a reconcile is pending. Reads the live config rather than a captured copy — the cycle
-     * that just ran may have rotated a fresh sealed refresh token into it.
+     * retiring the debt afterwards leaves a window in which Online is on screen while the device still
+     * owes a rebuild. Reads the live config rather than a captured copy — the link is what the debt is
+     * keyed on, and a connect that ran in between may have changed it.
      *
-     * Best-effort like [resealRefreshToken]: a config store that fails must not turn a sync that
-     * succeeded into a failure — [reconcileArmed] stays up so the next cycle retries the clear.
+     * Best-effort like [resealRefreshToken]: a store that fails must not turn a sync that succeeded into a
+     * failure — [reconcileArmed] stays up so the next cycle retries the write.
      */
-    private fun clearPendingReconcile(accountId: String) {
+    private fun retireDischargedDebt(accountId: String) {
         if (!reconcileArmed) return
         runCatching {
             val cfg = configStore.load()
             if (cfg != null && cfg.accountId == accountId) {
-                if (cfg.pendingReconcile) configStore.save(cfg.copy(pendingReconcile = false))
-                reconcileArmed = false // also when the marker was already down: nothing left to retry
+                val link = ServerLink(cfg.serverUrl, cfg.accountId)
+                if (link in reconcileDebts) retireDebt(link)
+                // Also when this link owes nothing: there is nothing left for a later cycle to retire.
+                // [reconcileArmed] is a plain flag rather than the link it was armed for, so a reconcile
+                // whose link was replaced before its first cycle succeeded (two servers under the same
+                // account id, switched in that window) leaves its debt standing and pays for it with one
+                // extra rebuild on the next connect back — never with a record the server purged.
+                reconcileArmed = false
             }
         }
     }
@@ -1644,8 +1680,8 @@ class SyncCoordinator(
                 // cursor write failure (disk full) must not leave configStore/healthTarget/status in a
                 // half-detached state ("Disconnect ran but the device is linked again").
                 runCatching { configStore.load()?.let { syncState.setCursor(it.accountId, 0) } }
-                // [unsavedReactivations] survives on purpose: erasing the link rebuilds nothing, so a debt
-                // the reconcile never paid is still owed — and the durable marker goes with the config here.
+                // The recorded debts survive on purpose ([debtStore] is not the config): erasing the link
+                // rebuilds nothing, so a debt the reconcile never paid is still owed on the next connect.
                 configStore.clear()
                 health.setTarget(null) // detached — stop the health ping (poller closes the client, status → UNKNOWN)
                 _status.value = SyncStatus.Disabled
@@ -1718,13 +1754,13 @@ class SyncCoordinator(
     /**
      * Finish a reactivation reconcile this live session owes ([reconcileOwed]) now that the vault is
      * unlocked. The situation is an auto-lock landing inside a reactivating connect or silent restore: the session was
-     * published, [Vault.clearRecords] threw, and the durable marker stayed up over an un-cleared vault, so
+     * published, [Vault.clearRecords] threw, and the recorded debt stayed standing over an un-cleared vault, so
      * every cycle is refused with [SyncFailureReason.ReconcileRequired]. Only a connect/restore used to
      * redo the reconcile, which asked the user for the master password — for a rebuild that needs none
      * (drop the records, reset the cursor, arm the flag). Issue #147.
      *
-     * A reconcile that fails again — the vault re-locked between the unlock and here, or the marker write
-     * was refused — is not a new failure: it leaves the marker up and the session owing the same
+     * A reconcile that fails again — the vault re-locked between the unlock and here, or the debt write
+     * was refused — is not a new failure: it leaves the debt standing and the session owing the same
      * reconcile, and the cycle right after this call republishes [SyncFailureReason.ReconcileRequired] —
      * the state the user already sees, with the same recovery. Any cause lands there; naming them apart
      * would only rename a stop whose exit is the same.
@@ -1735,11 +1771,11 @@ class SyncCoordinator(
     private fun redoOwedReconcileLocked() {
         val accountId = session?.accountId ?: return
         // Matched on the account before anything is dropped: reconciling under a config saved for another
-        // account would clear this vault against a marker that says nothing about it. ([reconcileOwed]
+        // account would clear this vault against a debt that says nothing about it. ([reconcileOwed]
         // matches the same way on its own read — the two agree because nothing suspends in between.)
         val cfg = configStore.load()?.takeIf { it.accountId == accountId } ?: return
         if (!reconcileOwed(accountId)) return
-        // Not swallowed silently: the cycle the caller runs next reads the same marker this clear failed to
+        // Not swallowed silently: the cycle the caller runs next reads the same debt this clear failed to
         // retire and publishes the refusal, so the failure keeps its own status — see the KDoc above.
         // runCatching is safe here: [reconcileLocked] has no suspension point, so there is no
         // CancellationException for it to absorb.
@@ -1794,13 +1830,11 @@ class SyncCoordinator(
                     }
                     val syncClient = clientFactory(cfg.serverUrl)
                     val newSession = syncClient.refresh(SyncSession(cfg.accountId, "", refreshToken))
-                    // A reconcile interrupted before it finished (pendingReconcile) must still run on this
-                    // silent restore — refresh carries no `reactivated` signal, so the marker is the only
-                    // thing that redoes it before the first push. A debt this process could not write down
-                    // counts the same: the connect that learned of it failed, and this restore is what
-                    // brings the device back.
-                    val reconcile = cfg.pendingReconcile ||
-                        ServerAccount(cfg.serverUrl, cfg.accountId) in unsavedReactivations
+                    // A reconcile interrupted before it finished must still run on this silent restore —
+                    // refresh carries no `reactivated` signal, so a standing debt is the only thing that
+                    // redoes it before the first push, whether it was recorded by this launch or an
+                    // earlier one.
+                    val reconcile = ServerLink(cfg.serverUrl, cfg.accountId) in reconcileDebts
                     // refresh rotates the token — re-save it sealed under the dataKey (inside activation).
                     activateSession(
                         syncClient,
