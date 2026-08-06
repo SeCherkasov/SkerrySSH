@@ -2,10 +2,12 @@ package app.skerry.shared.ai
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -98,6 +100,23 @@ class OpenAiProvider private constructor(
         return chunk.choices.firstOrNull()?.delta?.content
     }
 
+    /**
+     * Fetches the model catalog (`GET {baseUrl}/models`) for the BYOK settings refresh button. The
+     * key is only used in this request's `Authorization` header, never logged.
+     */
+    override suspend fun listModels(): List<String> {
+        val response = http.get("${config.baseUrl}/models") {
+            header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
+            header(HttpHeaders.Accept, ContentType.Application.Json.toString())
+        }
+        if (!response.status.isSuccess()) throw errorFor(response.status)
+        return try {
+            json.decodeFromString(ModelsWire.serializer(), response.bodyAsText()).data.map { it.id }
+        } catch (e: Exception) {
+            throw AiException(AiException.Kind.PROTOCOL, "Malformed model catalog", e)
+        }
+    }
+
     override suspend fun close() {
         if (ownsHttp) http.close()
     }
@@ -140,3 +159,10 @@ private data class ChunkChoiceWire(val delta: DeltaWire? = null)
 
 @Serializable
 private data class DeltaWire(val content: String? = null)
+
+/** `GET /models` response: `{"data":[{"id":"…"},…]}`. */
+@Serializable
+private data class ModelsWire(val data: List<ModelWire> = emptyList())
+
+@Serializable
+private data class ModelWire(val id: String)

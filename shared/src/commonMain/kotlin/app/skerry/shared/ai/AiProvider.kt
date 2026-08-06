@@ -47,6 +47,12 @@ interface AiProvider {
      */
     fun chat(request: AiChatRequest): Flow<AiDelta>
 
+    /**
+     * Lists the models advertised by this endpoint (OpenAI-compatible `GET /models`); empty when the
+     * provider has no discoverable catalog (e.g. on-device local models).
+     */
+    suspend fun listModels(): List<String> = emptyList()
+
     /** Releases network resources (HTTP client). */
     suspend fun close()
 }

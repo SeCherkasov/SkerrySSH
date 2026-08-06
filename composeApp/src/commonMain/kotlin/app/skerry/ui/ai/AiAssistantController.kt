@@ -10,6 +10,7 @@ import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.shared.ai.AiProvider
 import app.skerry.shared.ai.AiProviderKind
+import app.skerry.shared.ai.OpenAiConfig
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.AiRoute
 import app.skerry.shared.ai.AiRouter
@@ -152,6 +153,20 @@ class AiAssistantController(
                 baseUrl = baseUrl.trim().ifBlank { AiSettings().baseUrl },
             ),
         )
+    }
+
+    /**
+     * Fetches the model catalog for the BYOK fields (refresh button in AI settings), using the
+     * typed key/baseUrl. The catalog is not persisted — the UI keeps it per screen. Failures are
+     * surfaced as [Result.failure] (an [AiException] when the endpoint answered, anything else
+     * otherwise); the UI maps them to a localized message.
+     */
+    suspend fun listModels(apiKey: String, baseUrl: String): Result<List<String>> = runCatching {
+        providerFactory(
+            AiEndpoint.Cloud(
+                OpenAiConfig(apiKey = apiKey.trim(), baseUrl = baseUrl.trim()),
+            ),
+        ).listModels()
     }
 
     /** Selects the default provider (AI settings cards); persisted immediately. */

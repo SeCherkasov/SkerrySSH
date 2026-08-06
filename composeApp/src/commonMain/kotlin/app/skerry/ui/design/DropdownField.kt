@@ -7,9 +7,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,21 +69,33 @@ fun SelectTrigger(value: String, onClick: () -> Unit) {
     }
 }
 
-/** Dropdown menu column (layout surface + border). */
+/**
+ * Dropdown menu column (layout surface + border). Height is capped at [maxHeight] with internal
+ * scrolling — a catalog refresh can populate hundreds of options (e.g. AI model list) that must
+ * stay reachable on a phone screen instead of overflowing/clipping the popup.
+ */
 @Composable
-fun DropdownMenuColumn(width: Dp, content: @Composable () -> Unit) {
+fun DropdownMenuColumn(width: Dp, maxHeight: Dp = 320.dp, content: @Composable () -> Unit) {
     Column(
-        Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)),
+        Modifier
+            .width(width)
+            .heightIn(max = maxHeight)
+            .verticalScroll(rememberScrollState())
+            .clip(RoundedCornerShape(8.dp))
+            .background(Skerry.colors.surface2)
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)),
     ) { content() }
 }
 
-/** Dropdown menu item; the selected one is highlighted cyan. */
+/** Dropdown menu item; the selected one is highlighted cyan. Long labels ellipsize on one line. */
 @Composable
 fun DropdownOption(label: String, selected: Boolean, onClick: () -> Unit) {
     Txt(
         label,
         color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text,
         size = 12.5.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp),
     )
 }
