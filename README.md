@@ -1,4 +1,6 @@
-# Skerry
+<div align="center">
+
+<img src="docs/img/banner.png" alt="Skerry — the SSH client, the way it should be. Terminal · SFTP · tunnels · VNC/RDP · encrypted vault · no accounts, no cloud. Linux · Windows · macOS · Android" width="820">
 
 **English** · [Русский](README.ru.md)
 
@@ -7,73 +9,76 @@
 [![Clients: GPL-3.0](https://img.shields.io/badge/clients-GPL--3.0-blue)](LICENSE)
 [![Server: AGPL-3.0](https://img.shields.io/badge/server-AGPL--3.0-blue)](server/LICENSE)
 
-An open-source, cross-platform SSH client with a single core: Kotlin Multiplatform under the
-hood, Compose Multiplatform UI on top. One core codebase and one UI across
-**Desktop (Linux, Windows, macOS)** and **Android**, with feature parity between platforms.
+</div>
 
-- **Local-first** — everything works without a server or an account.
-- **Zero-knowledge** — the master password never leaves the device.
-- **AI under policy** — model output is treated as untrusted; actions require confirmation;
-  a fully local model is an option.
-- **Platform parity** — a feature isn't done until it works everywhere.
+---
+
+Open-source SSH client with a single core (Kotlin Multiplatform) for every platform:
+**Linux · Windows · macOS · Android**.
+
+- **Local-first** — fully functional without an account or external services; sync is optional
+  and self-hosted.
+- **Zero-knowledge** — vault sealed with Argon2id + XChaCha20-Poly1305; the master password and
+  encryption keys never leave the device.
+- **AI under policy** — model output is treated as untrusted input: command execution requires
+  explicit confirmation; local inference (llama.cpp) rules out outbound traffic.
+
+---
 
 ## How Skerry compares
 
-| Feature | Skerry | Termius | PuTTY | Tabby |
+| | Skerry | Termius | PuTTY | Tabby |
 |---|---|---|---|---|
-| **Open source** | ✅ GPL-3.0 · AGPL-3.0 | ❌ | ✅ MIT | ✅ MIT |
-| **Platforms** | Linux · Windows · macOS · Android | Windows · macOS · Linux · iOS · Android | Windows · Unix | Windows · macOS · Linux |
-| **First release** | 2026 (v0.3.x) | 2011 | 1999 | 2017 |
-| **Price** | free | free tier · paid from $10/mo | free | free |
-| **Works without an account** | ✅ | ⚠️ local only <sup>1</sup> | ✅ | ✅ |
-| **Encrypted vault** | ✅ always on <sup>2</sup> | ✅ | ❌ | ⚠️ opt-in |
-| **Sync** | ✅ self-hosted, zero-knowledge | ✅ vendor cloud, E2E (paid) | ❌ | ✅ self-hostable, E2E opt-in <sup>3</sup> |
-| **Team sharing** | ✅ end-to-end | ⚠️ paid tier | ❌ | ❌ |
-| **SFTP** | ✅ dual-pane UI | ✅ | ⚠️ CLI only (`psftp`) | ✅ built-in panel |
-| **Port forwarding** | ✅ local · remote · dynamic | ✅ | ✅ | ✅ |
-| **Serial / Telnet** | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ | ✅ / ✅ |
+| **License** | GPL-3.0 / AGPL-3.0 | proprietary | MIT | MIT |
+| **Platforms** | Linux · Windows · macOS · Android | Linux · Windows · macOS · Android · iOS | Windows · Unix | Linux · Windows · macOS |
+| **Price** | free | from $10/mo | free | free |
+| **Without an account** | ✅ | ⚠️ local only | ✅ | ✅ |
+| **Encrypted vault** | ✅ | ✅ | ❌ | ⚠️ opt-in |
+| **Sync** | ✅ self-hosted | ✅ vendor cloud | ❌ | ✅ self-hosted |
+| **Team sharing** | ✅ | ⚠️ paid | ❌ | ❌ |
+| **SFTP** | ✅ dual-pane | ✅ | ⚠️ CLI only | ✅ |
 | **Mosh** | ✅ | ✅ | ❌ | ❌ |
-| **VNC / RDP remote desktop** | ✅ built-in, both | ❌ | ❌ | ❌ |
-| **Live session sharing** | ✅ end-to-end encrypted | ⚠️ paid tier | ❌ | ❌ |
-| **AI assistant** | ✅ local or BYOK cloud <sup>4</sup> | ⚠️ cloud, account required | ❌ | ❌ |
+| **VNC / RDP** | ✅ | ❌ | ❌ | ❌ |
+| **Live session sharing** | ✅ | ⚠️ paid | ❌ | ❌ |
+| **AI assistant** | ✅ local or BYOK | ⚠️ cloud only | ❌ | ❌ |
 
-**Legend:** ✅ yes · ⚠️ partial / with caveats · ❌ no
+*Competitor data from the projects' official sites, 2026-07-23. If something is wrong, send a PR
+with the correction or open an [issue](../../issues/new).*
 
-<sup>1</sup> sync and AI need an account &nbsp;·&nbsp;
-<sup>2</sup> Argon2id + XChaCha20-Poly1305 &nbsp;·&nbsp;
-<sup>3</sup> via self-hostable Tabby Web &nbsp;·&nbsp;
-<sup>4</sup> optional; model output treated as untrusted, actions require confirmation
-
-*Competitor data collected from the projects' official sites and repositories on 2026-07-23.
-Spotted an error? Please open a PR.*
+---
 
 ## Status
 
-Actively developed for **Linux**, **Windows**, **macOS**, and **Android**. **iOS/iPadOS** is
-deferred — there are no iOS targets in the build.
+Actively developed for **Linux**, **Windows**, **macOS** and **Android**.
+
+**iOS/iPadOS** is deferred for the lack of hardware to build and debug on — the project has
+no iOS targets.
+
+---
 
 ## Install
 
-Grab a package from the **[latest release](../../releases/latest)**:
+Packages are in the **[latest release](../../releases/latest)**:
 
 | Platform | Arch | Files |
 |---|---|---|
 | Linux | x86_64 | `.deb`, `.rpm`, `.AppImage`, `.flatpak` |
 | Linux | arm64 | `.deb`, `.rpm`, `.AppImage` |
-| Windows | x64 | `.msi`, portable `.zip` |
-| macOS | Apple Silicon | `Skerry-*-arm64.dmg` |
-| macOS | Intel | `Skerry-*-x64.dmg` |
-| Android | arm64-v8a | `.apk` (signed; sideload) |
+| Windows | x64 | `.msi`, `.zip` |
+| macOS | Apple Silicon | `.dmg` |
+| macOS | Intel | `.dmg` |
+| Android | arm64-v8a | `.apk` |
 
-- **macOS builds are unsigned and not notarized** (no Apple Developer account yet), so
-  Gatekeeper blocks the first launch: right-click the app → Open, or allow it under
-  System Settings → Privacy & Security. The app's bundle metadata (Finder's Get Info)
-  shows a `1.x.y` version — it is the same `0.x` release (macOS packaging requires a
-  major version ≥ 1); the About screen shows the real version.
-- The Windows `.msi` is not code-signed either; SmartScreen may warn on first run.
-- Verify downloads against the attached checksums: `sha256sum -c --ignore-missing SHA256SUMS.txt`.
+- **Signing.** Builds are unsigned: there is no Apple Developer account. Gatekeeper blocks the
+  first launch of a macOS build — right-click the app → Open, or allow it under System Settings
+  → Privacy & Security. The Windows `.msi` is unsigned too, SmartScreen warns on first run.
+- **macOS bundle version.** Get Info shows `1.x.y` instead of `0.x`: packaging requires a major
+  version ≥ 1. The real version is on the About screen.
+- **Checksums.** `sha256sum -c --ignore-missing SHA256SUMS.txt`
 
-Building it yourself is also easy — see [Building from source](#building-from-source).
+Building from source is covered [below](#building-from-source).
+
+---
 
 ## Screenshots
 
@@ -96,93 +101,92 @@ Building it yourself is also easy — see [Building from source](#building-from-
 
 </details>
 
+---
+
 ## Features
 
-- **Connections** — SSH with jump hosts (ProxyJump), SSH certificates (loaded from the vault or
-  read from disk on every connection), host-key certificates signed by a CA, and
-  keyboard-interactive 2FA challenges; Mosh; SFTP (dual-pane commander with a built-in file
-  viewer/editor, sortable columns, a quick name filter and a transfer queue); port forwarding:
-  local, remote, dynamic/SOCKS, forwards that raise themselves once the vault is unlocked, plus
-  discovery of listening services with one-tap forwarding; Docker and Kubernetes exec (pick a
-  container/pod on the host and drop into its shell); Telnet; serial
-  (desktop and Android USB-OTG); a local shell in a tab, without any connection at all.
-  Existing hosts can be imported from `~/.ssh/config`.
-- **Remote desktops** — VNC and RDP in a section of their own, both on a client stack written
-  for this project. A session panel carries screenshots, Ctrl+Alt+Del, clipboard exchange and
-  settings that apply mid-session. RDP takes the H.264 stream a modern Windows host prefers when
-  the machine can decode it — Android always can; a desktop needs `ffmpeg` on PATH, and without
-  one the session simply runs on the other codecs.
-- **Terminal** — custom grid emulation, session tabs with up to four tiled panes and
-  synchronized input, SSH auto-reconnect, scrollback search, syntax highlighting for the
-  command line and the output, a command palette over the history, broadcast input to several
-  sessions, file paths from the output opened straight in the SFTP panel, clickable URLs even
-  when they wrap, and session recording (asciinema v2) with in-app playback.
-- **Host monitoring** — a screen of its own beside the terminal: CPU, memory and network with
-  their history, disk and swap as levels, the top processes, systemd units and mounts, running
-  containers, and threshold alerts derived on the device.
-- **Session sharing** — stream a live terminal to a teammate end-to-end encrypted, read-only or
-  with the keyboard handed over.
-- **Production guard** — hosts tagged `prod` score every command for risk and stop the dangerous
-  ones behind an explicit confirmation.
-- **Themes** — dark and light app themes with a card-based catalog; the terminal follows
-  the app theme, and the System mode tracks the OS live.
-- **Vault** — always-on encryption (Argon2id + XChaCha20-Poly1305) for keys, passwords,
-  identities, and certificates; biometric unlock on Android. Each secret states what it is —
-  algorithm, fingerprint, validity, what depends on it, and when it was last used. Deleted hosts,
-  keys, snippets, and tunnels stay restorable in the trash for 30 days, on every synced device.
-- **Sync** — optional and self-hosted, zero-knowledge, live push over WebSocket, device
-  pairing via QR, and a browser account zone behind a separate web password that reads metadata
-  and can revoke a device, nothing else. See [Sync server](#sync-server).
-- **Teams** — end-to-end encrypted sharing of hosts, snippets and runbooks within a team, with
-  access scopes per member and an activity feed of who changed which host and who opened a
-  session.
-- **Snippets & AI** — command library with type-ahead in the terminal; dynamic `${{…}}`
-  variables (date/time, uuid, random, clipboard, vault secrets, prompted parameters) resolved
-  at run time behind a confirmation preview; an assistant with per-host policies — a panel
-  beside the session on desktop, a bar on mobile — bring your own OpenAI key or run a local model.
+- **Protocols** — SSH, Mosh, Telnet, serial (desktop and Android USB-OTG), and a local shell in
+  a tab with no connection at all.
+- **SSH** — jump hosts (ProxyJump), certificates from the vault or from disk, CA-signed host-key
+  certificates, keyboard-interactive 2FA, auto-reconnect, host import from `~/.ssh/config`.
+- **SFTP** — dual-pane commander: file viewer and editor, sortable columns, name filter,
+  transfer queue.
+- **Port forwarding** — local, remote, dynamic/SOCKS, forwards raised automatically after the
+  vault is unlocked, one-click forwarding of the ports discovered on the host.
+- **Containers** — exec into a Docker container or a Kubernetes pod straight from the host.
+- **Remote desktops** — VNC and RDP on a client stack written for this project: screenshots,
+  Ctrl+Alt+Del, clipboard exchange, settings changed mid-session. H.264 in RDP when a decoder is
+  available: Android — always, desktop — `ffmpeg` on PATH.
+- **Terminal** — custom grid emulation, up to four tiled panes per tab with synchronized input,
+  scrollback search, syntax highlighting, a command palette over the history, input broadcast to
+  several sessions, file paths from the output opened in SFTP, session recording (asciinema v2)
+  with in-app playback.
+- **Host monitoring** — a screen of its own: CPU, memory and network with history, disk and swap
+  as levels, top processes, systemd units, mounts, containers, threshold alerts on the device.
+- **Session sharing** — a terminal streamed to a teammate over an end-to-end encrypted channel,
+  read-only or with the keyboard handed over.
+- **Production guard** — risk scoring for every command on hosts tagged `prod`, confirmation for
+  the dangerous ones.
+- **Runbooks** — step-by-step run of a procedure in a live session: a step is a command or an
+  SFTP transfer, a pause for confirmation, a stop on a non-zero exit code. Run log: state,
+  duration and output of every step.
+- **Snippets** — command library with type-ahead, `${{…}}` variables (date/time, uuid, random,
+  clipboard, vault secrets, prompted parameters) expanded at run time behind a confirmation
+  preview.
+- **AI** — a policy per host, an assistant panel beside the session on desktop, an input form on
+  a key press on mobile, your own OpenAI key or a local model.
   See [AI and privacy](#ai-and-privacy).
-- **Runbooks** — saved procedures run one step at a time in a live session: a step is a command
-  or a file moved over SFTP, it can pause for your go-ahead, and a step that exits non-zero
-  stops the run instead of carrying on. The run screen shows each step's state, duration and
-  output, and every finished run is kept in a per-runbook log.
-- **Localization** — English, Russian, and Simplified Chinese UI; the assistant replies in
-  the UI language.
+- **Vault** — Argon2id + XChaCha20-Poly1305 for keys, passwords, identities and certificates,
+  biometric unlock on Android, a secret card with algorithm, fingerprint, validity, dependants
+  and last use, a 30-day trash restorable on every synced device.
+- **Sync** — optional, self-hosted, zero-knowledge: live push over WebSocket, device pairing via
+  QR, a browser account zone behind a separate password — metadata and device revocation,
+  nothing else. See [Sync server](#sync-server).
+- **Teams** — end-to-end encrypted sharing of hosts, snippets and runbooks, access scopes per
+  member, an activity feed of who changed which host and who opened a session.
+- **Interface** — dark and light themes, the terminal following the app theme, System mode
+  tracking the OS, UI in English, Russian and Simplified Chinese.
+
+---
 
 ## AI and privacy
 
-The vault promise ("the master password never leaves the device") and a cloud AI assistant
-only coexist under explicit rules:
+The boundaries the assistant operates within:
 
-- **Nothing is sent anywhere automatically.** A request contains only the text you type
-  into the AI bar or chat, plus a fixed system prompt. Terminal output, host lists, and
-  vault contents are never attached.
-- **Cloud mode is BYOK**: your own OpenAI API key; requests go directly from the app to the
-  endpoint you configured.
-- **Per-host policies** decide where a request may go:
-  - **Strict** (default for new hosts) — local model only; nothing leaves the device.
-  - **Balanced** — cloud allowed; obvious secrets (private keys, tokens, `password=…`) are
-    redacted from the prompt before sending. Redaction is best-effort pattern matching,
-    not a guarantee.
-  - **Permissive** — cloud allowed without redaction, for non-sensitive systems.
-  - **Off** — AI is hidden for this host.
-- The global quick-chat always redacts secrets, even when using the local model.
-- **Local mode**: the app downloads GGUF models (Qwen3, Phi-4 Mini) and runs them on-device
-  via llama.cpp — no data leaves the device at all.
-- **Model output is untrusted**: a suggested command never runs by itself — it requires
-  explicit confirmation, and commands classified as risky require an extra confirmation.
+- **Request contents** — the request text and a fixed system prompt. Terminal output, host lists
+  and vault records are not sent.
+- **Cloud mode** — your own OpenAI key only: traffic goes from the app to the endpoint you set,
+  with no server in between.
+- **Host policy** — decides the recipient of a request:
+  - **Strict** (default for new hosts) — local model only.
+  - **Balanced** — cloud, with obvious secrets stripped from the prompt: private keys, tokens,
+    `password=…`. The mechanism is pattern matching and gives no guarantee.
+  - **Permissive** — cloud without redaction, for non-sensitive systems.
+  - **Off** — the assistant is hidden on the host.
+- **Quick-chat** — redaction always on, the local model included.
+- **Local models** — GGUF (Qwen3, Phi-4 Mini) via llama.cpp on the device, no outbound traffic.
+- **Command execution** — model output is untrusted: a run takes explicit confirmation, a risky
+  command a second one.
+
+---
 
 ## Tech stack
 
-- **Language/UI**: Kotlin 2.4.10, Compose Multiplatform 1.9.3
-- **Build**: Gradle 9.6.1, Android Gradle Plugin 9.1.1
-- **JVM target**: JDK 21 (`jvmToolchain(21)` in all modules, `JVM_21`)
-- **Android**: minSdk 26 (Android 8.0), compileSdk 37, targetSdk 36
-- **Core**: sshj 0.40.0, BouncyCastle 1.85, libsodium (ionspin KMP), okio 3.18.0, atomicfu
-- **Remote desktop**: VNC (RFB) and RDP stacks written for this project, no third-party client
-- **Serial**: jSerialComm 2.11.4 (desktop), usb-serial-for-android (Android, jitpack)
-- **Sync**: Ktor 3.5.1 (client+server), Exposed 1.3.1, SQLite/PostgreSQL, HikariCP,
-  Nimbus SRP-6a
-- **Quality**: JUnit 5, Kover coverage, detekt static analysis
+- **Language and UI** — Kotlin 2.4, Compose Multiplatform 1.9
+- **Build** — Gradle 9.6, Android Gradle Plugin 9.1, JDK 21 (`jvmToolchain(21)` in all modules)
+- **Android** — minSdk 26 (Android 8.0), compileSdk 37, targetSdk 36
+- **SSH and crypto** — sshj, BouncyCastle, libsodium (ionspin KMP): Argon2id +
+  XChaCha20-Poly1305
+- **Terminal** — custom grid emulation, pty4j for the local shell on desktop
+- **Remote desktops** — VNC (RFB) and RDP stacks written for this project, no third-party client
+- **Serial** — jSerialComm (desktop), usb-serial-for-android (Android)
+- **AI** — llamatik (a llama.cpp binding) for local models, a Ktor client for the cloud
+- **Sync** — Ktor (client and server), Exposed, SQLite/PostgreSQL, HikariCP, Nimbus SRP-6a
+- **Quality** — JUnit 5, Kover coverage, detekt static analysis
+
+Exact versions live in [`gradle/libs.versions.toml`](gradle/libs.versions.toml).
+
+---
 
 ## Repository layout
 
@@ -191,32 +195,31 @@ shared/       # KMP core: ssh/, sftp/, vault/, sync/, team/, share/, terminal/, 
               # telnet/, serial/, mosh/, rdp/, vnc/, graphics/, audio/, tunnel/, container/,
               # snippet/, runbook/, host/, tag/, files/, guard/, update/
 composeApp/   # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
-androidApp/   # Android app (MainActivity, manifest); applicationId app.skerry
+androidApp/   # Android app (MainActivity, manifest), applicationId app.skerry
 server/       # self-hosted sync server (Ktor, AGPL-3.0)
 sync-wire/    # wire contract shared by client and server
-docs/         # HTML prototypes (source of truth for UX) and design documents
+docs/         # documentation and design material
 ```
 
-HTML prototypes in `docs/design/` (`Skerry Tablet.html`, `Skerry Logo.html`) are the source
-of truth for the UI, built 1:1.
+---
 
 ## Building from source
 
-This section is for contributors — regular users should grab a package from
-[Install](#install). See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the development
-workflow, commit conventions, and packaging notes.
+Development workflow, commit conventions and packaging notes are in
+**[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
-Requires **JDK 21** (`foojay-resolver` fetches one if needed). Android additionally needs
-the Android SDK (`ANDROID_HOME`).
+Requires **JDK 21** (`foojay-resolver` fetches one if needed), and the Android SDK in
+`ANDROID_HOME` for Android.
 
-Desktop (packages are produced for the OS and CPU architecture of the machine the build
-runs on — build on macOS/ARM to get a `.dmg`/arm64 package):
+A package is built for the OS and CPU architecture of the build machine: an arm64 `.dmg` comes
+out of macOS/ARM only.
 
 ```bash
 ./gradlew :composeApp:run                                # run
 ./gradlew :composeApp:packageDistributionForCurrentOS    # .deb / .rpm / .msi / .dmg
 ./gradlew :composeApp:packageAppImage                    # portable Linux .AppImage
-./gradlew :composeApp:packageFlatpak                     # single-file Linux .flatpak (needs flatpak + flatpak-builder)
+./gradlew :composeApp:packagePortableZip                 # portable .zip
+./gradlew :composeApp:packageFlatpak                     # single-file .flatpak (needs flatpak and flatpak-builder)
 ```
 
 Android:
@@ -229,21 +232,23 @@ Tests (JUnit 5) and static analysis:
 
 ```bash
 ./gradlew test allTests    # `test` alone skips the multiplatform modules
-./gradlew detektAll        # detekt; existing findings sit in gradle/detekt-baseline-*.xml
+./gradlew detektAll        # existing findings sit in gradle/detekt-baseline-*.xml
 ```
+
+---
 
 ## Sync server
 
-Skerry is local-first — the app is fully functional without any server. When you want your
-vault on more than one device, you run your **own** sync server; there is no vendor cloud.
+The server is only there to sync devices, and it is always your server: there is no vendor
+cloud.
 
-The server is zero-knowledge by design: it stores only ciphertext (the wrapped `dataKey`,
-encrypted vault records) and sync metadata. It authenticates clients with SRP-6a — the
-password itself is never transmitted — and cannot decrypt anything you store.
+Zero-knowledge by design: what sits on the server is ciphertext (the wrapped `dataKey`,
+encrypted vault records) and sync metadata. Authentication is SRP-6a, the password is never
+transmitted, and the server cannot decrypt anything you store.
 
-Quick start (prebuilt multi-arch image from
-[Docker Hub](https://hub.docker.com/r/secherkasov/skerry-sync), SQLite in a named volume —
-zero configuration):
+Quick start — a prebuilt multi-arch image from
+[Docker Hub](https://hub.docker.com/r/secherkasov/skerry-sync), SQLite in a named volume, no
+configuration:
 
 ```bash
 docker run -d --name skerry-sync -p 8080:8080 \
@@ -253,29 +258,34 @@ docker run -d --name skerry-sync -p 8080:8080 \
   secherkasov/skerry-sync:latest
 ```
 
-The server listens on `http://localhost:8080` and ships a built-in, fully offline web
-frontend: a public page at `/`, an account cabinet at `/account`, an operator console at
-`/console`. To build from source instead, run `docker compose up -d --build`
-from the repository root; for PostgreSQL, uncomment the `db` service and the postgres
-variables in [docker-compose.yml](docker-compose.yml). A server-only Gradle build needs no
-Android SDK: `./gradlew :server:run -PserverOnly`.
+The server listens on `http://localhost:8080` and ships a built-in offline web frontend: a
+public page at `/`, an account cabinet at `/account`, an operator console at `/console`.
+Building from source — `docker compose up -d --build` from the repository root; PostgreSQL is
+enabled by the `db` service and the postgres variables in
+[docker-compose.yml](docker-compose.yml). A server-only build does without the Android SDK:
+`./gradlew :server:run -PserverOnly`.
 
-The full deployment guide — configuration reference, API endpoints, TLS termination
-(Caddy/nginx), backups, and the privacy model — lives in
-**[server/README.md](server/README.md)**.
+Configuration, API endpoints, TLS termination (Caddy/nginx), backups and the privacy model are
+in **[server/README.md](server/README.md)**.
+
+---
 
 ## Security
 
-The security policy — how to report a vulnerability privately, supported versions, the
-threat model, and an honest note on audit status — lives in **[SECURITY.md](SECURITY.md)**.
+Private vulnerability reporting, supported versions, the threat model and the audit status are
+in **[SECURITY.md](SECURITY.md)**.
+
+---
 
 ## Contributing
 
-Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** for the environment
-setup, build and test commands, module structure, commit conventions, and the PR process.
+Issues and pull requests are welcome. Environment setup, module structure, how the project is
+developed and what a PR has to satisfy are in **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+
+---
 
 ## Licenses
 
 - Clients (`shared/`, `composeApp/`, `androidApp/`) — [GPL-3.0](LICENSE)
-- Sync server (`server/`) — [AGPL-3.0](server/LICENSE). The server is AGPL so that forks
-  which host it as a service contribute their changes back to the project.
+- Sync server (`server/`) — [AGPL-3.0](server/LICENSE): a fork hosted as a service has to
+  contribute its changes back to the project.
