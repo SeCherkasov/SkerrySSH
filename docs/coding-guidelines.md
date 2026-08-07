@@ -6,6 +6,13 @@ writing code — every rule here is a class of defect we already paid for in the
 pre-release review and the 2026-07-03/04 refactor (~115 files, −7646 lines). The goal is to write it
 right the first time so a third such pass isn't needed.
 
+The rules here that can be decided without judgement — translations complete in en + ru + zh, no
+hardcoded UI literal, `Txt`/`Sym` instead of raw `Text`/`Icon`, design tokens instead of hex, no
+Kotest or MockK, dependencies through the version catalog, `atomicWriteUtf8` on secret paths, a key
+binding shipping with its Settings row — are enforced by `tools/harness/checks.py` and block the
+commit. The rest is on you and on the reviewers. Nothing here is duplicated there; the checks read
+these rules, they do not restate them.
+
 ## 1. Search before you write
 
 Before adding a class, function, or pattern — **look for the existing one**. Nine copies of a
