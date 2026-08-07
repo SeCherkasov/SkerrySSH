@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiException
@@ -42,7 +44,6 @@ import app.skerry.ui.ai.toFailure
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.ai.ModelPickerMenu
-import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
@@ -95,10 +96,15 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 fun MobileAiScreen(state: MobileDesignState) {
     val ai = LocalAi.current
+    // imePadding on the SCROLLABLE column, not the screen root: the keyboard then both shrinks the
+    // scroll viewport and auto-scrolls the focused field (and any open inline picker) above it —
+    // mirroring the terminal view's lift. Root-level padding would only shrink the page bottom and
+    // leave a mid-page field (the model picker) covered. Popup windows receive no IME insets, which
+    // is why the picker below is inline in the page flow, not a Popup.
     Column(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         MobilePushHeader(stringResource(Res.string.more_ai_privacy), onBack = state::pop)
         if (ai == null) return@Column
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).imePadding().padding(horizontal = 18.dp)) {
             Txt(
                 stringResource(Res.string.settings_ai_live_subtitle),
                 color = Skerry.colors.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(bottom = 12.dp),
@@ -226,48 +232,46 @@ private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
         Spacer(Modifier.height(12.dp))
         // ③ Model: editable combo — type freely, or pick from the catalog the refresh button fetched.
         MobileFormField(stringResource(Res.string.settings_ai_field_model)) {
-            // The dropdown wraps the whole field row (input + arrow button), so the menu opens
-            // below the field at the full row width — a small trigger would pop a tiny menu that
-            // squeezes long model names and overflows the screen on phones.
-            AnchoredDropdown(
-                expanded = modelMenuOpen,
-                onDismiss = { modelMenuOpen = false },
-                trigger = {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.weight(1f)) {
-                            MobileFormInput(model, { model = it }, stringResource(Res.string.settings_ai_placeholder_model), imeAction = ImeAction.Done)
-                        }
-                        Box(
-                            Modifier
-                                .clip(RoundedCornerShape(11.dp))
-                                .background(Skerry.colors.bg)
-                                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
-                                .clickable(enabled = models.isNotEmpty()) { modelMenuOpen = !modelMenuOpen }
-                                .padding(horizontal = 12.dp, vertical = 13.dp),
-                        ) { Sym("expand_more", size = 16.sp, color = Skerry.colors.faint) }
-                    }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) {
+                    MobileFormInput(model, { model = it }, stringResource(Res.string.settings_ai_placeholder_model), imeAction = ImeAction.Done)
+                }
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(Skerry.colors.bg)
+                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
+                        .clickable(enabled = models.isNotEmpty()) { modelMenuOpen = !modelMenuOpen }
+                        .padding(horizontal = 12.dp, vertical = 13.dp),
+                ) { Sym("expand_more", size = 16.sp, color = Skerry.colors.faint) }
+            }
+        }
+        // The picker expands IN the page flow instead of a Popup: Popup windows get no IME insets and
+        // stay put under the soft keyboard, but the screen root's imePadding lifts this whole page —
+        // search box and list together — above the keyboard when the search field gains focus. Desktop
+        // has no IME: the inline menu simply pushes the Save row down (scrollable, fine).
+        if (modelMenuOpen) {
+            Spacer(Modifier.height(8.dp))
+            ModelPickerMenu(
+                width = Dp.Infinity,
+                models = models,
+                selected = model,
+                favorites = favorites,
+                onToggleFavorite = { id ->
+                    favorites = if (id in favorites) favorites - id else favorites + id
+                    AiModelCache.saveFavorite(baseUrl, id, id in favorites)
                 },
-                menu = { width ->
-                    ModelPickerMenu(
-                        width = width,
-                        models = models,
-                        selected = model,
-                        favorites = favorites,
-                        onToggleFavorite = { id ->
-                            favorites = if (id in favorites) favorites - id else favorites + id
-                            AiModelCache.saveFavorite(baseUrl, id, id in favorites)
-                        },
-                        onSelect = { m ->
-                            model = m
-                            modelMenuOpen = false
-                            // Picking fills the field; nothing is persisted until Save (visible hint reminds that).
-                            hint = hintModel; hintFlash = false
-                        },
-                        emptyText = stringResource(Res.string.settings_ai_models_empty),
-                        searchPlaceholder = stringResource(Res.string.settings_ai_search_models),
-                    )
+                onSelect = { m ->
+                    model = m
+                    modelMenuOpen = false
+                    // Picking fills the field; nothing is persisted until Save (visible hint reminds that).
+                    hint = hintModel; hintFlash = false
                 },
+                emptyText = stringResource(Res.string.settings_ai_models_empty),
+                searchPlaceholder = stringResource(Res.string.settings_ai_search_models),
+                maxHeight = 260.dp,
             )
+            Spacer(Modifier.height(8.dp))
         }
         refreshFailure?.let { failure ->
             Txt(aiFailureMessage(failure), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
