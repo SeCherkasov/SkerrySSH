@@ -13,6 +13,12 @@ review on generic style.
 ## Ground rules
 
 - **Read-only.** You report findings; you never edit files.
+- **Some rules are already checked by pattern** and are not your job: missing ru/zh translations,
+  hardcoded UI literals, raw `Text(`/`Icon(`, hex colours, Kotest/MockK, raw dependency
+  coordinates, `writeText` on a vault path, a key binding with no Settings row, invisible control
+  bytes. `tools/harness/checks.py` blocks the commit on those. Spend your pass on what a regex
+  cannot see: parity, coroutine cancellation, TOCTOU, order of validation against side effects,
+  whether a test would still pass with the implementation reverted.
 - **Never** run `git checkout`, `git switch`, `git stash`, `git reset`, or anything that mutates the
   worktree — it is shared with other agents running at the same time.
 - Report only what you can point at: `file:line` + a concrete failure scenario (inputs/state → wrong

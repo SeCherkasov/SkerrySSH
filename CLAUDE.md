@@ -41,8 +41,25 @@ docs/         # HTML prototypes (source of truth for UX) and design documents
 
 ## How we work
 
-Every change follows the same loop. Steps 1–4 are not optional, and step 4 runs **before** the PR is
-merged, not after.
+Every change follows the same loop, but **what the loop demands depends on what the change is**.
+Ask the harness rather than guessing:
+
+```bash
+tools/harness/gate.py status     # kind, areas, and everything still owed
+tools/harness/gate.py task bug 133   # when the auto-detected kind is wrong
+```
+
+| Kind | How it is detected | What it owes |
+|---|---|---|
+| `docs` | no code in the diff | nothing — commit freely |
+| `refactor` | `refactor/` `chore/` `perf/` branch | checks · tests · build · detekt · reviewers |
+| `feature` | `feat/` branch, or an unnamed branch with code | the same, plus a test touched |
+| `bug` | `fix/` `bug/` `hotfix/` branch, or declared | the same, plus a test recorded failing **before** the fix |
+
+Areas add to that: UI or Android in the diff pulls in `:androidApp:compileDebugKotlin` and
+`ecc:a11y-architect`; server pulls in `ecc:java-reviewer`; terminal pulls in
+`ecc:performance-optimizer`. A declaration can make the gate stricter, never looser — a diff with
+Kotlin in it is never treated as docs.
 
 ### 0. Orient before writing code
 
@@ -61,7 +78,14 @@ merged, not after.
 - Write the test before the implementation, in `commonMain` test sources unless the behaviour is
   genuinely platform-specific.
 - Run it and **confirm it fails for the intended reason**, not on a compile error or a typo.
-- For a bug fix, the test must reproduce the bug.
+- For a bug fix the test must reproduce the bug, and the harness wants that on record:
+
+  ```bash
+  tools/harness/gate.py red --tests '*ReconcileDebt*' --file shared/src/commonTest/kotlin/.../ReconcileDebtStoreTest.kt
+  ```
+
+  It refuses to record a test that passes, and refuses a pattern that matched nothing. If the fix
+  is already written, revert it, record RED, restore it — otherwise the bug fix cannot be committed.
 - For controllers touching coroutines, cover cancellation and re-entry — that's the bug class
   guidelines §3 exists for.
 - `ecc:tdd-guide` and the `ecc:kotlin-testing` skill are the reference for test shape; ignore their
@@ -76,33 +100,51 @@ merged, not after.
 
 ### 3. Build gate
 
-- `./gradlew test allTests`, then `./gradlew build` (lint on), then `./gradlew detektAll`, and
-  `:androidApp:compileDebugKotlin` for anything that touches UI. `/gate` runs the whole sequence
-  plus the review fan-out.
+```bash
+tools/harness/gate.py run        # runs exactly the stages this change owes, in order
+```
+
+- **Only the runner marks a stage green.** It executes the stage, reads the exit code, and pins the
+  result to a digest of the tree it ran against. A Gradle run made by hand is not recorded — not
+  because hand runs are forbidden (iterate freely), but because nothing outside the runner can prove
+  which code an exit code belonged to.
+- Stages are `checks` (the deterministic project rules), `tests`, `build` (lint on), `detekt`, and
+  `android` when the diff touches UI. Logs land in `.git/skerry-gate/<stage>.log`.
 - detekt fails on **new** findings only; the existing ones sit in `gradle/detekt-baseline-*.xml`.
   Re-baselining (`./gradlew detektBaseline`) to silence your own finding is not allowed — fix it,
   or say out loud why it stays.
-- Run builds **without `| tail` / `| grep`** — the pipe masks the exit code. Redirect to a file and
-  check `echo $?`.
+- After a filtered run (`--tests`), Gradle calls the aggregate task up to date and the next full run
+  "passes" in half a second having run nothing. The runner adds `--rerun` when that has happened;
+  `cleanAllTests` does not fix it.
 - If the build breaks in a way that isn't obviously yours, hand it to `ecc:kotlin-build-resolver`
   (minimal diffs, no architectural edits) instead of reshaping the design around the error.
 - New test added? Re-run it with the fix reverted to prove it actually catches the regression.
+- Editing anything afterwards reopens the gate — the digest moved. That is not pedantry: it is the
+  only way "green" can mean the code being committed.
 
 ### 4. Review gate — ECC fan-out before the PR
 
-Once the branch is green, launch the reviewers **in parallel, in a single message**, scoped to
-`git diff main...HEAD`:
+Once the branch is green, `tools/harness/gate.py reviewers` prints the set this change needs and
+which of them have not run against the current tree. Launch them **in parallel, in a single
+message**, scoped to `git diff main...HEAD` plus the uncommitted worktree:
 
 | Agent | Looks for |
 |---|---|
-| `ecc:kotlin-reviewer` | idiomatic Kotlin, null safety, coroutine/structured-concurrency safety, Compose pitfalls |
-| `ecc:security-reviewer` | secrets, unsafe crypto, injection, untrusted input crossing a boundary |
+| `skerry-reviewer` | this project's own rules — parity, primitives, vault, the abstraction catalogue |
+| `skerry-kotlin-reviewer` | structured concurrency, Compose recomposition, Kotlin idioms — for *this* stack |
+| `skerry-security-reviewer` | the vault, untrusted protocol input, the sync/team boundary |
 | `ecc:silent-failure-hunter` | swallowed exceptions, bad fallbacks, errors that never propagate |
 | `ecc:pr-test-analyzer` | whether the tests actually cover the behaviour, not just the lines |
 
-Add when the diff calls for it: `ecc:performance-optimizer` (hot paths, terminal rendering),
-`ecc:type-design-analyzer` (new domain types), `ecc:comment-analyzer` (comment rot),
-`ecc:a11y-architect` (new UI surfaces), `ecc:database-reviewer` / `ecc:java-reviewer` (server side).
+The first three live in `.claude/agents/` — they ship with the clone, so the fan-out does not
+depend on a plugin installed on one machine. The generic Kotlin and security reviewers were
+replaced because they review a stack this repo does not have (ViewModels, Room, NavController;
+web vulnerabilities in an SSH client).
+
+The harness adds `ecc:a11y-architect`, `ecc:java-reviewer` or `ecc:performance-optimizer` by area,
+and reports them as *skipped* rather than owed when the plugin is not installed — say so in the
+hand-off when that happens. Add by judgement: `ecc:type-design-analyzer` (new domain types),
+`ecc:comment-analyzer` (comment rot), `ecc:database-reviewer` (SQL).
 
 Rules for the fan-out:
 
@@ -116,10 +158,22 @@ Rules for the fan-out:
 `/ecc:kotlin-review`, `/ecc:code-review` and `/ecc:review-pr` are the command shortcuts for the same
 agents when a single-angle pass is enough.
 
-**This stage is enforced, not advisory.** A local hook records every `.kt`/`.kts` edit, every green
-`allTests`/`detektAll` run and every reviewer subagent; `git commit`, `git push` and `gh pr create`
-are refused while the code is newer than either. Documentation-only changes are unaffected. The
-deliberate bypass is `SKERRY_GATE_OVERRIDE=1`, and using it means saying out loud why.
+**The whole loop is enforced, not advisory.** `git commit`, `git push` and `gh pr create` are
+refused until this change has met the requirements for what it is — see the table at the top of this
+section. The guard and the runner read the same policy module, so what is demanded and what is
+reported can never disagree; `tools/harness/gate.py status` always says exactly what is left.
+
+What "verified" is pinned to is **content**, not time: every stage records a digest of the files
+that can affect a build. So an edit made by `sed`, by a patch, or by an editor outside the session
+reopens the gate just as an `Edit` call does, `git commit` does not reopen it, and reverting a change
+restores the green state it had. Documentation-only changes owe nothing at all.
+
+The deliberate bypass is `SKERRY_GATE_OVERRIDE=1` on the command, and using it means saying out loud
+why. It does not unprotect `main`.
+
+The harness has its own tests — `python3 tools/harness/selftest.py`, ~70 cases, two seconds, no
+Gradle. Changing a rule means changing them too; the previous version had no tests and both of its
+holes were found in production.
 
 ### 5. Hand-off
 
