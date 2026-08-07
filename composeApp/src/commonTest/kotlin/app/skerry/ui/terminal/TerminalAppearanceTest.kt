@@ -2,6 +2,7 @@ package app.skerry.ui.terminal
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class TerminalAppearanceTest {
@@ -16,6 +17,19 @@ class TerminalAppearanceTest {
         TerminalFont.entries.forEach { font ->
             assertEquals(font, TerminalFont.fromId(font.id))
         }
+    }
+
+    @Test
+    fun a_cjk_capable_font_is_offered() {
+        // The bundled CJK font is the only one of the three whose glyphs are not resolved through a
+        // platform fallback, so a terminal showing Chinese output keeps one metric across the grid.
+        assertNotNull(TerminalFont.entries.singleOrNull { it.id == "maple-mono" })
+    }
+
+    @Test
+    fun font_ids_are_unique() {
+        val ids = TerminalFont.entries.map { it.id }
+        assertEquals(ids.size, ids.toSet().size)
     }
 
     @Test
