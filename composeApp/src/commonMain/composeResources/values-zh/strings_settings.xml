@@ -30,6 +30,7 @@
     <string name="settings_ai_models_empty">未获取到模型</string>
     <string name="settings_ai_search_models">搜索模型</string>
     <string name="settings_ai_no_matches">无匹配</string>
+    <string name="settings_ai_models_count">共 %1$d 个模型</string>
     <string name="settings_ai_hint_model_selected">模型已选择，请保存</string>
     <string name="settings_ai_hint_key_changed">密钥已变更，请保存</string>
     <string name="settings_ai_hint_endpoint_changed">服务器地址已变更，请保存</string>

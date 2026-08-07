@@ -30,6 +30,7 @@
     <string name="settings_ai_models_empty">No models found</string>
     <string name="settings_ai_search_models">Search models</string>
     <string name="settings_ai_no_matches">No matches</string>
+    <string name="settings_ai_models_count">%1$d models</string>
     <string name="settings_ai_hint_model_selected">Model selected — press Save</string>
     <string name="settings_ai_hint_key_changed">Key changed — press Save</string>
     <string name="settings_ai_hint_endpoint_changed">Address changed — press Save</string>

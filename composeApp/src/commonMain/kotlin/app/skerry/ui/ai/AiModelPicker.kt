@@ -37,6 +37,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.settings_ai_models_count
 import app.skerry.ui.generated.resources.settings_ai_no_matches
 import androidx.compose.foundation.layout.Arrangement
 
@@ -104,6 +105,13 @@ fun ModelPickerMenu(
                     modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { query = "" }.padding(2.dp))
             }
         }
+        // Catalog size, so a refresh's result is visible at a glance (e.g. "321 models").
+        Txt(
+            stringResource(Res.string.settings_ai_models_count, models.size),
+            color = Skerry.colors.faint,
+            size = 11.sp,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+        )
         HLine()
         Column(
             Modifier

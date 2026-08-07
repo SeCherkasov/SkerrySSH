@@ -30,6 +30,7 @@
     <string name="settings_ai_models_empty">Модели не найдены</string>
     <string name="settings_ai_search_models">Поиск моделей</string>
     <string name="settings_ai_no_matches">Нет совпадений</string>
+    <string name="settings_ai_models_count">Всего моделей: %1$d</string>
     <string name="settings_ai_hint_model_selected">Модель выбрана — сохраните</string>
     <string name="settings_ai_hint_key_changed">Ключ изменён — сохраните</string>
     <string name="settings_ai_hint_endpoint_changed">Адрес изменён — сохраните</string>
