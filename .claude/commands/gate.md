@@ -1,67 +1,92 @@
 ---
-description: Run the full pre-PR gate — tests, build, Android compile, then the review fan-out over the branch diff
-argument-hint: "[diff range, default main...HEAD] [--no-review to stop after the build]"
+description: Run the gate this change actually needs — stages by kind and area, then the review fan-out
+argument-hint: "[--no-review] [--stages-only]"
 ---
 
-Run the gate from `CLAUDE.md` → *How we work*, steps 3–4, on the current branch. Don't skip a stage
-because the previous one "looked fine", and don't summarise a stage you didn't run.
-
-**Range**: `$ARGUMENTS` if it names one, otherwise `main...HEAD`.
-
-## Stage 1 — build gate
-
-Refuse to start if `git status --short` is empty **and** the range is empty — there is nothing to
-gate. Otherwise run, in order, writing output to files (a pipe would mask the exit code):
+The gate is not one fixed list. `tools/harness/policy.py` derives it from what the change **is**
+(bug / feature / refactor / docs) and which **areas** it touches. Start by asking it:
 
 ```bash
-LOG_DIR=$(mktemp -d)
-ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk} ./gradlew test allTests > "$LOG_DIR/test.log" 2>&1; echo "tests: $?"
-ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk} ./gradlew build > "$LOG_DIR/build.log" 2>&1; echo "build: $?"
-ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk} ./gradlew detektAll > "$LOG_DIR/detekt.log" 2>&1; echo "detekt: $?"
+tools/harness/gate.py status
 ```
 
-detekt fails on new findings only. **Never** run `detektBaseline` to make your own finding go away —
-fix it, or report to the user why it should stay.
+That prints the kind, where the kind came from, the areas, and everything still owed. If the kind
+is wrong — the branch name is uninformative, or a "chore" branch turned out to be a bug fix —
+declare it before running anything: `tools/harness/gate.py task bug 133`.
 
-If the diff touches `composeApp/` or `androidApp/`, also:
+A **docs** change owes nothing. Say so and stop; do not run Gradle to prove a README is fine.
+
+## Stage 1 — the build stages
 
 ```bash
-ANDROID_HOME=${ANDROID_HOME:-$HOME/Android/Sdk} ./gradlew :androidApp:compileDebugKotlin > "$LOG_DIR/android.log" 2>&1; echo "android: $?"
+tools/harness/gate.py run
 ```
 
-On a non-zero exit: read the failing section of the log, report it, and stop. Don't start the review
-fan-out on a red branch. If the failure is a build/config error rather than a design problem, hand
-it to `ecc:kotlin-build-resolver` (minimal diffs only).
+Runs exactly what is owed, in order, and records each stage against a digest of the tree it ran
+against. Do **not** run Gradle by hand for this: a hand-run task is not recorded, because only the
+runner can tie an exit code to the code it tested. Output goes to `.git/skerry-gate/<stage>.log`;
+the runner prints the tail of a failing one.
 
-## Stage 2 — review fan-out
+Notes that cost time before:
 
-Only when stage 1 is green. Launch **all of these in a single message so they run concurrently**,
-each scoped to the range:
+- detekt fails on **new** findings only. Never run `detektBaseline` to bury your own finding — fix
+  it, or tell the user why it stays.
+- After a filtered test run (`--tests`), Gradle reports the aggregate task as up to date and the
+  next full run passes in half a second having executed nothing. The runner adds `--rerun` itself
+  when that has happened. `cleanAllTests` does not fix it.
+- The runner stops the Gradle and Kotlin daemons when it finishes; together they hang this machine.
+  `--keep-daemons` if you are about to run again.
 
-| Agent | Angle |
-|---|---|
-| `skerry-reviewer` | this project's own rules (parity, i18n, primitives, vault, abstractions) |
-| `ecc:kotlin-reviewer` | idiomatic Kotlin, null safety, coroutines, Compose |
-| `ecc:security-reviewer` | secrets, crypto, injection, untrusted input |
-| `ecc:silent-failure-hunter` | swallowed exceptions, bad fallbacks, errors that vanish |
-| `ecc:pr-test-analyzer` | whether the tests cover the behaviour, not just the lines |
+A failure that is a build or config error rather than a design problem goes to
+`ecc:kotlin-build-resolver` — minimal diffs, no architectural edits.
 
-Add by judgement: `ecc:performance-optimizer` (terminal/rendering hot paths),
-`ecc:type-design-analyzer` (new domain types), `ecc:a11y-architect` (new UI surface),
-`ecc:java-reviewer` or `ecc:database-reviewer` (server changes).
+## Stage 2 — RED, for a bug fix only
 
-Every reviewer prompt must state: the exact range, "read-only, report `file:line` + concrete failure
-scenario", and "never run `git checkout`/`switch`/`stash`/`reset` — the worktree is shared".
+A bug fix owes a test that failed **before** the fix existed. Record it while the bug is still live:
 
-Skip this stage entirely if `$ARGUMENTS` contains `--no-review`.
+```bash
+tools/harness/gate.py red --tests '*ReconcileDebt*' --file shared/src/commonTest/kotlin/.../ReconcileDebtStoreTest.kt
+```
 
-## Stage 3 — triage
+The runner refuses to record a test that passes — a green test before the fix proves nothing — and
+refuses a pattern that matched no test at all. Afterwards the gate checks the sources really changed
+since, so a stale record cannot stand in for a fix.
 
-Reviewers are fallible — **verify each finding against the actual code before acting on it**. Past
+If the bug was already fixed before the test was written, revert the fix, record RED, restore it.
+That is the whole point of step 1 in `CLAUDE.md`.
+
+## Stage 3 — the review fan-out
+
+Only when stage 1 is green, and skipped entirely on `--no-review` or `--stages-only`.
+
+```bash
+tools/harness/gate.py reviewers
+```
+
+prints the reviewers this change needs and which have not run against the current tree. The base
+set is `skerry-reviewer`, `skerry-kotlin-reviewer`, `skerry-security-reviewer`,
+`ecc:silent-failure-hunter`, `ecc:pr-test-analyzer`; a UI change adds `ecc:a11y-architect`, a server
+change `ecc:java-reviewer`, a terminal change `ecc:performance-optimizer`.
+
+An agent listed as `not installed` is not demanded — the ECC plugin is not declared in this repo and
+a contributor without it must still be able to close the gate. When that happens, name the missing
+angle in the hand-off instead of letting a thinner review pass silently.
+
+Launch **all of them in a single message** so they run concurrently. Every reviewer prompt states:
+
+- the exact range — `git diff main...HEAD` plus the uncommitted worktree;
+- "read-only: report `file:line` and a concrete failure scenario, no edits";
+- "never run `git checkout` / `switch` / `stash` / `reset` — the worktree is shared".
+
+Editing code after a reviewer finishes invalidates that reviewer, exactly as it invalidates a build.
+
+## Stage 4 — triage
+
+Reviewers are fallible: **verify each finding against the actual code before acting on it**. Past
 runs produced inflated severities and findings that were already implemented.
 
-Then report to the user as a single table: finding → `file:line` → verdict (fix / reject + reason).
-Nothing gets silently dropped. Apply the fixes that survive triage; any fix that changes behaviour
-goes back through the TDD loop (failing test first). Re-run stage 1 after applying fixes.
+Report to the user as one table: finding → `file:line` → verdict (fix / reject + reason). Nothing is
+dropped silently. A fix that changes behaviour goes back through step 1 — failing test first. Re-run
+`tools/harness/gate.py run` afterwards; the digest changed, so the stages are owed again.
 
 Finish by stating plainly what is still unverified — live device, live server, another OS.

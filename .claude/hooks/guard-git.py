@@ -1,67 +1,46 @@
 #!/usr/bin/env python3
-"""PreToolUse guard for Bash commands in the Skerry repo.
+"""PreToolUse guard on Bash: nothing leaves this worktree ungated.
 
-Three rules, all from CLAUDE.md -> How we work:
-  * `main` is protected: committing or pushing while HEAD is on main is blocked outright.
-  * Code that changed after the last gate run cannot be committed or pushed: the build/detekt run
-    and the reviewer fan-out must both post-date the last .kt/.kts edit (state written by
-    gate-state.py). Set SKERRY_GATE_OVERRIDE=1 to bypass deliberately.
-  * `gh pr create` asks for confirmation on top of that.
+Two rules from CLAUDE.md -> How we work:
 
-Exit 2 blocks the call and hands stderr to the model; a JSON body on stdout with exit 0
-downgrades the call to an explicit confirmation.
+  * `main` is protected — committing or pushing while HEAD is on main is blocked outright.
+  * A change may only be committed, pushed or turned into a PR once it has met the requirements
+    for what it *is*. A docs change owes nothing. A feature owes checks, tests, build, detekt,
+    the Android compile when it touches UI, and the reviewer fan-out. A bug fix owes all of that
+    plus a test recorded failing before the fix existed.
+
+The requirements come from tools/harness/policy.py, the same module `gate.py status` reports from,
+so what the guard demands and what the runner reports can never disagree.
+
+`SKERRY_GATE_OVERRIDE=1` skips the gate requirement — deliberately, and out loud to the user. It
+does not unprotect main.
 """
 
 import json
 import os
 import re
-import subprocess
 import sys
-import time
+
+HOOK_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(os.path.dirname(HOOK_DIR))
+sys.path.insert(0, os.path.join(REPO_ROOT, "tools"))
+
+try:
+    from harness import policy, state
+except ImportError:  # a worktree without the harness must still be usable
+    policy = state = None
 
 # `rtk` transparently prefixes shell commands in this environment, so match through it.
 GIT_WRITE = re.compile(r"(?:^|[;&|]|\s)(?:rtk\s+)?git\s+(?:-\S+\s+)*(commit|push)(?![\w-])")
 PR_CREATE = re.compile(r"(?:^|[;&|]|\s)(?:rtk\s+)?gh\s+pr\s+create\b")
-# A hook reads the environment of the process that spawned it, not the one the command will run in,
+# A hook reads the environment of the process that spawned it, not the one the command runs in,
 # so the documented escape hatch is recognised in the command text as well.
 OVERRIDE = re.compile(r"\bSKERRY_GATE_OVERRIDE=1\b")
 
 
-def current_branch() -> str:
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, timeout=5,
-        )
-        return out.stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return ""
-
-
-def gate_debt() -> list:
-    """Which gate stages are stale relative to the last code edit."""
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "--git-dir"], capture_output=True, text=True, timeout=5
-        )
-        path = os.path.join(out.stdout.strip(), "skerry-gate-state.json")
-        with open(path) as fh:
-            state = json.load(fh)
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return []  # no state yet — nothing was tracked, so nothing to claim
-
-    code = state.get("code")
-    if not code:
-        return []
-    stale = []
-    if code > state.get("build", 0):
-        stale.append("build + tests + detekt")
-    if code > state.get("review", 0):
-        stale.append("reviewer fan-out")
-    if stale:
-        age = int(time.time() - code)
-        stale.append(f"(last code edit {age}s ago)")
-    return stale
+def block(message: str) -> None:
+    sys.stderr.write(message + "\n")
+    sys.exit(2)
 
 
 def ask(reason: str) -> None:
@@ -75,6 +54,23 @@ def ask(reason: str) -> None:
     sys.exit(0)
 
 
+def describe(task: dict, debt: list) -> str:
+    areas = ", ".join(task["areas"]) or "none"
+    lines = [
+        f"Blocked: this is a **{task['kind']}** change ({task['source']}), areas: {areas}.",
+        "It still owes:",
+    ]
+    lines += [f"  - {item}" for item in debt]
+    lines += [
+        "",
+        "Close it with `tools/harness/gate.py run` (build stages) and the reviewer fan-out from",
+        "`/gate`; `tools/harness/gate.py status` shows what is left. If the kind is wrong, declare",
+        "it: `tools/harness/gate.py task <bug|feature|refactor|docs> [ref]`.",
+        "Deliberate bypass: prefix the command with SKERRY_GATE_OVERRIDE=1 and say why to the user.",
+    ]
+    return "\n".join(lines)
+
+
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -85,35 +81,40 @@ def main() -> None:
     if not command:
         sys.exit(0)
 
-    match = GIT_WRITE.search(command)
-    if match and current_branch() == "main":
-        verb = match.group(1)
-        sys.stderr.write(
-            f"Blocked: `git {verb}` while HEAD is on main. This repo is PR-only — "
-            "create a feature branch (`git checkout -b <type>/<slug>`) and open a PR. "
-            "Carry the working tree over with the branch; do not stash or reset it.\n"
+    write = GIT_WRITE.search(command)
+    pr = PR_CREATE.search(command)
+    if not write and not pr:
+        sys.exit(0)  # the expensive part below runs only for the three commands that matter
+
+    if state is None:
+        sys.exit(0)
+
+    if write and state.current_branch() == "main":
+        block(
+            f"Blocked: `git {write.group(1)}` while HEAD is on main. This repo is PR-only — create "
+            "a feature branch (`git checkout -b <kind>/<slug>`; the prefix also tells the harness "
+            "what kind of change this is) and open a PR. Carry the working tree over with the "
+            "branch; do not stash or reset it."
         )
-        sys.exit(2)
 
-    overridden = os.environ.get("SKERRY_GATE_OVERRIDE") == "1" or OVERRIDE.search(command)
-    if (match or PR_CREATE.search(command)) and not overridden:
-        stale = gate_debt()
-        if stale:
-            sys.stderr.write(
-                "Blocked: code changed after the last gate run — stale: "
-                + ", ".join(stale)
-                + ". Run /gate (build + tests + detekt, then the reviewer fan-out) and triage the "
-                "findings first. If this is deliberate, re-run with SKERRY_GATE_OVERRIDE=1 and say "
-                "why in the message to the user.\n"
-            )
-            sys.exit(2)
+    if os.environ.get("SKERRY_GATE_OVERRIDE") == "1" or OVERRIDE.search(command):
+        sys.exit(0)
 
-    if PR_CREATE.search(command):
+    try:
+        task, debt = policy.gate_debt()
+    except Exception as exc:  # a broken harness must not wedge the repo
+        sys.stderr.write(f"harness: gate check failed ({type(exc).__name__}: {exc}); allowing.\n")
+        sys.exit(0)
+
+    if debt:
+        block(describe(task, debt))
+
+    if pr:
         ask(
-            "Opening a PR. Confirm the pre-PR gate actually ran on this branch: "
-            "tests + build + Android compile green, and the review fan-out "
-            "(skerry-reviewer, ecc:kotlin-reviewer, ecc:security-reviewer, "
-            "ecc:silent-failure-hunter) triaged. Run /gate if it did not."
+            f"Opening a PR for a {task['kind']} change. The gate is green for the current tree: "
+            f"{', '.join(policy.required_stages(task)) or 'nothing required'}. Confirm the reviewer "
+            "findings were triaged (fixed or rejected with a reason to the user), and that the PR "
+            "description says what was not verified live."
         )
 
     sys.exit(0)
