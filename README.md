@@ -289,3 +289,4 @@ developed and what a PR has to satisfy are in **[CONTRIBUTING.md](CONTRIBUTING.m
 - Clients (`shared/`, `composeApp/`, `androidApp/`) — [GPL-3.0](LICENSE)
 - Sync server (`server/`) — [AGPL-3.0](server/LICENSE): a fork hosted as a service has to
   contribute its changes back to the project.
+- Bundled fonts — OFL-1.1 and Apache-2.0, texts and versions in [licenses/](licenses/README.md)
