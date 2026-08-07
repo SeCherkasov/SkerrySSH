@@ -14,6 +14,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.readLine
+import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -38,10 +39,13 @@ class OpenAiProvider private constructor(
     private val config: OpenAiConfig,
     private val http: HttpClient,
     private val ownsHttp: Boolean,
+    /** Catalog-only client (never follows redirects, see [listModels]); falls back to the shared one. */
+    private val catalogHttp: HttpClient? = null,
 ) : AiProvider {
 
     /** Shared (external) HttpClient — [close] does NOT close it; the caller owns the client. */
-    constructor(config: OpenAiConfig, http: HttpClient) : this(config, http, ownsHttp = false)
+    constructor(config: OpenAiConfig, http: HttpClient, catalogHttp: HttpClient? = null) :
+        this(config, http, ownsHttp = false, catalogHttp = catalogHttp)
 
     /** Creates and owns its own CIO client — [close] closes it. */
     constructor(config: OpenAiConfig) : this(config, defaultHttpClient(), ownsHttp = true)
@@ -103,15 +107,46 @@ class OpenAiProvider private constructor(
     /**
      * Fetches the model catalog (`GET {baseUrl}/models`) for the BYOK settings refresh button. The
      * key is only used in this request's `Authorization` header, never logged.
+     *
+     * The catalog request never follows redirects: this is the first authenticated `GET` in the
+     * client, and Ktor's default `HttpRedirect` would replay the `Authorization` header against
+     * whatever host a 3xx `Location` names — a one-way ticket for the API key to an arbitrary host.
+     * A 3xx is therefore surfaced as a PROTOCOL failure.
+     *
+     * The response is read with a hard cap and the catalog is trimmed (bounded size, bounded id
+     * length, duplicates/blank dropped): the result lands in a cache file and a non-lazy list, so
+     * a broken or hostile endpoint must not be able to inflate either.
      */
     override suspend fun listModels(): List<String> {
-        val response = http.get("${config.baseUrl}/models") {
+        val client = catalogHttp ?: noRedirectClient
+        val response = client.get("${config.baseUrl}/models") {
             header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
             header(HttpHeaders.Accept, ContentType.Application.Json.toString())
         }
         if (!response.status.isSuccess()) throw errorFor(response.status)
+        // Read with a hard cap. readAvailable fills as much as is currently available in one go,
+        // so loop until EOF (or the cap) instead of trusting a single call to return the whole body
+        // — a large or chunked body would otherwise be truncated mid-JSON.
+        val buffer = ByteArray(MAX_CATALOG_BYTES + 1)
+        val channel = response.bodyAsChannel()
+        var size = 0
+        while (size < buffer.size) {
+            val read = channel.readAvailable(buffer, size, buffer.size - size)
+            if (read <= 0) break // EOF
+            size += read
+        }
+        if (size > MAX_CATALOG_BYTES) {
+            throw AiException(AiException.Kind.PROTOCOL, "Model catalog response exceeds $MAX_CATALOG_BYTES bytes")
+        }
+        val body = buffer.decodeToString(0, size)
         return try {
-            json.decodeFromString(ModelsWire.serializer(), response.bodyAsText()).data.map { it.id }
+            json.decodeFromString(ModelsWire.serializer(), body).data
+                .asSequence()
+                .map { it.id }
+                .filter { it.isNotBlank() && it.length <= MAX_MODEL_ID_LENGTH }
+                .distinct()
+                .take(MAX_CATALOG_SIZE)
+                .toList()
         } catch (e: Exception) {
             throw AiException(AiException.Kind.PROTOCOL, "Malformed model catalog", e)
         }
@@ -122,6 +157,9 @@ class OpenAiProvider private constructor(
     }
 
     private fun errorFor(status: HttpStatusCode): AiException = when (status.value) {
+        // Redirects are not followed (see listModels) — an authenticated GET must never be replayed
+        // against whatever host a 3xx Location names.
+        in 300..399 -> AiException(AiException.Kind.PROTOCOL, "AI provider redirected the request ($status)")
         401, 403 -> AiException(AiException.Kind.UNAUTHORIZED, "AI provider rejected the API key ($status)")
         429 -> AiException(AiException.Kind.RATE_LIMITED, "AI provider rate limit ($status)")
         400, 404, 422 -> AiException(AiException.Kind.INVALID_REQUEST, "AI provider rejected the request ($status)")
@@ -132,9 +170,23 @@ class OpenAiProvider private constructor(
         /** Provider over a shared process-wide HttpClient (the CIO engine isn't recreated per request). */
         fun pooled(config: OpenAiConfig): OpenAiProvider = OpenAiProvider(config, shared)
 
+        /**
+         * Catalog-only shared client with redirects disabled: the model catalog is the one
+         * authenticated `GET` in the client, so it must not follow a 3xx to another host with the
+         * `Authorization` header attached (see [listModels]).
+         */
+        private val noRedirectClient: HttpClient by lazy {
+            HttpClient(CIO) { followRedirects = false }
+        }
+
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
         private val shared: HttpClient by lazy { defaultHttpClient() }
         private fun defaultHttpClient(): HttpClient = HttpClient(CIO)
+
+        /** Hard caps for the model catalog: the endpoint is remote and possibly broken or hostile. */
+        const val MAX_CATALOG_SIZE = 2000
+        const val MAX_MODEL_ID_LENGTH = 200
+        const val MAX_CATALOG_BYTES = 1_048_576 // 1 MiB
     }
 }
 

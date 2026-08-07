@@ -3,18 +3,18 @@ package app.skerry.ui.ai
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,11 +35,10 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
-import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_ai_models_count
 import app.skerry.ui.generated.resources.settings_ai_no_matches
-import androidx.compose.foundation.layout.Arrangement
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * AI model picker menu: a search box on top (fuzzy filter over the model catalog) with the
@@ -50,7 +49,7 @@ import androidx.compose.foundation.layout.Arrangement
  */
 @Composable
 fun ModelPickerMenu(
-    width: Dp,
+    modifier: Modifier = Modifier,
     models: List<String>,
     selected: String,
     favorites: Set<String>,
@@ -68,8 +67,7 @@ fun ModelPickerMenu(
         base.sortedBy { it !in favorites }
     }
     Column(
-        Modifier
-            .width(width)
+        modifier
             .heightIn(max = maxHeight)
             .clip(RoundedCornerShape(8.dp))
             .background(Skerry.colors.surface2)
@@ -113,21 +111,21 @@ fun ModelPickerMenu(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
         )
         HLine()
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(max = (maxHeight - 40.dp).coerceAtLeast(120.dp))
-                .verticalScroll(rememberScrollState()),
-        ) {
-            if (filtered.isEmpty()) {
-                Txt(
-                    if (models.isEmpty()) emptyText else stringResource(Res.string.settings_ai_no_matches),
-                    color = Skerry.colors.faint,
-                    size = 12.5.sp,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                )
-            } else {
-                filtered.forEach { m ->
+        if (filtered.isEmpty()) {
+            Txt(
+                if (models.isEmpty()) emptyText else stringResource(Res.string.settings_ai_no_matches),
+                color = Skerry.colors.faint,
+                size = 12.5.sp,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        } else {
+            // Lazy: a refreshed catalog can hold hundreds of entries; composing every row up front
+            // would be wasted work the moment the menu is opened. weight(1f) inside the heightIn-
+            // capped column lets layout compute the list height from the header, no magic constant.
+            LazyColumn(
+                Modifier.fillMaxWidth().weight(1f),
+            ) {
+                items(filtered, key = { it }) { m ->
                     val starred = m in favorites
                     Row(
                         Modifier.fillMaxWidth().clickable { onSelect(m) }.padding(horizontal = 12.dp, vertical = 9.dp),

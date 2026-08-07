@@ -17,7 +17,7 @@
     <string name="settings_ai_live_subtitle">AI 助手提供商与设置。</string>
     <string name="settings_ai_field_api_key">OPENAI API 密钥</string>
     <string name="settings_ai_field_model">模型</string>
-    <string name="settings_ai_field_endpoint">服务器地址</string>
+    <string name="settings_ai_field_endpoint">接口地址</string>
     <string name="settings_ai_placeholder_api_key">sk-…</string>
     <string name="settings_ai_placeholder_model">gpt-4o-mini</string>
     <string name="settings_ai_placeholder_endpoint">https://api.openai.com/v1</string>
@@ -147,7 +147,7 @@
     <string name="settings_security_biometric_recheck">重新检查</string>
     <string name="settings_security_biometric_weak_binding">已启用，但密钥绑定较弱 — 仍需生物识别。</string>
     <string name="settings_security_auto_lock">自动锁定</string>
-    <string name="settings_security_auto_lock_desc">空闲后锁定，桌面端最小化亦会锁定。</string>
+    <string name="settings_security_auto_lock_desc">空闲后锁定。</string>
     <string name="settings_autolock_1m">1 分钟后</string>
     <string name="settings_autolock_5m">5 分钟后</string>
     <string name="settings_autolock_15m">15 分钟后</string>
@@ -253,22 +253,4 @@
     <string name="settings_trash_locked">解锁保险库以查看回收站</string>
     <string name="settings_terminal_prod_warnings">在生产环境确认警告级命令</string>
     <string name="settings_terminal_prod_warnings_desc">在带 #prod 标签的主机上，除危险命令外也确认警告级命令（kill、停止服务、卸载软件包）。root 会话不适用 sudo 规则（在那里没有意义），但无论如何都会确认破坏性警告。</string>
-    <string name="settings_backup_title">数据备份</string>
-    <string name="settings_backup_desc">导出或导入账号同步的全部数据（主机、片段、运行手册、密钥）。</string>
-    <string name="settings_backup_export">导出数据…</string>
-    <string name="settings_backup_import">导入数据…</string>
-    <string name="settings_backup_pw_label">主密码</string>
-    <string name="settings_backup_pw_hint">输入主密码以解锁备份。</string>
-    <string name="settings_backup_encrypt_sub">导出数据为加密格式，使用主密码派生的密钥加密。</string>
-    <string name="settings_backup_export_action">导出</string>
-    <string name="settings_backup_import_action">导入</string>
-    <string name="settings_backup_import_records">备份中包含 %1$d 条记录</string>
-    <string name="settings_backup_encrypted_note">此备份已加密，输入主密码以读取。</string>
-    <string name="settings_backup_merge">合并</string>
-    <string name="settings_backup_merge_sub">保留现有数据，备份中较新的记录生效。</string>
-    <string name="settings_backup_replace">覆盖</string>
-    <string name="settings_backup_replace_sub">将先删除当前全部同步数据。</string>
-    <string name="settings_backup_import_confirm">确认覆盖</string>
-    <string name="settings_backup_err_password">主密码错误</string>
-    <string name="settings_backup_err_corrupted">此文件不是有效的备份</string>
 </resources>

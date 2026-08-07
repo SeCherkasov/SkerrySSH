@@ -17,7 +17,7 @@
     <string name="settings_ai_live_subtitle">AI assistant provider and settings.</string>
     <string name="settings_ai_field_api_key">OPENAI API KEY</string>
     <string name="settings_ai_field_model">MODEL</string>
-    <string name="settings_ai_field_endpoint">ENDPOINT</string>
+    <string name="settings_ai_field_endpoint">API URL</string>
     <string name="settings_ai_placeholder_api_key">sk-…</string>
     <string name="settings_ai_placeholder_model">gpt-4o-mini</string>
     <string name="settings_ai_placeholder_endpoint">https://api.openai.com/v1</string>
@@ -147,7 +147,7 @@
     <string name="settings_security_biometric_recheck">Check again</string>
     <string name="settings_security_biometric_weak_binding">On with a weaker key binding — biometrics still required.</string>
     <string name="settings_security_auto_lock">Auto-lock</string>
-    <string name="settings_security_auto_lock_desc">Lock after idle; minimizing on desktop locks it too.</string>
+    <string name="settings_security_auto_lock_desc">Lock after idle.</string>
     <string name="settings_autolock_1m">After 1 minute</string>
     <string name="settings_autolock_5m">After 5 minutes</string>
     <string name="settings_autolock_15m">After 15 minutes</string>
@@ -253,22 +253,4 @@
     <string name="settings_trash_locked">Unlock the vault to see the trash</string>
     <string name="settings_terminal_prod_warnings">Confirm warnings on production</string>
     <string name="settings_terminal_prod_warnings_desc">On hosts tagged #prod also confirm warnings (kill, stopping a service, uninstalling a package), not only dangerous commands. A root session drops the sudo rule — it says nothing there — and confirms destructive warnings either way.</string>
-    <string name="settings_backup_title">Data backup</string>
-    <string name="settings_backup_desc">Export or import everything the account syncs (hosts, snippets, runbooks, keys).</string>
-    <string name="settings_backup_export">Export data…</string>
-    <string name="settings_backup_import">Import data…</string>
-    <string name="settings_backup_pw_label">Master password</string>
-    <string name="settings_backup_pw_hint">Confirm your master password to unlock the backup.</string>
-    <string name="settings_backup_encrypt_sub">The backup is always encrypted — sealed with a key derived from your master password.</string>
-    <string name="settings_backup_export_action">Export</string>
-    <string name="settings_backup_import_action">Import</string>
-    <string name="settings_backup_import_records">%1$d record(s) in this backup</string>
-    <string name="settings_backup_encrypted_note">This backup is encrypted — enter your master password to read it.</string>
-    <string name="settings_backup_merge">Merge</string>
-    <string name="settings_backup_merge_sub">Existing data stays; the backup wins where it is newer.</string>
-    <string name="settings_backup_replace">Replace</string>
-    <string name="settings_backup_replace_sub">Deletes ALL current synced data first.</string>
-    <string name="settings_backup_import_confirm">Confirm replace</string>
-    <string name="settings_backup_err_password">Wrong master password</string>
-    <string name="settings_backup_err_corrupted">This file is not a valid backup</string>
 </resources>

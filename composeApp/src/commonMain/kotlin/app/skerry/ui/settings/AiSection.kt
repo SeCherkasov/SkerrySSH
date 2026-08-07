@@ -9,13 +9,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,16 +24,14 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.ai.AiException
 import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.ai.AiRole
-import app.skerry.ui.AiModelCache
 import app.skerry.ui.ai.AiChatBubble
-import app.skerry.ui.ai.AiFailure
 import app.skerry.ui.ai.AiQuickChatHeader
+import app.skerry.ui.ai.ByokHints
 import app.skerry.ui.ai.aiFailureMessage
 import app.skerry.ui.ai.isInsecureAiEndpoint
-import app.skerry.ui.ai.toFailure
+import app.skerry.ui.ai.rememberByokModelState
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.ai.ModelPickerMenu
@@ -91,8 +88,6 @@ import app.skerry.ui.generated.resources.settings_clear
 import app.skerry.ui.generated.resources.settings_save
 import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.sync.SyncField
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 
@@ -176,57 +171,35 @@ private fun LiveAiSection(ai: app.skerry.ui.ai.AiAssistantController) {
  */
 @Composable
 private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
-    var key by remember(ai.settings) { mutableStateOf(ai.settings.apiKey) }
-    var model by remember(ai.settings) { mutableStateOf(ai.settings.model) }
-    var baseUrl by remember(ai.settings) { mutableStateOf(ai.settings.baseUrl) }
-    var models by remember(ai.settings) { mutableStateOf(AiModelCache.load(baseUrl)) }
-    var favorites by remember(ai.settings) { mutableStateOf(AiModelCache.loadFavorites(baseUrl)) }
-    var refreshing by remember { mutableStateOf(false) }
-    var refreshFailure by remember { mutableStateOf<AiFailure?>(null) }
-    var modelMenuOpen by remember { mutableStateOf(false) }
-    // Status hint next to the action buttons: Pending stays until superseded (e.g. "key changed —
-    // press Save", "refreshing…"), Flash clears itself after 3s (e.g. "models refreshed", "saved").
-    var hint by remember { mutableStateOf<String?>(null) }
-    var hintFlash by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(hint, hintFlash) {
-        if (hint != null && hintFlash) {
-            delay(3000)
-            hint = null
-        }
-    }
     // Hint texts must be resolved here (composable context) — stringResource is @Composable and
     // cannot be called from onChange/onClick lambdas.
-    val hintEndpoint = stringResource(Res.string.settings_ai_hint_endpoint_changed)
-    val hintKey = stringResource(Res.string.settings_ai_hint_key_changed)
-    val hintModel = stringResource(Res.string.settings_ai_hint_model_selected)
-    val hintRefreshing = stringResource(Res.string.settings_ai_refreshing_models)
-    val hintRefreshed = stringResource(Res.string.settings_ai_refresh_done)
-    val hintSaved = stringResource(Res.string.settings_ai_saved)
+    val hints = ByokHints(
+        endpointChanged = stringResource(Res.string.settings_ai_hint_endpoint_changed),
+        keyChanged = stringResource(Res.string.settings_ai_hint_key_changed),
+        modelSelected = stringResource(Res.string.settings_ai_hint_model_selected),
+        refreshing = stringResource(Res.string.settings_ai_refreshing_models),
+        refreshed = stringResource(Res.string.settings_ai_refresh_done),
+        saved = stringResource(Res.string.settings_ai_saved),
+    )
+    val byok = rememberByokModelState(ai, hints)
 
     // ① Server address (endpoint). First: it is what the other two fields talk to.
     FieldLabel(stringResource(Res.string.settings_ai_field_endpoint), top = 10.dp)
     SyncField(
-        placeholder = stringResource(Res.string.settings_ai_placeholder_endpoint), value = baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next,
-        onChange = {
-            baseUrl = it
-            hint = hintEndpoint; hintFlash = false
-        },
+        placeholder = stringResource(Res.string.settings_ai_placeholder_endpoint), value = byok.baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next,
+        onChange = byok::onEndpointChange,
     )
     // http:// sends the API key and prompt (with secrets under Permissive) in cleartext; warn,
     // except for localhost where cleartext is intentional for a local proxy.
-    if (isInsecureAiEndpoint(baseUrl)) {
+    if (isInsecureAiEndpoint(byok.baseUrl)) {
         Txt(stringResource(Res.string.sync_insecure_url_warning), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
     }
 
     // ② API key.
     FieldLabel(stringResource(Res.string.settings_ai_field_api_key))
     SyncField(
-        placeholder = stringResource(Res.string.settings_ai_placeholder_api_key), value = key, icon = "key", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true,
-        onChange = {
-            key = it
-            hint = hintKey; hintFlash = false
-        },
+        placeholder = stringResource(Res.string.settings_ai_placeholder_api_key), value = byok.key, icon = "key", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true,
+        onChange = byok::onKeyChange,
     )
 
     // ③ Model: editable combo — type freely, or pick from the catalog the refresh button fetched.
@@ -235,80 +208,56 @@ private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
     // full row width; a small trigger would pop a tiny menu that squeezes long model names and can
     // overflow the window edge on narrow layouts.
     AnchoredDropdown(
-        expanded = modelMenuOpen,
-        onDismiss = { modelMenuOpen = false },
+        expanded = byok.modelMenuOpen,
+        onDismiss = { byok.modelMenuOpen = false },
         trigger = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
-                    SyncField(placeholder = stringResource(Res.string.settings_ai_placeholder_model), value = model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Done, onChange = { model = it })
+                    SyncField(placeholder = stringResource(Res.string.settings_ai_placeholder_model), value = byok.model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Done, onChange = { byok.model = it })
                 }
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(7.dp))
                         .background(Skerry.colors.bg)
                         .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                        .clickable(enabled = models.isNotEmpty()) { modelMenuOpen = !modelMenuOpen }
+                        // Opens even with an empty catalog: the menu then explains itself with
+                        // "No models found" instead of a silent no-op before the first refresh.
+                        .clickable { byok.modelMenuOpen = !byok.modelMenuOpen }
                         .padding(horizontal = 10.dp, vertical = 11.dp),
                 ) { Sym("expand_more", size = 16.sp, color = Skerry.colors.faint) }
             }
         },
         menu = { width ->
             ModelPickerMenu(
-                width = width,
-                models = models,
-                selected = model,
-                favorites = favorites,
-                onToggleFavorite = { id ->
-                    favorites = if (id in favorites) favorites - id else favorites + id
-                    AiModelCache.saveFavorite(baseUrl, id, id in favorites)
-                },
-                onSelect = { m ->
-                    model = m
-                    modelMenuOpen = false
-                    // Picking fills the field; nothing is persisted until Save (visible hint reminds that).
-                    hint = hintModel; hintFlash = false
-                },
+                modifier = Modifier.width(width),
+                models = byok.models,
+                selected = byok.model,
+                favorites = byok.favorites,
+                onToggleFavorite = byok::toggleFavorite,
+                onSelect = byok::onSelectModel,
                 emptyText = stringResource(Res.string.settings_ai_models_empty),
                 searchPlaceholder = stringResource(Res.string.settings_ai_search_models),
             )
         },
     )
-    refreshFailure?.let { failure ->
+    byok.refreshFailure?.let { failure ->
         Txt(aiFailureMessage(failure), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
     }
 
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
         PrimaryButton(stringResource(Res.string.settings_save), onClick = {
-            ai.save(key, model, baseUrl)
-            hint = hintSaved; hintFlash = true
+            ai.save(byok.key, byok.model, byok.baseUrl)
+            byok.markSaved()
         })
         ChipButton(
-            if (refreshing) stringResource(Res.string.settings_ai_refreshing) else stringResource(Res.string.settings_ai_refresh_models),
+            if (byok.refreshing) stringResource(Res.string.settings_ai_refreshing) else stringResource(Res.string.settings_ai_refresh_models),
             color = Skerry.colors.cyan,
-            onClick = {
-                refreshFailure = null
-                refreshing = true
-                hint = hintRefreshing; hintFlash = false
-                scope.launch {
-                    val result = ai.listModels(key, baseUrl)
-                    refreshing = false
-                    result.fold(
-                        onSuccess = { fetched ->
-                            models = fetched
-                            AiModelCache.save(baseUrl, fetched)
-                            hint = hintRefreshed; hintFlash = true
-                        },
-                        onFailure = { e ->
-                            refreshFailure = if (e is AiException) e.toFailure() else AiFailure.UNKNOWN
-                            hint = null
-                        },
-                    )
-                }
-            },
-            enabled = key.isNotBlank() && baseUrl.isNotBlank() && !refreshing,
+            onClick = byok::refresh,
+            // Local proxies (Ollama, LM Studio, …) take no API key — an endpoint alone is enough.
+            enabled = byok.baseUrl.isNotBlank() && !byok.refreshing,
         )
-        if (hint != null) Txt(hint!!, color = if (hintFlash) Skerry.colors.moss else Skerry.colors.amber, size = 11.5.sp)
+        if (byok.hint != null) Txt(byok.hint!!, color = if (byok.hintFlash) Skerry.colors.moss else Skerry.colors.amber, size = 11.5.sp)
         else if (ai.isConfigured) Txt(stringResource(Res.string.settings_ai_key_saved), color = Skerry.colors.moss, size = 11.5.sp)
         else Txt(stringResource(Res.string.settings_ai_not_configured), color = Skerry.colors.faint, size = 11.5.sp)
     }

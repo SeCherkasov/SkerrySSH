@@ -80,10 +80,12 @@ fun DropdownMenuColumn(width: Dp, maxHeight: Dp = 320.dp, content: @Composable (
         Modifier
             .width(width)
             .heightIn(max = maxHeight)
-            .verticalScroll(rememberScrollState())
             .clip(RoundedCornerShape(8.dp))
             .background(Skerry.colors.surface2)
-            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)),
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp))
+            // scroll AFTER the surface/border modifiers: they must bound the viewport, not the
+            // full (unscrolled) content height, or the frame slides away and overflows the popup.
+            .verticalScroll(rememberScrollState()),
     ) { content() }
 }
 

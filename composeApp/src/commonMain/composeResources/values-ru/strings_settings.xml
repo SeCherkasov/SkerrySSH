@@ -17,7 +17,7 @@
     <string name="settings_ai_live_subtitle">Провайдер и настройки AI-ассистента.</string>
     <string name="settings_ai_field_api_key">КЛЮЧ API OPENAI</string>
     <string name="settings_ai_field_model">МОДЕЛЬ</string>
-    <string name="settings_ai_field_endpoint">АДРЕС</string>
+    <string name="settings_ai_field_endpoint">API URL</string>
     <string name="settings_ai_placeholder_api_key">sk-…</string>
     <string name="settings_ai_placeholder_model">gpt-4o-mini</string>
     <string name="settings_ai_placeholder_endpoint">https://api.openai.com/v1</string>
@@ -147,7 +147,7 @@
     <string name="settings_security_biometric_recheck">Проверить снова</string>
     <string name="settings_security_biometric_weak_binding">Включено с ослабленной привязкой ключа — биометрия по-прежнему нужна.</string>
     <string name="settings_security_auto_lock">Автоблокировка</string>
-    <string name="settings_security_auto_lock_desc">Блокировка после простоя; сворачивание на десктопе тоже блокирует.</string>
+    <string name="settings_security_auto_lock_desc">Блокировка после простоя.</string>
     <string name="settings_autolock_1m">Через 1 минуту</string>
     <string name="settings_autolock_5m">Через 5 минут</string>
     <string name="settings_autolock_15m">Через 15 минут</string>
@@ -253,22 +253,4 @@
     <string name="settings_trash_locked">Разблокируйте хранилище, чтобы увидеть корзину</string>
     <string name="settings_terminal_prod_warnings">Подтверждать предупреждения на проде</string>
     <string name="settings_terminal_prod_warnings_desc">На хостах с тегом #prod спрашивать не только на опасных командах, но и на предупреждениях (kill, остановка сервиса, удаление пакета). В сессии под root правило про sudo не действует — там оно ничего не значит, — а разрушительные предупреждения подтверждаются в любом случае.</string>
-    <string name="settings_backup_title">Резервная копия</string>
-    <string name="settings_backup_desc">Экспорт или импорт всех синхронизируемых данных (хосты, сниппеты, сценарии, ключи).</string>
-    <string name="settings_backup_export">Экспорт…</string>
-    <string name="settings_backup_import">Импорт…</string>
-    <string name="settings_backup_pw_label">Основной пароль</string>
-    <string name="settings_backup_pw_hint">Введите основной пароль для разблокировки копии.</string>
-    <string name="settings_backup_encrypt_sub">Резервная копия всегда зашифрована — ключом, полученным из основного пароля.</string>
-    <string name="settings_backup_export_action">Экспорт</string>
-    <string name="settings_backup_import_action">Импорт</string>
-    <string name="settings_backup_import_records">В резервной копии %1$d записей</string>
-    <string name="settings_backup_encrypted_note">Копия зашифрована — введите основной пароль.</string>
-    <string name="settings_backup_merge">Объединить</string>
-    <string name="settings_backup_merge_sub">Существующие данные сохраняются; новые записи из копии применяются.</string>
-    <string name="settings_backup_replace">Заменить</string>
-    <string name="settings_backup_replace_sub">Сначала удалит ВСЕ текущие синхронизируемые данные.</string>
-    <string name="settings_backup_import_confirm">Подтвердить замену</string>
-    <string name="settings_backup_err_password">Неверный основной пароль</string>
-    <string name="settings_backup_err_corrupted">Файл не является резервной копией</string>
 </resources>

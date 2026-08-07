@@ -4,6 +4,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.request.HttpRequestData
+import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
@@ -109,5 +110,102 @@ class OpenAiProviderTest {
 
         val ex = assertFailsWith<AiException> { provider.chat(request).toList() }
         assertEquals(AiException.Kind.RATE_LIMITED, ex.kind)
+    }
+
+    // ---- listModels (the BYOK model catalog) ----
+
+    /** A mock client with redirects disabled, as the catalog request requires (see OpenAiProvider). */
+    private fun catalogClient(status: HttpStatusCode, body: String, headers: Headers = headersOf(HttpHeaders.ContentType, "application/json")): HttpClient =
+        HttpClient(MockEngine { req ->
+            lastRequest = req
+            respond(content = body, status = status, headers = headers)
+        }) { followRedirects = false }
+
+    private fun providerWithCatalog(client: HttpClient): OpenAiProvider =
+        OpenAiProvider(OpenAiConfig(apiKey = "sk-secret", baseUrl = "https://api.example.com/v1"), client, catalogHttp = client)
+
+    @Test
+    fun `listModels returns the advertised model ids`() = runTest {
+        val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, """{"data":[{"id":"gpt-4o-mini"},{"id":"gpt-4o"}]}"""))
+
+        val ids = provider.listModels()
+
+        assertEquals(listOf("gpt-4o-mini", "gpt-4o"), ids)
+        assertTrue(lastRequest.url.toString().endsWith("/models"), "url was ${lastRequest.url}")
+        assertEquals("Bearer sk-secret", lastRequest.headers[HttpHeaders.Authorization])
+    }
+
+    @Test
+    fun `listModels maps an empty data array to an empty list`() = runTest {
+        val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, """{"data":[]}"""))
+
+        assertEquals(emptyList(), provider.listModels())
+    }
+
+    @Test
+    fun `listModels maps a non-JSON body to PROTOCOL`() = runTest {
+        val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, "not json"))
+
+        val ex = assertFailsWith<AiException> { provider.listModels() }
+        assertEquals(AiException.Kind.PROTOCOL, ex.kind)
+    }
+
+    @Test
+    fun `listModels maps 401 to UNAUTHORIZED`() = runTest {
+        val provider = providerWithCatalog(catalogClient(HttpStatusCode.Unauthorized, """{"error":{"message":"nope"}}"""))
+
+        val ex = assertFailsWith<AiException> { provider.listModels() }
+        assertEquals(AiException.Kind.UNAUTHORIZED, ex.kind)
+    }
+
+    @Test
+    fun `listModels treats a redirect as PROTOCOL instead of following it`() = runTest {
+        // The one place the client must never follow a 3xx: following would replay the
+        // Authorization header against whatever host Location names.
+        val provider = providerWithCatalog(
+            catalogClient(
+                HttpStatusCode.Found,
+                "",
+                headersOf(
+                    HttpHeaders.Location to listOf("https://evil.example.com/models"),
+                    HttpHeaders.ContentType to listOf("application/json"),
+                ),
+            ),
+        )
+
+        val ex = assertFailsWith<AiException> { provider.listModels() }
+        assertEquals(AiException.Kind.PROTOCOL, ex.kind)
+        assertTrue(lastRequest.url.toString().endsWith("/models"), "must not follow the redirect, got ${lastRequest.url}")
+    }
+
+    @Test
+    fun `listModels drops blank and over-length ids and de-duplicates`() = runTest {
+        val long = "x".repeat(300)
+        val body = """{"data":[{"id":""},{"id":"$long"},{"id":"gpt-4o"},{"id":"gpt-4o"},{"id":"   "}]}"""
+        val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, body))
+
+        assertEquals(listOf("gpt-4o"), provider.listModels())
+    }
+
+    @Test
+    fun `listModels caps the catalog size`() = runTest {
+        val ids = (0 until 2500).joinToString(",") { """{"id":"model-$it"}""" }
+        val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, """{"data":[$ids]}"""))
+
+        val models = provider.listModels()
+        assertEquals(OpenAiProvider.MAX_CATALOG_SIZE, models.size)
+        assertEquals("model-0", models.first())
+        assertEquals("model-${OpenAiProvider.MAX_CATALOG_SIZE - 1}", models.last())
+    }
+
+    @Test
+    fun `listModels caps the response body`() = runTest {
+        // A body far larger than the cap is truncated before parsing (a hostile endpoint must not
+        // get its whole payload into memory), and the truncation fails JSON parsing -> PROTOCOL.
+        val huge = "x".repeat(OpenAiProvider.MAX_CATALOG_BYTES + 1024)
+        val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, """{"data":[{"id":"$huge"}]}"""))
+
+        val ex = assertFailsWith<AiException> { provider.listModels() }
+        assertEquals(AiException.Kind.PROTOCOL, ex.kind)
     }
 }
