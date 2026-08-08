@@ -86,13 +86,20 @@ class NewConnectionFormState {
      */
     fun chooseConnectionType(type: ConnectionType) {
         if (type == connectionType) return
-        if (port.trim() == defaultPortFor(connectionType).toString()) {
+        if (isDefaultPort) {
             port = defaultPortFor(type).toString()
         }
         if (!type.usesSshAuth) jumpHostId = null
         if (type.isVnc) dropNonVncAuth()
         connectionType = type
     }
+
+    /**
+     * True while [port] still holds the current transport's default — the value the form filled in
+     * itself, not one the user typed. Drives the port substitution in [chooseConnectionType] and
+     * the select-on-focus rule of the port field.
+     */
+    val isDefaultPort: Boolean get() = port.trim() == defaultPortFor(connectionType).toString()
 
     /**
      * VNC auth is password-only: leftover key state — or an already-picked saved secret, possibly

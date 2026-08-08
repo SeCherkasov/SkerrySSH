@@ -39,6 +39,8 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ports_no_saved_hosts
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -53,17 +55,20 @@ internal fun EditField(
     placeholder: String,
     mono: FontFamily,
     keyboardType: KeyboardType = KeyboardType.Text,
+    /** See `ModalTextField`: select the prefilled value on focus so the next keystroke replaces it. */
+    selectAllOnFocus: Boolean = false,
 ) {
     val textColor = Skerry.colors.text
     val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 12.5.sp, fontFamily = mono) }
+    val draft = rememberFieldDraft(value, selectAllOnFocus)
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         singleLine = true,
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Box(fieldBox()) {
                 if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 12.5.sp, font = mono)

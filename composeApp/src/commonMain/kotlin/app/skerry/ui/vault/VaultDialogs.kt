@@ -110,6 +110,8 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.shared.ssh.keyFileSiblingRef
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 
 @Composable
@@ -283,7 +285,8 @@ internal fun RenameSecretDialog(currentLabel: String, onDismiss: () -> Unit, onC
     val trimmed = name.trim()
     val valid = trimmed.isNotEmpty() && trimmed != currentLabel
     VaultDialogScaffold(stringResource(Res.string.vault_rename_title, currentLabel), null, onDismiss) {
-        DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = currentLabel)
+        // The old label arrives prefilled: select it so typing replaces the name outright.
+        DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = currentLabel, selectAllOnFocus = name == currentLabel)
         DialogButtons(confirmLabel = stringResource(Res.string.vault_rename), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onConfirm(trimmed) })
     }
 }
@@ -351,6 +354,8 @@ internal fun DialogField(
     // Explicit keyboard type override: for visible but sensitive fields (PEM key) set
     // KeyboardType.Password — disables IME autocorrect/dictionary without visually masking input.
     keyboardType: KeyboardType? = null,
+    /** See `ModalTextField`: select the prefilled value on focus so the next keystroke replaces it. */
+    selectAllOnFocus: Boolean = false,
 ) {
     val ui = LocalFonts.current.ui
     val mono = LocalFonts.current.mono
@@ -383,14 +388,15 @@ internal fun DialogField(
             now = withFrameNanos { it }
         }
     }
+    val draft = rememberFieldDraft(value, selectAllOnFocus, masked = password, singleLine = singleLine)
     Column {
         Txt(label, color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
         // Capsule/padding live in decorationBox so a click anywhere in the field (incl. the empty area
         // below the caret in multi-line PEM/certificate fields) places the caret.
         BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth().onFocusChanged { focused = it.isFocused },
+            value = draft.textFieldValue(value),
+            onValueChange = { draft.accept(it, value, onValueChange) },
+            modifier = Modifier.fillMaxWidth().fieldFocus(draft).onFocusChanged { focused = it.isFocused },
             singleLine = singleLine,
             textStyle = style,
             cursorBrush = SolidColor(Skerry.colors.cyan),

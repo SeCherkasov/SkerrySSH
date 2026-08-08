@@ -111,6 +111,21 @@ class NewConnectionFormStateTest {
     }
 
     @Test
+    fun default_port_is_recognized_per_transport() {
+        val f = NewConnectionFormState()
+        assertTrue(f.isDefaultPort) // untouched SSH form
+        f.port = " 22 "
+        assertTrue(f.isDefaultPort) // the field is trimmed on the way into the draft
+        f.port = "2222"
+        assertFalse(f.isDefaultPort)
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.RDP)
+        assertEquals("2222", f.port) // a customized port survives the switch
+        assertFalse(f.isDefaultPort)
+        f.port = "3389"
+        assertTrue(f.isDefaultPort) // RDP's own default, not SSH's
+    }
+
+    @Test
     fun switching_away_from_ssh_drops_the_jump_host() {
         val f = NewConnectionFormState().apply { jumpHostId = "bastion-1" }
         f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.TELNET)

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """The gate runner — the only thing that can mark a stage green.
 
 The previous recorder inferred a green build from the *text* of a Bash command and the tool's

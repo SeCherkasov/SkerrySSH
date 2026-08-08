@@ -240,7 +240,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                         MobileFormInput(form.username, { form.username = it }, "root")
                     }
                     MobileFormField(stringResource(Res.string.conn_field_port), Modifier.width(84.dp)) {
-                        MobileFormInput(form.port, { form.port = it }, "22", keyboardType = KeyboardType.Number)
+                        MobileFormInput(form.port, { form.port = it }, "22", keyboardType = KeyboardType.Number, selectAllOnFocus = form.isDefaultPort)
                     }
                 }
                 Spacer(Modifier.height(14.dp))
@@ -264,7 +264,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                         MobileFormInput(form.username, { form.username = it }, "Administrator")
                     }
                     MobileFormField(stringResource(Res.string.conn_field_port), Modifier.width(84.dp)) {
-                        MobileFormInput(form.port, { form.port = it }, "3389", keyboardType = KeyboardType.Number)
+                        MobileFormInput(form.port, { form.port = it }, "3389", keyboardType = KeyboardType.Number, selectAllOnFocus = form.isDefaultPort)
                     }
                 }
                 Spacer(Modifier.height(14.dp))
@@ -287,7 +287,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             } else if (form.connectionType.isVnc) {
                 // VNC: a password (no username), plus the RFB port. No jump host / keep-alive.
                 MobileFormField(stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
-                    MobileFormInput(form.port, { form.port = it }, "5900", keyboardType = KeyboardType.Number)
+                    MobileFormInput(form.port, { form.port = it }, "5900", keyboardType = KeyboardType.Number, selectAllOnFocus = form.isDefaultPort)
                 }
                 Spacer(Modifier.height(14.dp))
                 MobileFormField(stringResource(Res.string.conn_field_authentication)) { MobileAuthPicker(form, allowKey = false) }
@@ -295,7 +295,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
             } else {
                 // Telnet/Serial: no authentication; show only port/baud.
                 MobileFormField(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(120.dp)) {
-                    MobileFormInput(form.port, { form.port = it }, if (serial) "9600" else "23", keyboardType = KeyboardType.Number)
+                    MobileFormInput(form.port, { form.port = it }, if (serial) "9600" else "23", keyboardType = KeyboardType.Number, selectAllOnFocus = form.isDefaultPort)
                 }
                 Spacer(Modifier.height(14.dp))
             }

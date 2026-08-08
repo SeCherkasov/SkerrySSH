@@ -55,6 +55,8 @@ import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -298,13 +300,14 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictText: String
 private fun EditField(value: String, onValueChange: (String) -> Unit, placeholder: String, font: FontFamily) {
     val textColor = Skerry.colors.text
     val textStyle = remember(font, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = font) }
+    val draft = rememberFieldDraft(value)
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         singleLine = true,
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
                 if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = font)
@@ -319,12 +322,13 @@ private fun EditField(value: String, onValueChange: (String) -> Unit, placeholde
 private fun CommandField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
     val textColor = Skerry.colors.textBright
     val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
+    val draft = rememberFieldDraft(value, singleLine = false)
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp)) {
                 if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = mono)

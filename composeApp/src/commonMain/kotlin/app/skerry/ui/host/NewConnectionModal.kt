@@ -267,7 +267,13 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                         }
                     }
                     Field(if (serial) stringResource(Res.string.conn_field_baud) else stringResource(Res.string.conn_field_port), Modifier.width(110.dp)) {
-                        ModalTextField(form.port, { form.port = it }, if (serial) "9600" else "22", keyboardType = KeyboardType.Number)
+                        // Still the transport's own default (22 / 23 / 3389 / 5900 / 9600 baud) —
+                        // select it on focus so typing replaces it. A port the user set stays put.
+                        ModalTextField(
+                            form.port, { form.port = it }, if (serial) "9600" else "22",
+                            keyboardType = KeyboardType.Number,
+                            selectAllOnFocus = form.isDefaultPort,
+                        )
                     }
                 }
                 // Auth follows the SSH path (SSH and Mosh): Telnet enters login/password in the

@@ -30,6 +30,8 @@ import app.skerry.ui.design.Badge
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.NumberStepper
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -241,13 +243,14 @@ private fun LocalShellField(value: String, onChange: (String) -> Unit) {
     val textColor = Skerry.colors.text
     val textStyle = remember(fonts.ui, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = fonts.ui) }
     val placeholder = stringResource(Res.string.conn_field_shell_placeholder)
+    val draft = rememberFieldDraft(value)
     BasicTextField(
-        value = value,
-        onValueChange = onChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onChange) },
         singleLine = true,
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)
