@@ -113,6 +113,8 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -375,7 +377,7 @@ private fun MobileTunnelEditorSheet(
             MobileFormField(stringResource(Res.string.ports_field_via_host)) { MobileHostPicker(hostName, hostList.map { it.id to it.label }) { form.hostId = it } }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MobileFormField(stringResource(Res.string.ports_field_bind_address), Modifier.weight(1f)) { PortInput(form.bindHost, { form.bindHost = it }, "127.0.0.1", mono) }
+                MobileFormField(stringResource(Res.string.ports_field_bind_address), Modifier.weight(1f)) { PortInput(form.bindHost, { form.bindHost = it }, TunnelFormState.DEFAULT_BIND_HOST, mono, selectAllOnFocus = form.isDefaultBindHost) }
                 MobileFormField(stringResource(Res.string.ports_field_port), Modifier.width(96.dp)) { PortInput(form.bindPort, { form.bindPort = it }, "8080", mono, KeyboardType.Number) }
             }
             BindExposureWarning(form.bindHost)
@@ -607,18 +609,27 @@ private fun MobileHostPicker(current: String, options: List<Pair<String, String>
 
 /** Field label + content, matching the New connection sheet's field idiom. */
 @Composable
-private fun PortInput(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily, keyboardType: KeyboardType = KeyboardType.Text) {
+private fun PortInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    mono: FontFamily,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    /** See `ModalTextField`: select the prefilled value on focus so the next keystroke replaces it. */
+    selectAllOnFocus: Boolean = false,
+) {
     val textColor = Skerry.colors.text
     val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 15.sp, fontFamily = mono) }
+    val draft = rememberFieldDraft(value, selectAllOnFocus)
     // Border lives in decorationBox so a click anywhere in the field places the caret.
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         singleLine = true,
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),

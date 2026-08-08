@@ -62,6 +62,8 @@ import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -226,17 +228,20 @@ internal fun SyncField(
     val ui = LocalFonts.current.ui
     val textColor = Skerry.colors.text
     val style = remember(ui, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = ui) }
+    // No select-on-focus: a saved server URL is edited, not replaced. The draft is still here for
+    // the caret, which otherwise starts at offset 0 on a prefilled field.
+    val draft = rememberFieldDraft(value, masked = secret)
     // Capsule/padding/icon live in decorationBox so a click anywhere in the field places the caret.
     BasicTextField(
-        value = value,
-        onValueChange = onChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onChange) },
         singleLine = true,
         textStyle = style,
         cursorBrush = SolidColor(Skerry.colors.cyan),
         visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = keyboardType),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }, onSend = { onSubmit() }),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),

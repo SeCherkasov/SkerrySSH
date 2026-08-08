@@ -40,6 +40,8 @@ import app.skerry.ui.design.Chip
 import app.skerry.ui.design.FilterChipRow
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
@@ -171,6 +173,8 @@ private fun RenameTagDialog(initialName: String, onDismiss: () -> Unit, onSave: 
     var name by remember { mutableStateOf(initialName) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // The old tag arrives prefilled and autofocused: select it so typing replaces the name.
+    val draft = rememberFieldDraft(name, selectAllOnFocus = name == initialName)
     val canSave = name.trim().isNotEmpty()
     val save = { if (canSave) onSave(name) }
     ModalScrim(onDismiss = onDismiss) {
@@ -195,14 +199,14 @@ private fun RenameTagDialog(initialName: String, onDismiss: () -> Unit, onSave: 
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
             BasicTextField(
-                value = name,
-                onValueChange = { name = it },
+                value = draft.textFieldValue(name),
+                onValueChange = { draft.accept(it, name) { name = it } },
                 singleLine = true,
                 textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
                 cursorBrush = SolidColor(Skerry.colors.cyan),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { save() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldFocus(draft),
                 decorationBox = { inner ->
                     Row(
                         Modifier

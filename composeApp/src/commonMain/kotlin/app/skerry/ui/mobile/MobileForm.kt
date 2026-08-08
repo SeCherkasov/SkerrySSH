@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -68,6 +70,8 @@ internal fun MobileFormInput(
     background: Color = Skerry.colors.bg,
     minHeightDp: Int? = null,
     imeAction: ImeAction = ImeAction.Default,
+    /** See `ModalTextField`: select the prefilled value on focus so the next keystroke replaces it. */
+    selectAllOnFocus: Boolean = false,
     onSubmit: (() -> Unit)? = null,
 ) {
     val fonts = LocalFonts.current
@@ -77,10 +81,11 @@ internal fun MobileFormInput(
     val textStyle = remember(family, fontSize, textColor) {
         TextStyle(color = textColor, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 17.sp else 20.sp)
     }
+    val draft = rememberFieldDraft(value, selectAllOnFocus, masked, singleLine)
     // Border/padding live in decorationBox so a click anywhere in the field places the caret.
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         singleLine = singleLine,
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
@@ -91,7 +96,7 @@ internal fun MobileFormInput(
         } else {
             KeyboardActions.Default
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Box(
                 Modifier

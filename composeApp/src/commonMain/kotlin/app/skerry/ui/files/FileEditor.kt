@@ -42,6 +42,8 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberSeededDraft
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ftail_fkey_edit
@@ -338,6 +340,7 @@ private fun EditorSearchBar(
 ) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val draft = rememberSeededDraft(query)
     Row(
         Modifier.fillMaxWidth().background(Skerry.colors.panel).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -346,14 +349,15 @@ private fun EditorSearchBar(
         Sym("search", size = 15.sp, color = Skerry.colors.cyanBright)
         Txt(stringResource(Res.string.sftp_edit_find), color = Skerry.colors.faint, size = 11.5.sp)
         BasicTextField(
-            value = query,
-            onValueChange = onQueryChange,
+            value = draft.textFieldValue(query),
+            onValueChange = { draft.accept(it, query, onQueryChange) },
             singleLine = true,
             textStyle = TextStyle(color = Skerry.colors.textBright, fontSize = 12.sp, fontFamily = mono),
             cursorBrush = SolidColor(Skerry.colors.cyan),
             modifier = Modifier
                 .weight(1f)
                 .focusRequester(focus)
+                .fieldFocus(draft)
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (event.key) {

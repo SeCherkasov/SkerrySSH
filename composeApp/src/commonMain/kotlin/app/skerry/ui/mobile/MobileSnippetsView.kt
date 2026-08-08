@@ -347,6 +347,8 @@ private fun MobileRenameTagSheet(oldTag: String, onDismiss: () -> Unit, onSave: 
                 { name = it },
                 stringResource(Res.string.lib_snippets_rename_tag_placeholder),
                 imeAction = ImeAction.Done,
+                // The old tag arrives prefilled: select it so typing replaces the name.
+                selectAllOnFocus = name == oldTag,
                 onSubmit = save,
             )
             MobileSheetButton(stringResource(Res.string.shell_save), onClick = save, modifier = Modifier.fillMaxWidth())

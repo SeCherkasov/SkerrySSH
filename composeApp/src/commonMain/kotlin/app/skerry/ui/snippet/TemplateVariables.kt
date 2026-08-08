@@ -37,6 +37,8 @@ import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippet_vars_clipboard
@@ -83,6 +85,12 @@ class TemplateVariableValues internal constructor(
     internal val vaultResolutions: Map<String, VaultRef>,
     internal val params: SnapshotStateMap<String, String>,
 ) {
+    /** What each parameter was seeded with — the template's default, or the previous run's value. */
+    private val seeded: Map<String, String> = params.toMap()
+
+    /** True while [name] still holds what the form put there, so its field may select on focus. */
+    internal fun isSeeded(name: String): Boolean = params[name] == seeded[name]
+
     /** Clipboard contents; `null` while still being read. */
     internal var clipboard: String? by mutableStateOf(null)
 
@@ -159,6 +167,9 @@ fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = 
                 value = values.params[name].orEmpty(),
                 onChange = { values.params[name] = sanitizeSnippetValue(it) },
                 modifier = if (index == 0) Modifier.focusRequester(firstFieldFocus) else Modifier,
+                // The default from the template (or the previous run) is a suggestion: select it, so
+                // the autofocused first field takes a replacement rather than a prefix.
+                selectAllOnFocus = values.isSeeded(name),
             )
         }
     }
@@ -200,18 +211,19 @@ fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = 
 }
 
 @Composable
-private fun ParamField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun ParamField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, selectAllOnFocus: Boolean = false) {
     val mono = LocalFonts.current.mono
     val textColor = Skerry.colors.text
     val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 12.5.sp, fontFamily = mono) }
+    val draft = rememberFieldDraft(value, selectAllOnFocus)
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)
             .border(1.dp, Skerry.colors.line, RoundedCornerShape(7.dp)).padding(horizontal = 9.dp, vertical = 7.dp),
     ) {
         BasicTextField(
-            value, onChange, singleLine = true, textStyle = style,
+            draft.textFieldValue(value), { draft.accept(it, value, onChange) }, singleLine = true, textStyle = style,
             cursorBrush = SolidColor(Skerry.colors.cyan),
-            modifier = modifier.fillMaxWidth(),
+            modifier = modifier.fillMaxWidth().fieldFocus(draft),
         )
     }
 }
