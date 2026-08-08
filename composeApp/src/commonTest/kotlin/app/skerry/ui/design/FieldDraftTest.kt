@@ -48,6 +48,98 @@ class FieldDraftTest {
     }
 
     @Test
+    fun the_click_that_brought_focus_does_not_collapse_the_selection() {
+        val draft = FieldDraft()
+        draft.focused = true
+        draft.pressed = true
+        // A mouse click reaches the field twice: the selection gesture drops the caret on the press,
+        // and `detectTapAndPress` drops it again at the same offset on the release. The selection
+        // goes on in between, so without this the whole value flashes selected and dies on release.
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(5)), "127.0.0.1") {}
+        draft.focusGained("127.0.0.1", selectAll = true)
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(5)), "127.0.0.1") {}
+        assertEquals(TextRange(0, 9), draft.textFieldValue("127.0.0.1").selection)
+    }
+
+    @Test
+    fun the_next_click_at_the_same_place_places_the_caret() {
+        val draft = FieldDraft()
+        draft.focused = true
+        draft.pressed = true
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(5)), "127.0.0.1") {}
+        draft.focusGained("127.0.0.1", selectAll = true)
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(5)), "127.0.0.1") {}
+        // One write is ignored, not every write at that offset: the click after it is the user
+        // asking for the caret and must land.
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(5)), "127.0.0.1") {}
+        assertEquals(TextRange(5), draft.textFieldValue("127.0.0.1").selection)
+    }
+
+    @Test
+    fun a_key_that_collapses_the_selection_after_keyboard_focus_lands() {
+        val draft = FieldDraft()
+        draft.focused = true
+        // Tab, or a dialog autofocusing itself: no gesture, so nothing is owed. Home and Left both
+        // collapse a full selection onto offset 0 — the same shape a click there has — and Left is
+        // how a screen reader reads a field it has just landed on.
+        draft.focusGained("127.0.0.1", selectAll = true)
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(0)), "127.0.0.1") {}
+        assertEquals(TextRange(0), draft.textFieldValue("127.0.0.1").selection)
+    }
+
+    @Test
+    fun a_click_on_the_start_of_the_value_does_not_collapse_the_selection() {
+        val draft = FieldDraft()
+        draft.focused = true
+        draft.pressed = true
+        // An unfocused field is handed a caret at offset 0, so a click landing there leaves the
+        // selection unchanged and the press is never reported — only the release arrives, and with
+        // nothing on record it would collapse the selection the focus had just made.
+        draft.focusGained("127.0.0.1", selectAll = true)
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(0)), "127.0.0.1") {}
+        assertEquals(TextRange(0, 9), draft.textFieldValue("127.0.0.1").selection)
+    }
+
+    @Test
+    fun a_tap_that_reported_once_leaves_nothing_owed() {
+        val draft = FieldDraft()
+        draft.focused = true
+        // Touch reports a tap once, on the release, and the finger is up by the time the selection
+        // is made — so nothing is owed, and the next tap on the same character places the caret
+        // instead of being spent.
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(5)), "127.0.0.1") {}
+        draft.focusGained("127.0.0.1", selectAll = true)
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(5)), "127.0.0.1") {}
+        assertEquals(TextRange(5), draft.textFieldValue("127.0.0.1").selection)
+    }
+
+    @Test
+    fun a_drag_ending_where_the_press_began_still_selects() {
+        val draft = FieldDraft()
+        draft.focused = true
+        draft.pressed = true
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(5)), "127.0.0.1") {}
+        draft.focusGained("127.0.0.1", selectAll = true)
+        // Only a collapsed caret is ever spent. A range the user dragged out by hand is theirs,
+        // wherever it ends.
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(2, 5)), "127.0.0.1") {}
+        assertEquals(TextRange(2, 5), draft.textFieldValue("127.0.0.1").selection)
+    }
+
+    @Test
+    fun a_click_somewhere_else_still_places_the_caret() {
+        val draft = FieldDraft()
+        draft.focused = true
+        draft.pressed = true
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(5)), "127.0.0.1") {}
+        draft.focusGained("127.0.0.1", selectAll = true)
+        // Only the offset the focusing gesture put the caret at is ignored. Clicking into the value
+        // afterwards means the user wants to edit it in place.
+        draft.accept(TextFieldValue("127.0.0.1", TextRange(2)), "127.0.0.1") {}
+        assertEquals(TextRange(2), draft.textFieldValue("127.0.0.1").selection)
+    }
+
+    @Test
     fun a_click_after_the_selection_collapses_it() {
         val draft = FieldDraft()
         draft.focusGained("22", selectAll = true)

@@ -9,6 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 
@@ -33,8 +35,25 @@ internal class FieldDraft(private val masked: Boolean = false, private val singl
     /** Whether the last [accept] handed the caller new text — see [caretIn]. */
     private var emitted by mutableStateOf(false)
 
+    /**
+     * Where the gesture that brought focus here put the caret, until the one write it still owes
+     * arrives. A mouse click reaches the field twice — the selection gesture places the caret on the
+     * press, `detectTapAndPress` places it again on the release — and a selection made on focus goes
+     * on between the two, so the release would undo it. Exactly one write is ignored, and the next
+     * one lands wherever it points. Not read during composition, so it stays a plain field.
+     *
+     * Only a gesture still holding the field owes anything, which is what a mouse press does and a
+     * finished tap does not. Focus arriving from the keyboard records nothing at all — `Home` and
+     * `Left` both collapse a full selection onto offset 0, the same shape a click there has, and
+     * `Left` is how a screen reader reads a field it has just landed on.
+     */
+    private var gestureCaret: Int? = null
+
     /** Written by [fieldFocus]; read by [rememberFieldDraft] to drive the select-on-focus rule. */
     internal var focused by mutableStateOf(false)
+
+    /** Written by [fieldFocus]: whether a pointer is on the field right now. See [gestureCaret]. */
+    internal var pressed = false
 
     /**
      * The value to hand to `BasicTextField`, built around the caller's [text].
@@ -84,6 +103,9 @@ internal class FieldDraft(private val masked: Boolean = false, private val singl
      * that from a caller refusing the edit.
      */
     fun accept(next: TextFieldValue, current: String, onText: (String) -> Unit) {
+        val owed = gestureCaret
+        gestureCaret = null
+        if (next.text == anchor && next.selection.collapsed && next.selection.end == owed) return
         // Compared against the last text this field produced, not against [current]: the field can
         // emit twice before the caller's state recomposes (batched IME edits), and the second
         // emission would be measured against a value already one edit stale — dropping the newer
@@ -111,6 +133,12 @@ internal class FieldDraft(private val masked: Boolean = false, private val singl
     fun focusGained(text: String, selectAll: Boolean) {
         val selectable = !masked && singleLine
         if (!selectAll || !selectable || text.isEmpty()) return
+        // The caret the focusing gesture already placed, and only while that gesture is still under
+        // a finger or a button — one that is over reports once, before this runs, and owes nothing.
+        // Its repeat on the release is ignored; a click anywhere else is the user asking to edit in
+        // place. With nothing on record the click landed on offset 0 — that is the caret an
+        // unfocused field is handed, and a gesture that does not move it is never reported at all.
+        gestureCaret = if (!pressed) null else if (anchor == text) selection?.end else 0
         anchor = text
         selection = TextRange(0, text.length)
         emitted = false
@@ -124,6 +152,7 @@ internal class FieldDraft(private val masked: Boolean = false, private val singl
         anchor = null
         lastCurrent = null
         emitted = false
+        gestureCaret = null
         selection = null
         composition = null
     }
@@ -167,5 +196,22 @@ internal fun rememberSeededDraft(text: String, vararg keys: Any?): FieldDraft {
 }
 
 /** Feeds focus changes into [draft]; goes on the `BasicTextField` itself, not on its decoration. */
-internal fun Modifier.fieldFocus(draft: FieldDraft): Modifier =
-    onFocusChanged { draft.focused = it.isFocused }
+internal fun Modifier.fieldFocus(draft: FieldDraft): Modifier = this
+    .onFocusChanged { draft.focused = it.isFocused }
+    // Watched in the initial pass and never consumed: the field's own handlers still see every
+    // event. This only tells focus that arrived under a finger or a mouse button from focus that
+    // arrived off the keyboard, which owes no caret write and must not have one taken.
+    .pointerInput(draft) {
+        // The gesture can end by being cancelled rather than released — the field leaving
+        // composition under a finger, a parent taking the stream over — and a flag left standing
+        // would make the next keyboard focus owe a write it never received.
+        try {
+            awaitPointerEventScope {
+                while (true) {
+                    draft.pressed = awaitPointerEvent(PointerEventPass.Initial).changes.any { it.pressed }
+                }
+            }
+        } finally {
+            draft.pressed = false
+        }
+    }
