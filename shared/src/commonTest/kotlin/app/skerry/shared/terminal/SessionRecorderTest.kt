@@ -172,5 +172,10 @@ class SessionRecorderTest {
         assertEquals("skerry-root-alpha-20251009-114640.cast", castFileName("root@alpha", "20251009-114640"))
         assertEquals("skerry-session-20251009-114640.cast", castFileName("   ", "20251009-114640"))
         assertEquals("skerry-a-b-c-20251009-114640.cast", castFileName("a/b\\c", "20251009-114640"))
+        // Dots would read as a second extension in front of .cast, underscores are a normal part of
+        // a host name, and a label long enough to bother a Save-As dialog is cut before the stamp.
+        assertEquals("skerry-web-01-lan-1.cast", castFileName("web-01.lan", "1"))
+        assertEquals("skerry-deploy_box-1.cast", castFileName("deploy_box", "1"))
+        assertEquals("skerry-${"h".repeat(48)}-1.cast", castFileName("h".repeat(80), "1"))
     }
 }

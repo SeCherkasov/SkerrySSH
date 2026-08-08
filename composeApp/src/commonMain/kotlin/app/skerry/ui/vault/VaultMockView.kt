@@ -32,7 +32,7 @@ import app.skerry.ui.generated.resources.vault_copy_public_key
 import app.skerry.ui.generated.resources.vault_delete
 import app.skerry.ui.generated.resources.vault_e2e_description
 import app.skerry.ui.generated.resources.vault_e2e_encrypted
-import app.skerry.ui.generated.resources.vault_export
+import app.skerry.ui.generated.resources.vault_export_key
 import app.skerry.ui.generated.resources.vault_header_summary
 import app.skerry.ui.generated.resources.vault_item_count
 import app.skerry.ui.generated.resources.vault_title
@@ -142,7 +142,7 @@ private fun MockSecretDetail(credential: Credential, mono: FontFamily) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PrimaryButton(stringResource(Res.string.vault_copy_public_key), onClick = {}, icon = "content_copy", modifier = Modifier.fillMaxWidth())
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GhostButton(stringResource(Res.string.vault_export), onClick = {}, modifier = Modifier.weight(1f))
+                GhostButton(stringResource(Res.string.vault_export_key), onClick = {}, modifier = Modifier.weight(1f))
                 GhostButton(stringResource(Res.string.vault_delete), onClick = {}, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
             }
         }

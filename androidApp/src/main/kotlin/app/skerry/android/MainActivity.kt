@@ -136,13 +136,12 @@ class MainActivity : FragmentActivity() {
 
         // SFTP SAF pickers: launchers are registered in onCreate (ActivityResult API requires
         // registration before STARTED) and handed to SafBridge as launch lambdas so the shared UI code
-        // stays Activity-independent. octet-stream for arbitrary binary downloads; text/plain for
-        // key/certificate .pub export; "*/*" for any upload.
+        // stays Activity-independent. octet-stream for every created document — SAF keeps the caller's
+        // extension only when it maps back to the requested MIME, and neither `.pem` nor `.cast` maps
+        // to text/plain, so a text launcher would file an exported key as `id_ed25519.pem.txt`.
+        // "*/*" for any upload.
         val createDocument = registerForActivityResult(
             ActivityResultContracts.CreateDocument("application/octet-stream"),
-        ) { uri -> SafBridge.onCreateResult(uri) }
-        val createTextDocument = registerForActivityResult(
-            ActivityResultContracts.CreateDocument("text/plain"),
         ) { uri -> SafBridge.onCreateResult(uri) }
         val openDocument = registerForActivityResult(
             ActivityResultContracts.OpenDocument(),
@@ -150,7 +149,6 @@ class MainActivity : FragmentActivity() {
         SafBridge.install(
             applicationContext,
             launchCreate = { name -> createDocument.launch(name) },
-            launchCreateText = { name -> createTextDocument.launch(name) },
             launchOpen = { openDocument.launch(arrayOf("*/*")) },
         )
 

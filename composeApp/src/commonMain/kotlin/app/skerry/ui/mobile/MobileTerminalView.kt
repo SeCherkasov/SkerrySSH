@@ -77,7 +77,8 @@ import app.skerry.ui.session.broadcastTargets
 import kotlinx.coroutines.launch
 import app.skerry.shared.terminal.castFileName
 import app.skerry.shared.terminal.recordingStamp
-import app.skerry.ui.vault.exportTextFile
+import app.skerry.ui.vault.ExportOutcome
+import app.skerry.ui.vault.exportFileGuarded
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
@@ -407,14 +408,15 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                                         } else {
                                             val name = castFileName(active?.displayTitle.orEmpty().ifBlank { active?.subtitle.orEmpty() }, recordingStamp())
                                             val seconds = activeTerminal.recordingSeconds
-                                            val saved = exportTextFile(name, cast)
+                                            val outcome = exportFileGuarded(name, cast)
                                             // Desktop parity: report a saved recording of a shared
                                             // host to its team. A cancelled Save-As kept nothing.
-                                            if (saved) active.hostId?.let { teams?.reportSessionRecorded(it, seconds) }
-                                            recordingNotice = when {
-                                                !saved -> null
-                                                truncated -> RecordingOutcome.SavedTruncated
-                                                else -> RecordingOutcome.Saved
+                                            if (outcome == ExportOutcome.Saved) active.hostId?.let { teams?.reportSessionRecorded(it, seconds) }
+                                            recordingNotice = when (outcome) {
+                                                ExportOutcome.Cancelled -> null
+                                                ExportOutcome.Failed -> RecordingOutcome.Failed
+                                                ExportOutcome.Saved ->
+                                                    if (truncated) RecordingOutcome.SavedTruncated else RecordingOutcome.Saved
                                             }
                                         }
                                     }

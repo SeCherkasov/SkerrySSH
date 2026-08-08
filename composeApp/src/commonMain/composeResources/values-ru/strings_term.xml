@@ -82,6 +82,7 @@
     <string name="term_record_truncated">Запись остановлена: достигнут предел размера</string>
     <string name="term_record_empty">Записывать было нечего</string>
     <string name="term_record_saved">Запись сохранена</string>
+    <string name="term_record_failed">Запись не удалось сохранить</string>
     <string name="term_player_open">Воспроизвести запись</string>
     <string name="term_player_title">Запись сессии</string>
     <string name="term_player_invalid">Это не запись в формате asciicast v2</string>

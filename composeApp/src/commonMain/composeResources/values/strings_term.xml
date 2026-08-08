@@ -82,6 +82,7 @@
     <string name="term_record_truncated">Recording stopped: size limit reached</string>
     <string name="term_record_empty">Nothing was recorded</string>
     <string name="term_record_saved">Recording saved</string>
+    <string name="term_record_failed">Recording could not be written</string>
     <string name="term_player_open">Play a recording</string>
     <string name="term_player_title">Recording</string>
     <string name="term_player_invalid">This file is not an asciicast v2 recording</string>

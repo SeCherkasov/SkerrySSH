@@ -6,25 +6,36 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /**
- * Exports a public key/certificate via Storage Access Framework, reusing [SafBridge]: `CreateDocument`
- * yields a `content://` Uri, then [content] is written there as UTF-8. Only public material is
- * exported; private keys never leave the app.
+ * Writes an exported file via Storage Access Framework, reusing [SafBridge]: `CreateDocument` yields
+ * a `content://` Uri, then [content] is written there as UTF-8. The user picks where it lands, which
+ * is the point — an exported private key is meant to be moved to another device — and also the limit
+ * of what this can promise: a document in Downloads is readable by anything holding that Uri. The
+ * decision to hand the key over is re-authenticated at the call site, not here.
  *
- * Returns `false` if the user cancels the picker (Uri == null) or the write fails; any IO/Uri
- * failure is swallowed rather than thrown. On write failure the partially created document is
- * deleted to avoid leaving an empty file behind.
+ * A closed picker is [ExportOutcome.Cancelled]; an IO/Uri failure is reported as
+ * [ExportOutcome.Failed] rather than thrown, and the partially created document is deleted so a
+ * truncated key is not left behind looking like a whole one. That delete is best-effort: SAF hands
+ * back the final Uri up front, so unlike the desktop writer there is no temp file to discard, and if
+ * the delete fails too a partial document can survive at the name the user picked.
  */
-actual suspend fun exportTextFile(suggestedName: String, content: String): Boolean {
-    val ctx = SafBridge.context() ?: return false
-    val uri = SafBridge.createTextDocument(suggestedName) ?: return false
+internal actual suspend fun exportTextFile(suggestedName: String, content: String): ExportOutcome {
+    val ctx = SafBridge.context() ?: return ExportOutcome.Failed
+    val uri = SafBridge.createDocument(suggestedName) ?: return ExportOutcome.Cancelled
     return withContext(Dispatchers.IO) {
-        runCatching {
-            ctx.contentResolver.openOutputStream(uri)?.use { it.write(content.toByteArray(Charsets.UTF_8)) }
-                ?: error("no output stream for $uri")
-            true
-        }.getOrElse {
-            runCatching { DocumentsContract.deleteDocument(ctx.contentResolver, uri) }
-            false
+        // Zeroed after the write, as on desktop: the String behind it can't be, but this copy can,
+        // and a phone is the likelier of the two to have its heap dumped.
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        try {
+            runCatching {
+                ctx.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    ?: error("no output stream for $uri")
+                ExportOutcome.Saved
+            }.getOrElse {
+                runCatching { DocumentsContract.deleteDocument(ctx.contentResolver, uri) }
+                ExportOutcome.Failed
+            }
+        } finally {
+            bytes.fill(0)
         }
     }
 }

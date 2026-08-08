@@ -54,7 +54,11 @@ import app.skerry.ui.generated.resources.vault_empty_passwords_hint
 import app.skerry.ui.generated.resources.vault_empty_passwords_title
 import app.skerry.ui.generated.resources.vault_empty_ssh_hint
 import app.skerry.ui.generated.resources.vault_empty_ssh_title
-import app.skerry.ui.generated.resources.vault_export
+import app.skerry.ui.generated.resources.vault_export_key
+import app.skerry.ui.generated.resources.vault_export_certificate
+import app.skerry.ui.generated.resources.vault_export_failed_title
+import app.skerry.ui.generated.resources.vault_export_failed_message
+import app.skerry.ui.generated.resources.vault_export_dismiss
 import app.skerry.ui.generated.resources.vault_generate_key
 import app.skerry.ui.generated.resources.vault_header_summary
 import app.skerry.ui.generated.resources.vault_item_count
@@ -76,12 +80,18 @@ import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.shortFingerprint
 import app.skerry.ui.vault.SecretCopyAuthorizer
+import app.skerry.ui.vault.SecretExport
+import app.skerry.ui.vault.privateKeyExport
+import app.skerry.ui.vault.certificateExport
+import app.skerry.ui.vault.SecretActions
+import app.skerry.ui.vault.secretActions
+import app.skerry.ui.vault.exportPrivateKey
+import app.skerry.ui.vault.exportPublic
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
 import app.skerry.ui.vault.title
 import app.skerry.ui.vault.copyPasswordToClipboard
 import app.skerry.ui.vault.copyTextToClipboard
-import app.skerry.ui.vault.exportTextFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -96,6 +106,8 @@ import app.skerry.ui.vault.GenerateKeyDialog
 import app.skerry.ui.vault.ImportCertificateDialog
 import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.GhostButton
+import app.skerry.ui.design.NoticeDialog
+import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSnippets
@@ -165,6 +177,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     val vault = LocalVault.current
     val biometrics = LocalVaultBiometrics.current
     val copyAuth = remember(vault, biometrics, scope) { SecretCopyAuthorizer(vault, biometrics, scope) }
+    var exportFailed by remember { mutableStateOf(false) }
 
     var category by remember { mutableStateOf(VaultCategoryKind.SSH_KEYS) }
     var selectedId by remember { mutableStateOf<String?>(null) }
@@ -186,7 +199,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     // writes the flag only on value change (not every list recomposition); DisposableEffect clears it
     // on leaving the tab so the tab bar isn't left hidden.
     val modalOpen = showGenerate || showAddPassword || showImportCert || showLinkKeyFile || pendingRename != null || pendingDelete != null ||
-        selectedCred != null || copyAuth.passwordPromptVisible
+        selectedCred != null || copyAuth.passwordPromptVisible || exportFailed
     LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
 
@@ -339,7 +352,9 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 onCopyPassword = { pwd ->
                     copyAuth.authorize { credentials.recordCopied(credential.id); copyPasswordToClipboard(pwd) }
                 },
-                onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
+                // Private key material: re-authenticated like a password copy; see VaultView.
+                onExportKey = { export -> exportPrivateKey(copyAuth, export, scope) { exportFailed = it.worthReporting } },
+                onExportPublic = { export -> exportPublic(export, scope) { exportFailed = it.worthReporting } },
                 // Close the detail sheet before showing a centered dialog (rename/delete): otherwise the
                 // sheet, drawn on top, would cover it and leave only its edge visible.
                 onRename = {
@@ -353,10 +368,22 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 onDismiss = { selectedId = null },
             )
         }
+        if (exportFailed) {
+            // The sheet underneath registers its own back handler, so without this one Back would
+            // close the sheet and leave the notice stranded over the tab bar.
+            PlatformBackHandler(onBack = { exportFailed = false })
+            NoticeDialog(
+                title = stringResource(Res.string.vault_export_failed_title),
+                message = stringResource(Res.string.vault_export_failed_message),
+                buttonLabel = stringResource(Res.string.vault_export_dismiss),
+                onDismiss = { exportFailed = false },
+            )
+        }
         if (copyAuth.passwordPromptVisible) {
             PasswordConfirmDialog(
                 error = copyAuth.passwordError,
                 busy = copyAuth.verifying,
+                access = copyAuth.access,
                 onDismiss = { copyAuth.dismiss() },
                 onConfirm = { copyAuth.submitPassword(it) },
             )
@@ -514,8 +541,9 @@ private fun MobileVaultEmpty(category: VaultCategoryKind) {
 
 /**
  * Bottom detail sheet for the selected secret: header (icon/name/subtype), public key + fingerprint
- * (key) or certificate body, used-by hosts, Copy/Export/Delete buttons. Only public material (public
- * key/cert) is exposed; the private key/password only via Copy/Export on an explicit user action.
+ * (key) or certificate body, used-by hosts, Copy/Export/Delete buttons. What the sheet *draws* is
+ * public material only (public key/cert); the private key and the password leave the vault solely
+ * through Copy/Export, each behind re-authentication.
  */
 @Composable
 private fun MobileSecretDetailSheet(
@@ -527,11 +555,14 @@ private fun MobileSecretDetailSheet(
     mono: FontFamily,
     onCopy: (String) -> Unit,
     onCopyPassword: (String) -> Unit,
-    onExport: (name: String, content: String) -> Unit,
+    onExportKey: (SecretExport.PrivateKey) -> Unit,
+    onExportPublic: (SecretExport.Public) -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val keyExport = remember(credential) { privateKeyExport(credential) }
+    val certExport = remember(credential) { certificateExport(credential) }
     val generator = LocalSshKeyGenerator.current
     val inspector = LocalSshCertificateInspector.current
     val secret = credential.secret
@@ -598,17 +629,23 @@ private fun MobileSecretDetailSheet(
                         is CredentialSecret.KeyFile -> Unit
                     }
                     MobileSheetButton(stringResource(Res.string.vault_rename), onClick = onRename, filled = false, modifier = Modifier.fillMaxWidth())
-                    when (secret) {
-                        is CredentialSecret.Certificate -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MobileSheetButton(stringResource(Res.string.vault_export), onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, filled = false, modifier = Modifier.weight(1f))
-                            MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
+                    // Export hands out the private key; see the desktop panel.
+                    val deleteButton: @Composable (Modifier) -> Unit = { modifier ->
+                        MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = modifier)
+                    }
+                    when (secretActions(credential)) {
+                        SecretActions.KeyAndCertificate -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                MobileSheetButton(stringResource(Res.string.vault_export_key), onClick = { keyExport?.let(onExportKey) }, filled = false, modifier = Modifier.weight(1f))
+                                MobileSheetButton(stringResource(Res.string.vault_export_certificate), onClick = { certExport?.let(onExportPublic) }, filled = false, modifier = Modifier.weight(1f))
+                            }
+                            deleteButton(Modifier.fillMaxWidth())
                         }
-                        is CredentialSecret.PrivateKey -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MobileSheetButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, filled = false, modifier = Modifier.weight(1f))
-                            MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.weight(1f))
+                        SecretActions.KeyAndDelete -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            MobileSheetButton(stringResource(Res.string.vault_export_key), onClick = { keyExport?.let(onExportKey) }, filled = false, modifier = Modifier.weight(1f))
+                            deleteButton(Modifier.weight(1f))
                         }
-                        is CredentialSecret.Password, is CredentialSecret.KeyFile ->
-                            MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())
+                        SecretActions.DeleteOnly -> deleteButton(Modifier.fillMaxWidth())
                     }
                 }
                 SecretSectionLabel(encryptionSectionTitle())
