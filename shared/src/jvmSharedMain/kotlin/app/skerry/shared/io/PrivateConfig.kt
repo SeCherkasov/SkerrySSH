@@ -94,12 +94,21 @@ object PrivateConfig {
             // short (an ENOSPC boundary, a FUSE or network mount) and return normally, leaving a
             // truncated secret behind.
             channel.use { sink ->
-                Channels.newOutputStream(sink).use { it.write(bytes) }
+                // The stream is deliberately not closed: closing it closes `sink`, and force() on a
+                // closed channel throws — the flush below would be a no-op wearing a comment that
+                // says otherwise. It buffers nothing, so there is nothing to lose by leaving the
+                // single close to `use`.
+                Channels.newOutputStream(sink).write(bytes)
                 // Flushed before the rename: without it the move can land while the data does not
                 // (ext4 data=writeback, most network mounts), leaving a zero-length file where a
-                // host-key mismatch record or a private key was supposed to be. Best-effort — a
-                // filesystem may reject force(), and only a FileChannel offers it at all.
-                runCatching { (sink as? FileChannel)?.force(true) }
+                // host-key mismatch record or a private key was supposed to be. A failure here is
+                // *not* swallowed — under delayed allocation ENOSPC surfaces at fsync rather than at
+                // write, so this is the call that knows the bytes did not reach the medium, and
+                // reporting a private key as exported when they did not is the failure this whole
+                // path exists to avoid. Only the cast is tolerated: force() belongs to FileChannel.
+                // The directory entry itself is still not fsynced, so the window is narrowed rather
+                // than closed.
+                (sink as? FileChannel)?.force(true)
             }
             // No-op where the create attribute already applied, and a no-op on non-POSIX too — there
             // the mount's mask or the profile ACL is what decides, as the KDoc says.

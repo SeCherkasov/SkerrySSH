@@ -3,10 +3,12 @@ package app.skerry.ui.vault
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -90,6 +92,26 @@ class SecretExportGateTest {
         launch { laterWorkRan = true }
         advanceUntilIdle()
         assertTrue(laterWorkRan, "the scope was cancelled — later actions on this screen are dead")
+    }
+
+    @Test
+    fun `a cancelled export is not reported as a failure`() = runTest {
+        // The composition going away is not something to interrupt the user about. Pinned at the
+        // action, not at guardedExport: an inline runCatching here would collapse cancellation into
+        // "Export failed" and pop that dialog every time the sheet closed mid-write.
+        var reported: ExportOutcome? = null
+        val auth = SecretCopyAuthorizer(
+            FakeUnlockedVault("master"), biometrics = null, scope = this,
+            kdfDispatcher = StandardTestDispatcher(testScheduler),
+        )
+
+        exportPrivateKey(auth, key, scope = this, write = { throw CancellationException("screen left") }) {
+            reported = it
+        }
+        auth.submitPassword("master")
+        runCatching { advanceUntilIdle() }
+
+        assertNull(reported, "a cancelled export must not be reported as an outcome")
     }
 
     @Test
