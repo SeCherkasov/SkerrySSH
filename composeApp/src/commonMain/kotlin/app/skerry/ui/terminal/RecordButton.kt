@@ -14,7 +14,8 @@ import app.skerry.ui.generated.resources.shell_tip_record_stop
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.session.Session
 import app.skerry.ui.connection.ConnectionUiState
-import app.skerry.ui.vault.exportTextFile
+import app.skerry.ui.vault.ExportOutcome
+import app.skerry.ui.vault.exportFileGuarded
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import app.skerry.ui.theme.Skerry
@@ -60,15 +61,15 @@ fun RecordSessionButton(
                 }
                 val name = castFileName(session.displayTitle.ifBlank { session.subtitle }, recordingStamp())
                 val seconds = live.recordingSeconds
-                val saved = exportTextFile(name, cast)
+                val outcome = exportFileGuarded(name, cast)
                 // Only an actually exported recording is reported: a cancelled Save-As wrote nothing,
                 // and announcing a recording nobody kept would be a plain falsehood in the feed.
-                if (saved) session.hostId?.let { onSaved(it, seconds) }
+                if (outcome == ExportOutcome.Saved) session.hostId?.let { onSaved(it, seconds) }
                 onDone(
-                    when {
-                        !saved -> RecordingOutcome.Cancelled
-                        truncated -> RecordingOutcome.SavedTruncated
-                        else -> RecordingOutcome.Saved
+                    when (outcome) {
+                        ExportOutcome.Cancelled -> RecordingOutcome.Cancelled
+                        ExportOutcome.Failed -> RecordingOutcome.Failed
+                        ExportOutcome.Saved -> if (truncated) RecordingOutcome.SavedTruncated else RecordingOutcome.Saved
                     },
                 )
             }
@@ -91,6 +92,7 @@ enum class RecordingOutcome {
     Saved,
     SavedTruncated,
     Empty,
+    Failed,
     Cancelled;
 
     /** A cancelled Save-As is the user's own choice — nothing to tell them about it. */

@@ -13,6 +13,7 @@
     <string name="vtail_bio_copy_title">Confirm it's you</string>
     <string name="vtail_bio_copy_cancel">Cancel</string>
     <string name="vtail_bio_copy_subtitle">Verify your biometrics to copy this secret to the clipboard.</string>
+    <string name="vtail_bio_export_subtitle">Verify your biometrics to write this private key to a file.</string>
 
     <!-- Auth picker: keychain credential type labels. -->
     <string name="vtail_picker_type_password">Password</string>

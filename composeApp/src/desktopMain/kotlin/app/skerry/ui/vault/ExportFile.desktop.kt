@@ -14,9 +14,9 @@ import org.jetbrains.compose.resources.getString
 /**
  * Desktop export via the native AWT [FileDialog] (like [app.skerry.ui.sftp.pickDownloadTarget]).
  * The modal dialog runs a nested EDT event loop, so it's shown on [Dispatchers.Swing]; the write
- * happens on the IO dispatcher. Cancellation (directory/name null) returns `false`.
+ * happens on the IO dispatcher. Cancellation (directory/name null) returns [ExportOutcome.Cancelled].
  */
-actual suspend fun exportTextFile(suggestedName: String, content: String): Boolean {
+internal actual suspend fun exportTextFile(suggestedName: String, content: String): ExportOutcome {
     // Same dialog title as the SFTP download picker, so the shared key is reused.
     val title = getString(Res.string.sftp_dialog_save_as)
     val path = withContext(Dispatchers.Swing) {
@@ -27,14 +27,24 @@ actual suspend fun exportTextFile(suggestedName: String, content: String): Boole
         val dir = dialog.directory ?: return@withContext null
         val name = dialog.file ?: return@withContext null
         File(dir, name).absolutePath
-    } ?: return false
-    withContext(Dispatchers.IO) {
-        val file = File(path)
-        file.writeText(content)
-        // A session recording holds whatever the server printed — tokens, key material echoed by a
-        // careless command. Default umask leaves it 0644, readable by every local account, so it
-        // gets the same 0600 as every other private file Skerry writes.
-        PrivateConfig.harden(file.toPath())
+    } ?: return ExportOutcome.Cancelled
+    return withContext(Dispatchers.IO) {
+        // What travels through here is secret: a session recording holds whatever the server printed,
+        // and a keychain export is the private key itself. writePrivateFile attaches 0600 as the file
+        // is created (where the platform has permissions) — writing first and hardening after would
+        // leave the key world-readable for the width of that gap, and ssh(1) refuses a key at 0644
+        // anyway. Not atomicWrite: that one also forces 0700 on the parent, which here is the
+        // directory the user picked in the dialog — their Downloads folder is not ours to
+        // re-permission. A failed write is reported rather than swallowed: the user re-authenticated
+        // for this and would otherwise believe they have a backup they don't.
+        // The String behind the key can't be zeroed (accepted, see Credential's KDoc), but this copy
+        // of it can be, and is — no reason to leave a second one for a heap dump or swap to find.
+        val bytes = content.toByteArray()
+        try {
+            runCatching { PrivateConfig.writePrivateFile(File(path).toPath(), bytes) }
+                .fold(onSuccess = { ExportOutcome.Saved }, onFailure = { ExportOutcome.Failed })
+        } finally {
+            bytes.fill(0)
+        }
     }
-    return true
 }

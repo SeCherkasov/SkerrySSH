@@ -39,6 +39,9 @@ import app.skerry.shared.vault.CredentialUsage
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.vault_export_dismiss
+import app.skerry.ui.generated.resources.vault_export_failed_message
+import app.skerry.ui.generated.resources.vault_export_failed_title
 import app.skerry.ui.generated.resources.vault_add_password
 import app.skerry.ui.generated.resources.vault_badge_expired
 import app.skerry.ui.generated.resources.vault_e2e_description
@@ -66,7 +69,6 @@ import app.skerry.ui.vault.VaultPresentation
 import app.skerry.ui.vault.title
 import app.skerry.ui.vault.copyPasswordToClipboard
 import app.skerry.ui.vault.copyTextToClipboard
-import app.skerry.ui.vault.exportTextFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -74,6 +76,7 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.LocalSync
 import app.skerry.ui.sync.SyncStatus
+import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.GhostButton
@@ -130,10 +133,12 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     val inspector = LocalSshCertificateInspector.current
     val scope = rememberCoroutineScope()
     val allCreds = credentials.credentials
-    // Re-authentication before copying a password (no biometrics on desktop — master password instead).
+    // Re-authentication before copying a password or exporting a key (no biometrics on desktop —
+    // master password instead).
     val vault = LocalVault.current
     val biometrics = LocalVaultBiometrics.current
     val copyAuth = remember(vault, biometrics, scope) { SecretCopyAuthorizer(vault, biometrics, scope) }
+    var exportFailed by remember { mutableStateOf(false) }
 
     var category by remember { mutableStateOf(VaultCategoryKind.SSH_KEYS) }
     var selectedId by remember { mutableStateOf<String?>(null) }
@@ -204,7 +209,17 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                             onCopyPassword = { pwd ->
                                 copyAuth.authorize { credentials.recordCopied(credential.id); copyPasswordToClipboard(pwd) }
                             },
-                            onExport = { name, content -> scope.launch { exportTextFile(name, content) } },
+                            // Private key material: the same re-authentication a password copy takes,
+                            // for the same reason — an unlocked vault on an unattended screen. A
+                            // cancelled Save-As stays silent; a failed write must not, or the user
+                            // walks away believing they have a backup.
+                            onExportKey = { export ->
+                                exportPrivateKey(copyAuth, export, scope) { exportFailed = it.worthReporting }
+                            },
+                            // The certificate is public — no gate, like the Copy button next to it.
+                            onExportPublic = { export ->
+                                exportPublic(export, scope) { exportFailed = it.worthReporting }
+                            },
                             onRename = { pendingRenameCred = credential },
                             onDelete = { pendingDeleteCred = credential },
                         )
@@ -314,10 +329,19 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                 },
             )
         }
+        if (exportFailed) {
+            NoticeDialog(
+                title = stringResource(Res.string.vault_export_failed_title),
+                message = stringResource(Res.string.vault_export_failed_message),
+                buttonLabel = stringResource(Res.string.vault_export_dismiss),
+                onDismiss = { exportFailed = false },
+            )
+        }
         if (copyAuth.passwordPromptVisible) {
             PasswordConfirmDialog(
                 error = copyAuth.passwordError,
                 busy = copyAuth.verifying,
+                access = copyAuth.access,
                 onDismiss = { copyAuth.dismiss() },
                 onConfirm = { copyAuth.submitPassword(it) },
             )

@@ -49,7 +49,8 @@ import app.skerry.ui.generated.resources.vault_copy_certificate
 import app.skerry.ui.generated.resources.vault_copy_password
 import app.skerry.ui.generated.resources.vault_copy_public_key
 import app.skerry.ui.generated.resources.vault_delete
-import app.skerry.ui.generated.resources.vault_export
+import app.skerry.ui.generated.resources.vault_export_key
+import app.skerry.ui.generated.resources.vault_export_certificate
 import app.skerry.ui.generated.resources.vault_key_unreadable
 import app.skerry.ui.generated.resources.vault_label_cert_path
 import app.skerry.ui.generated.resources.vault_label_key_path
@@ -136,11 +137,14 @@ internal fun LiveSecretDetail(
     mono: FontFamily,
     onCopy: (String) -> Unit,
     onCopyPassword: (String) -> Unit,
-    onExport: (name: String, content: String) -> Unit,
+    onExportKey: (SecretExport.PrivateKey) -> Unit,
+    onExportPublic: (SecretExport.Public) -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val secret = credential.secret
+    val keyExport = remember(credential) { privateKeyExport(credential) }
+    val certExport = remember(credential) { certificateExport(credential) }
     val keyInfo = rememberKeyInfo(credential, generator)
     val certInfo = rememberCertInfo(credential, inspector)
     val keyFileState = (secret as? CredentialSecret.KeyFile)?.let { rememberKeyFileState(it, LocalSecretFileReader.current, inspector) }
@@ -195,23 +199,33 @@ internal fun LiveSecretDetail(
                 is CredentialSecret.KeyFile -> Unit
             }
             GhostButton(stringResource(Res.string.vault_rename), onClick = onRename, modifier = Modifier.fillMaxWidth())
-            when (secret) {
-                is CredentialSecret.Certificate -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GhostButton(stringResource(Res.string.vault_export), onClick = { onExport("${credential.label}-cert.pub", secret.certificate) }, modifier = Modifier.weight(1f))
-                    GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+            // Export writes the private key — the half of a key or a certificate that is otherwise
+            // trapped in the vault; it is labelled for what it hands out, and the host
+            // re-authenticates first. A certificate's public half gets its own button rather than a
+            // second file from this one: one button, one file, one outcome to report.
+            val deleteButton: @Composable (Modifier) -> Unit = { modifier ->
+                GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f), modifier = modifier)
+            }
+            when (secretActions(credential)) {
+                SecretActions.KeyAndCertificate -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GhostButton(stringResource(Res.string.vault_export_key), onClick = { keyExport?.let(onExportKey) }, modifier = Modifier.weight(1f))
+                        GhostButton(stringResource(Res.string.vault_export_certificate), onClick = { certExport?.let(onExportPublic) }, modifier = Modifier.weight(1f))
+                    }
+                    deleteButton(Modifier.fillMaxWidth())
                 }
-                is CredentialSecret.PrivateKey -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GhostButton(stringResource(Res.string.vault_export), onClick = { keyInfo?.let { onExport("${credential.label}.pub", it.publicKeyOpenSsh) } }, modifier = Modifier.weight(1f))
-                    GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f), modifier = Modifier.weight(1f))
+                SecretActions.KeyAndDelete -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GhostButton(stringResource(Res.string.vault_export_key), onClick = { keyExport?.let(onExportKey) }, modifier = Modifier.weight(1f))
+                    deleteButton(Modifier.weight(1f))
                 }
-                is CredentialSecret.Password, is CredentialSecret.KeyFile ->
-                    GhostButton(stringResource(Res.string.vault_delete), onClick = onDelete, fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f), modifier = Modifier.fillMaxWidth())
+                SecretActions.DeleteOnly -> deleteButton(Modifier.fillMaxWidth())
             }
         }
         SecretSectionLabel(encryptionSectionTitle())
         SecretEncryptionRows(syncing)
         // Audit counts clipboard copies, and only a password ever leaves the vault that way: for a
         // key or a certificate the copy button hands over the public half, which is not a secret.
+        // (An exported key is not a copy and is not counted — the log records clipboard events.)
         if (secret is CredentialSecret.Password) {
             SecretSectionLabel(auditSectionTitle())
             SecretAuditRows(usage)
