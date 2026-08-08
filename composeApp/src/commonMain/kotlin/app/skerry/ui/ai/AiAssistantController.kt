@@ -10,6 +10,7 @@ import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.ai.AiPolicyDecision
 import app.skerry.shared.ai.AiProvider
 import app.skerry.shared.ai.AiProviderKind
+import app.skerry.shared.ai.OpenAiConfig
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.AiRoute
 import app.skerry.shared.ai.AiRouter
@@ -17,6 +18,7 @@ import app.skerry.shared.ai.AiSettings
 import app.skerry.shared.ai.SecretRedactor
 import app.skerry.shared.ai.local.LocalModel
 import app.skerry.shared.ai.local.LocalModelCatalog
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 
@@ -152,6 +154,31 @@ class AiAssistantController(
                 baseUrl = baseUrl.trim().ifBlank { AiSettings().baseUrl },
             ),
         )
+    }
+
+    /**
+     * Fetches the model catalog for the BYOK fields (refresh button in AI settings), using the
+     * typed key/baseUrl. The catalog is not persisted by the controller — the UI keeps it per
+     * screen. Failures are surfaced as [Result.failure] (an [AiException] when the endpoint
+     * answered, anything else otherwise); the UI maps them to a localized message. The provider is
+     * always closed after the call, and coroutine cancellation is rethrown — a cancelled refresh
+     * (screen leaving composition mid-flight) must not be reported as a provider failure.
+     */
+    suspend fun listModels(apiKey: String, baseUrl: String): Result<List<String>> {
+        val provider = providerFactory(
+            AiEndpoint.Cloud(
+                OpenAiConfig(apiKey = apiKey.trim(), baseUrl = baseUrl.trim()),
+            ),
+        )
+        return try {
+            Result.success(provider.listModels())
+        } catch (e: CancellationException) {
+            throw e // same rule as OpenAiProvider.chat: cancellation is not a provider failure
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            provider.close()
+        }
     }
 
     /** Selects the default provider (AI settings cards); persisted immediately. */

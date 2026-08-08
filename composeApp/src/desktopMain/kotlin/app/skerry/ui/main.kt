@@ -101,9 +101,10 @@ import java.util.UUID
 /**
  * Skerry config directory. Defaults to `~/.config/skerry`; honors XDG_CONFIG_HOME. Created with
  * mode 0700 (and upgraded if an old install left 0755), so UI prefs and config files inside are
- * not accessible to other local users regardless of their permissions.
+ * not accessible to other local users regardless of their permissions. Internal: shared by the
+ * app root and per-feature caches that live in the config dir (see `AiModelCache`).
  */
-private fun configDir(): Path {
+internal fun configDir(): Path {
     val xdg = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }
     val base = xdg?.let { Path.of(it) } ?: Path.of(System.getProperty("user.home"), ".config")
     return base.resolve("skerry").also { PrivateConfig.ensureDir(it) }
