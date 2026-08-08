@@ -188,6 +188,35 @@ class OpenAiProviderTest {
     }
 
     @Test
+    fun `listModels drops ids carrying control or bidi characters`() {
+        // A model id is drawn in the picker and copied into the model field, so an id that renders
+        // as a different one (RIGHT-TO-LEFT OVERRIDE) or splits the line-based cache (newline) is
+        // dropped at the source rather than sanitised on each consumer.
+        runTest {
+            val body = """{"data":[{"id":"gpt-4o\nrogue"},{"id":"gpt-4o\u202Elacol-ylno"},{"id":"gpt-4o\u0000"},{"id":"gpt-4o"}]}"""
+            val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, body))
+
+            assertEquals(listOf("gpt-4o"), provider.listModels())
+        }
+    }
+
+    @Test
+    fun `listModels trims ids so a cache round trip cannot duplicate them`() = runTest {
+        val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, """{"data":[{"id":" gpt-4o"},{"id":"gpt-4o "},{"id":"gpt-4o"}]}"""))
+
+        assertEquals(listOf("gpt-4o"), provider.listModels())
+    }
+
+    @Test
+    fun `listModels keeps an id of exactly the maximum length`() = runTest {
+        val exact = "x".repeat(OpenAiProvider.MAX_MODEL_ID_LENGTH)
+        val tooLong = "y".repeat(OpenAiProvider.MAX_MODEL_ID_LENGTH + 1)
+        val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, """{"data":[{"id":"$exact"},{"id":"$tooLong"}]}"""))
+
+        assertEquals(listOf(exact), provider.listModels(), "the cap is inclusive")
+    }
+
+    @Test
     fun `listModels caps the catalog size`() = runTest {
         val ids = (0 until 2500).joinToString(",") { """{"id":"model-$it"}""" }
         val provider = providerWithCatalog(catalogClient(HttpStatusCode.OK, """{"data":[$ids]}"""))

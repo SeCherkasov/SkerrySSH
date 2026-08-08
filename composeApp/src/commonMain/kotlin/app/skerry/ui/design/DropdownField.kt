@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -71,8 +74,9 @@ fun SelectTrigger(value: String, onClick: () -> Unit) {
 
 /**
  * Dropdown menu column (layout surface + border). Height is capped at [maxHeight] with internal
- * scrolling — a catalog refresh can populate hundreds of options (e.g. AI model list) that must
- * stay reachable on a phone screen instead of overflowing/clipping the popup.
+ * scrolling, so a menu longer than the screen stays reachable instead of overflowing the popup.
+ * (The AI model picker does not come through here: it needs a lazy list, which cannot live inside
+ * this scroll — see `ModelPickerMenu`.)
  */
 @Composable
 fun DropdownMenuColumn(width: Dp, maxHeight: Dp = 320.dp, content: @Composable () -> Unit) {
@@ -87,6 +91,31 @@ fun DropdownMenuColumn(width: Dp, maxHeight: Dp = 320.dp, content: @Composable (
             // full (unscrolled) content height, or the frame slides away and overflows the popup.
             .verticalScroll(rememberScrollState()),
     ) { content() }
+}
+
+/**
+ * Arrow button that opens a combo's menu, sitting next to an editable field (AI model picker on
+ * both desktop and mobile). Icon-only, so it carries [label] for screen readers; the geometry is
+ * per call site because the mobile field is taller than the desktop one.
+ */
+@Composable
+fun ComboArrow(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    corner: Dp = 7.dp,
+    horizontalPadding: Dp = 10.dp,
+    verticalPadding: Dp = 11.dp,
+) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(corner))
+            .background(Skerry.colors.bg)
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(corner))
+            .semantics { contentDescription = label }
+            .clickable(onClick = onClick)
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+    ) { Sym("expand_more", size = 16.sp, color = Skerry.colors.faint) }
 }
 
 /** Dropdown menu item; the selected one is highlighted cyan. Long labels ellipsize on one line. */

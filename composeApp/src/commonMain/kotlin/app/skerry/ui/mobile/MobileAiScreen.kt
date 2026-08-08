@@ -24,6 +24,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -32,14 +35,15 @@ import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.ai.AiRole
 import app.skerry.ui.ai.AiChatBubble
 import app.skerry.ui.ai.AiQuickChatHeader
-import app.skerry.ui.ai.ByokHints
 import app.skerry.ui.ai.aiFailureMessage
+import app.skerry.ui.ai.byokHintMessage
 import app.skerry.ui.ai.isInsecureAiEndpoint
 import app.skerry.ui.ai.rememberByokModelState
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.ai.ModelPickerMenu
 import app.skerry.ui.design.ChipButton
+import app.skerry.ui.design.ComboArrow
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -49,16 +53,11 @@ import app.skerry.ui.generated.resources.settings_ai_ask
 import app.skerry.ui.generated.resources.settings_ai_field_api_key
 import app.skerry.ui.generated.resources.settings_ai_field_endpoint
 import app.skerry.ui.generated.resources.settings_ai_field_model
-import app.skerry.ui.generated.resources.settings_ai_hint_endpoint_changed
-import app.skerry.ui.generated.resources.settings_ai_hint_key_changed
-import app.skerry.ui.generated.resources.settings_ai_hint_model_selected
 import app.skerry.ui.generated.resources.settings_ai_key_saved
 import app.skerry.ui.generated.resources.settings_ai_live_subtitle
 import app.skerry.ui.generated.resources.settings_ai_models_empty
-import app.skerry.ui.generated.resources.settings_ai_refresh_done
-import app.skerry.ui.generated.resources.settings_ai_refreshing_models
-import app.skerry.ui.generated.resources.settings_ai_saved
 import app.skerry.ui.generated.resources.settings_ai_search_models
+import app.skerry.ui.generated.resources.settings_ai_show_models
 import app.skerry.ui.generated.resources.settings_ai_not_configured
 import app.skerry.ui.generated.resources.settings_ai_off_note
 import app.skerry.ui.generated.resources.settings_ai_placeholder_api_key
@@ -165,17 +164,7 @@ fun MobileAiScreen(state: MobileDesignState) {
  */
 @Composable
 private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
-    // Hint texts must be resolved here (composable context) — stringResource is @Composable and
-    // cannot be called from onChange/onClick lambdas.
-    val hints = ByokHints(
-        endpointChanged = stringResource(Res.string.settings_ai_hint_endpoint_changed),
-        keyChanged = stringResource(Res.string.settings_ai_hint_key_changed),
-        modelSelected = stringResource(Res.string.settings_ai_hint_model_selected),
-        refreshing = stringResource(Res.string.settings_ai_refreshing_models),
-        refreshed = stringResource(Res.string.settings_ai_refresh_done),
-        saved = stringResource(Res.string.settings_ai_saved),
-    )
-    val byok = rememberByokModelState(ai, hints)
+    val byok = rememberByokModelState(ai)
 
     Column(Modifier.padding(top = 10.dp)) {
         // ① Server address (endpoint): what the other two fields talk to.
@@ -206,18 +195,17 @@ private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
         MobileFormField(stringResource(Res.string.settings_ai_field_model)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) {
-                    MobileFormInput(byok.model, { byok.model = it }, stringResource(Res.string.settings_ai_placeholder_model), imeAction = ImeAction.Done)
+                    MobileFormInput(byok.model, byok::onModelChange, stringResource(Res.string.settings_ai_placeholder_model), imeAction = ImeAction.Done)
                 }
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(Skerry.colors.bg)
-                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
-                        // Opens even with an empty catalog: the menu then explains itself with
-                        // "No models found" instead of a silent no-op before the first refresh.
-                        .clickable { byok.modelMenuOpen = !byok.modelMenuOpen }
-                        .padding(horizontal = 12.dp, vertical = 13.dp),
-                ) { Sym("expand_more", size = 16.sp, color = Skerry.colors.faint) }
+                // Opens even with an empty catalog: the menu then explains itself with "No models
+                // found" instead of a silent no-op before the first refresh.
+                ComboArrow(
+                    label = stringResource(Res.string.settings_ai_show_models),
+                    onClick = { byok.modelMenuOpen = !byok.modelMenuOpen },
+                    corner = 11.dp,
+                    horizontalPadding = 12.dp,
+                    verticalPadding = 13.dp,
+                )
             }
         }
         // The picker expands IN the page flow instead of a Popup: Popup windows get no IME insets and
@@ -240,7 +228,7 @@ private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
             Spacer(Modifier.height(8.dp))
         }
         byok.refreshFailure?.let { failure ->
-            Txt(aiFailureMessage(failure), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            Txt(aiFailureMessage(failure), color = Skerry.colors.storm, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
         }
 
         Spacer(Modifier.height(12.dp))
@@ -256,9 +244,20 @@ private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
                 // Local proxies (Ollama, LM Studio, …) take no API key — an endpoint alone is enough.
                 enabled = byok.baseUrl.isNotBlank() && !byok.refreshing,
             )
-            if (byok.hint != null) Txt(byok.hint!!, color = if (byok.hintFlash) Skerry.colors.moss else Skerry.colors.amber, size = 11.5.sp)
-            else if (ai.isConfigured) Txt(stringResource(Res.string.settings_ai_key_saved), color = Skerry.colors.moss, size = 11.5.sp)
-            else Txt(stringResource(Res.string.settings_ai_not_configured), color = Skerry.colors.faint, size = 11.5.sp)
+            val hint = byok.hint
+            if (hint != null) {
+                // A live region: a refresh has no other feedback for a screen reader.
+                Txt(
+                    byokHintMessage(hint),
+                    color = if (hint.flash) Skerry.colors.moss else Skerry.colors.amber,
+                    size = 11.5.sp,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                )
+            } else if (ai.isConfigured) {
+                Txt(stringResource(Res.string.settings_ai_key_saved), color = Skerry.colors.moss, size = 11.5.sp)
+            } else {
+                Txt(stringResource(Res.string.settings_ai_not_configured), color = Skerry.colors.faint, size = 11.5.sp)
+            }
         }
     }
 }

@@ -1,20 +1,21 @@
 package app.skerry.shared.ai
 
+import app.skerry.shared.terminal.isSafeTerminalInputChar
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
-import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.prepareGet
 import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
-import io.ktor.utils.io.readLine
+import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
+import io.ktor.utils.io.readLine
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -47,8 +48,8 @@ class OpenAiProvider private constructor(
     constructor(config: OpenAiConfig, http: HttpClient, catalogHttp: HttpClient? = null) :
         this(config, http, ownsHttp = false, catalogHttp = catalogHttp)
 
-    /** Creates and owns its own CIO client — [close] closes it. */
-    constructor(config: OpenAiConfig) : this(config, defaultHttpClient(), ownsHttp = true)
+    /** Creates and owns its own CIO client — [close] closes it, catalog client included. */
+    constructor(config: OpenAiConfig) : this(config, defaultHttpClient(), ownsHttp = true, catalogHttp = catalogHttpClient())
 
     override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
         val wire = ChatReqWire(
@@ -113,37 +114,42 @@ class OpenAiProvider private constructor(
      * whatever host a 3xx `Location` names — a one-way ticket for the API key to an arbitrary host.
      * A 3xx is therefore surfaced as a PROTOCOL failure.
      *
-     * The response is read with a hard cap and the catalog is trimmed (bounded size, bounded id
-     * length, duplicates/blank dropped): the result lands in a cache file and a non-lazy list, so
-     * a broken or hostile endpoint must not be able to inflate either.
+     * The body is read as a stream with a hard cap, and the catalog is trimmed (bounded size,
+     * bounded id length, blanks and duplicates dropped, ids carrying control or bidi characters
+     * rejected via [isSafeTerminalInputChar] — an id is drawn in the picker and saved into the
+     * model field, so a RIGHT-TO-LEFT OVERRIDE would let one model read as another): the result
+     * lands in a cache file and a picker list, so a broken or hostile endpoint must not be able to
+     * inflate or spoof either.
+     *
+     * The request is issued with [prepareGet]/`execute` for the same reason [chat] is: a plain
+     * `get()` hands back a response whose body is already in memory, so a cap applied after that
+     * point bounds only what is kept, not what was read.
      */
     override suspend fun listModels(): List<String> {
-        val client = catalogHttp ?: noRedirectClient
-        val response = client.get("${config.baseUrl}/models") {
+        val client = catalogHttp ?: sharedNoRedirect
+        val statement = client.prepareGet("${config.baseUrl}/models") {
             header(HttpHeaders.Authorization, "Bearer ${config.apiKey}")
             header(HttpHeaders.Accept, ContentType.Application.Json.toString())
         }
-        if (!response.status.isSuccess()) throw errorFor(response.status)
-        // Read with a hard cap. readAvailable fills as much as is currently available in one go,
-        // so loop until EOF (or the cap) instead of trusting a single call to return the whole body
-        // — a large or chunked body would otherwise be truncated mid-JSON.
-        val buffer = ByteArray(MAX_CATALOG_BYTES + 1)
-        val channel = response.bodyAsChannel()
-        var size = 0
-        while (size < buffer.size) {
-            val read = channel.readAvailable(buffer, size, buffer.size - size)
-            if (read <= 0) break // EOF
-            size += read
+        val body = try {
+            statement.execute { response ->
+                if (!response.status.isSuccess()) throw errorFor(response.status)
+                readCapped(response.bodyAsChannel())
+            }
+        } catch (e: CancellationException) {
+            throw e // coroutine cancellation is not a provider failure — never swallow or rewrap it
+        } catch (e: AiException) {
+            throw e
+        } catch (e: Exception) {
+            // Same ladder as chat(): a typo'd host raises UnresolvedAddressException, which is not
+            // an IOException — without this the UI would call a plain network failure "unknown".
+            throw AiException(AiException.Kind.NETWORK, "Model catalog request failed: ${e.message}", e)
         }
-        if (size > MAX_CATALOG_BYTES) {
-            throw AiException(AiException.Kind.PROTOCOL, "Model catalog response exceeds $MAX_CATALOG_BYTES bytes")
-        }
-        val body = buffer.decodeToString(0, size)
         return try {
             json.decodeFromString(ModelsWire.serializer(), body).data
                 .asSequence()
-                .map { it.id }
-                .filter { it.isNotBlank() && it.length <= MAX_MODEL_ID_LENGTH }
+                .map { it.id.trim() } // trimmed here, or the desktop cache (FilePrefs trims on read) would return duplicates
+                .filter { it.isNotEmpty() && it.length <= MAX_MODEL_ID_LENGTH && it.all(::isSafeTerminalInputChar) }
                 .distinct()
                 .take(MAX_CATALOG_SIZE)
                 .toList()
@@ -152,8 +158,34 @@ class OpenAiProvider private constructor(
         }
     }
 
+    /**
+     * Reads at most [MAX_CATALOG_BYTES] from [channel] and fails if the endpoint has more to say.
+     * `readAvailable` returns what is buffered right now, so the loop runs until EOF or the cap —
+     * a chunked body would otherwise be cut mid-JSON. Reading stops at the cap: the connection is
+     * dropped by the caller's `execute` block and the rest of the body is never pulled.
+     */
+    private suspend fun readCapped(channel: ByteReadChannel): String {
+        // Grown as needed rather than pre-allocated at the cap: a real catalog is a few KB, and the
+        // buffer is charged per refresh press.
+        var buffer = ByteArray(READ_CHUNK_BYTES)
+        var size = 0
+        while (size <= MAX_CATALOG_BYTES) {
+            if (size == buffer.size) buffer = buffer.copyOf(minOf(buffer.size * 2, MAX_CATALOG_BYTES + 1))
+            val read = channel.readAvailable(buffer, size, buffer.size - size)
+            if (read <= 0) break // EOF
+            size += read
+        }
+        if (size > MAX_CATALOG_BYTES) {
+            throw AiException(AiException.Kind.PROTOCOL, "Model catalog response exceeds $MAX_CATALOG_BYTES bytes")
+        }
+        return buffer.decodeToString(0, size)
+    }
+
     override suspend fun close() {
-        if (ownsHttp) http.close()
+        if (ownsHttp) {
+            http.close()
+            catalogHttp?.close()
+        }
     }
 
     private fun errorFor(status: HttpStatusCode): AiException = when (status.value) {
@@ -171,13 +203,14 @@ class OpenAiProvider private constructor(
         fun pooled(config: OpenAiConfig): OpenAiProvider = OpenAiProvider(config, shared)
 
         /**
-         * Catalog-only shared client with redirects disabled: the model catalog is the one
-         * authenticated `GET` in the client, so it must not follow a 3xx to another host with the
-         * `Authorization` header attached (see [listModels]).
+         * Catalog-only client with redirects disabled: the model catalog is the one authenticated
+         * `GET` in the client, so it must not follow a 3xx to another host with the `Authorization`
+         * header attached (see [listModels]). Shared alongside [shared] for the pooled provider;
+         * an owning provider gets its own via [catalogHttpClient] and closes it.
          */
-        private val noRedirectClient: HttpClient by lazy {
-            HttpClient(CIO) { followRedirects = false }
-        }
+        private val sharedNoRedirect: HttpClient by lazy { catalogHttpClient() }
+
+        private fun catalogHttpClient(): HttpClient = HttpClient(CIO) { followRedirects = false }
 
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false }
         private val shared: HttpClient by lazy { defaultHttpClient() }
@@ -186,6 +219,7 @@ class OpenAiProvider private constructor(
         /** Hard caps for the model catalog: the endpoint is remote and possibly broken or hostile. */
         const val MAX_CATALOG_SIZE = 2000
         const val MAX_MODEL_ID_LENGTH = 200
+        private const val READ_CHUNK_BYTES = 16 * 1024
         const val MAX_CATALOG_BYTES = 1_048_576 // 1 MiB
     }
 }

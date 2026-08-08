@@ -4,7 +4,11 @@ import android.content.Context
 import app.skerry.ui.sftp.SafBridge
 import java.security.MessageDigest
 
-/** Android: model-catalog cache in app-private SharedPreferences (per device, never synced). */
+/**
+ * Android: model-catalog cache in app-private SharedPreferences (per device, never synced).
+ * A failed write is silent by design, as on desktop (`FilePrefs`): the catalog is a convenience the
+ * next refresh rebuilds, and the UI must not fail over a cache miss.
+ */
 actual object AiModelCache {
 
     private val prefs: android.content.SharedPreferences?
@@ -13,18 +17,19 @@ actual object AiModelCache {
     actual fun load(baseUrl: String): List<String> =
         prefs?.getString(cacheKey(baseUrl), null)?.lines()?.filter { it.isNotBlank() } ?: emptyList()
 
+    // Trimmed and de-duplicated like the desktop actual, so both platforms hand the picker the same
+    // set (its rows are keyed by id, and a duplicate key throws).
     actual fun save(baseUrl: String, models: List<String>) {
-        prefs?.edit()?.putString(cacheKey(baseUrl), models.filter { it.isStorable() }.joinToString("\n"))?.apply()
+        val stored = models.map { it.trim() }.filter { it.isStorable() }.distinct()
+        prefs?.edit()?.putString(cacheKey(baseUrl), stored.joinToString("\n"))?.apply()
     }
 
     actual fun loadFavorites(baseUrl: String): Set<String> =
         prefs?.getString(favKey(baseUrl), null)?.lines()?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
 
-    actual fun saveFavorite(baseUrl: String, id: String, favorite: Boolean) {
-        if (!id.isStorable()) return // a newline in the id would split it into two cache entries on the next load
-        val fav = (prefs?.getString(favKey(baseUrl), null)?.lines()?.filter { it.isNotBlank() } ?: emptyList()).toMutableSet()
-        if (favorite) fav.add(id) else fav.remove(id)
-        prefs?.edit()?.putString(favKey(baseUrl), fav.joinToString("\n"))?.apply()
+    actual fun saveFavorites(baseUrl: String, ids: Set<String>) {
+        val stored = ids.map { it.trim() }.filter { it.isStorable() }
+        prefs?.edit()?.putString(favKey(baseUrl), stored.joinToString("\n"))?.apply()
     }
 
     /**

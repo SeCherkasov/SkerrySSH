@@ -13,5 +13,7 @@ expect object AiModelCache {
 
     /** Starred (favorite) model ids per server address; starred entries sort first in the picker. */
     fun loadFavorites(baseUrl: String): Set<String>
-    fun saveFavorite(baseUrl: String, id: String, favorite: Boolean)
+
+    /** Stores the whole set, so a write never has to merge into what is already on disk. */
+    fun saveFavorites(baseUrl: String, ids: Set<String>)
 }

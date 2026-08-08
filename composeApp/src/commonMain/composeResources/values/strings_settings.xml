@@ -30,10 +30,14 @@
     <string name="settings_ai_models_empty">No models found</string>
     <string name="settings_ai_search_models">Search models</string>
     <string name="settings_ai_no_matches">No matches</string>
+    <string name="settings_ai_search_clear">Clear search</string>
+    <string name="settings_ai_favorite_model">Favorite %1$s</string>
+    <string name="settings_ai_show_models">Show models</string>
     <string name="settings_ai_models_count">%1$d models</string>
     <string name="settings_ai_hint_model_selected">Model selected — press Save</string>
+    <string name="settings_ai_hint_model_changed">Model changed — press Save</string>
     <string name="settings_ai_hint_key_changed">Key changed — press Save</string>
-    <string name="settings_ai_hint_endpoint_changed">Address changed — press Save</string>
+    <string name="settings_ai_hint_endpoint_changed">API URL changed — press Save</string>
     <string name="settings_ai_refreshing_models">Refreshing models…</string>
     <string name="settings_ai_refresh_done">Models refreshed</string>
     <string name="settings_ai_saved">Saved</string>

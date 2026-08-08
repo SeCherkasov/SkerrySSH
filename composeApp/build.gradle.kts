@@ -18,7 +18,12 @@ kotlin {
 
     jvm("desktop") {
         // kotlin("test") picks its backend from the Test task configuration: this enables JUnit 5
-        testRuns["test"].executionTask.configure { useJUnitPlatform() }
+        testRuns["test"].executionTask.configure {
+            useJUnitPlatform()
+            // configDir() honours XDG_CONFIG_HOME: point it at the build directory so a test
+            // touching the desktop prefs/caches cannot write into the developer's ~/.config/skerry.
+            environment("XDG_CONFIG_HOME", layout.buildDirectory.dir("test-config").get().asFile.absolutePath)
+        }
     }
 
     androidLibrary {
