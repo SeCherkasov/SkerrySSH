@@ -4,12 +4,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +22,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -66,21 +72,61 @@ fun SelectTrigger(value: String, onClick: () -> Unit) {
     }
 }
 
-/** Dropdown menu column (layout surface + border). */
+/**
+ * Dropdown menu column (layout surface + border). Height is capped at [maxHeight] with internal
+ * scrolling, so a menu longer than the screen stays reachable instead of overflowing the popup.
+ * (The AI model picker does not come through here: it needs a lazy list, which cannot live inside
+ * this scroll — see `ModelPickerMenu`.)
+ */
 @Composable
-fun DropdownMenuColumn(width: Dp, content: @Composable () -> Unit) {
+fun DropdownMenuColumn(width: Dp, maxHeight: Dp = 320.dp, content: @Composable () -> Unit) {
     Column(
-        Modifier.width(width).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)),
+        Modifier
+            .width(width)
+            .heightIn(max = maxHeight)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Skerry.colors.surface2)
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp))
+            // scroll AFTER the surface/border modifiers: they must bound the viewport, not the
+            // full (unscrolled) content height, or the frame slides away and overflows the popup.
+            .verticalScroll(rememberScrollState()),
     ) { content() }
 }
 
-/** Dropdown menu item; the selected one is highlighted cyan. */
+/**
+ * Arrow button that opens a combo's menu, sitting next to an editable field (AI model picker on
+ * both desktop and mobile). Icon-only, so it carries [label] for screen readers; the geometry is
+ * per call site because the mobile field is taller than the desktop one.
+ */
+@Composable
+fun ComboArrow(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    corner: Dp = 7.dp,
+    horizontalPadding: Dp = 10.dp,
+    verticalPadding: Dp = 11.dp,
+) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(corner))
+            .background(Skerry.colors.bg)
+            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(corner))
+            .semantics { contentDescription = label }
+            .clickable(onClick = onClick)
+            .padding(horizontal = horizontalPadding, vertical = verticalPadding),
+    ) { Sym("expand_more", size = 16.sp, color = Skerry.colors.faint) }
+}
+
+/** Dropdown menu item; the selected one is highlighted cyan. Long labels ellipsize on one line. */
 @Composable
 fun DropdownOption(label: String, selected: Boolean, onClick: () -> Unit) {
     Txt(
         label,
         color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text,
         size = 12.5.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp),
     )
 }

@@ -7,6 +7,7 @@ import app.skerry.shared.ai.AiProvider
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.AiSettings
 import app.skerry.shared.ai.SecretRedactor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -15,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -23,6 +25,8 @@ import kotlin.test.assertTrue
 private class FakeProvider(
     private val deltas: List<String> = emptyList(),
     private val failWith: AiException? = null,
+    private val catalog: List<String> = emptyList(),
+    private val catalogFailWith: Throwable? = null,
 ) : AiProvider {
     var closed = false
     var lastRequest: AiChatRequest? = null
@@ -30,6 +34,10 @@ private class FakeProvider(
         lastRequest = request
         failWith?.let { throw it }
         deltas.forEach { emit(AiDelta(it)) }
+    }
+    override suspend fun listModels(): List<String> {
+        catalogFailWith?.let { throw it }
+        return catalog
     }
     override suspend fun close() { closed = true }
 }
@@ -271,5 +279,41 @@ class AiAssistantControllerTest {
         assertEquals("gpt-4o", saved!!.model)
         assertEquals(AiSettings().baseUrl, saved!!.baseUrl)
         assertTrue(c.isConfigured)
+    }
+
+    @Test
+    fun `listModels returns the provider catalog and closes the provider`() = runTest {
+        val provider = FakeProvider(catalog = listOf("gpt-4o-mini", "gpt-4o"))
+        var endpoint: app.skerry.shared.ai.AiEndpoint? = null
+        val c = AiAssistantController(AiSettings(), persist = {}, providerFactory = { e -> endpoint = e; provider }, scope = this)
+
+        val result = c.listModels(" sk-secret ", " https://api.example.com/v1 ")
+
+        assertEquals(listOf("gpt-4o-mini", "gpt-4o"), result.getOrNull())
+        val config = (endpoint as app.skerry.shared.ai.AiEndpoint.Cloud).config
+        assertEquals("sk-secret", config.apiKey, "the typed key is trimmed before it reaches the provider")
+        assertEquals("https://api.example.com/v1", config.baseUrl)
+        assertTrue(provider.closed, "the provider must be closed after the catalog call")
+    }
+
+    @Test
+    fun `listModels surfaces a provider failure as a failed result and closes the provider`() = runTest {
+        val provider = FakeProvider(catalogFailWith = AiException(AiException.Kind.UNAUTHORIZED, "401"))
+        val c = AiAssistantController(AiSettings(), persist = {}, providerFactory = { provider }, scope = this)
+
+        val result = c.listModels("sk-bad", "https://api.example.com/v1")
+
+        assertTrue(result.isFailure)
+        assertEquals(AiException.Kind.UNAUTHORIZED, (result.exceptionOrNull() as AiException).kind)
+        assertTrue(provider.closed)
+    }
+
+    @Test
+    fun `listModels propagates cancellation and still closes the provider`() = runTest {
+        val provider = FakeProvider(catalogFailWith = CancellationException("screen left composition"))
+        val c = AiAssistantController(AiSettings(), persist = {}, providerFactory = { provider }, scope = this)
+
+        assertFailsWith<CancellationException> { c.listModels("sk-x", "https://api.example.com/v1") }
+        assertTrue(provider.closed, "cancellation must not skip the provider cleanup")
     }
 }
