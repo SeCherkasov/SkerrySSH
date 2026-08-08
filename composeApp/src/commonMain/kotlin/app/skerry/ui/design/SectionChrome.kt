@@ -124,13 +124,14 @@ fun SidebarSearchField(
     placeholder: String,
     modifier: Modifier = Modifier,
 ) {
+    val draft = rememberFieldDraft(value)
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         singleLine = true,
         textStyle = TextStyle(color = Skerry.colors.text, fontSize = 12.5.sp, fontFamily = LocalFonts.current.ui),
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = modifier,
+        modifier = modifier.fieldFocus(draft),
         decorationBox = { inner ->
             Row(
                 Modifier

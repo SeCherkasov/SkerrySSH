@@ -290,3 +290,4 @@ Issue и pull request приветствуются. Настройка окру�
 - Клиенты (`shared/`, `composeApp/`, `androidApp/`) — [GPL-3.0](LICENSE)
 - Sync-сервер (`server/`) — [AGPL-3.0](server/LICENSE): форк, поднятый как сервис, обязан
   вернуть свои изменения в проект.
+- Встроенные шрифты — OFL-1.1 и Apache-2.0, тексты и версии в [licenses/](licenses/README.md)

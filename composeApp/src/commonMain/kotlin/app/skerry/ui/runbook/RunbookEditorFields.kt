@@ -32,6 +32,8 @@ import app.skerry.ui.design.Chip
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.labelUppercase
@@ -283,13 +285,14 @@ private fun RunbookLineField(
 ) {
     val textColor = Skerry.colors.text
     val style = remember(font, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = font) }
+    val draft = rememberFieldDraft(value, singleLine = singleLine)
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         singleLine = singleLine,
         textStyle = style,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)
@@ -307,12 +310,13 @@ private fun RunbookLineField(
 private fun RunbookCommandField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
     val textColor = Skerry.colors.textBright
     val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
+    val draft = rememberFieldDraft(value, singleLine = false)
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         textStyle = style,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(8.dp))

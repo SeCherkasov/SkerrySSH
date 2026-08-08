@@ -44,6 +44,8 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sync_back
@@ -528,15 +530,18 @@ internal fun SyncTextField(
     val ui = LocalFonts.current.ui
     val textColor = Skerry.colors.text
     val style = remember(ui, textColor) { TextStyle(color = textColor, fontSize = 15.sp, fontFamily = ui, lineHeight = 20.sp) }
+    // No select-on-focus: a saved server URL is edited, not replaced. [masked] is passed anyway,
+    // so the rule holds if this field is ever armed.
+    val draft = rememberFieldDraft(value, masked = masked)
     BasicTextField(
-        value = value,
-        onValueChange = onChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onChange) },
         singleLine = true,
         textStyle = style,
         cursorBrush = SolidColor(Skerry.colors.cyan),
         visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),

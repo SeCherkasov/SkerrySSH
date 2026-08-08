@@ -62,6 +62,8 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberSeededDraft
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.design.Badge
 
@@ -208,14 +210,15 @@ private fun PaneFilterField(
     restoreFocus: () -> Unit,
 ) {
     var text by remember(pane, pane.path) { mutableStateOf(pane.nameFilter) }
-    val fieldFocus = remember { FocusRequester() }
+    val focus = remember { FocusRequester() }
+    val draft = rememberSeededDraft(text, pane, pane.path)
     val clearAndClose = {
         pane.setNameFilter("")
         onClose()
         restoreFocus()
     }
     // Each Ctrl+F press (tick increment) refocuses the field, including when the row is already open.
-    LaunchedEffect(focusTick) { if (focusTick > 0) fieldFocus.requestFocus() }
+    LaunchedEffect(focusTick) { if (focusTick > 0) focus.requestFocus() }
     // The row can leave composition while focused (Esc path, listing reload) — release the standdown.
     DisposableEffect(Unit) { onDispose { onEditing(false) } }
     Row(
@@ -225,17 +228,20 @@ private fun PaneFilterField(
     ) {
         Sym("filter_alt", size = 14.sp, color = Skerry.colors.faint)
         BasicTextField(
-            value = text,
+            value = draft.textFieldValue(text),
             onValueChange = {
-                text = it
-                pane.setNameFilter(it)
+                draft.accept(it, text) { changed ->
+                    text = changed
+                    pane.setNameFilter(changed)
+                }
             },
             singleLine = true,
             textStyle = TextStyle(color = Skerry.colors.textBright, fontSize = 11.5.sp, fontFamily = mono),
             cursorBrush = SolidColor(Skerry.colors.cyan),
             modifier = Modifier
                 .weight(1f)
-                .focusRequester(fieldFocus)
+                .focusRequester(focus)
+                .fieldFocus(draft)
                 .onFocusChanged { onEditing(it.isFocused) }
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

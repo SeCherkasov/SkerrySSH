@@ -61,6 +61,8 @@ import app.skerry.ui.generated.resources.sftp_what_single
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
@@ -94,21 +96,25 @@ internal fun NameDialog(
     val ok = valid && !conflict
     val submit = { if (ok) onConfirm(trimmed) }
     // Autofocus: the field should be ready for input the moment the dialog opens, without a click.
-    val fieldFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { fieldFocus.requestFocus() }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    // Rename opens on the current name, autofocused: select all of it — extension included, since
+    // renaming report.log to notes.txt replaces both halves. "New folder" opens empty.
+    val draft = rememberFieldDraft(name, selectAllOnFocus = name == initial)
     SftpDialogFrame(onDismiss = onDismiss) {
             Txt(title, color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold)
             // Border in decorationBox so a click anywhere in the field places the caret.
             BasicTextField(
-                value = name,
-                onValueChange = { name = it },
+                value = draft.textFieldValue(name),
+                onValueChange = { draft.accept(it, name) { name = it } },
                 singleLine = true,
                 textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = mono),
                 cursorBrush = SolidColor(Skerry.colors.cyan),
                 // Enter confirms (if the name is valid), Esc closes — handler before the focusable field.
                 modifier = Modifier
                     .fillMaxWidth()
-                    .focusRequester(fieldFocus)
+                    .focusRequester(focus)
+                    .fieldFocus(draft)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when (event.key) {

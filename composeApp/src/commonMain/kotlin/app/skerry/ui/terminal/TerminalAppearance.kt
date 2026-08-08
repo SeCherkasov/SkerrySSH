@@ -12,21 +12,31 @@ import app.skerry.ui.generated.resources.hack_bold
 import app.skerry.ui.generated.resources.hack_regular
 import app.skerry.ui.generated.resources.jetbrainsmono_bold
 import app.skerry.ui.generated.resources.jetbrainsmono_regular
+import app.skerry.ui.generated.resources.maplemono_bold
+import app.skerry.ui.generated.resources.maplemono_regular
 import kotlin.math.round
 import org.jetbrains.compose.resources.Font
 
 /**
- * Terminal font, chosen in settings (Appearance → Font). Both variants render WITHOUT programmatic
+ * Terminal font, chosen in settings (Appearance → Font). Every variant renders WITHOUT programmatic
  * ligatures ([NO_LIGATURES]): `->`, `=>`, `!=` stay separate glyphs — required for the terminal's
- * per-character grid. Hack has no ligatures by design; JetBrains Mono does, so disabling them matters
- * there. [id] is a stable key for persistence (see desktop `main`).
+ * per-character grid. Hack has no ligatures by design; JetBrains Mono and Maple Mono do, so disabling
+ * them matters there. [id] is a stable key for persistence (see desktop `main`).
  */
 enum class TerminalFont(val displayName: String, val id: String) {
     /** Hack — monospace without ligatures, terminal default. */
     Hack("Hack", "hack"),
 
     /** JetBrains Mono — Skerry's design-token font (same as the rest of the UI); ligatures forced off. */
-    JetBrainsMono("JetBrains Mono", "jetbrains-mono");
+    JetBrainsMono("JetBrains Mono", "jetbrains-mono"),
+
+    /**
+     * Maple Mono CN — the only bundled terminal font that carries CJK glyphs itself, at exactly twice
+     * the ASCII advance. Hack and JetBrains Mono have none, so CJK output falls back to a platform font
+     * whose advance is unrelated to the cell width. Bundled as a GB2312 + ASCII + CJK-punctuation
+     * subset (see `tools/fonts/verify-maple-mono.py`), not the full 18 MB upstream face.
+     */
+    MapleMono("Maple Mono CN", "maple-mono");
 
     companion object {
         val DEFAULT = Hack
@@ -163,5 +173,9 @@ fun rememberTerminalFontFamily(font: TerminalFont): FontFamily = when (font) {
     TerminalFont.JetBrainsMono -> FontFamily(
         Font(Res.font.jetbrainsmono_regular, weight = FontWeight.Normal),
         Font(Res.font.jetbrainsmono_bold, weight = FontWeight.Bold),
+    )
+    TerminalFont.MapleMono -> FontFamily(
+        Font(Res.font.maplemono_regular, weight = FontWeight.Normal),
+        Font(Res.font.maplemono_bold, weight = FontWeight.Bold),
     )
 }

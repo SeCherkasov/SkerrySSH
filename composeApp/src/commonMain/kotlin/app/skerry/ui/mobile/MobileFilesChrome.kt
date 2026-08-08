@@ -45,6 +45,8 @@ import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberSeededDraft
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -157,23 +159,26 @@ internal fun MobileFilesBreadcrumbRow(
 internal fun MobileFilterRow(pane: FilePaneController, mono: FontFamily, onClose: () -> Unit) {
     var text by remember(pane, pane.path) { mutableStateOf(pane.nameFilter) }
     // Focus the field the moment the row appears (funnel tap), so typing starts immediately.
-    val fieldFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { fieldFocus.requestFocus() }
+    val focus = remember { FocusRequester() }
+    val draft = rememberSeededDraft(text, pane, pane.path)
+    LaunchedEffect(Unit) { focus.requestFocus() }
     Row(
         Modifier.fillMaxWidth().padding(start = 22.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         BasicTextField(
-            value = text,
+            value = draft.textFieldValue(text),
             onValueChange = {
-                text = it
-                pane.setNameFilter(it)
+                draft.accept(it, text) { changed ->
+                    text = changed
+                    pane.setNameFilter(changed)
+                }
             },
             singleLine = true,
             textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = mono),
             cursorBrush = SolidColor(Skerry.colors.cyan),
-            modifier = Modifier.weight(1f).focusRequester(fieldFocus),
+            modifier = Modifier.weight(1f).focusRequester(focus).fieldFocus(draft),
             decorationBox = { inner ->
                 Box(
                     Modifier

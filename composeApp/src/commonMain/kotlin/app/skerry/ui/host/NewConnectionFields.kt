@@ -54,6 +54,8 @@ import app.skerry.ui.generated.resources.conn_test_rtt_ms
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.ai.PolicyOption
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -88,6 +90,11 @@ internal fun ModalTextField(
     singleLine: Boolean = true,
     mono: Boolean = false,
     minHeightDp: Int? = null,
+    /**
+     * Select the whole value when the field takes focus, so the next keystroke replaces it. For a
+     * value the form filled in itself (a still-default port) — never for one the user typed.
+     */
+    selectAllOnFocus: Boolean = false,
     /** Drawn at the right edge, inside the border — the serial device field hangs its menu arrow here. */
     trailing: (@Composable () -> Unit)? = null,
 ) {
@@ -98,16 +105,19 @@ internal fun ModalTextField(
     val textStyle = remember(family, fontSize, textColor) {
         TextStyle(color = textColor, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 16.sp else 18.sp)
     }
+    // Masked input and multi-line areas keep the plain caret: a selected password reveals its
+    // length, and replacing a whole pasted key wholesale is not what the field is for.
+    val draft = rememberFieldDraft(value, selectAllOnFocus, masked, singleLine)
     // Border/icon live in decorationBox so a click anywhere on the field places the caret.
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         singleLine = singleLine,
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
         visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
         decorationBox = { inner ->
             Row(
                 Modifier

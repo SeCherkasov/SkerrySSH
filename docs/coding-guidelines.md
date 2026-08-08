@@ -6,6 +6,13 @@ writing code — every rule here is a class of defect we already paid for in the
 pre-release review and the 2026-07-03/04 refactor (~115 files, −7646 lines). The goal is to write it
 right the first time so a third such pass isn't needed.
 
+The rules here that can be decided without judgement — translations complete in en + ru + zh, no
+hardcoded UI literal, `Txt`/`Sym` instead of raw `Text`/`Icon`, design tokens instead of hex, no
+Kotest or MockK, dependencies through the version catalog, `atomicWriteUtf8` on secret paths, a key
+binding shipping with its Settings row — are enforced by `tools/harness/checks.py` and block the
+commit. The rest is on you and on the reviewers. Nothing here is duplicated there; the checks read
+these rules, they do not restate them.
+
 ## 1. Search before you write
 
 Before adding a class, function, or pattern — **look for the existing one**. Nine copies of a
@@ -72,6 +79,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Field labels, caps, avatars | `FieldLabel`, `LabelCase.labelUppercase`, `InitialsAvatar` |
 | Mobile chrome | `MobilePushHeader`, `MobileScreenTitle`, `MobileFabButton`, `MobileTagsEditor` |
 | Mobile form fields (label caps + input) | `ui/mobile/MobileForm.kt`: `MobileFormField` / `MobileFormInput` |
+| Caret and select-on-focus for a field whose value is a caller-owned `String` | `ui/design/FieldDraft`: `rememberFieldDraft` + `Modifier.fieldFocus`, told whether the field is masked and single-line so it applies the never-select rules itself; `rememberSeededDraft` for a find or filter bar, which selects its query only while it is the one the bar opened with. A field that owns its own `TextFieldValue` and selects on *open* (`PathJumpField`, `TerminalSearchBar`) is the other, deliberate shape — don't hand-roll a third |
 | Tunnel/snippet form state (desktop and mobile) | `TunnelFormState`, `SnippetFormState` |
 | Secret display | `VaultPresentation.secretStyle` |
 | Terminal screen state (incl. scrollback search) | `ui/terminal/TerminalScreenState` |

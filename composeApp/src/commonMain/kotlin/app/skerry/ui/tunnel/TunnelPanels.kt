@@ -130,7 +130,7 @@ internal fun TunnelEditor(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
                 FieldLabel(labelUppercase(stringResource(Res.string.ports_field_bind_address)), top = 0.dp)
-                EditField(form.bindHost, { form.bindHost = it }, "127.0.0.1", mono)
+                EditField(form.bindHost, { form.bindHost = it }, TunnelFormState.DEFAULT_BIND_HOST, mono, selectAllOnFocus = form.isDefaultBindHost)
             }
             Column(Modifier.width(70.dp)) {
                 FieldLabel(labelUppercase(stringResource(Res.string.ports_field_port)), top = 0.dp)
