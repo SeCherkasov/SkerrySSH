@@ -29,6 +29,11 @@
     <string name="vault_copy_public_key">Copy public key</string>
     <string name="vault_copy_password">Copy password</string>
     <string name="vault_export">Export</string>
+    <string name="vault_export_key">Export key</string>
+    <string name="vault_export_certificate">Export certificate</string>
+    <string name="vault_export_failed_title">Export failed</string>
+    <string name="vault_export_failed_message">The file was not written.</string>
+    <string name="vault_export_dismiss">Close</string>
     <string name="vault_delete">Delete</string>
     <string name="vault_rename">Rename</string>
     <string name="vault_cancel">Cancel</string>
@@ -72,9 +77,10 @@
     <string name="vault_cert_valid_summary">%1$s · %2$s · valid until %3$s</string>
     <string name="vault_import">Import</string>
 
-    <!-- Confirm master password before copying a secret. -->
+    <!-- Confirm master password before a secret leaves the vault (clipboard copy or key export). -->
     <string name="vault_confirm_master_title">Confirm master password</string>
     <string name="vault_confirm_master_subtitle">Enter your master password to copy this secret to the clipboard.</string>
+    <string name="vault_confirm_master_subtitle_export">Enter your master password to write this private key to a file.</string>
     <string name="vault_field_master_password">MASTER PASSWORD</string>
     <string name="vault_placeholder_master_password">master password</string>
     <string name="vault_password_mismatch_retry">That password didn't match — try again.</string>

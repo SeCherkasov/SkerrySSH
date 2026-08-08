@@ -82,6 +82,7 @@
     <string name="term_record_truncated">录制已停止：已达大小上限</string>
     <string name="term_record_empty">没有录制到内容</string>
     <string name="term_record_saved">录制已保存</string>
+    <string name="term_record_failed">录制无法写入</string>
     <string name="term_player_open">播放录制</string>
     <string name="term_player_title">会话录制</string>
     <string name="term_player_invalid">该文件不是 asciicast v2 录制</string>

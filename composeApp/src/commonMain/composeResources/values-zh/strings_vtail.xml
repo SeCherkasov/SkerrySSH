@@ -13,6 +13,7 @@
     <string name="vtail_bio_copy_title">确认身份</string>
     <string name="vtail_bio_copy_cancel">取消</string>
     <string name="vtail_bio_copy_subtitle">验证你的生物识别以将此密钥复制到剪贴板。</string>
+    <string name="vtail_bio_export_subtitle">验证你的生物识别以将此私钥写入文件。</string>
 
     <!-- 认证选择器：密钥链凭据类型标签。 -->
     <string name="vtail_picker_type_password">密码</string>

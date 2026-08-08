@@ -141,27 +141,24 @@ object SafBridge {
     private var launchCreate: ((String) -> Unit)? = null
 
     @Volatile
-    private var launchCreateText: ((String) -> Unit)? = null
-
-    @Volatile
     private var launchOpen: (() -> Unit)? = null
 
     @Volatile
     private var pending: CompletableDeferred<Uri?>? = null
 
     /**
-     * Called from `MainActivity.onCreate`: [launchCreate] (octet-stream, binary SFTP download) and
-     * [launchCreateText] (text/plain, key/certificate .pub export) take a filename; [launchOpen] takes
-     * none. The two create launchers differ only by MIME (fixed at contract registration), giving the
-     * file manager the right icon/handler for text .pub exports.
+     * Called from `MainActivity.onCreate`: [launchCreate] (octet-stream) takes a filename, [launchOpen]
+     * takes none. Everything created goes through the one octet-stream contract — a MIME-specific
+     * launcher would make SAF rewrite extensions it can't map back (`id_ed25519.pem` → `…pem.txt`),
+     * and what travels here is an SFTP download, a session recording, or a private key, none of which
+     * the file manager should open as text.
      */
-    fun install(context: Context, launchCreate: (String) -> Unit, launchCreateText: (String) -> Unit, launchOpen: () -> Unit) {
+    fun install(context: Context, launchCreate: (String) -> Unit, launchOpen: () -> Unit) {
         // Release a pick started by the previous (destroyed) Activity, or its await would hang forever.
         pending?.complete(null)
         pending = null
         appContext = context.applicationContext
         this.launchCreate = launchCreate
-        this.launchCreateText = launchCreateText
         this.launchOpen = launchOpen
     }
 
@@ -169,9 +166,6 @@ object SafBridge {
 
     /** Launch CreateDocument (octet-stream) with [suggestedName], await the chosen Uri (null on cancel). */
     suspend fun createDocument(suggestedName: String): Uri? = createVia(launchCreate, suggestedName)
-
-    /** Launch CreateDocument (text/plain) with [suggestedName], for key/certificate text export. */
-    suspend fun createTextDocument(suggestedName: String): Uri? = createVia(launchCreateText, suggestedName)
 
     private suspend fun createVia(launch: ((String) -> Unit)?, suggestedName: String): Uri? = lock.withLock {
         val fire = launch ?: return null

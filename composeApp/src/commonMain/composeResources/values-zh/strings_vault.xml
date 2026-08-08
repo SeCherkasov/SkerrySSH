@@ -29,6 +29,11 @@
     <string name="vault_copy_public_key">复制公钥</string>
     <string name="vault_copy_password">复制密码</string>
     <string name="vault_export">导出</string>
+    <string name="vault_export_key">导出密钥</string>
+    <string name="vault_export_certificate">导出证书</string>
+    <string name="vault_export_failed_title">导出失败</string>
+    <string name="vault_export_failed_message">文件未写入。</string>
+    <string name="vault_export_dismiss">关闭</string>
     <string name="vault_delete">删除</string>
     <string name="vault_rename">重命名</string>
     <string name="vault_cancel">取消</string>
@@ -75,6 +80,7 @@
     <!-- 复制密钥前确认主密码 -->
     <string name="vault_confirm_master_title">确认主密码</string>
     <string name="vault_confirm_master_subtitle">请输入主密码以将此密钥复制到剪贴板。</string>
+    <string name="vault_confirm_master_subtitle_export">请输入主密码以将此私钥写入文件。</string>
     <string name="vault_field_master_password">主密码</string>
     <string name="vault_placeholder_master_password">主密码</string>
     <string name="vault_password_mismatch_retry">密码不匹配——请重试。</string>

@@ -1,5 +1,6 @@
 package app.skerry.shared.terminal
 
+import app.skerry.shared.io.safeFileStem
 import kotlinx.serialization.json.JsonPrimitive
 
 /**
@@ -166,14 +167,9 @@ private fun completeUtf8Length(data: ByteArray): Int {
 
 /**
  * File name suggested when exporting a recording: `skerry-<host>-<stamp>.cast`. The host label comes
- * from user data and travels into a Save-As dialog, so anything that isn't a letter, digit or dash
- * is collapsed — a label with a slash must not read as a path.
+ * from user data and travels into a Save-As dialog, so it goes through [safeFileStem] — a label with
+ * a slash must not read as a path. Dots are dropped rather than kept: a recording is filed by
+ * session, and `web-01.lan` gaining a second extension in front of `.cast` reads as the wrong format.
  */
-fun castFileName(hostLabel: String, stamp: String): String {
-    val safe = hostLabel.map { if (it.isLetterOrDigit()) it else '-' }
-        .joinToString("")
-        .split('-').filter { it.isNotEmpty() }.joinToString("-")
-        .lowercase()
-        .ifBlank { "session" }
-    return "skerry-$safe-$stamp.cast"
-}
+fun castFileName(hostLabel: String, stamp: String): String =
+    "skerry-${safeFileStem(hostLabel, fallback = "session", lowercase = true)}-$stamp.cast"

@@ -61,6 +61,8 @@ import app.skerry.ui.generated.resources.vault_cancel
 import app.skerry.ui.generated.resources.vault_cert_read_error
 import app.skerry.ui.generated.resources.vault_cert_valid_summary
 import app.skerry.ui.generated.resources.vault_confirm_master_subtitle
+import app.skerry.ui.generated.resources.vault_confirm_master_subtitle_export
+import app.skerry.ui.generated.resources.vault_export
 import app.skerry.ui.generated.resources.vault_confirm_master_title
 import app.skerry.ui.generated.resources.vault_copy
 import app.skerry.ui.generated.resources.vault_delete
@@ -263,13 +265,29 @@ private fun RefField(label: String, value: String, onValueChange: (String) -> Un
  * open for another attempt. The field clears when the dialog is recreated.
  */
 @Composable
-internal fun PasswordConfirmDialog(error: Boolean, busy: Boolean, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+internal fun PasswordConfirmDialog(
+    error: Boolean,
+    busy: Boolean,
+    access: SecretAccess,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
     var password by remember { mutableStateOf("") }
-    VaultDialogScaffold(stringResource(Res.string.vault_confirm_master_title), stringResource(Res.string.vault_confirm_master_subtitle), onDismiss) {
+    // The dialog names the action it is gating: a master password typed for "Copy" must not be the
+    // one that writes a private key to disk.
+    val subtitle = when (access) {
+        SecretAccess.COPY -> stringResource(Res.string.vault_confirm_master_subtitle)
+        SecretAccess.EXPORT -> stringResource(Res.string.vault_confirm_master_subtitle_export)
+    }
+    val confirmLabel = when (access) {
+        SecretAccess.COPY -> stringResource(Res.string.vault_copy)
+        SecretAccess.EXPORT -> stringResource(Res.string.vault_export)
+    }
+    VaultDialogScaffold(stringResource(Res.string.vault_confirm_master_title), subtitle, onDismiss) {
         DialogField(stringResource(Res.string.vault_field_master_password), password, { password = it }, placeholder = stringResource(Res.string.vault_placeholder_master_password), password = true)
         if (error) Txt(stringResource(Res.string.vault_password_mismatch_retry), color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(top = 12.dp))
         // confirmEnabled is disabled while verifying (Argon2id) — otherwise a double-tap would run it twice.
-        DialogButtons(confirmLabel = stringResource(Res.string.vault_copy), confirmEnabled = password.isNotEmpty() && !busy, onDismiss = onDismiss, onConfirm = { onConfirm(password) })
+        DialogButtons(confirmLabel = confirmLabel, confirmEnabled = password.isNotEmpty() && !busy, onDismiss = onDismiss, onConfirm = { onConfirm(password) })
     }
 }
 
