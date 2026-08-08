@@ -135,7 +135,8 @@ internal fun MobileGroupRenameDialog(
         Spacer(Modifier.height(6.dp))
         Txt(stringResource(Res.string.conn_group_rename_hint), color = Skerry.colors.dim, size = 12.5.sp)
         Spacer(Modifier.height(14.dp))
-        MobileFormInput(name, { name = it }, "Production")
+        // Prefilled with the old name: selected on focus, so a tap and a keystroke replace it.
+        MobileFormInput(name, { name = it }, "Production", selectAllOnFocus = name == initialName)
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(

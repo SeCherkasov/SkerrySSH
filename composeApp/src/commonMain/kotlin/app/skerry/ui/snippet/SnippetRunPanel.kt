@@ -44,7 +44,9 @@ import app.skerry.ui.design.KeyValueRow
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.labelUppercase
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_clipboard_ref
 import app.skerry.ui.generated.resources.lib_snippets_copied
@@ -262,13 +264,16 @@ private fun VariableRow(
 private fun ParamInput(value: String, onValueChange: (String) -> Unit, mono: FontFamily, modifier: Modifier = Modifier) {
     val textColor = Skerry.colors.text
     val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 11.5.sp, fontFamily = mono) }
+    // The caller sanitizes what it stores, so the caret has to survive a value coming back
+    // rewritten — see FieldDraft.
+    val draft = rememberFieldDraft(value)
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
         singleLine = true,
         textStyle = style,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = modifier,
+        modifier = modifier.fieldFocus(draft),
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Skerry.colors.bg)

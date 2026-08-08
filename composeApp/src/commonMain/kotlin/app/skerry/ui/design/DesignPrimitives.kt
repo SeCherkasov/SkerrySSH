@@ -497,15 +497,18 @@ fun NumberStepper(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         StepButton("remove") { onValueChange(value - step); editing = null }
+        // Untouched, the field shows the setting's current number: select it on focus, so the next
+        // keystroke replaces the value instead of extending it into a nonsense one (13 -> 133).
+        val draft = rememberFieldDraft(shown, selectAllOnFocus = editing == null)
         BasicTextField(
-            value = shown,
-            onValueChange = { editing = it },
+            value = draft.textFieldValue(shown),
+            onValueChange = { next -> draft.accept(next, shown) { editing = it } },
             singleLine = true,
             textStyle = textStyle,
             cursorBrush = SolidColor(Skerry.colors.cyan),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { commit() }),
-            modifier = Modifier.width(fieldWidth).onFocusChanged { if (!it.isFocused) commit() },
+            modifier = Modifier.width(fieldWidth).fieldFocus(draft).onFocusChanged { if (!it.isFocused) commit() },
         )
         if (suffix.isNotEmpty()) Txt(suffix, color = Skerry.colors.faint, size = 12.sp)
         StepButton("add") { onValueChange(value + step); editing = null }

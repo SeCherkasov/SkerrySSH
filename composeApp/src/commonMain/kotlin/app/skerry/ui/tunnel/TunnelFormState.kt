@@ -22,11 +22,17 @@ class TunnelFormState private constructor(private val editingId: String?) {
     var label: String by mutableStateOf("")
     var direction: TunnelDirection by mutableStateOf(TunnelDirection.Local)
     var hostId: String? by mutableStateOf(null)
-    var bindHost: String by mutableStateOf("127.0.0.1")
+    var bindHost: String by mutableStateOf(DEFAULT_BIND_HOST)
     var bindPort: String by mutableStateOf("")
     var destHost: String by mutableStateOf("")
     var destPort: String by mutableStateOf("")
     var autostart: Boolean by mutableStateOf(false)
+
+    /**
+     * True while [bindHost] still holds the loopback the form filled in itself — the field selects
+     * it on focus so retyping it as `0.0.0.0` replaces the value instead of appending to it.
+     */
+    val isDefaultBindHost: Boolean get() = bindHost.trim() == DEFAULT_BIND_HOST
 
     /** SOCKS (`-D`) has no destination; the form hides the destination fields. */
     val isDynamic: Boolean get() = direction == TunnelDirection.Dynamic
@@ -41,6 +47,9 @@ class TunnelFormState private constructor(private val editingId: String?) {
             ?.copy(autostart = autostart)
 
     companion object {
+        /** Loopback: the bind address a tunnel gets unless the user widens it. */
+        const val DEFAULT_BIND_HOST = "127.0.0.1"
+
         /**
          * Form pre-filled from [entry] (edit), or empty with defaults (create, `entry == null`):
          * type `-L`, loopback bind host, empty ports.

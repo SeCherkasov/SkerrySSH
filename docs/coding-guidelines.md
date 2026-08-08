@@ -79,6 +79,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Field labels, caps, avatars | `FieldLabel`, `LabelCase.labelUppercase`, `InitialsAvatar` |
 | Mobile chrome | `MobilePushHeader`, `MobileScreenTitle`, `MobileFabButton`, `MobileTagsEditor` |
 | Mobile form fields (label caps + input) | `ui/mobile/MobileForm.kt`: `MobileFormField` / `MobileFormInput` |
+| Caret and select-on-focus for a field whose value is a caller-owned `String` | `ui/design/FieldDraft`: `rememberFieldDraft` + `Modifier.fieldFocus`, told whether the field is masked and single-line so it applies the never-select rules itself; `rememberSeededDraft` for a find or filter bar, which selects its query only while it is the one the bar opened with. A field that owns its own `TextFieldValue` and selects on *open* (`PathJumpField`, `TerminalSearchBar`) is the other, deliberate shape — don't hand-roll a third |
 | Tunnel/snippet form state (desktop and mobile) | `TunnelFormState`, `SnippetFormState` |
 | Secret display | `VaultPresentation.secretStyle` |
 | Terminal screen state (incl. scrollback search) | `ui/terminal/TerminalScreenState` |

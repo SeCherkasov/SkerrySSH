@@ -17,6 +17,16 @@ import kotlin.test.assertTrue
 class TunnelFormTest {
 
     @Test
+    fun `the loopback bind host counts as a default until the user changes it`() {
+        val form = TunnelFormState.fromEntry(null)
+        assertTrue(form.isDefaultBindHost) // seeded by the form, so its field selects on focus
+        form.bindHost = " 127.0.0.1 "
+        assertTrue(form.isDefaultBindHost)
+        form.bindHost = "0.0.0.0"
+        assertFalse(form.isDefaultBindHost)
+    }
+
+    @Test
     fun `builds a local draft from valid fields`() {
         val draft = buildTunnelDraft(
             id = null, label = "web", hostId = "h1", direction = TunnelDirection.Local,

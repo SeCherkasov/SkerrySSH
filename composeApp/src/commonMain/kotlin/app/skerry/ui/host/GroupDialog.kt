@@ -44,6 +44,8 @@ import app.skerry.ui.generated.resources.shell_create
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
@@ -66,6 +68,9 @@ fun GroupDialog(
     var name by remember { mutableStateOf(initialName) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // Renaming opens on the old name, autofocused: select it so typing replaces it instead of
+    // landing in front of it. Creating starts empty and has nothing to select.
+    val draft = rememberFieldDraft(name, selectAllOnFocus = editing && name == initialName)
     val canSave = name.trim().isNotEmpty()
     val save = { if (canSave) onSave(name) }
     ModalScrim(onDismiss = onDismiss) {
@@ -93,14 +98,14 @@ fun GroupDialog(
             // Border/placeholder live in decorationBox + fillMaxWidth so a click anywhere in the
             // field places the caret.
             BasicTextField(
-                value = name,
-                onValueChange = { name = it },
+                value = draft.textFieldValue(name),
+                onValueChange = { draft.accept(it, name) { name = it } },
                 singleLine = true,
                 textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
                 cursorBrush = SolidColor(Skerry.colors.cyan),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { save() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldFocus(draft),
                 decorationBox = { inner ->
                     Row(
                         Modifier
