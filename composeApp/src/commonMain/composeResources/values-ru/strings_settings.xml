@@ -207,6 +207,7 @@
     <string name="settings_kb_open_assistant">Открыть ассистента</string>
     <string name="settings_kb_open_sftp">Открыть SFTP</string>
     <string name="settings_kb_lock">Заблокировать Skerry</string>
+    <string name="settings_kb_copy_text">Копировать выделенный текст (ассистент, диалоги)</string>
     <string name="settings_kb_accept_autocomplete">Принять подсказку автодополнения</string>
     <string name="settings_kb_cycle_suggestions">Перебрать подсказки</string>
     <string name="settings_kb_search_history">Поиск по истории команд</string>

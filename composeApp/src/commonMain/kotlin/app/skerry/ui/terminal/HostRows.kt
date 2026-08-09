@@ -1,8 +1,6 @@
 package app.skerry.ui.terminal
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -11,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -48,6 +45,8 @@ import app.skerry.ui.design.Badge
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.design.MenuItem
+import app.skerry.ui.design.MenuPanel
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -328,20 +327,18 @@ internal fun HostEntryRow(
                     )
                     if (menuOpen) {
                         Popup(alignment = Alignment.TopEnd, onDismissRequest = { menuOpen = false }) {
-                            Column(
-                                Modifier.clip(RoundedCornerShape(7.dp)).background(Skerry.colors.surface2).border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(7.dp)).padding(4.dp),
-                            ) {
+                            MenuPanel {
                                 if (canRunSnippet) {
-                                    HostMenuItem(stringResource(Res.string.term_menu_run_snippet), Skerry.colors.text) { menuOpen = false; snippetPickerOpen = true }
+                                    MenuItem(stringResource(Res.string.term_menu_run_snippet)) { menuOpen = false; snippetPickerOpen = true }
                                 }
                                 onEdit?.let { edit ->
-                                    HostMenuItem(stringResource(Res.string.term_menu_edit), Skerry.colors.text) { menuOpen = false; edit() }
+                                    MenuItem(stringResource(Res.string.term_menu_edit)) { menuOpen = false; edit() }
                                 }
                                 onDuplicate?.let { duplicate ->
-                                    HostMenuItem(stringResource(Res.string.term_menu_duplicate), Skerry.colors.text) { menuOpen = false; duplicate() }
+                                    MenuItem(stringResource(Res.string.term_menu_duplicate)) { menuOpen = false; duplicate() }
                                 }
                                 onDelete?.let { delete ->
-                                    HostMenuItem(stringResource(Res.string.term_menu_delete), Skerry.colors.sunset) { menuOpen = false; delete() }
+                                    MenuItem(stringResource(Res.string.term_menu_delete), Skerry.colors.sunset) { menuOpen = false; delete() }
                                 }
                             }
                         }
@@ -365,19 +362,5 @@ internal fun HostEntryRow(
                 }
             }
         }
-    }
-}
-
-/**
- * Context menu item for a host row. The width floor keeps the card from collapsing onto its longest
- * label — short verbs in some locales leave a sliver of a click target, and the same menu would
- * change width from row to row depending on which actions that row offers.
- */
-@Composable
-private fun HostMenuItem(label: String, color: Color, onClick: () -> Unit) {
-    Box(
-        Modifier.widthIn(min = 140.dp).clip(RoundedCornerShape(5.dp)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 7.dp),
-    ) {
-        Txt(label, color = color, size = 12.sp)
     }
 }

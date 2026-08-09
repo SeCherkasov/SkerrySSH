@@ -207,6 +207,7 @@
     <string name="settings_kb_open_assistant">打开助手</string>
     <string name="settings_kb_open_sftp">打开 SFTP</string>
     <string name="settings_kb_lock">锁定 Skerry</string>
+    <string name="settings_kb_copy_text">复制选中的文本（助手、对话框）</string>
     <string name="settings_kb_accept_autocomplete">接受自动补全建议</string>
     <string name="settings_kb_cycle_suggestions">循环切换建议</string>
     <string name="settings_kb_search_history">搜索命令历史</string>
