@@ -57,20 +57,16 @@ import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
-import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.assistant_ask_placeholder
-import app.skerry.ui.generated.resources.assistant_no_answer
 import app.skerry.ui.generated.resources.assistant_clear
 import app.skerry.ui.generated.resources.assistant_context_chip
 import app.skerry.ui.generated.resources.assistant_context_off
 import app.skerry.ui.generated.resources.assistant_context_title
 import app.skerry.ui.generated.resources.assistant_empty
 import app.skerry.ui.generated.resources.assistant_explain_request
-import app.skerry.ui.generated.resources.assistant_policy_note
 import app.skerry.ui.generated.resources.assistant_thinking
 import app.skerry.ui.generated.resources.assistant_title
-import app.skerry.ui.generated.resources.term_ai_not_a_command
 import app.skerry.ui.terminal.WORK_BAR_HEIGHT
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.terminal.lastCommandBlocks
@@ -252,45 +248,6 @@ private fun AssistantFeed(
         // Shown while the panel is still empty: what the policy allows and what leaves the machine.
         // Once there is a conversation it would just push it up the panel every turn.
         if (controller.turns.isEmpty()) item { AssistantPolicyNote(controller) }
-    }
-}
-
-/** Blocked/failed/unusable outcome, in the feed rather than a popup: it belongs to that question. */
-@Composable
-private fun AssistantNotice(notice: AiNotice) {
-    val text = when (notice) {
-        is AiNotice.Blocked -> aiBlockedMessage(notice.reason)
-        is AiNotice.Ask -> notice.question
-        AiNotice.Rejected -> stringResource(Res.string.term_ai_not_a_command)
-        AiNotice.NoAnswer -> stringResource(Res.string.assistant_no_answer)
-        is AiNotice.Error -> aiFailureMessage(notice.failure)
-    }
-    val color = if (notice is AiNotice.Error) Skerry.colors.storm else Skerry.colors.amber
-    Txt(text, color = color, size = 12.sp, lineHeight = 17.sp)
-}
-
-/** Policy badge plus the one line of what is sent — the STRICT card from the mock. */
-@Composable
-private fun AssistantPolicyNote(controller: SessionAssistantController) {
-    val mono = LocalFonts.current.mono
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Skerry.colors.overlaySoft)
-            .border(1.dp, Skerry.colors.lineStrong, RoundedCornerShape(12.dp))
-            .padding(horizontal = 11.dp, vertical = 9.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            Modifier.clip(RoundedCornerShape(6.dp)).background(Skerry.colors.amberSoft).padding(horizontal = 7.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Sym("shield", size = 12.sp, color = Skerry.colors.amber)
-            Txt(labelUppercase(controller.policy.shortLabel()), color = Skerry.colors.amber, size = 10.sp, font = mono, maxLines = 1)
-        }
-        Txt(stringResource(Res.string.assistant_policy_note), color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp)
     }
 }
 

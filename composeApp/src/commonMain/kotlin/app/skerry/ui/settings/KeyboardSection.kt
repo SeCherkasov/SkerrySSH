@@ -39,6 +39,7 @@ import app.skerry.ui.generated.resources.settings_kb_broadcast
 import app.skerry.ui.generated.resources.settings_kb_editor_group
 import app.skerry.ui.generated.resources.settings_kb_command_palette
 import app.skerry.ui.generated.resources.settings_kb_copy_selection
+import app.skerry.ui.generated.resources.settings_kb_copy_text
 import app.skerry.ui.generated.resources.settings_kb_cycle_suggestions
 import app.skerry.ui.generated.resources.settings_kb_files_filter
 import app.skerry.ui.generated.resources.settings_kb_files_group
@@ -97,6 +98,10 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.settings_kb_open_assistant), mod("/"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_open_sftp), mod("E"), live = true),
         KeyboardBinding(stringResource(Res.string.settings_kb_lock), mod("L"), live = true),
+        // Deliberately not the terminal's Ctrl+Shift+C: outside a shell there is no SIGINT to avoid,
+        // and this is the platform chord every other selectable surface answers to. Listed because
+        // the terminal row two groups down teaches a different one for the same word.
+        KeyboardBinding(stringResource(Res.string.settings_kb_copy_text), if (mac) "⌘C" else ctrl("C"), live = true),
     )
     // Terminal-internal hotkeys (handled by TerminalScreen): fish-style autocomplete, history
     // reverse-search (Ctrl-R), copy/paste. Active while a terminal session is focused.

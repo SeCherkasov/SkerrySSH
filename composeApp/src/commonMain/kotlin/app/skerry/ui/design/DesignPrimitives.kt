@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
@@ -78,6 +79,9 @@ fun Txt(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
     align: TextAlign = TextAlign.Unspecified,
+    // Left Unspecified, the paragraph base comes from the layout direction — right for prose, wrong
+    // for anything whose order carries meaning regardless of the UI language (a shell line).
+    textDirection: TextDirection = TextDirection.Unspecified,
 ) {
     val family = font ?: LocalFonts.current.ui
     BasicText(
@@ -93,6 +97,7 @@ fun Txt(
             letterSpacing = letterSpacing,
             lineHeight = lineHeight,
             textAlign = align,
+            textDirection = textDirection,
         ),
     )
 }

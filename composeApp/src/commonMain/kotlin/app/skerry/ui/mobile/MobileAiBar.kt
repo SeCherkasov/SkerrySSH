@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -32,11 +33,13 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.CommandRisk
 import app.skerry.ui.ai.AiNotice
+import app.skerry.ui.ai.AssistantAnswer
 import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.ai.aiBlockedMessage
 import app.skerry.ui.ai.aiFailureMessage
@@ -104,11 +107,16 @@ internal fun MobileAiBarInput(controller: TerminalAiController, terminal: Termin
                             CommandRisk.None -> controller.pendingInfo
                             else -> controller.pendingRisk?.reason?.let { commandRiskReasonText(it) }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            // The command wraps (up to 6 lines), not truncated: the user sees in full what
-                            // they confirm and run (see TerminalView — the same safety invariant).
-                            Txt(pending, color = if (severe) Skerry.colors.sunset else Skerry.colors.text, size = 12.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
-                            if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
+                        // Long-press selects, as in the terminal underneath: the bar has no Copy
+                        // button, so selection is the only way the command leaves the screen.
+                        SelectionContainer {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                // The command wraps (up to 6 lines), not truncated: the user sees in full what
+                                // they confirm and run (see TerminalView — the same safety invariant).
+                                // Direction pinned, as on the desktop card: a shell line is LTR whatever the UI language.
+                                Txt(pending, color = if (severe) Skerry.colors.sunset else Skerry.colors.text, size = 12.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, textDirection = TextDirection.Ltr, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
+                                if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
+                            }
                         }
                     }
                     explanation != null ->
@@ -116,18 +124,29 @@ internal fun MobileAiBarInput(controller: TerminalAiController, terminal: Termin
                             Txt(stringResource(Res.string.term_ai_explain_reading), color = Skerry.colors.dim, size = 13.sp)
                         } else {
                             Column(Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
-                                Txt(explanation, color = Skerry.colors.text, size = 12.sp, lineHeight = 17.sp)
+                                // The one place a model's prose appears on mobile outside the AI
+                                // screen, and there is no Copy for it — selection is the way out.
+                                // Filtered like the panel's: it is raw model text, and what a
+                                // selection copies can be pasted straight back into the shell.
+                                SelectionContainer {
+                                    Txt(
+                                        remember(explanation) { AssistantAnswer.safeText(explanation) },
+                                        color = Skerry.colors.text, size = 12.sp, lineHeight = 17.sp,
+                                    )
+                                }
                             }
                         }
                     controller.busy -> Txt(stringResource(Res.string.term_ai_thinking), color = Skerry.colors.dim, size = 13.sp)
-                    controller.notice != null -> when (val notice = controller.notice!!) {
-                        is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Ask -> Txt(notice.question, color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        // The bar only ever asks for a command, so an empty reply is the same
-                        // "nothing usable" outcome as prose — one message covers both.
-                        AiNotice.Rejected, AiNotice.NoAnswer ->
-                            Txt(stringResource(Res.string.term_ai_not_a_command), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = Skerry.colors.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    controller.notice != null -> SelectionContainer {
+                        when (val notice = controller.notice!!) {
+                            is AiNotice.Blocked -> Txt(aiBlockedMessage(notice.reason), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            is AiNotice.Ask -> Txt(notice.question, color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            // The bar only ever asks for a command, so an empty reply is the same
+                            // "nothing usable" outcome as prose — one message covers both.
+                            AiNotice.Rejected, AiNotice.NoAnswer ->
+                                Txt(stringResource(Res.string.term_ai_not_a_command), color = Skerry.colors.amber, size = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            is AiNotice.Error -> Txt(aiFailureMessage(notice.failure), color = Skerry.colors.sunset, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                     else -> {
                         if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_short), color = Skerry.colors.dim, size = 13.sp)

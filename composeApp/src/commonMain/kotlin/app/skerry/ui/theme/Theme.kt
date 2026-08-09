@@ -4,6 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import app.skerry.ui.design.SkerryTextContextMenu
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -123,10 +124,11 @@ fun SkerryTheme(
     // ThemeMode.SYSTEM) glides instead of snapping. First composition snaps to the target.
     val colors = animateSkerryColors(target)
     CompositionLocalProvider(LocalSkerryColors provides colors) {
-        MaterialTheme(
-            colorScheme = colors.toMaterialColorScheme(dark),
-            content = content,
-        )
+        MaterialTheme(colorScheme = colors.toMaterialColorScheme(dark)) {
+            // Inside the theme, so the menu Compose opens over selected text is drawn with this
+            // palette rather than its own white Material default.
+            SkerryTextContextMenu(content)
+        }
     }
 }
 
