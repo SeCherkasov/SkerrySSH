@@ -57,6 +57,7 @@ import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_close
 import app.skerry.ui.generated.resources.conn_cancel
 import app.skerry.ui.generated.resources.conn_duplicate_name
 import app.skerry.ui.generated.resources.conn_field_ai_policy
@@ -111,6 +112,8 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.i18n.label
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * "New connection" / "Edit connection" modal: host profile form plus AI policy selection. With a
@@ -227,7 +230,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                         color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp),
                     )
                 }
-                IconBtn("close", onClick = state::closeModal, modifier = Modifier.align(Alignment.TopEnd))
+                IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = state::closeModal, modifier = Modifier.align(Alignment.TopEnd))
             }
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(start = 26.dp, end = 26.dp, top = 6.dp, bottom = 22.dp)) {
                 val namePlaceholder = if (section == HostSection.RemoteDesktops) "e.g. lab-desktop" else "e.g. prod-web-01"
@@ -428,7 +431,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                         TestStatusLabel(status)
                     }
                 }
-                CancelButton(stringResource(Res.string.conn_cancel), onClick = state::closeModal)
+                CancelButton(stringResource(Res.string.conn_cancel), onClick = state::closeModal, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
                 if (showsTest) {
                     GhostButton(
                         stringResource(Res.string.conn_test),
@@ -482,6 +485,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                         }
                     },
                     enabled = hosts == null || form.canSave,
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
                 )
             }
         }

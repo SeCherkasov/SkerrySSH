@@ -103,7 +103,15 @@ private fun ColumnsMenu(prefs: SftpPrefs) {
     AnchoredDropdown(
         expanded = open,
         onDismiss = { open = false },
-        trigger = { IconBtn("view_column", onClick = { open = !open }, box = 26, icon = 16.sp) },
+        trigger = {
+            IconBtn(
+                "view_column",
+                onClick = { open = !open },
+                box = 26,
+                icon = 16.sp,
+                tooltip = stringResource(Res.string.sftp_columns),
+            )
+        },
     ) { _ ->
         Column(
             Modifier

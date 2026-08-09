@@ -773,6 +773,46 @@ class TerminalEmulatorTest {
         assertEquals("abc", emu.title)
     }
 
+    /**
+     * The title is drawn on the tab and is also the name of the tab's close button, so a bidi
+     * override in it can make one session's close button read as another's. Escapes, not the
+     * characters themselves: they are invisible in a diff.
+     */
+    @Test
+    fun `osc title strips bidi and zero-width format characters`() {
+        val emu = emulate(chunks = arrayOf("$esc]0;prod\u202Ebd-01\u202C\u200B$bel"))
+        assertEquals("prodbd-01", emu.title)
+    }
+
+    /**
+     * The title is laid out three times over (tab chip, its tooltip, the close button's name), and
+     * the OSC buffer it comes from is bounded at megabytes, not at anything a tab could show.
+     */
+    @Test
+    fun `osc title is capped`() {
+        val emu = emulate(chunks = arrayOf("$esc]0;${"a".repeat(4_000)}$bel"))
+        assertEquals(256, emu.title.length)
+    }
+
+    /**
+     * The cap counts UTF-16 units, so a title whose 256th unit is the first half of an astral
+     * character would be cut through the middle of it and draw U+FFFD on the tab, in its tooltip and
+     * in the close button's name. 255 ASCII characters then an emoji puts the cut exactly there.
+     */
+    @Test
+    fun `osc title is not cut through a surrogate pair`() {
+        val emu = emulate(chunks = arrayOf("$esc]0;${"a".repeat(255)}\uD83D\uDE80$bel"))
+        assertEquals(255, emu.title.length)
+        assertFalse(emu.title.any { it.isSurrogate() }, "a half of the emoji was left in the title")
+    }
+
+    /** Same class as the bidi controls, different Unicode category: these break the line. */
+    @Test
+    fun `osc title strips the line and paragraph separators`() {
+        val emu = emulate(chunks = arrayOf("$esc]0;prod\u2028web\u202901$bel"))
+        assertEquals("prodweb01", emu.title)
+    }
+
     @Test
     fun `CSI 22 t pushes and CSI 23 t pops the window title`() {
         // XTWINOPS title stack: vim/tmux save the title on entry (22;2 t) and restore it on exit

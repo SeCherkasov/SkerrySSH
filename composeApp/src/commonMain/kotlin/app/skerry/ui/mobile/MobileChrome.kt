@@ -34,6 +34,9 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_back
+import org.jetbrains.compose.resources.stringResource
 
 // Shared mobile screen chrome: push-screen header, root-tab title, FAB.
 
@@ -59,7 +62,11 @@ internal fun MobilePushHeader(title: String, onBack: () -> Unit, plainBack: Bool
         } else {
             Modifier.clickable(onClick = onBack)
         }
-        Sym("chevron_left", size = 27.sp, color = Skerry.colors.cyanBright, modifier = backModifier)
+        Sym(
+            "chevron_left",
+            contentDescription = stringResource(Res.string.shell_tip_back),
+            size = 27.sp, color = Skerry.colors.cyanBright, modifier = backModifier,
+        )
         Txt(title, color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
     }
 }

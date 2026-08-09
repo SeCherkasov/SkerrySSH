@@ -24,6 +24,16 @@
     <!-- 主机筛选标签：无标签筛选的标签（仅用于显示，参见 ALL_HOSTS_CHIP） -->
     <string name="shtail_chip_all">全部</string>
 
+    <!-- 文件夹标题：折叠分组的箭头（%1$s 为分组名称） -->
+    <string name="shtail_group_collapse">折叠 %1$s</string>
+    <string name="shtail_group_expand">展开 %1$s</string>
+
+    <!-- 文件夹标题：打开重命名/删除对话框的铅笔图标（%1$s 为分组名称） -->
+    <string name="shtail_group_rename">重命名 %1$s</string>
+
+    <!-- 侧边栏搜索框：清空查询的叉号 (SidebarSearchField) -->
+    <string name="shtail_search_clear">清除搜索</string>
+
     <!-- 移动端已知主机 (MobileKnown.kt) -->
     <string name="shtail_known_changed">已变更</string>
     <string name="shtail_known_key_changed_title">密钥已变更：%1$s</string>

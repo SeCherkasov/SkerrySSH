@@ -53,8 +53,11 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.vault.VaultPresentation
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Password-entry dialog for connecting to a host with no bound identity (parity with the mobile
@@ -110,7 +113,12 @@ fun DesktopPasswordDialog(
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = KeyboardType.Password),
                 keyboardActions = KeyboardActions(onDone = { submit() }),
-                modifier = Modifier.fillMaxWidth(),
+                // Named after the placeholder, not the "PASSWORD" caption above it: the caption is
+                // drawn in caps and a screen reader should not be handed shouted text, and "connection
+                // password" also tells it apart from the vault's master password.
+                modifier = Modifier.fillMaxWidth()
+                    .fieldName(fallback = stringResource(Res.string.shell_password_host_placeholder))
+                    .testTag(UiTags.FORM_FIELD),
                 decorationBox = { inner ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),
@@ -163,8 +171,8 @@ fun DesktopPasswordDialog(
                     Sym("shield_lock", size = 14.sp, color = Skerry.colors.moss)
                     Txt(stringResource(Res.string.shell_not_stored_once), color = Skerry.colors.faint, size = 11.sp)
                 }
-                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                PrimaryButton(stringResource(Res.string.shell_connect), onClick = submit, enabled = password.isNotEmpty())
+                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
+                PrimaryButton(stringResource(Res.string.shell_connect), onClick = submit, enabled = password.isNotEmpty(), modifier = Modifier.testTag(UiTags.FORM_SAVE))
             }
         }
     }

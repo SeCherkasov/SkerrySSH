@@ -76,6 +76,7 @@
     <!-- Caption over the permissions column: the full word doesn't fit the slot -->
     <string name="sftp_col_permissions_short">Perms</string>
     <string name="sftp_filter_hint">Filter (name or *.mask)</string>
+    <string name="sftp_tip_filter_toggle">Filter listing</string>
     <string name="sftp_meta_joined">%1$s · %2$s</string>
     <!-- Modified column date: recent — current year (month, day, HH:mm), day — without time,
          old — past years (month, day, year); component order is per-locale -->

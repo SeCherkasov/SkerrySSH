@@ -2,17 +2,10 @@ package app.skerry.ui.mobile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.runtime.collectAsState
 import app.skerry.ui.host.rowSubtitle
-import app.skerry.ui.sync.SyncIndicatorLevel
-import app.skerry.ui.sync.syncIndicatorLocalized
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -35,9 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,28 +41,20 @@ import app.skerry.ui.host.UNGROUPED_LABEL
 import app.skerry.ui.host.ungroupedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_add_first
-import app.skerry.ui.generated.resources.rd_search_placeholder
 import app.skerry.ui.generated.resources.shell_no_hosts_yet
 import app.skerry.ui.generated.resources.shell_add_first_host
 import app.skerry.ui.generated.resources.rd_no_desktops
-import app.skerry.ui.generated.resources.rd_screen_title
-import app.skerry.ui.generated.resources.shell_hosts
-import app.skerry.ui.generated.resources.shell_search_hosts
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.host.ALL_HOSTS_CHIP
 import app.skerry.ui.host.HostDragState
-import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
-import app.skerry.ui.app.LocalSync
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.teams.AutoPullTeamsOnOnline
-import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.host.folderHeaderAnchor
 import app.skerry.ui.host.folderRangeAnchor
 import app.skerry.ui.host.hostBoundsAnchor
-import app.skerry.ui.host.hostChipLabel
 import app.skerry.ui.host.icon
 import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.sessionDotColor
@@ -81,6 +62,8 @@ import app.skerry.ui.session.sessionStatusText
 import app.skerry.ui.host.draggableFolderHeader
 import app.skerry.ui.host.draggableHostRow
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /** Preview catalog for the path without a live [LocalHosts] (offscreen/preview). */
 internal val MOBILE_PREVIEW_HOSTS = listOf(
@@ -157,7 +140,7 @@ private fun MobileCatalogScreen(state: MobileDesignState, section: HostSection) 
         }
         MobileFabButton(
             onClick = { state.openNewConn(section) },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp).testTag(UiTags.NEW_CONNECTION),
         )
     }
 }
@@ -286,175 +269,6 @@ private fun MobileEmptyCatalogNote(section: HostSection) {
     ) {
         Txt(stringResource(title), color = Skerry.colors.dim, size = 14.sp)
         Txt(stringResource(subtitle), color = Skerry.colors.faint, size = 12.5.sp, lineHeight = 18.sp)
-    }
-}
-
-/** Header: the section title (28sp) + sync indicator on the right. */
-@Composable
-private fun HostsHeader(section: HostSection) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 6.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        MobileScreenTitle(
-            stringResource(
-                when (section) {
-                    HostSection.Terminal -> Res.string.shell_hosts
-                    HostSection.RemoteDesktops -> Res.string.rd_screen_title
-                },
-            ),
-        )
-        // Sync indicator driven by session status (see syncIndicator), not just server
-        // reachability: shows "paused/error" without a working session instead of a false green online.
-        val syncC = LocalSync.current
-        val ind = syncC?.let { syncIndicatorLocalized(it.status.collectAsState().value, it.serverReachable.collectAsState().value) }
-        if (ind != null) {
-            Sym(ind.icon, size = 19.sp, color = when (ind.level) {
-                SyncIndicatorLevel.OK -> Skerry.colors.moss
-                SyncIndicatorLevel.WARN -> Skerry.colors.amber
-                SyncIndicatorLevel.ERROR -> Skerry.colors.sunset
-            })
-        }
-    }
-}
-
-/** Search field over host name/address/username/group of this section. */
-@Composable
-private fun HostsSearch(query: String, section: HostSection, onChange: (String) -> Unit) {
-    // Outer padding is on the wrapper; the border lives in decorationBox so a click anywhere places the caret.
-    BasicTextField(
-        value = query,
-        onValueChange = onChange,
-        singleLine = true,
-        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
-        cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 22.dp, end = 22.dp, top = 10.dp, bottom = 6.dp),
-        decorationBox = { inner ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(Skerry.colors.card)
-                    .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(11.dp))
-                    .padding(start = 12.dp, end = 12.dp, top = 11.dp, bottom = 11.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Sym("search", size = 19.sp, color = Skerry.colors.faint)
-                Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) {
-                        val placeholder = when (section) {
-                            HostSection.Terminal -> Res.string.shell_search_hosts
-                            HostSection.RemoteDesktops -> Res.string.rd_search_placeholder
-                        }
-                        Txt(stringResource(placeholder), color = Skerry.colors.faint, size = 15.sp)
-                    }
-                    inner()
-                }
-            }
-        },
-    )
-}
-
-/** Filter-chip row: "All" + tags (prefixed with `#`); active chip highlighted cyan, horizontally scrollable. */
-@Composable
-private fun HostsChips(chips: List<String>, active: String, onSelect: (String) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 22.dp),
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
-    ) {
-        chips.forEach { chip ->
-            key(chip) {
-                val on = chip == active
-                val onClick = remember(chip) { { onSelect(chip) } }
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (on) Skerry.colors.cyan14 else Skerry.colors.overlayMed)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                            onClick = onClick,
-                        )
-                        .padding(horizontal = 13.dp, vertical = 5.dp),
-                ) {
-                    Txt(
-                        hostChipLabel(chip),
-                        color = if (on) Skerry.colors.cyanBright else Skerry.colors.dim,
-                        size = 12.5.sp,
-                        weight = if (on) FontWeight.Medium else FontWeight.Normal,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/**
- * Folder section header: collapse chevron + uppercase name + (edit pencil) + host count. Chevron
- * click toggles collapsed state, pencil click opens the Rename/Delete group dialog — hit zones are
- * strictly on the icons ([onToggle]/[onEdit]) so taps don't conflict with header drag (folder
- * reorder), as on desktop. [dropTarget] highlights the uppercase name when a host is dropped here.
- * [onEdit] == null for the synthetic "Ungrouped" bucket and the preview path (pencil hidden).
- */
-@Composable
-private fun MobileFolderHeader(
-    name: String,
-    count: Int,
-    collapsed: Boolean,
-    dropTarget: Boolean,
-    onToggle: () -> Unit,
-    onEdit: (() -> Unit)?,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 16.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Box(
-            Modifier
-                .size(22.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onToggle,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
-        }
-        // Template form: "PRODUCTION · 3" — the count rides with the name instead of sitting on the
-        // far right, where it read as a column of unrelated numbers down the screen.
-        Txt(
-            "${name.uppercase()} · $count",
-            color = if (dropTarget) Skerry.colors.cyanBright else Skerry.colors.faint,
-            size = 12.sp,
-            weight = FontWeight.SemiBold,
-            letterSpacing = 0.6.sp,
-        )
-        if (onEdit != null) {
-            Box(
-                Modifier
-                    .size(22.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onEdit,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Sym("edit", size = 14.sp, color = Skerry.colors.faint)
-            }
-        }
-        Spacer(Modifier.weight(1f))
     }
 }
 

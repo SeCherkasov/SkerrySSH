@@ -59,6 +59,8 @@ import app.skerry.ui.runbook.RunbookManager
 import app.skerry.ui.runbook.runbookTarget
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Runbooks screen (More → Runbooks): the saved procedures plus an add FAB. Tapping a card opens the
@@ -122,7 +124,7 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
         if (!sheetOpen) {
             MobileFabButton(
                 onClick = { adding = true; editing = null },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp).testTag(UiTags.NEW_RUNBOOK),
             )
         }
 
@@ -228,7 +230,7 @@ private fun MobileRunbookEditSheet(
                 MobileSheetButton(
                     stringResource(Res.string.runbook_save),
                     onClick = { if (form.canSave) { manager.save(form.toDraft()); onSaved() } },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag(UiTags.FORM_SAVE),
                 )
                 if (entry != null) {
                     MobileSheetButton(

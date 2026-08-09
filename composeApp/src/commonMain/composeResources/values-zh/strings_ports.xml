@@ -61,6 +61,7 @@
     <string name="ports_status_stopped">已停止</string>
     <string name="ports_autostart">自动启动</string>
     <string name="ports_autostart_hint">这些隧道会在保险库解锁后自动建立。</string>
+    <string name="ports_autostart_switch">自动启动 %1$s</string>
     <string name="ports_autostart_none">没有隧道会自动启动</string>
     <string name="ports_field_autostart">解锁后自动启动</string>
     <string name="ports_card_throughput">吞吐量</string>

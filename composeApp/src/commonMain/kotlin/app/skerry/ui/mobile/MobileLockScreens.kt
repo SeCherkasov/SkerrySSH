@@ -47,6 +47,7 @@ import app.skerry.ui.design.BrandPlate
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_corrupted_subtitle
@@ -85,6 +86,8 @@ import app.skerry.ui.vault.VaultGateError
 import app.skerry.ui.vault.vaultGateErrorMessage
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 // Lock screens (mobile visual).
 
@@ -109,7 +112,7 @@ fun MobileUnlockScreen(
     MobileLockScaffold(title = stringResource(Res.string.shell_lock_title), subtitle = stringResource(Res.string.shell_unlock_subtitle_mobile), error = error) {
         MobileLockField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Done, onSubmit = submit)
         Spacer(Modifier.height(14.dp))
-        MobileWideButton(stringResource(Res.string.shell_unlock), onClick = submit)
+        MobileWideButton(stringResource(Res.string.shell_unlock), onClick = submit, modifier = Modifier.testTag(UiTags.FORM_SAVE))
         if (canUseBiometric) {
             Spacer(Modifier.height(18.dp))
             Row(
@@ -177,7 +180,8 @@ fun MobileCreateScreen(
         MobileLockField(confirm, { confirm = it }, stringResource(Res.string.shell_repeat_password), ImeAction.Done, onSubmit = submit)
         Spacer(Modifier.height(14.dp))
         MobileWideButton(
-            stringResource(Res.string.shell_create_vault),
+            modifier = Modifier.testTag(UiTags.FORM_SAVE),
+            label = stringResource(Res.string.shell_create_vault),
             onClick = submit,
             bg = if (canCreate) Skerry.colors.cyan else Skerry.colors.overlayStrong,
             fg = if (canCreate) Skerry.colors.ink else Skerry.colors.faint,
@@ -374,7 +378,9 @@ private fun MobileLockField(
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
-        modifier = Modifier.fillMaxWidth(),
+        // The placeholder is the field's only caption, and it vanishes once anything is typed — see
+        // the same note on the desktop gate's LockPasswordField.
+        modifier = Modifier.fillMaxWidth().fieldName(fallback = placeholder).testTag(UiTags.FORM_FIELD),
         decorationBox = { inner ->
             Row(
                 Modifier
@@ -419,7 +425,7 @@ private fun MobileLockPlainField(
             capitalization = KeyboardCapitalization.Characters,
         ),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldName(fallback = placeholder),
         decorationBox = { inner ->
             Row(
                 Modifier
@@ -451,9 +457,10 @@ private fun MobileWideButton(
     bg: Color = Skerry.colors.cyan,
     fg: Color = Skerry.colors.ink,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     Box(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(13.dp))
             .background(bg)

@@ -102,6 +102,8 @@
     <string name="shell_status_disconnected">Disconnected</string>
     <string name="shell_status_encoding">UTF-8 · LF</string>
     <string name="shell_tip_add_pane">Add pane</string>
+    <string name="shell_tip_new_tab">New tab</string>
+    <string name="shell_tip_close_tab">Close %1$s</string>
     <string name="shell_tip_more_actions">More actions</string>
     <string name="shell_tip_sync_panes">Synchronized input between panes</string>
     <string name="shell_tip_files">Files (SFTP)</string>
@@ -109,6 +111,17 @@
     <string name="shell_tip_record">Record session</string>
     <string name="shell_tip_record_stop">Stop recording</string>
     <string name="shell_tip_play">Play recording</string>
+    <string name="shell_tip_minimize">Minimize</string>
+    <string name="shell_tip_maximize">Maximize</string>
+    <string name="shell_tip_restore">Restore</string>
+    <string name="shell_tip_close_window">Close window</string>
+    <string name="shell_tip_close">Close</string>
+    <string name="shell_tip_show_options">Show options</string>
+    <string name="shell_tip_show_hosts">Show hosts</string>
+    <string name="shell_tip_back">Back</string>
+    <string name="shell_tip_remove">Remove</string>
+    <string name="shell_tip_pause">Pause</string>
+    <string name="shell_tip_replay">Replay</string>
     <string name="shell_tip_monitor">Monitoring</string>
     <string name="shell_tip_disconnect">Disconnect</string>
     <string name="shell_no_hosts_yet">No hosts yet</string>

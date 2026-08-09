@@ -102,6 +102,8 @@
     <string name="shell_status_disconnected">Отключено</string>
     <string name="shell_status_encoding">UTF-8 · LF</string>
     <string name="shell_tip_add_pane">Добавить панель</string>
+    <string name="shell_tip_new_tab">Новая вкладка</string>
+    <string name="shell_tip_close_tab">Закрыть «%1$s»</string>
     <string name="shell_tip_more_actions">Ещё действия</string>
     <string name="shell_tip_sync_panes">Синхронизация ввода между панелями</string>
     <string name="shell_tip_files">Файлы (SFTP)</string>
@@ -109,6 +111,17 @@
     <string name="shell_tip_record">Записать сессию</string>
     <string name="shell_tip_record_stop">Остановить запись</string>
     <string name="shell_tip_play">Воспроизвести запись</string>
+    <string name="shell_tip_minimize">Свернуть</string>
+    <string name="shell_tip_maximize">Развернуть</string>
+    <string name="shell_tip_restore">Восстановить</string>
+    <string name="shell_tip_close_window">Закрыть окно</string>
+    <string name="shell_tip_close">Закрыть</string>
+    <string name="shell_tip_show_options">Показать варианты</string>
+    <string name="shell_tip_show_hosts">Показать хосты</string>
+    <string name="shell_tip_back">Назад</string>
+    <string name="shell_tip_remove">Удалить</string>
+    <string name="shell_tip_pause">Пауза</string>
+    <string name="shell_tip_replay">Сначала</string>
     <string name="shell_tip_monitor">Мониторинг</string>
     <string name="shell_tip_disconnect">Отключить</string>
     <string name="shell_no_hosts_yet">Пока нет хостов</string>

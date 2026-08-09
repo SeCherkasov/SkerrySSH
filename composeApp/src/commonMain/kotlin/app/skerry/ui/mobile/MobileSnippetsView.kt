@@ -74,6 +74,8 @@ import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 private data class MockMobileSnippet(val icon: String, val title: String, val cmd: String)
 
@@ -155,7 +157,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
         if (!sheetOpen) {
             MobileFabButton(
                 onClick = { adding = true; editing = null },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp),
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp).testTag(UiTags.NEW_SNIPPET),
             )
         }
 
@@ -317,7 +319,7 @@ private fun MobileSnippetEditSheet(
             MobileSheetButton(
                 stringResource(Res.string.lib_snippets_save_snippet),
                 onClick = { if (form.canSave) onSave(form.toDraft()) },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag(UiTags.FORM_SAVE),
             )
             if (onDelete != null) {
                 MobileSheetButton(stringResource(Res.string.lib_snippets_delete), onClick = onDelete, filled = false, danger = true, modifier = Modifier.fillMaxWidth())

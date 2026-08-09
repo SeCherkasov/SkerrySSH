@@ -40,6 +40,8 @@ import app.skerry.ui.teams.roleBadgeColors
 import app.skerry.ui.teams.teamRoleLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.generated.resources.shell_tip_remove
+import app.skerry.ui.generated.resources.lib_teams_history
 
 // Rows and sections of the phone's Team screen, split out of MobileTeamsView so that file stays
 // about state and dialogs rather than about pixels.
@@ -145,7 +147,7 @@ internal fun MobileMemberRow(
         }
         if (row.manageable) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(4.dp)) {
-                Sym("close", size = 15.sp, color = Skerry.colors.faint)
+                Sym("close", contentDescription = stringResource(Res.string.shell_tip_remove), size = 15.sp, color = Skerry.colors.faint)
             }
         }
     }
@@ -170,12 +172,12 @@ internal fun MobileSharedRow(
         // "What happened to this one" — only for readers who may see the audit log at all.
         if (onHistory != null) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onHistory).padding(3.dp)) {
-                Sym("history", size = 14.sp, color = Skerry.colors.faint)
+                Sym("history", contentDescription = stringResource(Res.string.lib_teams_history), size = 14.sp, color = Skerry.colors.faint)
             }
         }
         if (canUnshare) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onUnshare).padding(3.dp)) {
-                Sym("close", size = 14.sp, color = Skerry.colors.faint)
+                Sym("close", contentDescription = stringResource(Res.string.shell_tip_remove), size = 14.sp, color = Skerry.colors.faint)
             }
         }
     }

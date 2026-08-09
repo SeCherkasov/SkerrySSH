@@ -56,6 +56,7 @@ import app.skerry.ui.host.pickAndParseSshConfig
 import app.skerry.ui.generated.resources.conn_import_action
 import app.skerry.ui.generated.resources.conn_rdp_import_action
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.NO_PRESS
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SIDEBAR_WIDTH
 import app.skerry.ui.design.SidebarSearchField
@@ -65,6 +66,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_search_placeholder
 import app.skerry.ui.generated.resources.rd_section
+import app.skerry.ui.generated.resources.shell_group_new_title
 import app.skerry.ui.generated.resources.term_hosts_section
 import app.skerry.ui.generated.resources.term_new_connection
 import app.skerry.ui.generated.resources.term_no_hosts_match
@@ -85,6 +87,10 @@ import app.skerry.ui.host.icon
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 
 // Terminal view host sidebar: search, tag filters, catalog folders (live drag-and-drop or mock
 // preview), a RECENT section, and the "New connection" button.
@@ -96,9 +102,6 @@ import app.skerry.ui.theme.Skerry
  * relaxed double clicks missed it and the row connected "every other time".
  */
 private const val HOST_DOUBLE_CLICK_MS = 400L
-
-/** [HOST_DOUBLE_CLICK_MS] press-tracking reset: far enough in the past that no press pairs with it. */
-private const val NO_PRESS = Long.MIN_VALUE / 2
 
 /**
  * Height of the sidebar's bottom strip (the "New connection" button): a fixed height keeps the
@@ -154,6 +157,12 @@ internal fun Modifier.hostConnectClick(
                         false
                     }
                 }
+                // Outside clickable, not inside: where two modifiers publish the same semantics key
+                // the outer one wins, and clickable's own action is bound to the empty lambda below
+                // (it is there for the ripple; connecting is the press counting further down). Inner,
+                // this would be overwritten and a row activated by a screen reader or a switch would
+                // press nothing.
+                .semantics { onClick { connect.value(); true } }
                 .clickable(
                     interactionSource = interaction,
                     indication = LocalIndication.current,
@@ -216,7 +225,7 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
     val chips = liveHosts?.let { remember(sectionHosts) { hostTagChips(sectionHosts) } } ?: emptyList()
     // If the active tag disappears (host edited/deleted), the filter falls back to "All".
     val effectiveChip = if (activeChip in chips) activeChip else ALL_HOSTS_CHIP
-    Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)) {
+    Column(Modifier.width(SIDEBAR_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).testTag(UiTags.HOST_SIDEBAR)) {
         Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)) {
             // Search alone in the header: collapsing is the work bar's chevron (and the rail's
             // toggle), so a third control here only took room from the search field.
@@ -278,7 +287,15 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
                 // Create a new (initially empty) group in the live catalog; decorative on the mock path.
                 // The folder is remembered for this section's sidebar (see [CustomGroup]).
                 if (liveHosts != null) {
-                    IconBtn("create_new_folder", onClick = { state.openCreateGroup(section) }, box = 20, icon = 14.sp, tint = Skerry.colors.faint)
+                    IconBtn(
+                        "create_new_folder",
+                        onClick = { state.openCreateGroup(section) },
+                        box = 20,
+                        icon = 14.sp,
+                        tint = Skerry.colors.faint,
+                        tooltip = stringResource(Res.string.shell_group_new_title),
+                        modifier = Modifier.testTag(UiTags.NEW_GROUP),
+                    )
                 } else {
                     Sym("create_new_folder", size = 14.sp, color = Skerry.colors.faint)
                 }
@@ -380,7 +397,7 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
                     stringResource(Res.string.term_new_connection),
                     onClick = { state.openModal(section) },
                     icon = "add_link",
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).testTag(UiTags.NEW_CONNECTION),
                 )
                 // Import hosts from an OpenSSH ~/.ssh/config: pick + parse off the main thread, then the
                 // preview modal (rendered at the app root) handles selection and persistence. Shown only

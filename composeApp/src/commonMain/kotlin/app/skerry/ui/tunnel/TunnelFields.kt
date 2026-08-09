@@ -40,6 +40,8 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ports_no_saved_hosts
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
+import app.skerry.ui.design.fieldValueName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
@@ -68,7 +70,7 @@ internal fun EditField(
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Box(fieldBox()) {
                 if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 12.5.sp, font = mono)
@@ -133,7 +135,9 @@ internal fun ThroughputRow(icon: String, color: Color, fraction: Float, value: S
 @Composable
 private fun PickerTrigger(value: String, onClick: () -> Unit) {
     Row(
-        fieldBox(onClick),
+        // Named from caption + value: the row's only content is the current selection, and a plain
+        // caption would replace it in the announcement instead of joining it (see fieldValueName).
+        fieldBox(onClick).fieldValueName(value),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {

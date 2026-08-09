@@ -58,6 +58,9 @@ import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_create
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import app.skerry.ui.design.fieldName
 
 /** Share-picker item (a host or snippet from the own vault): [detail] is the second line (address/command). */
 data class ShareItem(val id: String, val label: String, val detail: String)
@@ -98,7 +101,10 @@ internal fun TeamsTextField(
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onDone() }),
-        modifier = modifier.fillMaxWidth().focusRequester(focus),
+        // Named from the placeholder, which is the only caption this field ever draws.
+        modifier = modifier.fillMaxWidth().focusRequester(focus)
+            .fieldName(fallback = placeholder)
+            .testTag(UiTags.FORM_FIELD),
         decorationBox = { inner ->
             Row(
                 Modifier
@@ -136,8 +142,13 @@ fun CreateTeamDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-            PrimaryButton(stringResource(Res.string.shell_create), onClick = ::save, enabled = name.trim().isNotEmpty())
+            CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
+            PrimaryButton(
+                stringResource(Res.string.shell_create),
+                onClick = ::save,
+                enabled = name.trim().isNotEmpty(),
+                modifier = Modifier.testTag(UiTags.FORM_SAVE),
+            )
         }
     }
 }
@@ -201,11 +212,12 @@ fun InviteMemberDialog(
             horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
+            CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
             PrimaryButton(
                 if (ready) stringResource(Res.string.lib_teams_invite_send) else stringResource(Res.string.lib_teams_invite_next),
                 onClick = ::submit,
                 enabled = accountId.trim().isNotEmpty() && !busy,
+                modifier = Modifier.testTag(UiTags.FORM_SAVE),
             )
         }
     }

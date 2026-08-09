@@ -27,7 +27,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
+import androidx.compose.runtime.CompositionLocalProvider
+import app.skerry.ui.design.LocalFieldLabel
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 
@@ -48,7 +51,8 @@ internal fun MobileFormField(label: String, modifier: Modifier = Modifier, conte
             letterSpacing = 0.6.sp,
             modifier = Modifier.padding(bottom = 6.dp),
         )
-        content()
+        // See [LocalFieldLabel]: the caption is a sibling, so the input adopts it as its name.
+        CompositionLocalProvider(LocalFieldLabel provides label) { content() }
     }
 }
 
@@ -96,7 +100,7 @@ internal fun MobileFormInput(
         } else {
             KeyboardActions.Default
         },
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Box(
                 Modifier

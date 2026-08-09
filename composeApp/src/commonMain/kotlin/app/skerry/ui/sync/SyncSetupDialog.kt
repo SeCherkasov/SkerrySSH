@@ -63,8 +63,12 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.design.FormField
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Self-hosted sync onboarding modal: server URL + accountId + master password, one "Connect" action
@@ -140,14 +144,15 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 color = Skerry.colors.dim, size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )
 
-            FieldLabel(stringResource(Res.string.sync_field_server_url), top = 16.dp)
-            SyncField(stringResource(Res.string.sync_placeholder_server_url), serverUrl, "dns", KeyboardType.Uri, ImeAction.Next) { serverUrl = it }
-
-            FieldLabel(stringResource(Res.string.sync_field_account))
-            SyncField(stringResource(Res.string.sync_placeholder_account), account, "person", KeyboardType.Text, ImeAction.Next) { account = it }
-
-            FieldLabel(stringResource(Res.string.sync_field_master_password))
-            SyncField(stringResource(Res.string.sync_placeholder_master_password), password, "key", KeyboardType.Password, ImeAction.Done, secret = true, onSubmit = { submit() }) { password = it }
+            FormField(stringResource(Res.string.sync_field_server_url), top = 16.dp) {
+                SyncField(stringResource(Res.string.sync_placeholder_server_url), serverUrl, "dns", KeyboardType.Uri, ImeAction.Next) { serverUrl = it }
+            }
+            FormField(stringResource(Res.string.sync_field_account)) {
+                SyncField(stringResource(Res.string.sync_placeholder_account), account, "person", KeyboardType.Text, ImeAction.Next) { account = it }
+            }
+            FormField(stringResource(Res.string.sync_field_master_password)) {
+                SyncField(stringResource(Res.string.sync_placeholder_master_password), password, "key", KeyboardType.Password, ImeAction.Done, secret = true, onSubmit = { submit() }) { password = it }
+            }
 
             KeepConnectedRow(keepConnected) { keepConnected = it }
 
@@ -180,7 +185,7 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                     )
                 }
                 CancelButton(stringResource(Res.string.sync_cancel), onClick = onDismiss)
-                PrimaryButton(stringResource(Res.string.sync_connect), onClick = { submit() }, enabled = canSubmit)
+                PrimaryButton(stringResource(Res.string.sync_connect), onClick = { submit() }, enabled = canSubmit, modifier = Modifier.testTag(UiTags.FORM_SAVE))
             }
         }
     }
@@ -210,11 +215,6 @@ private fun KeepConnectedRow(checked: Boolean, onChange: (Boolean) -> Unit) {
 }
 
 @Composable
-internal fun FieldLabel(text: String, top: androidx.compose.ui.unit.Dp = 12.dp) {
-    Txt(text, color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = top, bottom = 5.dp))
-}
-
-@Composable
 internal fun SyncField(
     placeholder: String,
     value: String,
@@ -241,7 +241,7 @@ internal fun SyncField(
         visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = keyboardType),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }, onSend = { onSubmit() }),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 10.dp),

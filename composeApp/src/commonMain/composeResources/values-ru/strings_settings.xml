@@ -15,8 +15,8 @@
 
     <!-- Раздел AI -->
     <string name="settings_ai_live_subtitle">Провайдер и настройки AI-ассистента.</string>
-    <string name="settings_ai_field_api_key">КЛЮЧ API OPENAI</string>
-    <string name="settings_ai_field_model">МОДЕЛЬ</string>
+    <string name="settings_ai_field_api_key">Ключ API OpenAI</string>
+    <string name="settings_ai_field_model">Модель</string>
     <string name="settings_ai_field_endpoint">API URL</string>
     <string name="settings_ai_placeholder_api_key">sk-…</string>
     <string name="settings_ai_placeholder_model">gpt-4o-mini</string>

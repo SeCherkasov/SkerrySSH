@@ -66,6 +66,9 @@ import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import app.skerry.ui.design.fieldName
 
 /** Modal name input (New folder / Rename). Confirm is enabled only for a valid name. */
 @Composable
@@ -115,6 +118,9 @@ internal fun NameDialog(
                     .fillMaxWidth()
                     .focusRequester(focus)
                     .fieldFocus(draft)
+                    // The dialog's title is the field's caption; the box has none of its own.
+                    .fieldName(fallback = title)
+                    .testTag(UiTags.FORM_FIELD)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         when (event.key) {
@@ -140,11 +146,12 @@ internal fun NameDialog(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CancelButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss)
+                CancelButton(stringResource(Res.string.sftp_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
                 PrimaryButton(
                     confirmLabel,
                     onClick = submit,
                     bg = if (ok) Skerry.colors.cyan else Skerry.colors.whiteFaint,
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
                 )
             }
     }

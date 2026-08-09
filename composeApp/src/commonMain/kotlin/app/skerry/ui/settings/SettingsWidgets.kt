@@ -22,6 +22,8 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.appearance_default_value
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import androidx.compose.runtime.CompositionLocalProvider
+import app.skerry.ui.design.LocalFieldLabel
 
 // Shared settings-section widgets (used by several *Section.kt files in this package).
 
@@ -53,7 +55,7 @@ internal fun SettingToggleRow(title: String, desc: String, on: Boolean, onToggle
             Txt(title, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
             if (desc.isNotEmpty()) Txt(desc, color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 3.dp))
         }
-        Toggle(on, onToggle, Modifier.padding(top = 2.dp))
+        Toggle(on, onToggle, Modifier.padding(top = 2.dp), label = title)
     }
 }
 
@@ -82,7 +84,8 @@ internal fun SettingRow(
             Txt(label, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
             if (hasHint) DefaultValueHint(isDefault, defaultText, onReset)
         }
-        control()
+        // The caption is a sibling of the control, as in a form field — see [LocalFieldLabel].
+        CompositionLocalProvider(LocalFieldLabel provides label) { control() }
     }
 }
 

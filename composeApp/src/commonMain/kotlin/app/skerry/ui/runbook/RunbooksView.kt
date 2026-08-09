@@ -58,6 +58,8 @@ import app.skerry.ui.snippet.snippetTagLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /** Width of the search field in the section header — the same one the snippets section uses. */
 private val SEARCH_WIDTH = 240.dp
@@ -203,7 +205,7 @@ private fun RunbooksHeader(
         actions = {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 SidebarSearchField(query, onQuery, stringResource(Res.string.runbook_search), Modifier.width(SEARCH_WIDTH))
-                PrimaryButton(stringResource(Res.string.runbook_new), onClick = onNew, icon = "add")
+                PrimaryButton(stringResource(Res.string.runbook_new), onClick = onNew, icon = "add", modifier = Modifier.testTag(UiTags.NEW_RUNBOOK))
             }
         },
     )

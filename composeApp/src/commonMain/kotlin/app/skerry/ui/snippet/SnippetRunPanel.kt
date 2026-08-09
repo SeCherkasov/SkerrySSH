@@ -45,6 +45,7 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.generated.resources.Res
@@ -273,7 +274,7 @@ private fun ParamInput(value: String, onValueChange: (String) -> Unit, mono: Fon
         singleLine = true,
         textStyle = style,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = modifier.fieldFocus(draft),
+        modifier = modifier.fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Skerry.colors.bg)

@@ -49,6 +49,7 @@ import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.terminal_search_close
@@ -107,8 +108,9 @@ internal fun TerminalSearchBar(state: TerminalScreenState, modifier: Modifier = 
             if (expand) Modifier.weight(1f) else Modifier.width(SEARCH_FIELD_WIDTH),
             contentAlignment = Alignment.CenterStart,
         ) {
+            val placeholder = stringResource(Res.string.terminal_search_placeholder)
             if (value.text.isEmpty()) {
-                Txt(stringResource(Res.string.terminal_search_placeholder), color = Skerry.colors.faint, size = 12.sp, font = mono)
+                Txt(placeholder, color = Skerry.colors.faint, size = 12.sp, font = mono)
             }
             BasicTextField(
                 value = value,
@@ -130,6 +132,9 @@ internal fun TerminalSearchBar(state: TerminalScreenState, modifier: Modifier = 
                 keyboardActions = KeyboardActions(onSearch = { state.search.next() }),
                 modifier = Modifier
                     .fillMaxWidth()
+                    // The panel has no caption above the field; what it searches is said by the
+                    // placeholder, so that is the field's name too (as in the sidebar search).
+                    .fieldName(placeholder)
                     .focusRequester(focusRequester)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false

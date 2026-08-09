@@ -23,6 +23,8 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_cancel
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Confirmation dialog for a destructive action (disconnect session, close split panel, delete
@@ -65,8 +67,8 @@ fun ConfirmActionDialog(
                     horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                    PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmColor, fg = Skerry.colors.sunsetInk)
+                    CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
+                    PrimaryButton(confirmLabel, onClick = onConfirm, bg = confirmColor, fg = Skerry.colors.sunsetInk, modifier = Modifier.testTag(UiTags.FORM_SAVE))
                 }
             }
         }

@@ -578,8 +578,20 @@ class TerminalEmulator(
         val rest = if (sep < 0) "" else s.substring(sep + 1)
         when (code) {
             // C0/C1/DEL are stripped from the title: a server must not corrupt the tab UI or smuggle
-            // control bytes into consumers of the string (logs, etc).
-            0, 1, 2 -> title = rest.filter { it.code in 0x20..0x7e || it.code >= 0xa0 }
+            // control bytes into consumers of the string (logs, etc). Format characters go with them
+            // — the title is also the name of the tab's close button, and a bidi override in it can
+            // make "Close prod-db-01" read as another session.
+            // Capped as well as filtered: MAX_OSC_LEN is 4 MiB (shared with the graphics path), and
+            // the title is laid out on the tab, in its tooltip and in the close button's name —
+            // three passes over whatever a host chose to send.
+            0, 1, 2 -> title = rest.asSequence()
+                .filter { (it.code in 0x20..0x7e || it.code >= 0xa0) && isTitleChar(it) }
+                .take(MAX_TITLE_CHARS)
+                .joinToString("")
+                // The cap counts UTF-16 units, so it can land between the halves of a surrogate pair
+                // and leave a lone high surrogate — U+FFFD on the tab, in its tooltip and in the
+                // close button's name. Drop it rather than draw the replacement glyph.
+                .dropLastWhile { it.isHighSurrogate() }
             4 -> setPalette(rest)     // OSC 4 ; index ; spec [ ; index ; spec ... ]
             8 -> setHyperlink(rest)   // OSC 8 ; params ; URI
             52 -> setClipboard(rest)  // OSC 52 ; Pc ; Pd
@@ -1412,9 +1424,21 @@ class TerminalEmulator(
         return raw.replace(':', ';').split(';').map { it.toIntOrNull() ?: -1 }
     }
 
+    /**
+     * What may stay in a window title: printable, and neither reordering nor invisible.
+     *
+     * Both halves are needed. [isSafeDisplayChar] drops the bidi controls and the line and paragraph
+     * separators — which are not format characters, but end a line wherever the title is drawn — and
+     * the format category covers the zero-width set that carries no glyph at all.
+     */
+    private fun isTitleChar(c: Char): Boolean = isSafeDisplayChar(c) && c.category != CharCategory.FORMAT
+
     private companion object {
         /** OSC string length cap (OOM guard on untrusted output); 4 MiB with headroom for OSC 52. */
         const val MAX_OSC_LEN = 4 * 1024 * 1024
+
+        /** Longest window title kept: far past anything a tab, its tooltip or its close button shows. */
+        const val MAX_TITLE_CHARS = 256
 
         /** [stepMarkRow] when no runbook step is open — nothing to cut the output out of. */
         private const val NO_STEP_MARK = -1

@@ -37,11 +37,11 @@
     <string name="sync_reconnect_password">Переподключитесь с помощью мастер-пароля.</string>
 
     <!-- Поля формы -->
-    <string name="sync_field_server_url">АДРЕС СЕРВЕРА</string>
+    <string name="sync_field_server_url">Адрес сервера</string>
     <string name="sync_placeholder_server_url">https://sync.example.com</string>
-    <string name="sync_field_account">АККАУНТ</string>
+    <string name="sync_field_account">Аккаунт</string>
     <string name="sync_placeholder_account">you@example.com</string>
-    <string name="sync_field_master_password">МАСТЕР-ПАРОЛЬ</string>
+    <string name="sync_field_master_password">Мастер-пароль</string>
     <string name="sync_placeholder_master_password">мастер-пароль</string>
     <string name="sync_keep_connected">Оставаться подключённым</string>
     <string name="sync_keep_connected_sub">Автоматически переподключаться после перезапуска.</string>
@@ -54,12 +54,12 @@
     <!-- Связывание по коду (join) -->
     <string name="sync_join_title">Связать по коду</string>
     <string name="sync_join_desc">На устройстве, где вы уже вошли, откройте Настройки → Синхронизация → Связать устройство, затем отсканируйте QR-код или вставьте код сюда. Пароль ниже шифрует хранилище этого устройства и не восстанавливается — потеряете его, придётся связывать заново.</string>
-    <string name="sync_field_pairing_code">КОД СВЯЗЫВАНИЯ</string>
+    <string name="sync_field_pairing_code">Код связывания</string>
     <string name="sync_placeholder_pairing_code">Вставьте код (sk1.…)</string>
     <string name="sync_scan_qr">Сканировать QR-код</string>
-    <string name="sync_field_choose_password">ПРИДУМАЙТЕ ПАРОЛЬ ДЛЯ ЭТОГО УСТРОЙСТВА</string>
+    <string name="sync_field_choose_password">Придумайте пароль для этого устройства</string>
     <string name="sync_placeholder_min_chars">не менее %1$d символов</string>
-    <string name="sync_field_repeat_password">ПОВТОРИТЕ ПАРОЛЬ</string>
+    <string name="sync_field_repeat_password">Повторите пароль</string>
     <string name="sync_placeholder_repeat">повторите для подтверждения</string>
     <string name="sync_passwords_mismatch">Пароли не совпадают.</string>
     <string name="sync_link_this_device">Связать это устройство</string>
@@ -141,8 +141,8 @@
     <string name="web_access_change">Сменить</string>
     <string name="web_access_open">Открыть</string>
     <string name="web_access_remove">Отключить</string>
-    <string name="web_access_field_new">ПАРОЛЬ ВЕБ-ДОСТУПА</string>
-    <string name="web_access_field_repeat">ПОВТОР ПАРОЛЯ</string>
+    <string name="web_access_field_new">Пароль веб-доступа</string>
+    <string name="web_access_field_repeat">Повтор пароля</string>
     <string name="web_access_save">Сохранить</string>
     <string name="web_access_cancel">Отмена</string>
     <string name="web_access_too_short">Не короче %1$d символов.</string>

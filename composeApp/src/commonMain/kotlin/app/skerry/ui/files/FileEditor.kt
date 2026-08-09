@@ -68,6 +68,8 @@ import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.sftp.ConfirmDangerDialog
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.generated.resources.shell_tip_close
+import app.skerry.ui.generated.resources.shell_save
 
 /**
  * Built-in file viewer/editor (F3/F4). It takes over the file panel's own screen rather than opening
@@ -262,13 +264,14 @@ private fun EditorHeader(
             if (!controller.readOnly) {
                 IconBtn(
                     "save",
+                    label = stringResource(Res.string.shell_save),
                     onClick = onSave,
                     box = 26,
                     icon = 16.sp,
                     tint = if (controller.dirty && !controller.saving) Skerry.colors.cyanBright else Skerry.colors.faint,
                 )
             }
-            IconBtn("close", onClick = onClose, box = 26, icon = 16.sp)
+            IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = onClose, box = 26, icon = 16.sp)
         }
     }
 }

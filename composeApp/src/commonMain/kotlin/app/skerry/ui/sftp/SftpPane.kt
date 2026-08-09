@@ -44,6 +44,7 @@ import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.PathJumpField
 import app.skerry.ui.files.fileBrowserFailureText
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_close
 import app.skerry.ui.generated.resources.ftail_fkey_copy
 import app.skerry.ui.generated.resources.ftail_fkey_delete
 import app.skerry.ui.generated.resources.ftail_fkey_edit
@@ -63,6 +64,7 @@ import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberSeededDraft
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.design.Badge
@@ -242,6 +244,9 @@ private fun PaneFilterField(
                 .weight(1f)
                 .focusRequester(focus)
                 .fieldFocus(draft)
+                // The placeholder is the only caption this field ever shows, and it goes on the
+                // first keystroke — same treatment as the phone's filter row.
+                .fieldName(fallback = stringResource(Res.string.sftp_filter_hint))
                 .onFocusChanged { onEditing(it.isFocused) }
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -266,7 +271,7 @@ private fun PaneFilterField(
                 }
             },
         )
-        IconBtn("close", onClick = clearAndClose, box = 20, icon = 13.sp)
+        IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = clearAndClose, box = 20, icon = 13.sp)
     }
 }
 

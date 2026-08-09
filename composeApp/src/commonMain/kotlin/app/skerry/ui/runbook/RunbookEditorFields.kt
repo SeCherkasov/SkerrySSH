@@ -33,6 +33,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
@@ -71,6 +72,11 @@ import app.skerry.ui.generated.resources.runbook_transfer_note
 import app.skerry.ui.generated.resources.runbook_vars_hint
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.FormField
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import androidx.compose.runtime.CompositionLocalProvider
+import app.skerry.ui.design.LocalFieldLabel
 
 /** Watchdog values the editor offers, in minutes; `0` turns the warning off. */
 private val WATCHDOG_CHOICES = listOf(0, 2, 5, 15)
@@ -84,15 +90,17 @@ private val WATCHDOG_CHOICES = listOf(0, 2, 5, 15)
 @Composable
 fun RunbookEditorFields(form: RunbookFormState, mono: FontFamily, horizontalPadding: Dp = 24.dp) {
     Column(Modifier.padding(horizontal = horizontalPadding, vertical = 20.dp)) {
-        RunbookFieldLabel(stringResource(Res.string.runbook_field_name))
-        RunbookLineField(form.label, { form.label = it }, stringResource(Res.string.runbook_ph_name), LocalFonts.current.ui)
+        FormField(stringResource(Res.string.runbook_field_name), top = 0.dp, bottom = 8.dp) {
+            RunbookLineField(form.label, { form.label = it }, stringResource(Res.string.runbook_ph_name), LocalFonts.current.ui)
+        }
 
         Column(Modifier.padding(top = 20.dp)) {
-            RunbookFieldLabel(stringResource(Res.string.runbook_field_description))
-            RunbookLineField(
-                form.description, { form.description = it },
-                stringResource(Res.string.runbook_ph_description), LocalFonts.current.ui, singleLine = false,
-            )
+            FormField(stringResource(Res.string.runbook_field_description), top = 0.dp, bottom = 8.dp) {
+                RunbookLineField(
+                    form.description, { form.description = it },
+                    stringResource(Res.string.runbook_ph_description), LocalFonts.current.ui, singleLine = false,
+                )
+            }
         }
 
         Column(Modifier.padding(top = 20.dp)) {
@@ -106,7 +114,10 @@ fun RunbookEditorFields(form: RunbookFormState, mono: FontFamily, horizontalPadd
                     form.tags.forEach { tag -> key(tag) { Chip("#$tag", onClick = { form.removeTag(tag) }) } }
                 }
             }
-            RunbookLineField(form.tagDraft, form::updateTagDraft, stringResource(Res.string.runbook_ph_tags), mono)
+            // RunbookFieldLabel only draws; the input takes its name from the same caption.
+            CompositionLocalProvider(LocalFieldLabel provides stringResource(Res.string.runbook_field_tags)) {
+                RunbookLineField(form.tagDraft, form::updateTagDraft, stringResource(Res.string.runbook_ph_tags), mono)
+            }
         }
 
         Column(Modifier.padding(top = 24.dp)) {
@@ -262,7 +273,7 @@ private fun StepFlagRow(label: String, on: Boolean, onToggle: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Toggle(on, onToggle)
+        Toggle(on, onToggle, label = label)
         Txt(label, color = Skerry.colors.text, size = 12.sp)
     }
 }
@@ -292,7 +303,7 @@ private fun RunbookLineField(
         singleLine = singleLine,
         textStyle = style,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)
@@ -316,7 +327,7 @@ private fun RunbookCommandField(value: String, onValueChange: (String) -> Unit, 
         onValueChange = { draft.accept(it, value, onValueChange) },
         textStyle = style,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).testTag(UiTags.RUNBOOK_STEP_COMMAND),
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(8.dp))

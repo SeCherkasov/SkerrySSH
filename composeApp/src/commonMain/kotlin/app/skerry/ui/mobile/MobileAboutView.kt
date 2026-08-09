@@ -70,6 +70,7 @@ fun MobileAboutScreen(state: MobileDesignState) {
                         Toggle(
                             on = updates.settings.checkForUpdates,
                             onToggle = { updates.setCheckForUpdates(!updates.settings.checkForUpdates) },
+                            label = stringResource(Res.string.settings_about_check_updates),
                         )
                     }
                 }

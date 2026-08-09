@@ -28,6 +28,7 @@ import app.skerry.ui.files.TransferStatus
 import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_close
 import app.skerry.ui.generated.resources.ftail_file_fallback
 import app.skerry.ui.generated.resources.ftail_transfer_counter
 import app.skerry.ui.generated.resources.sftp_meta_joined
@@ -120,7 +121,7 @@ private fun TransferQueueRow(entry: TransferEntry, mono: FontFamily, onDismiss: 
             modifier = Modifier.widthIn(max = QUEUE_TAIL_MAX_WIDTH),
         )
         // A finished row is the user's to clear; a running one has nothing to dismiss yet.
-        if (active) Box(Modifier.size(22.dp)) else IconBtn("close", onClick = { onDismiss(entry.id) }, box = 22, icon = 14.sp)
+        if (active) Box(Modifier.size(22.dp)) else IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = { onDismiss(entry.id) }, box = 22, icon = 14.sp)
     }
 }
 

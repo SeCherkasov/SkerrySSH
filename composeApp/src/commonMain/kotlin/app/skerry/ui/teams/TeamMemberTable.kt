@@ -36,6 +36,7 @@ import app.skerry.ui.generated.resources.lib_teams_scopes
 import app.skerry.ui.generated.resources.lib_teams_status_invited
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.generated.resources.shell_tip_remove
 
 /** Value cell with nothing to show — a member holding no scope, an unreported last-seen time. */
 internal const val NO_VALUE = "—"
@@ -134,7 +135,7 @@ private fun MemberRow(row: TeamMemberRowUi, now: Long, scopesLoading: Boolean, o
         Box(Modifier.width(ACTIONS_WIDTH), contentAlignment = Alignment.CenterEnd) {
             if (row.manageable) {
                 Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(4.dp)) {
-                    Sym("close", size = 15.sp, color = Skerry.colors.faint)
+                    Sym("close", contentDescription = stringResource(Res.string.shell_tip_remove), size = 15.sp, color = Skerry.colors.faint)
                 }
             }
         }

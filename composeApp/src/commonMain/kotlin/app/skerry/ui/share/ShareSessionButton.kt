@@ -247,7 +247,11 @@ internal fun SharePanel(
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Txt(stringResource(Res.string.share_allow_input), size = 12.sp, modifier = Modifier.weight(1f))
-                        Toggle(on = state.inputAllowed, onToggle = { onAllowInput(!state.inputAllowed) })
+                        Toggle(
+                            on = state.inputAllowed,
+                            onToggle = { onAllowInput(!state.inputAllowed) },
+                            label = stringResource(Res.string.share_allow_input),
+                        )
                     }
                 }
                 GhostButton(

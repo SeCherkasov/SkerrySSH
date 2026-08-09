@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,9 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -207,9 +211,16 @@ fun AnchoredDropdown(
     }
 }
 
-/** 36×20 toggle switch: cyan when [on], white knob circle. */
+/**
+ * 36×20 toggle switch: cyan when [on], white knob circle.
+ *
+ * [label] names what the switch controls. Without one the control is a bare colored rectangle to
+ * anything that isn't looking at it — the state is carried by [toggleable], but the subject is not,
+ * and a row of them reads as "switch, on" repeated. Rows that already have a caption
+ * ([ToggleRow], `SettingToggleRow`) pass it here.
+ */
 @Composable
-fun Toggle(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+fun Toggle(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier, label: String? = null) {
     val interaction = remember { MutableInteractionSource() }
     Box(
         modifier
@@ -217,7 +228,14 @@ fun Toggle(on: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
             .height(20.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (on) Skerry.colors.cyan else Skerry.colors.whiteFaint)
-            .clickable(interactionSource = interaction, indication = null, onClick = onToggle),
+            .then(if (label == null) Modifier else Modifier.semantics { contentDescription = label })
+            .toggleable(
+                value = on,
+                interactionSource = interaction,
+                indication = null,
+                role = Role.Switch,
+                onValueChange = { onToggle() },
+            ),
     ) {
         Box(
             Modifier
@@ -252,6 +270,9 @@ fun Dot(color: Color, size: Int = 6, modifier: Modifier = Modifier) {
  * [tint]; [hoverTint] recolors the icon on hover (e.g. the window close cross turning white over
  * its red hover background), `null` keeps [tint]. [enabled] false dims the glyph and swallows the
  * click, for rows where the action exists but has nothing to act on.
+ *
+ * [tooltip] is both what the hover shows and what the button is called: the glyph is decoration and
+ * carries no name of its own, so a button given no tooltip has no accessible name either.
  */
 @Composable
 fun IconBtn(
@@ -264,6 +285,12 @@ fun IconBtn(
     hoverBg: Color = Skerry.colors.hover,
     hoverTint: Color? = null,
     tooltip: String? = null,
+    /**
+     * The button's accessible name when it should not also grow hover chrome. Defaults to [tooltip],
+     * which is the usual case; pass it on its own for a button the layout draws bare (window
+     * buttons, a modal's ✕) so naming it does not put a popup over the title bar.
+     */
+    label: String? = tooltip,
     enabled: Boolean = true,
 ) {
     // Custom light hover background (dark theme): clickable's default indication gives a dark
@@ -283,7 +310,9 @@ fun IconBtn(
             hovered && hoverTint != null -> hoverTint
             else -> tint
         }
-        Sym(name, size = icon, color = color)
+        // The tooltip is the button's name: an icon-only control has no other label, and the glyph
+        // itself says nothing (see [Sym]). Without either the button stays unnamed, as before.
+        Sym(name, size = icon, color = color, contentDescription = label)
         if (tooltip != null && hovered) HoverTooltip(tooltip)
     }
 }
@@ -513,7 +542,7 @@ fun NumberStepper(
             cursorBrush = SolidColor(Skerry.colors.cyan),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { commit() }),
-            modifier = Modifier.width(fieldWidth).fieldFocus(draft).onFocusChanged { if (!it.isFocused) commit() },
+            modifier = Modifier.width(fieldWidth).fieldFocus(draft).fieldName().onFocusChanged { if (!it.isFocused) commit() },
         )
         if (suffix.isNotEmpty()) Txt(suffix, color = Skerry.colors.faint, size = 12.sp)
         StepButton("add") { onValueChange(value + step); editing = null }
