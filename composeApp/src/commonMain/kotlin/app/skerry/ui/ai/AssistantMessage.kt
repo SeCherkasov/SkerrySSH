@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +30,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,58 +76,82 @@ internal fun AssistantMessage(
 ) {
     val alignment = if (fromUser) Alignment.End else Alignment.Start
     Column(Modifier.fillMaxWidth(), horizontalAlignment = alignment) {
-        Column(
-            Modifier
-                // Width follows the content up to the cap, so a short question is a short bubble
-                // while an answer with a command block still gets the room it needs.
-                .widthIn(max = BUBBLE_MAX_WIDTH)
-                .clip(RoundedCornerShape(12.dp))
-                .background(if (fromUser) Skerry.colors.cyan.copy(alpha = 0.12f) else Skerry.colors.overlaySoft)
-                .border(
-                    1.dp,
-                    if (fromUser) Skerry.colors.lineStrong else Skerry.colors.line,
-                    RoundedCornerShape(12.dp),
-                )
-                .padding(horizontal = 11.dp, vertical = 9.dp),
-        ) {
-            // A user turn is plain text: it is what the person typed, not model output to interpret.
-            if (fromUser) {
-                Txt(text, color = Skerry.colors.text, size = 12.5.sp, lineHeight = 19.sp)
-                // What actually left the machine with this question. Terminal output is the part
-                // worth stating: it is not what the user typed, and under a cloud policy it is the
-                // part that reaches someone else's server.
-                if (attached > 0) {
-                    Box(Modifier.height(5.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Sym("attach_file", size = 11.sp, color = Skerry.colors.faint)
-                        Txt(
-                            stringResource(Res.string.assistant_attached, attached),
-                            color = Skerry.colors.faint,
-                            size = 10.5.sp,
-                        )
+        // One selection scope per turn, not one around the whole feed: the feed is a LazyColumn, and
+        // a selection spanning items that scroll out of composition is undefined by contract
+        // (SelectionContainer's own docs). Per turn also means a streaming delta lands in a scope of
+        // its own, so it cannot collapse a selection made in an older turn. What it does not survive
+        // is the turn leaving composition — scrolling it out of the feed drops the selection with it,
+        // as it would in any lazy list.
+        //
+        // The container installs `focusable()`, which costs two things we take knowingly: each
+        // visible turn becomes a Tab stop — with no focus ring, and unlabelled, since `focusable()`
+        // does not merge the bubble's text into the node — and clicking a reply moves keyboard focus
+        // off the terminal until the terminal is clicked again. Both are the price of the copy chord:
+        // `focusProperties { canFocus = false }` removes them and takes Ctrl+C with them, because
+        // that is the node Compose routes the chord to.
+        SelectionContainer {
+            Column(
+                Modifier
+                    // Width follows the content up to the cap, so a short question is a short bubble
+                    // while an answer with a command block still gets the room it needs.
+                    .widthIn(max = BUBBLE_MAX_WIDTH)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (fromUser) Skerry.colors.cyan.copy(alpha = 0.12f) else Skerry.colors.overlaySoft)
+                    .border(
+                        1.dp,
+                        if (fromUser) Skerry.colors.lineStrong else Skerry.colors.line,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .padding(horizontal = 11.dp, vertical = 9.dp),
+            ) {
+                // A user turn is plain text: it is what the person typed, not model output to parse
+                // for commands. Filtered all the same — a question is often a line pasted out of
+                // terminal output, i.e. text the host chose, and the bubble is selectable now.
+                if (fromUser) {
+                    Txt(
+                        remember(text) { AssistantAnswer.safeText(text) },
+                        color = Skerry.colors.text, size = 12.5.sp, lineHeight = 19.sp,
+                    )
+                    // What actually left the machine with this question. Terminal output is the part
+                    // worth stating: it is not what the user typed, and under a cloud policy it is the
+                    // part that reaches someone else's server. Out of the selection scope like the
+                    // action row — chrome about the turn, and `Sym` draws its icon as a ligature whose
+                    // *text* is the glyph name, so a sweep would paste the word `attach_file`.
+                    if (attached > 0) {
+                        Box(Modifier.height(5.dp))
+                        DisableSelection {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Sym("attach_file", size = 11.sp, color = Skerry.colors.faint)
+                                Txt(
+                                    stringResource(Res.string.assistant_attached, attached),
+                                    color = Skerry.colors.faint,
+                                    size = 10.5.sp,
+                                )
+                            }
+                        }
                     }
+                    return@Column
                 }
-                return@Column
-            }
-            // Parsed once per reply text, not per frame: this runs on every streaming delta.
-            val segments = remember(text) { AssistantAnswer.segments(text) }
-            var seenCode = false
-            segments.forEachIndexed { index, segment ->
-                // A reply that lists several commands is one bubble of alternating block and
-                // explanation; a rule before every block but the first cuts it into the groups the
-                // model meant, so it is clear which sentence belongs to which command.
-                if (segment is AssistantSegment.Code && seenCode) {
-                    Box(Modifier.height(10.dp))
-                    HLine()
-                    Box(Modifier.height(10.dp))
-                } else if (index > 0) {
-                    Box(Modifier.height(6.dp))
-                }
-                when (segment) {
-                    is AssistantSegment.Prose -> ProseText(segment.text)
-                    is AssistantSegment.Code -> {
-                        CodeBlock(segment, actions)
-                        seenCode = true
+                // Parsed once per reply text, not per frame: this runs on every streaming delta.
+                val segments = remember(text) { AssistantAnswer.segments(text) }
+                var seenCode = false
+                segments.forEachIndexed { index, segment ->
+                    // A reply that lists several commands is one bubble of alternating block and
+                    // explanation; a rule before every block but the first cuts it into the groups the
+                    // model meant, so it is clear which sentence belongs to which command.
+                    if (segment is AssistantSegment.Code && seenCode) {
+                        Box(Modifier.height(10.dp))
+                        HLine()
+                        Box(Modifier.height(10.dp))
+                    } else if (index > 0) {
+                        Box(Modifier.height(6.dp))
+                    }
+                    when (segment) {
+                        is AssistantSegment.Prose -> ProseText(segment.text)
+                        is AssistantSegment.Code -> {
+                            CodeBlock(segment, actions)
+                            seenCode = true
+                        }
                     }
                 }
             }
@@ -192,55 +219,66 @@ private fun CommandCard(display: String, command: String?, actions: AssistantCom
         ) {
             // A long command scrolls rather than wrapping: a wrapped shell line is easy to misread
             // before confirming it.
+            //
+            // Direction pinned rather than inherited: a shell line is LTR by nature, and an unstyled
+            // Txt resolves its paragraph base from the layout direction. Under an RTL UI locale a
+            // command whose first strong character is RTL would render with its trailing `#` hoisted
+            // to the front — a live command reading as a comment, next to the Run button. No
+            // character filter can prevent that; stating the direction can.
             Txt(
                 display,
                 color = if (severe) Skerry.colors.sunset else Skerry.colors.moss,
                 size = 11.5.sp,
                 lineHeight = 18.sp,
                 font = mono,
+                textDirection = TextDirection.Ltr,
             )
         }
         if (command == null) return@Column
-        // Wraps instead of clipping: "Run in session" and its two neighbours don't fit one line in
-        // every language, and a half-cut button on a destructive command is the worst place for it.
-        FlowRow(
-            Modifier.padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            val runLabel = when {
-                !severe -> stringResource(Res.string.assistant_run)
-                !armed -> stringResource(Res.string.assistant_run_anyway)
-                else -> stringResource(Res.string.assistant_confirm_run)
+        // Out of the turn's selection scope: a sweep meant for the command must not pick up "Run",
+        // and a copied turn should read as what the model said, not as the buttons under it.
+        DisableSelection {
+            // Wraps instead of clipping: "Run in session" and its two neighbours don't fit one line in
+            // every language, and a half-cut button on a destructive command is the worst place for it.
+            FlowRow(
+                Modifier.padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                val runLabel = when {
+                    !severe -> stringResource(Res.string.assistant_run)
+                    !armed -> stringResource(Res.string.assistant_run_anyway)
+                    else -> stringResource(Res.string.assistant_confirm_run)
+                }
+                ChipButton(
+                    label = runLabel,
+                    color = if (severe) Skerry.colors.sunset else Skerry.colors.teal,
+                    filled = true,
+                    icon = if (severe) "warning" else "play_arrow",
+                    enabled = actions.runnable,
+                    verticalPadding = 4.dp,
+                    onClick = { if (severe && !armed) armed = true else actions.run(command) },
+                )
+                // Copy and Edit carry their glyph only: with three labelled buttons the row wrapped in
+                // every language but English, and the primary action is the one that needs naming.
+                IconBtn(
+                    "content_copy",
+                    onClick = { actions.copy(command) },
+                    box = 24,
+                    icon = 13.sp,
+                    tint = Skerry.colors.textMid,
+                    tooltip = stringResource(Res.string.assistant_copy),
+                )
+                IconBtn(
+                    "edit",
+                    onClick = { actions.edit(command) },
+                    box = 24,
+                    icon = 13.sp,
+                    tint = Skerry.colors.textMid,
+                    tooltip = stringResource(Res.string.assistant_edit),
+                    enabled = actions.runnable,
+                )
             }
-            ChipButton(
-                label = runLabel,
-                color = if (severe) Skerry.colors.sunset else Skerry.colors.teal,
-                filled = true,
-                icon = if (severe) "warning" else "play_arrow",
-                enabled = actions.runnable,
-                verticalPadding = 4.dp,
-                onClick = { if (severe && !armed) armed = true else actions.run(command) },
-            )
-            // Copy and Edit carry their glyph only: with three labelled buttons the row wrapped in
-            // every language but English, and the primary action is the one that needs naming.
-            IconBtn(
-                "content_copy",
-                onClick = { actions.copy(command) },
-                box = 24,
-                icon = 13.sp,
-                tint = Skerry.colors.textMid,
-                tooltip = stringResource(Res.string.assistant_copy),
-            )
-            IconBtn(
-                "edit",
-                onClick = { actions.edit(command) },
-                box = 24,
-                icon = 13.sp,
-                tint = Skerry.colors.textMid,
-                tooltip = stringResource(Res.string.assistant_edit),
-                enabled = actions.runnable,
-            )
         }
     }
 }

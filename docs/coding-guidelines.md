@@ -74,6 +74,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Chips | `Chip` (label, active/inactive) vs `ChipButton` (action chip: colour, outline/filled, enabled) — pick one, don't add a third |
 | Rules and separators | `HLine`, `VLine` |
 | Dropdowns and modals | `AnchoredDropdown`, `DropdownField`, `ModalScrim` |
+| Pop-up menu (right click, "⋮") | `ui/design/MenuPanel`: `MenuPanel` + `MenuItem` (label only; destructive via `color`). It also draws the platform text context menu, through `ui/design/SkerryTextContextMenu`. `ui/terminal/SessionActions.MenuActionRow` is the glyph+label row — pick one, don't add a third. `TerminalPanes`, `SessionActions` and `RemoteDesktopMenus` still hand-roll the panel with their own tokens and widths and should converge onto `MenuPanel` (issue #224) |
 | Confirming a destructive action / informing | `ui/design/ConfirmActionDialog`, `NoticeDialog` |
 | Sidebar and section chrome | `ui/design/SectionChrome`: `SidebarSectionTitle`, `SectionHeader`, `EmptyState`, `SidebarSearchField` |
 | Field labels, caps, avatars | `FieldLabel`, `LabelCase.labelUppercase`, `InitialsAvatar` |

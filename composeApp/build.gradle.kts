@@ -78,6 +78,22 @@ kotlin {
                 implementation(libs.jna.platform)
             }
         }
+        val desktopTest by getting {
+            dependencies {
+                // Compose UI tests run on the desktop target only: gestures the UI is built around
+                // (mouse drag-to-select) have no headless equivalent on the Android unit-test JVM.
+                // Needs a display — CI wraps the run in xvfb.
+                //
+                // JUnit 4 and Truth come with it transitively, and this source set runs on the JUnit 5
+                // platform with no vintage engine: a test written with `org.junit.Test` would compile,
+                // report nothing, and pass. Excluded so that import cannot resolve in the first place.
+                @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+                implementation(compose.uiTest) {
+                    exclude(group = "junit")
+                    exclude(group = "com.google.truth")
+                }
+            }
+        }
     }
 }
 

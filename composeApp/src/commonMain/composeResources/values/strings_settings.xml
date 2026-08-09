@@ -207,6 +207,7 @@
     <string name="settings_kb_open_assistant">Open assistant</string>
     <string name="settings_kb_open_sftp">Open SFTP</string>
     <string name="settings_kb_lock">Lock Skerry</string>
+    <string name="settings_kb_copy_text">Copy selected text (assistant, dialogs)</string>
     <string name="settings_kb_accept_autocomplete">Accept autocomplete suggestion</string>
     <string name="settings_kb_cycle_suggestions">Cycle suggestions</string>
     <string name="settings_kb_search_history">Search command history</string>

@@ -2,6 +2,7 @@ package app.skerry.ui.ai
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
@@ -98,6 +99,89 @@ class AssistantAnswerTest {
     }
 
     // --- inline spans (mono for `code`, bold for **text**) ---
+
+    /**
+     * The card shows [AssistantSegment.Code.text] and Run sends [AssistantSegment.Code.commands] —
+     * two strings out of one block. A bidi override left in the shown one renders the line in an
+     * order the shell never sees, which is the whole reason `isSafeTerminalInputChar` exists. Since
+     * the block became selectable it is also an egress: what is swept up goes to the clipboard, and
+     * a paste into the terminal is not filtered.
+     */
+    @Test
+    fun `a fenced block is shown with bidi and control characters already stripped`() {
+        val segments = AssistantAnswer.segments("```\necho safe\u202E; rm -rf /\n```")
+
+        val code = segments.filterIsInstance<AssistantSegment.Code>().single()
+        assertFalse(code.text.any { it == '\u202E' }, "the shown text still carries U+202E: `${'$'}{code.text}`")
+        assertEquals(code.commands.single(), code.text)
+    }
+
+    /**
+     * Prose is not inert either: `spans` renders a `` `…` `` run in the mono font, across newlines,
+     * so a stretch of prose can look exactly like the command card next to it. Since the panel
+     * became selectable it is one Ctrl+C and one paste away from the shell.
+     */
+    @Test
+    fun `prose is shown with bidi and control characters already stripped`() {
+        val segments = AssistantAnswer.segments("Run `echo safe\u202E; rm -rf /` when ready.")
+
+        val prose = segments.filterIsInstance<AssistantSegment.Prose>().single()
+        assertFalse(prose.text.any { it == '\u202E' }, "the shown prose still carries U+202E: `${'$'}{prose.text}`")
+    }
+
+    /**
+     * The input predicate rejects U+200B..U+200F wholesale, which takes the zero-width joiner with
+     * it: filtering prose with it splits a family emoji into three people and writes Persian without
+     * its joins. Prose is shown, not run, so it keeps them — only the reordering characters go.
+     */
+    @Test
+    fun `prose keeps the joiners that hold an emoji and a Persian word together`() {
+        val segments = AssistantAnswer.segments("Try \uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67 and \u0645\u06CC\u200C\u0634\u0648\u062F.")
+
+        val prose = segments.filterIsInstance<AssistantSegment.Prose>().single()
+        assertTrue(prose.text.contains('\u200D'), "the emoji joiner was stripped: `${'$'}{prose.text}`")
+        assertTrue(prose.text.contains('\u200C'), "the Persian non-joiner was stripped: `${'$'}{prose.text}`")
+    }
+
+    /** A block sits next to Run, so it keeps the stricter predicate: shown and executed are one string. */
+    @Test
+    fun `a fenced block drops the joiners prose keeps`() {
+        val segments = AssistantAnswer.segments("```\nls \u200Dsrc\n```")
+
+        val code = segments.filterIsInstance<AssistantSegment.Code>().single()
+        assertFalse(code.text.any { it == '\u200D' }, "the block kept a zero-width joiner: `${'$'}{code.text}`")
+        assertEquals(code.commands.single(), code.text)
+    }
+
+    @Test
+    fun `a block of nothing but rejected characters is dropped, not shown empty`() {
+        // trim() sees no whitespace in a bidi override, so the block survives the blank check and
+        // only collapses after filtering — the one path that can make a segment disappear.
+        val segments = AssistantAnswer.segments("Before.\n```\n\u202E\u200B\n```\nAfter.")
+
+        assertTrue(segments.none { it is AssistantSegment.Code }, "an empty block was still rendered")
+        assertEquals(listOf("Before.", "After."), segments.filterIsInstance<AssistantSegment.Prose>().map { it.text })
+    }
+
+    @Test
+    fun `a line that filters away leaves no blank line behind`() {
+        // `flush` trims before filtering, and U+200B is not whitespace to String.trim(): without a
+        // second trim the block would open with an empty line and stop matching its command.
+        val segments = AssistantAnswer.segments("```\n\u200B\nls\n```")
+
+        val code = segments.filterIsInstance<AssistantSegment.Code>().single()
+        assertEquals("ls", code.text)
+        assertEquals(listOf("ls"), code.commands)
+    }
+
+    @Test
+    fun `a block is still shown line by line once sanitized`() {
+        val segments = AssistantAnswer.segments("```\n# keep this\nsystemctl daemon-reload\n```")
+
+        val code = segments.filterIsInstance<AssistantSegment.Code>().single()
+        assertEquals("# keep this\nsystemctl daemon-reload", code.text)
+        assertEquals(listOf("systemctl daemon-reload"), code.commands)
+    }
 
     @Test
     fun `inline backticks become mono spans`() {

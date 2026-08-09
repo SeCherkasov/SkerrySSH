@@ -34,8 +34,8 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.ai.AiRole
 import app.skerry.ui.ai.AiChatBubble
+import app.skerry.ui.ai.AiChatError
 import app.skerry.ui.ai.AiQuickChatHeader
-import app.skerry.ui.ai.aiFailureMessage
 import app.skerry.ui.ai.byokHintMessage
 import app.skerry.ui.ai.isInsecureAiEndpoint
 import app.skerry.ui.ai.rememberByokModelState
@@ -129,8 +129,7 @@ fun MobileAiScreen(state: MobileDesignState) {
                 Spacer(Modifier.height(8.dp))
                 ai.turns.forEach { turn -> AiChatBubble(turn.role, turn.text) }
                 ai.streaming?.let { AiChatBubble(AiRole.ASSISTANT, if (it.isEmpty()) "…" else it) }
-                // Request error uses the error token (Skerry.colors.storm), as on desktop; Skerry.colors.sunset is reserved for warnings.
-                ai.error?.let { Txt(aiFailureMessage(it), color = Skerry.colors.storm, size = 12.sp, modifier = Modifier.padding(vertical = 6.dp)) }
+                ai.error?.let { AiChatError(it) }
 
                 var prompt by remember { mutableStateOf("") }
                 val send = { if (prompt.isNotBlank() && !ai.busy) { ai.ask(prompt); prompt = "" } }
@@ -228,7 +227,7 @@ private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
             Spacer(Modifier.height(8.dp))
         }
         byok.refreshFailure?.let { failure ->
-            Txt(aiFailureMessage(failure), color = Skerry.colors.storm, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            AiChatError(failure, compact = true)
         }
 
         Spacer(Modifier.height(12.dp))
