@@ -54,18 +54,36 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       name: ${{ steps.resolve.outputs.name }}
+      code: ${{ steps.resolve.outputs.code }}
     steps:
       - id: resolve
-        # inputs.versionName goes through env, never interpolated into the shell — otherwise a
+        # The dispatch inputs go through env, never interpolated into the shell — otherwise a
         # dispatch input could inject commands into this step (it writes $GITHUB_OUTPUT).
         env:
           INPUT_VERSION: ${{ inputs.versionName }}
+          INPUT_VERSION_CODE: ${{ inputs.versionCode }}
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "name=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            name="${GITHUB_REF_NAME#v}"
           else
-            echo "name=$INPUT_VERSION" >> "$GITHUB_OUTPUT"
+            name="$INPUT_VERSION"
           fi
+          # None of the sources is constrained to a version format. Reject anything that is not
+          # version-shaped here, once, before it reaches $GITHUB_OUTPUT and four build jobs. This
+          # is not jpackage's grammar: a pre-release tag still gets as far as the packaging step.
+          if [[ -n "$name" && ! "$name" =~ ^[0-9]+(\.[0-9]+)*([-.][0-9A-Za-z]+)*$ ]]; then
+            echo "not a version string: $name" >&2
+            exit 1
+          fi
+          # Bounded and leading-zero-free: AGP parses versionCode as a signed int, and 007 would
+          # quietly become 7 — a downgrade against the value in gradle.properties.
+          code="$INPUT_VERSION_CODE"
+          if [[ -n "$code" && ! "$code" =~ ^[1-9][0-9]{0,8}$ ]]; then
+            echo "not a versionCode (1..999999999): $code" >&2
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
 
   linux-desktop:
     needs: version
@@ -94,36 +112,25 @@ jobs:
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
 
       - name: Package deb + rpm
+        # Version comes through env, not interpolated into the shell (injection-safe).
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.name }}
         run: >
           ./gradlew :composeApp:packageDeb :composeApp:packageRpm --stacktrace
-          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
-
-      - name: Fetch appimagetool
-        # Pin the tool to an immutable tagged release (not the mutable `continuous` tag) and verify
-        # its sha256 before use — a swapped binary here would run in the build. Passing arch via env
-        # keeps the matrix value out of the shell command.
-        env:
-          APPIMAGETOOL_VERSION: "1.9.1"
-          ARCH: ${{ matrix.arch }}
-        run: |
-          case "$ARCH" in
-            x86_64)  sha=ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0 ;;
-            aarch64) sha=f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158 ;;
-            *) echo "unsupported arch: $ARCH" >&2; exit 1 ;;
-          esac
-          curl -fsSL -o "$RUNNER_TEMP/appimagetool" \
-            "https://github.com/AppImage/appimagetool/releases/download/${APPIMAGETOOL_VERSION}/appimagetool-${ARCH}.AppImage"
-          echo "${sha}  ${RUNNER_TEMP}/appimagetool" | sha256sum -c -
-          chmod +x "$RUNNER_TEMP/appimagetool"
-          echo "APPIMAGETOOL=$RUNNER_TEMP/appimagetool" >> "$GITHUB_ENV"
+          ${VERSION_NAME:+"-Pskerry.versionName=$VERSION_NAME"}
 
       - name: Package AppImage
         # createDistributable (a dependency of packageAppImage) rebuilds the app-image; the
         # script wraps it into a portable .AppImage. CI has no FUSE — the script sets
         # APPIMAGE_EXTRACT_AND_RUN so appimagetool and mksquashfs run without it.
+        # appimagetool is downloaded and sha256-verified by that script, which is the single place
+        # its version and hashes are pinned: a second copy here would drift from it unnoticed.
+        # Version comes through env, not interpolated into the shell (injection-safe).
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.name }}
         run: >
           ./gradlew :composeApp:packageAppImage --stacktrace
-          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
+          ${VERSION_NAME:+"-Pskerry.versionName=$VERSION_NAME"}
 
       - name: Upload Linux distributables
         # deb/rpm/AppImage names already carry the arch (amd64/arm64, x86_64/aarch64),
@@ -160,10 +167,13 @@ jobs:
       - name: Package msi + portable zip
         # packagePortableZip reuses the app-image createDistributable already builds for the
         # msi, so the extra artifact costs only the zipping.
+        # Version comes through env, not interpolated into the shell (injection-safe).
         shell: bash
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.name }}
         run: >
           ./gradlew :composeApp:packageMsi :composeApp:packagePortableZip --stacktrace
-          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
+          ${VERSION_NAME:+"-Pskerry.versionName=$VERSION_NAME"}
 
       - name: Suffix msi and portable zip with the architecture
         # jpackage emits Skerry-<version>.msi with no arch marker; every other desktop
@@ -209,9 +219,12 @@ jobs:
       - name: Package dmg
         # Unsigned/un-notarized on purpose (no Apple Developer account yet) — Gatekeeper
         # will require a manual allow in System Settings on first launch.
+        # Version comes through env, not interpolated into the shell (injection-safe).
+        env:
+          VERSION_NAME: ${{ needs.version.outputs.name }}
         run: >
           ./gradlew :composeApp:packageDmg --stacktrace
-          ${{ needs.version.outputs.name && format('-Pskerry.versionName={0}', needs.version.outputs.name) || '' }}
+          ${VERSION_NAME:+"-Pskerry.versionName=$VERSION_NAME"}
 
       - name: Rename dmg to the real version and suffix the architecture
         # jpackage forces the mac bundle version's major to >=1 (see build.gradle.kts), so
@@ -294,11 +307,11 @@ jobs:
           SKERRY_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           SKERRY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           VERSION_NAME: ${{ needs.version.outputs.name }}
-          VERSION_CODE: ${{ inputs.versionCode || github.run_number }}
+          VERSION_CODE: ${{ needs.version.outputs.code || github.run_number }}
         run: >
           ./gradlew :androidApp:assembleRelease --stacktrace
-          ${VERSION_NAME:+-Pskerry.versionName=$VERSION_NAME}
-          -Pskerry.versionCode=$VERSION_CODE
+          ${VERSION_NAME:+"-Pskerry.versionName=$VERSION_NAME"}
+          "-Pskerry.versionCode=$VERSION_CODE"
 
       - name: Rename APK to match the other artifacts
         # AGP emits androidApp-release.apk. Rename it to the Skerry-<version> scheme the
