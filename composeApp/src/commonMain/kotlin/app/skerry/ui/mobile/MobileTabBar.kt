@@ -20,7 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileTab
+import app.skerry.ui.app.UiTags
 import app.skerry.ui.app.mobileActiveTab
+import androidx.compose.ui.platform.testTag
 import app.skerry.ui.immersive.hiddenSystemBarsPadding
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -31,6 +33,8 @@ import app.skerry.ui.generated.resources.nav_tab_more
 import app.skerry.ui.generated.resources.nav_tab_sessions
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 
 // Mobile bottom tab bar.
 
@@ -73,7 +77,12 @@ private fun MobileTabItem(tab: MobileTab, active: Boolean, onClick: () -> Unit) 
     val color = if (active) Skerry.colors.cyanBright else Skerry.colors.faint
     val interaction = remember { MutableInteractionSource() }
     Column(
-        Modifier.clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        Modifier
+            .testTag(UiTags.mobileTab(tab))
+            // Which tab is open is otherwise only a colour and a weight — desktop parity with the
+            // rail (see DesktopRail.RailButton).
+            .semantics { selected = active }
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {

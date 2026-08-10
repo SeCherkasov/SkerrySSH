@@ -24,6 +24,16 @@
     <!-- Чипы фильтра хостов: чип «без фильтра по тегу» (только отображение, см. ALL_HOSTS_CHIP) -->
     <string name="shtail_chip_all">Все</string>
 
+    <!-- Шапка папки: шеврон, сворачивающий группу (%1$s — имя группы) -->
+    <string name="shtail_group_collapse">Свернуть «%1$s»</string>
+    <string name="shtail_group_expand">Развернуть «%1$s»</string>
+
+    <!-- Шапка папки: карандаш, открывающий диалог переименования/удаления (%1$s — имя группы) -->
+    <string name="shtail_group_rename">Переименовать «%1$s»</string>
+
+    <!-- Поиск в боковой панели: крестик, очищающий запрос (SidebarSearchField) -->
+    <string name="shtail_search_clear">Очистить поиск</string>
+
     <!-- Mobile known hosts (MobileKnown.kt) -->
     <string name="shtail_known_changed">изменён</string>
     <string name="shtail_known_key_changed_title">Ключ изменён: %1$s</string>

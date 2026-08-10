@@ -102,6 +102,8 @@
     <string name="shell_status_disconnected">已断开</string>
     <string name="shell_status_encoding">UTF-8 · LF</string>
     <string name="shell_tip_add_pane">添加窗格</string>
+    <string name="shell_tip_new_tab">新建标签页</string>
+    <string name="shell_tip_close_tab">关闭 %1$s</string>
     <string name="shell_tip_more_actions">更多操作</string>
     <string name="shell_tip_sync_panes">窗格间输入同步</string>
     <string name="shell_tip_files">文件 (SFTP)</string>
@@ -109,6 +111,17 @@
     <string name="shell_tip_record">录制会话</string>
     <string name="shell_tip_record_stop">停止录制</string>
     <string name="shell_tip_play">播放录制</string>
+    <string name="shell_tip_minimize">最小化</string>
+    <string name="shell_tip_maximize">最大化</string>
+    <string name="shell_tip_restore">还原</string>
+    <string name="shell_tip_close_window">关闭窗口</string>
+    <string name="shell_tip_close">关闭</string>
+    <string name="shell_tip_show_options">显示选项</string>
+    <string name="shell_tip_show_hosts">显示主机</string>
+    <string name="shell_tip_back">返回</string>
+    <string name="shell_tip_remove">移除</string>
+    <string name="shell_tip_pause">暂停</string>
+    <string name="shell_tip_replay">重播</string>
     <string name="shell_tip_monitor">监控</string>
     <string name="shell_tip_disconnect">断开连接</string>
     <string name="shell_no_hosts_yet">还没有主机</string>

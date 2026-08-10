@@ -31,6 +31,7 @@ import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.NumberStepper
 import app.skerry.ui.design.Sym
@@ -250,7 +251,8 @@ private fun LocalShellField(value: String, onChange: (String) -> Unit) {
         singleLine = true,
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        // Under a SectionLabel, not a FormField caption — the placeholder is the only label it shows.
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(fallback = placeholder),
         decorationBox = { inner ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)

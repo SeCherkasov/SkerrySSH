@@ -37,6 +37,7 @@ import app.skerry.ui.generated.resources.ports_dynamic_proxy
 import app.skerry.ui.sftp.humanSize
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.generated.resources.ports_open_in_browser
 
 /** Placeholder in a numeric cell with nothing to show yet (a tunnel that has carried no bytes). */
 private const val NO_VALUE = "—"
@@ -128,7 +129,7 @@ internal fun TunnelRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 OpenInBrowserAction(entry)
-                TunnelSwitch(entry, onToggle)
+                TunnelSwitch(entry, t.label, onToggle)
             }
         }
         (entry.status as? TunnelStatus.Failed)?.let {
@@ -198,6 +199,7 @@ private fun OpenInBrowserAction(entry: TunnelEntry) {
     val uriHandler = LocalUriHandler.current
     Sym(
         "open_in_new",
+        contentDescription = stringResource(Res.string.ports_open_in_browser),
         size = 15.sp,
         color = Skerry.colors.cyanBright,
         // A failing system handler must not throw into the composition (see AboutSection).
@@ -205,12 +207,15 @@ private fun OpenInBrowserAction(entry: TunnelEntry) {
     )
 }
 
-/** On/off switch; an hourglass stands in while the tunnel is still dialling. */
+/**
+ * On/off switch; an hourglass stands in while the tunnel is still dialling. Named after the tunnel
+ * it raises — the row draws that name too, but the switch is a control of its own.
+ */
 @Composable
-private fun TunnelSwitch(entry: TunnelEntry, onToggle: () -> Unit) {
+private fun TunnelSwitch(entry: TunnelEntry, label: String, onToggle: () -> Unit) {
     when (entry.status) {
-        is TunnelStatus.Active -> Toggle(on = true, onToggle = onToggle)
+        is TunnelStatus.Active -> Toggle(on = true, onToggle = onToggle, label = label)
         TunnelStatus.Connecting -> Sym("hourglass_top", size = 16.sp, color = Skerry.colors.amber)
-        else -> Toggle(on = false, onToggle = onToggle)
+        else -> Toggle(on = false, onToggle = onToggle, label = label)
     }
 }

@@ -97,6 +97,19 @@ kotlin {
     }
 }
 
+// UI tests run in English, whatever locale the machine is in.
+//
+// They look their strings up through `stringResource`, so they are locale-agnostic by construction —
+// but only one at a time. Two different resources that happen to be the same word in one language
+// collide there and nowhere else: the production guard's confirm button and the snippet library's
+// Run button are both "Run" in English and different words in Russian, so a lookup by caption found
+// two nodes on CI and one on a Russian desktop. Pinning the locale makes a local run and a CI run
+// the same run.
+tasks.withType<Test>().configureEach {
+    systemProperty("user.language", "en")
+    systemProperty("user.country", "US")
+}
+
 compose.resources {
     publicResClass = false
     packageOfResClass = "app.skerry.ui.generated.resources"

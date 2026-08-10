@@ -324,7 +324,7 @@ private fun MobileSyncToggleRow(label: String, sub: String?, on: Boolean, onTogg
             Txt(label, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
             if (sub != null) Txt(sub, color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
         }
-        Toggle(on = on, onToggle = onToggle)
+        Toggle(on = on, onToggle = onToggle, label = label)
     }
 }
 

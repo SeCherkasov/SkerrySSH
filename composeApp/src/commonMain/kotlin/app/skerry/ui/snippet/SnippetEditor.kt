@@ -56,6 +56,7 @@ import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
@@ -77,6 +78,10 @@ import app.skerry.ui.generated.resources.lib_snippets_shortcut_reserved
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.FormField
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import app.skerry.ui.generated.resources.shell_tip_remove
 
 /**
  * Snippet form: name, command, tags and hotkey. Reached from "New snippet" and from Edit in the run
@@ -100,13 +105,15 @@ internal fun SnippetEditor(
             Txt(form.label.ifBlank { stringResource(Res.string.lib_snippets_new) }, color = Skerry.colors.text, size = 17.sp, weight = FontWeight.SemiBold)
         }
         Column(Modifier.padding(top = 20.dp)) {
-            FieldLabel(top = 0.dp, bottom = 8.dp, text = labelUppercase(stringResource(Res.string.lib_snippets_field_name)))
             // The name is human-readable text — UI font, like every other name field (command below stays mono).
-            EditField(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name), LocalFonts.current.ui)
+            FormField(stringResource(Res.string.lib_snippets_field_name), top = 0.dp, bottom = 8.dp) {
+                EditField(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name), LocalFonts.current.ui)
+            }
         }
         Column(Modifier.padding(top = 20.dp)) {
-            FieldLabel(top = 0.dp, bottom = 8.dp, text = labelUppercase(stringResource(Res.string.lib_snippets_field_command)))
-            CommandField(form.command, { form.command = it }, "df -h | sort -k5 -r", mono)
+            FormField(stringResource(Res.string.lib_snippets_field_command), top = 0.dp, bottom = 8.dp) {
+                CommandField(form.command, { form.command = it }, "df -h | sort -k5 -r", mono)
+            }
         }
         Column(Modifier.padding(top = 20.dp)) {
             FieldLabel(top = 0.dp, bottom = 8.dp, text = labelUppercase(stringResource(Res.string.lib_snippets_field_tags)))
@@ -149,8 +156,9 @@ internal fun SnippetEditor(
                 stringResource(Res.string.lib_snippets_save),
                 onClick = { if (form.canSave) onSaved(manager.save(form.toDraft())) },
                 enabled = form.canSave,
+                modifier = Modifier.testTag(UiTags.FORM_SAVE),
             )
-            CancelButton(stringResource(Res.string.shell_cancel), onClick = onCancel)
+            CancelButton(stringResource(Res.string.shell_cancel), onClick = onCancel, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
         }
     }
 }
@@ -195,7 +203,10 @@ private fun TagsField(
                     cursorBrush = SolidColor(Skerry.colors.cyan),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onCommit() }),
-                    modifier = Modifier.widthIn(min = 72.dp).focusRequester(focus).onFocusChanged { focused = it.isFocused },
+                    // The chips row has no caption of its own, so the placeholder is the name.
+                    modifier = Modifier.widthIn(min = 72.dp).focusRequester(focus)
+                        .fieldName(fallback = stringResource(Res.string.lib_snippets_add_tag))
+                        .onFocusChanged { focused = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (draft.isEmpty()) Txt(stringResource(Res.string.lib_snippets_add_tag), color = Skerry.colors.faint, size = 12.5.sp, font = mono)
@@ -241,7 +252,7 @@ private fun TagPill(tag: String, onRemove: () -> Unit) {
     ) {
         Txt(snippetTagLabel(tag), color = Skerry.colors.cyanBright, size = 11.sp)
         Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(2.dp), contentAlignment = Alignment.Center) {
-            Sym("close", size = 12.sp, color = Skerry.colors.cyanBright)
+            Sym("close", contentDescription = stringResource(Res.string.shell_tip_remove), size = 12.sp, color = Skerry.colors.cyanBright)
         }
     }
 }
@@ -307,7 +318,7 @@ private fun EditField(value: String, onValueChange: (String) -> Unit, placeholde
         singleLine = true,
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
                 if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = font)
@@ -328,7 +339,7 @@ private fun CommandField(value: String, onValueChange: (String) -> Unit, placeho
         onValueChange = { draft.accept(it, value, onValueChange) },
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp)) {
                 if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = mono)

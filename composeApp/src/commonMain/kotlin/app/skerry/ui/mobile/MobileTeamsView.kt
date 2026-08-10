@@ -130,6 +130,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.terminal.spaceLabel
 
 /** Destructive Teams actions on mobile — same confirmations as desktop. */
 private sealed interface MobileTeamsConfirm {
@@ -575,8 +576,15 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>, section: HostSec
     val sections = remember(teamList, hostsSnapshot, revision, section) {
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.flatMap { team ->
             // One group per share space: the team itself plus every scope whose key we hold.
-            val spaces = listOf(TeamScopeRef(team.id) to team.name) +
-                team.scopes.filter { it.hasKey }.map { TeamScopeRef(team.id, it.id) to "${team.name} · ${it.name}" }
+            // Sanitized like the desktop sidebar's (see spaceLabel): the name is a peer's, arrives
+            // inside the sealed envelope, and the server never sees it — so the same string must not
+            // be scrubbed on one platform and drawn raw on the other.
+            val teamName = spaceLabel(team.name, fallback = team.id.take(SHORT_TEAM_ID_CHARS))
+            val spaces = listOf(TeamScopeRef(team.id) to teamName) +
+                team.scopes.filter { it.hasKey }.map {
+                    TeamScopeRef(team.id, it.id) to
+                        "$teamName · ${spaceLabel(it.name, fallback = it.id.take(SHORT_TEAM_ID_CHARS))}"
+                }
             spaces.mapNotNull { (ref, label) ->
                 val vault = teams.spaceVault(ref) ?: return@mapNotNull null
                 // Split by section like the personal catalog (desktop parity).
@@ -633,3 +641,6 @@ private fun MobileTeamHostRow(host: Host, onClick: () -> Unit) {
         onClick = onClick,
     )
 }
+
+/** Same stand-in as the desktop sidebar's when a peer's space name sanitizes away to nothing. */
+private const val SHORT_TEAM_ID_CHARS = 8

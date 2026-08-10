@@ -64,6 +64,7 @@ fun RdpAudioSection(form: NewConnectionFormState) {
                 on = form.rdpAudioOutput,
                 onToggle = { form.rdpAudioOutput = !form.rdpAudioOutput },
                 modifier = Modifier.align(Alignment.CenterVertically),
+                label = stringResource(Res.string.conn_audio_redirect),
             )
         }
         if (!form.rdpAudioOutput) return@Column

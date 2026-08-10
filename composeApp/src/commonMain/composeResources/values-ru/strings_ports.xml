@@ -61,6 +61,7 @@
     <string name="ports_status_stopped">остановлен</string>
     <string name="ports_autostart">Автостарт</string>
     <string name="ports_autostart_hint">Эти туннели поднимаются сами после разблокировки хранилища.</string>
+    <string name="ports_autostart_switch">Автостарт %1$s</string>
     <string name="ports_autostart_none">Ни один туннель не поднимается сам</string>
     <string name="ports_field_autostart">Поднимать после разблокировки</string>
     <string name="ports_card_throughput">Пропускная способность</string>

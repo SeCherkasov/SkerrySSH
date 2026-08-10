@@ -21,6 +21,9 @@ import app.skerry.ui.theme.Skerry
  *
  * [labelSize] exists for the mobile type scale; everything else is fixed so the rows stay
  * recognisably the same control across platforms.
+ *
+ * [switchName] overrides what the switch itself is called, for a list whose rows are named after
+ * the objects they act on: "web tunnel" says which tunnel, not what the switch does to it.
  */
 @Composable
 fun ToggleRow(
@@ -31,6 +34,7 @@ fun ToggleRow(
     subtitle: String? = null,
     subtitleColor: Color = Skerry.colors.faint,
     labelSize: TextUnit = 12.5.sp,
+    switchName: String = label,
 ) {
     Row(
         modifier.fillMaxWidth(),
@@ -43,6 +47,6 @@ fun ToggleRow(
                 Txt(subtitle, color = subtitleColor, size = 11.sp, lineHeight = 15.sp)
             }
         }
-        Toggle(on = on, onToggle = onToggle)
+        Toggle(on = on, onToggle = onToggle, label = switchName)
     }
 }

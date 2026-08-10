@@ -30,6 +30,9 @@ import app.skerry.ui.share.SharedSessionsList
 import app.skerry.ui.share.rememberJoinSharedSession
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.generated.resources.shell_tip_close
+import app.skerry.ui.generated.resources.shell_tip_remove
+import app.skerry.ui.generated.resources.lib_teams_history
 
 /** A record shared into the selected space: what the list row shows, plus the id its actions need. */
 internal data class SharedRecordUi(val id: String, val label: String, val detail: String)
@@ -69,12 +72,12 @@ internal fun TeamSharedRecordsDialog(
                         Txt(item.detail, color = Skerry.colors.faint, size = 10.5.sp, modifier = Modifier.weight(1f), maxLines = 1)
                         if (onHistory != null) {
                             Box(Modifier.clip(CircleShape).clickable { onHistory(item) }.padding(3.dp)) {
-                                Sym("history", size = 14.sp, color = Skerry.colors.faint)
+                                Sym("history", contentDescription = stringResource(Res.string.lib_teams_history), size = 14.sp, color = Skerry.colors.faint)
                             }
                         }
                         if (onUnshare != null) {
                             Box(Modifier.clip(CircleShape).clickable { onUnshare(item) }.padding(3.dp)) {
-                                Sym("close", size = 14.sp, color = Skerry.colors.faint)
+                                Sym("close", contentDescription = stringResource(Res.string.shell_tip_remove), size = 14.sp, color = Skerry.colors.faint)
                             }
                         }
                     }
@@ -123,7 +126,7 @@ private fun DialogTitleRow(title: String, onDismiss: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
         Box(Modifier.clip(CircleShape).clickable(onClick = onDismiss).padding(4.dp)) {
-            Sym("close", size = 16.sp, color = Skerry.colors.dim)
+            Sym("close", contentDescription = stringResource(Res.string.shell_tip_close), size = 16.sp, color = Skerry.colors.dim)
         }
     }
 }

@@ -37,6 +37,8 @@ import app.skerry.ui.app.LocalSync
 import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.app.SettingsTab
+import app.skerry.ui.app.UiTags
+import androidx.compose.ui.platform.testTag
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Sym
@@ -94,6 +96,7 @@ fun SettingsPanel(state: DesktopDesignState) {
                 .clip(RoundedCornerShape(12.dp))
                 .background(Skerry.colors.surfaceDeep)
                 .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
+                .testTag(UiTags.SETTINGS_PANEL)
                 .consumeClicks(),
         ) {
         Row(Modifier.fillMaxSize()) {
@@ -121,7 +124,10 @@ fun SettingsPanel(state: DesktopDesignState) {
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 26.dp)
-                        .padding(top = if (hasHeader) SETTINGS_HEADER_HEIGHT + 14.dp else 22.dp, bottom = 22.dp),
+                        .padding(top = if (hasHeader) SETTINGS_HEADER_HEIGHT + 14.dp else 22.dp, bottom = 22.dp)
+                        // Tagged with the tab it resolved to, not the one that was asked for:
+                        // `effectiveTab` is what a hidden AI tab falls back to.
+                        .testTag(UiTags.settingsSection(effectiveTab)),
                 ) {
                     when (effectiveTab) {
                         SettingsTab.AI -> AiSection(state)
@@ -169,7 +175,7 @@ fun SettingsPanel(state: DesktopDesignState) {
             contentAlignment = Alignment.Center,
         ) {
             Box(
-                Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = state::closeSettings).padding(8.dp),
+                Modifier.clip(RoundedCornerShape(8.dp)).testTag(UiTags.SETTINGS_CLOSE).clickable(onClick = state::closeSettings).padding(8.dp),
             ) {
                 Sym(name = "close", size = 18.sp, color = Skerry.colors.dim)
             }
@@ -213,7 +219,7 @@ private fun rememberSecurityController(): VaultGateController? {
 @Composable
 private fun NavRow(item: SettingsNavItem, active: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().padding(bottom = 1.dp).clip(RoundedCornerShape(6.dp)).background(if (active) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
+        Modifier.fillMaxWidth().padding(bottom = 1.dp).clip(RoundedCornerShape(6.dp)).background(if (active) Skerry.colors.cyan10 else Color.Transparent).testTag(UiTags.settingsTab(item.tab)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

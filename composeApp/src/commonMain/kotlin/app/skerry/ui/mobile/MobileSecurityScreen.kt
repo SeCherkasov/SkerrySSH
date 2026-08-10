@@ -201,6 +201,7 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                                     reload++
                                 }
                             },
+                            label = stringResource(Res.string.settings_security_biometric),
                         )
                     }
                     HLine()
@@ -238,7 +239,11 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                         Txt(stringResource(Res.string.settings_security_report_team_sessions), color = Skerry.colors.text, size = 14.5.sp)
                         Txt(stringResource(Res.string.settings_security_report_team_sessions_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
                     }
-                    Toggle(on = state.reportTeamSessions, onToggle = state::toggleReportTeamSessions)
+                    Toggle(
+                        on = state.reportTeamSessions,
+                        onToggle = state::toggleReportTeamSessions,
+                        label = stringResource(Res.string.settings_security_report_team_sessions),
+                    )
                 }
 
                 // Recent security events from the real log (or "no events yet").

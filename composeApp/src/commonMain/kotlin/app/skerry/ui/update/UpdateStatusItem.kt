@@ -19,6 +19,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_update_status
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.generated.resources.shell_tip_close
 
 /**
  * Passive update notice in the desktop status bar: appears only while
@@ -45,7 +46,7 @@ fun UpdateStatusItem() {
             Txt(stringResource(Res.string.settings_update_status, update.versionLabel), color = Skerry.colors.cyanBright, size = 10.5.sp, font = mono)
         }
         Sym(
-            "close", size = 12.sp, color = Skerry.colors.faint,
+            "close", contentDescription = stringResource(Res.string.shell_tip_close), size = 12.sp, color = Skerry.colors.faint,
             modifier = Modifier.clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,

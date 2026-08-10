@@ -41,6 +41,7 @@ import app.skerry.ui.files.TransferState
 import app.skerry.ui.files.fileBrowserFailureText
 import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_close
 import app.skerry.ui.generated.resources.ftail_file_fallback
 import app.skerry.ui.generated.resources.ftail_fkey_edit
 import app.skerry.ui.generated.resources.ftail_fkey_view
@@ -281,7 +282,7 @@ internal fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDis
                         transferFailureText(transfer.failure),
                     ),
                     color = Skerry.colors.sunset, size = 11.5.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                IconBtn("close", onClick = onDismiss, box = 26, icon = 16.sp)
+                IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = onDismiss, box = 26, icon = 16.sp)
             }
         }
     }

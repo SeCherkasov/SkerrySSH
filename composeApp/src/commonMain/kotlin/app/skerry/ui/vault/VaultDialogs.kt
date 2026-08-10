@@ -115,6 +115,10 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 
 @Composable
 internal fun GenerateKeyDialog(onDismiss: () -> Unit, onCreate: (name: String, type: SshKeyType) -> Unit) {
@@ -414,7 +418,9 @@ internal fun DialogField(
         BasicTextField(
             value = draft.textFieldValue(value),
             onValueChange = { draft.accept(it, value, onValueChange) },
-            modifier = Modifier.fillMaxWidth().fieldFocus(draft).onFocusChanged { focused = it.isFocused },
+            modifier = Modifier.fillMaxWidth().fieldFocus(draft)
+                .semantics { contentDescription = label }
+                .onFocusChanged { focused = it.isFocused },
             singleLine = singleLine,
             textStyle = style,
             cursorBrush = SolidColor(Skerry.colors.cyan),
@@ -443,8 +449,8 @@ internal fun DialogButtons(confirmLabel: String, confirmEnabled: Boolean, onDism
         horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CancelButton(stringResource(Res.string.vault_cancel), onClick = onDismiss)
-        PrimaryButton(confirmLabel, onClick = onConfirm, enabled = confirmEnabled)
+        CancelButton(stringResource(Res.string.vault_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
+        PrimaryButton(confirmLabel, onClick = onConfirm, enabled = confirmEnabled, modifier = Modifier.testTag(UiTags.FORM_SAVE))
     }
 }
 

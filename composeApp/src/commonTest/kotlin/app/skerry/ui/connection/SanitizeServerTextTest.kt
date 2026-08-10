@@ -28,6 +28,35 @@ class SanitizeServerTextTest {
         assertFalse(cleaned.any { it in '\u202A'..'\u202E' }, "bidi overrides must be dropped")
     }
 
+    /**
+     * The marks and the zero-width formatters, not only the overrides: LRM/RLM reorder the neutral
+     * runs of a prompt the user reads before typing a secret, and ZWSP/ZWNJ hide content in it.
+     * Written as escapes because the characters themselves are invisible in a diff.
+     */
+    @Test
+    fun `strips the bidi marks and the zero-width formatters too`() {
+        val hostile = "Code \u200Bfor \u200Eserver\u200F 10.0.0.1\u061C\u2060 ok"
+        assertEquals("Code for server 10.0.0.1 ok", sanitizeServerText(hostile, 200, allowNewlines = false))
+    }
+
+    /**
+     * Line and paragraph separators are not in the format category, but every layout treats them as
+     * a hard line break — a single-line caption is what a server would use them to turn into several.
+     */
+    @Test
+    fun `strips the line and paragraph separators`() {
+        assertEquals("Codenow", sanitizeServerText("Code\u2028\u2029now", 200, allowNewlines = false))
+    }
+
+    /** The cap counts UTF-16 units, so it must not fall between the halves of an emoji. */
+    @Test
+    fun `the cap is not applied through a surrogate pair`() {
+        val flood = "a".repeat(119) + "\uD83D\uDE80"
+        val cleaned = sanitizeServerText(flood, 120, allowNewlines = false)
+        assertEquals(119, cleaned.length)
+        assertFalse(cleaned.any { it.isSurrogate() })
+    }
+
     @Test
     fun `caps the length so the dialog cannot be flooded`() {
         val flood = "A".repeat(5_000)

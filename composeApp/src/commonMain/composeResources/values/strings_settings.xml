@@ -15,8 +15,8 @@
 
     <!-- AI section -->
     <string name="settings_ai_live_subtitle">AI assistant provider and settings.</string>
-    <string name="settings_ai_field_api_key">OPENAI API KEY</string>
-    <string name="settings_ai_field_model">MODEL</string>
+    <string name="settings_ai_field_api_key">OpenAI API key</string>
+    <string name="settings_ai_field_model">Model</string>
     <string name="settings_ai_field_endpoint">API URL</string>
     <string name="settings_ai_placeholder_api_key">sk-…</string>
     <string name="settings_ai_placeholder_model">gpt-4o-mini</string>

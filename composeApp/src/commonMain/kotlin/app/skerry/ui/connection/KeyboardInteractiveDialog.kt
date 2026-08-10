@@ -44,6 +44,7 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_kbdint_asks
@@ -53,6 +54,8 @@ import app.skerry.ui.generated.resources.shell_kbdint_title
 import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Prompt for a server's keyboard-interactive challenge — a 2FA code, an SMS token, a push
@@ -135,15 +138,19 @@ fun KeyboardInteractiveDialog(
 
             val name = sanitizeServerText(challenge.name, MAX_TITLE_CHARS, allowNewlines = false)
             val instruction = sanitizeServerText(challenge.instruction, MAX_INSTRUCTION_CHARS, allowNewlines = true)
+            // Drawn whatever the server sent, not only when it filled in a name or an instruction:
+            // everything below this line is the host's own wording, prompt captions included. Left
+            // conditional, a server that sends nothing but a prompt gets to caption the input box
+            // itself — "Skerry vault master password:" over a field whose answer it receives.
+            Txt(
+                stringResource(Res.string.shell_kbdint_asks),
+                color = Skerry.colors.faint,
+                size = 10.5.sp,
+                weight = FontWeight.SemiBold,
+                letterSpacing = 0.6.sp,
+                modifier = Modifier.padding(top = 14.dp, bottom = 5.dp),
+            )
             if (name.isNotBlank() || instruction.isNotBlank()) {
-                Txt(
-                    stringResource(Res.string.shell_kbdint_asks),
-                    color = Skerry.colors.faint,
-                    size = 10.5.sp,
-                    weight = FontWeight.SemiBold,
-                    letterSpacing = 0.6.sp,
-                    modifier = Modifier.padding(top = 14.dp, bottom = 5.dp),
-                )
                 Column(
                     Modifier.fillMaxWidth()
                         .clip(RoundedCornerShape(7.dp))
@@ -177,6 +184,7 @@ fun KeyboardInteractiveDialog(
                 PromptField(
                     value = answers[index],
                     onValueChange = { answers[index] = it },
+                    label = label,
                     masked = !prompt.echo,
                     last = index == challenge.prompts.lastIndex,
                     onSubmit = submit,
@@ -189,8 +197,8 @@ fun KeyboardInteractiveDialog(
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                PrimaryButton(stringResource(Res.string.shell_kbdint_continue), onClick = submit)
+                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
+                PrimaryButton(stringResource(Res.string.shell_kbdint_continue), onClick = submit, modifier = Modifier.testTag(UiTags.FORM_SAVE))
             }
         }
     }
@@ -217,6 +225,8 @@ fun KeyboardInteractiveHost(controller: KeyboardInteractivePromptController?) {
 private fun PromptField(
     value: String,
     onValueChange: (String) -> Unit,
+    /** The server's own prompt text, already sanitized — this field's only caption, and its name. */
+    label: String,
     masked: Boolean,
     last: Boolean,
     onSubmit: () -> Unit,
@@ -239,7 +249,13 @@ private fun PromptField(
             keyboardType = KeyboardType.Password,
         ),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }),
-        modifier = modifier.fillMaxWidth(),
+        // One tag per prompt row: a challenge can carry several, in server order. The tag tells them
+        // apart by index only — the name is what tells a screen-reader user which prompt this is.
+        // Prefixed with our own "the host is asking" caption: the words are the server's, and a
+        // bare prompt as the field's name would be indistinguishable from a label Skerry wrote.
+        modifier = modifier.fillMaxWidth()
+            .fieldName(fallback = "${stringResource(Res.string.shell_kbdint_asks)} $label")
+            .testTag(UiTags.FORM_FIELD),
         decorationBox = { inner ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)
@@ -280,10 +296,16 @@ internal fun sanitizeServerText(text: String, maxChars: Int, allowNewlines: Bool
             }
         }
     }
-    return cleaned.trim()
+    // The cap counts UTF-16 units, so it can fall between the halves of an astral character and
+    // leave an orphan that draws as U+FFFD — in the caption and in the field's name alike. Same
+    // cut, same treatment as the terminal title's and the team label's.
+    return cleaned.dropLastWhile { it.isHighSurrogate() }.trim()
 }
 
 /** What [sanitizeServerText] does with one character of server text. */
+private const val LINE_SEPARATOR = '\u2028'
+private const val PARAGRAPH_SEPARATOR = '\u2029'
+
 private enum class ServerChar { Keep, Break, Space, Drop }
 
 private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = when {
@@ -295,8 +317,13 @@ private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = w
     // ("Accessdeniedby policy"), which reads worse than the wrapped original.
     ch == '\n' || ch == '\r' || ch == '\t' -> ServerChar.Space
     ch.isISOControl() -> ServerChar.Drop
-    // Bidi overrides/isolates: they can visually reverse the text around them.
-    ch in '\u202A'..'\u202E' || ch in '\u2066'..'\u2069' -> ServerChar.Drop
-    ch == '\uFEFF' -> ServerChar.Drop
+    // The whole format category rather than the bidi overrides alone: the marks (LRM/RLM/ALM) reorder
+    // the neutral runs of a prompt the user reads before typing a secret, and the zero-width set lets
+    // one carry content nothing renders. Naming ranges left both classes in, and would leave whatever
+    // Unicode adds next. Covers the BOM too, which used to have a branch of its own.
+    ch.category == CharCategory.FORMAT -> ServerChar.Drop
+    // Not in that category, but they end a line wherever the text is laid out — a single-line
+    // caption is exactly what a server would use them to turn into several.
+    ch == LINE_SEPARATOR || ch == PARAGRAPH_SEPARATOR -> ServerChar.Drop
     else -> ServerChar.Keep
 }

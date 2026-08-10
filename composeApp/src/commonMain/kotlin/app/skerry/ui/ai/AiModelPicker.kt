@@ -30,7 +30,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -89,7 +88,7 @@ fun ModelPickerMenu(
         ) {
             // Decorative: the field next to it carries the meaning, and Sym is a BasicText whose
             // content would otherwise be read out as the literal ligature name.
-            Sym("search", size = 14.sp, color = Skerry.colors.faint, modifier = Modifier.clearAndSetSemantics {})
+            Sym("search", size = 14.sp, color = Skerry.colors.faint)
             val ui = LocalFonts.current.ui
             BasicTextField(
                 value = query,

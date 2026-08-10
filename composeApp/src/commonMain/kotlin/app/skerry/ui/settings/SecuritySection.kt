@@ -34,7 +34,6 @@ import app.skerry.shared.vault.securityMoment
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.DropdownField
-import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.ModalScrim
@@ -113,6 +112,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.design.FormField
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 // Security section: master password, biometrics, auto-lock, event log.
 
@@ -397,12 +399,15 @@ internal fun ChangeMasterPasswordDialog(
         ) {
             Txt(stringResource(Res.string.settings_change_pw_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold)
             Box(Modifier.height(16.dp))
-            FieldLabel(stringResource(Res.string.settings_change_pw_current), top = 0.dp)
-            SyncField(placeholder = "••••••••", value = current, icon = "lock", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { current = it; wrongCurrent = false }
-            FieldLabel(stringResource(Res.string.settings_change_pw_new))
-            SyncField(placeholder = "••••••••", value = fresh, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { fresh = it }
-            FieldLabel(stringResource(Res.string.settings_change_pw_confirm))
-            SyncField(placeholder = "••••••••", value = confirm, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, secret = true, onSubmit = submit) { confirm = it }
+            FormField(stringResource(Res.string.settings_change_pw_current), top = 0.dp, uppercase = false) {
+                SyncField(placeholder = "••••••••", value = current, icon = "lock", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { current = it; wrongCurrent = false }
+            }
+            FormField(stringResource(Res.string.settings_change_pw_new), uppercase = false) {
+                SyncField(placeholder = "••••••••", value = fresh, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { fresh = it }
+            }
+            FormField(stringResource(Res.string.settings_change_pw_confirm), uppercase = false) {
+                SyncField(placeholder = "••••••••", value = confirm, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, secret = true, onSubmit = submit) { confirm = it }
+            }
             if (error != null) Txt(error, color = Skerry.colors.storm, size = 11.5.sp, modifier = Modifier.padding(top = 10.dp))
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
@@ -418,6 +423,7 @@ internal fun ChangeMasterPasswordDialog(
                     enabled = canSubmit,
                     bg = if (canSubmit) Skerry.colors.cyan else Skerry.colors.cyan10,
                     fg = if (canSubmit) Skerry.colors.ink else Skerry.colors.faint,
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
                 )
             }
         }
@@ -495,12 +501,15 @@ internal fun ChangeAccountPasswordDialog(
             Box(Modifier.height(8.dp))
             Txt(stringResource(Res.string.settings_change_account_pw_note), color = Skerry.colors.dim, size = 11.5.sp)
             Box(Modifier.height(14.dp))
-            FieldLabel(stringResource(Res.string.settings_change_pw_current), top = 0.dp)
-            SyncField(placeholder = "••••••••", value = current, icon = "lock", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { current = it; result = null }
-            FieldLabel(stringResource(Res.string.settings_change_pw_new))
-            SyncField(placeholder = "••••••••", value = fresh, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { fresh = it; result = null }
-            FieldLabel(stringResource(Res.string.settings_change_pw_confirm))
-            SyncField(placeholder = "••••••••", value = confirm, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, secret = true, onSubmit = submit) { confirm = it; result = null }
+            FormField(stringResource(Res.string.settings_change_pw_current), top = 0.dp, uppercase = false) {
+                SyncField(placeholder = "••••••••", value = current, icon = "lock", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { current = it; result = null }
+            }
+            FormField(stringResource(Res.string.settings_change_pw_new), uppercase = false) {
+                SyncField(placeholder = "••••••••", value = fresh, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true) { fresh = it; result = null }
+            }
+            FormField(stringResource(Res.string.settings_change_pw_confirm), uppercase = false) {
+                SyncField(placeholder = "••••••••", value = confirm, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, secret = true, onSubmit = submit) { confirm = it; result = null }
+            }
             if (error != null) Txt(error, color = Skerry.colors.storm, size = 11.5.sp, modifier = Modifier.padding(top = 10.dp))
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
@@ -516,6 +525,7 @@ internal fun ChangeAccountPasswordDialog(
                     enabled = canSubmit,
                     bg = if (canSubmit) Skerry.colors.cyan else Skerry.colors.cyan10,
                     fg = if (canSubmit) Skerry.colors.ink else Skerry.colors.faint,
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
                 )
             }
         }

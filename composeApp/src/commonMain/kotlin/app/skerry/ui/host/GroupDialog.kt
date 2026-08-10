@@ -51,6 +51,9 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import app.skerry.ui.design.fieldName
 
 /**
  * Dialog for creating/renaming a host group: a name field plus buttons. [onDelete] != null means
@@ -105,7 +108,11 @@ fun GroupDialog(
                 cursorBrush = SolidColor(Skerry.colors.cyan),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { save() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldFocus(draft),
+                // Named from the placeholder: it is the field's only caption and it goes on the
+                // first keystroke, leaving a tagged but nameless box. Same as the connect dialogs'.
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldFocus(draft)
+                    .fieldName(fallback = stringResource(Res.string.shell_group_name_placeholder))
+                    .testTag(UiTags.FORM_FIELD),
                 decorationBox = { inner ->
                     Row(
                         Modifier
@@ -134,8 +141,13 @@ fun GroupDialog(
                     }
                 }
                 Box(Modifier.weight(1f))
-                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                PrimaryButton(if (editing) stringResource(Res.string.shell_save) else stringResource(Res.string.shell_create), onClick = save, enabled = canSave)
+                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
+                PrimaryButton(
+                    if (editing) stringResource(Res.string.shell_save) else stringResource(Res.string.shell_create),
+                    onClick = save,
+                    enabled = canSave,
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
+                )
             }
         }
     }

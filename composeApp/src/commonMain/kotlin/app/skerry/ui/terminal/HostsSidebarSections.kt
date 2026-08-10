@@ -46,6 +46,9 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_add_first
+import app.skerry.ui.generated.resources.shtail_group_collapse
+import app.skerry.ui.generated.resources.shtail_group_rename
+import app.skerry.ui.generated.resources.shtail_group_expand
 import app.skerry.ui.generated.resources.rd_no_desktops
 import app.skerry.ui.generated.resources.term_recent_section
 import app.skerry.ui.host.HostDragState
@@ -66,6 +69,7 @@ import app.skerry.ui.host.ungroupedLabel
 import app.skerry.ui.host.icon
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.shared.snippet.sanitizeSnippetValue
 
 /**
  * Host folder header: collapse chevron + icon + name + count. The chevron ([collapsed] ->
@@ -79,19 +83,46 @@ private fun FolderHeader(name: String, count: Int, collapsed: Boolean, onToggle:
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(
-            Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
-            contentAlignment = Alignment.Center,
-        ) {
-            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
-        }
+        FolderCollapseToggle(name, collapsed, onToggle)
         Sym("folder_open", size = 15.sp, color = Skerry.colors.cyanBright)
         Txt(name, color = Skerry.colors.dim, size = 12.5.sp, weight = FontWeight.Medium, modifier = Modifier.weight(1f))
         // Rename/delete the group (live catalog only, not for the synthetic "Ungrouped").
-        if (onEdit != null) IconBtn("edit", onClick = onEdit, box = 20, icon = 13.sp, tint = Skerry.colors.faint)
+        if (onEdit != null) {
+            IconBtn(
+                "edit",
+                onClick = onEdit,
+                box = 20,
+                icon = 13.sp,
+                tint = Skerry.colors.faint,
+                tooltip = stringResource(Res.string.shtail_group_rename, name),
+            )
+        }
         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Skerry.colors.card).padding(horizontal = 6.dp, vertical = 1.dp)) {
             Txt(count.toString(), color = Skerry.colors.faint, size = 10.sp)
         }
+    }
+}
+
+/**
+ * The chevron folding a folder away. Icon-only, so it names itself after what it does and to which
+ * folder — a list of headers all saying "Collapse" says nothing about which one is which.
+ */
+@Composable
+private fun FolderCollapseToggle(name: String, collapsed: Boolean, onToggle: () -> Unit) {
+    val label = stringResource(
+        if (collapsed) Res.string.shtail_group_expand else Res.string.shtail_group_collapse,
+        name,
+    )
+    Box(
+        Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        Sym(
+            if (collapsed) "chevron_right" else "expand_more",
+            size = 16.sp,
+            color = Skerry.colors.faint,
+            contentDescription = label,
+        )
     }
 }
 
@@ -132,30 +163,44 @@ internal fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignSta
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.flatMap { team ->
             // One group per share space: the team itself, plus every scope whose key we hold. A scope
             // we're merely told about (manager without a grant) has no readable records, so no group.
-            val spaces = listOf(TeamScopeRef(team.id) to team.name) +
-                team.scopes.filter { it.hasKey }.map { TeamScopeRef(team.id, it.id) to "${team.name} · ${it.name}" }
+            val teamName = spaceLabel(team.name, fallback = team.id.take(SHORT_ID_CHARS))
+            val spaces = listOf(TeamScopeRef(team.id) to teamName) +
+                team.scopes.filter { it.hasKey }.map {
+                    TeamScopeRef(team.id, it.id) to
+                        "$teamName · ${spaceLabel(it.name, fallback = it.id.take(SHORT_ID_CHARS))}"
+                }
             spaces.mapNotNull { (ref, label) ->
                 val vault = teams.spaceVault(ref) ?: return@mapNotNull null
                 // Shared hosts are split by section like the personal catalog: a team's VNC box belongs
                 // to the desktops list, its servers to the terminal one.
                 val shared = VaultHostStore(vault).all().inSection(section)
-                if (shared.isEmpty()) null else label to shared
+                if (shared.isEmpty()) null else TeamSection(ref, label, shared)
             }
         }
     }
     if (sections.isEmpty()) return
     TeamHostsSectionHeader()
-    sections.forEach { (name, shared) ->
-        // Prefixed collapse key: otherwise a team and a host group with the same name would share
-        // one entry in the common collapsedGroups.
-        val collapseKey = "$TEAM_COLLAPSE_PREFIX$name"
+    sections.forEach { section ->
+        // Keyed by the space's ids, never by its label: the label is a peer's text put through a
+        // sanitizer, so two teams can perfectly well arrive at the same one — and then collapsing
+        // one folder would fold the other. Prefixed so a team and a host group of the same name
+        // still get separate entries in the shared collapsedGroups.
+        val collapseKey = section.collapseKey
         val collapsed = state.isGroupCollapsed(collapseKey)
         val onToggle = remember(state, collapseKey) { { state.toggleGroupCollapsed(collapseKey) } }
-        TeamFolderHeader(name, shared.size, collapsed, onToggle)
+        TeamFolderHeader(section.label, section.hosts.size, collapsed, onToggle)
         if (!collapsed) {
-            shared.forEach { host -> key("team-${host.id}") { TeamHostRow(host, mono) } }
+            section.hosts.forEach { host -> key("team-${host.id}") { TeamHostRow(host, mono) } }
         }
     }
+}
+
+/**
+ * One shared space in the sidebar: what it is called, what it holds, and what its fold state is
+ * filed under. The label and the key are deliberately different things — see [spaceLabel].
+ */
+private class TeamSection(ref: TeamScopeRef, val label: String, val hosts: List<Host>) {
+    val collapseKey: String = "$TEAM_COLLAPSE_PREFIX${ref.teamId}\u0000${ref.scopeId.orEmpty()}"
 }
 
 /** Collapse-key prefix for teams in the shared [DesktopDesignState.collapsedGroups], see [TeamHostsSection]. */
@@ -172,12 +217,7 @@ private fun TeamFolderHeader(name: String, count: Int, collapsed: Boolean, onTog
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Box(
-            Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
-            contentAlignment = Alignment.Center,
-        ) {
-            Sym(if (collapsed) "chevron_right" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
-        }
+        FolderCollapseToggle(name, collapsed, onToggle)
         Sym("group", size = 15.sp, color = Skerry.colors.cyanBright)
         Txt(name, color = Skerry.colors.dim, size = 12.5.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Skerry.colors.card).padding(horizontal = 6.dp, vertical = 1.dp)) {
@@ -312,3 +352,28 @@ internal fun LiveHostFolder(
         }
     }
 }
+
+/**
+ * A team space's name, made fit to draw and to announce.
+ *
+ * Peer-authored and never seen by the server (the name travels inside the sealed envelope), so it is
+ * sanitized rather than trusted: the label is both drawn and used as the collapse chevron's
+ * accessible name, and a bidi override in it would make a folder announce as a space other than the
+ * one its hosts belong to. Cut to length first — filtering a name a hostile peer made pathologically
+ * long before throwing most of it away is work for nothing.
+ */
+internal fun spaceLabel(raw: String, fallback: String): String =
+    // sanitizeSnippetValue, not stripUnsafeFormatChars: the latter keeps every C0 control on purpose
+    // (a multi-line snippet has to stay multi-line), and this is a one-line label — a newline or a
+    // NUL in a peer's name has no business in a folder header or in what it announces.
+    // dropLastWhile: cutting to length can land between the halves of an astral character.
+    sanitizeSnippetValue(raw.take(MAX_SPACE_NAME_CHARS).dropLastWhile { it.isHighSurrogate() })
+        // A name made only of the characters the sanitizer drops leaves nothing to draw, and a blank
+        // folder header is one the user cannot tell from any other. Fall back to the space's id.
+        .ifBlank { fallback }
+
+/** How much of an id stands in for a name that sanitized away — enough to tell two spaces apart. */
+private const val SHORT_ID_CHARS = 8
+
+/** Cap on a team-space label: a sidebar row shows a fraction of this, and the name is a peer's. */
+internal const val MAX_SPACE_NAME_CHARS = 120

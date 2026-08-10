@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -53,8 +54,10 @@ import app.skerry.ui.generated.resources.conn_test_connected
 import app.skerry.ui.generated.resources.conn_test_rtt_ms
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
+import app.skerry.ui.design.LocalFieldLabel
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.ai.PolicyOption
 import app.skerry.ui.design.Sym
@@ -62,6 +65,8 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.i18n.label
 import app.skerry.ui.vault.title
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.generated.resources.shell_tip_remove
+import app.skerry.ui.generated.resources.shell_tip_show_options
 
 @Composable
 internal fun Spacer14() = Box(Modifier.size(14.dp))
@@ -70,7 +75,9 @@ internal fun Spacer14() = Box(Modifier.size(14.dp))
 internal fun Field(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(modifier) {
         Txt(label.uppercase(), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(bottom = 5.dp))
-        content()
+        // The caption is a sibling of the input, so nothing connects the two on its own — see
+        // [LocalFieldLabel]. The input inside adopts it as its accessible name.
+        CompositionLocalProvider(LocalFieldLabel provides label) { content() }
     }
 }
 
@@ -117,7 +124,7 @@ internal fun ModalTextField(
         cursorBrush = SolidColor(Skerry.colors.cyan),
         visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Row(
                 Modifier
@@ -167,6 +174,7 @@ internal fun SerialDeviceField(form: NewConnectionFormState) {
                     {
                         Sym(
                             if (menuOpen) "expand_less" else "expand_more",
+                            contentDescription = stringResource(Res.string.shell_tip_show_options),
                             size = 16.sp,
                             color = Skerry.colors.faint,
                             modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable { menuOpen = !menuOpen },
@@ -232,7 +240,7 @@ internal fun RemovableTagPill(tag: String, onRemove: () -> Unit) {
     ) {
         Txt("#$tag", color = Skerry.colors.cyanBright, size = 11.sp)
         Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(2.dp), contentAlignment = Alignment.Center) {
-            Sym("close", size = 12.sp, color = Skerry.colors.cyanBright)
+            Sym("close", contentDescription = stringResource(Res.string.shell_tip_remove), size = 12.sp, color = Skerry.colors.cyanBright)
         }
     }
 }
@@ -278,7 +286,7 @@ internal fun TagInput(value: String, onValueChange: (String) -> Unit, onCommit: 
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { onCommit() }),
-        modifier = modifier.widthIn(min = 72.dp).onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
+        modifier = modifier.widthIn(min = 72.dp).fieldName().onFocusChanged { onFocusChanged?.invoke(it.isFocused) },
         decorationBox = { inner ->
             Box(contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty()) Txt(stringResource(Res.string.conn_tag_add_placeholder), color = Skerry.colors.faint, size = 12.5.sp)

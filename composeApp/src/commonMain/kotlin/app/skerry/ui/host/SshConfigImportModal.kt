@@ -41,6 +41,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_close
 import app.skerry.ui.generated.resources.conn_cancel
 import app.skerry.ui.generated.resources.conn_import_keys_note
 import app.skerry.ui.generated.resources.conn_import_button
@@ -50,6 +51,8 @@ import app.skerry.ui.generated.resources.conn_import_skipped
 import app.skerry.ui.generated.resources.conn_import_subtitle
 import app.skerry.ui.generated.resources.conn_import_title
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Preview-and-select modal for importing hosts parsed from an `ssh_config` file. Shows every parsed
@@ -83,7 +86,7 @@ fun SshConfigImportModal(state: DesktopDesignState, result: SshConfigParseResult
                     Txt(stringResource(Res.string.conn_import_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
                     Txt(stringResource(Res.string.conn_import_subtitle), color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp))
                 }
-                IconBtn("close", onClick = state::closeSshImport, modifier = Modifier.align(Alignment.TopEnd))
+                IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = state::closeSshImport, modifier = Modifier.align(Alignment.TopEnd))
             }
             HLine()
 
@@ -150,7 +153,7 @@ fun SshConfigImportModal(state: DesktopDesignState, result: SshConfigParseResult
                 } else {
                     Spacer(Modifier.weight(1f))
                 }
-                CancelButton(stringResource(Res.string.conn_cancel), onClick = state::closeSshImport)
+                CancelButton(stringResource(Res.string.conn_cancel), onClick = state::closeSshImport, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
                 PrimaryButton(
                     stringResource(Res.string.conn_import_button, selected.size),
                     onClick = {
@@ -165,6 +168,7 @@ fun SshConfigImportModal(state: DesktopDesignState, result: SshConfigParseResult
                     },
                     icon = "download",
                     enabled = selected.isNotEmpty(),
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
                 )
             }
         }

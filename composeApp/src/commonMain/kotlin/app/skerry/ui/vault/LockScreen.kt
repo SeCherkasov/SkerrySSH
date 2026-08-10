@@ -82,8 +82,11 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.sync.PairingJoinScreen
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Lock overlay (mock path): radial background, large logo, master password field and buttons. Unlock
@@ -133,7 +136,7 @@ fun DesktopUnlockScreen(
     ) {
         LockPasswordField(pwd, { pwd = it }, stringResource(Res.string.shell_master_password), ImeAction.Done, onSubmit = submit, autoFocus = true)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PrimaryButton(stringResource(Res.string.shell_unlock), onClick = submit, modifier = Modifier.weight(1f))
+            PrimaryButton(stringResource(Res.string.shell_unlock), onClick = submit, modifier = Modifier.weight(1f).testTag(UiTags.FORM_SAVE))
             if (canUseBiometric) BiometricButton(onClick = onBiometric)
         }
         // A forgotten password can only be resolved by a reset (zero-knowledge): an unobtrusive,
@@ -288,7 +291,7 @@ fun DesktopCreateScreen(
         PrimaryButton(
             stringResource(Res.string.shell_create_vault),
             onClick = submit,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag(UiTags.FORM_SAVE),
             enabled = canCreate,
         )
         if (sync != null && onPairingComplete != null) {
@@ -412,7 +415,11 @@ private fun LockPasswordField(
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
-        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+        // The gate screens have a title instead of field captions, so the placeholder is the only
+        // label this input ever shows — and it disappears as soon as anything is typed. A tag is a
+        // test identifier, not a name: without this the create screen offers two identical masked
+        // fields (master password, repeat) that read alike.
+        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester).fieldName(fallback = placeholder).testTag(UiTags.FORM_FIELD),
         decorationBox = { innerTextField ->
             Row(
                 Modifier
@@ -450,7 +457,7 @@ private fun LockTextField(
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().fieldName(fallback = placeholder),
         decorationBox = { innerTextField ->
             Row(
                 Modifier

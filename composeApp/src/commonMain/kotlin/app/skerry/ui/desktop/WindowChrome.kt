@@ -13,6 +13,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_close_window
+import app.skerry.ui.generated.resources.shell_tip_maximize
+import app.skerry.ui.generated.resources.shell_tip_minimize
+import app.skerry.ui.generated.resources.shell_tip_restore
+import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -47,10 +53,14 @@ fun WindowButtons(chrome: WindowChrome, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        IconBtn("remove", onClick = chrome.onMinimize, icon = 15.sp, hoverTint = Skerry.colors.text)
-        IconBtn(if (chrome.isMaximized()) "filter_none" else "crop_square", onClick = chrome.onToggleMaximize, icon = 15.sp, hoverTint = Skerry.colors.text)
+        IconBtn("remove", label = stringResource(Res.string.shell_tip_minimize), onClick = chrome.onMinimize, icon = 15.sp, hoverTint = Skerry.colors.text)
+        IconBtn(
+            if (chrome.isMaximized()) "filter_none" else "crop_square",
+            label = stringResource(if (chrome.isMaximized()) Res.string.shell_tip_restore else Res.string.shell_tip_maximize),
+            onClick = chrome.onToggleMaximize, icon = 15.sp, hoverTint = Skerry.colors.text,
+        )
         // The close button warns with the storm accent on hover, like native chrome does.
-        IconBtn("close", onClick = chrome.onClose, icon = 15.sp, hoverBg = Skerry.colors.storm, hoverTint = Skerry.colors.white)
+        IconBtn("close", label = stringResource(Res.string.shell_tip_close_window), onClick = chrome.onClose, icon = 15.sp, hoverBg = Skerry.colors.storm, hoverTint = Skerry.colors.white)
     }
 }
 

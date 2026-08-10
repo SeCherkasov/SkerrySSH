@@ -61,6 +61,7 @@
     <string name="ports_status_stopped">stopped</string>
     <string name="ports_autostart">Autostart</string>
     <string name="ports_autostart_hint">These tunnels come up on their own once the vault is unlocked.</string>
+    <string name="ports_autostart_switch">Autostart %1$s</string>
     <string name="ports_autostart_none">No tunnels start on their own</string>
     <string name="ports_field_autostart">Start on unlock</string>
     <string name="ports_card_throughput">Throughput</string>

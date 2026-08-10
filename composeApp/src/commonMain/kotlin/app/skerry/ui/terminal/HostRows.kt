@@ -71,6 +71,7 @@ import app.skerry.ui.session.sessionDotColor
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.generated.resources.shell_tip_more_actions
 
 /** Shared team host row, like [RecentHostRow]; the team-vault origin is marked by the section header. */
 @Composable
@@ -321,6 +322,7 @@ internal fun HostEntryRow(
                     // (otherwise every row costs two presses); keyboard users get Enter/Space to connect.
                     IconBtn(
                         "more_vert",
+                        label = stringResource(Res.string.shell_tip_more_actions),
                         onClick = { menuOpen = !menuOpen },
                         modifier = Modifier.focusProperties { canFocus = false },
                         box = 22, icon = 16.sp, tint = Skerry.colors.faint,

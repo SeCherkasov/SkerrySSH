@@ -39,6 +39,10 @@ import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.generated.resources.term_player_truncated
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.generated.resources.shell_tip_close
+import app.skerry.ui.generated.resources.shell_tip_pause
+import app.skerry.ui.generated.resources.shell_tip_play
+import app.skerry.ui.generated.resources.shell_tip_replay
 
 /**
  * Plays a recording over the current screen (mobile, and the desktop mock without live sessions):
@@ -101,7 +105,7 @@ internal fun ColumnScope.CastPlayerContent(playback: CastPlayback, onClose: (() 
             Txt(cast.title ?: stringResource(Res.string.term_player_title), color = Skerry.colors.textBright, size = 13.sp, weight = FontWeight.SemiBold)
             if (cast.truncated) Txt(stringResource(Res.string.term_player_truncated), color = Skerry.colors.amber, size = 11.sp)
         }
-        if (onClose != null) IconBtn("close", onClick = onClose)
+        if (onClose != null) IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = onClose)
     }
     Box(Modifier.weight(1f).fillMaxWidth().background(Skerry.colors.terminalBg)) {
         if (cast.events.isEmpty()) {
@@ -135,10 +139,11 @@ private fun TransportBar(player: CastPlayer) {
     ) {
         IconBtn(
             if (player.playing) "pause" else "play_arrow",
+            label = stringResource(if (player.playing) Res.string.shell_tip_pause else Res.string.shell_tip_play),
             onClick = player::toggle,
             tint = Skerry.colors.cyanBright,
         )
-        IconBtn("replay", onClick = player::restart)
+        IconBtn("replay", label = stringResource(Res.string.shell_tip_replay), onClick = player::restart)
         Txt(formatCastTime(player.position), color = Skerry.colors.dim, size = 11.5.sp)
         SeekBar(player, Modifier.weight(1f))
         Txt(formatCastTime(player.duration), color = Skerry.colors.dim, size = 11.5.sp)

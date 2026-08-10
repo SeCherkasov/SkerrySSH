@@ -25,6 +25,8 @@ import app.skerry.ui.generated.resources.runbook_new
 import app.skerry.ui.generated.resources.runbook_save
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Runbook form in the section's right-hand panel: reached from "New runbook" and from Edit on the
@@ -56,8 +58,9 @@ internal fun RunbookEditorPanel(
                 stringResource(Res.string.runbook_save),
                 onClick = { if (form.canSave) onSaved(manager.save(form.toDraft())) },
                 enabled = form.canSave,
+                modifier = Modifier.testTag(UiTags.FORM_SAVE),
             )
-            CancelButton(stringResource(Res.string.runbook_cancel), onClick = onCancel)
+            CancelButton(stringResource(Res.string.runbook_cancel), onClick = onCancel, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
         }
     }
 }

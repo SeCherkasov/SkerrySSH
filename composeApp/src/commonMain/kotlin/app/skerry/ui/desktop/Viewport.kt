@@ -1,9 +1,14 @@
 package app.skerry.ui.desktop
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.DesktopView
+import app.skerry.ui.app.UiTags
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.known.KnownHostsView
 import app.skerry.ui.app.LocalSessions
@@ -34,30 +39,46 @@ import app.skerry.ui.app.workAreaSection
  */
 @Composable
 fun Viewport(state: DesktopDesignState) {
-    when (state.appOverlay) {
-        DesktopView.Ports -> TunnelsView()
-        DesktopView.Snippets -> SnippetsView(state)
-        DesktopView.Runbooks -> RunbooksView(state)
-        DesktopView.Vault -> VaultView()
-        DesktopView.Known -> KnownHostsView()
-        DesktopView.Teams -> TeamsView()
-        // overlay == null: renders the work area (showView only stores app-level values in appOverlay).
-        else -> {
-            val sessions = LocalSessions.current
-            when (workAreaSection(sessions?.active, state.section)) {
-                HostSection.RemoteDesktops -> RemoteDesktopsView(state)
-                HostSection.Terminal -> {
-                    // activeTerminal, not active: a remote-desktop tab renders in the branch above.
-                    val view = sessions?.activeTerminal?.view ?: state.view.asSessionView()
-                    when (view) {
-                        SessionView.Terminal -> TerminalView(state)
-                        SessionView.Sftp -> SftpView()
-                        SessionView.Monitor -> MonitorView(state)
-                        SessionView.Runbook -> RunbookRunView(state)
-                        // A remote desktop never renders here (see activeTerminal); keep the branch total.
-                        SessionView.Vnc -> TerminalView(state)
-                        SessionView.Player -> CastPlayerView()
-                    }
+    // Tagged with what it decided to draw: this `when` is the one place that knows, and a test
+    // asking "which screen is up" has nowhere else to ask ([UiTags]).
+    val overlay = state.appOverlay
+    // This `when` is the definition of "app-level", not [DesktopView.isAppLevel] plus a second list
+    // that has to agree with it: a value it does not name falls through to the work area, where the
+    // rail button at least opens something. The two lists drifting apart drew an empty pane under a
+    // correct screen tag, which is the one failure nothing reports.
+    val appLevel: (@Composable () -> Unit)? = when (overlay) {
+        DesktopView.Ports -> ({ TunnelsView() })
+        DesktopView.Snippets -> ({ SnippetsView(state) })
+        DesktopView.Runbooks -> ({ RunbooksView(state) })
+        DesktopView.Vault -> ({ VaultView() })
+        DesktopView.Known -> ({ KnownHostsView() })
+        DesktopView.Teams -> ({ TeamsView() })
+        // Spelled out rather than left to an `else`, so the compiler refuses a new DesktopView that
+        // nothing here draws instead of letting it fall through silently.
+        DesktopView.Terminal, DesktopView.Sftp, DesktopView.Monitor, null -> null
+    }
+    if (overlay != null && appLevel != null) {
+        Box(Modifier.fillMaxSize().testTag(UiTags.screen(overlay))) { appLevel() }
+        return
+    }
+    // overlay == null: renders the work area (showView only stores app-level values in appOverlay).
+    val sessions = LocalSessions.current
+    when (workAreaSection(sessions?.active, state.section)) {
+        HostSection.RemoteDesktops -> Box(Modifier.fillMaxSize().testTag(UiTags.screen(HostSection.RemoteDesktops))) {
+            RemoteDesktopsView(state)
+        }
+        HostSection.Terminal -> {
+            // activeTerminal, not active: a remote-desktop tab renders in the branch above.
+            val view = sessions?.activeTerminal?.view ?: state.view.asSessionView()
+            Box(Modifier.fillMaxSize().testTag(UiTags.screen(view))) {
+                when (view) {
+                    SessionView.Terminal -> TerminalView(state)
+                    SessionView.Sftp -> SftpView()
+                    SessionView.Monitor -> MonitorView(state)
+                    SessionView.Runbook -> RunbookRunView(state)
+                    // A remote desktop never renders here (see activeTerminal); keep the branch total.
+                    SessionView.Vnc -> TerminalView(state)
+                    SessionView.Player -> CastPlayerView()
                 }
             }
         }

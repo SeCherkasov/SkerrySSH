@@ -26,6 +26,9 @@ import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -36,6 +39,7 @@ import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.ui.app.LocalSftpPrefs
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.NO_PRESS
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.labelUppercase
@@ -86,7 +90,7 @@ internal fun LivePaneList(
                                 modified = if (showModified) "" else null,
                                 size = NO_SIZE,
                             ),
-                            selected = false, cursored = pane.cursorOnParent, active = active, mono = mono,
+                            isSelected = false, cursored = pane.cursorOnParent, active = active, mono = mono,
                             // A single click only puts the cursor on ".."; going up is a double click (like entering a directory).
                             onPress = { onActivate(); pane.setCursorOnParent() },
                             onDoubleClick = { onActivate(); pane.goUp() },
@@ -120,7 +124,7 @@ internal fun LivePaneList(
                             modified = if (showModified) fileDateText(entry.modifiedEpochSeconds) else null,
                             size = if (entry.type == FileItemType.File) humanSize(entry.size) else NO_SIZE,
                         ),
-                        selected = entry.path in pane.selection,
+                        isSelected = entry.path in pane.selection,
                         cursored = entry.path == pane.cursor,
                         active = active,
                         mono = mono,
@@ -243,7 +247,9 @@ internal fun LiveFileRow(
     iconColor: Color,
     name: String,
     columns: FileRowColumns,
-    selected: Boolean,
+    // Named apart from the semantics property it feeds: `selected` inside a SemanticsPropertyReceiver
+    // resolves to the property, not to this.
+    isSelected: Boolean,
     cursored: Boolean,
     active: Boolean,
     mono: FontFamily,
@@ -264,12 +270,27 @@ internal fun LiveFileRow(
     val rowBg = when {
         cursored && active -> Skerry.colors.cyan20
         cursored -> Skerry.colors.overlayMed
-        selected -> Skerry.colors.cyan06
+        isSelected -> Skerry.colors.cyan06
         else -> Color.Transparent
     }
     Row(
         Modifier
             .fillMaxWidth()
+            // One node per row. The pane around the listing is clickable and therefore merges
+            // everything under it, which without this leaves the whole directory as a single node —
+            // one unreadable run of names, sizes and dates with no row boundaries in it.
+            //
+            // No contentDescription on purpose: the merged text is name · size · date · mode in the
+            // order the columns are drawn, which is what a listing should read like. A description
+            // would replace all of it with the name alone.
+            //
+            // The click action is the row's own: opening is a double click parsed by hand below, and
+            // a hand-rolled gesture publishes nothing, so without this the row is inert to anything
+            // that is not a mouse. Marking is what `selected` reports.
+            .semantics(mergeDescendants = true) {
+                selected = isSelected
+                onClick { currentDouble(); true }
+            }
             .background(rowBg)
             .listingRowHairline()
             // LMB: our own tap parsing in one loop — more reliable than detectTapGestures (which lost
@@ -277,7 +298,7 @@ internal fun LiveFileRow(
             // two presses closer than DOUBLE_CLICK_MS are a double click (enter directory). Time comes
             // from the event itself (uptimeMillis) — deterministic. RMB is skipped (rubber-band below handles it).
             .pointerInput(Unit) {
-                var lastDownMs = 0L
+                var lastDownMs = NO_PRESS
                 awaitPointerEventScope {
                     while (true) {
                         val e = awaitPointerEvent()
@@ -286,7 +307,7 @@ internal fun LiveFileRow(
                         currentPress()
                         if (t - lastDownMs <= DOUBLE_CLICK_MS) {
                             currentDouble()
-                            lastDownMs = 0L // reset so a triple click doesn't give a second enter
+                            lastDownMs = NO_PRESS // reset so a triple click doesn't give a second enter
                         } else {
                             lastDownMs = t
                         }
@@ -320,7 +341,7 @@ internal fun LiveFileRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         FileRowIcon(icon, iconColor)
-        FileRowName(name, selected, directory, mono, Modifier.weight(1f))
+        FileRowName(name, isSelected, directory, mono, Modifier.weight(1f))
         FileRowColumnCells(columns, mono)
     }
 }

@@ -114,8 +114,14 @@ import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
+import app.skerry.ui.design.fieldValueName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import app.skerry.ui.generated.resources.ports_open_in_browser
+import app.skerry.ui.generated.resources.shell_tip_close
 
 /**
  * Push screen for Port forwarding: back header + saved tunnel cards + New tunnel button.
@@ -260,6 +266,7 @@ private fun LiveTunnelCard(
                 val uriHandler = LocalUriHandler.current
                 Sym(
                     "open_in_new",
+                    contentDescription = stringResource(Res.string.ports_open_in_browser),
                     size = 18.sp,
                     color = Skerry.colors.cyanBright,
                     // A failing system handler must not throw into the composition.
@@ -269,7 +276,7 @@ private fun LiveTunnelCard(
                     ) { runCatching { uriHandler.openUri(url) } }.padding(end = 4.dp),
                 )
             }
-            TunnelStatusControl(entry, onToggle)
+            TunnelStatusControl(entry, t.label, onToggle)
         }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -304,11 +311,11 @@ private fun LiveTunnelCard(
 
 /** Card's right-side control by status: active shows the on toggle, connecting shows an hourglass, otherwise the off toggle. */
 @Composable
-private fun TunnelStatusControl(entry: TunnelEntry, onToggle: () -> Unit) {
+private fun TunnelStatusControl(entry: TunnelEntry, label: String, onToggle: () -> Unit) {
     when (entry.status) {
-        is TunnelStatus.Active -> Toggle(on = true, onToggle = onToggle)
+        is TunnelStatus.Active -> Toggle(on = true, onToggle = onToggle, label = label)
         TunnelStatus.Connecting -> Sym("hourglass_top", size = 18.sp, color = Skerry.colors.amber)
-        else -> Toggle(on = false, onToggle = onToggle)
+        else -> Toggle(on = false, onToggle = onToggle, label = label)
     }
 }
 
@@ -360,6 +367,7 @@ private fun MobileTunnelEditorSheet(
                 }
                 Sym(
                     "close",
+                    contentDescription = stringResource(Res.string.shell_tip_close),
                     size = 24.sp,
                     color = Skerry.colors.dim,
                     modifier = Modifier.clickable(
@@ -427,6 +435,7 @@ private fun MobileTunnelEditorSheet(
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {
                         draft?.let { manager.save(it); onDismiss() }
                     })
+                    .testTag(UiTags.FORM_SAVE)
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -482,6 +491,7 @@ private fun MobileServicesSheet(
             }
             Sym(
                 "close",
+                contentDescription = stringResource(Res.string.shell_tip_close),
                 size = 24.sp,
                 color = Skerry.colors.dim,
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),
@@ -583,7 +593,7 @@ private fun MobileHostPicker(current: String, options: List<Pair<String, String>
         onDismiss = { open = false },
         trigger = {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).fieldValueName(current).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -629,7 +639,7 @@ private fun PortInput(
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
@@ -650,7 +660,7 @@ private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection)
         onDismiss = { open = false },
         trigger = {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).fieldValueName(direction.displayLabel()).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = { open = !open }).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -679,9 +689,9 @@ private fun PortTypeSelect(direction: TunnelDirection, onPick: (TunnelDirection)
 
 /** Outlined full-width action under the tunnel list (cyan border, leading icon). */
 @Composable
-private fun MobileDashedButton(label: String, icon: String, onClick: () -> Unit) {
+private fun MobileDashedButton(label: String, icon: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(13.dp))
             .border(1.dp, Skerry.colors.cyan20, RoundedCornerShape(13.dp))
@@ -697,7 +707,12 @@ private fun MobileDashedButton(label: String, icon: String, onClick: () -> Unit)
 
 @Composable
 private fun MobileNewTunnelButton(onClick: () -> Unit) =
-    MobileDashedButton(stringResource(Res.string.ports_new_tunnel), icon = "add", onClick = onClick)
+    MobileDashedButton(
+        stringResource(Res.string.ports_new_tunnel),
+        icon = "add",
+        onClick = onClick,
+        modifier = Modifier.testTag(UiTags.NEW_TUNNEL),
+    )
 
 /** Throughput row in the editor sheet: arrow + bar + text. */
 @Composable
@@ -756,7 +771,7 @@ private fun MockTunnelCard(t: MockTunnel, mono: FontFamily) {
             val (typeBg, typeFg) = mockTunnelTypeColors(t.type)
             Badge(t.type, bg = typeBg, fg = typeFg, radius = 4, size = 9.5.sp)
             Txt(t.via, color = Skerry.colors.dim, size = 11.sp, font = mono, modifier = Modifier.weight(1f))
-            Toggle(on = t.on, onToggle = {})
+            Toggle(on = t.on, onToggle = {}, label = t.via)
         }
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {

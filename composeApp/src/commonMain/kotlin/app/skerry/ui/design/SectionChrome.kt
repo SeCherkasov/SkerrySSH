@@ -30,12 +30,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shtail_search_clear
 import app.skerry.ui.theme.Skerry
 
 // Shared "section chrome": the sidebar/header/empty-state building blocks every section screen
@@ -131,7 +136,9 @@ fun SidebarSearchField(
         singleLine = true,
         textStyle = TextStyle(color = Skerry.colors.text, fontSize = 12.5.sp, fontFamily = LocalFonts.current.ui),
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = modifier.fieldFocus(draft),
+        // The placeholder names the field: a search box has no caption above it, so without this it
+        // reaches a screen reader as an unnamed text field.
+        modifier = modifier.fieldFocus(draft).fieldName(placeholder),
         decorationBox = { inner ->
             Row(
                 Modifier
@@ -150,8 +157,13 @@ fun SidebarSearchField(
                     inner()
                 }
                 if (value.isNotEmpty()) {
+                    val clearLabel = stringResource(Res.string.shtail_search_clear)
                     Box(
-                        Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).clickable { onValueChange("") },
+                        Modifier
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .semantics { contentDescription = clearLabel }
+                            .clickable { onValueChange("") },
                         contentAlignment = Alignment.Center,
                     ) {
                         Sym("close", size = 14.sp, color = Skerry.colors.faint)

@@ -249,7 +249,11 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
                     Txt(stringResource(Res.string.appearance_custom_term_theme), color = Skerry.colors.text, size = 14.5.sp)
                     Txt(stringResource(Res.string.appearance_custom_term_theme_desc), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
                 }
-                Toggle(on = state.customTerminalTheme, onToggle = state::toggleCustomTerminalTheme)
+                Toggle(
+                    on = state.customTerminalTheme,
+                    onToggle = state::toggleCustomTerminalTheme,
+                    label = stringResource(Res.string.appearance_custom_term_theme),
+                )
             }
             if (state.customTerminalTheme) {
                 TerminalThemes.all.chunked(2).forEach { rowThemes ->
@@ -466,6 +470,6 @@ private fun MobileToggleRow(title: String, desc: String, on: Boolean, onToggle: 
             Txt(title, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
             Txt(desc, color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(top = 2.dp))
         }
-        Toggle(on = on, onToggle = onToggle)
+        Toggle(on = on, onToggle = onToggle, label = title)
     }
 }

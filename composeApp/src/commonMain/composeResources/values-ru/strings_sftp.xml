@@ -77,6 +77,7 @@
     <!-- Caption over the permissions column: the full word does not fit the slot -->
     <string name="sftp_col_permissions_short">Права</string>
     <string name="sftp_filter_hint">Фильтр (имя или маска *.conf)</string>
+    <string name="sftp_tip_filter_toggle">Фильтр списка</string>
     <string name="sftp_meta_joined">%1$s · %2$s</string>
     <string name="sftp_date_recent">%2$d %1$s %3$s</string>
     <string name="sftp_date_day">%2$d %1$s</string>

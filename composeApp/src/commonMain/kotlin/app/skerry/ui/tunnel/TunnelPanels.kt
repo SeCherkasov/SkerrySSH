@@ -42,9 +42,11 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.forward.rateFraction
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_close
 import app.skerry.ui.generated.resources.ports_already_forwarded
 import app.skerry.ui.generated.resources.ports_autostart
 import app.skerry.ui.generated.resources.ports_autostart_hint
+import app.skerry.ui.generated.resources.ports_autostart_switch
 import app.skerry.ui.generated.resources.ports_changes_apply_after_restart
 import app.skerry.ui.generated.resources.ports_field_autostart
 import app.skerry.ui.generated.resources.ports_field_bind_address
@@ -75,6 +77,9 @@ import app.skerry.ui.generated.resources.ports_tunnel_detail
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.FormField
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * The three things the right-hand column of the tunnel section can hold: the create/edit form,
@@ -118,23 +123,28 @@ internal fun TunnelEditor(
             leading = { Badge(form.direction.badgeLabel(), bg = badgeBg, fg = badgeFg, radius = 4, size = 10.sp) },
         )
         Box(Modifier.padding(bottom = 10.dp))
-        FieldLabel(labelUppercase(stringResource(Res.string.ports_field_name)), top = 0.dp)
-        EditField(form.label, { form.label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono)
+        FormField(stringResource(Res.string.ports_field_name), top = 0.dp) {
+            EditField(form.label, { form.label = it }, stringResource(Res.string.ports_ph_web_tunnel), mono)
+        }
         Box(Modifier.padding(bottom = 12.dp))
-        FieldLabel(labelUppercase(stringResource(Res.string.ports_field_type)), top = 0.dp)
-        TypePicker(form.direction, onPick = { form.direction = it })
+        FormField(stringResource(Res.string.ports_field_type), top = 0.dp) {
+            TypePicker(form.direction, onPick = { form.direction = it })
+        }
         Box(Modifier.padding(bottom = 12.dp))
-        FieldLabel(labelUppercase(stringResource(Res.string.ports_field_via_host)), top = 0.dp)
-        HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { form.hostId = it })
+        FormField(stringResource(Res.string.ports_field_via_host), top = 0.dp) {
+            HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { form.hostId = it })
+        }
         Box(Modifier.padding(bottom = 12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
-                FieldLabel(labelUppercase(stringResource(Res.string.ports_field_bind_address)), top = 0.dp)
-                EditField(form.bindHost, { form.bindHost = it }, TunnelFormState.DEFAULT_BIND_HOST, mono, selectAllOnFocus = form.isDefaultBindHost)
+                FormField(stringResource(Res.string.ports_field_bind_address), top = 0.dp) {
+                    EditField(form.bindHost, { form.bindHost = it }, TunnelFormState.DEFAULT_BIND_HOST, mono, selectAllOnFocus = form.isDefaultBindHost)
+                }
             }
             Column(Modifier.width(70.dp)) {
-                FieldLabel(labelUppercase(stringResource(Res.string.ports_field_port)), top = 0.dp)
-                EditField(form.bindPort, { form.bindPort = it }, "0", mono, KeyboardType.Number)
+                FormField(stringResource(Res.string.ports_field_port), top = 0.dp) {
+                    EditField(form.bindPort, { form.bindPort = it }, "0", mono, KeyboardType.Number)
+                }
             }
         }
         BindExposureWarning(form.bindHost)
@@ -142,12 +152,14 @@ internal fun TunnelEditor(
             Box(Modifier.padding(bottom = 12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f)) {
-                    FieldLabel(labelUppercase(stringResource(Res.string.ports_field_destination)), top = 0.dp)
-                    EditField(form.destHost, { form.destHost = it }, "10.0.0.5", mono)
+                    FormField(stringResource(Res.string.ports_field_destination), top = 0.dp) {
+                        EditField(form.destHost, { form.destHost = it }, "10.0.0.5", mono)
+                    }
                 }
                 Column(Modifier.width(70.dp)) {
-                    FieldLabel(labelUppercase(stringResource(Res.string.ports_field_port)), top = 0.dp)
-                    EditField(form.destPort, { form.destPort = it }, "80", mono, KeyboardType.Number)
+                    FormField(stringResource(Res.string.ports_field_port), top = 0.dp) {
+                        EditField(form.destPort, { form.destPort = it }, "80", mono, KeyboardType.Number)
+                    }
                 }
             }
         } else {
@@ -188,7 +200,7 @@ internal fun TunnelEditor(
             PrimaryButton(
                 label = stringResource(Res.string.ports_save),
                 onClick = { draft?.let { onSaved(manager.save(it)) } },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag(UiTags.FORM_SAVE),
                 enabled = draft != null,
             )
             if (existing != null) {
@@ -246,6 +258,9 @@ internal fun AutostartPanel(manager: TunnelManager, hostLabel: (String) -> Strin
                     modifier = boxedRow(),
                     subtitle = "${hostLabel(entry.tunnel.hostId)} · ${entry.tunnel.bindHost}:${entry.tunnel.bindPort}",
                     subtitleColor = if (exposed) Skerry.colors.amber else Skerry.colors.faint,
+                    // The table behind this panel has a switch per tunnel too, and it means
+                    // something else: on now, versus on after the next unlock.
+                    switchName = stringResource(Res.string.ports_autostart_switch, entry.tunnel.label),
                 )
             }
         }
@@ -279,8 +294,9 @@ internal fun ServicesPanel(
             leading = { Sym("radar", size = 16.sp, color = Skerry.colors.cyanBright) },
         )
         Txt(stringResource(Res.string.ports_services_hint), color = Skerry.colors.faint, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(bottom = 14.dp))
-        FieldLabel(labelUppercase(stringResource(Res.string.ports_field_via_host)), top = 0.dp)
-        HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { hostId = it })
+        FormField(stringResource(Res.string.ports_field_via_host), top = 0.dp) {
+            HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { hostId = it })
+        }
         Box(Modifier.padding(bottom = 12.dp))
         PrimaryButton(
             label = stringResource(Res.string.ports_scan),
@@ -372,7 +388,12 @@ private fun PanelHeader(title: String, onClose: () -> Unit, leading: @Composable
             leading()
             Txt(title, color = Skerry.colors.text, size = 13.sp, weight = FontWeight.SemiBold)
         }
-        Sym("close", size = 16.sp, color = Skerry.colors.faint, modifier = Modifier.clickable(onClick = onClose))
+        Sym(
+            "close",
+            contentDescription = stringResource(Res.string.shell_tip_close),
+            size = 16.sp, color = Skerry.colors.faint,
+            modifier = Modifier.clickable(onClick = onClose),
+        )
     }
 }
 

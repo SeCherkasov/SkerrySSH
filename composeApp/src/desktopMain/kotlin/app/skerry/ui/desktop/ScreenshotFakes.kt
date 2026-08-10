@@ -127,9 +127,38 @@ internal class FakeChannel(target: SshTarget) : ShellChannel {
         awaitCancellation()
     }
 
-    override suspend fun write(data: ByteArray) {}
+    override suspend fun write(data: ByteArray) = FakeShellInput.record(data.decodeToString())
     override suspend fun resize(size: PtySize) {}
     override suspend fun close() {}
+}
+
+/**
+ * What has been typed into the fake shells, in order.
+ *
+ * The channel has no server behind it, so nothing it is sent comes back as echo — this log is the
+ * only place a test can see that a snippet, a runbook step or a keystroke actually reached the
+ * session rather than stopping one layer short of it. Shared across the fakes because a test holds
+ * the session, never the channel; call [clear] before the act it is about.
+ */
+internal object FakeShellInput {
+    private val lines = mutableListOf<String>()
+
+    /** Called from the writer's coroutine, read from the test thread — hence the lock. */
+    fun record(text: String) = synchronized(lines) {
+        // Bounded on purpose: this object sits in desktopMain beside the other screenshot fakes, so
+        // it is compiled into the shipped jar even though only the offscreen render and the tests can
+        // reach it. An unbounded record of everything typed into a shell is not a thing to ship,
+        // however unreachable it is.
+        if (lines.size >= CAPACITY) lines.removeAt(0)
+        lines += text
+        Unit
+    }
+
+    fun all(): List<String> = synchronized(lines) { lines.toList() }
+
+    fun clear() = synchronized(lines) { lines.clear() }
+
+    private const val CAPACITY = 256
 }
 
 /** Fake SFTP client with a canned `/var/www` listing, for the offscreen render of a live panel. */

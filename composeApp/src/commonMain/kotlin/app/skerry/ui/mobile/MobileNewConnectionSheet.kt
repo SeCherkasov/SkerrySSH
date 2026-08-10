@@ -88,6 +88,9 @@ import app.skerry.ui.connection.resolveJumpChain
 import app.skerry.ui.i18n.label
 import app.skerry.ui.host.tagSuggestions
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import app.skerry.ui.generated.resources.shell_tip_close
 
 /**
  * "New connection" bottom sheet: scrim + panel with the host profile form. With a live
@@ -200,6 +203,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 )
                 Sym(
                     "close",
+                    contentDescription = stringResource(Res.string.shell_tip_close),
                     size = 24.sp,
                     color = Skerry.colors.dim,
                     modifier = Modifier.clickable(
@@ -376,6 +380,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                     .clip(RoundedCornerShape(14.dp))
                     .background(if (canSave) Skerry.colors.cyan else Skerry.colors.cyan.copy(alpha = 0.4f))
                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onSave)
+                    .testTag(UiTags.FORM_SAVE)
                     .padding(15.dp),
                 contentAlignment = Alignment.Center,
             ) {
