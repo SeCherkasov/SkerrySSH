@@ -1,7 +1,7 @@
 # Third-party font licenses
 
 Skerry bundles the fonts below in `composeApp/src/commonMain/composeResources/font/` and ships them
-inside every artifact (APK, `.deb`/`.rpm`/`.msi`/`.dmg`, Flatpak, AppImage). Each of their licenses
+inside every artifact (APK, `.deb`/`.rpm`/`.msi`/`.dmg`, AppImage). Each of their licenses
 requires the copyright notice and the license text to travel with the binary — these files are that
 copy. The client code itself stays under [GPL-3.0](../LICENSE); a font license covers only the font.
 

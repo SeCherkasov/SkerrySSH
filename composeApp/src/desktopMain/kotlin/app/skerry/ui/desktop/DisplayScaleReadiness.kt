@@ -98,8 +98,8 @@ internal object DisplayScaleReadiness {
      * Whether this is a Wayland session, where XWayland starts on demand and can therefore be
      * younger than the app reading its settings.
      *
-     * Both signals are needed: inside the Flatpak sandbox `WAYLAND_DISPLAY` is empty (the app is
-     * granted the X11 socket only), while `XDG_SESSION_TYPE` is passed through.
+     * Both signals are needed: a sandbox that grants the X11 socket only leaves `WAYLAND_DISPLAY`
+     * empty, while `XDG_SESSION_TYPE` is passed through.
      */
     fun isWaylandSession(sessionType: String?, waylandDisplay: String?): Boolean =
         sessionType.equals("wayland", ignoreCase = true) || !waylandDisplay.isNullOrEmpty()

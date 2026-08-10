@@ -15,8 +15,5 @@ dependencies {
     api(libs.kotlinx.serialization.json)
 }
 
-// Kover coverage — applied via pluginManager (classpath comes from the root buildscript) so the
-// offline Flatpak build, which sets -Dskerry.offlineRepo, never resolves it. See the root build.
-if (System.getProperty("skerry.offlineRepo") == null) {
-    pluginManager.apply("org.jetbrains.kotlinx.kover")
-}
+// Kover coverage — applied via pluginManager; the classpath comes from the root buildscript.
+pluginManager.apply("org.jetbrains.kotlinx.kover")

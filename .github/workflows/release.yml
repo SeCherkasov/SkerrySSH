@@ -3,9 +3,9 @@ name: Release build
 # Three modes:
 #   • Pull request touching packaging/toolchain files: builds every distributable as a
 #     pre-merge smoke test and uploads them as run artifacts — publishes NOTHING. This
-#     catches release-only breakage (e.g. a dependency bump that desyncs the Flatpak
-#     offline repo, or a new jar that collides in the Android resource merge) on the PR
-#     instead of on the release tag. The paths filter keeps it off unrelated PRs.
+#     catches release-only breakage (e.g. a new jar that collides in the Android resource
+#     merge) on the PR instead of on the release tag. The paths filter keeps it off
+#     unrelated PRs.
 #   • Manual (workflow_dispatch): builds all distributables and uploads them as run
 #     artifacts only — publishes NOTHING, exactly as before.
 #   • Tag push (v*): builds with the version taken from the tag, then publishes a DRAFT
@@ -16,14 +16,14 @@ on:
   pull_request:
     # Only files that can change what the release build produces. A dependency/toolchain
     # bump (libs.versions.toml), a Gradle wrapper change, any build script, the version
-    # source, or the Flatpak offline sources all land here; UI/logic-only PRs don't.
+    # source or the AppImage packaging assets all land here; UI/logic-only PRs don't.
     paths:
       - "gradle/libs.versions.toml"
       - "gradle/wrapper/**"
       - "gradle.properties"
       - "settings.gradle.kts"
       - "**/build.gradle.kts"
-      - "composeApp/flatpak/**"
+      - "composeApp/appimage/**"
       - ".github/workflows/release.yml"
   workflow_dispatch:
     inputs:
@@ -302,7 +302,7 @@ jobs:
 
       - name: Rename APK to match the other artifacts
         # AGP emits androidApp-release.apk. Rename it to the Skerry-<version> scheme the
-        # msi/dmg/AppImage/flatpak assets use (deb/rpm keep the lowercase names their
+        # msi/dmg/AppImage assets use (deb/rpm keep the lowercase names their
         # platform conventions dictate).
         # On a manual run without a version, fall back to the gradle.properties default.
         # Version comes through env, not interpolated into the shell (injection-safe).
@@ -321,51 +321,11 @@ jobs:
           path: androidApp/build/outputs/apk/release/Skerry-*.apk
           if-no-files-found: error
 
-  linux-flatpak:
-    needs: version
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install flatpak + flatpak-builder + runtimes
-        # No JDK/Gradle setup: the bundle is built hermetically inside the flatpak sandbox from the
-        # committed offline sources (composeApp/flatpak/flatpak-sources.json), using the openjdk21
-        # SDK extension. Runtimes go into the --user installation (no root needed to install them).
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y flatpak flatpak-builder
-          flatpak remote-add --if-not-exists --user flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak install -y --user flathub \
-            org.freedesktop.Platform//24.08 \
-            org.freedesktop.Sdk//24.08 \
-            org.freedesktop.Sdk.Extension.openjdk21//24.08
-
-      - name: Set release version in gradle.properties
-        # The sandbox build reads the version from the copied gradle.properties — it can't see the
-        # -P override the other jobs pass. Rewrite it in place when a version is resolved.
-        if: needs.version.outputs.name != ''
-        # Version through env, not interpolated into the sed command (injection-safe).
-        env:
-          VERSION_NAME: ${{ needs.version.outputs.name }}
-        run: sed -i "s/^skerry.versionName=.*/skerry.versionName=${VERSION_NAME}/" gradle.properties
-
-      - name: Build flatpak bundle
-        env:
-          VERSION_NAME: ${{ needs.version.outputs.name }}
-        run: VERSION="${VERSION_NAME:-0.1.0}" bash composeApp/flatpak/package-flatpak.sh
-
-      - name: Upload flatpak bundle
-        uses: actions/upload-artifact@v7
-        with:
-          name: skerry-flatpak
-          path: composeApp/flatpak/*.flatpak
-          if-no-files-found: error
-
   # Publish only on tag pushes. Collects every build job's artifact, adds checksums, and
   # creates a DRAFT release for a human to review and publish. Skipped on manual runs
   # (then the artifacts just stay on the run, as before).
   publish:
-    needs: [linux-desktop, windows-desktop, macos-desktop, android, linux-flatpak]
+    needs: [linux-desktop, windows-desktop, macos-desktop, android]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:

@@ -1,8 +1,4 @@
-// Root detekt (static analysis) wiring, applied from build.gradle.kts ONLY for non-offline builds.
-// Same reasoning as gradle/kover.gradle.kts: it lives in its own script so the main build file never
-// references detekt types directly — the hermetic offline Flatpak build (-Dskerry.offlineRepo) has
-// no detekt on its buildscript classpath, and a direct reference in build.gradle.kts would fail to
-// COMPILE there, not merely skip at runtime.
+// Root detekt (static analysis) wiring, applied from build.gradle.kts.
 //
 // This script carries its own buildscript classpath: an applied script does NOT inherit the parent's
 // buildscript classpath for compilation.

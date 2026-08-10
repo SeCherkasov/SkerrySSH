@@ -65,7 +65,7 @@ class DisplayScaleReadinessTest {
 
     @Test
     fun `recognises a Wayland session even without the Wayland socket`() {
-        // The Flatpak build is granted the X11 socket only, so WAYLAND_DISPLAY is empty there.
+        // A sandbox granted the X11 socket only leaves WAYLAND_DISPLAY empty.
         assertTrue(DisplayScaleReadiness.isWaylandSession("wayland", null))
         assertTrue(DisplayScaleReadiness.isWaylandSession("wayland", ""))
         assertTrue(DisplayScaleReadiness.isWaylandSession(null, "wayland-0"))
