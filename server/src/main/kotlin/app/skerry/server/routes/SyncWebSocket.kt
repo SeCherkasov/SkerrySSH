@@ -37,10 +37,11 @@ fun Route.syncWebSocket(services: Services) {
         val accountId = principal.accountId
         val deviceId = principal.deviceId
         // The gauge is maintained here, not from ChangeNotifier.subscriptions: each session collects
-        // three flows, so that counter is three times the number of sockets.
+        // four flows, so that counter is four times the number of sockets. Tests pin the multiple as
+        // WS_SUBSCRIPTIONS — a fifth channel has to move with it, or their waits pass too early.
         services.metrics.wsSessionOpened()
         val openedAt = System.nanoTime()
-        // Written by the three notification coroutines and by the reader, read in `finally`: an
+        // Written by the four notification coroutines and by the reader, read in `finally`: an
         // AtomicReference gives that a happens-before edge, and first-cause-wins keeps the label
         // truthful when a revoke and a client close race.
         val closeReason = AtomicReference(WsCloseReason.CLIENT_CLOSE)

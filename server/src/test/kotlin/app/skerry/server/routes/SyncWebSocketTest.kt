@@ -17,9 +17,6 @@ import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** A single WS session subscribes to account, team records, share directory and membership. */
-private const val WS_SUBSCRIPTIONS = 4
-
 class SyncWebSocketTest {
 
     private val accountId = "alice@example.com"
@@ -38,6 +35,9 @@ class SyncWebSocketTest {
         client.webSocket("/sync", request = { bearerAuth(tokens.accessToken) }) {
             // Wait for all server subscriptions to register, then verify the push channel itself.
             withTimeout(2_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
+            // A fifth notifier channel would make every `>= WS_SUBSCRIPTIONS` wait pass before its
+            // collector subscribed, and a publish would be lost — fail here instead, once.
+            assertEquals(WS_SUBSCRIPTIONS, services.notifier.subscriptions.value)
             services.notifier.publish(accountId, 7)
             val frame = withTimeout(2_000) { incoming.receive() } as Frame.Text
             assertEquals("7", frame.readText())

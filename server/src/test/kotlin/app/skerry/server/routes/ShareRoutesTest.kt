@@ -29,7 +29,6 @@ import io.ktor.websocket.readBytes
 import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -97,7 +96,7 @@ class ShareRoutesTest {
         assertEquals(meta, listed.shares.first().meta)
 
         host.close()
-        withTimeout(5_000) { while (services.shares.list(teamId).isNotEmpty()) yield() }
+        awaitUntil { services.shares.list(teamId).isEmpty() }
         val after: SharesResponse = client.shares(mateToken).body()
         assertTrue(after.shares.isEmpty(), "a share must not outlive its host's socket")
     }
@@ -300,7 +299,7 @@ class ShareRoutesTest {
         val (ownerToken, mateToken) = client.teamOfTwo()
 
         val sync = client.webSocketSession("/sync") { bearerAuth(mateToken) }
-        withTimeout(5_000) { services.notifier.subscriptions.first { it >= 4 } }
+        withTimeout(5_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
 
         val host = client.webSocketSession(hostPath("s1", meta)) { bearerAuth(ownerToken) }
         assertEquals("shares:$teamId", withTimeout(5_000) { sync.nextText() })
@@ -312,10 +311,10 @@ class ShareRoutesTest {
     }
 
     private suspend fun app.skerry.server.Services.awaitShare() =
-        withTimeout(5_000) { while (shares.list(teamId).isEmpty()) yield() }
+        awaitUntil { shares.list(teamId).isNotEmpty() }
 
     private suspend fun app.skerry.server.Services.awaitViewers(count: Int) =
-        withTimeout(5_000) { while (shares.list(teamId).firstOrNull()?.viewers != count) yield() }
+        awaitUntil { shares.list(teamId).firstOrNull()?.viewers == count }
 
     /** Next binary frame, skipping the server's own text control frames. */
     private suspend fun DefaultClientWebSocketSession.nextBinary(): ByteArray {
