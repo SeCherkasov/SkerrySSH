@@ -1,9 +1,4 @@
-// Root Kover (coverage) wiring, applied from build.gradle.kts ONLY for non-offline builds.
-// It lives in its own script so the main build file never references Kover types directly: the
-// hermetic offline Flatpak build (-Dskerry.offlineRepo) has no Kover on its buildscript classpath,
-// and a direct `configure<KoverProjectExtension>` in build.gradle.kts would fail to COMPILE there
-// (unresolved reference), not just skip at runtime. `apply(from = …)` compiles this script only
-// when it is actually applied — i.e. online — so offline never sees the Kover symbols.
+// Root Kover (coverage) wiring, applied from build.gradle.kts.
 //
 // This script carries its own buildscript classpath: an applied script does NOT inherit the parent's
 // buildscript classpath for compilation, so the Kover types must be resolvable from here.

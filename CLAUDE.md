@@ -6,7 +6,9 @@ Multiplatform UI, one codebase across Desktop (Linux, Windows, macOS) and Androi
 
 ## Commands
 
-Requires **JDK 21** (`foojay-resolver` fetches one if needed); Android needs `ANDROID_HOME`.
+Requires **JDK 21** (`foojay-resolver` fetches one if needed) and an Android SDK for every client
+build — `:androidApp` is always in the settings graph, so `ANDROID_HOME` (or `sdk.dir` in
+`local.properties`) is needed even for a desktop-only build.
 
 ```bash
 ./gradlew :composeApp:run                                   # desktop

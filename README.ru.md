@@ -62,7 +62,7 @@
 
 | Платформа | Архитектура | Файлы |
 |---|---|---|
-| Linux | x86_64 | `.deb`, `.rpm`, `.AppImage`, `.flatpak` |
+| Linux | x86_64 | `.deb`, `.rpm`, `.AppImage` |
 | Linux | arm64 | `.deb`, `.rpm`, `.AppImage` |
 | Windows | x64 | `.msi`, `.zip` |
 | macOS | Apple Silicon | `.dmg` |
@@ -210,8 +210,9 @@ docs/         # документация и дизайн-материалы
 Процесс разработки, соглашения по коммитам и заметки по упаковке — в
 **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
-Требуется **JDK 21** (`foojay-resolver` подтянет при необходимости), для Android — Android SDK
-в `ANDROID_HOME`.
+Требуется **JDK 21** (`foojay-resolver` подтянет при необходимости) и Android SDK — модуль
+`:androidApp` конфигурируется в любой сборке клиента, поэтому `ANDROID_HOME` или `sdk.dir`
+в `local.properties` нужны и для сборки только под десктоп.
 
 Пакет собирается под ОС и архитектуру машины сборки: `.dmg` под arm64 получается только на
 macOS/ARM.
@@ -221,7 +222,6 @@ macOS/ARM.
 ./gradlew :composeApp:packageDistributionForCurrentOS    # .deb / .rpm / .msi / .dmg
 ./gradlew :composeApp:packageAppImage                    # портативный Linux .AppImage
 ./gradlew :composeApp:packagePortableZip                 # портативный .zip
-./gradlew :composeApp:packageFlatpak                     # однофайловый .flatpak (нужны flatpak и flatpak-builder)
 ```
 
 Android:

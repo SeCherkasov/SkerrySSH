@@ -121,7 +121,7 @@ internal fun detectSystemDark(): Boolean? {
     }
 }
 
-/** Linux: the XDG desktop portal is host-accurate and Flatpak-safe; gsettings is a non-portal fallback. */
+/** Linux: the XDG desktop portal is host-accurate and sandbox-safe; gsettings is a non-portal fallback. */
 private fun linuxDark(): Boolean? {
     runCmd(
         "gdbus", "call", "--session",
