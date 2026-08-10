@@ -1,16 +1,17 @@
-# detekt overrides on top of the shipped defaults (buildUponDefaultConfig = true in
-# gradle/detekt.gradle.kts). Only deviations live here; everything unmentioned keeps detekt's default.
+# detekt overrides on top of the shipped defaults (buildUponDefaultConfig = true in the root
+# build.gradle.kts). Only deviations live here; everything unmentioned keeps detekt's default.
 #
 # Two goals: catch the defect classes docs/coding-guidelines.md was written for (swallowed
 # exceptions, generic catches, dead code), and stay quiet about idioms that are correct here
 # (backtick test names, capitalised @Composable functions, injected-dependency constructors).
 #
 # LIMIT — no type resolution. The detekt tasks run over source files without a compile classpath
-# (see gradle/detekt.gradle.kts: the Gradle plugin's KMP integration can't be used here), so every
-# rule that needs type information silently finds nothing. Verified: a fresh `input!!` is NOT
-# reported, while a swallowed exception in the same file IS. The rules below marked
-# "needs type resolution" are kept for the day that changes; don't rely on them today —
-# `!!`, unsafe casts and blocking calls are caught by review (skerry-reviewer), not by detekt.
+# (see the root build.gradle.kts: the task type is registered directly, not via its Gradle plugin,
+# which is what would bring type resolution), so every rule that needs type information silently
+# finds nothing. Verified: a fresh `input!!` is NOT reported, while a swallowed exception in the
+# same file IS. The rules below marked "needs type resolution" are kept for the day that changes;
+# don't rely on them today — `!!`, unsafe casts and blocking calls are caught by review
+# (skerry-reviewer), not by detekt.
 
 build:
   maxIssues: 0

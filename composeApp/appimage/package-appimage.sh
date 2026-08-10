@@ -51,15 +51,49 @@ install -m 0644 "$ICON_PNG" "$APPDIR/skerry.png"
 install -Dm 0644 "$ICON_PNG" "$APPDIR/usr/share/icons/hicolor/512x512/apps/skerry.png"
 
 tool="${APPIMAGETOOL:-}"
-if [ -z "$tool" ]; then
+if [ -n "$tool" ]; then
+  # An externally supplied tool runs as-is. Say so, so a log never implies it was verified.
+  echo "==> Using appimagetool from APPIMAGETOOL=$tool (sha256 not checked)" >&2
+else
   cache="${XDG_CACHE_HOME:-$HOME/.cache}/skerry"
   mkdir -p "$cache"
-  tool="$cache/appimagetool"
-  if [ ! -x "$tool" ]; then
-    echo "==> Downloading appimagetool → $tool"
+  # Version and arch are part of the name: a version bump then downloads a new file instead of
+  # running whatever the previous one left behind.
+  cached="$cache/appimagetool-${APPIMAGETOOL_VERSION}-${ARCH}"
+  # Everything happens in a private directory. The cache path is caller-controlled through
+  # XDG_CACHE_HOME and shared between concurrent builds: a predictable name opened for writing
+  # there can be a symlink, and a file verified there can be swapped between the check and the exec.
+  work="$(mktemp -d)"
+  trap 'rm -rf "$work" ${stage:+"$stage"}' EXIT
+  tool="$work/appimagetool"
+  if [ -e "$cached" ]; then
+    from_cache=1
+    cp "$cached" "$tool"
+  else
+    from_cache=
+    echo "==> Downloading appimagetool → $cached"
     curl -fsSL -o "$tool" "$APPIMAGETOOL_URL"
-    echo "${APPIMAGETOOL_SHA256}  ${tool}" | sha256sum -c -
-    chmod +x "$tool"
+  fi
+  # Verified on every run, not only right after a download: otherwise a cached binary is executed
+  # with no check at all. Hashed through stdin because `sha256sum "$path"` escapes the whole output
+  # line, hash field included, when the path contains a backslash.
+  actual="$(sha256sum < "$tool" | cut -d ' ' -f 1)"
+  if [ "$actual" != "$APPIMAGETOOL_SHA256" ]; then
+    if [ -n "$from_cache" ]; then
+      echo "cached appimagetool failed sha256 verification ($actual) — dropping $cached" >&2
+      rm -f "$cached"
+    else
+      echo "downloaded appimagetool failed sha256 verification ($actual)" >&2
+    fi
+    exit 1
+  fi
+  chmod +x "$tool"
+  if [ -z "$from_cache" ]; then
+    # The cache only ever gains verified bytes, staged under a name nobody could have pre-planted.
+    stage="$(mktemp "$cache/.appimagetool.XXXXXX")"
+    cp "$tool" "$stage"
+    mv -f "$stage" "$cached"
+    stage=
   fi
 fi
 
