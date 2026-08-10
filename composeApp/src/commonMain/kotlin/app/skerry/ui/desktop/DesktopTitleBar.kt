@@ -40,7 +40,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.generated.resources.Res
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 import app.skerry.ui.generated.resources.shell_lock
+import app.skerry.ui.generated.resources.shell_tip_close_tab
+import app.skerry.ui.generated.resources.shell_tip_new_tab
 import app.skerry.ui.generated.resources.shtail_new_tab
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.BrandMark
@@ -90,7 +94,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
             Txt("Skerry", color = Skerry.colors.text, size = 14.5.sp, weight = FontWeight.Bold, letterSpacing = (-0.2).sp)
         }
         Row(
-            Modifier.weight(1f).fillMaxHeight(),
+            Modifier.weight(1f).fillMaxHeight().testTag(UiTags.SESSION_TABS),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
@@ -156,6 +160,7 @@ private fun TitleBarRow(state: DesktopDesignState, onLock: (() -> Unit)?, window
                     }
                 },
                 box = 26,
+                tooltip = stringResource(Res.string.shell_tip_new_tab),
                 modifier = Modifier.padding(start = 4.dp),
             )
         }
@@ -273,7 +278,16 @@ internal fun SessionTabChip(
             modifier = Modifier.widthIn(max = 150.dp),
         )
         if (showClose) {
-            IconBtn("close", onClick = onClose, box = 16, icon = 14.sp, tint = if (active) Skerry.colors.dim else Skerry.colors.faint)
+            // Named after the tab it closes: a row of buttons all called "Close" says nothing about
+            // which session is about to go.
+            IconBtn(
+                "close",
+                onClick = onClose,
+                box = 16,
+                icon = 14.sp,
+                tint = if (active) Skerry.colors.dim else Skerry.colors.faint,
+                tooltip = stringResource(Res.string.shell_tip_close_tab, name),
+            )
         } else {
             Box(Modifier.width(16.dp))
         }

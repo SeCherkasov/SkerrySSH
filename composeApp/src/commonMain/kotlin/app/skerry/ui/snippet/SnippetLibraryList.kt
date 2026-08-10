@@ -41,6 +41,7 @@ import app.skerry.ui.design.FilterChipRow
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
@@ -206,7 +207,9 @@ private fun RenameTagDialog(initialName: String, onDismiss: () -> Unit, onSave: 
                 cursorBrush = SolidColor(Skerry.colors.cyan),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { save() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldFocus(draft),
+                // The dialog has a title instead of a field caption, so the title is what names it.
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldFocus(draft)
+                    .fieldName(fallback = stringResource(Res.string.lib_snippets_rename_tag_title)),
                 decorationBox = { inner ->
                     Row(
                         Modifier

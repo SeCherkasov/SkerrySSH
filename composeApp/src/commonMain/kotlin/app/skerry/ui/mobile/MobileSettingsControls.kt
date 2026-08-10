@@ -36,6 +36,8 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.settings.autoLockLabel
 import app.skerry.ui.theme.Skerry
+import androidx.compose.runtime.CompositionLocalProvider
+import app.skerry.ui.design.LocalFieldLabel
 
 /**
  * Hub section row: leading icon + name + subtitle on the right + chevron. [onClick] == null
@@ -111,7 +113,9 @@ internal fun MobileStepperRow(
             Txt(label, color = Skerry.colors.text, size = 14.5.sp)
             MobileDefaultValueHint(isDefault, defaultText, onReset)
         }
-        stepper()
+        // Published like the desktop's SettingRow does: NumberStepper names itself from here, and
+        // without it the phone's font-size box is an anonymous input with a number in it.
+        CompositionLocalProvider(LocalFieldLabel provides label) { stepper() }
     }
 }
 

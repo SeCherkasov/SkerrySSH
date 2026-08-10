@@ -46,8 +46,12 @@ import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberSeededDraft
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.generated.resources.shell_tip_back
+import app.skerry.ui.generated.resources.shell_tip_close
+import app.skerry.ui.generated.resources.sftp_tip_filter_toggle
 
 /**
  * "Files" title (28sp, as in the layout). Actions (create directory/upload) live in the shared
@@ -64,6 +68,7 @@ internal fun MobileFilesTitle(onBack: (() -> Unit)? = null) {
         if (onBack != null) {
             Sym(
                 "chevron_left",
+                contentDescription = stringResource(Res.string.shell_tip_back),
                 size = 27.sp,
                 color = Skerry.colors.cyanBright,
                 modifier = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onBack),
@@ -137,6 +142,7 @@ internal fun MobileFilesBreadcrumbRow(
         if (onToggleFilter != null && !editing) {
             Sym(
                 "filter_alt",
+                contentDescription = stringResource(Res.string.sftp_tip_filter_toggle),
                 size = 18.sp,
                 color = if (filterActive) Skerry.colors.cyanBright else Skerry.colors.faint,
                 modifier = Modifier.clickable(
@@ -178,7 +184,8 @@ internal fun MobileFilterRow(pane: FilePaneController, mono: FontFamily, onClose
             singleLine = true,
             textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = mono),
             cursorBrush = SolidColor(Skerry.colors.cyan),
-            modifier = Modifier.weight(1f).focusRequester(focus).fieldFocus(draft),
+            modifier = Modifier.weight(1f).focusRequester(focus).fieldFocus(draft)
+                .fieldName(fallback = stringResource(Res.string.sftp_filter_hint)),
             decorationBox = { inner ->
                 Box(
                     Modifier
@@ -197,6 +204,7 @@ internal fun MobileFilterRow(pane: FilePaneController, mono: FontFamily, onClose
         )
         IconBtn(
             "close",
+            label = stringResource(Res.string.shell_tip_close),
             onClick = {
                 pane.setNameFilter("")
                 onClose()

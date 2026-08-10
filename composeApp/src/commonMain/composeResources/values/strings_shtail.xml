@@ -24,6 +24,16 @@
     <!-- Host filter chips: "no tag filter" chip label (display only, see ALL_HOSTS_CHIP) -->
     <string name="shtail_chip_all">All</string>
 
+    <!-- Folder header: the chevron that folds a group away (%1$s is the group name) -->
+    <string name="shtail_group_collapse">Collapse %1$s</string>
+    <string name="shtail_group_expand">Expand %1$s</string>
+
+    <!-- Folder header: the pencil opening the rename/delete dialog (%1$s is the group name) -->
+    <string name="shtail_group_rename">Rename %1$s</string>
+
+    <!-- Sidebar search field: the cross that empties the query (SidebarSearchField) -->
+    <string name="shtail_search_clear">Clear search</string>
+
     <!-- Mobile known hosts (MobileKnown.kt) -->
     <string name="shtail_known_changed">changed</string>
     <string name="shtail_known_key_changed_title">Key changed: %1$s</string>

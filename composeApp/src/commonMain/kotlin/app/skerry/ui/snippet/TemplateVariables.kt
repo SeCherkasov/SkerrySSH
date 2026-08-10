@@ -38,6 +38,7 @@ import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -50,6 +51,7 @@ import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.terminal.fetchSystemClipboardText
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.FormField
 
 /** Mask shown wherever a vault secret would otherwise be printed. */
 internal const val SECRET_MASK = "••••••"
@@ -162,15 +164,18 @@ fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = 
     val firstFieldFocus = remember { FocusRequester() }
     values.paramNames.forEachIndexed { index, name ->
         key(name) {
-            FieldLabel(name)
-            ParamField(
-                value = values.params[name].orEmpty(),
-                onChange = { values.params[name] = sanitizeSnippetValue(it) },
-                modifier = if (index == 0) Modifier.focusRequester(firstFieldFocus) else Modifier,
-                // The default from the template (or the previous run) is a suggestion: select it, so
-                // the autofocused first field takes a replacement rather than a prefix.
-                selectAllOnFocus = values.isSeeded(name),
-            )
+            // The caption is the variable's own name, not chrome: `${{token}}` and `${{TOKEN}}` are
+            // two different keys, and uppercasing the caption would draw and announce them alike.
+            FormField(name, uppercase = false) {
+                ParamField(
+                    value = values.params[name].orEmpty(),
+                    onChange = { values.params[name] = sanitizeSnippetValue(it) },
+                    modifier = if (index == 0) Modifier.focusRequester(firstFieldFocus) else Modifier,
+                    // The default from the template (or the previous run) is a suggestion: select it,
+                    // so the autofocused first field takes a replacement rather than a prefix.
+                    selectAllOnFocus = values.isSeeded(name),
+                )
+            }
         }
     }
     if (values.paramNames.isNotEmpty() && autoFocus) {
@@ -223,7 +228,7 @@ private fun ParamField(value: String, onChange: (String) -> Unit, modifier: Modi
         BasicTextField(
             draft.textFieldValue(value), { draft.accept(it, value, onChange) }, singleLine = true, textStyle = style,
             cursorBrush = SolidColor(Skerry.colors.cyan),
-            modifier = modifier.fillMaxWidth().fieldFocus(draft),
+            modifier = modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         )
     }
 }

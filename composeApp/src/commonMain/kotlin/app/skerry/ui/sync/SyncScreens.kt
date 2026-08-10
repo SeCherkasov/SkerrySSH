@@ -40,11 +40,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.design.FormField
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -279,12 +281,15 @@ internal fun SyncSetupBody(
     val form = SyncSetupForm(serverUrl, account)
     val canSubmit = form.canSubmit(password.length) && !busy
 
-    SyncFieldLabel(stringResource(Res.string.sync_field_server_url))
-    SyncTextField(serverUrl, stringResource(Res.string.sync_placeholder_server_url), KeyboardType.Uri, icon = "dns") { serverUrl = it }
-    SyncFieldLabel(stringResource(Res.string.sync_field_account))
-    SyncTextField(account, stringResource(Res.string.sync_placeholder_account), KeyboardType.Text, icon = "person") { account = it }
-    SyncFieldLabel(stringResource(Res.string.sync_field_master_password))
-    SyncTextField(password, stringResource(Res.string.sync_placeholder_master_password), KeyboardType.Password, masked = true, icon = "key") { password = it }
+    SyncFormField(stringResource(Res.string.sync_field_server_url)) {
+        SyncTextField(serverUrl, stringResource(Res.string.sync_placeholder_server_url), KeyboardType.Uri, icon = "dns") { serverUrl = it }
+    }
+    SyncFormField(stringResource(Res.string.sync_field_account)) {
+        SyncTextField(account, stringResource(Res.string.sync_placeholder_account), KeyboardType.Text, icon = "person") { account = it }
+    }
+    SyncFormField(stringResource(Res.string.sync_field_master_password)) {
+        SyncTextField(password, stringResource(Res.string.sync_placeholder_master_password), KeyboardType.Password, masked = true, icon = "key") { password = it }
+    }
 
     Row(
         Modifier.fillMaxWidth().padding(top = 16.dp).clickable { keepConnected = !keepConnected },
@@ -424,8 +429,9 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
     val passwordsMatch = password == confirm
     val canSubmit = code.isNotBlank() && password.length >= MIN_MASTER_PASSWORD_LENGTH && passwordsMatch
 
-    SyncFieldLabel(stringResource(Res.string.sync_field_pairing_code))
-    SyncTextField(code, stringResource(Res.string.sync_placeholder_pairing_code), KeyboardType.Text, icon = "qr_code") { code = it }
+    SyncFormField(stringResource(Res.string.sync_field_pairing_code)) {
+        SyncTextField(code, stringResource(Res.string.sync_placeholder_pairing_code), KeyboardType.Text, icon = "qr_code") { code = it }
+    }
     if (qrScannerAvailable) {
         GhostButton(stringResource(Res.string.sync_scan_qr), onClick = { showScanner = true }, icon = "photo_camera", modifier = Modifier.padding(top = 10.dp))
     }
@@ -440,10 +446,12 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
             Txt(stringResource(Res.string.sync_insecure_url_warning), color = Skerry.colors.sunset, size = 11.5.sp, lineHeight = 15.sp)
         }
     }
-    SyncFieldLabel(stringResource(Res.string.sync_field_choose_password))
-    SyncTextField(password, stringResource(Res.string.sync_placeholder_min_chars, MIN_MASTER_PASSWORD_LENGTH), KeyboardType.Password, masked = true, icon = "key") { password = it }
-    SyncFieldLabel(stringResource(Res.string.sync_field_repeat_password))
-    SyncTextField(confirm, stringResource(Res.string.sync_placeholder_repeat), KeyboardType.Password, masked = true, icon = "key") { confirm = it }
+    SyncFormField(stringResource(Res.string.sync_field_choose_password)) {
+        SyncTextField(password, stringResource(Res.string.sync_placeholder_min_chars, MIN_MASTER_PASSWORD_LENGTH), KeyboardType.Password, masked = true, icon = "key") { password = it }
+    }
+    SyncFormField(stringResource(Res.string.sync_field_repeat_password)) {
+        SyncTextField(confirm, stringResource(Res.string.sync_placeholder_repeat), KeyboardType.Password, masked = true, icon = "key") { confirm = it }
+    }
     if (confirm.isNotEmpty() && !passwordsMatch) {
         Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Sym("error", size = 14.sp, color = Skerry.colors.sunset)
@@ -513,9 +521,15 @@ internal fun SyncStatusNotice(icon: String, iconColor: Color, title: String, sub
     }
 }
 
+/**
+ * [FormField] at the sync screens' own caption spacing.
+ *
+ * The caption used to be its own composable with the input written next to it, which left the input
+ * anonymous — three unnamed fields on the pairing screen, one of them the device's master password.
+ */
 @Composable
-internal fun SyncFieldLabel(text: String) {
-    Txt(text, color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp, modifier = Modifier.padding(top = 16.dp, bottom = 6.dp))
+internal fun SyncFormField(label: String, field: @Composable () -> Unit) {
+    FormField(label, top = 16.dp, bottom = 6.dp, field = field)
 }
 
 @Composable
@@ -541,7 +555,7 @@ internal fun SyncTextField(
         cursorBrush = SolidColor(Skerry.colors.cyan),
         visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = if (masked) KeyboardType.Password else keyboardType),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp)).padding(horizontal = 14.dp, vertical = 13.dp),

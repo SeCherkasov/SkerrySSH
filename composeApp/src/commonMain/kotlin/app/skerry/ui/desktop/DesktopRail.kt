@@ -28,6 +28,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -55,6 +58,7 @@ import app.skerry.ui.generated.resources.shell_status_disconnected
 import app.skerry.ui.generated.resources.shell_status_encoding
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.UiTags
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
@@ -82,6 +86,10 @@ internal fun IconRail(state: DesktopDesignState) {
                 icon = item.icon,
                 label = stringResource(item.label),
                 active = railItemActive(item, state),
+                tag = when (val target = item.target) {
+                    is RailTarget.View -> UiTags.railView(target.view)
+                    is RailTarget.Section -> UiTags.railSection(target.section)
+                },
                 onClick = {
                     when (val target = item.target) {
                         // App-level (Vault/Known/Teams/Tunnels/Snippets) → overlay over the tabs.
@@ -94,12 +102,18 @@ internal fun IconRail(state: DesktopDesignState) {
             )
         }
         Spacer(Modifier.weight(1f))
-        RailButton(icon = "settings", label = stringResource(Res.string.shell_settings), active = false, onClick = state::openSettings)
+        RailButton(
+            icon = "settings",
+            label = stringResource(Res.string.shell_settings),
+            active = false,
+            tag = UiTags.RAIL_SETTINGS,
+            onClick = state::openSettings,
+        )
     }
 }
 
 @Composable
-private fun RailButton(icon: String, label: String, active: Boolean, onClick: () -> Unit) {
+private fun RailButton(icon: String, label: String, active: Boolean, tag: String, onClick: () -> Unit) {
     val fg = if (active) Skerry.colors.cyanBright else Skerry.colors.faint
     // Icons without labels: the item name goes to a hover tooltip (desktop) so the narrow column doesn't
     // wrap long words.
@@ -122,10 +136,18 @@ private fun RailButton(icon: String, label: String, active: Boolean, onClick: ()
                 .size(38.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .background(if (active) Skerry.colors.cyan10 else if (hovered) Skerry.colors.cyan.copy(alpha = 0.06f) else Color.Transparent)
+                // On the clickable box itself, not the row: the tag has to land on the node that
+                // carries the click, or a test would find it and press nothing.
+                .testTag(tag)
+                // Which section is open is otherwise only a colour and a 2dp accent bar, so a screen
+                // reader would announce every rail button alike whichever one is current.
+                .semantics { selected = active }
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Sym(icon, size = 21.sp, color = fg)
+            // The label is otherwise only in the hover tooltip, which a screen reader never opens
+            // and a keyboard never triggers — without this the rail is a column of unnamed buttons.
+            Sym(icon, size = 21.sp, color = fg, contentDescription = label)
         }
         // Tooltip to the right of the rail — only while the cursor is over the button.
         if (hovered) {
@@ -242,6 +264,9 @@ internal fun StatusBar() {
             if (ind != null) {
                 Sym(
                     ind.icon,
+                    // The only thing that says sync has stopped: a bare glyph with no text beside it,
+                    // so without its own name it is nothing at all to a screen reader.
+                    contentDescription = ind.label,
                     size = 13.sp,
                     color = when (ind.level) {
                         SyncIndicatorLevel.OK -> Skerry.colors.moss

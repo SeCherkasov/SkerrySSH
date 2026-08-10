@@ -52,6 +52,8 @@ import app.skerry.ui.generated.resources.ports_tunnels
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /** What the right-hand column is showing. Exactly one at a time — they share the slot. */
 private enum class TunnelPanel { None, Editor, Services, Autostart }
@@ -101,6 +103,7 @@ fun TunnelsView() {
                     stringResource(Res.string.ports_new_tunnel),
                     onClick = { panel = TunnelPanel.Editor; adding = true; selectedId = null },
                     icon = "add",
+                    modifier = Modifier.testTag(UiTags.NEW_TUNNEL),
                 )
             },
         )

@@ -31,6 +31,8 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Confirmation dialog for deleting a host profile (from the sidebar context menu). Only the
@@ -62,8 +64,14 @@ fun DesktopDeleteHostDialog(host: Host, onDismiss: () -> Unit, onConfirm: () -> 
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                PrimaryButton(stringResource(Res.string.shell_delete), onClick = onConfirm, bg = Skerry.colors.sunset, fg = Skerry.colors.sunsetInk)
+                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
+                PrimaryButton(
+                    stringResource(Res.string.shell_delete),
+                    onClick = onConfirm,
+                    bg = Skerry.colors.sunset,
+                    fg = Skerry.colors.sunsetInk,
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
+                )
             }
         }
     }

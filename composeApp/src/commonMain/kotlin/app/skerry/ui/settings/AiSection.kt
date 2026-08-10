@@ -41,7 +41,6 @@ import app.skerry.ui.ai.ModelPickerMenu
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.ComboArrow
-import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
@@ -89,6 +88,9 @@ import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.sync.SyncField
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.design.FormField
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 // AI settings section: live BYOK tab (LocalAi) or mock preview.
 
@@ -173,58 +175,67 @@ private fun DesktopByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
     val byok = rememberByokModelState(ai)
 
     // ① Server address (endpoint). First: it is what the other two fields talk to.
-    FieldLabel(stringResource(Res.string.settings_ai_field_endpoint), top = 10.dp)
-    SyncField(
-        placeholder = stringResource(Res.string.settings_ai_placeholder_endpoint), value = byok.baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next,
-        onChange = byok::onEndpointChange,
-    )
+    FormField(stringResource(Res.string.settings_ai_field_endpoint), top = 10.dp) {
+        SyncField(
+            placeholder = stringResource(Res.string.settings_ai_placeholder_endpoint), value = byok.baseUrl, icon = "cloud", keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next,
+            onChange = byok::onEndpointChange,
+        )
+    }
     // http:// sends the API key and prompt (with secrets under Permissive) in cleartext; warn,
     // except for localhost where cleartext is intentional for a local proxy.
     if (isInsecureAiEndpoint(byok.baseUrl)) {
-        Txt(stringResource(Res.string.sync_insecure_url_warning), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+        Txt(
+            stringResource(Res.string.sync_insecure_url_warning),
+            color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp,
+            modifier = Modifier.padding(top = 6.dp).testTag(UiTags.AI_INSECURE_ENDPOINT),
+        )
     }
 
     // ② API key.
-    FieldLabel(stringResource(Res.string.settings_ai_field_api_key))
-    SyncField(
-        placeholder = stringResource(Res.string.settings_ai_placeholder_api_key), value = byok.key, icon = "key", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true,
-        onChange = byok::onKeyChange,
-    )
+    FormField(stringResource(Res.string.settings_ai_field_api_key)) {
+        SyncField(
+            placeholder = stringResource(Res.string.settings_ai_placeholder_api_key), value = byok.key, icon = "key", keyboardType = KeyboardType.Password, imeAction = ImeAction.Next, secret = true,
+            onChange = byok::onKeyChange,
+        )
+    }
 
     // ③ Model: editable combo — type freely, or pick from the catalog the refresh button fetched.
-    FieldLabel(stringResource(Res.string.settings_ai_field_model))
+    // Wrapped in FormField below rather than left under a bare caption, so the input adopts the
+    // caption as its name like its two neighbours above and like the phone's own model field.
     // The dropdown wraps the whole field row (input + arrow button) so the menu opens below at the
     // full row width; a small trigger would pop a tiny menu that squeezes long model names and can
     // overflow the window edge on narrow layouts.
-    AnchoredDropdown(
-        expanded = byok.modelMenuOpen,
-        onDismiss = { byok.modelMenuOpen = false },
-        trigger = {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.weight(1f)) {
-                    SyncField(placeholder = stringResource(Res.string.settings_ai_placeholder_model), value = byok.model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Done, onChange = byok::onModelChange)
+    FormField(stringResource(Res.string.settings_ai_field_model)) {
+        AnchoredDropdown(
+            expanded = byok.modelMenuOpen,
+            onDismiss = { byok.modelMenuOpen = false },
+            trigger = {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) {
+                        SyncField(placeholder = stringResource(Res.string.settings_ai_placeholder_model), value = byok.model, icon = "auto_awesome", keyboardType = KeyboardType.Text, imeAction = ImeAction.Done, onChange = byok::onModelChange)
+                    }
+                    // Opens even with an empty catalog: the menu then explains itself with "No models
+                    // found" instead of a silent no-op before the first refresh.
+                    ComboArrow(
+                        label = stringResource(Res.string.settings_ai_show_models),
+                        onClick = { byok.modelMenuOpen = !byok.modelMenuOpen },
+                    )
                 }
-                // Opens even with an empty catalog: the menu then explains itself with "No models
-                // found" instead of a silent no-op before the first refresh.
-                ComboArrow(
-                    label = stringResource(Res.string.settings_ai_show_models),
-                    onClick = { byok.modelMenuOpen = !byok.modelMenuOpen },
+            },
+            menu = { width ->
+                ModelPickerMenu(
+                    modifier = Modifier.width(width),
+                    models = byok.models,
+                    selected = byok.model,
+                    favorites = byok.favorites,
+                    onToggleFavorite = byok::toggleFavorite,
+                    onSelect = byok::onSelectModel,
+                    emptyText = stringResource(Res.string.settings_ai_models_empty),
+                    searchPlaceholder = stringResource(Res.string.settings_ai_search_models),
                 )
-            }
-        },
-        menu = { width ->
-            ModelPickerMenu(
-                modifier = Modifier.width(width),
-                models = byok.models,
-                selected = byok.model,
-                favorites = byok.favorites,
-                onToggleFavorite = byok::toggleFavorite,
-                onSelect = byok::onSelectModel,
-                emptyText = stringResource(Res.string.settings_ai_models_empty),
-                searchPlaceholder = stringResource(Res.string.settings_ai_search_models),
-            )
-        },
-    )
+            },
+        )
+    }
     byok.refreshFailure?.let { failure ->
         AiChatError(failure, compact = true)
     }

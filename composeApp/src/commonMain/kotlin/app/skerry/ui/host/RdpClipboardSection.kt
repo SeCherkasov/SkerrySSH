@@ -50,6 +50,7 @@ fun RdpClipboardSection(form: NewConnectionFormState) {
             on = form.rdpClipboard,
             onToggle = { form.rdpClipboard = !form.rdpClipboard },
             modifier = Modifier.align(Alignment.CenterVertically),
+            label = stringResource(Res.string.conn_clipboard_share),
         )
     }
 }

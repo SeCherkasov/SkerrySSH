@@ -15,7 +15,7 @@
 
     <!-- AI 部分 -->
     <string name="settings_ai_live_subtitle">AI 助手提供商与设置。</string>
-    <string name="settings_ai_field_api_key">OPENAI API 密钥</string>
+    <string name="settings_ai_field_api_key">OpenAI API 密钥</string>
     <string name="settings_ai_field_model">模型</string>
     <string name="settings_ai_field_endpoint">接口地址</string>
     <string name="settings_ai_placeholder_api_key">sk-…</string>

@@ -31,6 +31,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_close
 import app.skerry.ui.generated.resources.conn_cancel
 import app.skerry.ui.generated.resources.conn_rdp_import_button
 import app.skerry.ui.generated.resources.conn_rdp_import_empty
@@ -40,6 +41,8 @@ import app.skerry.ui.generated.resources.conn_rdp_import_subtitle
 import app.skerry.ui.generated.resources.conn_rdp_import_title
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Preview-and-confirm modal for importing a `.rdp` file. One file describes one connection, so
@@ -69,7 +72,7 @@ fun RdpFileImportModal(state: DesktopDesignState, result: RdpFileImportResult) {
                     Txt(stringResource(Res.string.conn_rdp_import_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
                     Txt(stringResource(Res.string.conn_rdp_import_subtitle), color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp))
                 }
-                IconBtn("close", onClick = state::closeRdpImport, modifier = Modifier.align(Alignment.TopEnd))
+                IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = state::closeRdpImport, modifier = Modifier.align(Alignment.TopEnd))
             }
             HLine()
 
@@ -130,7 +133,7 @@ fun RdpFileImportModal(state: DesktopDesignState, result: RdpFileImportResult) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Spacer(Modifier.weight(1f))
-                CancelButton(stringResource(Res.string.conn_cancel), onClick = state::closeRdpImport)
+                CancelButton(stringResource(Res.string.conn_cancel), onClick = state::closeRdpImport, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
                 PrimaryButton(
                     stringResource(Res.string.conn_rdp_import_button),
                     onClick = {
@@ -142,6 +145,7 @@ fun RdpFileImportModal(state: DesktopDesignState, result: RdpFileImportResult) {
                     },
                     icon = "download",
                     enabled = entry != null && hosts != null,
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
                 )
             }
         }

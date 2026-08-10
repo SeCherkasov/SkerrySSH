@@ -41,6 +41,8 @@ import app.skerry.ui.generated.resources.lib_snippets_untitled
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Confirmation dialog for a snippet with `${{…}}` variables ([SnippetManager.pendingRun]): prompts
@@ -124,8 +126,13 @@ private fun SnippetRunDialogContent(
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
-                PrimaryButton(stringResource(Res.string.lib_snippet_vars_run), onClick = confirm, enabled = canRun)
+                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss, modifier = Modifier.testTag(UiTags.FORM_CANCEL))
+                PrimaryButton(
+                    stringResource(Res.string.lib_snippet_vars_run),
+                    onClick = confirm,
+                    enabled = canRun,
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
+                )
             }
         }
     }

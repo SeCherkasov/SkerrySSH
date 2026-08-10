@@ -45,6 +45,10 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.design.fieldName
+import app.skerry.ui.generated.resources.shell_tip_remove
+import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.generated.resources.Res
 
 /**
  * Mobile tag editor with type-ahead: `#tag` pills with a close button + inline entry for a new tag
@@ -98,7 +102,7 @@ internal fun MobileTagsEditor(
                                 Modifier.clip(CircleShape).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onRemove(tag) }.padding(2.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Sym("close", size = 14.sp, color = Skerry.colors.cyanBright)
+                                Sym("close", contentDescription = stringResource(Res.string.shell_tip_remove), size = 14.sp, color = Skerry.colors.cyanBright)
                             }
                         }
                     }
@@ -111,7 +115,7 @@ internal fun MobileTagsEditor(
                     cursorBrush = SolidColor(Skerry.colors.cyan),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { onCommit() }),
-                    modifier = Modifier.widthIn(min = 90.dp).focusRequester(focus).onFocusChanged { focused = it.isFocused },
+                    modifier = Modifier.widthIn(min = 90.dp).focusRequester(focus).fieldName().onFocusChanged { focused = it.isFocused },
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (draft.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 14.sp)

@@ -71,6 +71,7 @@ import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
+import app.skerry.ui.generated.resources.shell_tip_show_hosts
 
 /** Height of a pane's own header on a split grid; a single-pane tab is named by the [WorkBar]. */
 internal val PANE_HEADER_HEIGHT = 26.dp
@@ -216,7 +217,14 @@ internal fun SidebarReopenHandle(onClick: () -> Unit) {
         Modifier.width(16.dp).fillMaxHeight().background(Skerry.colors.surface2).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Sym("chevron_right", size = 16.sp, color = Skerry.colors.faint)
+        // The strip is the only way back to the sidebar on a remote-desktop view, and it draws
+        // nothing but a chevron — without a name it is a focusable element that says nothing.
+        Sym(
+            "chevron_right",
+            contentDescription = stringResource(Res.string.shell_tip_show_hosts),
+            size = 16.sp,
+            color = Skerry.colors.faint,
+        )
     }
 }
 

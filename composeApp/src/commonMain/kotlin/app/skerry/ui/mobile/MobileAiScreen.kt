@@ -77,6 +77,8 @@ import app.skerry.ui.generated.resources.sync_insecure_url_warning
 import app.skerry.ui.settings.AiProviderCards
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Mobile AI settings screen (More -> "AI & privacy"), parity with desktop `LiveAiSection`:
@@ -176,7 +178,11 @@ private fun MobileByokFields(ai: app.skerry.ui.ai.AiAssistantController) {
         }
         // http:// sends the key/prompt in plaintext — warn, except for localhost.
         if (isInsecureAiEndpoint(byok.baseUrl)) {
-            Txt(stringResource(Res.string.sync_insecure_url_warning), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+            Txt(
+                stringResource(Res.string.sync_insecure_url_warning),
+                color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp,
+                modifier = Modifier.padding(top = 6.dp).testTag(UiTags.AI_INSECURE_ENDPOINT),
+            )
         }
 
         Spacer(Modifier.height(12.dp))

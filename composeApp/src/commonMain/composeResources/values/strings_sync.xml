@@ -37,11 +37,11 @@
     <string name="sync_reconnect_password">Reconnect with your master password.</string>
 
     <!-- Поля формы -->
-    <string name="sync_field_server_url">SERVER URL</string>
+    <string name="sync_field_server_url">Server URL</string>
     <string name="sync_placeholder_server_url">https://sync.example.com</string>
-    <string name="sync_field_account">ACCOUNT</string>
+    <string name="sync_field_account">Account</string>
     <string name="sync_placeholder_account">you@example.com</string>
-    <string name="sync_field_master_password">MASTER PASSWORD</string>
+    <string name="sync_field_master_password">Master password</string>
     <string name="sync_placeholder_master_password">master password</string>
     <string name="sync_keep_connected">Keep me connected</string>
     <string name="sync_keep_connected_sub">Reconnect automatically after restart.</string>
@@ -54,12 +54,12 @@
     <!-- Связывание по коду (join) -->
     <string name="sync_join_title">Link with a code</string>
     <string name="sync_join_desc">On a device that's already signed in, open Settings → Sync → Link a device, then scan its QR or paste the code here. The password below encrypts this device's vault and can't be recovered — lose it and you'll re-link from scratch.</string>
-    <string name="sync_field_pairing_code">PAIRING CODE</string>
+    <string name="sync_field_pairing_code">Pairing code</string>
     <string name="sync_placeholder_pairing_code">Paste code (sk1.…)</string>
     <string name="sync_scan_qr">Scan QR code</string>
-    <string name="sync_field_choose_password">CHOOSE A PASSWORD FOR THIS DEVICE</string>
+    <string name="sync_field_choose_password">Choose a password for this device</string>
     <string name="sync_placeholder_min_chars">at least %1$d characters</string>
-    <string name="sync_field_repeat_password">REPEAT PASSWORD</string>
+    <string name="sync_field_repeat_password">Repeat password</string>
     <string name="sync_placeholder_repeat">repeat to confirm</string>
     <string name="sync_passwords_mismatch">Passwords don't match.</string>
     <string name="sync_link_this_device">Link this device</string>
@@ -141,8 +141,8 @@
     <string name="web_access_change">Change</string>
     <string name="web_access_open">Open</string>
     <string name="web_access_remove">Disable</string>
-    <string name="web_access_field_new">WEB PASSWORD</string>
-    <string name="web_access_field_repeat">REPEAT PASSWORD</string>
+    <string name="web_access_field_new">Web password</string>
+    <string name="web_access_field_repeat">Repeat password</string>
     <string name="web_access_save">Save</string>
     <string name="web_access_cancel">Cancel</string>
     <string name="web_access_too_short">At least %1$d characters.</string>

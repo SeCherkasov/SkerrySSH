@@ -63,6 +63,9 @@ import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.host.ProdBadge
 import app.skerry.ui.host.ProdBroadcastDialog
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
+import app.skerry.ui.design.fieldName
 
 /**
  * Every connected terminal a broadcast can reach: top-level tabs and their split panes, VNC tabs
@@ -175,7 +178,7 @@ internal fun BroadcastPanel(
                     lastSentTo?.let {
                         Txt(stringResource(Res.string.term_broadcast_sent, it.toString()), color = Skerry.colors.cyanBright, size = 11.sp, modifier = Modifier.weight(1f))
                     } ?: Box(Modifier.weight(1f))
-                    PrimaryButton(stringResource(Res.string.term_broadcast_send), onClick = submit, icon = "send")
+                    PrimaryButton(stringResource(Res.string.term_broadcast_send), onClick = submit, icon = "send", modifier = Modifier.testTag(UiTags.FORM_SAVE))
                 }
             }
         }
@@ -238,6 +241,10 @@ private fun CommandField(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focus)
+                // The placeholder above is the only caption this box has, and it goes on the first
+                // keystroke — the same treatment the one-field dialogs get.
+                .fieldName(fallback = stringResource(Res.string.term_broadcast_placeholder))
+                .testTag(UiTags.FORM_FIELD)
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
                         onSubmit(); true

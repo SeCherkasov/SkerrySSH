@@ -54,6 +54,8 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.generated.resources.guard_prod_broadcast_confirm
 import app.skerry.ui.generated.resources.guard_prod_broadcast_message
 import app.skerry.ui.generated.resources.guard_prod_broadcast_title
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * A connection to a production host waiting for confirmation: [host] names it in the dialog,
@@ -310,12 +312,20 @@ private fun ProdCommandSheet(
                 horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                CancelButton(stringResource(Res.string.shell_cancel), onClick = onDismiss)
+                // Tagged like ConfirmActionDialog's pair: this is the same kind of confirmation, and
+                // its buttons are otherwise reachable only by their localized captions — "Run" here
+                // is the same word as the snippet library's own Run button in English.
+                CancelButton(
+                    stringResource(Res.string.shell_cancel),
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag(UiTags.FORM_CANCEL),
+                )
                 PrimaryButton(
                     confirmLabel,
                     onClick = onConfirm,
                     bg = Skerry.colors.sunset,
                     fg = Skerry.colors.sunsetInk,
+                    modifier = Modifier.testTag(UiTags.FORM_SAVE),
                 )
             }
         }

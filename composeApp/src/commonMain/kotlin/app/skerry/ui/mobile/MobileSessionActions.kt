@@ -1,7 +1,9 @@
 package app.skerry.ui.mobile
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -15,6 +17,7 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.app.MobileTab
+import app.skerry.ui.app.UiTags
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -96,11 +99,14 @@ internal fun openMobileVnc(
  */
 @Composable
 internal fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
-    when (state.tab) {
-        MobileTab.Hosts -> MobileHostsScreen(state)
-        MobileTab.Desktops -> MobileDesktopsScreen(state)
-        MobileTab.Sessions -> MobileSessionsScreen(state)
-        MobileTab.More -> MobileMoreScreen(state, onLock)
+    // Tagged with the tab it drew, the mobile counterpart of [app.skerry.ui.desktop.Viewport].
+    Box(Modifier.fillMaxSize().testTag(UiTags.mobileScreen(state.tab))) {
+        when (state.tab) {
+            MobileTab.Hosts -> MobileHostsScreen(state)
+            MobileTab.Desktops -> MobileDesktopsScreen(state)
+            MobileTab.Sessions -> MobileSessionsScreen(state)
+            MobileTab.More -> MobileMoreScreen(state, onLock)
+        }
     }
 }
 
@@ -110,23 +116,25 @@ internal fun MobileTabPane(state: MobileDesignState, onLock: (() -> Unit)?) {
  */
 @Composable
 internal fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
-    when (route) {
-        MobileRoute.HostDetail -> MobileHostDetailScreen(state)
-        MobileRoute.Terminal -> MobileTerminalScreen(state)
-        MobileRoute.Vnc -> MobileVncScreen(state)
-        MobileRoute.Files -> MobileFilesScreen(onBack = state::pop)
-        MobileRoute.Vault -> MobileVaultScreen(state)
-        MobileRoute.Snippets -> MobileSnippetsScreen(state)
-        MobileRoute.Runbooks -> MobileRunbooksScreen(state)
-        MobileRoute.Ports -> MobilePortsScreen(state)
-        MobileRoute.Known -> MobileKnownScreen(state)
-        MobileRoute.Team -> MobileTeamsScreen(state)
-        MobileRoute.Appearance -> MobileAppearanceScreen(state)
-        MobileRoute.Sync -> MobileSyncScreen(state)
-        MobileRoute.Ai -> MobileAiScreen(state)
-        MobileRoute.Security -> MobileSecurityScreen(state)
-        MobileRoute.Trash -> MobileTrashScreen(state)
-        MobileRoute.About -> MobileAboutScreen(state)
+    Box(Modifier.fillMaxSize().testTag(UiTags.mobileScreen(route))) {
+        when (route) {
+            MobileRoute.HostDetail -> MobileHostDetailScreen(state)
+            MobileRoute.Terminal -> MobileTerminalScreen(state)
+            MobileRoute.Vnc -> MobileVncScreen(state)
+            MobileRoute.Files -> MobileFilesScreen(onBack = state::pop)
+            MobileRoute.Vault -> MobileVaultScreen(state)
+            MobileRoute.Snippets -> MobileSnippetsScreen(state)
+            MobileRoute.Runbooks -> MobileRunbooksScreen(state)
+            MobileRoute.Ports -> MobilePortsScreen(state)
+            MobileRoute.Known -> MobileKnownScreen(state)
+            MobileRoute.Team -> MobileTeamsScreen(state)
+            MobileRoute.Appearance -> MobileAppearanceScreen(state)
+            MobileRoute.Sync -> MobileSyncScreen(state)
+            MobileRoute.Ai -> MobileAiScreen(state)
+            MobileRoute.Security -> MobileSecurityScreen(state)
+            MobileRoute.Trash -> MobileTrashScreen(state)
+            MobileRoute.About -> MobileAboutScreen(state)
+        }
     }
 }
 

@@ -192,7 +192,7 @@ internal fun seededCast(): Asciicast = Asciicast(
  * shows the live table (one active forward with its browser link) and a real service scan against
  * [FakeSshConnection]'s canned `ss` output.
  */
-internal fun seededTunnels(hosts: HostManagerController): TunnelManager {
+internal fun seededTunnels(hosts: HostManagerController, scope: CoroutineScope = seedScope()): TunnelManager {
     val store = object : TunnelStore {
         private val entries = mutableListOf<Tunnel>()
         override fun all(): List<Tunnel> = entries.toList()
@@ -219,7 +219,7 @@ internal fun seededTunnels(hosts: HostManagerController): TunnelManager {
                 TunnelResolution.Ready(host.toTarget(), SshAuth.Password("demo"))
             }
         },
-        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        scope = scope,
     ) { "seed-${next++}" }
     manager.activate("t1")
     // The scene renders one frame at t=0, so everything the one-second telemetry poll feeds — the
@@ -327,8 +327,7 @@ internal fun seededUpdates(): app.skerry.ui.update.UpdateNoticeController {
     return controller
 }
 
-internal fun seededAi(): app.skerry.ui.ai.AiAssistantController {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+internal fun seededAi(scope: CoroutineScope = seedScope()): app.skerry.ui.ai.AiAssistantController {
     val kind = runCatching {
         app.skerry.shared.ai.AiProviderKind.valueOf(System.getProperty("skerry.screenshot.aiProvider", "CLOUD"))
     }.getOrDefault(app.skerry.shared.ai.AiProviderKind.CLOUD)
@@ -363,8 +362,7 @@ internal fun seededAi(): app.skerry.ui.ai.AiAssistantController {
  * the offscreen render shows a live terminal/toolbar/tabs with real components
  * ([SessionsController] -> [ConnectionController] -> [TerminalScreen]), no network.
  */
-internal fun seededSessions(hosts: HostManagerController): SessionsController {
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+internal fun seededSessions(hosts: HostManagerController, scope: CoroutineScope = seedScope()): SessionsController {
     var n = 0
     val sessions = SessionsController(
         newId = { "s${n++}" },
@@ -419,3 +417,13 @@ internal val SEEDED_SS_OUTPUT = """
     LISTEN 0      511          127.0.0.1:6379      0.0.0.0:*    users:(("redis-server",pid=733,fd=7))
     LISTEN 0      128             0.0.0.0:8080     0.0.0.0:*    users:(("java",pid=1204,fd=41))
 """.trimIndent()
+
+/**
+ * Scope a seed runs its own background work in when the caller does not supply one.
+ *
+ * The offscreen renders live for one frame and then the JVM exits, so nothing there needs to cancel
+ * it. A test run does not exit between tests: it builds a shell per test, and a manager whose
+ * telemetry poll keeps waking every second would outlive its composition a hundred times over. Those
+ * callers pass a scope of their own and cancel it.
+ */
+internal fun seedScope(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

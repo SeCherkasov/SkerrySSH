@@ -55,6 +55,8 @@ import app.skerry.ui.generated.resources.web_access_too_short
 import app.skerry.ui.theme.Skerry
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.ui.platform.testTag
+import app.skerry.ui.app.UiTags
 
 /**
  * Web access card (Settings → Sync on desktop, the Sync screen on mobile — one composable, so the
@@ -239,13 +241,15 @@ private fun WebAccessFields(
     busy: Boolean,
     onChange: (WebPasswordForm) -> Unit,
 ) {
-    SyncFieldLabel(stringResource(Res.string.web_access_field_new))
-    SyncTextField(form.password, "••••••••", KeyboardType.Password, masked = true, icon = "key") {
-        if (!busy) onChange(form.copy(password = it))
+    SyncFormField(stringResource(Res.string.web_access_field_new)) {
+        SyncTextField(form.password, "••••••••", KeyboardType.Password, masked = true, icon = "key") {
+            if (!busy) onChange(form.copy(password = it))
+        }
     }
-    SyncFieldLabel(stringResource(Res.string.web_access_field_repeat))
-    SyncTextField(form.confirm, "••••••••", KeyboardType.Password, masked = true, icon = "key") {
-        if (!busy) onChange(form.copy(confirm = it))
+    SyncFormField(stringResource(Res.string.web_access_field_repeat)) {
+        SyncTextField(form.confirm, "••••••••", KeyboardType.Password, masked = true, icon = "key") {
+            if (!busy) onChange(form.copy(confirm = it))
+        }
     }
 }
 
@@ -301,7 +305,7 @@ private fun WebAccessActions(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (editing) {
-            PrimaryButton(stringResource(Res.string.web_access_save), onClick = onSubmit, enabled = canSubmit && !busy)
+            PrimaryButton(stringResource(Res.string.web_access_save), onClick = onSubmit, enabled = canSubmit && !busy, modifier = Modifier.testTag(UiTags.FORM_SAVE))
             GhostButton(stringResource(Res.string.web_access_cancel), onClick = onCancel, fg = Skerry.colors.dim)
         } else {
             // First in the row and offered whichever way the state read went: with no password set
@@ -323,6 +327,7 @@ private fun WebAccessActions(
                 onClick = onEdit,
                 icon = "key",
                 enabled = !busy,
+                modifier = Modifier.testTag(UiTags.FORM_EDIT),
             )
             if (enabled == true) {
                 GhostButton(
