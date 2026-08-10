@@ -3,8 +3,6 @@ package app.skerry.ui.terminal
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -15,10 +13,8 @@ import app.skerry.ui.desktop.FakeShellInput
 import app.skerry.ui.desktop.runDesktopShell
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.guard_prod_command_confirm
 import app.skerry.ui.generated.resources.guard_prod_command_title
 import app.skerry.ui.generated.resources.lib_snippets_run
-import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.snippet.SnippetDraft
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -48,7 +44,9 @@ class ProductionGuardWiringTest {
         onNodeWithText(string(Res.string.guard_prod_command_title)).assertIsDisplayed()
         assertTrue(FakeShellInput.all().none { it.contains(RISKY_COMMAND) }, "the guard must hold the command, not trail it")
 
-        onNode(hasText(string(Res.string.guard_prod_command_confirm)) and hasClickAction()).performClick()
+        // By tag, not by caption: the guard's confirm button reads "Run" in English and so does the
+        // snippet library's own Run button underneath it, so a text lookup finds two nodes.
+        onNodeWithTag(UiTags.FORM_SAVE).performClick()
         waitUntil { FakeShellInput.all().any { it.contains(RISKY_COMMAND) } }
     }
 
@@ -59,7 +57,7 @@ class ProductionGuardWiringTest {
         FakeShellInput.clear()
 
         runSelectedSnippet()
-        onNodeWithText(string(Res.string.shell_cancel)).performClick()
+        onNodeWithTag(UiTags.FORM_CANCEL).performClick()
         waitForIdle()
 
         onNodeWithText(string(Res.string.guard_prod_command_title)).assertDoesNotExist()
