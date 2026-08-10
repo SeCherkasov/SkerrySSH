@@ -112,8 +112,8 @@ internal fun configDir(): Path {
 
 /**
  * Skerry data directory (not config): large artifacts such as downloaded local-AI GGUF models.
- * Defaults to `~/.local/share/skerry`; honors XDG_DATA_HOME (the app data dir inside a Flatpak
- * sandbox). Models are public weights, so 0600 hardening is not required.
+ * Defaults to `~/.local/share/skerry`; honors XDG_DATA_HOME. Models are public weights, so 0600
+ * hardening is not required.
  */
 private fun dataDir(): Path {
     val xdg = System.getenv("XDG_DATA_HOME")?.takeIf { it.isNotBlank() }

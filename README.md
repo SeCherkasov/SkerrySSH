@@ -62,7 +62,7 @@ Packages are in the **[latest release](../../releases/latest)**:
 
 | Platform | Arch | Files |
 |---|---|---|
-| Linux | x86_64 | `.deb`, `.rpm`, `.AppImage`, `.flatpak` |
+| Linux | x86_64 | `.deb`, `.rpm`, `.AppImage` |
 | Linux | arm64 | `.deb`, `.rpm`, `.AppImage` |
 | Windows | x64 | `.msi`, `.zip` |
 | macOS | Apple Silicon | `.dmg` |
@@ -208,8 +208,9 @@ docs/         # documentation and design material
 Development workflow, commit conventions and packaging notes are in
 **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
-Requires **JDK 21** (`foojay-resolver` fetches one if needed), and the Android SDK in
-`ANDROID_HOME` for Android.
+Requires **JDK 21** (`foojay-resolver` fetches one if needed) and the Android SDK — every client
+build configures `:androidApp`, so set `ANDROID_HOME` or `sdk.dir` in `local.properties` even for
+a desktop-only build.
 
 A package is built for the OS and CPU architecture of the build machine: an arm64 `.dmg` comes
 out of macOS/ARM only.
@@ -219,7 +220,6 @@ out of macOS/ARM only.
 ./gradlew :composeApp:packageDistributionForCurrentOS    # .deb / .rpm / .msi / .dmg
 ./gradlew :composeApp:packageAppImage                    # portable Linux .AppImage
 ./gradlew :composeApp:packagePortableZip                 # portable .zip
-./gradlew :composeApp:packageFlatpak                     # single-file .flatpak (needs flatpak and flatpak-builder)
 ```
 
 Android:

@@ -52,7 +52,7 @@ object LlmHostCommandLine {
      * The jpackage launcher counts its libjli re-execs in this variable. A child launcher that
      * inherits a non-zero count skips the cfg file and hands its argv to the JVM verbatim, so
      * [HOST_FLAG] becomes an unknown JVM option and the host dies with "Could not create the
-     * Java Virtual Machine". Seen on Linux under Flatpak, where libjli always re-execs.
+     * Java Virtual Machine". Seen on Linux with launchers whose libjli re-execs.
      */
     private const val JPACKAGE_RESTART_MARKER = "_JPACKAGE_LAUNCHER"
 

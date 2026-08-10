@@ -83,17 +83,15 @@ mlkit-barcode = "17.3.0"
 # (the JNA core is already on the classpath transitively via the libsodium binding).
 jna = "5.19.1"
 # Kover — code-coverage for the JVM/KMP test suites. Loaded via the root buildscript classpath and
-# applied conditionally (see the root build.gradle.kts) so the offline Flatpak build never resolves it.
+# applied by id in each measured module (see the root build.gradle.kts).
 # 0.9.8+ is required: earlier releases can't handle the com.android.kotlin.multiplatform.library
 # target used by :shared and :composeApp (they demand a legacy `android` extension). See kover #747/#772.
 kover = "0.9.8"
-# detekt — static analysis for Kotlin. Rides the same online-only buildscript gate as Kover: a
-# plugins {} entry would be resolved even with `apply false` and break the hermetic offline Flatpak
-# build (-Dskerry.offlineRepo). 1.23.8 is the last stable line (2.0.x is still alpha).
+# detekt — static analysis for Kotlin. Rides the same root buildscript classpath as Kover.
+# 1.23.8 is the last stable line (2.0.x is still alpha).
 detekt = "1.23.8"
-# Compose Hot Reload — dev-only live UI reload (./gradlew :composeApp:hotRunJvm). Like Kover it is
-# loaded via the root buildscript classpath and applied by id only in online builds, so the hermetic
-# offline Flatpak build (-Dskerry.offlineRepo) never resolves it. Pinned to 1.1.1: it is the last
+# Compose Hot Reload — dev-only live UI reload (./gradlew :composeApp:hotRunDesktop). Like Kover it is
+# loaded via the root buildscript classpath and applied by id. Pinned to 1.1.1: it is the last
 # line that supports Compose Multiplatform < 1.10 (we are on 1.9.3 for the stable material3 pair);
 # CHR 1.2.0-alpha02+ requires CMP 1.10.0+. Kotlin 2.1.20+ is fine (we run 2.4.10).
 composeHotReload = "1.1.1"

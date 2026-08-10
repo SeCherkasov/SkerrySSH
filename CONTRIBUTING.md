@@ -7,7 +7,9 @@ the build/test workflow, and the conventions the project follows.
 
 - **JDK 21** — required for all builds; `foojay-resolver` fetches a toolchain automatically
   if none is installed.
-- **Android SDK** — only for Android targets; set `ANDROID_HOME` (compileSdk 36).
+- **Android SDK** — needed by every client build, not just Android ones: `:androidApp` is
+  always in the settings graph and AGP resolves the SDK at configuration time. Set
+  `ANDROID_HOME` or `sdk.dir` in `local.properties` (compileSdk 36).
 - A server-only build needs no Android SDK: `./gradlew :server:run -PserverOnly`.
 
 ## Build, run, test
@@ -16,9 +18,8 @@ the build/test workflow, and the conventions the project follows.
 ./gradlew :composeApp:run                                   # desktop app
 ./gradlew :composeApp:packageDistributionForCurrentOS       # .deb / .rpm / .msi / .dmg
 ./gradlew :composeApp:packageAppImage                       # portable Linux .AppImage
-./gradlew :composeApp:packageFlatpak                        # Linux .flatpak (needs flatpak + flatpak-builder)
 ANDROID_HOME=$HOME/Android/Sdk ./gradlew :androidApp:installDebug
-./gradlew test                                              # JUnit 5 — CI runs exactly this
+./gradlew test allTests                                     # JUnit 5; `test` alone skips shared/composeApp
 docker compose up -d --build                                # sync server; set SKERRY_JWT_SECRET
 ```
 
@@ -55,14 +56,14 @@ what the change does:
 
 ```
 Add SSH jump host (ProxyJump) support
-Fix Flatpak headless crash on Wayland by granting X11+ipc
+Wait for the session's display scale before opening the first window
 Wire the keep-alive setting end to end with dead-link detection
 ```
 
 ## Pull requests
 
 1. Branch from `main`.
-2. Make sure `./gradlew test` passes — CI runs it on every PR.
+2. Make sure `./gradlew test allTests` passes — CI runs it on every PR, under `xvfb-run`.
 3. Keep desktop ⇆ Android parity for anything user-facing.
 4. When touching `README.md`, mirror the change in `README.ru.md` (and vice versa) — the
    two must stay structurally identical.
@@ -72,14 +73,10 @@ Wire the keep-alive setting end to end with dead-link detection
 - **ProGuard/minification is disabled on purpose** for the desktop release — it broke the
   crypto stack (JNA/libsodium, okio, BouncyCastle's signed jar). See the comment in
   `composeApp/build.gradle.kts` before trying to re-enable it.
-- **Flatpak** is a hermetic source build: `flatpak-builder` compiles the app inside the
-  sandbox from the committed offline sources (`composeApp/flatpak/flatpak-sources.json`).
-  Regenerate that list with `composeApp/flatpak/regenerate-sources.sh` whenever desktop
-  dependencies change.
 - **Releases**: pushing a `v*` tag runs the release workflow, which builds
-  `.deb`/`.rpm`/`.AppImage` (x64 + arm64), a Flatpak bundle (x64), `.msi` (x64), `.dmg`
-  (arm64 + x64, unsigned), a signed `.apk`, and `SHA256SUMS.txt`, and publishes them as a
-  **draft** GitHub Release — a maintainer reviews and publishes it manually.
+  `.deb`/`.rpm`/`.AppImage` (x64 + arm64), `.msi` (x64), `.dmg` (arm64 + x64, unsigned),
+  a signed `.apk`, and `SHA256SUMS.txt`, and publishes them as a **draft** GitHub Release
+  — a maintainer reviews and publishes it manually.
 
 ## Licenses
 

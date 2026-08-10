@@ -1,30 +1,23 @@
-// Kover (code coverage) is loaded onto the root buildscript classpath (not the plugins {} DSL) so
-// every measured module inherits it and applies it by id (see each module's build.gradle.kts). It is
-// gated on the online build: a versioned plugins {} entry would be resolved even with `apply false`
-// (the same trap that keeps io.ktor.plugin out of that block — see the note there), which would make
-// the hermetic offline Flatpak build (-Dskerry.offlineRepo) fail — its offline repo doesn't carry
-// Kover. Coverage is a dev/CI concern, absent from the offline packaging build. The root-level
-// aggregation + report config lives in gradle/kover.gradle.kts, applied online only (below), so this
-// file never names a Kover type — which would fail to COMPILE offline, where Kover is off the classpath.
+// Kover (code coverage) rides the root buildscript classpath rather than the plugins {} DSL, and
+// each measured module applies it by id (see its build.gradle.kts). Both routes would work; this
+// one is what the modules are already wired for. The root-level aggregation + report config lives
+// in gradle/kover.gradle.kts (applied below).
 buildscript {
-    if (System.getProperty("skerry.offlineRepo") == null) {
-        repositories { gradlePluginPortal() }
-        dependencies {
-            classpath("org.jetbrains.kotlinx:kover-gradle-plugin:" + libs.versions.kover.get())
-            // Compose Hot Reload (dev-only live reload) rides the same online-only gate as Kover: a
-            // plugins {} entry would be resolved even with `apply false` and break the offline build.
-            classpath("org.jetbrains.compose.hot-reload:hot-reload-gradle-plugin:" + libs.versions.composeHotReload.get())
-            // detekt (static analysis) rides the same online-only gate for the same reason.
-            classpath("io.gitlab.arturbosch.detekt:detekt-gradle-plugin:" + libs.versions.detekt.get())
-        }
+    repositories { gradlePluginPortal() }
+    dependencies {
+        classpath("org.jetbrains.kotlinx:kover-gradle-plugin:" + libs.versions.kover.get())
+        // Compose Hot Reload (dev-only live reload) rides the same classpath as Kover.
+        classpath("org.jetbrains.compose.hot-reload:hot-reload-gradle-plugin:" + libs.versions.composeHotReload.get())
+        // detekt (static analysis), same again.
+        classpath("io.gitlab.arturbosch.detekt:detekt-gradle-plugin:" + libs.versions.detekt.get())
     }
 }
 
 plugins {
     // io.ktor.plugin is intentionally NOT declared here — it is applied directly (with its catalog
-    // version) by its only consumer, :server. Declaring it at root made every build resolve its full
-    // plugin classpath, including the hermetic desktop-only Flatpak build (which excludes :server),
-    // where ktor's dynamic-version transitive (commons-lang3:[3.18.0,)) can't resolve offline.
+    // version) by its only consumer, :server. A root entry, even with `apply false`, puts ktor's
+    // plugin classpath — including its dynamic-version constraint commons-lang3:[3.18.0,) — on the
+    // buildscript classpath every module inherits, instead of leaving it in :server's.
     // com.android.application STAYS: it pins the AGP version so it shares a single classpath with the
     // AGP KMP library plugin — dropping it breaks the normal build ("plugin already on classpath").
     alias(libs.plugins.androidApplication) apply false
@@ -38,12 +31,7 @@ plugins {
 
 // Aggregate coverage at the root over the modules that carry real logic and tests. Each measured
 // module applies Kover itself (see its build.gradle.kts). findProject keeps this correct under the
-// serverOnly / desktopOnly settings graphs, which drop some modules. Run: ./gradlew koverHtmlReport
-// Applied from a separate script so build.gradle.kts carries no Kover types — the offline Flatpak
-// build has no Kover on its classpath and a direct reference here would fail to compile. See the
-// script header. buildscript{} above already gates the classpath the same way.
-if (System.getProperty("skerry.offlineRepo") == null) {
-    apply(from = rootProject.file("gradle/kover.gradle.kts"))
-    // Static analysis, wired the same way and for the same offline reason. Run: ./gradlew detekt
-    apply(from = rootProject.file("gradle/detekt.gradle.kts"))
-}
+// serverOnly settings graph, which drops some modules. Run: ./gradlew koverHtmlReport
+apply(from = rootProject.file("gradle/kover.gradle.kts"))
+// Static analysis, wired the same way. Run: ./gradlew detekt
+apply(from = rootProject.file("gradle/detekt.gradle.kts"))
