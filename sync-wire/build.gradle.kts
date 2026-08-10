@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "app.skerry"
-version = "0.3.0"
+version = "0.3.1"
 
 kotlin {
     jvmToolchain(21)

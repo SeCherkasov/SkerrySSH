@@ -27,12 +27,32 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import org.jetbrains.exposed.v1.jdbc.Database
 import java.math.BigInteger
 import java.nio.file.Files
 import java.security.SecureRandom
 
 val SRP_PARAMS: SRP6CryptoParams = SRP6CryptoParams.getInstance(2048, "SHA-256")
+
+/**
+ * A single WS session subscribes to account, team records, share directory and membership. A test
+ * that waits for fewer lets a publish land before its collector is subscribed, and the bus replays
+ * nothing — so this is one constant, not one per test file.
+ */
+const val WS_SUBSCRIPTIONS = 4
+
+/**
+ * Polls [condition] until it holds. What a socket test waits for is written by a coroutine on
+ * another dispatcher with no signal to subscribe to, so it is polled; the bound throws rather than
+ * returning, because a wait whose expiry nobody observes is a sleep, not a barrier.
+ */
+suspend fun awaitUntil(timeoutMillis: Long = 5_000, condition: suspend () -> Boolean) {
+    withTimeout(timeoutMillis) {
+        while (!condition()) delay(10)
+    }
+}
 
 fun testServices(
     adminToken: String = "",

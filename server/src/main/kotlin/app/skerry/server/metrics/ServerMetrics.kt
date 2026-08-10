@@ -121,6 +121,8 @@ class ServerMetrics(
         count("skerry.sync.ws.sessions.opened")
     }
 
+    // The duration timer is written last on purpose: it is the only one of the three an observer
+    // can wait on to know the whole close was accounted, and tests use it as that barrier.
     fun wsSessionClosed(reason: WsCloseReason, durationSeconds: Double) {
         wsSessions.decrementAndGet()
         count("skerry.sync.ws.sessions.closed", "reason" to reason.label)
