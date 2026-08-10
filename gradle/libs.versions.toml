@@ -19,8 +19,8 @@ kotlin = "2.4.10"
 material3 = "1.9.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
-ktor = "3.5.1"
-logback = "1.6.0"
+ktor = "3.5.2"
+logback = "1.6.1"
 # slf4j-nop: a no-op SLF4J provider for the app. sshj logs via slf4j-api (2.0.17 on the
 # classpath); without any binding SLF4J prints "No SLF4J providers were found" and goes NOP.
 # An explicit nop removes the warning while keeping current behavior (sshj logs are not needed in the client anyway).
@@ -48,12 +48,12 @@ ionspin-libsodium = "0.9.5"
 # fixed it (URL→URI decoding); ionspin 0.9.5 still pins 2.0.2, so we override here. Desktop only.
 goterl-resource-loader = "2.1.0"
 # okio — cross-platform file I/O behind FileSystem (FileVault in commonMain, FakeFileSystem in tests)
-okio = "3.18.0"
+okio = "3.18.1"
 # atomicfu — multiplatform locks (kotlinx.atomicfu.locks) instead of JVM-only @Synchronized
 atomicfu = "0.33.0"
 # --- Phase 2 sync ---
 # Exposed — the server's type-safe SQL layer; SQLite by default, PostgreSQL via DB URL
-exposed = "1.3.1"
+exposed = "1.4.0"
 sqlite-jdbc = "3.53.2.1"
 postgresql = "42.7.13"
 hikari = "7.1.0"
