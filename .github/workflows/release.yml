@@ -109,7 +109,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm fakeroot
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
       - name: Package deb + rpm
         # Version comes through env, not interpolated into the shell (injection-safe).
@@ -162,7 +162,7 @@ jobs:
         run: choco install wixtoolset -y --no-progress
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
       - name: Package msi + portable zip
         # packagePortableZip reuses the app-image createDistributable already builds for the
@@ -214,7 +214,7 @@ jobs:
           java-version: "21"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
       - name: Package dmg
         # Unsigned/un-notarized on purpose (no Apple Developer account yet) — Gatekeeper
@@ -295,7 +295,7 @@ jobs:
           echo "SKERRY_KEYSTORE_FILE=$RUNNER_TEMP/skerry-release.jks" >> "$GITHUB_ENV"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
       - name: Assemble release APK
         # versionCode must be a monotonic integer; the tag's semver can't map to one, so use
