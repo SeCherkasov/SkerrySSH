@@ -3,6 +3,8 @@ package app.skerry.server.metrics
 import app.skerry.server.Services
 import app.skerry.server.configureServer
 import app.skerry.server.model.b64
+import app.skerry.server.routes.WS_SUBSCRIPTIONS
+import app.skerry.server.routes.awaitUntil
 import app.skerry.server.routes.changePassword
 import app.skerry.server.routes.pushRecord
 import app.skerry.server.routes.registerAccount
@@ -39,6 +41,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -51,9 +54,6 @@ class InstrumentationTest {
     private val alice = "alice@example.com"
     private val bob = "bob@example.com"
     private val password = "correct horse"
-
-    /** A single WS session subscribes to three notifier channels (account, teams, membership). */
-    private val wsSubscriptions = 3
 
     private fun withServer(
         extraEnv: Map<String, String> = emptyMap(),
@@ -78,6 +78,15 @@ class InstrumentationTest {
         scrape().lines().firstOrNull { it.startsWith("$series ") }?.substringAfterLast(' ')?.toDouble() ?: 0.0
 
     private fun ServerMetrics.has(prefix: String): Boolean = scrape().lines().any { it.startsWith(prefix) }
+
+    /**
+     * The socket's `finally` cancels the notifier collectors before it accounts the session closed,
+     * so a subscription count of zero does not yet mean the gauge, the reason counter and the
+     * duration timer have been written. `wsSessionClosed` writes the timer last, so waiting until
+     * that many sessions have been timed makes all three visible.
+     */
+    private suspend fun ServerMetrics.awaitSessionsAccountedClosed(sessions: Int) =
+        awaitUntil(2_000) { value("skerry_sync_ws_session_duration_seconds_count") >= sessions }
 
     // --- sync volume ---
 
@@ -310,7 +319,7 @@ class InstrumentationTest {
         val tokens: TokenResponse = client.registerAccount(alice, password, deviceId = "devA")
 
         client.webSocket("/sync", request = { bearerAuth(tokens.accessToken) }) {
-            withTimeout(2_000) { services.notifier.subscriptions.first { it >= wsSubscriptions } }
+            withTimeout(2_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
             assertEquals(1.0, services.metrics.value("skerry_sync_ws_sessions"))
             assertEquals(1.0, services.metrics.value("skerry_sync_ws_sessions_opened_total"))
 
@@ -320,6 +329,8 @@ class InstrumentationTest {
         }
         withTimeout(2_000) { services.notifier.subscriptions.first { it == 0 } }
 
+        services.metrics.awaitSessionsAccountedClosed(sessions = 1)
+
         assertEquals(0.0, services.metrics.value("skerry_sync_ws_sessions"), "the gauge must come back down")
         assertEquals(1.0, services.metrics.value("""skerry_sync_ws_frames_sent_total{kind="account"}"""))
         assertEquals(1.0, services.metrics.value("""skerry_sync_notify_published_total{kind="account"}"""))
@@ -327,7 +338,7 @@ class InstrumentationTest {
             1.0,
             services.metrics.value("""skerry_sync_ws_sessions_closed_total{reason="client_close"}"""),
         )
-        assertTrue(services.metrics.has("skerry_sync_ws_session_duration_seconds_count"))
+        // The duration histogram is not asserted here: the barrier above is exactly a wait on it.
     }
 
     @Test
@@ -339,12 +350,13 @@ class InstrumentationTest {
         val tokens: TokenResponse = client.registerAccount(alice, password, deviceId = "devA")
 
         client.webSocket("/sync", request = { bearerAuth(tokens.accessToken) }) {
-            withTimeout(2_000) { services.notifier.subscriptions.first { it >= wsSubscriptions } }
+            withTimeout(2_000) { services.notifier.subscriptions.first { it >= WS_SUBSCRIPTIONS } }
             services.devices.revoke(alice, "devA")
             services.notifier.publish(alice, 1)
             withTimeout(2_000) { closeReason.await() }
         }
         withTimeout(2_000) { services.notifier.subscriptions.first { it == 0 } }
+        services.metrics.awaitSessionsAccountedClosed(sessions = 1)
 
         // First cause wins: the revoke decided this close, not the client's reaction to it.
         assertEquals(
@@ -353,6 +365,14 @@ class InstrumentationTest {
             services.metrics.scrape().lines().filter { "ws_sessions_closed" in it }.toString(),
         )
         assertEquals(0.0, services.metrics.value("""skerry_sync_ws_sessions_closed_total{reason="client_close"}"""))
+        // The property is that a revoked device stops receiving pushes, not merely that the socket
+        // ends: sending the cursor before the revocation check would still close under this reason.
+        // Asserted over the whole series rather than one kind — every channel repeats the guard, and
+        // a mistyped label block would read as zero forever.
+        assertFalse(
+            services.metrics.has("skerry_sync_ws_frames_sent_total"),
+            "a revoked device must not receive the cursor that revealed the revocation",
+        )
     }
 
     // --- inventory and pool ---
