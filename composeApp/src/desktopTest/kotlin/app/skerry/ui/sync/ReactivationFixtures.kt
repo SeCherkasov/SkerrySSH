@@ -24,9 +24,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Shared doubles for the reactivation/reconcile tests ([SyncCoordinatorReactivationTest] and
- * [SyncCoordinatorReconcileDebtTest]): a server that reactivates a revoked device, a vault whose clear
- * fails, and debt stores that refuse one direction of the write.
+ * Shared doubles for the reactivation/reconcile tests ([SyncCoordinatorReactivationTest],
+ * [SyncCoordinatorReconcileDebtTest] and [SyncCoordinatorArmedLinkTest]): a server that reactivates a
+ * revoked device, a vault whose clear fails, and debt stores that refuse one direction of the write.
  */
 
 /**
@@ -103,14 +103,22 @@ internal class ReactivatingClient(
  * bounds how many clears fail, so a test can also drive the recovery: the lock is gone by the next connect
  * and the reconcile finally runs.
  */
-internal class ClearFailingVault(private val delegate: Vault, private val failures: Int = Int.MAX_VALUE) : Vault by delegate {
+internal class ClearFailingVault(
+    private val delegate: Vault,
+    private val failures: Int = Int.MAX_VALUE,
+    /** How many clears go through before the failing ones start — the lock lands mid-run, not at the start. */
+    private val intact: Int = 0,
+) : Vault by delegate {
     private val attempts = AtomicInteger(0)
 
     /** How many clears were tried — the observable "the reconcile ran again" for a retry that fails too. */
     val clearAttempts: Int get() = attempts.get()
 
     override fun clearRecords(types: Set<RecordType>) {
-        if (attempts.getAndIncrement() < failures) error("vault is locked")
+        val n = attempts.getAndIncrement()
+        // `n - intact < failures`, not `n < intact + failures`: the default [failures] is Int.MAX_VALUE and
+        // the sum would overflow, turning "every clear after the first" into "no clear at all".
+        if (n >= intact && n - intact < failures) error("vault is locked")
         delegate.clearRecords(types)
     }
 }
@@ -125,6 +133,28 @@ internal class DebtRaiseFailingStore(private val delegate: ReconcileDebtStore) :
     override fun save(debts: Set<ServerLink>) {
         if (refuse && debts.size > delegate.load().size) error("debt write failed")
         delegate.save(debts)
+    }
+}
+
+/**
+ * Debt store that refuses a write whichever direction it goes — including one that records a debt the set
+ * already holds, which a real store still writes to disk (`FileReconcileDebtStore`) and a full disk still
+ * refuses.
+ */
+internal class DebtWriteFailingStore(private val delegate: ReconcileDebtStore) : ReconcileDebtStore {
+    override fun load(): Set<ServerLink> = delegate.load()
+    override fun save(debts: Set<ServerLink>) = error("debt write failed")
+}
+
+/** Config store that refuses to save the link — the write that tells the guards which server this is. */
+internal class LinkWriteFailingStore(private val delegate: SyncConfigStore) : SyncConfigStore by delegate {
+    /** Set once the test wants the next save to be the refused one. */
+    @Volatile
+    var refuse = false
+
+    override fun save(config: SyncConfig) {
+        if (refuse) error("link write failed")
+        delegate.save(config)
     }
 }
 

@@ -207,12 +207,18 @@ class SyncCoordinator(
     @Volatile
     private var retryJob: Job? = null
 
-    // Whether THIS coordinator has actually started a reactivation reconcile (records dropped, cursor
+    // The link THIS coordinator actually started a reactivation reconcile for (records dropped, cursor
     // reset) — the permission [retireDischargedDebt] needs before it may retire a recorded debt.
     // The debt alone isn't enough: it is recorded before the vault is touched, so it can stand while
-    // nothing was cleared. Every read and write is under [syncMutex].
+    // nothing was cleared. It names the link rather than being a bare flag because the debt is keyed on
+    // one: with the same account id on two servers, a rebuild that ran for one of them says nothing about
+    // a session on the other, and reading it as permission there would sync a vault that still owes its
+    // rebuild and retire a debt nothing discharged (issue #172). It does not outlive this coordinator's
+    // stay on that link either — an activation ([activateSession]) or a sync cycle ([retireDischargedDebt])
+    // on another one ends it, because both refill the vault the rebuild emptied, and the arming is a
+    // statement about the vault. Every read and write is under [syncMutex].
     @Volatile
-    private var reconcileArmed = false
+    private var armedFor: ServerLink? = null
 
     // Links this device owes a reactivation rebuild to — the in-memory half of [debtStore], which holds the
     // same set across restarts. A login that reports `reactivated` records the debt here and on disk before
@@ -563,6 +569,12 @@ class SyncCoordinator(
         val superseded: SyncClient?
         syncMutex.withLock {
             superseded = client?.takeIf { it !== syncClient }
+            // The arming answers for the link it was rebuilt for, and the guards read the SAVED link as the
+            // identity of the server the live session talks to. This activation publishes another link, and
+            // the write that would make the saved one agree can be refused (a full disk) — so drop a
+            // permission that names anything else BEFORE the session goes live, rather than leave it resting
+            // on a store write landing. [reconcileLocked] re-arms below once its own clear has run.
+            if (armedFor != ServerLink(config.serverUrl, config.accountId)) armedFor = null
             client = syncClient
             session = newSession
             // A retry loop armed for the previous session must not carry its escalated backoff into
@@ -576,12 +588,14 @@ class SyncCoordinator(
             } else {
                 if (resetCursor) syncState.setCursor(config.accountId, 0)
                 configStore.save(config)
-                // Disarm only if this link owes nothing. A re-activation that doesn't reconcile
-                // ([doChangeAccountPassword]) can still land on a debt — a reconcile that ran here but whose
-                // retiring write was refused — and the records it dropped stay dropped. Disarming there
-                // would make [reconcileOwed] refuse every later cycle, including the one that would finally
-                // retire the debt.
-                reconcileArmed = reconcileArmed && ServerLink(config.serverUrl, config.accountId) in reconcileDebts
+                // Keep the arming only for an activation of the SAME link that still owes the debt it is
+                // the permission to retire. A re-activation that doesn't reconcile
+                // ([doChangeAccountPassword]) can land on a standing debt — a reconcile that ran here but
+                // whose retiring write was refused — and the records it dropped stay dropped; disarming
+                // there would make [reconcileOwed] refuse every later cycle, including the one that would
+                // finally retire it. The link itself was already settled above — what is left here is the
+                // debt: an arming whose debt is gone has nothing to retire and nothing to say.
+                armedFor = armedFor?.takeIf { it in reconcileDebts }
             }
         }
         health.setTarget(config.serverUrl)
@@ -647,6 +661,12 @@ class SyncCoordinator(
      * no cycle exists yet to race it.
      */
     private fun recordDebt(link: ServerLink) {
+        // A fresh obligation on this link revokes the permission an earlier rebuild left there: the records
+        // THIS debt is about are in the vault now, whatever an earlier rebuild dropped. Without it, a device
+        // revoked a second time on a link whose retiring write was refused would carry the old arming into
+        // the new debt, and a reconcile that then failed on the clear would sync anyway ([reconcileOwed]).
+        // [reconcileLocked] arms again a few lines later — once its own clear has actually run.
+        if (armedFor == link) armedFor = null
         reconcileDebts = reconcileDebts + link
         debtStore.save(reconcileDebts)
     }
@@ -699,7 +719,7 @@ class SyncCoordinator(
      * unlocked one) leaves the debt standing over an un-cleared vault, which is what [reconcileOwed] reads.
      *
      * Call with [syncMutex] held (kotlinx [Mutex] is not reentrant): both callers — [activateSession] and
-     * the redo in [resumeAfterUnlock] — take it themselves, and every [reconcileArmed]/cursor/config write
+     * the redo in [resumeAfterUnlock] — take it themselves, and every [armedFor]/cursor/config write
      * in here shares that lock with the sync cycles.
      */
     private fun reconcileLocked(config: SyncConfig) {
@@ -709,12 +729,20 @@ class SyncCoordinator(
         // debt is usually already recorded ([rememberReactivation]) — a set write, so re-recording it is
         // free; the paths that reach a reconcile without one (a restore driven by an older launch's debt)
         // get it written here.
-        recordDebt(ServerLink(config.serverUrl, config.accountId))
+        // The link is saved first, and only then the debt: both guards ([reconcileOwed],
+        // [retireDischargedDebt]) read the saved link as the identity of the server this session talks to,
+        // and a debt write that is refused (a full disk) after the session was published would otherwise
+        // leave them reading the PREVIOUS link — one this coordinator may still be armed for, which is
+        // exactly the permission issue #172 is about. The other order buys nothing: the debt is already
+        // in memory before its store write, and the reconcile intent still lands before the vault is
+        // touched, which is what a crash in between must not lose.
+        val link = ServerLink(config.serverUrl, config.accountId)
         configStore.save(config)
+        recordDebt(link)
         val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
         vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet())
         syncState.setCursor(config.accountId, 0) // reactivation always full-pulls to rebuild from the server
-        reconcileArmed = true // only now — see [retireDischargedDebt]
+        armedFor = link // only now, and named — see [retireDischargedDebt]
     }
 
     /**
@@ -1239,7 +1267,7 @@ class SyncCoordinator(
 
     /**
      * Whether a reactivation reconcile is owed on this account but was never performed here: a debt for the
-     * saved link stands ([reconcileDebts]) while [reconcileArmed] is down.
+     * saved link stands ([reconcileDebts]) and this coordinator did not rebuild THAT link ([armedFor]).
      *
      * [activateSession] publishes the session and reconciles in one locked section, so a cycle can no
      * longer slip in mid-reconcile — but the clear itself can throw (an auto-lock landing inside the
@@ -1252,14 +1280,17 @@ class SyncCoordinator(
      * memory — which is why [reconcileDebts] and not the store is what this reads: otherwise a full disk
      * would leave the guard blind and every cycle would run over the un-rebuilt vault.
      *
-     * Read under [syncMutex] like [reconcileArmed] itself, and matched on the saved link — a debt owed by
-     * this device to another server, or another account, says nothing about this session.
+     * Read under [syncMutex] like [armedFor] itself, and matched on the saved link — on BOTH sides. A debt
+     * owed by this device to another server, or another account, says nothing about this session; neither
+     * does a rebuild that ran for another link, and taking one for permission is what let a session sync a
+     * vault whose records the server it is talking to had purged (issue #172).
      */
     private fun reconcileOwed(accountId: String): Boolean {
-        if (reconcileArmed) return false
         val cfg = configStore.load() ?: return false
         if (cfg.accountId != accountId) return false
-        return ServerLink(cfg.serverUrl, cfg.accountId) in reconcileDebts
+        val link = ServerLink(cfg.serverUrl, cfg.accountId)
+        if (armedFor == link) return false
+        return link in reconcileDebts
     }
 
     /** Park the status on Configured (the vault-locked resting state); Disabled without a link. */
@@ -1311,11 +1342,11 @@ class SyncCoordinator(
     }
 
     /**
-     * Retire the reactivation debt for the saved link once a sync cycle for that account has actually
-     * succeeded. [reconcileArmed] says this coordinator dropped the local records
-     * and reset the cursor, so the cycle that just finished IS the full re-pull the debt is waiting
-     * for — including one reached by a later retry (backoff loop, reachability trigger, manual sync)
-     * after the reconcile's own first cycle failed.
+     * Retire the reactivation debt for the saved link once a sync cycle for that link has actually
+     * succeeded. [armedFor] names the link this coordinator dropped the local records and reset the cursor
+     * for, so a cycle on that same link IS the full re-pull the debt is waiting for — including one reached
+     * by a later retry (backoff loop, reachability trigger, manual sync) after the reconcile's own first
+     * cycle failed.
      *
      * The debt on its own would be the wrong permission: it is recorded BEFORE the vault is touched (a
      * crash in between must not lose the signal), so a clear that threw — an auto-lock landing inside the
@@ -1327,25 +1358,33 @@ class SyncCoordinator(
      * Called before the status is published: [SyncStatus.Online] is what every observer reacts to, and
      * retiring the debt afterwards leaves a window in which Online is on screen while the device still
      * owes a rebuild. Reads the live config rather than a captured copy — the link is what the debt is
-     * keyed on, and a connect that ran in between may have changed it.
+     * keyed on, and a connect that ran in between may have changed it. A cycle on another link retires
+     * nothing and ends the arming instead of carrying it: it just pulled that link's records into the
+     * vault, so the rebuild the arming stood for no longer describes what is in there (issue #172). The
+     * debt it left stands, and the next connect back rebuilds once more — never a record the server purged.
+     * Belt and braces on the same rule as [activateSession]'s: for a cycle to reach here on a foreign link
+     * it would have to have passed [reconcileOwed], which compares the same two links — so this branch is
+     * unreachable today, and "unreachable" is worth a lock when what it guards is a purged record coming
+     * back. It is not what makes the arming safe; the link-keyed reads are.
      *
      * Best-effort like [resealRefreshToken]: a store that fails must not turn a sync that succeeded into a
-     * failure — [reconcileArmed] stays up so the next cycle retries the write.
+     * failure — [armedFor] stays up so the next cycle retries the write.
      */
     private fun retireDischargedDebt(accountId: String) {
-        if (!reconcileArmed) return
+        val armed = armedFor ?: return
         runCatching {
-            val cfg = configStore.load()
-            if (cfg != null && cfg.accountId == accountId) {
-                val link = ServerLink(cfg.serverUrl, cfg.accountId)
-                if (link in reconcileDebts) retireDebt(link)
-                // Also when this link owes nothing: there is nothing left for a later cycle to retire.
-                // [reconcileArmed] is a plain flag rather than the link it was armed for, so a reconcile
-                // whose link was replaced before its first cycle succeeded (two servers under the same
-                // account id, switched in that window) leaves its debt standing and pays for it with one
-                // extra rebuild on the next connect back — never with a record the server purged.
-                reconcileArmed = false
+            // A config that doesn't load is a read that FAILED as readily as a link that isn't there (both
+            // stores answer `null` for either), and a failed read must not cost the arming: the debt would
+            // then stand with nothing left to retire it, and every later cycle would be refused. Keep it and
+            // let the next cycle re-read, like a refused retiring write.
+            val cfg = configStore.load() ?: return@runCatching
+            if (armed.accountId != accountId || ServerLink(cfg.serverUrl, cfg.accountId) != armed) {
+                armedFor = null
+                return@runCatching
             }
+            if (armed in reconcileDebts) retireDebt(armed)
+            // Also when the link owes nothing: there is nothing left for a later cycle to retire.
+            armedFor = null
         }
     }
 
@@ -1765,7 +1804,7 @@ class SyncCoordinator(
      * the state the user already sees, with the same recovery. Any cause lands there; naming them apart
      * would only rename a stop whose exit is the same.
      *
-     * Call under [syncMutex] with [opMutex] held by the caller: it writes [reconcileArmed], the cursor and
+     * Call under [syncMutex] with [opMutex] held by the caller: it writes [armedFor], the cursor and
      * the config exactly like the activation path does.
      */
     private fun redoOwedReconcileLocked() {
