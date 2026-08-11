@@ -190,6 +190,7 @@
     <string name="settings_change_account_pw_note">更改所有已同步设备的密码。其他设备需用新密码重新登录。</string>
     <string name="settings_change_account_pw_submit">更改密码</string>
     <string name="settings_change_account_pw_err_rewrap">账户密码已更改，但此设备需用新密码重新连接。</string>
+    <string name="settings_password_link_moved">此表单打开期间，设备已连接到其他服务器。请重新打开后再试。</string>
 
     <!-- 键盘部分 -->
     <string name="settings_keyboard_subtitle">应用与终端快捷键。</string>

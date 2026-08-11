@@ -15,6 +15,18 @@ class SyncSetupFormTest {
         assertEquals("maya", form.normalizedAccountId)
     }
 
+    /**
+     * What the form submits is what the link is keyed on, so it has to be the canonical spelling and not
+     * merely a trimmed one: connect after a `disconnect` is typed from memory, and a variant spelling used
+     * to be a different server (issue #243).
+     */
+    @Test
+    fun normalizes_the_url_to_the_spelling_the_link_is_keyed_on() {
+        val form = SyncSetupForm(serverUrl = " HTTPS://Work.TEST:443/ ", accountId = "maya")
+        assertEquals("https://work.test", form.normalizedServerUrl)
+        assertEquals(ServerLink("https://work.test", "maya"), ServerLink(form.normalizedServerUrl, form.normalizedAccountId))
+    }
+
     @Test
     fun complete_form_can_submit() {
         val form = SyncSetupForm(serverUrl = "https://sync.skerry.dev", accountId = "maya")

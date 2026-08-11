@@ -293,8 +293,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // session. Per-team vaults live in config/teams/ (dataKey = teamKey from the account vault's
     // TEAM record); team-sync cursors are in their own file. Team WS signals arrive via onTeamSignal.
     val teams = app.skerry.ui.teams.TeamsCoordinator(
-        session = { sync.currentSession() },
-        client = { sync.currentTeamClient() },
+        live = { sync.currentTeamLink() },
         vault = vault,
         crypto = IonspinVaultCrypto(),
         teamVaults = app.skerry.shared.team.TeamVaults(
@@ -475,16 +474,14 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // Session sharing (relay on the sync server): the host side and the directory of what the
     // account's teams are sharing right now. Both ride the same sync session and team keys.
     val sessionShare = app.skerry.ui.share.SessionShareController(
-        client = { sync.currentShareClient() },
-        session = { sync.currentSession() },
+        liveLink = { sync.currentShareLink() },
         teamKey = { teamId -> teams.teamKey(teamId) },
         crypto = IonspinVaultCrypto(),
         newShareId = { UUID.randomUUID().toString().lowercase() },
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     )
     val sharedSessions = app.skerry.ui.share.SharedSessionsController(
-        client = { sync.currentShareClient() },
-        session = { sync.currentSession() },
+        liveLink = { sync.currentShareLink() },
         teams = { teams.teams.value.filter { it.hasKey }.map { t -> t.id to t.name } },
         teamKey = { teamId -> teams.teamKey(teamId) },
         crypto = IonspinVaultCrypto(),

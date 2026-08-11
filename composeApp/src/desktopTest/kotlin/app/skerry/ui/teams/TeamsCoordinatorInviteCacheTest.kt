@@ -21,6 +21,7 @@ import app.skerry.shared.team.TeamVaults
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.initializeVaultCrypto
+import app.skerry.ui.sync.TeamLink
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -111,8 +112,7 @@ class TeamsCoordinatorInviteCacheTest {
             ),
         )
         val coord = TeamsCoordinator(
-            session = { SyncSession(self, "access", "refresh") },
-            client = { client },
+            live = { TeamLink(SyncSession(self, "access", "refresh"), client, "test-link") },
             vault = vault,
             crypto = crypto,
             teamVaults = TeamVaults(teamDir, crypto, deviceId = "dev-alice", fileSystem = FileSystem.SYSTEM, now = { NOW }),

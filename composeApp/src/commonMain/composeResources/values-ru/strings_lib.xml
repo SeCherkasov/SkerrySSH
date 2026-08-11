@@ -113,6 +113,7 @@
 
     <!-- Teams -->
     <string name="lib_teams_sidebar">КОМАНДЫ</string>
+    <string name="lib_teams_unnamed_space">Пространство без имени</string>
     <string name="lib_teams_invite">Пригласить</string>
     <string name="lib_teams_members">Участники</string>
     <string name="lib_teams_recent_activity">Недавние действия</string>

@@ -231,8 +231,10 @@ private fun metaLine(row: TeamActivityRow): String {
         parts += if (seconds < 60) stringResource(Res.string.lib_teams_feed_duration_short)
         else stringResource(Res.string.lib_teams_feed_duration, (seconds / 60).toString())
     }
-    // A bulk summary and an unknown event carry the server's own wording; nothing else does.
-    if (row.kind == TeamActivityKind.UNKNOWN && row.detail.isNotBlank()) parts += row.detail
+    // A bulk summary and an unknown event carry the server's own wording; nothing else does. It goes
+    // through the same filter as the actor beside it — a bidi override here reverses that actor, and an
+    // audit row whose actor can be rewritten by the field next to it is worth nothing.
+    if (row.kind == TeamActivityKind.UNKNOWN && row.detail.isNotBlank()) parts += untrustedLabel(row.detail)
     return parts.joinToString(" · ")
 }
 
@@ -265,7 +267,8 @@ private fun eventLabel(row: TeamActivityRow): String = when (row.kind) {
         stringResource(Res.string.lib_teams_event_records_bulk, row.detail.takeWhile { it.isDigit() }.toIntOrNull() ?: 0)
     TeamActivityKind.SESSION_OPEN -> stringResource(Res.string.lib_teams_event_session_open)
     TeamActivityKind.SESSION_RECORD -> stringResource(Res.string.lib_teams_event_session_record)
-    TeamActivityKind.UNKNOWN -> stringResource(Res.string.lib_teams_event_unknown, row.event)
+    // The event name is the server's own string — same filter as every other field it authored.
+    TeamActivityKind.UNKNOWN -> stringResource(Res.string.lib_teams_event_unknown, untrustedLabel(row.event))
 }
 
 /** The kind of thing a record event touched, as a noun to follow the verb. */

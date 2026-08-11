@@ -1,6 +1,5 @@
-package app.skerry.ui.terminal
+package app.skerry.ui.design
 
-import app.skerry.ui.design.MAX_UNTRUSTED_LABEL_CHARS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

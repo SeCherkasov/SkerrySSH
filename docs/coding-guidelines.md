@@ -94,6 +94,9 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Streaming an AI reply / parsing it | `ui/ai/AiStreamRunner`, `AiReplyParser` |
 | Sealed sync token, health monitoring | `ui/sync/SealedTokenCodec`, `ServerHealthMonitor` |
 | Sync failure reason → localised text | `SyncFailureReason` + `ui/sync/syncFailureText` (don't build strings in the controller) |
+| A state that changes on its own and has to be heard | `ui/design/StatusAnnouncer` — a polite live region that carries the message itself and stays composed across the change (a node inserted together with its text announces nothing). Put it above the `when` that picks the card, not inside a branch, and give it the empty string for the states worth no announcement. `AiSection`, `AiModelPicker` and `MobileAiScreen` still set `liveRegion` by hand on a visible `Txt` and should converge onto this |
+| The error line under a form | `ui/sync/SyncFormError` — icon + text in `sunset`, composed even when there is no error so the announcer outlives it. `announce = false` when the screen already keeps an announcer above the branch this row sits in |
+| A per-key state store over a store the caller pins one key of | `shared/sync/KeyedStateStore` (the sync cursor per `ServerLink`, a team space's cursor per link + space) |
 
 ## 2. Size and decomposition — when you create it, not later
 

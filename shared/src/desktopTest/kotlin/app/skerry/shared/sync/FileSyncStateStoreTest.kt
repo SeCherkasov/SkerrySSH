@@ -22,6 +22,21 @@ class FileSyncStateStoreTest {
         assertEquals(0L, store.cursor("acc"))
     }
 
+    /**
+     * The account cursor is filed under a whole link — url, NUL, account id (`ServerLink.cursorKey`) — and
+     * the separator is only safe because this store encodes what it writes. A key that came back cut at
+     * the NUL would file every server's cursor under its own url.
+     */
+    @Test
+    fun `a link key survives the file with its separator intact`() {
+        val key = "https://work.test\u0000maya"
+        FileSyncStateStore(file()).setCursor(key, 7L)
+        val reopened = FileSyncStateStore(file())
+        assertEquals(7L, reopened.cursor(key))
+        assertEquals(0L, reopened.cursor("https://work.test"), "the key must not read as its own prefix")
+        assertEquals(0L, reopened.cursor("maya"), "nor as the account id it ends with")
+    }
+
     @Test
     fun `setCursor is read back in the same instance`() {
         val store = FileSyncStateStore(file())

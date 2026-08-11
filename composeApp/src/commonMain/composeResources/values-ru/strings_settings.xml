@@ -190,6 +190,7 @@
     <string name="settings_change_account_pw_note">Меняет пароль на всех синхронизированных устройствах. На остальных нужно войти заново с новым паролём.</string>
     <string name="settings_change_account_pw_submit">Сменить пароль</string>
     <string name="settings_change_account_pw_err_rewrap">Пароль аккаунта изменён, но это устройство нужно переподключить с новым паролём.</string>
+    <string name="settings_password_link_moved">Пока форма была открыта, устройство подключилось к другому серверу. Откройте заново.</string>
 
     <!-- Раздел Keyboard -->
     <string name="settings_keyboard_subtitle">Горячие клавиши приложения и терминала.</string>

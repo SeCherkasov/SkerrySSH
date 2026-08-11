@@ -21,6 +21,18 @@ internal fun untrustedLabel(raw: String, maxChars: Int = MAX_UNTRUSTED_LABEL_CHA
     sanitizeServerText(raw, maxChars, allowNewlines = false)
 
 /**
+ * A name someone else wrote, made fit to draw and to announce, with something to draw when nothing of it
+ * survives the filter.
+ *
+ * The one shape for every list whose rows are named by a peer or a server — team spaces, hosts, linked
+ * devices. The label is drawn AND used as an accessible name, so a bidi override in it would make one row
+ * announce as another; and a name made only of characters the sanitizer drops leaves a blank row the user
+ * cannot tell from any other, which is what [fallback] is for. Pass an id, filtered too — a fallback that
+ * skips the filter just moves the hole.
+ */
+internal fun spaceLabel(raw: String, fallback: String): String = untrustedLabel(raw).ifBlank { fallback }
+
+/**
  * How much of an id stands in for a name that filtered away to nothing — enough to tell two rows
  * apart, short enough to read as an id rather than as a name.
  */
