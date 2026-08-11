@@ -36,6 +36,7 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.connection.toVncAuth
 import app.skerry.ui.connection.connectableSecrets
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.session.SessionsController
@@ -155,7 +156,7 @@ internal fun MobileChrome(
                     val cred = credentials?.useForConnect(host.credentialId)
                     if (cred != null) {
                         sessions?.openVnc(
-                            host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
+                            host.id, host.rowLabel(), host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
                             remoteResize = host.vncResizeToWindow,
                             onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
                         )

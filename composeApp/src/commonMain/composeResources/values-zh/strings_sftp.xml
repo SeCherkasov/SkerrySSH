@@ -71,6 +71,8 @@
     <!-- Listing columns (modified date / permissions) and the quick name filter -->
     <string name="sftp_columns">显示列</string>
     <string name="sftp_col_name">名称</string>
+    <!-- Row name for an entry whose name is nothing but characters that cannot be drawn -->
+    <string name="sftp_unprintable_name">无法显示的名称</string>
     <string name="sftp_col_size">大小</string>
     <string name="sftp_col_modified">修改时间</string>
     <string name="sftp_col_permissions">权限</string>

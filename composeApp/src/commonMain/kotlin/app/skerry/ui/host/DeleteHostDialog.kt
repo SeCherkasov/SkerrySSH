@@ -53,7 +53,7 @@ fun DesktopDeleteHostDialog(host: Host, onDismiss: () -> Unit, onConfirm: () -> 
                 .consumeClicks()
                 .padding(26.dp),
         ) {
-            Txt(stringResource(Res.string.shell_delete_host_title, host.label), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+            Txt(stringResource(Res.string.shell_delete_host_title, host.rowLabel()), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
             Txt(host.connectionSubtitle(), color = Skerry.colors.dim, size = 12.5.sp, font = LocalFonts.current.mono, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
             Txt(
                 stringResource(Res.string.shell_delete_host_body),

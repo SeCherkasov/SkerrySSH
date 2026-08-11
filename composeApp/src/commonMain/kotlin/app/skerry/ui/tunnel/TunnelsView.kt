@@ -50,6 +50,7 @@ import app.skerry.ui.generated.resources.ports_remove_confirm_title
 import app.skerry.ui.generated.resources.ports_remove_inactive_message
 import app.skerry.ui.generated.resources.ports_tunnels
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.platform.testTag
@@ -153,7 +154,7 @@ private fun GlobalTunnelsBody(
     val selected = tunnels.firstOrNull { it.id == selectedId }
     val editorVisible = panel == TunnelPanel.Editor && (adding || selected != null)
 
-    fun hostLabel(hostId: String): String = hosts?.find(hostId)?.label ?: hostId
+    fun hostLabel(hostId: String): String = hosts?.find(hostId)?.rowLabel() ?: hostId
 
     // Tunnel for which the delete-confirmation dialog is shown (null — no dialog). Local state
     // suffices since deletion (manager.delete) is self-contained, unlike session close.

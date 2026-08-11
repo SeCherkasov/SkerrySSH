@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import app.skerry.ui.host.rowSubtitle
+import app.skerry.ui.host.rowLabel
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -292,8 +293,8 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
     val status = LocalSessions.current?.sessionStatusFor(host.id) ?: SessionStatus.Idle
     MobileCatalogRow(
         icon = host.connectionType.icon,
-        label = host.label,
-        subtitle = host.rowSubtitle(),
+        label = remember(host) { host.rowLabel() },
+        subtitle = remember(host) { host.rowSubtitle() },
         dotColor = sessionDotColor(status),
         statusText = sessionStatusText(status),
         onClick = onClick,

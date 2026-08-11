@@ -38,10 +38,11 @@ fun mobileFileRowMeta(item: FileItem): SizeParts? =
  * Leading row icon ([Sym] ligature): directory → `folder`, symlink → `link`, shell script →
  * `terminal`, other file → `description`.
  */
-fun mobileFileIcon(item: FileItem): String = when (item.type) {
+fun mobileFileIcon(item: FileItem, name: String): String = when (item.type) {
     FileItemType.Directory -> "folder"
     FileItemType.Symlink -> "link"
-    FileItemType.File, FileItemType.Other -> if (item.name.endsWith(".sh")) "terminal" else "description"
+    // [name] is what the row draws (sanitized): the icon must not claim an extension the row does not.
+    FileItemType.File, FileItemType.Other -> if (name.endsWith(".sh")) "terminal" else "description"
 }
 
 /**

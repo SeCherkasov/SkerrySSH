@@ -36,6 +36,7 @@ import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_actor_you
 import app.skerry.ui.generated.resources.lib_teams_event_accept
@@ -203,7 +204,8 @@ internal fun ActivityRow(row: TeamActivityRow, mono: androidx.compose.ui.text.fo
             Txt(eventLabel(row), color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
             row.subject?.let { subject ->
                 Txt(
-                    subject,
+                    // Record names come from a peer's vault, and this row is what says who did what.
+                    untrustedLabel(subject),
                     // A name we resolved reads as a name; a bare short id is shown as the id it is.
                     color = if (row.subjectResolved) Skerry.colors.cyanBright else Skerry.colors.faint,
                     size = 12.sp, font = mono, modifier = Modifier.weight(1f),
@@ -222,9 +224,9 @@ internal fun ActivityRow(row: TeamActivityRow, mono: androidx.compose.ui.text.fo
 /** Actor, share space, and reported length — everything about the row that isn't the event itself. */
 @Composable
 private fun metaLine(row: TeamActivityRow): String {
-    val actor = if (row.isSelf) stringResource(Res.string.lib_teams_actor_you) else row.actorAccountId
+    val actor = if (row.isSelf) stringResource(Res.string.lib_teams_actor_you) else untrustedLabel(row.actorAccountId)
     val parts = mutableListOf(actor)
-    row.scopeName?.let { parts += stringResource(Res.string.lib_teams_feed_in_scope, it) }
+    row.scopeName?.let { parts += stringResource(Res.string.lib_teams_feed_in_scope, untrustedLabel(it)) }
     row.durationSec?.let { seconds ->
         parts += if (seconds < 60) stringResource(Res.string.lib_teams_feed_duration_short)
         else stringResource(Res.string.lib_teams_feed_duration, (seconds / 60).toString())

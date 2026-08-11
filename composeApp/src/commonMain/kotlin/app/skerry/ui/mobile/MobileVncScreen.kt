@@ -1,5 +1,6 @@
 package app.skerry.ui.mobile
 
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.remote.remoteKeyEvent
 import app.skerry.ui.remote.RemoteDesktopPanel
 import app.skerry.ui.remote.rememberClipboardActions
@@ -213,7 +214,7 @@ private fun MobileVncBar(
     ) {
         MobileVncIcon("arrow_back") { state.pop() }
         Txt(
-            screen?.serverName ?: title,
+            screen?.serverName?.let { untrustedLabel(it) } ?: title,
             color = Skerry.colors.text, size = 13.sp, modifier = Modifier.weight(1f).padding(start = 4.dp),
         )
         if (screen != null) MobileVncIcon("tune") { onPanelOpenChange(!panelOpen) }

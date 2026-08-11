@@ -26,6 +26,7 @@ import app.skerry.ui.design.InitialsAvatar
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_nothing_shared
 import app.skerry.ui.generated.resources.lib_teams_status_invited
@@ -101,7 +102,7 @@ internal fun MobileTeamChip(team: TeamUi, active: Boolean, onClick: () -> Unit) 
         horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Sym(if (invited) "mail" else "group", size = 15.sp, color = fg)
-        Txt(team.name, color = fg, size = 12.5.sp)
+        Txt(untrustedLabel(team.name), color = fg, size = 12.5.sp)
     }
 }
 
@@ -127,10 +128,11 @@ internal fun MobileMemberRow(
     ) {
         InitialsAvatar(m.accountId, size = 28.dp)
         Column(Modifier.weight(1f)) {
-            Txt(m.accountId, color = Skerry.colors.text, size = 12.5.sp, font = mono, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Txt(untrustedLabel(m.accountId), color = Skerry.colors.text, size = 12.5.sp, font = mono, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             // Same rule as the desktop table: an access list we failed to read is "?", never an
             // empty chip row — the phone is where granting and revoking actually happens.
-            val tags = row.scopes.joinToString(" ") { "#$it" }
+            // A space name is a peer's too, and here it shares a line with "last seen".
+            val tags = row.scopes.joinToString(" ") { "#${untrustedLabel(it)}" }
             // A grant list that didn't load leaves a "?" — whether or not other scopes did load.
             val scopes = listOf(tags, if (row.scopesKnown) "" else UNKNOWN_VALUE).filter { it.isNotEmpty() }.joinToString(" ")
             Txt(

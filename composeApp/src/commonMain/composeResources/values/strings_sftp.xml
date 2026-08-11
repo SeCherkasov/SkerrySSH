@@ -70,6 +70,8 @@
     <!-- Listing columns (modified date / permissions) and the quick name filter -->
     <string name="sftp_columns">Columns</string>
     <string name="sftp_col_name">Name</string>
+    <!-- Row name for an entry whose name is nothing but characters that cannot be drawn -->
+    <string name="sftp_unprintable_name">Unprintable name</string>
     <string name="sftp_col_size">Size</string>
     <string name="sftp_col_modified">Modified</string>
     <string name="sftp_col_permissions">Permissions</string>

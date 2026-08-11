@@ -34,6 +34,7 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_scope_access_hint
 import app.skerry.ui.generated.resources.lib_teams_scope_access_title
@@ -75,7 +76,7 @@ private fun ScopeChipRow(
     ) {
         ScopeChip(stringResource(Res.string.lib_teams_scope_all), active = selected.isEmpty(), muted = false) { onSelect("") }
         scopes.forEach { scope ->
-            ScopeChip(scope.name, active = selected == scope.id, muted = !scope.hasKey) { onSelect(scope.id) }
+            ScopeChip(untrustedLabel(scope.name), active = selected == scope.id, muted = !scope.hasKey) { onSelect(scope.id) }
         }
         if (canManage) {
             GhostButton(stringResource(Res.string.lib_teams_scope_new), onClick = onNew, icon = "add")
@@ -202,7 +203,7 @@ internal fun ScopeAccessDialog(
 ) {
     val mono = LocalFonts.current.mono
     TeamsDialogCard(onDismiss) {
-        Txt(stringResource(Res.string.lib_teams_scope_access_title, scopeName), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
+        Txt(stringResource(Res.string.lib_teams_scope_access_title, untrustedLabel(scopeName)), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
         Txt(
             stringResource(Res.string.lib_teams_scope_access_hint),
             color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp,
@@ -223,7 +224,7 @@ internal fun ScopeAccessDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Txt(member.accountId, color = if (has) Skerry.colors.textBright else Skerry.colors.dim, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
+                    Txt(untrustedLabel(member.accountId), color = if (has) Skerry.colors.textBright else Skerry.colors.dim, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
                     if (has) {
                         GhostButton(
                             stringResource(Res.string.lib_teams_scope_revoke),

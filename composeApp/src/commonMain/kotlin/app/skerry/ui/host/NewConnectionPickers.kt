@@ -67,6 +67,7 @@ import app.skerry.ui.generated.resources.conn_protocol_ssh
 import app.skerry.ui.generated.resources.conn_protocol_telnet
 import app.skerry.ui.generated.resources.conn_protocol_vnc
 import app.skerry.ui.generated.resources.conn_protocol_rdp
+import app.skerry.ui.host.rowLabel
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
@@ -237,7 +238,7 @@ internal fun JumpHostPicker(form: NewConnectionFormState, allHosts: List<Host>, 
     DropdownField(
         value = selected,
         options = listOf<Host?>(null) + candidates,
-        label = { it?.label ?: stringResource(Res.string.conn_jump_none) },
+        label = { it?.rowLabel() ?: stringResource(Res.string.conn_jump_none) },
         onPick = { form.jumpHostId = it?.id },
     )
 }

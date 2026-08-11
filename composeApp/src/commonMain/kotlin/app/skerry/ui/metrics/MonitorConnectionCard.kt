@@ -14,6 +14,7 @@ import app.skerry.ui.connection.jumpRouteLabel
 import app.skerry.ui.connection.shortCipher
 import app.skerry.ui.design.Card
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.mon_card_connection
 import app.skerry.ui.generated.resources.mon_card_system
@@ -31,6 +32,7 @@ import app.skerry.ui.generated.resources.term_info_uptime
 import app.skerry.ui.generated.resources.term_info_user
 import app.skerry.ui.generated.resources.term_system_load
 import app.skerry.ui.generated.resources.term_system_vcpu
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -59,9 +61,9 @@ internal fun connectionFacts(hostId: String?, paneTitle: String?, cipher: String
     val credentials = LocalCredentials.current
     val host = hostId?.let { hosts?.find(it) }
     return ConnectionFacts(
-        host = host?.label ?: paneTitle ?: NO_DATA,
-        address = host?.let { "${it.address}:${it.port}" } ?: NO_DATA,
-        user = host?.username ?: NO_DATA,
+        host = host?.rowLabel() ?: paneTitle ?: NO_DATA,
+        address = host?.let { untrustedLabel("${it.address}:${it.port}") } ?: NO_DATA,
+        user = host?.let { untrustedLabel(it.username) } ?: NO_DATA,
         jump = host?.let { h -> jumpRouteLabel(h) { id -> hosts?.find(id) } },
         credential = host?.credentialId?.let { id -> credentials?.find(id) }?.secret,
         hasCredential = host != null,

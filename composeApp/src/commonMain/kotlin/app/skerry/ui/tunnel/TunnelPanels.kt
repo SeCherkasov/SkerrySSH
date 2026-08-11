@@ -75,6 +75,7 @@ import app.skerry.ui.generated.resources.ports_services_unsupported
 import app.skerry.ui.generated.resources.ports_socks_hint
 import app.skerry.ui.generated.resources.ports_tunnel_detail
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.FormField
@@ -114,7 +115,9 @@ internal fun TunnelEditor(
     val (badgeBg, badgeFg) = form.direction.badgeColors()
     // The tunnel dials this host over SSH, so remote desktops are not candidates.
     val hostList = hosts?.hosts?.filter { it.connectionType.usesSshAuth } ?: emptyList()
-    val hostLabel = form.hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: stringResource(Res.string.ports_select_host)
+    // Filtered once per catalog change, not once per recomposition of the form around it.
+    val hostOptions = remember(hostList) { hostList.map { it.id to it.rowLabel() } }
+    val hostLabel = form.hostId?.let { id -> hostOptions.firstOrNull { it.first == id }?.second } ?: stringResource(Res.string.ports_select_host)
 
     SidePanel {
         PanelHeader(
@@ -132,7 +135,7 @@ internal fun TunnelEditor(
         }
         Box(Modifier.padding(bottom = 12.dp))
         FormField(stringResource(Res.string.ports_field_via_host), top = 0.dp) {
-            HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { form.hostId = it })
+            HostPicker(hostLabel, hostOptions, onPick = { form.hostId = it })
         }
         Box(Modifier.padding(bottom = 12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -284,7 +287,8 @@ internal fun ServicesPanel(
     // then rejected as Unsupported. MOSH qualifies — it dials the same SSH hop.
     val hostList = hosts?.hosts?.filter { it.connectionType.usesSshAuth } ?: emptyList()
     var hostId by remember { mutableStateOf(scan.scannedHostId ?: hostList.firstOrNull()?.id) }
-    val hostLabel = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label }
+    val hostOptions = remember(hostList) { hostList.map { it.id to it.rowLabel() } }
+    val hostLabel = hostOptions.firstOrNull { it.first == hostId }?.second
         ?: stringResource(Res.string.ports_select_host)
 
     SidePanel {
@@ -295,7 +299,7 @@ internal fun ServicesPanel(
         )
         Txt(stringResource(Res.string.ports_services_hint), color = Skerry.colors.faint, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(bottom = 14.dp))
         FormField(stringResource(Res.string.ports_field_via_host), top = 0.dp) {
-            HostPicker(hostLabel, hostList.map { it.id to it.label }, onPick = { hostId = it })
+            HostPicker(hostLabel, hostOptions, onPick = { hostId = it })
         }
         Box(Modifier.padding(bottom = 12.dp))
         PrimaryButton(

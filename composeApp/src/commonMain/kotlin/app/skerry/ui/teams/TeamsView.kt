@@ -60,6 +60,7 @@ import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_accept
 import app.skerry.ui.generated.resources.lib_teams_create
@@ -253,7 +254,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
         val (title, message) = when (c) {
             is TeamsConfirm.Leave -> stringResource(Res.string.lib_teams_leave) to stringResource(Res.string.lib_teams_leave_message)
             is TeamsConfirm.Delete -> stringResource(Res.string.lib_teams_delete) to stringResource(Res.string.lib_teams_delete_message)
-            is TeamsConfirm.Remove -> stringResource(Res.string.lib_teams_remove_member_title) to stringResource(Res.string.lib_teams_remove_member_message, c.accountId)
+            is TeamsConfirm.Remove -> stringResource(Res.string.lib_teams_remove_member_title) to stringResource(Res.string.lib_teams_remove_member_message, untrustedLabel(c.accountId))
             is TeamsConfirm.DeleteScope -> stringResource(Res.string.lib_teams_scope_delete) to stringResource(Res.string.lib_teams_scope_delete_message)
         }
         ConfirmActionDialog(
@@ -360,7 +361,7 @@ private fun LiveTeamRow(team: TeamUi, active: Boolean, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Sym(if (invited) "mail" else "group", size = 16.sp, color = fg)
-        Txt(team.name, color = fg, size = 12.5.sp)
+        Txt(untrustedLabel(team.name), color = fg, size = 12.5.sp)
     }
 }
 

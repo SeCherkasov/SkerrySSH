@@ -25,6 +25,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.files.TransferEntry
 import app.skerry.ui.files.TransferStatus
+import app.skerry.ui.files.fileDisplayName
 import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.generated.resources.Res
@@ -80,10 +81,12 @@ private fun TransferQueueRow(entry: TransferEntry, mono: FontFamily, onDismiss: 
                 else -> Skerry.colors.teal
             },
         )
+        // Blank is not "unprintable": a transfer that failed before it named a file has no name yet.
+        val name = if (entry.name.isBlank()) stringResource(Res.string.ftail_file_fallback) else fileDisplayName(entry.name)
         val title = if (entry.fileCount > 1) {
-            stringResource(Res.string.ftail_transfer_counter, entry.name, entry.fileIndex, entry.fileCount)
+            stringResource(Res.string.ftail_transfer_counter, name, entry.fileIndex, entry.fileCount)
         } else {
-            entry.name.ifBlank { stringResource(Res.string.ftail_file_fallback) }
+            name
         }
         Txt(
             title,

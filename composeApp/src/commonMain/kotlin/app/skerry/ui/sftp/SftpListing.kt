@@ -44,6 +44,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.files.FilePaneController
+import app.skerry.ui.files.fileDisplayName
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sftp_col_modified
 import app.skerry.ui.generated.resources.sftp_col_name
@@ -110,10 +111,14 @@ internal fun LivePaneList(
                         pane.setCursor(entry)
                         pane.open(entry)
                     }
+                    // The name is whatever the server answered with, and this row is what the user
+                    // clicks to download or open: a bidi override in it draws one extension over
+                    // another. The icon reads the same sanitized string, so the two cannot disagree.
+                    val shownName = fileDisplayName(entry.name)
                     LiveFileRow(
-                        icon = sftpFileIcon(entry.name, entry.type),
+                        icon = sftpFileIcon(shownName, entry.type),
                         iconColor = if (entry.type == FileItemType.Directory) Skerry.colors.cyanBright else Skerry.colors.faint,
-                        name = entry.name,
+                        name = shownName,
                         directory = entry.type == FileItemType.Directory,
                         // An enabled column always occupies its fixed-width slot — an empty value
                         // renders as a blank slot, otherwise rows with a missing value (a directory's

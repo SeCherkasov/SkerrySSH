@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
 import app.skerry.shared.vault.Credential
+import app.skerry.ui.connection.connectionSubtitle
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.vault.VaultPresentation
 import app.skerry.ui.generated.resources.shell_use_saved_secret
@@ -62,9 +64,9 @@ fun MobilePasswordSheet(
         onDismiss = onDismiss,
         panelModifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
     ) {
-        Txt(host.label, color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
+        Txt(host.rowLabel(), color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(3.dp))
-            Txt("${host.username}@${host.address}:${host.port}", color = Skerry.colors.dim, size = 12.5.sp, font = LocalFonts.current.mono)
+            Txt(host.connectionSubtitle(), color = Skerry.colors.dim, size = 12.5.sp, font = LocalFonts.current.mono)
             Spacer(Modifier.height(18.dp))
             Txt(stringResource(Res.string.term_password_label), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
             Spacer(Modifier.height(6.dp))

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.PathJumpField
+import app.skerry.ui.files.fileDisplayPath
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sftp_connecting
 import app.skerry.ui.generated.resources.sftp_files_title
@@ -95,6 +96,10 @@ internal fun MobileFilesBreadcrumbRow(
     filterActive: Boolean = false,
 ) {
     var editing by remember(path) { mutableStateOf(false) }
+    // Drawn filtered, edited raw: what the field submits has to be the path the pane is actually in
+    // (a tab or a zero-width character in a directory name is legal on the far side). Same split as
+    // the desktop pane's PathField.
+    val shownPath = fileDisplayPath(path)
     Row(
         Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 4.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -121,7 +126,7 @@ internal fun MobileFilesBreadcrumbRow(
             }
         } else {
             Txt(
-                mobileFilesBreadcrumb(label, path),
+                mobileFilesBreadcrumb(label, shownPath),
                 color = Skerry.colors.dim,
                 size = 12.sp,
                 font = mono,

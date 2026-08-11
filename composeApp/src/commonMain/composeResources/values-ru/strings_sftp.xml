@@ -71,6 +71,8 @@
     <!-- Колонки списка (дата изменения / права) и быстрый фильтр по имени -->
     <string name="sftp_columns">Колонки</string>
     <string name="sftp_col_name">Имя</string>
+    <!-- Row name for an entry whose name is nothing but characters that cannot be drawn -->
+    <string name="sftp_unprintable_name">Непечатаемое имя</string>
     <string name="sftp_col_size">Размер</string>
     <string name="sftp_col_modified">Дата изменения</string>
     <string name="sftp_col_permissions">Права</string>

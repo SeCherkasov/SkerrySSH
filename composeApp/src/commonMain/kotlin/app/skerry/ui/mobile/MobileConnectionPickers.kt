@@ -66,6 +66,7 @@ import app.skerry.ui.generated.resources.conn_protocol_telnet
 import app.skerry.ui.generated.resources.conn_protocol_vnc
 import app.skerry.ui.generated.resources.conn_protocol_rdp
 import app.skerry.ui.generated.resources.conn_protocol_local
+import app.skerry.ui.host.rowLabel
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.AiPolicy
 import app.skerry.ui.ai.shortLabel
@@ -312,7 +313,7 @@ internal fun MobileJumpHostPicker(form: NewConnectionFormState, allHosts: List<H
                 MobileGroupOption(stringResource(Res.string.conn_jump_none), selected = selected == null) { form.jumpHostId = null; menuOpen = false }
                 candidates.forEach { host ->
                     key(host.id) {
-                        MobileGroupOption(host.label, selected = form.jumpHostId == host.id) { form.jumpHostId = host.id; menuOpen = false }
+                        MobileGroupOption(host.rowLabel(), selected = form.jumpHostId == host.id) { form.jumpHostId = host.id; menuOpen = false }
                     }
                 }
             }

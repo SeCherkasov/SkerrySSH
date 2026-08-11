@@ -38,12 +38,14 @@ import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamScopeRef
 import androidx.compose.runtime.collectAsState
+import app.skerry.ui.design.SHORT_ID_CHARS
 import app.skerry.ui.teams.AutoPullTeamsOnOnline
 import app.skerry.ui.generated.resources.lib_teams_sidebar
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_add_first
 import app.skerry.ui.generated.resources.shtail_group_collapse
@@ -69,7 +71,6 @@ import app.skerry.ui.host.ungroupedLabel
 import app.skerry.ui.host.icon
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
-import app.skerry.shared.snippet.sanitizeSnippetValue
 
 /**
  * Host folder header: collapse chevron + icon + name + count. The chevron ([collapsed] ->
@@ -359,21 +360,10 @@ internal fun LiveHostFolder(
  * Peer-authored and never seen by the server (the name travels inside the sealed envelope), so it is
  * sanitized rather than trusted: the label is both drawn and used as the collapse chevron's
  * accessible name, and a bidi override in it would make a folder announce as a space other than the
- * one its hosts belong to. Cut to length first — filtering a name a hostile peer made pathologically
- * long before throwing most of it away is work for nothing.
+ * one its hosts belong to — see [untrustedLabel], which the cap and the filtering come from.
  */
 internal fun spaceLabel(raw: String, fallback: String): String =
-    // sanitizeSnippetValue, not stripUnsafeFormatChars: the latter keeps every C0 control on purpose
-    // (a multi-line snippet has to stay multi-line), and this is a one-line label — a newline or a
-    // NUL in a peer's name has no business in a folder header or in what it announces.
-    // dropLastWhile: cutting to length can land between the halves of an astral character.
-    sanitizeSnippetValue(raw.take(MAX_SPACE_NAME_CHARS).dropLastWhile { it.isHighSurrogate() })
+    untrustedLabel(raw)
         // A name made only of the characters the sanitizer drops leaves nothing to draw, and a blank
         // folder header is one the user cannot tell from any other. Fall back to the space's id.
         .ifBlank { fallback }
-
-/** How much of an id stands in for a name that sanitized away — enough to tell two spaces apart. */
-private const val SHORT_ID_CHARS = 8
-
-/** Cap on a team-space label: a sidebar row shows a fraction of this, and the name is a peer's. */
-internal const val MAX_SPACE_NAME_CHARS = 120

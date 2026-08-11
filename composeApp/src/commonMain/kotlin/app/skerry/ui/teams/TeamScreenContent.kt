@@ -50,6 +50,7 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_accept
 import app.skerry.ui.generated.resources.lib_teams_decline
@@ -76,6 +77,7 @@ import app.skerry.ui.generated.resources.lib_teams_shared_runbooks_count
 import app.skerry.ui.generated.resources.lib_teams_shared_snippets_count
 import app.skerry.ui.generated.resources.lib_teams_synced_never
 import app.skerry.ui.host.rowSubtitle
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.theme.Skerry
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
@@ -184,7 +186,7 @@ private fun TeamHeader(
 ) {
     SectionHeader(
         title = stringResource(Res.string.lib_teams_header_title),
-        subtitle = stringResource(Res.string.lib_teams_header_subtitle, team.name, team.memberCount),
+        subtitle = stringResource(Res.string.lib_teams_header_subtitle, untrustedLabel(team.name), team.memberCount),
         actions = {
             if (!invited) SyncPill(lastSyncedAt, onSync)
             if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
@@ -314,7 +316,7 @@ private fun InviteBanner(tc: TeamsCoordinator, team: TeamUi, busy: Boolean, onAc
             if (p == null) {
                 Txt(stringResource(Res.string.lib_teams_invite_unverified), color = Skerry.colors.sunset, size = 11.5.sp)
             } else {
-                Txt(stringResource(Res.string.lib_teams_invited_by, p.accountId), color = Skerry.colors.dim, size = 11.5.sp)
+                Txt(stringResource(Res.string.lib_teams_invited_by, untrustedLabel(p.accountId)), color = Skerry.colors.dim, size = 11.5.sp)
                 Txt(stringResource(Res.string.lib_teams_invited_fingerprint, p.fingerprint), color = Skerry.colors.cyanBright, size = 11.5.sp, font = mono)
             }
         }
@@ -352,16 +354,18 @@ internal fun SharedRecordsView(
     val records = remember(team.id, scopeId, tick, spaceVault, view) {
         when (view) {
             TeamSharedView.HOSTS -> spaceVault?.let { vault ->
-                VaultHostStore(vault).all().map { SharedRecordUi(it.id, it.label, it.rowSubtitle()) }
+                VaultHostStore(vault).all().map { SharedRecordUi(it.id, it.rowLabel(), it.rowSubtitle()) }
             }
             TeamSharedView.SNIPPETS -> spaceVault?.let { vault ->
-                VaultSnippetStore(vault).all().map { SharedRecordUi(it.id, it.label, it.command) }
+                VaultSnippetStore(vault).all().map { SharedRecordUi(it.id, untrustedLabel(it.label), untrustedLabel(it.command)) }
             }
             else -> null
         } ?: emptyList()
     }
     val items = if (view == TeamSharedView.RUNBOOKS) {
-        runbooks.map { SharedRecordUi(it.id, it.label, runbookSummary(it.steps.size)) }
+        // Not inside the remember above: the second line is a localized string built in the
+        // composition, so the row is rebuilt on recomposition either way.
+        runbooks.map { SharedRecordUi(it.id, untrustedLabel(it.label), runbookSummary(it.steps.size)) }
     } else {
         records
     }
@@ -423,7 +427,7 @@ internal fun SharePicker(
     val sharedIds = remember(ref, kind, tick) { tc.sharedRecordIds(ref.teamId, kind) }
     val items = when (kind) {
         RecordType.HOST ->
-            (hosts?.hosts ?: emptyList()).filter { it.id !in sharedIds }.map { ShareItem(it.id, it.label, "${it.username}@${it.address}") }
+            (hosts?.hosts ?: emptyList()).filter { it.id !in sharedIds }.map { ShareItem(it.id, it.rowLabel(), it.rowSubtitle()) }
         RecordType.SNIPPET ->
             (snippets?.snippets ?: emptyList()).filter { it.id !in sharedIds }.map { ShareItem(it.id, it.snippet.label, it.snippet.command) }
         else ->
