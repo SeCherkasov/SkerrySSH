@@ -1,4 +1,4 @@
-package app.skerry.ui.connection
+package app.skerry.ui.design
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

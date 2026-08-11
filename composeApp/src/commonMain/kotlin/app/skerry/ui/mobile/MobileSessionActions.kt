@@ -13,6 +13,7 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshJump
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
@@ -37,7 +38,7 @@ internal fun openMobileSession(
 ) {
     sessions?.open(
         hostId = host.id,
-        title = host.label,
+        title = host.rowLabel(),
         subtitle = host.connectionSubtitle(),
         target = host.toTarget(jump),
         auth = auth,
@@ -55,7 +56,7 @@ internal fun openMobileRdp(
 ) {
     sessions?.openRdp(
         host.id,
-        host.label,
+        host.rowLabel(),
         host.connectionSubtitle(),
         app.skerry.ui.remote.RdpConnectRequest(
             host = host.address,
@@ -85,7 +86,7 @@ internal fun openMobileVnc(
     auth: app.skerry.shared.vnc.VncAuth,
 ) {
     sessions?.openVnc(
-        host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
+        host.id, host.rowLabel(), host.connectionSubtitle(), host.toTarget(), auth,
         remoteResize = host.vncResizeToWindow,
         onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
     )

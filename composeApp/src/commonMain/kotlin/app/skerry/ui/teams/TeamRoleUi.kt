@@ -23,6 +23,7 @@ import app.skerry.shared.team.TeamRole
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.CancelButton
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.lib_teams_role_admin
@@ -102,7 +103,7 @@ internal fun RolePickerDialog(
     val mono = LocalFonts.current.mono
     TeamsDialogCard(onDismiss) {
         Txt(stringResource(Res.string.lib_teams_role_picker_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-        Txt(accountId, color = Skerry.colors.dim, size = 12.sp, font = mono, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+        Txt(untrustedLabel(accountId), color = Skerry.colors.dim, size = 12.sp, font = mono, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             assignable.forEach { role ->
                 val active = role == current

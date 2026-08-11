@@ -17,6 +17,7 @@ import app.skerry.shared.terminal.TerminalSession
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSharedSessions
 import app.skerry.ui.app.LocalShowTerminal
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.InitialsAvatar
@@ -89,12 +90,12 @@ private fun SharedSessionRow(share: SharedSessionUi, onJoin: () -> Unit) {
         InitialsAvatar(share.hostAccountId, size = 26.dp)
         Column(Modifier.weight(1f)) {
             Txt(
-                share.label.ifBlank { stringResource(Res.string.share_unnamed) },
+                untrustedLabel(share.label).ifBlank { stringResource(Res.string.share_unnamed) },
                 size = 12.5.sp,
                 color = Skerry.colors.text,
             )
             Txt(
-                stringResource(Res.string.share_started_by, share.hostAccountId, share.viewers),
+                stringResource(Res.string.share_started_by, untrustedLabel(share.hostAccountId), share.viewers),
                 size = 11.sp,
                 color = Skerry.colors.dim,
             )
@@ -119,8 +120,10 @@ fun rememberJoinSharedSession(): (SharedSessionUi) -> Unit {
             onOpened = { viewer ->
                 showWatchedSession(
                     sessions = sessions,
-                    title = share.label.ifBlank { unnamed },
-                    subtitle = share.hostAccountId,
+                    // The same filtering the row above got: the tab, the session list and the
+                    // broadcast targets all draw this title from here on.
+                    title = untrustedLabel(share.label).ifBlank { unnamed },
+                    subtitle = untrustedLabel(share.hostAccountId),
                     viewer = viewer,
                     // The pane and the viewer are the same session from here on: the terminal
                     // overlay finds the viewer by the pane it is drawing.

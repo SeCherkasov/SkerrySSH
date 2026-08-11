@@ -191,7 +191,7 @@ fun FileEditorScreen(
     if (confirmDiscard) {
         ConfirmDangerDialog(
             title = stringResource(Res.string.sftp_edit_discard_q),
-            body = stringResource(Res.string.sftp_edit_discard_body, controller.name),
+            body = stringResource(Res.string.sftp_edit_discard_body, fileDisplayName(controller.name)),
             confirmLabel = stringResource(Res.string.sftp_edit_discard),
             onConfirm = { confirmDiscard = false; onClose() },
             onDismiss = { confirmDiscard = false },
@@ -201,7 +201,7 @@ fun FileEditorScreen(
     if (controller.conflict) {
         ConfirmDangerDialog(
             title = stringResource(Res.string.sftp_edit_conflict_q),
-            body = stringResource(Res.string.sftp_edit_conflict_body, controller.name),
+            body = stringResource(Res.string.sftp_edit_conflict_body, fileDisplayName(controller.name)),
             confirmLabel = stringResource(Res.string.sftp_overwrite),
             onConfirm = controller::confirmOverwrite,
             onDismiss = controller::dismissConflict,
@@ -245,9 +245,9 @@ private fun EditorHeader(
             size = 13.sp,
             weight = FontWeight.SemiBold,
         )
-        Txt(controller.name, color = Skerry.colors.textBright, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Txt(fileDisplayName(controller.name), color = Skerry.colors.textBright, size = 12.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Txt(
-            controller.path,
+            fileDisplayPath(controller.path),
             color = Skerry.colors.faint,
             size = 11.sp,
             font = mono,

@@ -1,5 +1,6 @@
 package app.skerry.ui.metrics
 
+import app.skerry.ui.design.untrustedLabel
 import kotlin.math.roundToInt
 
 /**
@@ -140,14 +141,14 @@ fun parseHostMetrics(raw: String): HostMetrics? {
         ?.split(WHITESPACE)?.firstOrNull()?.toDoubleOrNull()?.toLong()
     val loadAverage = section(lines, "@LOAD").firstOrNull()
         ?.split(WHITESPACE)?.take(3)?.takeIf { it.size == 3 }?.joinToString(" ")
-        // Same treatment as OS/kernel: the exec answer is whatever the host chose to send, and this
-        // string reaches the CPU tile, the System card and the alert feed.
+        // The exec answer is whatever the host chose to send, and this string reaches the CPU tile,
+        // the System card and the alert feed.
         ?.let { hostText(it, FACT_MAX_LEN) }
-    // OS/kernel come from the remote (trusted but potentially misbehaving) host — cap the length
-    // so an anomalously long string can't break the info panel layout (defence-in-depth).
+    // OS/kernel come from the remote host and land in the System card — same filter and same cap
+    // as every other field it sends, or a PRETTY_NAME ending in an override draws the row backwards.
     val osName = section(lines, "@OS").firstOrNull { it.startsWith("PRETTY_NAME=") }
-        ?.removePrefix("PRETTY_NAME=")?.trim('"')?.take(FACT_MAX_LEN)?.takeIf { it.isNotBlank() }
-    val kernel = section(lines, "@KERNEL").firstOrNull()?.take(FACT_MAX_LEN)?.takeIf { it.isNotBlank() }
+        ?.removePrefix("PRETTY_NAME=")?.trim('"')?.let { hostText(it, FACT_MAX_LEN) }
+    val kernel = section(lines, "@KERNEL").firstOrNull()?.let { hostText(it, FACT_MAX_LEN) }
     val cpuCount = section(lines, "@CPU").firstOrNull()?.toIntOrNull()
     val net = parseNetCounters(section(lines, "@NET"))
     val processes = parseProcesses(section(lines, "@PROC"))
@@ -202,24 +203,13 @@ private const val NAME_MAX_LEN = 40
 private const val LIST_MAX_ROWS = 8
 
 /**
- * A string coming from the remote host, made safe to draw: control characters (escape sequences
- * that would repaint the screen) removed and the length capped so one anomalous line can't stretch
- * a card. Blank input yields null — the caller drops the row rather than drawing an empty one.
+ * A string coming from the remote host, made safe to draw — [untrustedLabel] with this card's own
+ * cap. A process or container named with a RIGHT-TO-LEFT OVERRIDE draws its own row backwards,
+ * which is how a busy process passes for an idle one at a glance. Blank input yields null: the
+ * caller drops the row rather than drawing an empty one.
  */
 private fun hostText(raw: String, max: Int): String? =
-    raw.filter { it.code >= 0x20 && it.code !in INVISIBLE_CODES && it.code !in BIDI_CODES }
-        .take(max)
-        .takeIf { it.isNotBlank() }
-
-/** DEL and the C1 control block — invisible, and a terminal would act on some of them. */
-private val INVISIBLE_CODES = (0x7F..0x9F) + listOf(0x200B, 0x200C, 0x200D, 0xFEFF)
-
-/**
- * Bidirectional and other Unicode format controls. A process or container named with a
- * RIGHT-TO-LEFT OVERRIDE draws its own row backwards, which is how a busy process passes for an
- * idle one at a glance.
- */
-private val BIDI_CODES = (0x200E..0x200F) + (0x202A..0x202E) + (0x2060..0x2069)
+    untrustedLabel(raw, max).takeIf { it.isNotBlank() }
 
 /**
  * Kernel-backed filesystems `df` reports next to the real ones. They're either RAM (tmpfs), a

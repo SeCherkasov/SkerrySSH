@@ -78,6 +78,7 @@ import app.skerry.ui.generated.resources.term_pane_change_host
 import app.skerry.ui.generated.resources.term_pane_close
 import app.skerry.ui.generated.resources.term_pane_menu
 import app.skerry.ui.generated.resources.term_select_host_placeholder
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.session.PaneDragState
 import app.skerry.ui.session.PaneEdge
 import app.skerry.ui.session.Session
@@ -339,7 +340,7 @@ internal fun PaneHostPicker(onPick: (Host) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Sym("dns", size = 14.sp, color = Skerry.colors.cyanBright)
-                Txt(host.label, color = Skerry.colors.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
+                Txt(host.rowLabel(), color = Skerry.colors.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
             }
         }
     }

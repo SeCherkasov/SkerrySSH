@@ -40,6 +40,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
+import app.skerry.ui.files.fileDisplayName
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sftp_already_exists
 import app.skerry.ui.generated.resources.sftp_cancel
@@ -56,6 +57,10 @@ import app.skerry.ui.generated.resources.sftp_delete_items_q
 import app.skerry.ui.generated.resources.sftp_items_count
 import app.skerry.ui.generated.resources.sftp_move
 import app.skerry.ui.generated.resources.sftp_move_to_q
+import app.skerry.ui.generated.resources.sftp_overwrite
+import app.skerry.ui.generated.resources.sftp_overwrite_many
+import app.skerry.ui.generated.resources.sftp_overwrite_one
+import app.skerry.ui.generated.resources.sftp_overwrite_q
 import app.skerry.ui.generated.resources.sftp_transfer_body
 import app.skerry.ui.generated.resources.sftp_what_single
 import org.jetbrains.compose.resources.stringResource
@@ -65,6 +70,7 @@ import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
@@ -80,6 +86,8 @@ internal fun NameDialog(
     onDismiss: () -> Unit,
     existing: Set<String> = emptySet(),
 ) {
+    // [initial] is the raw name on purpose, unlike every drawn one: this field is edited and
+    // submitted, so it has to hold the name the server actually has (see [fileDisplayName]).
     // Keyed on initial: on a re-show under a different entry (rename without leaving composition) the
     // field must reset to the new name rather than keep the old one.
     var name by remember(initial) { mutableStateOf(initial) }
@@ -158,6 +166,26 @@ internal fun NameDialog(
 }
 
 /**
+ * Confirmation for a transfer that found same-named objects at the destination ([names] are the
+ * clashing entries, chosen by whichever side wrote them). Shared by both shells: the coordinator
+ * behind it is shared, and so is the answer the user gives it.
+ */
+@Composable
+internal fun ConfirmOverwriteDialog(names: List<String>, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    val single = names.singleOrNull()
+    ConfirmDangerDialog(
+        title = stringResource(Res.string.sftp_overwrite_q),
+        // The name is the other side's text and this dialog decides which file stops existing, so
+        // it is drawn the way the listing row is (see [untrustedLabel]).
+        body = if (single != null) stringResource(Res.string.sftp_overwrite_one, fileDisplayName(single))
+        else stringResource(Res.string.sftp_overwrite_many, names.size),
+        confirmLabel = stringResource(Res.string.sftp_overwrite),
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+    )
+}
+
+/**
  * Confirmation for deleting a batch of [items] (F8 on the active pane): a single item — its name,
  * several — a count. The text warns about recursion if the batch contains a directory.
  */
@@ -172,8 +200,8 @@ internal fun ConfirmDeleteItemsDialog(items: List<FileItem>, onConfirm: () -> Un
     }
     val body = when {
         single != null && single.type == FileItemType.Directory ->
-            stringResource(Res.string.sftp_delete_folder_body, single.name)
-        single != null -> stringResource(Res.string.sftp_delete_file_body, single.name)
+            stringResource(Res.string.sftp_delete_folder_body, fileDisplayName(single.name))
+        single != null -> stringResource(Res.string.sftp_delete_file_body, fileDisplayName(single.name))
         hasDir -> stringResource(Res.string.sftp_delete_items_dirs_body, items.size)
         else -> stringResource(Res.string.sftp_delete_items_body, items.size)
     }
@@ -192,7 +220,7 @@ internal fun ConfirmCopyDialog(
     onDismiss: () -> Unit,
 ) {
     val single = items.singleOrNull()
-    val what = if (single != null) stringResource(Res.string.sftp_what_single, single.name) else stringResource(Res.string.sftp_items_count, items.size)
+    val what = if (single != null) stringResource(Res.string.sftp_what_single, fileDisplayName(single.name)) else stringResource(Res.string.sftp_items_count, items.size)
     ConfirmDangerDialog(
         title = stringResource(Res.string.sftp_copy_to_q, destLabel),
         body = stringResource(Res.string.sftp_transfer_body, what, destPath),
@@ -217,7 +245,7 @@ internal fun ConfirmMoveDialog(
     onDismiss: () -> Unit,
 ) {
     val single = items.singleOrNull()
-    val what = if (single != null) stringResource(Res.string.sftp_what_single, single.name) else stringResource(Res.string.sftp_items_count, items.size)
+    val what = if (single != null) stringResource(Res.string.sftp_what_single, fileDisplayName(single.name)) else stringResource(Res.string.sftp_items_count, items.size)
     ConfirmDangerDialog(
         title = stringResource(Res.string.sftp_move_to_q, destLabel),
         body = stringResource(Res.string.sftp_transfer_body, what, destPath),
@@ -323,8 +351,8 @@ internal fun ConfirmDeleteDialog(entry: FileItem, onConfirm: () -> Unit, onDismi
     SftpDialogFrame(onDismiss = onDismiss) {
             Txt(if (isDir) stringResource(Res.string.sftp_delete_folder_q) else stringResource(Res.string.sftp_delete_file_q), color = Skerry.colors.text, size = 14.sp, weight = FontWeight.SemiBold)
             Txt(
-                if (isDir) stringResource(Res.string.sftp_delete_folder_body, entry.name)
-                else stringResource(Res.string.sftp_delete_file_body, entry.name),
+                if (isDir) stringResource(Res.string.sftp_delete_folder_body, fileDisplayName(entry.name))
+                else stringResource(Res.string.sftp_delete_file_body, fileDisplayName(entry.name)),
                 color = Skerry.colors.faint,
                 size = 12.sp,
             )

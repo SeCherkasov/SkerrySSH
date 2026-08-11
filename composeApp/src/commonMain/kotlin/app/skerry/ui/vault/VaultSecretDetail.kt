@@ -71,6 +71,7 @@ import app.skerry.ui.generated.resources.vault_used_by
 import app.skerry.ui.generated.resources.vault_used_by_one
 import app.skerry.ui.generated.resources.vault_used_by_snippets
 import app.skerry.ui.generated.resources.vault_used_by_snippets_one
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.known.shortFingerprint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -249,7 +250,7 @@ internal fun UsedByHosts(hosts: List<Host>, snippetLabels: List<String>, mono: F
             else stringResource(Res.string.vault_used_by, hosts.size),
         )
         FlowRow(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            hosts.forEach { HostPill(it.label, mono) }
+            hosts.forEach { HostPill(it.rowLabel(), mono) }
         }
     }
     // Snippets referencing this secret by name (${{vault:label}}) — a rename/delete breaks them,

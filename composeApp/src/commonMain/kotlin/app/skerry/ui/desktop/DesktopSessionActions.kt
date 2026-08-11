@@ -17,6 +17,7 @@ import app.skerry.shared.ssh.SshJump
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
@@ -190,7 +191,7 @@ internal fun openHostSession(
     state.recordRecentHost(host.id)
     sessions?.connect(
         hostId = host.id,
-        title = host.label,
+        title = host.rowLabel(),
         subtitle = host.connectionSubtitle(),
         target = host.toTarget(jump),
         auth = auth,
@@ -221,7 +222,7 @@ internal fun openPaneSession(
         tabId = tabId,
         paneId = paneId,
         hostId = host.id,
-        title = host.label,
+        title = host.rowLabel(),
         subtitle = host.connectionSubtitle(),
         target = host.toTarget(jump),
         auth = auth,

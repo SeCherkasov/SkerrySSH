@@ -35,10 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.TransferState
 import app.skerry.ui.files.fileBrowserFailureText
+import app.skerry.ui.files.fileDisplayName
 import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_tip_close
@@ -159,6 +161,7 @@ private fun MobileFileRow(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val isDir = entry.type == FileItemType.Directory
+    val shownName = fileDisplayName(entry.name)
     Row(
         Modifier
             .fillMaxWidth()
@@ -169,16 +172,18 @@ private fun MobileFileRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
-        Sym(mobileFileIcon(entry), size = 23.sp, color = if (isDir) Skerry.colors.cyanBright else Skerry.colors.dim)
+        Sym(mobileFileIcon(entry, shownName), size = 23.sp, color = if (isDir) Skerry.colors.cyanBright else Skerry.colors.dim)
         Column(Modifier.weight(1f)) {
-            Txt(entry.name, color = Skerry.colors.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // The server chose this name; the row and the icon read the same sanitized form of it
+            // (see [untrustedLabel]) so neither can claim an extension the other does not.
+            Txt(shownName, color = Skerry.colors.text, size = 14.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
             mobileFileMetaText(entry)?.let { Txt(it, color = Skerry.colors.faint, size = 11.sp) }
         }
         Sym(mobileFileTrailingIcon(entry.type), size = 20.sp, color = Skerry.colors.faint)
     }
     if (menuOpen) {
         MobileActionSheet(
-            title = entry.name,
+            title = shownName,
             actions = buildList {
                 onDownloadHere?.let { dl ->
                     add(MobileSheetAction(stringResource(Res.string.sftp_download_to_device), onClick = dl, icon = "download"))
@@ -226,6 +231,14 @@ private fun MobileFileUpRow(mono: FontFamily, onClick: () -> Unit) {
 }
 
 /**
+ * The file a transfer card names. Blank is not "unprintable": a transfer that failed before it
+ * reported a file has no name yet, and says so with the neutral stand-in.
+ */
+@Composable
+private fun transferName(raw: String): String =
+    if (raw.isBlank()) stringResource(Res.string.ftail_file_fallback) else fileDisplayName(raw)
+
+/**
  * Mobile layout's transfer card (below the list): direction icon + name + percent + bar.
  * Active shows live progress; Failed shows the error with a close button; Idle renders nothing.
  */
@@ -252,7 +265,7 @@ internal fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDis
                     horizontalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
                     Sym(if (up) "upload" else "download", size = 17.sp, color = Skerry.colors.cyan)
-                    Txt(transfer.name, color = Skerry.colors.textBright, size = 12.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Txt(transferName(transfer.name), color = Skerry.colors.textBright, size = 12.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     Txt("$percent%", color = Skerry.colors.dim, size = 11.sp)
                 }
                 Spacer(Modifier.height(8.dp))
@@ -278,7 +291,7 @@ internal fun MobileTransferCard(transfer: TransferState, mono: FontFamily, onDis
                 Txt(
                     stringResource(
                         Res.string.sftp_transfer_error,
-                        transfer.name.ifBlank { stringResource(Res.string.ftail_file_fallback) },
+                        transferName(transfer.name),
                         transferFailureText(transfer.failure),
                     ),
                     color = Skerry.colors.sunset, size = 11.5.sp, maxLines = 6, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))

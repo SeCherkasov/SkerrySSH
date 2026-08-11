@@ -45,6 +45,7 @@ import app.skerry.ui.connection.toSshAuth
 import app.skerry.ui.app.CustomGroup
 import app.skerry.ui.app.GroupDialog
 import app.skerry.ui.host.GroupDialog as GroupEditDialog
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.session.BroadcastPanel
 import app.skerry.ui.session.SessionView
@@ -184,7 +185,7 @@ internal fun DesktopChrome(
         state.recordRecentHost(host.id)
         sessions?.openRdp(
             host.id,
-            host.label,
+            host.rowLabel(),
             host.connectionSubtitle(),
             app.skerry.ui.remote.RdpConnectRequest(
                 host = host.address,
@@ -240,7 +241,7 @@ internal fun DesktopChrome(
                     if (cred != null) {
                         state.recordRecentHost(host.id)
                         sessions?.openVnc(
-                            host.id, host.label, host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
+                            host.id, host.rowLabel(), host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
                             remoteResize = host.vncResizeToWindow,
                             onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
                         )
@@ -442,7 +443,7 @@ internal fun DesktopChrome(
                     pendingVncHost = null
                     state.recordRecentHost(host.id)
                     sessions?.openVnc(
-                        host.id, host.label, host.connectionSubtitle(), host.toTarget(), auth,
+                        host.id, host.rowLabel(), host.connectionSubtitle(), host.toTarget(), auth,
                         remoteResize = host.vncResizeToWindow,
                         onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
                     )
@@ -593,7 +594,7 @@ internal fun DesktopChrome(
                     .orEmpty().ifBlank { stringResource(Res.string.shell_this_session) }
                 val connectPane = LocalConnectPane.current
                 ConfirmActionDialog(
-                    title = stringResource(Res.string.shell_replace_pane_title, pending.host.label),
+                    title = stringResource(Res.string.shell_replace_pane_title, pending.host.rowLabel()),
                     message = stringResource(Res.string.shell_close_pane_message, paneName),
                     confirmLabel = stringResource(Res.string.shell_connect),
                     onConfirm = { connectPane(pending.host, pending.paneId); state.dismissPaneConnect() },

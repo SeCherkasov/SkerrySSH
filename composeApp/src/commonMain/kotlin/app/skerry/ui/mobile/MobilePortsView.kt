@@ -46,6 +46,7 @@ import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.ui.forward.humanRate
 import app.skerry.ui.forward.rateFraction
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.sftp.humanSize
 import app.skerry.ui.tunnel.AutostartFailureBanner
 import app.skerry.ui.tunnel.BindExposureWarning
@@ -215,7 +216,7 @@ private fun LiveMobilePortsBody(
                     val onRemoveRow = remember(entry.id, manager) { { manager.delete(entry.id) } }
                     LiveTunnelCard(
                         entry = entry,
-                        via = hosts?.find(entry.tunnel.hostId)?.label ?: entry.tunnel.hostId,
+                        via = hosts?.find(entry.tunnel.hostId)?.rowLabel() ?: entry.tunnel.hostId,
                         mono = mono,
                         onToggle = onToggle,
                         onEdit = onEditRow,
@@ -352,7 +353,9 @@ private fun MobileTunnelEditorSheet(
     val (badgeBg, badgeFg) = form.direction.badgeColors()
     // The tunnel dials this host over SSH, so remote desktops are not candidates.
     val hostList = hosts?.hosts?.filter { it.connectionType.usesSshAuth } ?: emptyList()
-    val hostName = form.hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label } ?: stringResource(Res.string.ports_select_host)
+    // Filtered once per catalog change: the sheet around it recomposes on every keystroke.
+    val hostOptions = remember(hostList) { hostList.map { it.id to it.rowLabel() } }
+    val hostName = hostOptions.firstOrNull { it.first == form.hostId }?.second ?: stringResource(Res.string.ports_select_host)
 
     MobileBottomSheet(
         onDismiss = onDismiss,
@@ -382,7 +385,7 @@ private fun MobileTunnelEditorSheet(
             Spacer(Modifier.height(14.dp))
             MobileFormField(stringResource(Res.string.ports_field_type)) { PortTypeSelect(form.direction) { form.direction = it } }
             Spacer(Modifier.height(14.dp))
-            MobileFormField(stringResource(Res.string.ports_field_via_host)) { MobileHostPicker(hostName, hostList.map { it.id to it.label }) { form.hostId = it } }
+            MobileFormField(stringResource(Res.string.ports_field_via_host)) { MobileHostPicker(hostName, hostOptions) { form.hostId = it } }
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 MobileFormField(stringResource(Res.string.ports_field_bind_address), Modifier.weight(1f)) { PortInput(form.bindHost, { form.bindHost = it }, TunnelFormState.DEFAULT_BIND_HOST, mono, selectAllOnFocus = form.isDefaultBindHost) }
@@ -475,7 +478,8 @@ private fun MobileServicesSheet(
     // The tunnel dials this host over SSH, so remote desktops are not candidates.
     val hostList = hosts?.hosts?.filter { it.connectionType.usesSshAuth } ?: emptyList()
     var hostId by remember { mutableStateOf(scan.scannedHostId ?: hostList.firstOrNull()?.id) }
-    val hostName = hostId?.let { id -> hostList.firstOrNull { it.id == id }?.label }
+    val hostOptions = remember(hostList) { hostList.map { it.id to it.rowLabel() } }
+    val hostName = hostOptions.firstOrNull { it.first == hostId }?.second
         ?: stringResource(Res.string.ports_select_host)
 
     MobileBottomSheet(
@@ -501,7 +505,7 @@ private fun MobileServicesSheet(
         Txt(stringResource(Res.string.ports_services_hint), color = Skerry.colors.faint, size = 12.sp, lineHeight = 17.sp)
         Spacer(Modifier.height(16.dp))
         MobileFormField(stringResource(Res.string.ports_field_via_host)) {
-            MobileHostPicker(hostName, hostList.map { it.id to it.label }) { hostId = it }
+            MobileHostPicker(hostName, hostOptions) { hostId = it }
         }
         Spacer(Modifier.height(14.dp))
         Box(

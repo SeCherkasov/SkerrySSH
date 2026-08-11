@@ -40,14 +40,11 @@ import app.skerry.ui.files.FKeyBar
 import app.skerry.ui.files.FileEditorScreen
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.TransferCoordinator
+import app.skerry.ui.files.fileDisplayPath
 import app.skerry.ui.files.platformLocalBrowser
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ftail_open_failed
 import app.skerry.ui.generated.resources.sftp_create
-import app.skerry.ui.generated.resources.sftp_overwrite
-import app.skerry.ui.generated.resources.sftp_overwrite_many
-import app.skerry.ui.generated.resources.sftp_overwrite_one
-import app.skerry.ui.generated.resources.sftp_overwrite_q
 import app.skerry.ui.generated.resources.sftp_new_folder
 import app.skerry.ui.generated.resources.sftp_opening
 import app.skerry.ui.generated.resources.sftp_pane_local
@@ -279,7 +276,7 @@ private fun LiveSftpView(
             // address stands in.
             label = WorkBarLabel.Solo(
                 hostName,
-                c?.remote?.path?.let { stringResource(Res.string.sftp_wbar_subtitle, it) } ?: hostLabel,
+                c?.remote?.path?.let { stringResource(Res.string.sftp_wbar_subtitle, fileDisplayPath(it)) } ?: hostLabel,
                 status,
             ),
         ) {
@@ -398,7 +395,7 @@ private fun LiveSftpView(
             LaunchedEffect(pane) { moveTarget = null }
         } else {
             val fromLocal = pane === coord.local
-            val destPath = if (fromLocal) coord.remote.path else coord.local.path
+            val destPath = fileDisplayPath(if (fromLocal) coord.remote.path else coord.local.path)
             ConfirmMoveDialog(
                 items = items,
                 destLabel = if (fromLocal) stringResource(Res.string.sftp_pane_remote) else stringResource(Res.string.sftp_pane_local),
@@ -418,7 +415,7 @@ private fun LiveSftpView(
             LaunchedEffect(pane) { copyTarget = null }
         } else {
             val fromLocal = pane === coord.local
-            val destPath = if (fromLocal) coord.remote.path else coord.local.path
+            val destPath = fileDisplayPath(if (fromLocal) coord.remote.path else coord.local.path)
             ConfirmCopyDialog(
                 items = items,
                 destLabel = if (fromLocal) stringResource(Res.string.sftp_pane_remote) else stringResource(Res.string.sftp_pane_local),
@@ -435,12 +432,8 @@ private fun LiveSftpView(
     // Overwrite conflict: a transfer (F5/F6 or drag) found same-named entries in the destination. Raised
     // by the coordinator after copy confirmation — otherwise we'd silently overwrite without asking.
     c?.overwrite?.let { conflict ->
-        val single = conflict.names.singleOrNull()
-        ConfirmDangerDialog(
-            title = stringResource(Res.string.sftp_overwrite_q),
-            body = if (single != null) stringResource(Res.string.sftp_overwrite_one, single)
-            else stringResource(Res.string.sftp_overwrite_many, conflict.names.size),
-            confirmLabel = stringResource(Res.string.sftp_overwrite),
+        ConfirmOverwriteDialog(
+            names = conflict.names,
             onConfirm = { c.resolveOverwrite(true) },
             onDismiss = { c.resolveOverwrite(false) },
         )

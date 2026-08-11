@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.container.ContainerEntry
 import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.ssh.SshAuth
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.generated.resources.Res
@@ -159,8 +160,8 @@ private fun MobileContainerBrowseResults(browser: ContainerBrowseController?, on
                                     .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onPick(entry) }
                                     .padding(horizontal = 12.dp, vertical = 9.dp),
                             ) {
-                                Txt(entry.name, color = Skerry.colors.text, size = 14.sp)
-                                val detail = listOf(entry.image, entry.status, entry.containers.joinToString(","))
+                                Txt(untrustedLabel(entry.name), color = Skerry.colors.text, size = 14.sp)
+                                val detail = listOf(entry.image, entry.status, entry.containers.joinToString(",")).map(::untrustedLabel)
                                     .filter { it.isNotBlank() }
                                     .joinToString(" · ")
                                 if (detail.isNotEmpty()) Txt(detail, color = Skerry.colors.faint, size = 11.5.sp)

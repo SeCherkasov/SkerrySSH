@@ -36,6 +36,7 @@ import app.skerry.ui.design.InitialsAvatar
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.rememberModalPresence
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.share_allow_input
 import androidx.compose.runtime.rememberCoroutineScope
@@ -194,13 +195,13 @@ internal fun SharePanel(
                 } else {
                     Txt(stringResource(Res.string.share_pick_team), size = 11.sp, color = Skerry.colors.faint)
                     teams.forEach { (id, name) ->
-                        ChipButton(name, color = Skerry.colors.cyan, onClick = { onShare(id, name) }, modifier = Modifier.fillMaxWidth())
+                        ChipButton(untrustedLabel(name), color = Skerry.colors.cyan, onClick = { onShare(id, name) }, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
             ShareUiState.Starting -> Txt(stringResource(Res.string.share_starting), size = 12.sp, color = Skerry.colors.dim)
             is ShareUiState.Live -> {
-                Txt(stringResource(Res.string.share_live, state.teamName), size = 12.sp, color = Skerry.colors.cyanBright)
+                Txt(stringResource(Res.string.share_live, untrustedLabel(state.teamName)), size = 12.sp, color = Skerry.colors.cyanBright)
                 if (state.viewerAccounts.isEmpty()) {
                     Txt(stringResource(Res.string.share_viewers, state.viewers), size = 11.5.sp, color = Skerry.colors.dim)
                 } else {
@@ -213,7 +214,7 @@ internal fun SharePanel(
                         val extra = state.viewerAccounts.size - MAX_SHOWN_VIEWERS
                         Txt(
                             if (extra > 0) stringResource(Res.string.share_viewers, state.viewers)
-                            else state.viewerAccounts.joinToString(", "),
+                            else state.viewerAccounts.joinToString(", ") { untrustedLabel(it) },
                             size = 11.5.sp,
                             color = Skerry.colors.dim,
                             maxLines = 1,
@@ -226,7 +227,7 @@ internal fun SharePanel(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         InitialsAvatar(account, size = 20.dp)
                         Txt(
-                            stringResource(Res.string.share_control_wants, account),
+                            stringResource(Res.string.share_control_wants, untrustedLabel(account)),
                             size = 11.5.sp,
                             color = Skerry.colors.amber,
                             modifier = Modifier.weight(1f),

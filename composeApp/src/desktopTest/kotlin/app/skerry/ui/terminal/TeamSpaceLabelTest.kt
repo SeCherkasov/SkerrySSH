@@ -1,5 +1,6 @@
 package app.skerry.ui.terminal
 
+import app.skerry.ui.design.MAX_UNTRUSTED_LABEL_CHARS
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -36,10 +37,10 @@ class TeamSpaceLabelTest {
         assertEquals("opsprod", spaceLabel("ops\u0000prod", fallback = FALLBACK))
     }
 
-    /** Cut before filtering: a pathologically long name is not scanned in full to be thrown away. */
+    /** A pathologically long name is cut, and not scanned past the bound the filter sets. */
     @Test
     fun `a name longer than the cap is cut to it`() {
-        assertEquals(MAX_SPACE_NAME_CHARS, spaceLabel("o".repeat(5_000), fallback = FALLBACK).length)
+        assertEquals(MAX_UNTRUSTED_LABEL_CHARS, spaceLabel("o".repeat(5_000), fallback = FALLBACK).length)
     }
 
     /**
@@ -48,9 +49,9 @@ class TeamSpaceLabelTest {
      */
     @Test
     fun `the cut is not made through a surrogate pair`() {
-        val name = "o".repeat(MAX_SPACE_NAME_CHARS - 1) + "\uD83D\uDE80"
+        val name = "o".repeat(MAX_UNTRUSTED_LABEL_CHARS - 1) + "\uD83D\uDE80"
         val label = spaceLabel(name, fallback = FALLBACK)
-        assertEquals(MAX_SPACE_NAME_CHARS - 1, label.length)
+        assertEquals(MAX_UNTRUSTED_LABEL_CHARS - 1, label.length)
         assertFalse(label.any { it.isSurrogate() }, "half of the emoji was left in the label")
     }
 
