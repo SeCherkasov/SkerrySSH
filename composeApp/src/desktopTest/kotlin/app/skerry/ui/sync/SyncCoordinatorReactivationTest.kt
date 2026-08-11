@@ -392,7 +392,7 @@ class SyncCoordinatorReactivationTest {
         val client = ReactivatingClient(ownWrap(vault), reactivated = true)
         // A cursor from before the revocation: the reconcile has to reset it, or the re-pull that rebuilds
         // the vault would ask for changes since the tip and get nothing back.
-        val state = InMemorySyncStateStore().also { it.setCursor(account, 42) }
+        val state = InMemorySyncStateStore().also { it.setCursor(ServerLink(serverUrl, account).cursorKey, 42) }
         val sut = SyncCoordinator(
             clientFactory = { client },
             crypto = crypto,

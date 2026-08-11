@@ -44,6 +44,7 @@ import app.skerry.ui.design.FormField
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.fieldName
@@ -159,6 +160,10 @@ fun SyncOnboardingScreen(sync: SyncCoordinator, onDone: () -> Unit) {
                 // in the URL) the typed server/account came back blank. Busy now only adds the
                 // notice on top and disables submit — same pattern as SyncSetupDialog.
                 val busy = status == SyncStatus.Busy
+                // Above everything that comes and goes with the status — the busy notice, the
+                // password-replace decision, the error row — so it is the one node that survives every
+                // transition and can be heard (issue #244).
+                StatusAnnouncer(syncAnnouncement(status))
                 if (busy) {
                     Spacer(Modifier.height(8.dp))
                     SyncStatusNotice("sync", Skerry.colors.cyanBright, stringResource(Res.string.sync_connecting), stringResource(Res.string.sync_connecting_sub))
@@ -260,10 +265,39 @@ private fun SyncChoiceCard(
 }
 
 /**
+ * The error line under a sync form — one composable for every form, because they all say the same thing
+ * in the same place. Takes a nullable message and stays composed when there is none: the announcer has to
+ * outlive the error to be heard when one appears (see [StatusAnnouncer]), and the error arrives while the
+ * focus is still in the field the user submitted from, so without it the form reads as having done
+ * nothing at all (issue #244).
+ *
+ * [announce] is for the caller that already keeps an announcer of its own above the branch this row sits
+ * in — the row would otherwise be the second voice for the same message.
+ */
+@Composable
+internal fun SyncFormError(message: String?, announce: Boolean = true) {
+    if (announce) StatusAnnouncer(message.orEmpty())
+    if (message == null) return
+    Row(
+        Modifier.padding(top = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Sym("error", size = 14.sp, color = Skerry.colors.sunset)
+        // lineHeight is not cosmetic here: a validation message wraps inside the web-access card.
+        Txt(message, color = Skerry.colors.sunset, size = 12.sp, lineHeight = 16.sp)
+    }
+}
+
+/**
  * Sync server connection form (server + accountId + master password + keep connected). Shared by
  * onboarding and the Sync screen: the password goes to [SyncCoordinator] as a CharArray and is wiped there.
  * [busy] — a connect is in flight: submit is disabled (fields stay editable, like [SyncSetupDialog]).
  * Callers must keep the form composed during Busy — leaving composition wipes the typed fields.
+ *
+ * The error row here does not announce itself: both screens that host this form put content of their own
+ * above it (a busy notice, a password-replace decision) that appears and disappears with the same status,
+ * so the announcer that has to survive all of it belongs to the screen, not to this row (issue #244).
  */
 @Composable
 internal fun SyncSetupBody(
@@ -318,12 +352,7 @@ internal fun SyncSetupBody(
         }
     }
 
-    if (errorMessage != null) {
-        Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("error", size = 14.sp, color = Skerry.colors.sunset)
-            Txt(errorMessage, color = Skerry.colors.sunset, size = 12.sp)
-        }
-    }
+    SyncFormError(errorMessage, announce = false)
 
     PrimaryButton(
         stringResource(Res.string.sync_connect),
@@ -452,12 +481,9 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
     SyncFormField(stringResource(Res.string.sync_field_repeat_password)) {
         SyncTextField(confirm, stringResource(Res.string.sync_placeholder_repeat), KeyboardType.Password, masked = true, icon = "key") { confirm = it }
     }
-    if (confirm.isNotEmpty() && !passwordsMatch) {
-        Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("error", size = 14.sp, color = Skerry.colors.sunset)
-            Txt(stringResource(Res.string.sync_passwords_mismatch), color = Skerry.colors.sunset, size = 11.5.sp)
-        }
-    }
+    // The same error line as the form's own, and for the same reason it announces: the mismatch is why
+    // the button below stays disabled, and nothing else says so.
+    SyncFormError(stringResource(Res.string.sync_passwords_mismatch).takeIf { confirm.isNotEmpty() && !passwordsMatch })
 
     Row(
         Modifier.fillMaxWidth().padding(top = 16.dp).clickable { keepConnected = !keepConnected },
@@ -478,12 +504,7 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
         }
     }
 
-    if (errorMessage != null) {
-        Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Sym("error", size = 14.sp, color = Skerry.colors.sunset)
-            Txt(errorMessage, color = Skerry.colors.sunset, size = 12.sp)
-        }
-    }
+    SyncFormError(errorMessage)
 
     PrimaryButton(
         stringResource(Res.string.sync_link_this_device),

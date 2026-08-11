@@ -43,6 +43,8 @@ import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncSetupBody
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.WebAccessCard
+import app.skerry.ui.sync.deviceLabel
+import app.skerry.ui.sync.syncAnnouncement
 import app.skerry.ui.sync.syncFailureText
 import app.skerry.ui.sync.SyncStatusNotice
 import app.skerry.ui.generated.resources.Res
@@ -75,6 +77,7 @@ import app.skerry.ui.generated.resources.sync_this_device_badge
 import app.skerry.ui.generated.resources.sync_confirm
 import app.skerry.ui.generated.resources.sync_cancel
 import app.skerry.ui.generated.resources.sync_revoke
+import app.skerry.ui.generated.resources.sync_device_unnamed
 import app.skerry.ui.generated.resources.web_access_label
 import app.skerry.ui.generated.resources.stail_reenroll_prompt_title
 import app.skerry.ui.generated.resources.stail_reenroll_prompt_cancel
@@ -91,6 +94,8 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Toggle
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.StatusAnnouncer
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -194,13 +199,19 @@ private fun SyncBody(sync: SyncCoordinator) {
     val busy = status == SyncStatus.Busy
     var stable by remember { mutableStateOf<SyncStatus?>(if (busy) null else status) }
     if (!busy) stable = status
+    // The state changes on its own here too (issue #244), and this node is the only one that survives
+    // every transition. Leaving a failure to the form below does not work: coming from Online, the form
+    // is INSERTED with the message already in it, and an insertion is not a change — nothing is
+    // announced. So this is the single voice for the whole screen, and [SyncSetupBody]'s own error row
+    // draws without announcing.
+    StatusAnnouncer(syncAnnouncement(status))
     if (busy) SyncStatusNotice("sync", Skerry.colors.cyanBright, stringResource(Res.string.sync_syncing), stringResource(Res.string.sync_connecting_sub))
     when (val s = stable) {
         // Opened mid-operation (e.g. session restore right after unlock): nothing stable to show
         // yet besides the notice above. Busy itself never lands in [stable].
         null, SyncStatus.Busy -> {}
         is SyncStatus.Online -> if (!busy) {
-            SyncStatusNotice("cloud_done", Skerry.colors.moss, stringResource(Res.string.sync_connected_title, s.accountId), stringResource(Res.string.sync_session_stats, s.lastPushed, s.lastPulled))
+            SyncStatusNotice("cloud_done", Skerry.colors.moss, stringResource(Res.string.sync_connected_title, untrustedLabel(s.accountId)), stringResource(Res.string.sync_session_stats, s.lastPushed, s.lastPulled))
             // Identifiers for Teams invites (accountId + share-key fingerprint) - mobile merges
             // Account+Sync into one screen, so this block lives here (desktop has a separate Account tab).
             AccountIdentityBlock(s.accountId, Modifier.padding(top = 12.dp))
@@ -229,7 +240,7 @@ private fun SyncBody(sync: SyncCoordinator) {
         // typed fields even though the form never visually left the screen.
         is SyncStatus.Configured, is SyncStatus.Failed, SyncStatus.Disabled -> {
             if (s is SyncStatus.Configured) {
-                SyncStatusNotice("cloud_off", Skerry.colors.amber, stringResource(Res.string.sync_linked_title, s.accountId), stringResource(Res.string.sync_reconnect_password))
+                SyncStatusNotice("cloud_off", Skerry.colors.amber, stringResource(Res.string.sync_linked_title, untrustedLabel(s.accountId)), stringResource(Res.string.sync_reconnect_password))
                 Spacer(Modifier.height(16.dp))
             }
             SyncSetupBody(
@@ -375,7 +386,10 @@ private fun MobileDeviceRow(device: RemoteDevice, onRevoke: (() -> Unit)?) {
     ) {
         Sym("devices", size = 20.sp, color = Skerry.colors.dim)
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Txt(device.name, color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium)
+            Txt(
+                deviceLabel(device, stringResource(Res.string.sync_device_unnamed)),
+                color = Skerry.colors.text, size = 13.5.sp, weight = FontWeight.Medium,
+            )
             if (device.current) Txt(stringResource(Res.string.sync_this_device_badge), color = Skerry.colors.moss, size = 10.sp)
         }
         if (onRevoke != null) {

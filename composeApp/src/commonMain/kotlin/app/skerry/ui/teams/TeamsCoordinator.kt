@@ -4,6 +4,7 @@ import app.skerry.shared.sync.SyncEngine
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSignal
+import app.skerry.shared.sync.KeyedStateStore
 import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.SyncException
 import app.skerry.shared.team.AccountIdentity
@@ -26,6 +27,7 @@ import app.skerry.shared.team.accountKeyFingerprint
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
+import app.skerry.ui.sync.TeamLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -93,8 +95,11 @@ data class InvitePreview(val accountId: String, val fingerprint: String)
  * orchestrates.
  */
 class TeamsCoordinator(
-    private val session: () -> SyncSession?,
-    private val client: () -> TeamClient?,
+    /**
+     * The live session and the team client it belongs to, as ONE value: two suppliers can be read either
+     * side of a connect to another server, pairing one server's client with the other's session (#240).
+     */
+    private val live: () -> TeamLink?,
     private val vault: Vault,
     private val crypto: VaultCrypto,
     private val teamVaults: TeamVaults,
@@ -216,7 +221,10 @@ class TeamsCoordinator(
                 // Cursor guard, like the account watch: our own echo doesn't run a redundant cycle.
                 // The cursor is the team's, shared by all its spaces, so any space lagging behind it
                 // has something to fetch.
-                if (spacesOf(signal.teamId).any { signal.cursor > teamState.cursor(it.key) }) syncTeam(signal.teamId)
+                // One read of the link for the whole guard, like every other place that pairs a session
+                // with the server it is on.
+                val key = live()?.linkKey
+                if (spacesOf(signal.teamId).any { signal.cursor > teamState.cursor(teamCursorKey(key, it)) }) syncTeam(signal.teamId)
             }
             is SyncSignal.Shares -> onSharesChanged?.invoke(signal.teamId)
             SyncSignal.Membership -> scope.launch { refresh() }
@@ -252,8 +260,7 @@ class TeamsCoordinator(
 
     /** Reread teams from the server, open active teams' vaults, publish identity on first login. */
     suspend fun refresh() {
-        val s = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
             // Publish identity idempotently: without it we can't be invited to a team.
@@ -272,8 +279,7 @@ class TeamsCoordinator(
     }
 
     suspend fun members(teamId: String): List<TeamMember> {
-        val s = session() ?: return emptyList()
-        val c = client() ?: return emptyList()
+        val (s, c) = live() ?: return emptyList()
         return try {
             c.members(s, teamId)
         } catch (e: CancellationException) {
@@ -286,8 +292,7 @@ class TeamsCoordinator(
 
     /** Create a team: id is client-side, teamKey is local; the server learns only the id. */
     suspend fun createTeam(name: String) {
-        val s = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
             publishIdentity(s, c)
@@ -300,8 +305,7 @@ class TeamsCoordinator(
 
     /** Invite step 1: the invitee's key + fingerprint for verification over a trusted channel. */
     suspend fun previewInvite(accountId: String): InvitePreview? {
-        val s = session() ?: run { markError(TeamsFailure.NotConnected); return null }
-        val c = client() ?: run { markError(TeamsFailure.NotConnected); return null }
+        val (s, c) = live() ?: run { markError(TeamsFailure.NotConnected); return null }
         return try {
             val keys = c.fetchPublicKey(s, accountId)
             if (keys == null) {
@@ -320,8 +324,7 @@ class TeamsCoordinator(
 
     /** Invite step 2: seal+sign teamKey+name to the invitee's key and create an invite membership with role [role]. */
     suspend fun invite(teamId: String, accountId: String, role: TeamRole) {
-        val s = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         val entry = keyStore.get(teamId) ?: return markError(TeamsFailure.KeyMissing)
         val teamKey = entry.dataKey() ?: return markError(TeamsFailure.KeyMissing)
         op {
@@ -347,8 +350,7 @@ class TeamsCoordinator(
 
     /** Change a member's role (owner/admin; the server enforces anti-escalation). */
     suspend fun changeRole(teamId: String, accountId: String, role: TeamRole) {
-        val s = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         op {
             c.changeRole(s, teamId, accountId, role)
             refreshUnlocked(s, c)
@@ -357,8 +359,7 @@ class TeamsCoordinator(
 
     /** Team audit log (owner/admin); on error — [lastError] and an empty list. */
     suspend fun teamActivity(teamId: String): List<TeamActivityEntry> {
-        val s = session() ?: return emptyList()
-        val c = client() ?: return emptyList()
+        val (s, c) = live() ?: return emptyList()
         return try {
             c.teamActivity(s, teamId)
         } catch (e: CancellationException) {
@@ -385,8 +386,7 @@ class TeamsCoordinator(
         reportSession(hostId, TeamSessionKind.RECORD, durationSec.coerceAtLeast(0))
 
     private fun reportSession(hostId: String, kind: TeamSessionKind, durationSec: Long?) {
-        val s = session() ?: return
-        val c = client() ?: return
+        val (s, c) = live() ?: return
         if (!reportSessionsEnabled()) return
         // Everything past this point runs off the caller's thread. This is called straight from a
         // Connect click, and finding the owning space means decrypting the account's team records and
@@ -420,7 +420,7 @@ class TeamsCoordinator(
             }
 
     /** The signed-in account, for marking our own actions in the activity feed. */
-    fun selfAccountId(): String? = session()?.accountId
+    fun selfAccountId(): String? = live()?.session?.accountId
 
     /**
      * Names of the records shared in this team, per share space: `scopeId -> recordId -> name`
@@ -448,8 +448,7 @@ class TeamsCoordinator(
      * missing/forged (signature invalid, wrong team, or not addressed to us).
      */
     suspend fun acceptPreview(teamId: String): InvitePreview? {
-        val s = session() ?: run { markError(TeamsFailure.NotConnected); return null }
-        val c = client() ?: run { markError(TeamsFailure.NotConnected); return null }
+        val (s, c) = live() ?: run { markError(TeamsFailure.NotConnected); return null }
         if (!vault.isUnlocked) { markError(TeamsFailure.VaultLocked); return null }
         return try {
             val verified = openVerifiedInvite(s, c, teamId) ?: run { markError(TeamsFailure.KeyMissing); return null }
@@ -466,8 +465,7 @@ class TeamsCoordinator(
 
     /** Accept an invite: open+verify the signed envelope, save the key at its epoch, pull records. */
     suspend fun accept(teamId: String) {
-        val s = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
             // Reuse the invite acceptPreview already opened+verified (no second listTeams/fetchPublicKey),
@@ -489,13 +487,12 @@ class TeamsCoordinator(
     suspend fun decline(teamId: String) = leave(teamId)
 
     suspend fun leave(teamId: String) {
-        val self = session()?.accountId ?: return markError(TeamsFailure.NotConnected)
+        val self = live()?.session?.accountId ?: return markError(TeamsFailure.NotConnected)
         removeMember(teamId, self)
     }
 
     suspend fun removeMember(teamId: String, accountId: String) {
-        val sess = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (sess, c) = live() ?: return markError(TeamsFailure.NotConnected)
         op {
             // Which scopes the member holds has to be read before the removal: the server drops their
             // grants along with the membership, and afterwards there is no way to tell which keys they
@@ -528,8 +525,7 @@ class TeamsCoordinator(
     }
 
     suspend fun deleteTeam(teamId: String) {
-        val sess = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (sess, c) = live() ?: return markError(TeamsFailure.NotConnected)
         op {
             c.deleteTeam(sess, teamId)
             forgetTeamLocally(teamId)
@@ -541,8 +537,7 @@ class TeamsCoordinator(
 
     /** Create a scope with its own key: what is shared into it stays unreadable outside its grants. */
     suspend fun createScope(teamId: String, name: String) {
-        val s = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         if (scopesUnsupported) return markError(TeamsFailure.ScopesUnsupported)
         op {
@@ -554,8 +549,7 @@ class TeamsCoordinator(
     }
 
     suspend fun deleteScope(teamId: String, scopeId: String) {
-        val s = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         op {
             spaces.deleteScope(s, c, teamId, scopeId)
             refreshUnlocked(s, c)
@@ -564,8 +558,7 @@ class TeamsCoordinator(
 
     /** Give a team member access to a scope: its current key, sealed and signed to them. */
     suspend fun grantScope(teamId: String, scopeId: String, accountId: String) {
-        val s = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         if (scopesUnsupported) return markError(TeamsFailure.ScopesUnsupported)
         op {
@@ -579,8 +572,7 @@ class TeamsCoordinator(
      * their copy of the old key, so anything shared afterwards must be under a new one.
      */
     suspend fun revokeScope(teamId: String, scopeId: String, accountId: String) {
-        val s = session() ?: return markError(TeamsFailure.NotConnected)
-        val c = client() ?: return markError(TeamsFailure.NotConnected)
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
             c.revokeScope(s, teamId, scopeId, accountId)
@@ -600,8 +592,7 @@ class TeamsCoordinator(
      * renders the second as the first tells a manager the scope is unshared when it may not be.
      */
     suspend fun scopeGrants(teamId: String, scopeId: String): List<String>? {
-        val s = session() ?: return null
-        val c = client() ?: return null
+        val (s, c) = live() ?: return null
         return try {
             c.scopeGrants(s, teamId, scopeId).map { it.accountId }
         } catch (e: CancellationException) {
@@ -667,15 +658,19 @@ class TeamsCoordinator(
 
     /** Sync one share space (scoped pull+push via the shared SyncEngine). */
     suspend fun syncSpace(ref: TeamScopeRef) {
-        val s = session() ?: return
-        val c = client() ?: return
+        // The link is read ONCE, with the session and the client it belongs to: the cursor this cycle
+        // advances has to be the one belonging to the server this cycle talked to. Re-reading it after the
+        // lock — which suspends — files server A's progress under server B's key when a connect landed in
+        // between, and B then skips records it never received (the shape of issues #240 and #242).
+        val link = live() ?: return
+        val (s, c) = link
         val spaceVault = spaces.vaultResettingStale(ref) ?: return
         syncMutex.withLock {
             try {
                 val engine = SyncEngine(
                     TeamScopedSyncClient(c, ref),
                     spaceVault,
-                    KeyedStateStore(teamState, ref.key),
+                    KeyedStateStore(teamState, teamCursorKey(link.linkKey, ref)),
                     settings = { SyncSettings() },
                 )
                 val outcome = engine.sync(s)
@@ -718,7 +713,11 @@ class TeamsCoordinator(
     private fun forgetTeamLocally(teamId: String) {
         // Read the spaces first: removing the TEAM record takes the nested scope keys with it, and
         // their cursors would then never be cleared (a re-join would resume mid-stream and miss records).
-        val spaceKeys = spacesOf(teamId).map { it.key }
+        // Every link the space was ever synced on, not just the one live now: the removal that leads here
+        // follows a network round trip, so the session can be gone or on another server by the time it
+        // runs — and a tip left standing is one a later re-join resumes from, missing everything below it.
+        val suffixes = spacesOf(teamId).map { it.key }
+        val spaceKeys = teamState.keys().filter { key -> suffixes.any { key == it || key.endsWith("\u0000$it") } }
         keyStore.remove(teamId)
         teamVaults.resetTeam(teamId) // the team's vault and every scope vault under it
         spaceKeys.forEach { teamState.setCursor(it, 0) }
@@ -913,11 +912,12 @@ class TeamsCoordinator(
     private fun Exception.toFailure(): TeamsFailure = (this as? SyncException)?.kind.toTeamsFailure()
 }
 
-/** [SyncStateStore] with a fixed key — so SyncEngine keeps a per-space cursor. */
-private class KeyedStateStore(
-    private val backing: SyncStateStore,
-    private val key: String,
-) : SyncStateStore {
-    override fun cursor(accountId: String): Long = backing.cursor(key)
-    override fun setCursor(accountId: String, cursor: Long) = backing.setCursor(key, cursor)
-}
+/**
+ * Where a team space's delta cursor is filed: the link this device is on, then the space.
+ *
+ * The space id alone is a key two servers can share — a team id is echoed by whichever server answers, so
+ * two of them would share one cursor and the second one's first pull would start at the first one's tip
+ * (issue #242, in the team store). With no live session there is nothing to sync anyway; the empty prefix
+ * keeps this total and cannot collide with a real link key, which starts with the url's length.
+ */
+internal fun teamCursorKey(linkKey: String?, ref: TeamScopeRef): String = "${linkKey.orEmpty()}\u0000${ref.key}"

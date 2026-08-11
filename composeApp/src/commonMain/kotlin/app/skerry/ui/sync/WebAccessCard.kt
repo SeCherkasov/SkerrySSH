@@ -29,9 +29,11 @@ import app.skerry.ui.design.ConfirmActionDialog
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.web_access_announce
 import app.skerry.ui.generated.resources.web_access_cancel
 import app.skerry.ui.generated.resources.web_access_change
 import app.skerry.ui.generated.resources.web_access_checking
@@ -111,6 +113,9 @@ fun WebAccessCard(sync: SyncCoordinator, modifier: Modifier = Modifier) {
                 result = r
                 if (r is WebAccessChange.Success) {
                     editing = false
+                    // Same snapshot as the bump: `enabled` still holds the pre-change answer, and the
+                    // announcer below would say the state the user just left (see its comment).
+                    checked = false
                     reload++
                 }
             }
@@ -125,6 +130,19 @@ fun WebAccessCard(sync: SyncCoordinator, modifier: Modifier = Modifier) {
             .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
     ) {
         WebAccessHeader(enabled, checked)
+        // Setting, rotating or removing the password succeeds silently: the form collapses and the state
+        // line above flips, which a sighted user sees and nobody else does. The state line itself is not a
+        // live region on purpose — it settles from "Checking…" every time the card is opened, and that
+        // would be chatter — so the confirmation is announced here, and only after an action (issue #244).
+        // `checked` is the gate that keeps it truthful: the action clears it in the same snapshot that asks
+        // for the re-read, so nothing is spoken until `enabled` is the answer from after the change.
+        StatusAnnouncer(
+            if (result is WebAccessChange.Success && checked) {
+                stringResource(Res.string.web_access_announce, webAccessStateText(enabled, checked))
+            } else {
+                ""
+            },
+        )
         // The address to open, printed verbatim: the page lives on the user's own server, and a
         // paraphrase ("your sync server") is not something you can type into a browser. Null with no
         // server configured, which is what leaves both the link and the Open button out.
@@ -181,6 +199,7 @@ fun WebAccessCard(sync: SyncCoordinator, modifier: Modifier = Modifier) {
                     result = r
                     if (r is WebAccessChange.Success) {
                         editing = false
+                        checked = false
                         reload++
                     }
                 }
@@ -190,16 +209,26 @@ fun WebAccessCard(sync: SyncCoordinator, modifier: Modifier = Modifier) {
     }
 }
 
+/** The state line: what the card exists to report, in one word. */
+@Composable
+private fun webAccessStateText(enabled: Boolean?, checked: Boolean): String = when {
+    !checked -> stringResource(Res.string.web_access_checking)
+    enabled == true -> stringResource(Res.string.web_access_state_on)
+    enabled == false -> stringResource(Res.string.web_access_state_off)
+    // Unknown is its own state and not "off": an account may well have web access on, this device
+    // just couldn't read it.
+    else -> stringResource(Res.string.web_access_state_unknown)
+}
+
 /** Icon, name, and the one fact the card exists to report: whether web access is on. */
 @Composable
 private fun WebAccessHeader(enabled: Boolean?, checked: Boolean) {
-    val (stateText, stateColor) = when {
-        !checked -> stringResource(Res.string.web_access_checking) to Skerry.colors.faint
-        enabled == true -> stringResource(Res.string.web_access_state_on) to Skerry.colors.moss
-        enabled == false -> stringResource(Res.string.web_access_state_off) to Skerry.colors.faint
-        // Unknown is its own state and not "off": an account may well have web access on, this
-        // device just couldn't read it.
-        else -> stringResource(Res.string.web_access_state_unknown) to Skerry.colors.amber
+    val stateText = webAccessStateText(enabled, checked)
+    val stateColor = when {
+        !checked -> Skerry.colors.faint
+        enabled == true -> Skerry.colors.moss
+        enabled == false -> Skerry.colors.faint
+        else -> Skerry.colors.amber
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Sym("public", size = 20.sp, color = Skerry.colors.cyanBright)
@@ -268,16 +297,7 @@ private fun WebAccessMessage(form: WebPasswordForm, result: WebAccessChange?) {
             else -> null
         }
     }
-    if (message != null) {
-        Row(
-            Modifier.padding(top = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Sym("error", size = 14.sp, color = Skerry.colors.sunset)
-            Txt(message, color = Skerry.colors.sunset, size = 11.5.sp, lineHeight = 15.sp)
-        }
-    }
+    SyncFormError(message)
 }
 
 /**

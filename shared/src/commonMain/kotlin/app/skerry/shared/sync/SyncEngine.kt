@@ -14,19 +14,52 @@ import app.skerry.shared.vault.VaultRecord
 private val TYPES_NEWER_THAN_SOME_SERVERS =
     setOf(RecordType.TRASH, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN, RecordType.TRUSTED_CA)
 
-/** Where the delta sync cursor (`lastSyncVersion`) is stored, per device/account. */
+/**
+ * Where the delta sync cursor (`lastSyncVersion`) is stored, one per [key].
+ *
+ * The key is opaque to the store, and what it names is the caller's invariant: a cursor is only ever a
+ * position in ONE server's history, so anything two servers can share is the wrong key. The account vault
+ * files it under the whole link (`ServerLink.cursorKey`) — one account id names different accounts on a
+ * home and a work instance, and sharing a cursor between them means every record at or below the other's
+ * tip is never pulled (issue #242). A team space is keyed on the link AND the space, for the same
+ * reason and through [KeyedStateStore].
+ */
 interface SyncStateStore {
-    fun cursor(accountId: String): Long
-    fun setCursor(accountId: String, cursor: Long)
+    fun cursor(key: String): Long
+    fun setCursor(key: String, cursor: Long)
+
+    /**
+     * Every key this store holds a cursor for. For the caller that has to forget a thing whose cursor it
+     * filed under more than one link — a team space is synced on whichever server the device was on, and
+     * clearing only the current one leaves a stale tip for a later re-join to resume from.
+     */
+    fun keys(): Set<String>
 }
 
 /** In-memory cursor (tests / ephemeral sessions). File persistence is a separate implementation. */
 class InMemorySyncStateStore : SyncStateStore {
     private val cursors = mutableMapOf<String, Long>()
-    override fun cursor(accountId: String): Long = cursors[accountId] ?: 0L
-    override fun setCursor(accountId: String, cursor: Long) {
-        cursors[accountId] = cursor
+    override fun cursor(key: String): Long = cursors[key] ?: 0L
+    override fun setCursor(key: String, cursor: Long) {
+        cursors[key] = cursor
     }
+    override fun keys(): Set<String> = cursors.keys.toSet()
+}
+
+/**
+ * A [SyncStateStore] pinned to one [key], so a [SyncEngine] — which knows only the session it syncs —
+ * keeps its cursor where its caller decided, not where the session's account id would put it.
+ */
+class KeyedStateStore(
+    private val backing: SyncStateStore,
+    private val pinnedKey: String,
+) : SyncStateStore {
+    // The passed key is the caller's idea of where its cursor goes; ignoring it is the whole point. The
+    // property is named apart from the parameter on purpose — with both called `key`, dropping one
+    // `this.` would turn this into a pass-through and silently re-key every cursor.
+    override fun cursor(key: String): Long = backing.cursor(pinnedKey)
+    override fun setCursor(key: String, cursor: Long) = backing.setCursor(pinnedKey, cursor)
+    override fun keys(): Set<String> = setOf(pinnedKey)
 }
 
 /**

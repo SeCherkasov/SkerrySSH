@@ -110,6 +110,7 @@
 
     <!-- 团队（TeamsView） -->
     <string name="lib_teams_sidebar">团队</string>
+    <string name="lib_teams_unnamed_space">未命名空间</string>
     <string name="lib_teams_invite">邀请</string>
     <string name="lib_teams_members">成员</string>
     <string name="lib_teams_recent_activity">最近活动</string>

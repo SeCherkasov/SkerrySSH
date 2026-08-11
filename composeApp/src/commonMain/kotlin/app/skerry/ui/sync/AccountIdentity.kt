@@ -26,6 +26,7 @@ import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sync_account_id_label
 import app.skerry.ui.generated.resources.sync_copied
@@ -60,7 +61,14 @@ fun AccountIdentityBlock(accountId: String, modifier: Modifier = Modifier) {
         modifier.fillMaxWidth().clip(RoundedCornerShape(9.dp)).border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(9.dp)).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        IdentityRow(stringResource(Res.string.sync_account_id_label), accountId, mono, copied == accountId) { copied = accountId }
+        // Drawn filtered, copied raw. The id is a paired device's server answer, so a bidi override in it
+        // would draw as a different account — but the copy is pasted into a Teams invite and looked up
+        // verbatim, and a filtered copy is an id that names nobody (or, at 120 chars, someone else).
+        IdentityRow(
+            stringResource(Res.string.sync_account_id_label),
+            accountId, mono, copied == accountId,
+            display = untrustedLabel(accountId),
+        ) { copied = accountId }
         if (fingerprint != null) {
             IdentityRow(stringResource(Res.string.sync_sharing_fingerprint_label), fingerprint, mono, copied == fingerprint, display = elideFingerprint(fingerprint)) { copied = fingerprint }
         }

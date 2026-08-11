@@ -34,6 +34,7 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_cancel
 import app.skerry.ui.generated.resources.settings_confirm
@@ -58,12 +59,15 @@ import app.skerry.ui.generated.resources.settings_sync_syncing
 import app.skerry.ui.generated.resources.settings_sync_syncing_desc
 import app.skerry.ui.generated.resources.settings_this_device
 import app.skerry.ui.generated.resources.settings_what_syncs
+import app.skerry.ui.generated.resources.sync_device_unnamed
 import app.skerry.ui.generated.resources.web_access_label
 import app.skerry.ui.sync.AccountCardModel
 import app.skerry.ui.sync.AccountIdentityBlock
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.WebAccessCard
 import app.skerry.ui.sync.accountCardModelLocalized
+import app.skerry.ui.sync.deviceLabel
+import app.skerry.ui.sync.syncAnnouncement
 import app.skerry.ui.sync.syncFailureText
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -96,6 +100,9 @@ internal fun SyncSection(state: DesktopDesignState) {
 @Composable
 private fun LiveSyncSection(sync: app.skerry.ui.sync.SyncCoordinator, state: DesktopDesignState) {
     val status = sync.status.collectAsState().value
+    // Above the `when`, so the node that announces survives the card being swapped for another one; the
+    // cards themselves come and go with the state they show (issue #244).
+    StatusAnnouncer(syncAnnouncement(status))
     when (status) {
         // Transient states keep the status-card look; everything else is the account card.
         SyncStatus.Busy -> SyncStatusCard("sync", Skerry.colors.cyanBright, stringResource(Res.string.settings_sync_syncing), stringResource(Res.string.settings_sync_syncing_desc)) {}
@@ -117,9 +124,10 @@ private fun LiveSyncSection(sync: app.skerry.ui.sync.SyncCoordinator, state: Des
                     GhostButton(stringResource(Res.string.settings_sync_now), onClick = { sync.syncNow() })
                 }
             }
-            // Identifiers for Teams invites (accountId + sharing-key fingerprint); model.title ==
-            // accountId while a session is active.
-            if (model.connected) AccountIdentityBlock(model.title, Modifier.padding(top = 12.dp))
+            // Identifiers for Teams invites (accountId + sharing-key fingerprint). The RAW id, not the
+            // card's title: the title is filtered for drawing, and this block's copy button hands the
+            // value to a team owner who looks it up verbatim.
+            if (status is SyncStatus.Online) AccountIdentityBlock(status.accountId, Modifier.padding(top = 12.dp))
         }
     }
     WhatSyncsHeader()
@@ -235,7 +243,7 @@ private fun LinkedDevices(sync: app.skerry.ui.sync.SyncCoordinator, onLink: () -
         else -> devices.forEach { d ->
             DeviceRow(
                 icon = "devices",
-                name = d.name,
+                name = deviceLabel(d, stringResource(Res.string.sync_device_unnamed)),
                 sub = if (d.current) stringResource(Res.string.settings_device_sub_current) else stringResource(Res.string.settings_device_sub_other),
                 thisDevice = d.current,
                 onRevoke = if (d.current || d.revoked) null else {

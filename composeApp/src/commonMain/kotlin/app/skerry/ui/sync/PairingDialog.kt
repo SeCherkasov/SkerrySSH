@@ -50,6 +50,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.secure.SecureScreen
@@ -133,14 +134,11 @@ fun PairingOfferContent(sync: SyncCoordinator) {
     }
 
     val mono = LocalFonts.current.mono
+    // Outside the `when`: the failure replaces the "generating…" row, so an announcer inside that branch
+    // would be inserted with its message already set — an insertion, which announces nothing (issue #244).
+    StatusAnnouncer(error.orEmpty())
     when {
-        error != null -> Row(
-            Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Sym("error", size = 14.sp, color = Skerry.colors.sunset)
-            Txt(error!!, color = Skerry.colors.sunset, size = 11.5.sp)
-        }
+        error != null -> SyncFormError(error, announce = false)
 
         offer == null -> Row(
             Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalArrangement = Arrangement.Center,

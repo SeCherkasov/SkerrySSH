@@ -83,7 +83,7 @@ private const val TYPE_CONTROL_REQUEST: Byte = 6
 private const val TYPE_CONTROL_STATE: Byte = 7
 
 /** Account ids are capped like everywhere else; a longer one is a peer making things up. */
-private const val MAX_ACCOUNT_CHARS = 320
+private const val MAX_ACCOUNT_CHARS = app.skerry.shared.sync.MAX_ACCOUNT_ID_CHARS
 
 /**
  * AAD binding a sealed frame to one share and one direction. Includes a protocol version so a later

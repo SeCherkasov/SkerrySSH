@@ -23,6 +23,7 @@ import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.initializeVaultCrypto
+import app.skerry.ui.sync.TeamLink
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -143,8 +144,7 @@ class TeamsCoordinatorRotationTest {
     private fun carolKeys() = AccountKeys(crypto.newSharingKeyPair().publicKey, crypto.newSigningKeyPair().publicKey)
 
     private fun coordinator(f: Fixture, client: TeamClient) = TeamsCoordinator(
-        session = { SyncSession(self, "access", "refresh") },
-        client = { client },
+        live = { TeamLink(SyncSession(self, "access", "refresh"), client, "test-link") },
         vault = f.vault,
         crypto = crypto,
         teamVaults = f.teamVaults,

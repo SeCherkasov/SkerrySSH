@@ -190,6 +190,7 @@
     <string name="settings_change_account_pw_note">Changes the password on every synced device. Others must sign in again with the new password.</string>
     <string name="settings_change_account_pw_submit">Change password</string>
     <string name="settings_change_account_pw_err_rewrap">Account password changed, but this device must reconnect with the new password.</string>
+    <string name="settings_password_link_moved">The device linked to another server while this was open. Reopen and try again.</string>
 
     <!-- Keyboard section -->
     <string name="settings_keyboard_subtitle">Application and terminal shortcuts.</string>

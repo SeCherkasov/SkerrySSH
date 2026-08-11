@@ -83,6 +83,7 @@
     <string name="sync_confirm">确认</string>
     <string name="sync_cancel">取消</string>
     <string name="sync_revoke">撤销</string>
+    <string name="sync_device_unnamed">未命名设备</string>
 
     <!-- 桌面端对话框 -->
     <string name="sync_setup_dialog_desc">端到端加密。Skerry 永远不会看到你的明文数据 — 主密码只留在你的设备上。</string>
@@ -137,6 +138,8 @@
     <string name="web_access_state_off">未设置</string>
     <string name="web_access_state_unknown">无法读取状态</string>
     <string name="web_access_checking">检查中…</string>
+    <!-- 设置/更改/移除后给屏幕阅读器的确认；%1$s — 上面的状态之一 -->
+    <string name="web_access_announce">网页访问：%1$s</string>
     <string name="web_access_set">设置密码</string>
     <string name="web_access_change">修改</string>
     <string name="web_access_open">打开</string>

@@ -4,15 +4,14 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.skerry.shared.share.SessionShareClient
 import app.skerry.shared.share.SessionShareCodec
 import app.skerry.shared.share.SharedSessionInfo
 import app.skerry.shared.share.SharedSessionViewer
 import app.skerry.shared.share.shareMetaAad
 import app.skerry.shared.sync.SyncException
-import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.VaultCrypto
+import app.skerry.ui.sync.ShareLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -42,8 +41,12 @@ data class SharedSessionUi(
  */
 @Stable
 class SharedSessionsController(
-    private val client: () -> SessionShareClient?,
-    private val session: () -> SyncSession?,
+    /**
+     * The relay and the session it belongs to, as ONE value — see [app.skerry.ui.sync.ShareLink]:
+     * two suppliers can be read either side of a connect and pair one server's client with the
+     * other's session (issue #240).
+     */
+    private val liveLink: () -> ShareLink?,
     /** Teams to look in, as (id, name) — the ones this account is an active member of. */
     private val teams: () -> List<Pair<String, String>>,
     private val teamKey: (String) -> DataKey?,
@@ -84,12 +87,12 @@ class SharedSessionsController(
 
     /** Re-reads every team's directory. A refresh already in flight is replaced. */
     fun refresh() {
-        val shareClient = client()
-        val syncSession = session()
-        if (shareClient == null || syncSession == null) {
+        val link = liveLink()
+        if (link == null) {
             shares = emptyList()
             return
         }
+        val (syncSession, shareClient) = link
         refreshJob?.cancel()
         val mine = ++refreshGeneration
         refreshJob = scope.launch {
@@ -143,13 +146,13 @@ class SharedSessionsController(
         onOpened: (SharedSessionViewer) -> Unit,
         onFailed: (ShareFailure) -> Unit,
     ) {
-        val shareClient = client()
-        val syncSession = session()
+        val link = liveLink()
         val key = teamKey(share.teamId)
-        if (shareClient == null || syncSession == null) {
+        if (link == null) {
             reportFailure(ShareFailure.NotConnected, onFailed)
             return
         }
+        val (syncSession, shareClient) = link
         if (key == null) {
             reportFailure(ShareFailure.NoTeamKey, onFailed)
             return

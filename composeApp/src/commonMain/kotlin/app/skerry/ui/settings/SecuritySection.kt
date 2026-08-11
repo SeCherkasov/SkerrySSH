@@ -38,6 +38,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.generated.resources.Res
@@ -98,6 +99,7 @@ import app.skerry.ui.generated.resources.settings_change_account_pw_submit
 import app.skerry.ui.generated.resources.settings_change_account_pw_title
 import app.skerry.ui.generated.resources.settings_security_account_password
 import app.skerry.ui.generated.resources.settings_security_account_password_desc
+import app.skerry.ui.generated.resources.settings_password_link_moved
 import app.skerry.ui.sync.AccountPasswordChange
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.sync.SyncFailureReason
@@ -408,6 +410,10 @@ internal fun ChangeMasterPasswordDialog(
             FormField(stringResource(Res.string.settings_change_pw_confirm), uppercase = false) {
                 SyncField(placeholder = "••••••••", value = confirm, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, secret = true, onSubmit = submit) { confirm = it }
             }
+            // The rotation fails asynchronously with the focus still in a password field, so this line has
+            // to be heard as well as seen; the announcer stays composed so the error is a change to it and
+            // not an insertion (issue #244).
+            StatusAnnouncer(error.orEmpty())
             if (error != null) Txt(error, color = Skerry.colors.storm, size = 11.5.sp, modifier = Modifier.padding(top = 10.dp))
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
@@ -477,6 +483,7 @@ internal fun ChangeAccountPasswordDialog(
         is AccountPasswordChange.LocalRewrapFailed -> stringResource(Res.string.settings_change_account_pw_err_rewrap)
         is AccountPasswordChange.Failed -> syncFailureText(SyncStatus.Failed(r.reason, r.detail))
         is AccountPasswordChange.NotConfigured -> syncFailureText(SyncStatus.Failed(SyncFailureReason.ConnectFailed))
+        is AccountPasswordChange.LinkMoved -> stringResource(Res.string.settings_password_link_moved)
         // Success never renders (the coroutine closed the dialog); null is the untouched state — both
         // fall through to input validation. Exhaustive over the sealed type so a new variant won't
         // silently land in a validation message.
@@ -510,6 +517,10 @@ internal fun ChangeAccountPasswordDialog(
             FormField(stringResource(Res.string.settings_change_pw_confirm), uppercase = false) {
                 SyncField(placeholder = "••••••••", value = confirm, icon = "lock_reset", keyboardType = KeyboardType.Password, imeAction = ImeAction.Done, secret = true, onSubmit = submit) { confirm = it; result = null }
             }
+            // The rotation fails asynchronously with the focus still in a password field, so this line has
+            // to be heard as well as seen; the announcer stays composed so the error is a change to it and
+            // not an insertion (issue #244).
+            StatusAnnouncer(error.orEmpty())
             if (error != null) Txt(error, color = Skerry.colors.storm, size = 11.5.sp, modifier = Modifier.padding(top = 10.dp))
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),
