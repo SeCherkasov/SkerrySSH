@@ -124,6 +124,35 @@ class TestDigest(SandboxCase):
         self.assertEqual(before, state.tree_digest("all", self.cwd),
                          "committing changes HEAD, not content — a gated tree stays gated")
 
+    def test_committing_a_deletion_does_not_invalidate(self):
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.box.write("shared/src/commonMain/kotlin/B.kt", "val b = 1\n")
+        self.box.commit("two files")
+        os.remove(os.path.join(self.cwd, "shared/src/commonMain/kotlin/B.kt"))
+        before = state.tree_digest("all", self.cwd)
+        self.box.commit("drop one")
+        self.assertEqual(before, state.tree_digest("all", self.cwd),
+                         "a deleted file is gone either way — the commit only records that")
+
+    def test_committing_a_rename_does_not_invalidate(self):
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.box.commit("one file")
+        os.remove(os.path.join(self.cwd, "shared/src/commonMain/kotlin/A.kt"))
+        self.box.write("shared/src/commonMain/kotlin/Moved.kt", "val a = 1\n")
+        before = state.tree_digest("all", self.cwd)
+        self.box.commit("move it")
+        self.assertEqual(before, state.tree_digest("all", self.cwd),
+                         "the hole this closes: a gate green before the commit reopened after it")
+
+    def test_deleting_a_file_still_invalidates(self):
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.box.write("shared/src/commonMain/kotlin/B.kt", "val b = 1\n")
+        self.box.commit("two files")
+        before = state.tree_digest("all", self.cwd)
+        os.remove(os.path.join(self.cwd, "shared/src/commonMain/kotlin/B.kt"))
+        self.assertNotEqual(before, state.tree_digest("all", self.cwd),
+                            "deleting code is an edit like any other")
+
     def test_revert_restores_the_digest(self):
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
         original = state.tree_digest("all", self.cwd)

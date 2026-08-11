@@ -108,8 +108,15 @@ def is_test(path: str) -> bool:
     return any(marker in path for marker in TEST_MARKERS)
 
 
-def _hash_file(root: str, path: str) -> str:
-    """Git's own blob id for a file on disk.
+class _Absent:
+    """Sentinel for a path that is tracked but no longer on disk. Not a content id."""
+
+
+ABSENT = _Absent()
+
+
+def _hash_file(root: str, path: str) -> str | _Absent:
+    """Git's own blob id for a file on disk, or [ABSENT] if it is no longer there.
 
     It has to be git's, not just any hash: entries from the index arrive as blob ids, and a file
     that keeps its content while moving from untracked to tracked must keep its content id too.
@@ -121,7 +128,7 @@ def _hash_file(root: str, path: str) -> str:
         header = f"blob {len(data)}\0".encode()
         return hashlib.sha1(header + data).hexdigest()
     except OSError:
-        return "absent"  # deleted in the worktree — a change like any other
+        return ABSENT
 
 
 def worktree_entries(cwd: str | None = None) -> dict[str, str]:
@@ -148,8 +155,17 @@ def worktree_entries(cwd: str | None = None) -> dict[str, str]:
         if code != 0:
             continue
         for path in out.split("\0"):
-            if path:
-                entries[path] = _hash_file(root, path)
+            if not path:
+                continue
+            content_id = _hash_file(root, path)
+            # A file deleted in the worktree is dropped rather than recorded as missing: after the
+            # commit the path leaves the index entirely, so recording it either way would make the
+            # commit look like an edit — the same hole a non-git hash used to open, one step later.
+            # Deleting still moves the digest, because the path stops being in the set at all.
+            if content_id is ABSENT:
+                entries.pop(path, None)
+            else:
+                entries[path] = content_id
     return entries
 
 
