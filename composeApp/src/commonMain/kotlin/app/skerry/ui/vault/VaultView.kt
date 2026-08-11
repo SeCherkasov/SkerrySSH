@@ -60,6 +60,7 @@ import app.skerry.ui.generated.resources.vault_import_certificate
 import app.skerry.ui.generated.resources.vault_link_key_file
 import app.skerry.ui.generated.resources.vault_sidebar_header
 import app.skerry.ui.host.HostDraft
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.identity.CredentialManagerController
@@ -185,7 +186,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                                     inspector = inspector,
                                     usage = credentials.usageOf(credential.id),
                                     usedBy = VaultPresentation.usedByLabel(
-                                        hostLabels = VaultPresentation.hostsUsing(credential.id, hosts).map { it.label },
+                                        hostLabels = VaultPresentation.hostsUsing(credential.id, hosts).map { it.rowLabel() },
                                         snippetCount = VaultPresentation.snippetsUsing(credential.label, snippetList).size,
                                     ),
                                     mono = mono,

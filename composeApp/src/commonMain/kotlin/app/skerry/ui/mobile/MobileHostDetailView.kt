@@ -27,8 +27,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.design.sanitizeServerText
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.rowSubtitle
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.host.section
 import app.skerry.shared.host.Host
 import app.skerry.ui.generated.resources.Res
@@ -52,6 +55,7 @@ import app.skerry.ui.generated.resources.shell_details
 import app.skerry.ui.generated.resources.shell_edit_host
 import app.skerry.ui.generated.resources.shell_duplicate_host
 import app.skerry.ui.generated.resources.shell_delete_host
+import app.skerry.ui.terminal.MAX_NOTE_CHARS
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.design.HLine
@@ -78,7 +82,7 @@ data class HostDetailRow(val label: String, val value: String, val mono: Boolean
  */
 @Composable
 fun mobileHostDetailRows(host: Host, findHost: (String) -> Host? = { null }): List<HostDetailRow> = listOfNotNull(
-    HostDetailRow(stringResource(Res.string.shtail_host_address), host.address, mono = true),
+    HostDetailRow(stringResource(Res.string.shtail_host_address), untrustedLabel(host.address), mono = true),
     HostDetailRow(stringResource(Res.string.shtail_host_port), host.port.toString(), mono = true),
     HostDetailRow(
         stringResource(Res.string.shtail_host_auth),
@@ -87,7 +91,14 @@ fun mobileHostDetailRows(host: Host, findHost: (String) -> Host? = { null }): Li
     ),
     jumpRouteLabel(host, findHost)?.let { HostDetailRow(stringResource(Res.string.shtail_host_jump), it, mono = false) },
     HostDetailRow(stringResource(Res.string.shtail_host_group), host.group?.takeIf { it.isNotBlank() } ?: ungroupedLabel(), mono = false),
-    host.notes?.takeIf { it.isNotBlank() }?.let { HostDetailRow(stringResource(Res.string.shtail_host_notes), it, mono = false) },
+    // A note is free-form prose: it keeps its lines, and is capped like every other peer string.
+    host.notes?.takeIf { it.isNotBlank() }?.let {
+        HostDetailRow(
+            stringResource(Res.string.shtail_host_notes),
+            sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true),
+            mono = false,
+        )
+    },
 )
 
 /**
@@ -128,7 +139,7 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
                 Sym("dns", size = 32.sp, color = Skerry.colors.cyanBright)
             }
             Spacer(Modifier.height(12.dp))
-            Txt(host.label, color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
+            Txt(host.rowLabel(), color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
             Spacer(Modifier.height(3.dp))
             Txt(
                 host.rowSubtitle(),

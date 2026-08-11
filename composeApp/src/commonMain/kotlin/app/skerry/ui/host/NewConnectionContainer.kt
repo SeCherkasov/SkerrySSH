@@ -31,6 +31,7 @@ import app.skerry.ui.connection.ContainerBrowseController
 import app.skerry.ui.connection.ContainerBrowseStatus
 import app.skerry.ui.connection.containerBrowseFailureText
 import app.skerry.ui.connection.toSshAuth
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.AuthMode
 import app.skerry.ui.host.NewConnectionFormState
 import app.skerry.ui.identity.CredentialManagerController
@@ -161,8 +162,8 @@ private fun ContainerBrowseResults(browser: ContainerBrowseController?, onPick: 
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Txt(entry.name, color = Skerry.colors.text, size = 12.5.sp, modifier = Modifier.weight(1f))
-                                val detail = listOf(entry.image, entry.status, entry.containers.joinToString(","))
+                                Txt(untrustedLabel(entry.name), color = Skerry.colors.text, size = 12.5.sp, modifier = Modifier.weight(1f))
+                                val detail = listOf(entry.image, entry.status, entry.containers.joinToString(",")).map(::untrustedLabel)
                                     .filter { it.isNotBlank() }
                                     .joinToString(" · ")
                                 if (detail.isNotEmpty()) Txt(detail, color = Skerry.colors.faint, size = 11.sp)

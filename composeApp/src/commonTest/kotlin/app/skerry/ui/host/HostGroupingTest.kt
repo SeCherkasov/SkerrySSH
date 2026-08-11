@@ -176,6 +176,24 @@ class HostRowSubtitleTest {
         assertEquals("10.0.0.5:5901", h.rowSubtitle())
     }
 
+    /**
+     * The name a row is drawn under, when the profile came from a team member: filtered, and never
+     * blank — a row with nothing in it is one neither the eye nor a screen reader can place.
+     * Escapes, not the characters themselves.
+     */
+    @Test
+    fun row_label_drops_a_bidi_override() {
+        assertEquals("web10-", host("a").copy(label = "web\u202E10-").rowLabel())
+    }
+
+    @Test
+    fun row_label_falls_back_to_the_address_then_to_the_id() {
+        val noName = host("a").copy(label = "\u202E\u200B", address = "10.0.0.5")
+        assertEquals("10.0.0.5", noName.rowLabel())
+        val nothingDrawable = host("h-shared-4f2a91").copy(label = "\u202E", address = "\u200B")
+        assertEquals("h-shared", nothingDrawable.rowLabel())
+    }
+
     @Test
     fun a_local_shell_shows_its_shell_path_or_a_name() {
         val shell = host("c", type = ConnectionType.LOCAL).copy(username = "", address = "/bin/zsh", port = 0)

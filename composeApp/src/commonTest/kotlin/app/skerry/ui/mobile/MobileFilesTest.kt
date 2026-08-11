@@ -57,11 +57,13 @@ class MobileFilesTest {
 
     @Test
     fun leading_icon_maps_by_type_and_script_extension() {
-        assertEquals("folder", mobileFileIcon(item("html", FileItemType.Directory)))
-        assertEquals("link", mobileFileIcon(item("current", FileItemType.Symlink)))
-        assertEquals("description", mobileFileIcon(item("nginx.conf", FileItemType.File)))
+        // The name is passed separately on purpose: the row draws a filtered form of it, and the
+        // icon has to read the same string it does.
+        assertEquals("folder", mobileFileIcon(item("html", FileItemType.Directory), "html"))
+        assertEquals("link", mobileFileIcon(item("current", FileItemType.Symlink), "current"))
+        assertEquals("description", mobileFileIcon(item("nginx.conf", FileItemType.File), "nginx.conf"))
         // Shell script: terminal icon.
-        assertEquals("terminal", mobileFileIcon(item("deploy.sh", FileItemType.File)))
+        assertEquals("terminal", mobileFileIcon(item("deploy.sh", FileItemType.File), "deploy.sh"))
     }
 
     // Row trailing icon (the action shown by the layout)

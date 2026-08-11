@@ -74,6 +74,7 @@ import app.skerry.ui.generated.resources.vault_subtitle_key_file_cert
 import app.skerry.ui.generated.resources.vault_subtitle_password
 import app.skerry.ui.generated.resources.vault_subtitle_private_key
 import app.skerry.ui.generated.resources.vault_title
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -232,7 +233,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                             credential = credential,
                             usage = credentials.usageOf(credential.id),
                             usedBy = VaultPresentation.usedByLabel(
-                                hostLabels = VaultPresentation.hostsUsing(credential.id, hosts).map { it.label },
+                                hostLabels = VaultPresentation.hostsUsing(credential.id, hosts).map { it.rowLabel() },
                                 snippetCount = VaultPresentation.snippetsUsing(credential.label, snippetList).size,
                             ),
                             mono = mono,

@@ -86,6 +86,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Caret and select-on-focus for a field whose value is a caller-owned `String` | `ui/design/FieldDraft`: `rememberFieldDraft` + `Modifier.fieldFocus`, told whether the field is masked and single-line so it applies the never-select rules itself; `rememberSeededDraft` for a find or filter bar, which selects its query only while it is the one the bar opened with. A field that owns its own `TextFieldValue` and selects on *open* (`PathJumpField`, `TerminalSearchBar`) is the other, deliberate shape — don't hand-roll a third |
 | Tunnel/snippet form state (desktop and mobile) | `TunnelFormState`, `SnippetFormState` |
 | Secret display | `VaultPresentation.secretStyle` |
+| One line of text a server or a team member wrote | `ui/design/UntrustedText`: `untrustedLabel` (row names, host labels, team and space names, container and metric rows) and `sanitizeServerText` for the longer multi-line kind (a prompt, a failure reason). Cap, drop the control and format characters, cut without splitting a surrogate pair. A profile's own free-form note keeps its lines: same helper, `sanitizeServerText(note, MAX_NOTE_CHARS, allowNewlines = true)`. Don't write a fourth variant — `spaceLabel`, `Host.rowLabel` and `HostMetrics.hostText` are all this one |
 | Terminal screen state (incl. scrollback search) | `ui/terminal/TerminalScreenState` |
 | Tiled session panes (split/resize/navigate) | `ui/session/PaneLayout` |
 | Remote-desktop screen | `ui/remote/RemoteDesktopController`, `RemoteDesktopScreenState` |

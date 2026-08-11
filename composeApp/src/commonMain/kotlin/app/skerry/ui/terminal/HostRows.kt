@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import app.skerry.ui.host.rowLabel
 import app.skerry.ui.host.rowSubtitle
 import app.skerry.shared.host.Host
 import app.skerry.ui.app.DesktopDesignState
@@ -49,6 +50,8 @@ import app.skerry.ui.design.MenuItem
 import app.skerry.ui.design.MenuPanel
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.sanitizeServerText
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_menu_delete
 import app.skerry.ui.generated.resources.term_menu_duplicate
@@ -90,8 +93,11 @@ internal fun TeamHostRow(host: Host, mono: FontFamily) {
     ) {
         Sym(host.connectionType.icon, size = 14.sp, color = Skerry.colors.faint)
         Column(Modifier.weight(1f)) {
-            Txt(host.label, color = Skerry.colors.dim, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Txt(host.rowSubtitle(), color = Skerry.colors.faint, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Filtered once per profile, not once per repaint of a list that draws every row it has.
+            val name = remember(host) { host.rowLabel() }
+            val subtitle = remember(host) { host.rowSubtitle() }
+            Txt(name, color = Skerry.colors.dim, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Txt(subtitle, color = Skerry.colors.faint, size = 10.5.sp, font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -119,13 +125,15 @@ internal fun RecentHostRow(host: Host, mono: FontFamily) {
     ) {
         Sym(host.connectionType.icon, size = 14.sp, color = Skerry.colors.faint)
         Column(Modifier.weight(1f)) {
+            val name = remember(host) { host.rowLabel() }
+            val subtitle = remember(host) { host.rowSubtitle() }
             Txt(
-                host.label,
+                name,
                 color = Skerry.colors.dim, size = 12.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Txt(
-                host.rowSubtitle(),
+                subtitle,
                 color = Skerry.colors.faint, size = 10.5.sp, font = mono,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
@@ -180,7 +188,7 @@ internal fun HostRow(
             },
     ) {
         HostEntryRow(
-            label = host.label,
+            label = remember(host) { host.rowLabel() },
             // Selection highlight: marks the row clicked in double-click mode (and the most recently
             // connected one in single-click mode). Distinct from the live-connection status dot.
             selected = host.id == selectedHostId,
@@ -216,7 +224,9 @@ internal fun DropLine() {
 @Composable
 internal fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily) {
     HostEntryRow(
-        label = host.name,
+        // Design data, not a peer's — but [HostEntryRow] draws its label as given, so it is filtered
+        // here like every other caller's.
+        label = untrustedLabel(host.name),
         selected = state.selectedHost == host.name,
         dot = host.status.color,
         badge = host.badge,
@@ -237,7 +247,8 @@ private const val NOTE_TOOLTIP_DELAY_MS = 450L
  * [onEdit]/[onDuplicate]/[onDelete] are provided (live catalog) or a snippet can be run on the host
  * ([host] != null and [LocalSnippets] is present), a trailing "⋮" button opens a menu (Run
  * snippet.../Edit/Duplicate/Delete); its click is intercepted before [onClick], so opening the menu
- * doesn't trigger a connection. "Run snippet..." opens the snippet picker and runs it on [host] via
+ * doesn't trigger a connection. [label] is drawn as given: a caller holding a profile passes
+ * [app.skerry.ui.host.rowLabel], never [app.skerry.shared.host.Host.label] itself. "Run snippet..." opens the snippet picker and runs it on [host] via
  * [LocalRunSnippetOnHost]. A profile carrying [Host.notes] shows them as a hover tooltip.
  */
 @Composable
@@ -282,8 +293,13 @@ internal fun HostEntryRow(
     // would still collect the row's 8dp item spacing and shift the label sideways on hover.
     Box(Modifier.fillMaxWidth()) {
         val note = host?.notes
+        // A shared profile's note is its author's text; it keeps its lines (prose), but not the
+        // characters that would let it draw as something else, and not more of them than a tooltip
+        // can hold — the field has no cap of its own.
+        val shownNote = remember(note) { note?.let { sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true) } }
         // Suppressed while the row's own popups are up, so the note doesn't land on top of them.
-        if (noteVisible && !note.isNullOrBlank() && !menuOpen && !snippetPickerOpen) HoverTooltip(note)
+        val popupOpen = menuOpen || snippetPickerOpen
+        if (noteVisible && !popupOpen && !shownNote.isNullOrBlank()) HoverTooltip(shownNote)
         Row(
             Modifier
                 .fillMaxWidth()
@@ -306,6 +322,8 @@ internal fun HostEntryRow(
             Dot(dot)
             Sym(icon, size = 13.sp, color = Skerry.colors.faint)
             Txt(
+                // Already sanitized by the caller ([app.skerry.ui.host.rowLabel]); filtering again
+                // here would only repeat the scan on the sidebar's longest list.
                 label,
                 color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim, size = 11.5.sp, font = mono,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -366,3 +384,6 @@ internal fun HostEntryRow(
         }
     }
 }
+
+/** How much of a profile's note a tooltip or a detail row will draw. */
+internal const val MAX_NOTE_CHARS = 600

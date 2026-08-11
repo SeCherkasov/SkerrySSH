@@ -43,6 +43,7 @@ import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.PathJumpField
 import app.skerry.ui.files.fileBrowserFailureText
+import app.skerry.ui.files.fileDisplayPath
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_tip_close
 import app.skerry.ui.generated.resources.ftail_fkey_copy
@@ -294,7 +295,8 @@ private fun PathField(
     var editing by remember(pane) { mutableStateOf(false) }
     if (!editing) {
         Txt(
-            pane.path,
+            // Drawn only — the editing branch below keeps the real path, which is what is submitted.
+            fileDisplayPath(pane.path),
             color = Skerry.colors.textBright,
             size = 11.5.sp,
             font = mono,

@@ -4,6 +4,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshJump
 import app.skerry.shared.vault.Credential
+import app.skerry.ui.host.rowLabel
 
 /**
  * Why a ProxyJump chain could not be assembled. Typed (not a message string) so every surface
@@ -99,7 +100,7 @@ fun jumpRouteLabel(host: Host, findHost: (String) -> Host?): String? {
     while (true) {
         if (!visited.add(jumpId)) break
         val hop = findHost(jumpId)
-        labels += hop?.label ?: "?"
+        labels += hop?.rowLabel() ?: "?"
         jumpId = hop?.jumpHostId ?: break
     }
     return labels.asReversed().joinToString(" → ")

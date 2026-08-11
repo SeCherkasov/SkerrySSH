@@ -44,6 +44,28 @@ class HostConnectTest {
         assertEquals("deploy@example.com:2222", host(address = "example.com", port = 2222, username = "deploy").connectionSubtitle())
     }
 
+    /**
+     * Every field spliced into the caption belongs to whoever wrote the profile, and a shared one
+     * was written by a team member: a bidi override in the username reverses the line the user
+     * reads before typing a password into it. Escapes, not the characters themselves.
+     */
+    @Test
+    fun subtitle_drops_a_bidi_override_in_the_username() {
+        assertEquals("root@example.com:22", host(address = "example.com", username = "ro\u202Eot").connectionSubtitle())
+    }
+
+    @Test
+    fun subtitle_drops_the_zero_width_formatters_in_the_address() {
+        assertEquals("root@example.com:22", host(address = "exam\u200Bple.com").connectionSubtitle())
+    }
+
+    /** A local shell has no host to name; a path made only of such characters must not blank it. */
+    @Test
+    fun local_subtitle_falls_back_when_the_path_filters_away() {
+        val local = host(address = "\u202E\u200B").copy(connectionType = ConnectionType.LOCAL)
+        assertEquals("local shell", local.connectionSubtitle())
+    }
+
     @Test
     fun container_target_carries_the_spec_and_the_host_fields() {
         val profile = host().copy(

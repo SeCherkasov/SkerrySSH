@@ -1,5 +1,7 @@
 package app.skerry.ui.connection
 
+import app.skerry.ui.design.sanitizeServerText
+
 /**
  * One banner or notice line's worth of transport diagnostics. Passed to [sanitizeServerText] with
  * newlines disallowed, so a multi-line reason folds into one line instead of being wrapped or

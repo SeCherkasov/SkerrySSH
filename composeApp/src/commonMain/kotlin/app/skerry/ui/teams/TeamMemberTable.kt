@@ -28,6 +28,7 @@ import app.skerry.ui.design.InitialsAvatar
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_col_last_seen
 import app.skerry.ui.generated.resources.lib_teams_col_member
@@ -93,7 +94,7 @@ private fun MemberRow(row: TeamMemberRowUi, now: Long, scopesLoading: Boolean, o
         ) {
             InitialsAvatar(member.accountId, size = 28.dp)
             Txt(
-                member.accountId,
+                untrustedLabel(member.accountId),
                 color = if (invited) Skerry.colors.dim else Skerry.colors.text,
                 size = 12.5.sp,
                 font = mono,
@@ -152,7 +153,7 @@ private fun ScopeTag(name: String) {
             .border(1.dp, Skerry.colors.line, RoundedCornerShape(20.dp))
             .padding(horizontal = 9.dp, vertical = 2.dp),
     ) {
-        Txt("#$name", color = Skerry.colors.dim, size = 10.5.sp, font = LocalFonts.current.mono, maxLines = 1)
+        Txt("#${untrustedLabel(name)}", color = Skerry.colors.dim, size = 10.5.sp, font = LocalFonts.current.mono, maxLines = 1)
     }
 }
 

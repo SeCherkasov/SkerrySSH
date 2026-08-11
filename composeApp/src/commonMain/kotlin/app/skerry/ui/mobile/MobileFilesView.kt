@@ -29,6 +29,7 @@ import app.skerry.ui.files.FileEditController
 import app.skerry.ui.files.FileEditorScreen
 import app.skerry.ui.files.FilePaneState
 import app.skerry.ui.files.TransferCoordinator
+import app.skerry.ui.files.fileDisplayPath
 import app.skerry.ui.files.platformLocalBrowser
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.ftail_local_label
@@ -37,18 +38,15 @@ import app.skerry.ui.generated.resources.sftp_connecting
 import app.skerry.ui.generated.resources.sftp_create
 import app.skerry.ui.generated.resources.sftp_create_directory
 import app.skerry.ui.generated.resources.sftp_new_folder
-import app.skerry.ui.generated.resources.sftp_overwrite
-import app.skerry.ui.generated.resources.sftp_overwrite_many
-import app.skerry.ui.generated.resources.sftp_overwrite_one
-import app.skerry.ui.generated.resources.sftp_overwrite_q
 import app.skerry.ui.generated.resources.sftp_unavailable
 import app.skerry.ui.generated.resources.sftp_upload_file
+import app.skerry.ui.sftp.ConfirmOverwriteDialog
 import app.skerry.ui.sftp.pickDownloadTarget
 import app.skerry.ui.sftp.pickUploadSource
+import app.skerry.ui.sftp.safeDownloadName
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
-import app.skerry.ui.sftp.ConfirmDangerDialog
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.sftp.NameDialog
@@ -159,7 +157,7 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                     // the transfer card updates) and doesn't needlessly invalidate the list.
                     val onTransfer = remember(c, uiScope) {
                         { item: FileItem ->
-                            uiScope.launch { pickDownloadTarget(item.name)?.let { c.downloadToTarget(item, it) } }
+                            uiScope.launch { pickDownloadTarget(safeDownloadName(item.name))?.let { c.downloadToTarget(item, it) } }
                             Unit
                         }
                     }
@@ -252,12 +250,8 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
         // Overwrite conflict (download/upload found a same-named object at the destination) — the
         // same confirmation dialog as desktop; the coordinator is shared, so [overwrite] state is shared too.
         c?.overwrite?.let { conflict ->
-            val single = conflict.names.singleOrNull()
-            ConfirmDangerDialog(
-                title = stringResource(Res.string.sftp_overwrite_q),
-                body = if (single != null) stringResource(Res.string.sftp_overwrite_one, single)
-                else stringResource(Res.string.sftp_overwrite_many, conflict.names.size),
-                confirmLabel = stringResource(Res.string.sftp_overwrite),
+            ConfirmOverwriteDialog(
+                names = conflict.names,
                 onConfirm = { c.resolveOverwrite(true) },
                 onDismiss = { c.resolveOverwrite(false) },
             )

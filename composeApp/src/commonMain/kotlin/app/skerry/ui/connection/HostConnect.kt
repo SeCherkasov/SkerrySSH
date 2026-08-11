@@ -9,6 +9,7 @@ import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vnc.VncAuth
+import app.skerry.ui.design.untrustedLabel
 
 /**
  * Pure helpers wiring a saved host profile to a live session. Kept separate from UI so the
@@ -39,10 +40,14 @@ fun Host.toTarget(jump: SshJump? = null): SshTarget =
  */
 fun Host.connectionSubtitle(): String {
     val spec = container?.takeIf { connectionType == ConnectionType.CONTAINER && it.isComplete }
+    // Sanitized like the catalog's own caption ([app.skerry.ui.host.rowSubtitle]): for a profile a
+    // team member shared, every field spliced in here is that member's text. The local-shell
+    // fallback reads the sanitized path, not the raw one — a path made only of format characters is
+    // blank once drawn, and the caption would otherwise go empty instead of naming the shell.
     return when {
-        connectionType == ConnectionType.LOCAL -> address.ifBlank { "local shell" }
-        spec != null -> "${containerLabel(spec)} · $username@$address"
-        else -> "$username@$address:$port"
+        connectionType == ConnectionType.LOCAL -> untrustedLabel(address).ifBlank { "local shell" }
+        spec != null -> untrustedLabel("${containerLabel(spec)} · $username@$address")
+        else -> untrustedLabel("$username@$address:$port")
     }
 }
 

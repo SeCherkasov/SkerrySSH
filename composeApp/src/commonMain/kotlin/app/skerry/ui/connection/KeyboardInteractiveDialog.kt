@@ -43,6 +43,7 @@ import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
+import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.generated.resources.Res
@@ -274,56 +275,3 @@ private fun PromptField(
 private const val MAX_TITLE_CHARS = 120
 private const val MAX_INSTRUCTION_CHARS = 600
 private const val MAX_PROMPT_CHARS = 200
-
-/**
- * Makes server-supplied text safe to render: drops control characters (including the escape
- * sequences a terminal would act on and the bidi overrides that could reorder the sentence), keeps
- * newlines only inside longer blocks, collapses runs of blank lines and caps the length.
- *
- * Truncation is silent rather than marked with an ellipsis — the cap is generous enough that only a
- * server trying to flood the dialog reaches it.
- */
-internal fun sanitizeServerText(text: String, maxChars: Int, allowNewlines: Boolean): String {
-    val cleaned = buildString(minOf(text.length, maxChars)) {
-        for (ch in text) {
-            if (length >= maxChars) break
-            when (classifyServerChar(ch, allowNewlines)) {
-                ServerChar.Keep -> append(ch)
-                // Runs collapse: a server padding with blank lines or tabs gets one separator.
-                ServerChar.Break -> if (isNotEmpty() && last() != '\n') append('\n')
-                ServerChar.Space -> if (isNotEmpty() && last() != ' ') append(' ')
-                ServerChar.Drop -> Unit
-            }
-        }
-    }
-    // The cap counts UTF-16 units, so it can fall between the halves of an astral character and
-    // leave an orphan that draws as U+FFFD — in the caption and in the field's name alike. Same
-    // cut, same treatment as the terminal title's and the team label's.
-    return cleaned.dropLastWhile { it.isHighSurrogate() }.trim()
-}
-
-/** What [sanitizeServerText] does with one character of server text. */
-private const val LINE_SEPARATOR = '\u2028'
-private const val PARAGRAPH_SEPARATOR = '\u2029'
-
-private enum class ServerChar { Keep, Break, Space, Drop }
-
-private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = when {
-    ch == '\n' && allowNewlines -> ServerChar.Break
-    // Where newlines survive, the carriage return of a CRLF must not become a space before every
-    // one of them; it carries nothing the newline does not already say.
-    ch == '\r' && allowNewlines -> ServerChar.Drop
-    // Single-line sink: fold rather than drop, or the words either side are glued together
-    // ("Accessdeniedby policy"), which reads worse than the wrapped original.
-    ch == '\n' || ch == '\r' || ch == '\t' -> ServerChar.Space
-    ch.isISOControl() -> ServerChar.Drop
-    // The whole format category rather than the bidi overrides alone: the marks (LRM/RLM/ALM) reorder
-    // the neutral runs of a prompt the user reads before typing a secret, and the zero-width set lets
-    // one carry content nothing renders. Naming ranges left both classes in, and would leave whatever
-    // Unicode adds next. Covers the BOM too, which used to have a branch of its own.
-    ch.category == CharCategory.FORMAT -> ServerChar.Drop
-    // Not in that category, but they end a line wherever the text is laid out — a single-line
-    // caption is exactly what a server would use them to turn into several.
-    ch == LINE_SEPARATOR || ch == PARAGRAPH_SEPARATOR -> ServerChar.Drop
-    else -> ServerChar.Keep
-}

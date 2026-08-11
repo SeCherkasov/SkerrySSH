@@ -35,7 +35,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.design.SHORT_ID_CHARS
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.rowSubtitle
+import app.skerry.ui.host.rowLabel
 import app.skerry.shared.host.Host
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.inSection
@@ -377,7 +380,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
         val (title, message) = when (c) {
             is MobileTeamsConfirm.Leave -> stringResource(Res.string.lib_teams_leave) to stringResource(Res.string.lib_teams_leave_message)
             is MobileTeamsConfirm.Delete -> stringResource(Res.string.lib_teams_delete) to stringResource(Res.string.lib_teams_delete_message)
-            is MobileTeamsConfirm.Remove -> stringResource(Res.string.lib_teams_remove_member_title) to stringResource(Res.string.lib_teams_remove_member_message, c.accountId)
+            is MobileTeamsConfirm.Remove -> stringResource(Res.string.lib_teams_remove_member_title) to stringResource(Res.string.lib_teams_remove_member_message, untrustedLabel(c.accountId))
             is MobileTeamsConfirm.DeleteScope -> stringResource(Res.string.lib_teams_scope_delete) to stringResource(Res.string.lib_teams_scope_delete_message)
         }
         ConfirmActionDialog(
@@ -447,7 +450,7 @@ private fun MobileTeamDetail(
     val sharedSnippets = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultSnippetStore(it).all() } ?: emptyList() }
     val sharedRunbooks = remember(team.id, scopeId, tick, spaceVault) { spaceVault?.let { VaultRunbookStore(it).all() } ?: emptyList() }
 
-    Txt(team.name, color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
+    Txt(untrustedLabel(team.name), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, modifier = Modifier.padding(top = 10.dp))
     Txt(stringResource(Res.string.lib_teams_members_count, team.memberCount), color = Skerry.colors.dim, size = 12.sp, modifier = Modifier.padding(top = 2.dp))
 
     if (invited) {
@@ -513,7 +516,7 @@ private fun MobileTeamDetail(
 
     MobileSharedSection(
         heading = stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size),
-        items = sharedHosts.map { SharedRecordUi(it.id, it.label, it.rowSubtitle()) },
+        items = sharedHosts.map { SharedRecordUi(it.id, it.rowLabel(), it.rowSubtitle()) },
         shareLabel = stringResource(Res.string.lib_teams_share_host).takeIf { canWrite },
         onShare = { onShare(RecordType.HOST) },
         canUnshare = canWrite,
@@ -523,7 +526,7 @@ private fun MobileTeamDetail(
     )
     MobileSharedSection(
         heading = stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size),
-        items = sharedSnippets.map { SharedRecordUi(it.id, it.label, it.command) },
+        items = sharedSnippets.map { SharedRecordUi(it.id, untrustedLabel(it.label), untrustedLabel(it.command)) },
         shareLabel = stringResource(Res.string.lib_teams_share_snippet).takeIf { canWrite },
         onShare = { onShare(RecordType.SNIPPET) },
         canUnshare = canWrite,
@@ -533,7 +536,7 @@ private fun MobileTeamDetail(
     )
     MobileSharedSection(
         heading = stringResource(Res.string.lib_teams_shared_runbooks_count, sharedRunbooks.size),
-        items = sharedRunbooks.map { SharedRecordUi(it.id, it.label, runbookSummary(it.steps.size)) },
+        items = sharedRunbooks.map { SharedRecordUi(it.id, untrustedLabel(it.label), runbookSummary(it.steps.size)) },
         shareLabel = stringResource(Res.string.lib_teams_share_runbook).takeIf { canWrite },
         onShare = { onShare(RecordType.RUNBOOK) },
         canUnshare = canWrite,
@@ -579,11 +582,11 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>, section: HostSec
             // Sanitized like the desktop sidebar's (see spaceLabel): the name is a peer's, arrives
             // inside the sealed envelope, and the server never sees it — so the same string must not
             // be scrubbed on one platform and drawn raw on the other.
-            val teamName = spaceLabel(team.name, fallback = team.id.take(SHORT_TEAM_ID_CHARS))
+            val teamName = spaceLabel(team.name, fallback = team.id.take(SHORT_ID_CHARS))
             val spaces = listOf(TeamScopeRef(team.id) to teamName) +
                 team.scopes.filter { it.hasKey }.map {
                     TeamScopeRef(team.id, it.id) to
-                        "$teamName · ${spaceLabel(it.name, fallback = it.id.take(SHORT_TEAM_ID_CHARS))}"
+                        "$teamName · ${spaceLabel(it.name, fallback = it.id.take(SHORT_ID_CHARS))}"
                 }
             spaces.mapNotNull { (ref, label) ->
                 val vault = teams.spaceVault(ref) ?: return@mapNotNull null
@@ -634,13 +637,11 @@ private fun MobileTeamHostRow(host: Host, onClick: () -> Unit) {
     val status = LocalSessions.current?.sessionStatusFor(host.id) ?: SessionStatus.Idle
     MobileCatalogRow(
         icon = "group",
-        label = host.label,
-        subtitle = host.rowSubtitle(),
+        label = remember(host) { host.rowLabel() },
+        subtitle = remember(host) { host.rowSubtitle() },
         dotColor = sessionDotColor(status),
         statusText = sessionStatusText(status),
         onClick = onClick,
     )
 }
 
-/** Same stand-in as the desktop sidebar's when a peer's space name sanitizes away to nothing. */
-private const val SHORT_TEAM_ID_CHARS = 8

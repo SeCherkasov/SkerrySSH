@@ -45,6 +45,7 @@ import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_palette_empty
 import app.skerry.ui.generated.resources.term_palette_hint
@@ -179,7 +180,7 @@ private fun CommandRow(suggestion: CommandSuggestion, mono: FontFamily, onClick:
         Txt(highlightMatches(suggestion), color = Skerry.colors.textBright, size = 12.5.sp, font = mono, modifier = Modifier.weight(1f))
         val origin = when {
             suggestion.fromCurrentHost -> stringResource(Res.string.term_palette_this_host)
-            else -> suggestion.hostLabel
+            else -> suggestion.hostLabel?.let { untrustedLabel(it) }
         }
         if (origin != null) {
             Txt(origin, color = if (suggestion.fromCurrentHost) Skerry.colors.cyanBright else Skerry.colors.faint, size = 10.sp)

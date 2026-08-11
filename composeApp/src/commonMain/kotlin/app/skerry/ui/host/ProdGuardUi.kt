@@ -189,7 +189,7 @@ fun ProdConnectDialog(request: ProdConnectRequest, onDismiss: () -> Unit) {
     if (line == null) {
         ConfirmActionDialog(
             title = stringResource(Res.string.guard_prod_connect_title),
-            message = stringResource(Res.string.guard_prod_connect_message, request.host.label),
+            message = stringResource(Res.string.guard_prod_connect_message, request.host.rowLabel()),
             confirmLabel = stringResource(Res.string.guard_prod_connect_confirm),
             onConfirm = { onDismiss(); request.proceed() },
             onDismiss = onDismiss,
@@ -198,7 +198,7 @@ fun ProdConnectDialog(request: ProdConnectRequest, onDismiss: () -> Unit) {
     }
     ProdCommandSheet(
         title = stringResource(Res.string.guard_prod_snippet_title),
-        subtitle = stringResource(Res.string.guard_prod_snippet_message, request.host.label),
+        subtitle = stringResource(Res.string.guard_prod_snippet_message, request.host.rowLabel()),
         command = line,
         reason = remember(line) { prodDisplayRisk(line) }?.assessment?.reason,
         confirmLabel = stringResource(Res.string.guard_prod_connect_confirm),

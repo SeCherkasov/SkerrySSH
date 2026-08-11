@@ -3,6 +3,8 @@ package app.skerry.ui.host
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.isRemoteDesktop
+import app.skerry.ui.design.SHORT_ID_CHARS
+import app.skerry.ui.design.untrustedLabel
 
 /**
  * Which part of the shell a saved profile belongs to. The catalog is one store (a profile is a
@@ -23,19 +25,40 @@ val Host.section: HostSection
 fun List<Host>.inSection(section: HostSection): List<Host> = filter { it.section == section }
 
 /**
+ * The name a profile is drawn under.
+ *
+ * A profile shared through a team was named by whoever shared it, and the name travels inside the
+ * sealed envelope — the server never sees it and could not validate it. So the catalog draws it
+ * through [untrustedLabel] rather than raw: a bidi override in a name makes one host row draw as
+ * another.
+ *
+ * A name that is nothing but the characters filtering drops leaves nothing to draw, and a blank row
+ * is one the user cannot tell from any other: the address stands in, and the id after it. The id is
+ * a peer's text as well for a shared record, so it is filtered like the rest. Same ladder as a team
+ * space's label.
+ */
+fun Host.rowLabel(): String =
+    untrustedLabel(label).ifBlank { untrustedLabel(address) }.ifBlank { untrustedLabel(id.take(SHORT_ID_CHARS)) }
+
+/**
  * Secondary caption for a profile in the host lists: `user@address` where there is a user, and
  * `address:port` where there isn't — a remote desktop authenticates with a password and has no
  * username, so the usual form would render as a bare "@10.0.0.5". A port of 0 (local shell) drops
  * the suffix, leaving just the shell path (blank for the system default).
+ *
+ * Sanitized for the same reason as [rowLabel]: the username and the address of a shared profile are
+ * a peer's text too, and this line is what tells two rows with the same name apart.
  */
-fun Host.rowSubtitle(): String = when {
-    // The port belongs to the address a row identifies a profile by: two profiles on the same
-    // machine (a jump host and a container gateway, 22 and 2222) are otherwise the same line.
-    username.isNotBlank() && port > 0 -> "$username@$address:$port"
-    username.isNotBlank() -> "$username@$address"
-    port > 0 -> "$address:$port"
-    else -> address
-}
+fun Host.rowSubtitle(): String = untrustedLabel(
+    when {
+        // The port belongs to the address a row identifies a profile by: two profiles on the same
+        // machine (a jump host and a container gateway, 22 and 2222) are otherwise the same line.
+        username.isNotBlank() && port > 0 -> "$username@$address:$port"
+        username.isNotBlank() -> "$username@$address"
+        port > 0 -> "$address:$port"
+        else -> address
+    },
+)
 
 /** Section a transport is filed under — the profile-level [Host.section] follows it. */
 val ConnectionType.section: HostSection
