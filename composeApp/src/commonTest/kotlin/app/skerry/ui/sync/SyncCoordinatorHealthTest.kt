@@ -130,21 +130,24 @@ private class HangingPingClient : SyncClient by FakePingClient(reachable = true)
  */
 class SyncCoordinatorCursorTest {
 
+    // The cursor of the bound link — never the account id alone, which two servers would share.
+    private val bound = ServerLink("https://sync.test", "maya").cursorKey
+
     @Test
     fun disconnect_resets_sync_cursor_for_bound_account() = runBlocking {
-        val state = InMemorySyncStateStore().apply { setCursor("maya", 42) }
+        val state = InMemorySyncStateStore().apply { setCursor(bound, 42) }
         val sut = SyncCoordinator(
             { FakePingClient(reachable = true) }, StubCrypto(), StubVault(),
             configStore = boundStore(), syncState = state,
         )
         sut.disconnect()
-        withTimeout(3_000) { while (state.cursor("maya") != 0L) delay(10) }
-        assertEquals(0L, state.cursor("maya"))
+        withTimeout(3_000) { while (state.cursor(bound) != 0L) delay(10) }
+        assertEquals(0L, state.cursor(bound))
     }
 
     @Test
     fun reenabling_a_type_resets_cursor_for_backfill() = runBlocking {
-        val state = InMemorySyncStateStore().apply { setCursor("maya", 7) }
+        val state = InMemorySyncStateStore().apply { setCursor(bound, 7) }
         val sut = SyncCoordinator(
             { FakePingClient(reachable = true) }, StubCrypto(), StubVault(),
             configStore = boundStore(), syncState = state,
@@ -152,11 +155,11 @@ class SyncCoordinatorCursorTest {
         // Disabling a type does not touch the cursor; it just stops sending/receiving that type.
         sut.setSyncSettings(SyncSettings(syncHosts = false))
         delay(150)
-        assertEquals(7L, state.cursor("maya"))
+        assertEquals(7L, state.cursor(bound))
         // Re-enabling triggers a full re-pull: cursor resets to catch up on missed records.
         sut.setSyncSettings(SyncSettings(syncHosts = true))
-        withTimeout(3_000) { while (state.cursor("maya") != 0L) delay(10) }
-        assertEquals(0L, state.cursor("maya"))
+        withTimeout(3_000) { while (state.cursor(bound) != 0L) delay(10) }
+        assertEquals(0L, state.cursor(bound))
     }
 
     private fun boundStore() = InMemorySyncConfigStore().apply {
@@ -174,16 +177,18 @@ class SyncCoordinatorWatchGuardTest {
 
     @Test
     fun ws_signal_triggers_pull_only_when_cursor_advances() = runBlocking {
-        val state = InMemorySyncStateStore().apply { setCursor("maya", 10) }
+        // Filed under the whole link, like every cursor read: an account id alone is shared by two servers.
+        val state = InMemorySyncStateStore()
+            .apply { setCursor(ServerLink("https://sync.test", "maya").cursorKey, 10) }
         val sut = SyncCoordinator(
             { FakePingClient(reachable = true) }, StubCrypto(), StubVault(),
             configStore = boundStore(), syncState = state,
         )
         // Equal cursor is an echo of our own push; skip (otherwise a loop). A lagging cursor is skipped too.
-        assertEquals(false, sut.signalAdvancesCursor("maya", 10))
-        assertEquals(false, sut.signalAdvancesCursor("maya", 3))
+        assertEquals(false, sut.signalAdvancesCursor(10))
+        assertEquals(false, sut.signalAdvancesCursor(3))
         // Cursor ahead of local means other devices made changes: pull the delta.
-        assertEquals(true, sut.signalAdvancesCursor("maya", 11))
+        assertEquals(true, sut.signalAdvancesCursor(11))
     }
 
     private fun boundStore() = InMemorySyncConfigStore().apply {

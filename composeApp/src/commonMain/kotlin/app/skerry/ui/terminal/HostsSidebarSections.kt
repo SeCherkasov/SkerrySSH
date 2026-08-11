@@ -45,8 +45,10 @@ import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.spaceLabel
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_teams_unnamed_space
 import app.skerry.ui.generated.resources.rd_add_first
 import app.skerry.ui.generated.resources.shtail_group_collapse
 import app.skerry.ui.generated.resources.shtail_group_rename
@@ -160,15 +162,20 @@ internal fun TeamHostsSection(hostsSnapshot: List<Host>, state: DesktopDesignSta
     // Changes on every team sync, so hosts freshly pulled into the team vault appear without a
     // manual sync (the personal catalog doesn't change, and these sections read the vault directly).
     val revision by teams.revision.collectAsState()
-    val sections = remember(teamList, hostsSnapshot, revision, section) {
+    // Resolved outside the remember (stringResource is composable-only) and keyed into it: the name AND
+    // the id can both filter away to nothing, and an unlabelled fold header is one the user cannot tell
+    // from any other — same last resort the device list has.
+    val unnamed = stringResource(Res.string.lib_teams_unnamed_space)
+    val sections = remember(teamList, hostsSnapshot, revision, section, unnamed) {
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.flatMap { team ->
             // One group per share space: the team itself, plus every scope whose key we hold. A scope
             // we're merely told about (manager without a grant) has no readable records, so no group.
-            val teamName = spaceLabel(team.name, fallback = team.id.take(SHORT_ID_CHARS))
+            val teamName = spaceLabel(team.name, fallback = untrustedLabel(team.id).take(SHORT_ID_CHARS))
+                .ifBlank { unnamed }
             val spaces = listOf(TeamScopeRef(team.id) to teamName) +
                 team.scopes.filter { it.hasKey }.map {
                     TeamScopeRef(team.id, it.id) to
-                        "$teamName · ${spaceLabel(it.name, fallback = it.id.take(SHORT_ID_CHARS))}"
+                        "$teamName · ${spaceLabel(it.name, fallback = untrustedLabel(it.id).take(SHORT_ID_CHARS)).ifBlank { unnamed }}"
                 }
             spaces.mapNotNull { (ref, label) ->
                 val vault = teams.spaceVault(ref) ?: return@mapNotNull null
@@ -354,16 +361,3 @@ internal fun LiveHostFolder(
     }
 }
 
-/**
- * A team space's name, made fit to draw and to announce.
- *
- * Peer-authored and never seen by the server (the name travels inside the sealed envelope), so it is
- * sanitized rather than trusted: the label is both drawn and used as the collapse chevron's
- * accessible name, and a bidi override in it would make a folder announce as a space other than the
- * one its hosts belong to — see [untrustedLabel], which the cap and the filtering come from.
- */
-internal fun spaceLabel(raw: String, fallback: String): String =
-    untrustedLabel(raw)
-        // A name made only of the characters the sanitizer drops leaves nothing to draw, and a blank
-        // folder header is one the user cannot tell from any other. Fall back to the space's id.
-        .ifBlank { fallback }

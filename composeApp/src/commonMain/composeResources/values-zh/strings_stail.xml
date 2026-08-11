@@ -23,4 +23,9 @@
     <string name="stail_sync_fail_key_adopt">无法采用账户密钥</string>
     <!-- %1$s — 本地化原因，%2$s — 技术细节（服务器/库的原始消息） -->
     <string name="stail_sync_fail_detail">%1$s（%2$s）</string>
+
+    <!-- 屏幕阅读器对同步状态变化的播报，参见 syncAnnouncement -->
+    <!-- %1$s — 本地化的错误文本 -->
+    <string name="stail_sync_announce_error">同步错误。%1$s</string>
+    <string name="stail_sync_announce_disconnected">同步已断开</string>
 </resources>

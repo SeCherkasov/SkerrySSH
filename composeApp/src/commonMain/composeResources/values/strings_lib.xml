@@ -111,6 +111,8 @@
 
     <!-- Teams (TeamsView) -->
     <string name="lib_teams_sidebar">TEAMS</string>
+    <!-- Last resort for a team space whose name and id both filter away to nothing -->
+    <string name="lib_teams_unnamed_space">Unnamed space</string>
     <string name="lib_teams_invite">Invite</string>
     <string name="lib_teams_members">Members</string>
     <string name="lib_teams_recent_activity">Recent activity</string>

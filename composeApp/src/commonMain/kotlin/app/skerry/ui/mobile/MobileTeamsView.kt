@@ -70,6 +70,7 @@ import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.session.sessionStatusText
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_teams_unnamed_space
 import app.skerry.ui.generated.resources.lib_teams_accept
 import app.skerry.ui.generated.resources.lib_teams_create
 import app.skerry.ui.generated.resources.lib_teams_create_subtitle
@@ -133,7 +134,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
-import app.skerry.ui.terminal.spaceLabel
+import app.skerry.ui.design.spaceLabel
 
 /** Destructive Teams actions on mobile — same confirmations as desktop. */
 private sealed interface MobileTeamsConfirm {
@@ -576,17 +577,22 @@ internal fun MobileTeamHostsSections(hostsSnapshot: List<Host>, section: HostSec
     // revision changes on every team sync — otherwise hosts live-pulled into the team vault wouldn't
     // appear until a manual sync (the personal catalog is unchanged and sections read the vault imperatively).
     val revision by teams.revision.collectAsState()
-    val sections = remember(teamList, hostsSnapshot, revision, section) {
+    // Resolved outside the remember (stringResource is composable-only) and keyed into it: the name AND
+    // the id can both filter away to nothing, and an unlabelled group is one the user cannot tell from
+    // any other — same last resort the device list has.
+    val unnamed = stringResource(Res.string.lib_teams_unnamed_space)
+    val sections = remember(teamList, hostsSnapshot, revision, section, unnamed) {
         teamList.filter { it.status == TeamMemberStatus.ACTIVE && it.hasKey }.flatMap { team ->
             // One group per share space: the team itself plus every scope whose key we hold.
             // Sanitized like the desktop sidebar's (see spaceLabel): the name is a peer's, arrives
             // inside the sealed envelope, and the server never sees it — so the same string must not
             // be scrubbed on one platform and drawn raw on the other.
-            val teamName = spaceLabel(team.name, fallback = team.id.take(SHORT_ID_CHARS))
+            val teamName = spaceLabel(team.name, fallback = untrustedLabel(team.id).take(SHORT_ID_CHARS))
+                .ifBlank { unnamed }
             val spaces = listOf(TeamScopeRef(team.id) to teamName) +
                 team.scopes.filter { it.hasKey }.map {
                     TeamScopeRef(team.id, it.id) to
-                        "$teamName · ${spaceLabel(it.name, fallback = it.id.take(SHORT_ID_CHARS))}"
+                        "$teamName · ${spaceLabel(it.name, fallback = untrustedLabel(it.id).take(SHORT_ID_CHARS)).ifBlank { unnamed }}"
                 }
             spaces.mapNotNull { (ref, label) ->
                 val vault = teams.spaceVault(ref) ?: return@mapNotNull null

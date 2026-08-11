@@ -4,16 +4,15 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.skerry.shared.share.SessionShareClient
 import app.skerry.shared.share.SessionShareCodec
 import app.skerry.shared.share.SessionShareHost
 import app.skerry.shared.share.ShareFrame
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.share.shareMetaAad
 import app.skerry.shared.sync.SyncException
-import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.VaultCrypto
+import app.skerry.ui.sync.ShareLink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -87,8 +86,11 @@ enum class ShareFailure {
  */
 @Stable
 class SessionShareController(
-    private val client: () -> SessionShareClient?,
-    private val session: () -> SyncSession?,
+    /**
+     * The relay and the session it belongs to, as ONE value — two suppliers can be read either side of a
+     * connect to another server and pair one server's client with the other's session (issue #240).
+     */
+    private val liveLink: () -> ShareLink?,
     private val teamKey: (String) -> DataKey?,
     private val crypto: VaultCrypto,
     private val newShareId: () -> String,
@@ -121,13 +123,13 @@ class SessionShareController(
      * for a production-tagged session.
      */
     fun share(teamId: String, teamName: String, paneId: String, label: String, source: ShareSource, readOnlyOnly: Boolean) {
-        val shareClient = client()
-        val syncSession = session()
+        val link = liveLink()
         val key = teamKey(teamId)
-        if (shareClient == null || syncSession == null) {
+        if (link == null) {
             state = ShareUiState.Failed(ShareFailure.NotConnected)
             return
         }
+        val (syncSession, shareClient) = link
         if (key == null) {
             state = ShareUiState.Failed(ShareFailure.NoTeamKey)
             return

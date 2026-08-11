@@ -164,13 +164,11 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 }
             }
 
-            val failed = status as? SyncStatus.Failed
-            if (failed != null) {
-                Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Sym("error", size = 14.sp, color = Skerry.colors.sunset)
-                    Txt(syncFailureText(failed), color = Skerry.colors.sunset, size = 11.5.sp)
-                }
-            }
+            // Announced by the Sync settings section behind this modal, not here: this dialog is only
+            // opened from it (`openSyncSetup`) and it stays composed underneath, so its own announcer is
+            // already carrying this status. Two live regions changing in one frame is one failure spoken
+            // twice (issue #244).
+            SyncFormError((status as? SyncStatus.Failed)?.let { syncFailureText(it) }, announce = false)
 
             Row(
                 Modifier.fillMaxWidth().padding(top = 18.dp),

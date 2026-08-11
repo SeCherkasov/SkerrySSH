@@ -2,6 +2,7 @@ package app.skerry.ui.sync
 
 import app.skerry.shared.platformName
 import app.skerry.shared.sync.AccountSummary
+import app.skerry.shared.sync.MAX_ACCOUNT_ID_CHARS
 import app.skerry.shared.sync.DeviceInfo
 import app.skerry.shared.sync.RemoteDevice
 import app.skerry.shared.sync.SyncClient
@@ -13,6 +14,7 @@ import app.skerry.shared.sync.SyncSignal
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.InMemorySyncStateStore
+import app.skerry.shared.sync.KeyedStateStore
 import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSettingsStore
 import app.skerry.shared.sync.WebAccessClient
@@ -25,9 +27,11 @@ import app.skerry.shared.vault.VaultCrypto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.sync.Mutex
@@ -128,7 +132,18 @@ class SyncCoordinator(
     private val settingsStore = SyncSettingsStore(vault)
 
     private val engineFactory: (SyncClient) -> SyncRunner = engineFactory
-        ?: { c -> SyncRunner { s -> SyncEngine(c, vault, syncState, settings = { settingsStore.load() }).sync(s) } }
+        // The engine knows only the session it syncs, and a session carries no server — so the cursor is
+        // pinned to the link the cycle belongs to here, where it is known ([cursorKey], issue #242).
+        ?: { c ->
+            SyncRunner { s ->
+                // No link means no session, and this runs inside one. Refuse rather than fall back to the
+                // account id: that key is one nothing else reads any more, so a cycle filed under it would
+                // strand its progress silently and re-pull everything for good. The failure surfaces on
+                // the status like any other failed cycle.
+                val key = cursorKey() ?: error("no active link for a live session")
+                SyncEngine(c, vault, KeyedStateStore(syncState, key), settings = { settingsStore.load() }).sync(s)
+            }
+        }
 
     /** Sealing the refresh token under the vault dataKey for "keep connected" (see [SealedTokenCodec]). */
     private val tokens = SealedTokenCodec(crypto)
@@ -142,14 +157,47 @@ class SyncCoordinator(
     private val _syncSettings = MutableStateFlow(SyncSettings())
     val syncSettings: StateFlow<SyncSettings> = _syncSettings.asStateFlow()
 
+    /**
+     * The live session, the client it belongs to, the LINK it is on, and the generation they were
+     * published in — one immutable value, because every pair of these that is read separately can be read
+     * across a connect to another server (issue #240).
+     */
+    private class LiveSession(
+        val client: SyncClient,
+        val session: SyncSession,
+        val epoch: Long,
+        val link: ServerLink,
+    )
+
     // @Volatile: written/read from independent coroutines on [scope] (Dispatchers.Default thread pool):
-    // activateSession sets, disconnect nulls, startWatch/startLocalPush/runSync read. Without volatile a
-    // write on one thread isn't guaranteed visible to a read on another (JMM) — e.g. disconnect sets
-    // client=null while startWatch sees a stale non-null and starts a watch on a dead client.
+    // activateSession publishes, disconnect nulls, startWatch/startLocalPush/runSync read. Without it a
+    // write on one thread isn't guaranteed visible to a read on another (JMM) — disconnect nulls the
+    // reference while startWatch still sees a stale one and starts a watch on a dead client.
     @Volatile
-    private var client: SyncClient? = null
-    @Volatile
-    private var session: SyncSession? = null
+    private var liveRef: LiveSession? = null
+
+    // Read as two fields, a caller can be scheduled between them and pick up one server's client with
+    // another server's session — a token of the account on one server sent to the other (issue #240).
+    // One immutable reference cannot be observed half-replaced, so every reader below gets a pair that
+    // agrees, with no lock of its own; publishing it stays under [syncMutex] like every other write here.
+    private val client: SyncClient? get() = liveRef?.client
+    private val session: SyncSession? get() = liveRef?.session
+
+    /**
+     * Which server the live session is on — what the reconcile guards and every per-link store key on.
+     *
+     * A session carries an account id and two tokens, never the URL they are valid at, so the coordinator
+     * used to answer "which server is this session on?" by reading the saved config — a SEPARATE fact,
+     * written by a store that can refuse the write. An activation that aborted in between (the reconcile's
+     * clear throws, the link write is refused) left a live session on one link while both reconcile guards
+     * evaluated another, and a cycle over a vault that owed its rebuild ran as if it owed nothing (#241).
+     *
+     * Read off the same snapshot as the session rather than kept beside it: a field of its own would be a
+     * second read, and a reader landing between the two writes gets one server's session with the other's
+     * link. Not derived from [SyncSession] because the client, not the session, is what knows the URL; not
+     * from the config because that is the write that can fail.
+     */
+    private val activeLink: ServerLink? get() = liveRef?.link
 
     /**
      * TeamsCoordinator hook: team WS signals ([SyncSignal.Team]/[SyncSignal.Membership]) from the
@@ -159,15 +207,30 @@ class SyncCoordinator(
     @Volatile
     var onTeamSignal: ((SyncSignal) -> Unit)? = null
 
-    /** Live session for team operations; null when sync isn't connected. */
-    fun currentSession(): SyncSession? = session
+    /**
+     * The team API of the live session, with the session itself — one accessor rather than two, so a
+     * caller cannot end up holding a client and a session that belong to different servers (issue #240).
+     * Null when sync isn't connected, or when the transport doesn't speak Teams.
+     */
+    fun currentTeamLink(): TeamLink? {
+        val live = liveRef ?: return null
+        val team = live.client as? TeamClient ?: return null
+        return TeamLink(live.session, team, live.link.cursorKey)
+    }
 
-    /** Team API of the current client; null when sync isn't connected (or transport lacks Teams). */
-    fun currentTeamClient(): TeamClient? = client as? TeamClient
+    /** The session-sharing relay of the live session, paired the same way as [currentTeamLink]. */
+    fun currentShareLink(): ShareLink? {
+        val live = liveRef ?: return null
+        val relay = live.client as? app.skerry.shared.share.SessionShareClient ?: return null
+        return ShareLink(live.session, relay)
+    }
 
-    /** Session-sharing relay of the current client; null when sync isn't connected. */
-    fun currentShareClient(): app.skerry.shared.share.SessionShareClient? =
-        client as? app.skerry.shared.share.SessionShareClient
+    /**
+     * The live session alone. No production caller needs one without its client — pairing a session with a
+     * client read separately is the bug this file spent issue #240 removing — so this exists for the tests
+     * that assert whether a session survived a refresh, and stays `internal` to keep it that way.
+     */
+    internal fun currentSession(): SyncSession? = liveRef?.session
 
     // Own scope: network operations must not depend on a composable's lifecycle. On mobile the form
     // recomposes on [status]: as soon as connect() sets Busy the form leaves composition, and if the
@@ -206,6 +269,16 @@ class SyncCoordinator(
     // outlive its session and slow-roll the first retry of the next one. Scheduled only under [syncMutex].
     @Volatile
     private var retryJob: Job? = null
+
+    // Bumped whenever the published session is replaced or torn down: which generation of the session the
+    // live subscriptions belong to. The watch loop re-reads [session] on every attempt (a mid-session token
+    // rotation has to reach the next handshake), so a loop of the PREVIOUS session that wakes after a new
+    // one is published would otherwise hand the new server's tokens to the old server's client — cancelling
+    // it doesn't help, since cancellation only lands at a suspension point and the read isn't one (issue
+    // #240). Read together with [session] under [syncMutex], which is what makes the pair atomic against
+    // [activateSession]'s publish.
+    @Volatile
+    private var sessionEpoch: Long = 0
 
     // The link THIS coordinator actually started a reactivation reconcile for (records dropped, cursor
     // reset) — the permission [retireDischargedDebt] needs before it may retire a recorded debt.
@@ -566,49 +639,70 @@ class SyncCoordinator(
         // and config it just published.
         //
         // Lock order holds: we're under opMutex, syncMutex nests inside it.
-        val superseded: SyncClient?
-        syncMutex.withLock {
-            superseded = client?.takeIf { it !== syncClient }
-            // The arming answers for the link it was rebuilt for, and the guards read the SAVED link as the
-            // identity of the server the live session talks to. This activation publishes another link, and
-            // the write that would make the saved one agree can be refused (a full disk) — so drop a
-            // permission that names anything else BEFORE the session goes live, rather than leave it resting
-            // on a store write landing. [reconcileLocked] re-arms below once its own clear has run.
-            if (armedFor != ServerLink(config.serverUrl, config.accountId)) armedFor = null
-            client = syncClient
-            session = newSession
-            // A retry loop armed for the previous session must not carry its escalated backoff into
-            // this one — the fresh session's first network failure re-arms from the minimum.
-            retryJob?.cancel()
-            // Uncaught on purpose: a clear that throws must abort the activation before it starts the
-            // subscriptions, both because a session that owes a reconcile has nothing to subscribe for and
-            // because [resumeAfterUnlock]'s redo stands down on a live `watchJob`.
-            if (clearLocalRecords) {
-                reconcileLocked(config)
-            } else {
-                if (resetCursor) syncState.setCursor(config.accountId, 0)
-                configStore.save(config)
-                // Keep the arming only for an activation of the SAME link that still owes the debt it is
-                // the permission to retire. A re-activation that doesn't reconcile
-                // ([doChangeAccountPassword]) can land on a standing debt — a reconcile that ran here but
-                // whose retiring write was refused — and the records it dropped stay dropped; disarming
-                // there would make [reconcileOwed] refuse every later cycle, including the one that would
-                // finally retire it. The link itself was already settled above — what is left here is the
-                // debt: an arming whose debt is gone has nothing to retire and nothing to say.
-                armedFor = armedFor?.takeIf { it in reconcileDebts }
+        val link = ServerLink(config.serverUrl, config.accountId)
+        var superseded: SyncClient? = null
+        try {
+            syncMutex.withLock {
+                superseded = client?.takeIf { it !== syncClient }
+                // The arming answers for the link it was rebuilt for. This activation publishes another
+                // one, so drop a permission that names anything else BEFORE the session goes live —
+                // [reconcileLocked] re-arms below once its own clear has run.
+                if (armedFor != link) armedFor = null
+                // The previous session's subscriptions end here, in the very section that replaces the
+                // fields they read — not in startWatch/startLocalPush below, which an activation that
+                // aborts on the reconcile never reaches. The epoch is what actually stops them:
+                // cancellation lands only at a suspension point, and the watch loop's re-read of
+                // [session] is not one, so a loop between two of them would still pick up the session
+                // published here and hand it to the client of the server it came from (issue #240).
+                sessionEpoch += 1
+                watchJob?.cancel() // cancel only — the join stays in startWatch, under opMutex
+                pushJob?.cancel()
+                liveRef = LiveSession(syncClient, newSession, sessionEpoch, link)
+                // A retry loop armed for the previous session must not carry its escalated backoff into
+                // this one — the fresh session's first network failure re-arms from the minimum.
+                retryJob?.cancel()
+                // Uncaught on purpose: a clear that throws must abort the activation before it starts
+                // the subscriptions — a session that owes a reconcile has nothing to subscribe for, and
+                // the unlock redo ([resumeAfterUnlock]) is what finishes it, on a coordinator whose
+                // subscriptions the cancel above has already stood down.
+                if (clearLocalRecords) {
+                    reconcileLocked(config)
+                } else {
+                    if (resetCursor) syncState.setCursor(link.cursorKey, 0)
+                    configStore.save(config)
+                    // Keep the arming only for an activation of the SAME link that still owes the debt it
+                    // is the permission to retire. A re-activation that doesn't reconcile
+                    // ([doChangeAccountPassword]) can land on a standing debt — a reconcile that ran here
+                    // but whose retiring write was refused — and the records it dropped stay dropped;
+                    // disarming there would make [reconcileOwed] refuse every later cycle, including the
+                    // one that would finally retire it. The link itself was already settled above — what
+                    // is left here is the debt: an arming whose debt is gone has nothing to retire.
+                    armedFor = armedFor?.takeIf { it in reconcileDebts }
+                }
+            }
+            health.setTarget(config.serverUrl)
+            // The debt recorded above is retired by the sync cycle itself ([retireDischargedDebt]) — not
+            // here, because a first cycle that fails leaves it to a later retry to finish the reconcile.
+            runSync()
+            startWatch()
+            startLocalPush()
+        } finally {
+            // Reconnecting over a live session (switching accounts, a confirmed password replace) leaves
+            // the previous Ktor client with its socket pool: only disconnect used to close one. In a
+            // `finally` because the reconcile above can throw — on a path the UI invites the user to
+            // retry, which used to leak a client and its threads per attempt (issue #241).
+            //
+            // No syncMutex: nothing can still pick this client up (it was replaced under that lock
+            // before anything suspended here), and taking it would hold opMutex uncancellably for the
+            // length of an in-flight cycle — long enough to keep a vault auto-lock waiting. The old
+            // subscriptions were cancelled in the same section, and on the path that reaches here
+            // normally they have already been joined. NonCancellable so a cancelled activation still
+            // gives the socket pool back.
+            val old = superseded
+            if (old != null) {
+                withContext(NonCancellable) { runCatching { old.close() } }
             }
         }
-        health.setTarget(config.serverUrl)
-        // The debt recorded above is retired by the sync cycle itself ([retireDischargedDebt]) — not
-        // here, because a first cycle that fails leaves it to a later retry to finish the reconcile.
-        runSync()
-        startWatch()
-        startLocalPush()
-        // Reconnecting over a live session (switching accounts, a confirmed password replace) leaves the
-        // previous Ktor client with its socket pool: only disconnect used to close one. Closed last, once
-        // startWatch/startLocalPush have cancelled and joined the subscriptions that were using it, and
-        // under syncMutex so it can't be closed out from under an in-flight sync.
-        if (superseded != null) syncMutex.withLock { runCatching { superseded.close() } }
         // The vault may have locked while this operation held opMutex: [pauseForLock] then ran first,
         // found no session to stop and left the flag for us. Undo the live half right here — otherwise
         // the subscriptions just published would outlive the lock with nothing left to cancel them.
@@ -729,19 +823,16 @@ class SyncCoordinator(
         // debt is usually already recorded ([rememberReactivation]) — a set write, so re-recording it is
         // free; the paths that reach a reconcile without one (a restore driven by an older launch's debt)
         // get it written here.
-        // The link is saved first, and only then the debt: both guards ([reconcileOwed],
-        // [retireDischargedDebt]) read the saved link as the identity of the server this session talks to,
-        // and a debt write that is refused (a full disk) after the session was published would otherwise
-        // leave them reading the PREVIOUS link — one this coordinator may still be armed for, which is
-        // exactly the permission issue #172 is about. The other order buys nothing: the debt is already
-        // in memory before its store write, and the reconcile intent still lands before the vault is
-        // touched, which is what a crash in between must not lose.
+        // The link is saved first, and only then the debt. Neither guard depends on that order any more —
+        // both read [activeLink], published with the session (issue #241) — but the order still costs
+        // nothing: the debt is already in memory before its store write, and the reconcile intent lands
+        // before the vault is touched either way, which is what a crash in between must not lose.
         val link = ServerLink(config.serverUrl, config.accountId)
         configStore.save(config)
         recordDebt(link)
         val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
         vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet())
-        syncState.setCursor(config.accountId, 0) // reactivation always full-pulls to rebuild from the server
+        syncState.setCursor(link.cursorKey, 0) // reactivation always full-pulls to rebuild from the server
         armedFor = link // only now, and named — see [retireDischargedDebt]
     }
 
@@ -841,7 +932,20 @@ class SyncCoordinator(
         // Under opMutex like connect: activating the fresh session must not race with a disconnect or
         // a concurrent connect.
         return try {
-            opMutex.withLock { doChangeAccountPassword(cfg, current, next) }
+            opMutex.withLock {
+                // The link above was read before this coroutine queued for the lock, and a connect or a
+                // disconnect can hold it for a whole round trip. Run against that stale copy, the
+                // rotation would change the password of an account this device has since LEFT, and its
+                // activation would save that link back over the live session's — moving the device to a
+                // server the user just left. Re-read and only run if it is still the same link; the
+                // fresh copy is also the one to work from (it may carry a re-sealed token).
+                val fresh = configStore.load()
+                if (fresh == null || ServerLink(fresh.serverUrl, fresh.accountId) != ServerLink(cfg.serverUrl, cfg.accountId)) {
+                    AccountPasswordChange.LinkMoved
+                } else {
+                    doChangeAccountPassword(fresh, current, next)
+                }
+            }
         } finally {
             // If cancelled while waiting for opMutex (dialog dismissed mid-submit), doChangeAccountPassword
             // never ran and never wiped these — wipe here too. Idempotent on the normal path (it already
@@ -955,8 +1059,7 @@ class SyncCoordinator(
      * suspend — called from a UI coroutine (short POST); transferKey/dataKey copy are wiped in finally.
      */
     suspend fun startPairing(): PairingOffer? {
-        val c = client ?: return null
-        val s = session ?: return null
+        val (c, s) = liveSession()?.let { it.client to it.session } ?: return null
         val cfg = configStore.load() ?: return null
         // tryLock serializes pairing: a repeat call before the previous one finishes returns null.
         if (!pairMutex.tryLock()) return null
@@ -1029,6 +1132,18 @@ class SyncCoordinator(
             val deviceId = deviceIdProvider() // a new device for the account — always a fresh id
             val device = DeviceInfo(deviceId, deviceName, platformName)
             val result = syncClient.claimPairing(parsed.code, device)
+            // The one value in the answer this device did not already know, and the server chooses it. It
+            // goes into the config, into the account key derivation and into every per-link store key that
+            // is rewritten on each cycle — so it is bounded here, at the boundary, to what the server
+            // itself accepts at registration. Refused rather than truncated: an id is looked up whole.
+            //
+            // Same reason as the unopenable envelope below, and for the same reason: the claim has already
+            // burned the one-time code, so the only way forward is a fresh one. A generic protocol error
+            // would read as "try again", and trying again cannot work.
+            if (result.accountId.isEmpty() || result.accountId.length > MAX_ACCOUNT_ID_CHARS) {
+                _status.value = SyncStatus.Failed(SyncFailureReason.PairingCodeInvalid)
+                return
+            }
 
             val decoded = crypto.openTransferredDataKey(parsed.transferKey, result.encryptedDataKey)
             if (decoded == null) {
@@ -1122,10 +1237,19 @@ class SyncCoordinator(
             try {
                 val reEnabled = (settings.syncHosts && !previous.syncHosts) ||
                     (settings.syncSnippets && !previous.syncSnippets)
-                if (reEnabled) configStore.load()?.let { syncState.setCursor(it.accountId, 0) }
+                // Reset and save under the lock every cycle holds for its whole duration, and both of them
+                // inside it. Neither half is enough alone: an unlocked reset is overwritten by the tip a
+                // running cycle writes when it finishes, and a cycle that slips in between the reset and
+                // the save pulls from 0 while the engine still reads the OLD filter — it drops every record
+                // of the type just re-enabled and writes the tip back over the reset. Either way the
+                // backfill this exists for never happens, silently, under an Online status.
+                //
                 // save after the cursor reset: its localChanges wakes pushJob→runSync, which must see the
-                // already-reset cursor and do a full re-pull (debounce gives enough of a gap).
-                settingsStore.save(settings)
+                // already-reset cursor and do a full re-pull.
+                syncMutex.withLock {
+                    if (reEnabled) cursorKey()?.let { syncState.setCursor(it, 0) }
+                    settingsStore.save(settings)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1146,10 +1270,33 @@ class SyncCoordinator(
      * brings it again. No-op if not connected.
      */
     fun recoverFullPull() {
-        val s = session ?: return
-        if (client == null) return
-        syncState.setCursor(s.accountId, 0)
-        syncNow()
+        if (session == null || client == null) return
+        scope.launch {
+            // Under the lock every cycle holds for its whole duration — so no cycle can be in flight while
+            // the reset happens, and any cycle that takes the lock after it does the full pull the reset
+            // asked for. An unlocked reset is overwritten by the tip a running cycle writes when it
+            // finishes, and the caller (a team whose key never arrived) asks exactly once per process, so
+            // a lost reset is never retried and the record stays missing until the app restarts.
+            // The reset is a file write and can fail (a full config dir). The caller used to run it on its
+            // own thread, where its `op {}` reported the failure; from a launch on a SupervisorJob with no
+            // handler it would instead reach the platform's uncaught handler — which on Android kills the
+            // app for a recovery the user did not even ask for by name.
+            val reset = syncMutex.withLock {
+                val key = activeLink?.cursorKey ?: return@withLock false
+                try {
+                    syncState.setCursor(key, 0)
+                    true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Reported from inside the lock: outside it, a cycle queued behind this one finishes
+                    // Online first and the failure lands on top of a session that is syncing fine.
+                    _status.value = SyncStatus.Failed(SyncFailureReason.SyncFailed, e.message)
+                    false
+                }
+            }
+            if (reset) syncNow()
+        }
     }
 
     /** Run one sync cycle (pull/merge/push). No-op if not connected. */
@@ -1265,6 +1412,9 @@ class SyncCoordinator(
         if ((_status.value as? SyncStatus.Failed)?.reason == SyncFailureReason.Network) scheduleNetworkRetry()
     }
 
+    /** The live session, the client it belongs to and their generation — always read as one. */
+    private fun liveSession(): LiveSession? = liveRef
+
     /**
      * Whether a reactivation reconcile is owed on this account but was never performed here: a debt for the
      * saved link stands ([reconcileDebts]) and this coordinator did not rebuild THAT link ([armedFor]).
@@ -1280,18 +1430,33 @@ class SyncCoordinator(
      * memory — which is why [reconcileDebts] and not the store is what this reads: otherwise a full disk
      * would leave the guard blind and every cycle would run over the un-rebuilt vault.
      *
-     * Read under [syncMutex] like [armedFor] itself, and matched on the saved link — on BOTH sides. A debt
-     * owed by this device to another server, or another account, says nothing about this session; neither
-     * does a rebuild that ran for another link, and taking one for permission is what let a session sync a
-     * vault whose records the server it is talking to had purged (issue #172).
+     * Read under [syncMutex] like [armedFor] itself, and matched on the link the live session is on — on
+     * BOTH sides. A debt owed by this device to another server, or another account, says nothing about this
+     * session; neither does a rebuild that ran for another link, and taking one for permission is what let
+     * a session sync a vault whose records the server it is talking to had purged (issue #172).
+     *
+     * The link comes from [activeLink], published with the session itself, and not from the saved config:
+     * that write is a separate one and can be refused, which used to leave this guard answering for the
+     * link the device came FROM while the session was already on the next one (issue #241).
      */
     private fun reconcileOwed(accountId: String): Boolean {
-        val cfg = configStore.load() ?: return false
-        if (cfg.accountId != accountId) return false
-        val link = ServerLink(cfg.serverUrl, cfg.accountId)
+        val link = activeLink ?: return false
+        if (link.accountId != accountId) return false
         if (armedFor == link) return false
         return link in reconcileDebts
     }
+
+    /**
+     * Where this device's delta cursor is filed: under the whole link, never the account id alone. Two
+     * self-hosted servers under one account id would otherwise share a cursor, and the second one's first
+     * pull would start at the first one's tip — every record at or below it never pulled, permanently,
+     * under an Online status (issue #242).
+     *
+     * The live session's link, or the saved one when there is none: a settings toggle resets the cursor
+     * with sync merely configured. Null when there is neither — no link, no cursor to touch.
+     */
+    private fun cursorKey(): String? =
+        (activeLink ?: configStore.load()?.let { ServerLink(it.serverUrl, it.accountId) })?.cursorKey
 
     /** Park the status on Configured (the vault-locked resting state); Disabled without a link. */
     private fun parkOnConfigured() {
@@ -1357,8 +1522,9 @@ class SyncCoordinator(
      *
      * Called before the status is published: [SyncStatus.Online] is what every observer reacts to, and
      * retiring the debt afterwards leaves a window in which Online is on screen while the device still
-     * owes a rebuild. Reads the live config rather than a captured copy — the link is what the debt is
-     * keyed on, and a connect that ran in between may have changed it. A cycle on another link retires
+     * owes a rebuild. Matched against [activeLink] — the link published with the live session — and not
+     * against a captured copy or the saved config: the debt is keyed on a link, and a connect that ran in
+     * between may have moved this coordinator to another one. A cycle on another link retires
      * nothing and ends the arming instead of carrying it: it just pulled that link's records into the
      * vault, so the rebuild the arming stood for no longer describes what is in there (issue #172). The
      * debt it left stands, and the next connect back rebuilds once more — never a record the server purged.
@@ -1372,13 +1538,11 @@ class SyncCoordinator(
      */
     private fun retireDischargedDebt(accountId: String) {
         val armed = armedFor ?: return
+        // No live link means no session, and this runs inside one — keep the arming rather than spend it on
+        // a state that cannot answer: the debt would otherwise stand with nothing left to retire it.
+        val link = activeLink ?: return
         runCatching {
-            // A config that doesn't load is a read that FAILED as readily as a link that isn't there (both
-            // stores answer `null` for either), and a failed read must not cost the arming: the debt would
-            // then stand with nothing left to retire it, and every later cycle would be refused. Keep it and
-            // let the next cycle re-read, like a refused retiring write.
-            val cfg = configStore.load() ?: return@runCatching
-            if (armed.accountId != accountId || ServerLink(cfg.serverUrl, cfg.accountId) != armed) {
+            if (armed.accountId != accountId || link != armed) {
                 armedFor = null
                 return@runCatching
             }
@@ -1421,6 +1585,10 @@ class SyncCoordinator(
      * link survives and the user reconnects with the password, mirroring [restoreSession]'s fallback.
      */
     private suspend fun refreshSessionLocked(c: SyncClient, stale: SyncSession): RefreshResult {
+        // The caller's client, not just its session: a caller that started before an activation holds the
+        // PREVIOUS server's client, and rotating through it would hand that server the refresh token of
+        // the account on the new one. Its call belongs to a session that is gone — stand down (issue #240).
+        if (c !== client) return RefreshResult.StandDown
         val current = session ?: return RefreshResult.StandDown
         if (current !== stale) return RefreshResult.Refreshed
         val fresh = try {
@@ -1430,28 +1598,40 @@ class SyncCoordinator(
         } catch (e: SyncException) {
             if (e.kind == SyncException.Kind.UNAUTHORIZED || e.kind == SyncException.Kind.NOT_FOUND) {
                 if (session !== stale) return RefreshResult.StandDown
-                session = null
-                watchJob?.cancel() // cancel only — join/replace stay under opMutex (activateSession/disconnect)
-                pushJob?.cancel()
-                retryJob?.cancel() // the session is dead — nothing left for the retry loop to heal
-                runCatching { c.close() }
-                client = null
-                val cfg = configStore.load()
-                if (cfg?.sealedRefreshToken != null) {
-                    runCatching { configStore.save(cfg.copy(sealedRefreshToken = null)) }
-                }
-                _status.value = cfg?.let { SyncStatus.Configured(it.serverUrl, it.accountId) }
-                    ?: SyncStatus.Disabled
-                return RefreshResult.Dead
+                return tearDownDeadSessionLocked(c)
             }
             return RefreshResult.Failed(e)
         } catch (e: Exception) {
             return RefreshResult.Failed(e)
         }
-        if (session !== stale) return RefreshResult.StandDown
-        session = fresh
+        val live = liveRef ?: return RefreshResult.StandDown
+        if (live.session !== stale) return RefreshResult.StandDown
+        // Same generation: a rotation is the same session with new tokens, and the subscriptions that
+        // belong to it must keep running.
+        liveRef = LiveSession(live.client, fresh, live.epoch, live.link)
         resealRefreshToken(fresh)
         return RefreshResult.Refreshed
+    }
+
+    /**
+     * The refresh token itself is dead (device revoked, 30-day expiry, account gone): drop the session and
+     * everything that was living off it, forget the known-dead sealed token so cold starts stop burning a
+     * round trip on it, and park on [SyncStatus.Configured] — the link survives and the user reconnects
+     * with the password. Under [syncMutex], from [refreshSessionLocked] only.
+     */
+    private suspend fun tearDownDeadSessionLocked(c: SyncClient): RefreshResult {
+        liveRef = null
+        sessionEpoch += 1
+        watchJob?.cancel() // cancel only — join/replace stay under opMutex (activateSession/disconnect)
+        pushJob?.cancel()
+        retryJob?.cancel() // the session is dead — nothing left for the retry loop to heal
+        runCatching { c.close() }
+        val cfg = configStore.load()
+        if (cfg?.sealedRefreshToken != null) {
+            runCatching { configStore.save(cfg.copy(sealedRefreshToken = null)) }
+        }
+        _status.value = cfg?.let { SyncStatus.Configured(it.serverUrl, it.accountId) } ?: SyncStatus.Disabled
+        return RefreshResult.Dead
     }
 
     /**
@@ -1477,8 +1657,8 @@ class SyncCoordinator(
      * echo of our own push with nothing to pull: suppress it to avoid a push→WS→push loop. `internal`
      * (not private) — a hook for the unit test [SyncCoordinatorWatchGuardTest].
      */
-    internal fun signalAdvancesCursor(accountId: String, remoteCursor: Long): Boolean =
-        remoteCursor > syncState.cursor(accountId)
+    internal fun signalAdvancesCursor(remoteCursor: Long): Boolean =
+        remoteCursor > (cursorKey()?.let { syncState.cursor(it) } ?: 0L)
 
     /**
      * Subscribe to server change notifications (WS `/sync`) and pull the delta on each signal —
@@ -1498,6 +1678,9 @@ class SyncCoordinator(
         // otherwise the old collect could run runSync with the new session under the old cursor.
         watchJob?.cancel()
         watchJob?.join()
+        // The generation this subscription belongs to, read under the opMutex the caller holds — the only
+        // place a new one can be published from.
+        val epoch = sessionEpoch
         watchJob = scope.launch {
             var backoff = WATCH_RETRY_MIN_MS
             while (true) {
@@ -1506,7 +1689,13 @@ class SyncCoordinator(
                 // a captured copy would reconnect with the dead access token forever, live-pull
                 // silently gone while the status stays Online. A nulled session (dead refresh token,
                 // disconnect is a cancel and never reaches here) ends the loop.
-                val s = session ?: break
+                //
+                // Under [syncMutex], and paired with the epoch check, because the same re-read is what
+                // let this loop pick up a session published for ANOTHER server and open a stream to it
+                // with [c] — the client of the server this loop belongs to (issue #240). The publish
+                // writes both fields under that lock, so reading them under it can never see one without
+                // the other; a session of a newer generation ends the loop instead.
+                val s = syncMutex.withLock { session?.takeIf { sessionEpoch == epoch } } ?: break
                 try {
                     c.changes(s).collect { signal ->
                         backoff = WATCH_RETRY_MIN_MS // a live signal — reset the delay to the minimum
@@ -1516,7 +1705,7 @@ class SyncCoordinator(
                                 // our own push, returning as a WS signal with an already-known cursor,
                                 // would trigger a redundant sync — the second push→WS→push loop breaker
                                 // (defense-in-depth to the server guard).
-                                if (signalAdvancesCursor(s.accountId, signal.cursor)) runSync()
+                                if (signalAdvancesCursor(signal.cursor)) runSync()
                             // Team signals are TeamsCoordinator's job (its own cursor guard is there);
                             // the share directory rides the same channel, since it is team-scoped too.
                             is SyncSignal.Team, is SyncSignal.Shares, SyncSignal.Membership ->
@@ -1533,7 +1722,7 @@ class SyncCoordinator(
                     // backoff, a no-op when another path already rotated, and a healthy-token rotate
                     // is harmless (server refresh tokens are stateless, the old one stays valid). A
                     // dead refresh token nulls the session — the re-read above ends the loop.
-                    syncMutex.withLock { refreshSessionLocked(c, s) }
+                    syncMutex.withLock { if (sessionEpoch == epoch) refreshSessionLocked(c, s) }
                 }
                 delay(backoff)
                 backoff = (backoff * 2).coerceAtMost(WATCH_RETRY_MAX_MS)
@@ -1553,16 +1742,20 @@ class SyncCoordinator(
         if (client == null || session == null) return
         pushJob?.cancel()
         pushJob?.join() // like startWatch: wait for the old subscription to stop before starting a new one
+        val epoch = sessionEpoch
         pushJob = scope.launch {
             vault.localChanges
                 .debounce(PUSH_DEBOUNCE_MS)
-                .collect { if (client != null && session != null) runSync() }
+                // The epoch, like in [startWatch]: an edit debounced across an activation must not be
+                // pushed by the subscription of the session that is gone. The cycle it would start reads
+                // the live client and session, so it is the new session's cycle either way — but a
+                // superseded job driving one is a job nothing is left to account for.
+                .collect { if (sessionEpoch == epoch && client != null && session != null) runSync() }
         }
     }
 
     suspend fun listDevices(): List<RemoteDevice> {
-        val c = client ?: return emptyList()
-        val s = session ?: return emptyList()
+        val (c, s) = liveSession()?.let { it.client to it.session } ?: return emptyList()
         // Not runCatching: it would swallow CancellationException and break structured concurrency.
         return try {
             c.listDevices(s)
@@ -1580,8 +1773,7 @@ class SyncCoordinator(
      * actually means.
      */
     suspend fun serverSummary(): AccountSummary? {
-        val c = client ?: return null
-        val s = session ?: return null
+        val (c, s) = liveSession()?.let { it.client to it.session } ?: return null
         return try {
             c.accountSummary(s)
         } catch (e: CancellationException) {
@@ -1597,8 +1789,7 @@ class SyncCoordinator(
      * UI doesn't offer revoking the current device (that's [disconnect]).
      */
     suspend fun revokeDevice(deviceId: String): Boolean {
-        val c = client ?: return false
-        val s = session ?: return false
+        val (c, s) = liveSession()?.let { it.client to it.session } ?: return false
         return try {
             c.revokeDevice(s, deviceId)
         } catch (e: CancellationException) {
@@ -1671,15 +1862,25 @@ class SyncCoordinator(
      * vault and overwrite the status, and nothing here reads the vault or writes [status].
      */
     private suspend fun <T> onWebAccess(op: suspend (WebAccessClient, SyncSession) -> T): T? {
-        val c = client ?: return null
+        // Client, session and generation in one locked read, and the generation re-checked before the
+        // retry: this call outlives an activation (it is a network round trip under no mutex), and the
+        // retry used to re-read the live session while still holding the client it started with — one
+        // server's client with another server's access token, and the web password in the body (#240).
+        val live = liveSession() ?: return null
+        val c = live.client
         val web = c as? WebAccessClient ?: return null
-        val s = session ?: return null
+        val s = live.session
         return try {
             op(web, s)
         } catch (e: SyncException) {
             if (e.kind != SyncException.Kind.UNAUTHORIZED) throw e
-            when (val refreshed = syncMutex.withLock { refreshSessionLocked(c, s) }) {
-                RefreshResult.Refreshed -> op(web, session ?: throw e)
+            val refreshed = syncMutex.withLock {
+                if (sessionEpoch != live.epoch) RefreshResult.StandDown else refreshSessionLocked(c, s)
+            }
+            when (refreshed) {
+                // The rotated session, read back under the lock and only for this generation.
+                RefreshResult.Refreshed ->
+                    op(web, syncMutex.withLock { session?.takeIf { sessionEpoch == live.epoch } } ?: throw e)
                 // The refresh attempt itself failed (network/protocol): report THAT cause, the way
                 // runSyncLocked does. Rethrowing the original 401 would say the session is gone and
                 // send the user to re-enter a master password that was never the problem.
@@ -1711,14 +1912,14 @@ class SyncCoordinator(
                     // runCatching: a close() failure (I/O at teardown) must not leave the link/cursor in
                     // place — otherwise disconnect would silently fail and the status stick.
                     runCatching { client?.close() }
-                    client = null
-                    session = null
+                    liveRef = null
+                    sessionEpoch += 1 // anything still holding the previous generation stands down
                 }
                 // Forget the sync cursor too: the next connect (to this or another account in the same
                 // process) must do a full re-pull, not continue from the last session's tip. runCatching: a
                 // cursor write failure (disk full) must not leave configStore/healthTarget/status in a
                 // half-detached state ("Disconnect ran but the device is linked again").
-                runCatching { configStore.load()?.let { syncState.setCursor(it.accountId, 0) } }
+                runCatching { cursorKey()?.let { syncState.setCursor(it, 0) } }
                 // The recorded debts survive on purpose ([debtStore] is not the config): erasing the link
                 // rebuilds nothing, so a debt the reconcile never paid is still owed on the next connect.
                 configStore.clear()
@@ -1779,7 +1980,11 @@ class SyncCoordinator(
                 // A disconnect or a fresh connect may have run while we waited for the mutex; a
                 // reconnect has already restarted the subscriptions itself — and it redid the reconcile
                 // on its way, which is why the redo below sits behind this guard and not in front of it.
-                if (lockPaused || session == null || watchJob != null) return@withLock
+                // isActive, not non-null: an activation that aborts cancels the previous subscriptions
+                // in the section that publishes the new session and never reaches the restart, so the
+                // field holds a DEAD job — read as "already subscribed", it would leave this session
+                // with no live-pull and skip the reconcile redo below for good.
+                if (lockPaused || session == null || watchJob?.isActive == true) return@withLock
                 // Before the cycle, not after: a reconcile still owed would refuse every cycle below.
                 // Lock order holds — syncMutex nests inside the opMutex we're under.
                 syncMutex.withLock { redoOwedReconcileLocked() }
@@ -1809,10 +2014,13 @@ class SyncCoordinator(
      */
     private fun redoOwedReconcileLocked() {
         val accountId = session?.accountId ?: return
-        // Matched on the account before anything is dropped: reconciling under a config saved for another
-        // account would clear this vault against a debt that says nothing about it. ([reconcileOwed]
-        // matches the same way on its own read — the two agree because nothing suspends in between.)
-        val cfg = configStore.load()?.takeIf { it.accountId == accountId } ?: return
+        val link = activeLink ?: return
+        // Matched on the whole link before anything is dropped: this clear rebuilds the vault for the
+        // server the live session is on, and the saved config is a separate write that can name another
+        // one (issue #241). Reconciling under it would drop this vault's records against a debt that says
+        // nothing about it — and save that foreign link on the way out. ([reconcileOwed] matches the same
+        // link; the two agree because nothing suspends in between.)
+        val cfg = configStore.load()?.takeIf { ServerLink(it.serverUrl, it.accountId) == link } ?: return
         if (!reconcileOwed(accountId)) return
         // Not swallowed silently: the cycle the caller runs next reads the same debt this clear failed to
         // retire and publishes the refusal, so the failure keeps its own status — see the KDoc above.

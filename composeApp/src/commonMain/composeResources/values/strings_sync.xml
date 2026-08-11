@@ -83,6 +83,8 @@
     <string name="sync_confirm">Confirm</string>
     <string name="sync_cancel">Cancel</string>
     <string name="sync_revoke">Revoke</string>
+    <!-- Last resort for a linked device whose name and id both filter away to nothing -->
+    <string name="sync_device_unnamed">Unnamed device</string>
 
     <!-- Desktop-диалоги -->
     <string name="sync_setup_dialog_desc">End-to-end encrypted. Skerry never sees your data in plaintext — the master password stays on your device.</string>
@@ -137,6 +139,8 @@
     <string name="web_access_state_off">Not set</string>
     <string name="web_access_state_unknown">Can\'t read the state</string>
     <string name="web_access_checking">Checking…</string>
+    <!-- Screen-reader confirmation after a set/change/remove; %1$s — one of the state lines above -->
+    <string name="web_access_announce">Web access: %1$s</string>
     <string name="web_access_set">Set password</string>
     <string name="web_access_change">Change</string>
     <string name="web_access_open">Open</string>

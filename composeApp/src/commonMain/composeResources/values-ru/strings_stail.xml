@@ -23,4 +23,9 @@
     <string name="stail_sync_fail_key_adopt">Не удалось принять ключ аккаунта</string>
     <!-- %1$s — локализованная причина, %2$s — техническая деталь (сообщение сервера/библиотеки) -->
     <string name="stail_sync_fail_detail">%1$s (%2$s)</string>
+
+    <!-- Объявления для экранного диктора о состоянии синхронизации — см. syncAnnouncement -->
+    <!-- %1$s — локализованный текст ошибки -->
+    <string name="stail_sync_announce_error">Ошибка синхронизации. %1$s</string>
+    <string name="stail_sync_announce_disconnected">Синхронизация отключена</string>
 </resources>

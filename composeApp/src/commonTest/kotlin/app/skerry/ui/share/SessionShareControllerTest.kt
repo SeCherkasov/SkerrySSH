@@ -15,6 +15,7 @@ import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.VaultCrypto
 import app.skerry.shared.vault.initializeVaultCrypto
+import app.skerry.ui.sync.ShareLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -94,8 +95,7 @@ class SessionShareControllerTest {
     private fun TestScope.controller(client: SessionShareClient?, key: DataKey? = teamKey): Pair<SessionShareController, CoroutineScope> {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         return SessionShareController(
-            client = { client },
-            session = { syncSession },
+            liveLink = { client?.let { ShareLink(syncSession, it) } },
             teamKey = { key },
             crypto = crypto,
             newShareId = { "share-1" },

@@ -9,6 +9,10 @@ import app.skerry.ui.generated.resources.stail_synced_host
 import app.skerry.ui.generated.resources.stail_synced
 import app.skerry.ui.generated.resources.stail_linked_locked
 import app.skerry.ui.generated.resources.stail_sync_error
+import app.skerry.shared.sync.RemoteDevice
+import app.skerry.ui.design.SHORT_ID_CHARS
+import app.skerry.ui.design.spaceLabel
+import app.skerry.ui.design.untrustedLabel
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -39,14 +43,16 @@ fun accountCardModel(status: SyncStatus?, serverUrl: String? = null): AccountCar
     SyncStatus.Busy, is SyncStatus.NeedsPasswordReplaceConfirm -> localVaultCard("Syncing…")
     is SyncStatus.Online -> AccountCardModel(
         initials = accountInitials(status.accountId),
-        title = status.accountId,
+        // A device that joined by pairing learns the account id from the server's answer, so the title is
+        // not necessarily this user's own typing.
+        title = untrustedLabel(status.accountId),
         subtitle = serverHost(serverUrl)?.let { "Synced · $it" } ?: "Synced",
         connected = true,
         linked = false,
     )
     is SyncStatus.Configured -> AccountCardModel(
         initials = accountInitials(status.accountId),
-        title = status.accountId,
+        title = untrustedLabel(status.accountId),
         subtitle = "Linked · locked",
         connected = false,
         linked = true,
@@ -68,7 +74,9 @@ fun accountCardModelLocalized(status: SyncStatus?, serverUrl: String? = null): A
     SyncStatus.Busy, is SyncStatus.NeedsPasswordReplaceConfirm -> localizedLocalVaultCard(stringResource(Res.string.stail_syncing))
     is SyncStatus.Online -> AccountCardModel(
         initials = accountInitials(status.accountId),
-        title = status.accountId,
+        // A device that joined by pairing learns the account id from the server's answer, so the title is
+        // not necessarily this user's own typing.
+        title = untrustedLabel(status.accountId),
         subtitle = serverHost(serverUrl)?.let { stringResource(Res.string.stail_synced_host, it) }
             ?: stringResource(Res.string.stail_synced),
         connected = true,
@@ -76,7 +84,7 @@ fun accountCardModelLocalized(status: SyncStatus?, serverUrl: String? = null): A
     )
     is SyncStatus.Configured -> AccountCardModel(
         initials = accountInitials(status.accountId),
-        title = status.accountId,
+        title = untrustedLabel(status.accountId),
         subtitle = stringResource(Res.string.stail_linked_locked),
         connected = false,
         linked = true,
@@ -92,6 +100,19 @@ private fun localizedLocalVaultCard(subtitle: String) = AccountCardModel(
     connected = false,
     linked = false,
 )
+
+/**
+ * The name of a linked device, made fit to draw. That list is the surface the account owner revokes from,
+ * and the name is whatever the server returns for it — a bidi override in one row reverses the one beside
+ * it, so the wrong device is revoked and the right one keeps its token. Falls back to a slice of the id
+ * when the filter leaves nothing: an unnamed row still has to be one row apart from the next.
+ */
+fun deviceLabel(device: RemoteDevice, unnamed: String): String =
+    // The id is the server's text as well, so it is filtered before it is sliced — a fallback that skips
+    // the filter just moves the hole from the name to the id. And the id can filter away to nothing too,
+    // which is what [unnamed] is for: a row that draws and announces an empty string is a row the owner
+    // cannot tell from the next one, on the surface they revoke a device from.
+    spaceLabel(device.name, fallback = untrustedLabel(device.id).take(SHORT_ID_CHARS)).ifBlank { unnamed }
 
 /** Avatar initials: up to two leading letters/digits of the accountId local part, uppercased. */
 fun accountInitials(accountId: String): String {

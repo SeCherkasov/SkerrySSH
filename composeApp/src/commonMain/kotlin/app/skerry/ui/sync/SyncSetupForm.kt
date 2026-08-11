@@ -10,8 +10,12 @@ data class SyncSetupForm(
     val serverUrl: String = "",
     val accountId: String = "",
 ) {
-    /** Server URL trimmed (as it goes to [SyncCoordinator]). */
-    val normalizedServerUrl: String get() = serverUrl.trim()
+    /**
+     * Server URL in the canonical spelling it is saved and compared under ([canonicalServerUrl]) — so the
+     * link this device is on doesn't depend on how the user happened to type its host, port or trailing
+     * slash (issue #243).
+     */
+    val normalizedServerUrl: String get() = canonicalServerUrl(serverUrl)
 
     /** Account id trimmed. */
     val normalizedAccountId: String get() = accountId.trim()

@@ -20,7 +20,14 @@ data class SyncSession(
     val accessToken: String,
     val refreshToken: String,
     val reactivated: Boolean = false,
-)
+) {
+    /**
+     * Redacted, like [PairingPayload]: the refresh token is thirty days of full account access, and the
+     * generated `toString()` would print both of them into the first exception message or log line that
+     * ever interpolates a session — including the wrappers that hold one.
+     */
+    override fun toString(): String = "SyncSession($accountId, accessToken=***, refreshToken=***, reactivated=$reactivated)"
+}
 
 /**
  * Encrypted record as sent over the wire: metadata is plaintext, [blob] is XChaCha20-Poly1305
@@ -73,6 +80,14 @@ data class PairingTicket(val code: String, val expiresAt: Long)
 
 /** Result of claiming a pairing on a new device: encrypted dataKey plus a ready session. */
 data class PairingResult(val accountId: String, val encryptedDataKey: ByteArray, val session: SyncSession)
+
+/**
+ * Longest account id this client will accept from a server — the same bound the server enforces at
+ * registration. It matters on the paths where the id is the SERVER's answer rather than the user's typing
+ * (a device joining by pairing learns it from the claim): it goes into the config, into the account key
+ * derivation, and into a per-link store key rewritten on every cycle.
+ */
+const val MAX_ACCOUNT_ID_CHARS = 320
 
 /**
  * Client for the self-hosted sync server. Contract lives in the

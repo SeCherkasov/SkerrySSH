@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sync_password_replace_body
 import app.skerry.ui.generated.resources.sync_password_replace_cancel
@@ -46,7 +47,7 @@ fun PasswordReplaceConfirm(sync: SyncCoordinator, accountId: String) {
         icon = "warning",
         iconColor = Skerry.colors.amber,
         title = stringResource(Res.string.sync_password_replace_title),
-        subtitle = stringResource(Res.string.sync_password_replace_body, accountId),
+        subtitle = stringResource(Res.string.sync_password_replace_body, untrustedLabel(accountId)),
     )
     Row(
         Modifier.fillMaxWidth().padding(top = 16.dp),

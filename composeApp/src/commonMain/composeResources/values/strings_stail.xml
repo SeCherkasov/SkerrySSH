@@ -23,4 +23,9 @@
     <string name="stail_sync_fail_key_adopt">Couldn't adopt the account key</string>
     <!-- %1$s — localized reason, %2$s — raw technical detail (server/library message) -->
     <string name="stail_sync_fail_detail">%1$s (%2$s)</string>
+
+    <!-- Screen-reader announcements for a sync state that changed on its own — see syncAnnouncement -->
+    <!-- %1$s — the localized failure text -->
+    <string name="stail_sync_announce_error">Sync error. %1$s</string>
+    <string name="stail_sync_announce_disconnected">Sync disconnected</string>
 </resources>

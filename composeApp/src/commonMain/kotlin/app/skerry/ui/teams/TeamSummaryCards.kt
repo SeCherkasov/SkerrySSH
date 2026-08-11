@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import app.skerry.ui.design.Card
 import app.skerry.ui.design.KeyValueRow
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_card_devices
 import app.skerry.ui.generated.resources.lib_teams_card_devices_value
@@ -91,7 +92,12 @@ private fun ServerCard(cards: TeamCards, modifier: Modifier) {
     Card(modifier, title = stringResource(Res.string.lib_teams_card_server)) {
         KeyValueRow(stringResource(Res.string.lib_teams_card_endpoint), cards.endpoint ?: NO_VALUE)
         KeyValueRow(stringResource(Res.string.lib_teams_card_storage), stringResource(Res.string.lib_teams_card_storage_value))
-        KeyValueRow(stringResource(Res.string.lib_teams_card_version), cards.serverVersion?.takeIf { it.isNotBlank() } ?: NO_VALUE)
+        // The version string is whatever the server says it is — bounded and stripped like every other
+        // field it authors, or it reverses the label beside it.
+        KeyValueRow(
+            stringResource(Res.string.lib_teams_card_version),
+            cards.serverVersion?.takeIf { it.isNotBlank() }?.let { untrustedLabel(it) }?.takeIf { it.isNotBlank() } ?: NO_VALUE,
+        )
         KeyValueRow(
             stringResource(Res.string.lib_teams_card_devices),
             cards.devices?.let { stringResource(Res.string.lib_teams_card_devices_value, it) } ?: NO_VALUE,
