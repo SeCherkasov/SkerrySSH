@@ -240,7 +240,12 @@ private fun AssistantFeed(
                 if (partial.isEmpty()) {
                     Txt(stringResource(Res.string.assistant_thinking), color = Skerry.colors.dim, size = 12.5.sp)
                 } else {
-                    AssistantMessage(partial, fromUser = false, actions = actionsFor(actions, streaming = true))
+                    AssistantMessage(
+                        partial,
+                        fromUser = false,
+                        actions = actionsFor(actions, streaming = true),
+                        streaming = true,
+                    )
                 }
             }
         }

@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,6 +57,8 @@ import app.skerry.ui.generated.resources.term_ai_explain_reading
 import app.skerry.ui.generated.resources.term_ai_not_a_command
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.ClippedNotice
+import app.skerry.ui.design.CommandQuote
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
@@ -83,8 +84,24 @@ internal fun MobileAiBarInput(controller: TerminalAiController, terminal: Termin
     val danger = risk == CommandRisk.Danger
     // Red for any destructive command (delete/overwrite), even Warn.
     val severe = danger || controller.pendingRisk?.destructive == true
-    val accent = if (severe) Skerry.colors.sunset else Skerry.colors.moss
     var armed by remember(pending) { mutableStateOf(false) }
+    // Whether the strip managed to show the whole command. The bar is a strip over the terminal, so
+    // past [COMMAND_MAX_LINES] the rest is behind a scroll — and a command the user has not been
+    // shown is not a command they can confirm in one tap. Null until the layout says: unmeasured
+    // counts as unread, or the gate is open for the frame before it is known.
+    var fits by remember(pending) { mutableStateOf<Boolean?>(null) }
+    val clipped = fits == false
+    // `severe`, not `danger`: the desktop card arms for any destructive command, and the bar already
+    // paints those red. Painting a gate that is not there is worse than not painting it.
+    val unconfirmed = pending != null && (severe || fits != true)
+    // The label waits for a definite answer where the gate does not: an unmeasured strip would
+    // otherwise read "Run anyway" for the frame before its first layout.
+    val warns = pending != null && (severe || fits == false)
+    val accent = when {
+        severe -> Skerry.colors.sunset
+        clipped -> Skerry.colors.amber
+        else -> Skerry.colors.moss
+    }
     Column(Modifier.fillMaxWidth().background(if (pending != null) accent.copy(alpha = 0.08f) else Skerry.colors.surface2)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
@@ -107,16 +124,38 @@ internal fun MobileAiBarInput(controller: TerminalAiController, terminal: Termin
                             CommandRisk.None -> controller.pendingInfo
                             else -> controller.pendingRisk?.reason?.let { commandRiskReasonText(it) }
                         }
-                        // Long-press selects, as in the terminal underneath: the bar has no Copy
-                        // button, so selection is the only way the command leaves the screen.
-                        SelectionContainer {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                // The command wraps (up to 6 lines), not truncated: the user sees in full what
-                                // they confirm and run (see TerminalView — the same safety invariant).
-                                // Direction pinned, as on the desktop card: a shell line is LTR whatever the UI language.
-                                Txt(pending, color = if (severe) Skerry.colors.sunset else Skerry.colors.text, size = 12.sp, font = mono, maxLines = 6, overflow = TextOverflow.Ellipsis, textDirection = TextDirection.Ltr, modifier = Modifier.weight(1f, fill = false).alignByBaseline())
-                                if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).alignByBaseline())
+                        // The notice goes under the row rather than into the info slot beside the
+                        // command: that slot is one weighted half of the row at 10.5.sp, which cuts
+                        // the count — the only part of it that carries anything — and it would take
+                        // the room from the command it is about.
+                        Column {
+                            // Long-press selects, as in the terminal underneath: the bar has no Copy
+                            // button, so selection is the only way the command leaves the screen.
+                            SelectionContainer {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    // The same block the desktop card draws, under the same rules:
+                                    // it wraps rather than scrolling sideways, and past
+                                    // [COMMAND_MAX_LINES] it scrolls rather than ellipsising — this
+                                    // strip has no Copy and no Edit, so text it does not lay out is
+                                    // text nothing on the phone can reach. Latched: the command
+                                    // shares its row with the chips, so the label this decides
+                                    // ("Run" vs "Confirm") decides in turn how much width is left to
+                                    // wrap in.
+                                    CommandQuote(
+                                        pending,
+                                        visibleLines = COMMAND_MAX_LINES,
+                                        modifier = Modifier.weight(1f, fill = false),
+                                        color = if (severe) Skerry.colors.sunset else Skerry.colors.text,
+                                        latchClipped = true,
+                                        onFit = { fits = it },
+                                    )
+                                    // Top-aligned rather than on a baseline: the command is a
+                                    // scroll box now, and the baseline of a box that can be
+                                    // scrolled is not the baseline of the line being read.
+                                    if (info != null) Txt(info, color = infoColor, size = 10.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                }
                             }
+                            ClippedNotice(clipped, pending.length)
                         }
                     }
                     explanation != null ->
@@ -165,8 +204,8 @@ internal fun MobileAiBarInput(controller: TerminalAiController, terminal: Termin
             }
             when {
                 pending != null -> {
-                    MobileAiChip(when { !danger -> stringResource(Res.string.term_ai_run); !armed -> stringResource(Res.string.term_ai_run_anyway); else -> stringResource(Res.string.term_ai_confirm) }, accent) {
-                        if (danger && !armed) armed = true
+                    MobileAiChip(when { !warns -> stringResource(Res.string.term_ai_run); !armed -> stringResource(Res.string.term_ai_run_anyway); else -> stringResource(Res.string.term_ai_confirm) }, accent) {
+                        if (unconfirmed && !armed) armed = true
                         else controller.confirm()?.let { terminal.sendUserInputGuarded(it + "\r") }
                     }
                     MobileAiChip(stringResource(Res.string.term_ai_dismiss), Skerry.colors.faint) { controller.dismiss() }
@@ -240,3 +279,9 @@ private fun MobileAiChip(label: String, color: Color, onClick: () -> Unit) {
         Txt(label, color = color, size = 11.5.sp, weight = FontWeight.Medium)
     }
 }
+
+/**
+ * Lines of a proposed command the bar will show. Six is what fits over the terminal without the
+ * strip taking the screen; past that the block scrolls and Run takes a second tap.
+ */
+private const val COMMAND_MAX_LINES = 6

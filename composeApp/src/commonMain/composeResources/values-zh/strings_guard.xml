@@ -4,6 +4,10 @@
     <string name="guard_prod_connect_confirm">连接</string>
     <string name="guard_prod_command_title">在生产环境执行该命令？</string>
     <string name="guard_prod_command_host">主机 %1$s 带有 #prod 标签。</string>
+    <string name="guard_prod_nothing_to_show">无可显示的命令</string>
+    <string name="guard_prod_on_line">已在命令行上</string>
+    <string name="guard_prod_further_in">在该输入的后面</string>
+    <string name="guard_prod_sending">发送</string>
     <string name="guard_prod_command_confirm">执行</string>
     <string name="guard_prod_broadcast_title">向生产环境群发？</string>
     <string name="guard_prod_broadcast_message">所选会话中有 %1$d 个位于生产环境主机。命令将同时发送到全部会话。</string>

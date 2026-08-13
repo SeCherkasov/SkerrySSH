@@ -75,4 +75,6 @@
     <string name="qr_scan_hint">Point the camera at the QR code shown on your other device.</string>
     <string name="qr_permission_needed">Camera permission is needed to scan the pairing code.</string>
     <string name="qr_cancel">Cancel</string>
+    <string name="command_clipped_partial">shown in part</string>
+    <string name="command_clipped">shown in part · %1$d chars</string>
 </resources>

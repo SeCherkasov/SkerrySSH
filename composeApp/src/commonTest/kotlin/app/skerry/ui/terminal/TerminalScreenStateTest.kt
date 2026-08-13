@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -98,6 +99,25 @@ class TerminalScreenStateTest {
 
         assertTrue(mirrored.isEmpty())
         assertEquals(listOf("ls\n", "echo hi"), session.sent.map { it.decodeToString() })
+        scope.cancel()
+    }
+
+    /**
+     * What a snippet left on the line has to be part of what the next keystroke is classified
+     * against — at the moment that keystroke is classified, not whenever a queue gets around to it.
+     * The dispatcher here never runs the emulator's own coroutine, which is what a pane draining a
+     * backlog of output looks like from the keyboard's side.
+     */
+    @Test
+    fun `a snippet's line is tracked before the next input is classified`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.sendUserInput("rm -rf ") // a snippet leaves a half-written command on the line
+        state.typeInput("/srv\r") // the user finishes it by hand
+
+        assertEquals("rm -rf /srv", state.pendingGuarded?.command)
         scope.cancel()
     }
 
@@ -202,9 +222,10 @@ class TerminalScreenStateTest {
 
     @Test
     fun `sendUserInput forwards to the session and bumps inputVersion`() = runTest {
-        // Keybar keys, snippet runs, and AI-confirmed commands are user-initiated: they must snap
-        // a scrolled-up viewport back to the live screen (unlike programmatic send), but must not
-        // feed autocomplete (unlike typeInput).
+        // Keybar keys, snippet runs and AI-confirmed commands are user-initiated: they must snap a
+        // scrolled-up viewport back to the live screen, which a programmatic send must not do. They
+        // reach the tracked line as well, but by telling the engine what they did to it rather than
+        // by being fed through it character by character as typed input is.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val state = TerminalScreenState(session, scope)
@@ -445,6 +466,474 @@ class TerminalScreenStateTest {
 
         assertNotNull(state.pendingGuarded)
         assertEquals(false, session.sent.any { it.decodeToString() == "${15.toChar()}" })
+        // What runs is the line, and the control that runs it is not a character of it: quoting it
+        // would draw a command with a `<U+000F>` in it, and report the line twice.
+        assertEquals("rm -rf /srv", state.pendingGuardedQuote)
+        assertNull(state.pendingGuardedAside)
+        scope.cancel()
+    }
+
+    /**
+     * The join of a completed prefix and an incoming block is a string neither side has: it is
+     * classified, because it is the closest thing to what will run, but the dialog may not draw it.
+     * What is on the line is the prefix, and that is what the caption is about.
+     */
+    @Test
+    fun `a joined guess is classified but the dialog draws the line itself`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        session.emit("root@prod:~# rm -rf /srv/prod-db".encodeToByteArray())
+
+        "rm -rf /sr".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        state.sendUserInputGuarded("uptime\r")
+
+        assertEquals("uptime", state.pendingGuardedQuote)
+        val aside = assertNotNull(state.pendingGuardedAside)
+        assertEquals(true, aside.onLine)
+        assertEquals(false, aside.line.contains("uptime"), "the dialog drew a line nothing has: ${aside.line}")
+        scope.cancel()
+    }
+
+    /**
+     * The dangerous part arrives in the block, not on the line: `sudo r` was typed and completed,
+     * and `m -rf /var` finishes it. Neither half trips the guard alone — only the two joined, which
+     * is what will run.
+     */
+    @Test
+    fun `a block that finishes a completed line is classified as the joined command`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = false)
+        session.emit("root@prod:~# sudo r".encodeToByteArray())
+
+        "sudo r".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        state.paste("m -rf /var\n")
+
+        assertEquals("sudo rm -rf /var", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    /**
+     * And a row the host drew that does not finish what was typed is not a command anyone ran: the
+     * palette draws what history stores, across every host.
+     */
+    @Test
+    fun `a screen row unrelated to what was typed is not recorded`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var saved: List<String>? = null
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+
+        "systemctl restart ngi".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        session.emit("Display all 3000 possibilities? (y or n)".encodeToByteArray())
+        state.typeInput("\r")
+
+        assertNull(saved, "a row the host drew was recorded as a command")
+        scope.cancel()
+    }
+
+    /**
+     * The row is the host's to draw, and what is drawn there is not always what it reads as. A line
+     * carrying an override renders in an order the shell will not use; recorded, it would come back
+     * as a suggestion and sit in the palette across every host, reading as a command it is not.
+     */
+    @Test
+    fun `a screen row that does not draw as itself is not recorded`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var saved: List<String>? = null
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+
+        "echo hello".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        session.emit("root@prod:~# echo hello \u202e# rm -rf /srv".encodeToByteArray())
+        state.typeInput("\r")
+
+        assertNull(saved, "a line that draws in another order was recorded as a command")
+        scope.cancel()
+    }
+
+    /**
+     * The block finished the line itself, so the screen's row is not what ran — it is missing what
+     * this block added. Only a block that runs the line as it stands may take the screen's word for
+     * what that line is. (The Android IME funnel delivers a paste and its Enter as one block.)
+     */
+    @Test
+    fun `a block that adds to a completed line does not take the screen's word for it`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var saved: List<String>? = null
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+
+        "rm -rf /srv/bac".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        session.emit("root@prod:~# rm -rf /srv/backups/".encodeToByteArray())
+        state.typeInput("old\r") // one block: what the paste added, then Enter
+
+        assertNull(saved, "the screen's line was recorded as if the block had added nothing")
+        scope.cancel()
+    }
+
+    /**
+     * A character typed after a completion ends the prefix, but not the client's knowledge that
+     * something is on the line. The guard still classifies it — a wrapped `rm -rf` finished by hand
+     * is exactly the command a confirmation exists for.
+     */
+    @Test
+    fun `a line typed onto after a completion is still classified`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "rm -rf /var/log/nginx/arch".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        state.typeInput("k") // the completion did not finish it; the line now wraps
+        session.emit("ive/2024-01".encodeToByteArray()) // the row the line wrapped onto
+        state.typeInput("\r")
+
+        assertNotNull(state.pendingGuarded, "a wrapped rm -rf ran with no question asked")
+        scope.cancel()
+    }
+
+    /**
+     * And what it holds is reported beside the quote: the quote cannot claim a line the client is
+     * only guessing at, but leaving it out draws a service restart over an `rm -rf` that runs first.
+     */
+    @Test
+    fun `a line the quote cannot claim is drawn beside it`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "rm -rf /srv/back".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t") // completed, so what is held is a beginning of the shell's line
+        state.paste("; systemctl restart nginx\n")
+
+        assertEquals("; systemctl restart nginx", state.pendingGuardedQuote)
+        assertEquals("rm -rf /srv/back", state.pendingGuardedAside?.line)
+        scope.cancel()
+    }
+
+    /**
+     * Once something is typed onto a completed line the two have parted company: the shell's line is
+     * neither what is tracked nor a continuation of it. It is still classified — the danger is in it
+     * either way — but there is nothing truthful to draw, so the dialog says what the screen says
+     * rather than captioning an invention as "already on the line".
+     */
+    @Test
+    fun `a line that diverged from the shell's is classified but not drawn as it`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        session.emit("root@prod:~# rm -rf /srv/backups-2019/x".encodeToByteArray())
+
+        "rm -rf /srv/back".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        state.typeInput("x") // the shell put its own characters in the middle; this lands at the end
+        state.paste("; systemctl restart nginx\n")
+
+        assertNotNull(state.pendingGuarded)
+        assertEquals(false, state.pendingGuardedAside?.line == "rm -rf /srv/backx", "a line nobody has was drawn")
+        scope.cancel()
+    }
+
+    /**
+     * A Tab whose completion has not echoed yet leaves the row reading exactly what was typed. That
+     * is the prefix, not a command anyone ran — recording it is the thing this fallback exists to
+     * stop doing.
+     */
+    @Test
+    fun `a completion that has not echoed records nothing`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var saved: List<String>? = null
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+
+        "rm -rf /srv/ba".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        session.emit("root@prod:~# rm -rf /srv/ba".encodeToByteArray()) // the echo of what was typed
+        state.typeInput("\r")
+
+        assertNull(saved, "a half-typed prefix was recorded as a command")
+        scope.cancel()
+    }
+
+    /**
+     * The line diverged, it wrapped so the screen holds only its tail, and the input is a bare
+     * Enter: there is a reason and nothing truthful to show for it. The join the classifier used is
+     * a string neither side has, so the dialog draws no command rather than that one.
+     */
+    @Test
+    fun `a reason with nothing drawable behind it quotes nothing`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "rm -rf /var/log/nginx/arch".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        state.typeInput("k")
+        session.emit("ive/2024-01k".encodeToByteArray()) // the row the wrapped line ends on
+        state.typeInput("\r")
+
+        assertNotNull(state.pendingGuarded)
+        assertEquals("", state.pendingGuardedQuote, "a line neither side has was quoted")
+        assertNull(state.pendingGuardedQuoteLength)
+        assertNull(state.pendingGuardedAside)
+        scope.cancel()
+    }
+
+    /**
+     * Inside vim the cursor row is a line of a file and the tracked line is what is being typed into
+     * it. Neither is a shell line: a paste confirmed there must not be captioned as one, and what
+     * the screen holds must not become a command in the host's history.
+     */
+    @Test
+    fun `nothing on the alternate screen is taken for a shell line`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var saved: List<String>? = null
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        session.emit("\u001b[?1049h".encodeToByteArray())
+
+        "rm -rf /srv".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        state.paste("docker ps\nuptime\n")
+
+        assertNull(state.pendingGuardedAside, "a line of a file was captioned as the shell's")
+        assertNull(saved)
+        scope.cancel()
+    }
+
+    /**
+     * Text typed after the cursor was moved to the start runs *before* what is already on the line,
+     * not after it. The client cannot model that, so it must not draw the line it would get by
+     * appending: what the screen holds is the only thing left that is true.
+     */
+    @Test
+    fun `a line whose cursor moved is not quoted as an append`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        session.emit("root@prod:~# sudo rm -rf /srv; deploy".encodeToByteArray())
+
+        "deploy".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\u0001") // Ctrl-A
+        state.typeInput("sudo rm -rf /srv; ")
+        state.typeInput("\r")
+
+        assertNotNull(state.pendingGuarded)
+        assertEquals(false, state.pendingGuardedQuote.startsWith("deploysudo"), "an appended line was quoted")
+        assertEquals(false, state.pendingGuardedAside?.line?.startsWith("deploysudo") == true)
+        scope.cancel()
+    }
+
+    /**
+     * Saying no does not clear the line. The question came from the line itself, so forgetting it
+     * would leave the next Enter over the same shell line unasked — the guard would have talked
+     * itself out of its own finding. Asking again is the price; Ctrl-C and Ctrl-U are the way out.
+     */
+    @Test
+    fun `dismissing a question does not disarm the line it was about`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "rm -rf /srv/data".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\u000B") // Ctrl-K: the shell clears the rest of the line
+        state.typeInput("\r")
+        assertNotNull(state.pendingGuarded)
+        assertEquals("", state.pendingGuardedQuote)
+
+        state.dismissGuardedCommand()
+        state.typeInput("\r")
+
+        assertNotNull(state.pendingGuarded, "the line ran unasked after the question was dismissed")
+        scope.cancel()
+    }
+
+    /**
+     * The ghost belonged to the line the secret replaced. With the echo off nothing else will redraw,
+     * so it would sit at the cursor of a password prompt offering a completion of a line that is gone
+     * — and the typed path already clears it there.
+     */
+    @Test
+    fun `a secret sent by a snippet takes the ghost with the line`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, initialHistory = listOf("git push origin main"))
+        session.emit("$ ".encodeToByteArray())
+        state.typeInput("git pu")
+        session.emit("git pu".encodeToByteArray())
+        assertEquals("sh origin main", state.suggestionTail)
+
+        session.echoOff = true // a prompt is taking a secret
+        state.sendUserInput("hunter2")
+
+        assertNull(state.suggestionTail, "a completion of the old line was left over a password prompt")
+        scope.cancel()
+    }
+
+    /**
+     * The completed line wrapped, so the cursor row holds only its tail and says nothing about what
+     * the command is. What was typed before the Tab is still a prefix of what the shell has — the
+     * shell only appended to it — so it stays a candidate to classify, and `rm -rf` is held.
+     */
+    @Test
+    fun `a wrapped line completed by the shell is still held`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "rm -rf /srv/bac".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        session.emit("kups/2024-week12/nightly/".encodeToByteArray()) // the row the line wrapped onto
+        state.typeInput("\r")
+
+        assertNotNull(state.pendingGuarded, "a completed rm -rf ran with no question asked")
+        // The prefix is all there is to quote, and it is not the whole line: the dialog says so
+        // without a count, because no count over a prefix would be true.
+        assertEquals("rm -rf /srv/bac", state.pendingGuardedQuote)
+        assertNull(state.pendingGuardedQuoteLength)
+        scope.cancel()
+    }
+
+    /**
+     * The completed line wrapped, so the cursor row is its tail and not a command anyone ran.
+     * Recording that fragment would offer it back as a suggestion and put it in the reverse search;
+     * recording nothing is what the engine does with a line it cannot follow.
+     */
+    @Test
+    fun `a wrapped completion is not recorded as a command`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var saved: List<String>? = null
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        state.resize(PtySize(cols = 20, rows = 6))
+
+        "systemctl restart ngi".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        session.emit("root@prod:~# systemctl restart nginx.service".encodeToByteArray()) // wraps at 20
+        state.typeInput("\r")
+
+        assertNull(saved, "a fragment of a wrapped line was recorded as a command")
+        scope.cancel()
+    }
+
+    /**
+     * And the line the shell finished is what goes into history — the prefix that was typed is not a
+     * command anyone ran, and recording nothing at all would empty the history of a session where
+     * paths are tab-completed, which is most of them.
+     */
+    @Test
+    fun `a command the shell completed is recorded as the shell has it`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        var saved: List<String>? = null
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+
+        "systemctl restart ngi".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        session.emit("root@prod:~# systemctl restart nginx.service".encodeToByteArray())
+        state.typeInput("\r")
+
+        assertEquals(listOf("systemctl restart nginx.service"), saved)
+        scope.cancel()
+    }
+
+    /**
+     * A snippet that answers a password prompt is input like any other, and the tracked line is
+     * where history comes from. The typed and pasted paths already drop it; the ready-made one must
+     * too, or the next Enter writes the secret to the host's stored history.
+     */
+    @Test
+    fun `a secret sent by a snippet never reaches the tracked line`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession().apply { echoOff = true }
+        var saved: List<String>? = null
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+
+        state.sendUserInput("hunter2")
+        session.echoOff = false // the prompt is answered; the shell echoes again
+        state.typeInput("\r")
+
+        assertNull(saved, "a secret reached the host's history")
+        scope.cancel()
+    }
+
+    /**
+     * Inside vim or htop the cursor row is a line of a file. A snippet confirmed there must not be
+     * held against it, and the dialog must not draw it beside what is being sent.
+     */
+    @Test
+    fun `a ready-made command is not guessed against the alternate screen`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        session.emit("\u001b[?1049h".encodeToByteArray()) // alt-screen
+        session.emit("rm -rf /srv/data".encodeToByteArray()) // a line of the file being edited
+
+        state.sendUserInputGuarded("docker ps\r")
+
+        assertNull(state.pendingGuarded, "text the user is only looking at held a command")
+        scope.cancel()
+    }
+
+    /**
+     * Ctrl-O runs the line and pulls the next history entry into it, so what is on the line
+     * afterwards is not in the text that ran and cannot be derived from it.
+     */
+    @Test
+    fun `a keybar Ctrl-O leaves the line unknown rather than guessed`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "uptime".forEach { state.typeInput(it.toString()) }
+        state.sendUserInput("${15.toChar()}") // a ready-made block carrying Ctrl-O
+        state.typeInput("\r") // whatever the shell recalled runs on this Enter
+
+        // Nothing local is offered as what that Enter runs: the line came from the shell's history.
+        assertNull(state.pendingGuarded)
+        assertNull(state.suggestionTail)
+        scope.cancel()
+    }
+
+    /**
+     * Tab with no local ghost goes to the shell, which completes the line on its own — the tracked
+     * line is a prefix of the real one from then on, and the client cannot tell how much of one. The
+     * dialog must not quote that prefix: `rm -rf /sr` under a danger reason reads as a command that
+     * would delete nothing, while Enter runs `rm -rf /srv/prod-db`.
+     */
+    @Test
+    fun `a line completed by the shell is not quoted as what was typed`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "rm -rf /sr".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\t")
+        session.emit("root@prod:~# rm -rf /srv/prod-db".encodeToByteArray())
+        state.typeInput("\r")
+
+        assertEquals("rm -rf /srv/prod-db", state.pendingGuarded?.command)
+        assertEquals("rm -rf /srv/prod-db", state.pendingGuardedQuote)
         scope.cancel()
     }
 
@@ -1561,6 +2050,316 @@ class TerminalScreenStateTest {
         assertEquals("rm -rf /var/lib", state.pendingGuarded?.command)
         // Everything typed so far went through; only the Enter that would run it is held.
         assertEquals(false, session.sent.any { it.contentEquals("\r".encodeToByteArray()) })
+        scope.cancel()
+    }
+
+    /**
+     * What the confirmation quotes has to be what Confirm replays, and for a typed block that is the
+     * shell's line — the part already echoed plus the block arriving now. The case that tells them
+     * apart is the one Android takes for every clipboard paste: the block continues a line that is
+     * already there and carries more lines after it. Quoting the block alone would show neither the
+     * command that tripped the guard nor, once that line stood in for it, the lines under it.
+     */
+    @Test
+    fun `the quote for a typed block continues the line already on screen`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "rm -rf /sr".forEach { state.typeInput(it.toString()) }
+        state.typeInput("v\rchown -R nobody /srv/www\r")
+
+        assertEquals("rm -rf /srv", state.pendingGuarded?.command)
+        // Kept as the bytes that will run, carriage returns and all: the line breaks are a drawing
+        // question, and the block that draws it is what turns them into breaks.
+        assertEquals("rm -rf /srv\rchown -R nobody /srv/www", state.pendingGuardedQuote)
+        scope.cancel()
+    }
+
+    /** A paste is quoted from the block itself, every line of it, and it is replayed the same way. */
+    @Test
+    fun `the quote for a pasted block carries the lines under the risky one`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.paste("rm -rf /srv\nchown -R nobody /srv/www\n")
+
+        assertEquals("rm -rf /srv\nchown -R nobody /srv/www", state.pendingGuardedQuote)
+        scope.cancel()
+    }
+
+    /**
+     * A ready-made command lands on whatever the line already holds, so that is what the guard has
+     * to classify and quote. Classifying the block alone let a snippet finish a half-typed `rm -rf `
+     * with no question asked at all.
+     */
+    @Test
+    fun `a command finishing a half-typed line is held and quoted whole`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "rm -rf ".forEach { state.typeInput(it.toString()) }
+        state.sendUserInputGuarded("/srv/data\r")
+
+        assertEquals("rm -rf /srv/data", state.pendingGuarded?.command)
+        assertEquals("rm -rf /srv/data", state.pendingGuardedQuote)
+        // The typed prefix was echoed as it was typed; what the guard held is the block itself.
+        assertTrue(session.sent.none { it.decodeToString().contains("/srv/data") })
+        scope.cancel()
+    }
+
+    /** The same for a paste, which lands at the cursor exactly as a snippet does. */
+    @Test
+    fun `a paste finishing a half-typed line is quoted with it`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "echo ".forEach { state.typeInput(it.toString()) }
+        state.paste("rm -rf /srv\n")
+
+        assertEquals("echo rm -rf /srv", state.pendingGuardedQuote)
+        scope.cancel()
+    }
+
+    /**
+     * A line the engine cannot follow any more — Ctrl-W ate a word the client never saw removed — is
+     * not quoted at all: the guard falls back to the line it tripped on rather than drawing a
+     * sentence the shell will not run.
+     */
+    @Test
+    fun `a line edited by a control the client cannot follow is not quoted from`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        session.emit("root@prod:~# rm -rf /srv/data".encodeToByteArray())
+
+        // The tracked line keeps the word Ctrl-W removed from the shell's, and the screen — which is
+        // what the guard trips on — holds the line as it really is.
+        "rm -rf /srv/data extra".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\u0017") // Ctrl-W: the shell dropped a word, the tracked line did not
+        state.typeInput("\r")
+
+        assertEquals("rm -rf /srv/data", state.pendingGuarded?.command)
+        assertEquals("rm -rf /srv/data", state.pendingGuardedQuote)
+        scope.cancel()
+    }
+
+    /**
+     * The joined line is offered *beside* the block's own first line, never instead of it: the
+     * classifier's patterns are word-anchored, so a tracked `git` joined to `rm -rf /srv` reads as
+     * `gitrm -rf /srv` — harmless. The worst candidate wins, so the real command still holds.
+     */
+    @Test
+    fun `a command joined onto a word is still classified on its own`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "git".forEach { state.typeInput(it.toString()) }
+        state.sendUserInputGuarded("rm -rf /srv/cache\r")
+
+        assertEquals("rm -rf /srv/cache", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    /**
+     * And once a ready-made command has gone out, the line it left behind is not the shell's any
+     * more — nothing told the tracker it ran. Classifying the next command against it would raise a
+     * reason out of text that is no longer there, and quote a line nothing will run.
+     */
+    @Test
+    fun `a line left behind by a command that already ran is not joined onto the next`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "sudo ".forEach { state.typeInput(it.toString()) }
+        state.sendUserInputGuarded("rm -rf /var/lib/pgsql\r")
+        state.confirmGuardedCommand()
+
+        state.sendUserInputGuarded("ls /var/lib\r")
+
+        assertNull(state.pendingGuarded, "a stale `sudo ` held a command that does not run under it")
+        scope.cancel()
+    }
+
+    /**
+     * A command that ran without passing through the tracker leaves the line empty, not unknowable.
+     * Treating it as unknowable cost everything after it: the next typed command was classified from
+     * the screen row alone, and a snippet finishing it was not classified against it at all.
+     */
+    @Test
+    fun `the line is tracked again after a command that ran elsewhere`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        state.sendUserInputGuarded("docker ps\r") // harmless: not held, but it moved the line
+        "rm -rf ".forEach { state.typeInput(it.toString()) }
+        state.sendUserInputGuarded("/srv/data\r")
+
+        assertEquals("rm -rf /srv/data", state.pendingGuarded?.command)
+        assertEquals("rm -rf /srv/data", state.pendingGuardedQuote)
+        scope.cancel()
+    }
+
+    /**
+     * And a block that arrives while the tracked line is stale is still quoted whole: what the client
+     * cannot trust is the prefix, never the input it was just handed.
+     */
+    @Test
+    fun `a block pasted onto a line the client lost track of is still quoted whole`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        "foo bar".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\u0017") // Ctrl-W: the tracked line is now a guess
+        state.paste("rm -rf /srv\nchown -R nobody /srv/www\n")
+
+        assertEquals("rm -rf /srv\nchown -R nobody /srv/www", state.pendingGuardedQuote)
+        scope.cancel()
+    }
+
+    /**
+     * The command typed after one that ran elsewhere still reaches history: the tracker knows the
+     * line was cleared, so it has no reason to distrust what is typed onto it.
+     */
+    @Test
+    fun `a command typed after a snippet still reaches history`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val history = mutableListOf<List<String>>()
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it })
+
+        state.sendUserInputGuarded("docker ps\r")
+        session.emit("uptime".encodeToByteArray()) // echo, so the engine records what was typed
+        "uptime".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\r")
+
+        assertTrue(history.any { "uptime" in it }, "the command after a snippet never reached history")
+        scope.cancel()
+    }
+
+    /**
+     * The assistant's Edit puts a command on the line without running it. Nothing else tells the
+     * tracker, so the Enter that follows used to commit the line as it was before — the command the
+     * user actually ran was not the one that reached history.
+     */
+    @Test
+    fun `a command put on the line to be edited is tracked as if typed`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val history = mutableListOf<List<String>>()
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it })
+
+        state.sendUserInputGuarded("uptime") // Edit: the command lands on the line, nothing runs
+        session.emit("uptime".encodeToByteArray())
+        state.typeInput("\r")
+
+        assertTrue(history.any { "uptime" in it }, "the edited command never reached history")
+        scope.cancel()
+    }
+
+    /**
+     * The mobile key panel sends its arrows and Esc as raw sequences through the same path a
+     * ready-made command takes. They edit the shell's line in ways nothing here can follow, so the
+     * line becomes a guess — gluing the bytes on would carry them into the next history entry.
+     */
+    @Test
+    fun `an escape sequence sent to the line does not become part of the next command`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val history = mutableListOf<List<String>>()
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it })
+
+        state.sendUserInput("\u001b[A") // arrow up from the key panel: the shell recalled a command
+        "uptime".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\r")
+
+        // Both halves: the sequence is not glued onto the command, and the command still lands —
+        // marking the line unreadable for good would cost every command after it its history entry.
+        assertTrue(history.any { "uptime" in it }, "the command after an escape never reached history")
+        assertTrue(
+            history.flatten().none { it.any { c -> c < ' ' } },
+            "an escape sequence was recorded as part of a command: ${history.flatten()}",
+        )
+        scope.cancel()
+    }
+
+    /**
+     * A line the client lost track of is not joined onto what arrives next — the join would be a
+     * line nothing will run, and the guard would quote it as the thing being confirmed. What the
+     * shell really holds is then the screen's business, and the screen is read on every path.
+     */
+    @Test
+    fun `a ready-made command is classified against the line on screen`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        session.emit("root@prod:~# rm -rf /srv/data".encodeToByteArray())
+
+        "rm -rf /srv/data".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\u0017") // Ctrl-W: the tracked line is a guess from here on
+        state.sendUserInputGuarded("docker ps\r")
+
+        assertEquals("rm -rf /srv/data", state.pendingGuarded?.command)
+        // What Confirm sends is quoted; the screen's line is stated beside it, as its own fact.
+        assertEquals("docker ps", state.pendingGuardedQuote)
+        assertEquals("rm -rf /srv/data", state.pendingGuardedAside?.line)
+        scope.cancel()
+    }
+
+    /** The same on the paste path, which has no tracked line to fall back on either. */
+    @Test
+    fun `a paste is classified against the line on screen`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+        session.emit("root@prod:~# rm -rf /srv/data".encodeToByteArray())
+
+        "rm -rf /srv/data".forEach { state.typeInput(it.toString()) }
+        state.typeInput("\u0017") // Ctrl-W: the tracked line is a guess from here on
+        state.paste(" --one-file-system\n") // harmless on its own
+
+        assertEquals("rm -rf /srv/data", state.pendingGuarded?.command)
+        scope.cancel()
+    }
+
+    /**
+     * The classifier reads a bounded number of candidates and a long block fills that on its own, so
+     * the joined line — the one candidate that exists because the block finishes what was typed — is
+     * classified beside the block rather than inside its budget.
+     */
+    @Test
+    fun `a long block finishing a half-typed line is still held`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+        state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
+
+        // With a prompt on screen, as any live session has: the screen's candidates and the join are
+        // guesses about the same line, and neither may cost the block a line of its own.
+        session.emit("root@prod:~# ".encodeToByteArray())
+        "rm -rf ".forEach { state.typeInput(it.toString()) }
+        val block = "/srv/data\n" + (1..300).joinToString("\n") { "echo step $it" } + "\n"
+        state.sendUserInputGuarded(block)
+
+        assertEquals("rm -rf /srv/data", state.pendingGuarded?.command)
         scope.cancel()
     }
 

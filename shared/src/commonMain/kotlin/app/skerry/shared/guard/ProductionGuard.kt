@@ -21,7 +21,17 @@ const val MAX_GUARDED_COMMAND_LENGTH = 512
 const val MAX_GUARDED_CANDIDATES = 200
 
 /** A command that needs confirmation on a production host, with the reason to show the user. */
-data class GuardedCommand(val command: String, val assessment: CommandAssessment)
+data class GuardedCommand(
+    val command: String,
+    val assessment: CommandAssessment,
+    /**
+     * How long the candidate was before [MAX_GUARDED_COMMAND_LENGTH] cut it for the classifier. A
+     * dialog quoting [command] states this instead of what it drew: a shell line on a wide terminal
+     * can be longer than the classifier reads, and a partial command presented as whole is the one
+     * thing the confirmation exists to prevent.
+     */
+    val fullLength: Int = command.length,
+)
 
 /**
  * What the guard asks about in one session.
@@ -63,11 +73,7 @@ data class ProductionGuardPolicy(
 object ProductionGuard {
 
     /**
-     * Prompt terminator: the `$`/`#`/`%`/`>` (and the usual powerline/starship arrows) followed by a
-     * space that separates a shell prompt from what was typed after it.
-     */
-    /**
-     * Characters that end a shell prompt. Exposed because the syntax highlighter needs the same set
+     * Characters that end a shell prompt — `$`/`#`/`%`/`>` and the usual powerline/starship arrows. Exposed because the syntax highlighter needs the same set
      * for its allocation-free prescan: a second hand-written copy would silently drift from this one
      * the day a prompt glyph is added, and rows the guard cuts would stop being highlighted.
      */
@@ -101,17 +107,27 @@ object ProductionGuard {
         if (!policy.production) return null
         var worst: GuardedCommand? = null
         for (candidate in candidates.take(MAX_GUARDED_CANDIDATES)) {
-            val command = candidate.trim().take(MAX_GUARDED_COMMAND_LENGTH)
+            val whole = candidate.trim()
+            val command = whole.take(MAX_GUARDED_COMMAND_LENGTH)
             if (command.isEmpty()) continue
             val assessment = CommandRiskClassifier.assess(command)
             if (!needsConfirmation(assessment, policy)) continue
-            val current = worst
-            val better = current == null ||
-                assessment.risk.ordinal > current.assessment.risk.ordinal ||
-                (assessment.risk == current.assessment.risk && command.length < current.command.length)
-            if (better) worst = GuardedCommand(command, assessment)
+            worst = worse(worst, GuardedCommand(command, assessment, fullLength = whole.length))
         }
         return worst
+    }
+
+    /**
+     * The riskier of two findings by the same rule [inspect] ranks its candidates with. Public
+     * because candidates come from lists that must not share one cap — what a block will run is
+     * capped for the classifier's sake, and a guess read off the screen may not spend that budget.
+     */
+    fun worse(current: GuardedCommand?, other: GuardedCommand?): GuardedCommand? {
+        if (other == null) return current
+        if (current == null) return other
+        val better = other.assessment.risk.ordinal > current.assessment.risk.ordinal ||
+            (other.assessment.risk == current.assessment.risk && other.command.length < current.command.length)
+        return if (better) other else current
     }
 
     /** Single-candidate form: broadcast lines and snippets are known verbatim. */
@@ -119,9 +135,13 @@ object ProductionGuard {
         inspect(listOf(command), policy)
 
     /**
-     * Candidates from one input block (a paste, an IME commit, a ready-made command). Both caps are
-     * applied while splitting, not after: a multi-megabyte paste would otherwise materialize a
-     * String per line before [inspect] ever gets to drop them.
+     * Candidates from one input block (a paste, an IME commit, a ready-made command). Capped in
+     * number while splitting rather than after — a multi-megabyte paste would otherwise materialize
+     * a String per line before [inspect] ever gets to drop them. Capped in length here as well: a
+     * paste is not bounded by anything, and holding it a second time in full to keep an exact
+     * [GuardedCommand.fullLength] for a line nobody quotes from is the wrong trade. The quote carries
+     * its own, uncut length; what the screen holds is bounded by the terminal and stays uncut in
+     * [promptCandidates], which is where a length past the cap can still be real.
      */
     fun candidatesOf(text: String): List<String> =
         text.lineSequence()
@@ -152,7 +172,7 @@ object ProductionGuard {
      * line still holds the command.
      */
     fun promptCandidates(rawLine: String): List<String> {
-        val line = rawLine.trim().take(MAX_GUARDED_COMMAND_LENGTH)
+        val line = rawLine.trim()
         if (line.isEmpty()) return emptyList()
         val cut = promptEnd(line)
         if (cut == 0) return listOf(line)
