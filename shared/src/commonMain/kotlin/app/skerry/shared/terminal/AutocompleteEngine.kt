@@ -1,5 +1,7 @@
 package app.skerry.shared.terminal
 
+import kotlin.concurrent.Volatile
+
 /**
  * Terminal autocomplete engine (fish/zsh-style inline suggestion). Doesn't parse the remote
  * shell — it locally tracks the line the user is TYPING (from bytes sent to the PTY) and offers a
@@ -13,19 +15,28 @@ package app.skerry.shared.terminal
  * UI usage: [onUserInput] on each block sent to the session; [suggestionTail] is what to render
  * in gray after the typed text; [acceptSuggestion] returns the bytes to send to accept the
  * suggestion (Tab/→), updating the internal line.
+ *
+ * Every piece of state here is a value that is replaced, never edited in place, and published
+ * through [Volatile]. A terminal reaches the engine from more than one thread — a runbook step
+ * advances on its own dispatcher while the user types into the same pane — and a `StringBuilder`
+ * being appended to under a reader is how that turns into an exception on the keyboard's thread
+ * rather than a line. Two writers can still lose an update to each other; what they cannot do is
+ * tear one.
  */
 class AutocompleteEngine(
     private val history: CommandHistory = CommandHistory(),
     private val builtins: List<String> = COMMON_COMMANDS,
 ) {
-    private val line = StringBuilder()
+    @Volatile
+    private var line: String = ""
 
     // Cycle cursor for alternatives (Shift+Tab): index into [candidates]. Reset to 0 on any line
     // change so the best suggestion shows again after a new character.
+    @Volatile
     private var cycleIndex = 0
 
     /** Current typed line (for tests/diagnostics). */
-    val currentLine: String get() = line.toString()
+    val currentLine: String get() = line
 
     /**
      * Whether the tracked line may no longer match the host's. Set when input carried a control byte
@@ -33,8 +44,45 @@ class AutocompleteEngine(
      * the line here and the line on screen have diverged, and anything built on it — a suggestion, a
      * completion to insert — would complete a line the user is not on. Cleared when the line is.
      */
+    @Volatile
     var lineSuspect: Boolean = false
         private set
+
+    /**
+     * The narrower half of [lineSuspect]: the shell only *appended* to the tracked line, so what is
+     * held is still a genuine prefix of what it has. A Tab the UI did not consume is the case — the
+     * shell answers it with a completion. Nothing may be offered or quoted from a prefix, but it can
+     * still be classified: a production guard reading `rm -rf /srv/bac` finds the same reason the
+     * finished line would, and a completed command whose line wrapped is off the screen's only row.
+     */
+    @Volatile
+    var linePartial: Boolean = false
+        private set
+
+    /** The line is the client's own again: neither a guess nor the beginning of a longer one. */
+    private fun clearSuspicion() {
+        lineSuspect = false
+        linePartial = false
+    }
+
+    /**
+     * A line ran without passing through here — a ready-made command sent straight to the PTY — and
+     * [tail] is what it left behind on the shell's line, usually nothing. `null` when that cannot be
+     * known: Ctrl-O runs the line *and* recalls the next history entry into it, so what is there
+     * afterwards is the shell's business.
+     *
+     * With a [tail] the line is replaced rather than marked suspect: what happened to it is known
+     * exactly, and `suspect` would cost the *next* command its history entry, its suggestion and the
+     * tracked candidate the production guard classifies. What is lost either way is the command that
+     * ran — the engine never saw it, so it is not history.
+     */
+    fun lineRanElsewhere(tail: String?) {
+        line = tail.orEmpty()
+        lineSuspect = tail == null
+        linePartial = false
+        // As on any other line change: the alternative being cycled belonged to the line that left.
+        cycleIndex = 0
+    }
 
     /** Command history (for reverse-search from the UI). */
     val commandHistory: CommandHistory get() = history
@@ -44,9 +92,9 @@ class AutocompleteEngine(
 
     /** Resets the tracked line without recording it to history (e.g. entering a no-echo mode). */
     fun reset() {
-        line.clear()
+        line = ""
         cycleIndex = 0
-        lineSuspect = false
+        clearSuspicion()
     }
 
     /**
@@ -57,38 +105,60 @@ class AutocompleteEngine(
     fun onUserInput(data: ByteArray): String? {
         cycleIndex = 0 // line changed — cycling restarts from the best candidate
         var committed: String? = null
+        // Built in a buffer that never leaves this function: a paste arrives as one block, and
+        // growing the shared line a character at a time would copy it once per character. What is
+        // published to [line] is still only a finished string, so a reader on another thread cannot
+        // see anything half-built.
+        val buffer = StringBuilder(line)
         var i = 0
         while (i < data.size) {
             val b = data[i].toInt() and 0xFF
             when {
                 b == CR || b == LF -> {
-                    val cmd = line.toString().trim()
+                    val cmd = buffer.toString().trim()
                     if (cmd.isNotEmpty() && !lineSuspect) {
                         history.record(cmd)
                         committed = cmd
                     }
-                    line.clear()
-                    lineSuspect = false
+                    buffer.setLength(0)
+                    line = ""
+                    clearSuspicion()
                 }
-                b == BS || b == DEL -> if (line.isNotEmpty()) line.deleteAt(line.length - 1)
-                b == CTRL_U || b == CTRL_C -> { line.clear(); lineSuspect = false }
-                b == ESC -> { line.clear(); lineSuspect = false; i = skipEscapeSequence(data, i) } // arrows/navigation — reset
-                b == TAB -> { /* accept — handled by the UI via acceptSuggestion */ }
+                b == BS || b == DEL -> if (buffer.isNotEmpty()) buffer.setLength(buffer.length - 1)
+                b == CTRL_U || b == CTRL_C -> { buffer.setLength(0); line = ""; clearSuspicion() }
+                // arrows/navigation — reset
+                b == ESC -> {
+                    buffer.setLength(0)
+                    line = ""
+                    clearSuspicion()
+                    i = skipEscapeSequence(data, i)
+                }
+                // A Tab the UI consumed never gets here (it calls [acceptSuggestion] instead), so one
+                // that does went to the shell, which answers it by rewriting the line — a completion,
+                // a list of them, a bell. The tracked line is a prefix of the real one from then on
+                // and nothing local can say how much of one, so it stops being trusted: offering a
+                // ghost for it would complete text the shell does not have, and the production guard
+                // would quote the prefix as the whole command.
+                b == TAB -> { lineSuspect = true; linePartial = true }
                 // A control byte that edits the line on the shell side (Ctrl-W kills a word, Ctrl-K
                 // the rest of it) leaves the two lines disagreeing — mark the line, nothing is offered
                 // for it. Cursor moves and screen redraws (Ctrl-A/E, Ctrl-L) keep the line as it is.
-                b in LINE_EDITING_CONTROLS -> lineSuspect = true
+                b in LINE_EDITING_CONTROLS -> { lineSuspect = true; linePartial = false }
                 b < 0x20 -> { /* other control bytes — ignored, line untouched */ }
                 else -> {
                     // Printable character: decoded as UTF-8 (multi-byte sequences taken whole).
                     val (ch, next) = decodeUtf8(data, i)
-                    if (ch != null) line.append(ch)
+                    // What the shell completed sits where the cursor was, and this lands after it:
+                    // the two lines part company here, so what is held stops being a prefix of the
+                    // shell's. A deletion does not — dropping the end of a prefix leaves a prefix.
+                    if (ch != null) { buffer.append(ch); linePartial = false }
                     i = next
                     continue
                 }
             }
             i++
         }
+        line = buffer.toString()
         return committed
     }
 
@@ -98,7 +168,7 @@ class AutocompleteEngine(
      * path/tokens seen in this session's history. Duplicates collapsed, first-seen order kept.
      * Empty if there's nothing to suggest (empty line / ends with a space).
      */
-    fun candidates(): List<String> = candidatesFor(line.toString())
+    fun candidates(): List<String> = candidatesFor(currentLine)
 
     private fun candidatesFor(prefix: String): List<String> {
         if (prefix.isBlank() || prefix.endsWith(' ')) return emptyList()
@@ -117,7 +187,7 @@ class AutocompleteEngine(
      * `null` for a line a control byte may have edited ([lineSuspect]): completing it would rewrite a
      * line the user is no longer on.
      */
-    fun suggestion(): String? = if (lineSuspect) null else suggestionFor(line.toString())
+    fun suggestion(): String? = if (lineSuspect) null else suggestionFor(currentLine)
 
     private fun suggestionFor(prefix: String): String? {
         val c = candidatesFor(prefix)
@@ -125,8 +195,20 @@ class AutocompleteEngine(
         return c[cycleIndex.mod(c.size)]
     }
 
-    /** Suggestion tail — what to render in gray after the typed text, or `null`. */
-    fun suggestionTail(): String? = suggestion()?.substring(line.length)
+    /**
+     * Suggestion tail — what to render in gray after the typed text, or `null`.
+     *
+     * The line is read once and both halves are taken from that one value. Reading it again for the
+     * cut is what makes a value that cannot tear tear anyway: the line can change between the two
+     * reads, and the tail then belongs to a line nobody is on — a cut past its end throws, and a
+     * cut before it returns text that [acceptSuggestion] would type into the shell.
+     */
+    fun suggestionTail(): String? = tailOf(line)
+
+    private fun tailOf(prefix: String): String? {
+        if (lineSuspect) return null
+        return suggestionFor(prefix)?.substring(prefix.length)
+    }
 
     /**
      * Switches to the next suggestion alternative (Shift+Tab). Cycles through [candidates] with
@@ -142,8 +224,11 @@ class AutocompleteEngine(
      * (the tail), and updates the internal line. `null` if there's nothing to accept.
      */
     fun acceptSuggestion(): ByteArray? {
-        val tail = suggestionTail() ?: return null
-        line.append(tail)
+        // One read for the tail and for what it is appended to: taking the line again would append a
+        // tail computed for a different one.
+        val prefix = line
+        val tail = tailOf(prefix) ?: return null
+        line = prefix + tail
         cycleIndex = 0
         return tail.encodeToByteArray()
     }
@@ -231,13 +316,23 @@ class AutocompleteEngine(
         const val TAB = 9
 
         /**
-         * Control bytes a shell acts on by rewriting the current line, which this engine cannot
-         * follow: Ctrl-D (delete forward), Ctrl-K (kill to end), Ctrl-N/Ctrl-P (history recall,
-         * which replaces the line wholesale), Ctrl-O (run it and recall the next), Ctrl-T
-         * (transpose), Ctrl-W (kill word), Ctrl-Y (yank), Ctrl-_ (undo). Ctrl-U and Ctrl-C clear the
-         * line outright and are handled above; cursor moves and redraws (Ctrl-A/B/E/F/L) leave it be.
+         * Control bytes after which the tracked line is no longer something to quote or complete.
+         *
+         * Most rewrite the line and this engine cannot follow the result: Ctrl-D (delete forward),
+         * Ctrl-K (kill to end), Ctrl-N/Ctrl-P (history recall, which replaces it wholesale), Ctrl-O
+         * (run it and recall the next), Ctrl-R (reverse search — the line is replaced and what is
+         * typed next goes into the search box, not onto it), Ctrl-T (transpose), Ctrl-W (kill word),
+         * Ctrl-Y (yank), Ctrl-_ (undo). Ctrl-A/Ctrl-B/Ctrl-E/Ctrl-F leave the content alone and move the cursor,
+         * which is worse for the same reason: what is typed next lands where the cursor is, not at
+         * the end, so a line built by appending is one the shell does not have — and the production
+         * guard would quote it. The cost is wider than an edited line: Ctrl-A is also the tmux and
+         * screen prefix, and it reaches the PTY like any other Ctrl byte, so a window switch costs
+         * the next command its ghost and its history entry until the line is run or cleared. The
+         * alternative is a confirmation that names a command nobody wrote.
+         *
+         * Ctrl-U and Ctrl-C clear the line outright and are handled above; Ctrl-L only redraws.
          */
-        val LINE_EDITING_CONTROLS = setOf(4, 11, 14, 15, 16, 20, 23, 25, 31)
+        val LINE_EDITING_CONTROLS = setOf(1, 2, 4, 5, 6, 11, 14, 15, 16, 18, 20, 23, 25, 31)
     }
 }
 

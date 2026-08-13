@@ -2,7 +2,6 @@ package app.skerry.ui.ai
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -27,16 +25,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.CommandRisk
 import app.skerry.shared.ai.CommandRiskClassifier
 import app.skerry.ui.design.ChipButton
+import app.skerry.ui.design.ClippedNotice
+import app.skerry.ui.design.CommandQuote
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
@@ -73,6 +73,8 @@ internal fun AssistantMessage(
     actions: AssistantCommandActions,
     /** How many command outputs travelled with this question; 0 draws nothing. */
     attached: Int = 0,
+    /** Whether this turn is still being written. Its text grows under whatever is drawn from it. */
+    streaming: Boolean = false,
 ) {
     val alignment = if (fromUser) Alignment.End else Alignment.Start
     Column(Modifier.fillMaxWidth(), horizontalAlignment = alignment) {
@@ -149,7 +151,7 @@ internal fun AssistantMessage(
                     when (segment) {
                         is AssistantSegment.Prose -> ProseText(segment.text)
                         is AssistantSegment.Code -> {
-                            CodeBlock(segment, actions)
+                            CodeBlock(segment, actions, streaming)
                             seenCode = true
                         }
                     }
@@ -184,55 +186,88 @@ private fun annotate(spans: List<AiSpan>, mono: FontFamily): AnnotatedString = b
  * looking like it ran the block. A block with nothing runnable (comments only) still renders as text.
  */
 @Composable
-private fun CodeBlock(segment: AssistantSegment.Code, actions: AssistantCommandActions) {
+private fun CodeBlock(segment: AssistantSegment.Code, actions: AssistantCommandActions, streaming: Boolean) {
     if (segment.commands.size <= 1) {
-        CommandCard(segment.text, segment.commands.firstOrNull(), actions)
+        CommandCard(segment.text, segment.commands.firstOrNull(), actions, streaming)
         return
     }
     segment.commands.forEachIndexed { index, command ->
         if (index > 0) Box(Modifier.height(8.dp))
-        CommandCard(command, command, actions)
+        CommandCard(command, command, actions, streaming)
     }
 }
 
 /**
  * One command as shown and, if it is runnable, its actions. Nothing runs on its own — Run sends
  * [command] plus CR, and a [CommandRisk.Danger] one takes a second click, the same confirmation the
- * one-shot bar required.
+ * one-shot bar required. So does one the card cannot show whole: what is confirmed has to be what
+ * was read.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun CommandCard(display: String, command: String?, actions: AssistantCommandActions) {
-    val mono = LocalFonts.current.mono
+private fun CommandCard(
+    display: String,
+    command: String?,
+    actions: AssistantCommandActions,
+    streaming: Boolean,
+) {
     val risk = remember(command) { command?.let { CommandRiskClassifier.assess(it) } }
     val severe = risk?.risk == CommandRisk.Danger || risk?.destructive == true
-    var armed by remember(command) { mutableStateOf(false) }
+    // Two things only the layout knows, and they are not the same question. Whether the whole block
+    // fitted is what the card says about itself, and [CommandQuote] owns it. Whether the *runnable
+    // line* fitted decides whether Run needs confirming — a one-line command under nine lines of
+    // comment is fully read even though the box is scrolling, and arming there would spend the
+    // warning on nothing. Null until the first layout: a gate that defaults to "read" is open for
+    // the frame before it is measured.
+    var clipped by remember(display) { mutableStateOf(false) }
+    var commandRead by remember(display, command) { mutableStateOf<Boolean?>(null) }
+    // Keyed on the drawn text as well as the command: a reply that grows after the first click can
+    // push the runnable line out of what is laid out, and the arming was granted against the block as
+    // it was drawn then.
+    var armed by remember(display, command) { mutableStateOf(false) }
+    // Two readings of the same fact, and the difference is one frame: the click gate closes until the
+    // layout says the command was read, while the label waits for it to say the opposite. Sharing
+    // one of them would flash an amber "Run anyway" over every card as it scrolls into the feed.
+    val unconfirmed = severe || commandRead != true
+    val warns = severe || commandRead == false
     Column(Modifier.padding(top = 2.dp)) {
-        Box(
-            Modifier
+        CommandQuote(
+            display,
+            visibleLines = COMMAND_VISIBLE_LINES,
+            modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
                 .background(Skerry.colors.terminalBg)
                 .border(1.dp, Skerry.colors.line, RoundedCornerShape(10.dp))
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-                .horizontalScroll(rememberScrollState()),
-        ) {
-            // A long command scrolls rather than wrapping: a wrapped shell line is easy to misread
-            // before confirming it.
-            //
-            // Direction pinned rather than inherited: a shell line is LTR by nature, and an unstyled
-            // Txt resolves its paragraph base from the layout direction. Under an RTL UI locale a
-            // command whose first strong character is RTL would render with its trailing `#` hoisted
-            // to the front — a live command reading as a comment, next to the Run button. No
-            // character filter can prevent that; stating the direction can.
-            Txt(
-                display,
-                color = if (severe) Skerry.colors.sunset else Skerry.colors.moss,
-                size = 11.5.sp,
-                lineHeight = 18.sp,
-                font = mono,
-                textDirection = TextDirection.Ltr,
-            )
+                .padding(horizontal = 10.dp),
+            color = if (severe) Skerry.colors.sunset else Skerry.colors.moss,
+            size = 11.5.sp,
+            padding = CARD_PADDING,
+            onFit = { clipped = it == false },
+            // Where the runnable line ended up, looked up in the string that was actually laid out
+            // rather than in [display]: the quote cuts what it draws and spells out what would draw
+            // as nothing, and an offset into the text before either of those is an offset into a
+            // different string. A line that is not in what was drawn — cut away, or rewritten — has
+            // not been read, which is the safe answer. A later comment repeating the command text
+            // wins the lookup and can only make the gate stricter.
+            // Remembered under the same keys as the state it writes: the quote keys its own layout
+            // callback on this one, so a fresh lambda per recomposition would re-measure the
+            // paragraph on every click of the row below it.
+            onLayout = remember(display, command) {
+                { layout: TextLayoutResult ->
+                    val drawn = layout.layoutInput.text.text
+                    val end = command?.let { c -> drawn.lastIndexOf(c).takeIf { it >= 0 }?.plus(c.length - 1) }
+                    commandRead = if (command == null) true
+                    else end != null && layout.getLineForOffset(end) < COMMAND_VISIBLE_LINES
+                }
+            },
+        )
+        // Chrome about the command, so out of the selection scope like the action row.
+        // Announced once the reply has stopped growing, and keyed on that rather than on whether
+        // the card can run anything: a turn is also unrunnable while no session is attached, and a
+        // settled notice must not stay silent for as long as a terminal is away.
+        DisableSelection {
+            ClippedNotice(clipped, display.length, Modifier.padding(top = 5.dp), announce = !streaming)
         }
         if (command == null) return@Column
         // Out of the turn's selection scope: a sweep meant for the command must not pick up "Run",
@@ -246,18 +281,22 @@ private fun CommandCard(display: String, command: String?, actions: AssistantCom
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 val runLabel = when {
-                    !severe -> stringResource(Res.string.assistant_run)
+                    !warns -> stringResource(Res.string.assistant_run)
                     !armed -> stringResource(Res.string.assistant_run_anyway)
                     else -> stringResource(Res.string.assistant_confirm_run)
                 }
                 ChipButton(
                     label = runLabel,
-                    color = if (severe) Skerry.colors.sunset else Skerry.colors.teal,
+                    color = when {
+                        severe -> Skerry.colors.sunset
+                        warns -> Skerry.colors.amber
+                        else -> Skerry.colors.teal
+                    },
                     filled = true,
                     icon = if (severe) "warning" else "play_arrow",
                     enabled = actions.runnable,
                     verticalPadding = 4.dp,
-                    onClick = { if (severe && !armed) armed = true else actions.run(command) },
+                    onClick = { if (unconfirmed && !armed) armed = true else actions.run(command) },
                 )
                 // Copy and Edit carry their glyph only: with three labelled buttons the row wrapped in
                 // every language but English, and the primary action is the one that needs naming.
@@ -288,3 +327,11 @@ private fun CommandCard(display: String, command: String?, actions: AssistantCom
  * asymmetry that tells a question from an answer at a glance.
  */
 private val BUBBLE_MAX_WIDTH = 328.dp
+
+/**
+ * How tall a command card may get before it scrolls, in lines of its own text. Eight is a long
+ * awk one-liner wrapped at the bubble's width; past that the card would push the answer it belongs
+ * to off the screen, which is why there is a cap at all rather than a card that simply grows.
+ */
+private const val COMMAND_VISIBLE_LINES = 8
+private val CARD_PADDING = 8.dp

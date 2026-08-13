@@ -4,6 +4,10 @@
     <string name="guard_prod_connect_confirm">Connect</string>
     <string name="guard_prod_command_title">Run this on production?</string>
     <string name="guard_prod_command_host">%1$s is tagged #prod.</string>
+    <string name="guard_prod_nothing_to_show">no command to show</string>
+    <string name="guard_prod_on_line">already on the line</string>
+    <string name="guard_prod_further_in">further in this input</string>
+    <string name="guard_prod_sending">sending</string>
     <string name="guard_prod_command_confirm">Run</string>
     <string name="guard_prod_broadcast_title">Broadcast to production?</string>
     <string name="guard_prod_broadcast_message">%1$d of the selected sessions run on production hosts. The command goes to every session at once.</string>

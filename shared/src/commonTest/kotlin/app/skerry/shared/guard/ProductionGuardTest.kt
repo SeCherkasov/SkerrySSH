@@ -89,6 +89,27 @@ class ProductionGuardTest {
         assertNull(ProductionGuard.inspect(ProductionGuard.promptCandidates("user@host:~$ "), GUARDING))
     }
 
+    /**
+     * The rule two lists of candidates are compared by, on its own: risk first, and at equal risk the
+     * shorter command — the same command shows up with and without its prompt prefix, and what ran is
+     * the half without it.
+     */
+    @Test
+    fun the_worse_of_two_findings_is_the_riskier_and_then_the_shorter() {
+        val danger = assertNotNull(ProductionGuard.inspect("rm -rf /srv", GUARDING))
+        val warn = assertNotNull(ProductionGuard.inspect("sudo systemctl stop nginx", GUARDING))
+        val prompted = assertNotNull(ProductionGuard.inspect("root@prod:~# rm -rf /srv", GUARDING))
+
+        assertEquals(danger, ProductionGuard.worse(warn, danger))
+        assertEquals(danger, ProductionGuard.worse(danger, warn))
+        assertEquals(danger, ProductionGuard.worse(prompted, danger))
+        // Neither wins by being second: a tie keeps what was already found.
+        assertEquals(danger, ProductionGuard.worse(danger, danger.copy()))
+        assertEquals(danger, ProductionGuard.worse(null, danger))
+        assertEquals(danger, ProductionGuard.worse(danger, null))
+        assertNull(ProductionGuard.worse(null, null))
+    }
+
     @Test
     fun the_number_of_candidates_is_capped() {
         // Pasting a log file into a terminal must not run thousands of regex passes inline.
@@ -98,10 +119,17 @@ class ProductionGuardTest {
     }
 
     @Test
-    fun candidates_are_capped_by_length() {
+    fun a_long_candidate_is_cut_for_the_classifier_and_keeps_its_length() {
         // A pathological line (a screen row full of output) must not reach the regex engine whole.
-        val long = "x".repeat(MAX_GUARDED_COMMAND_LENGTH + 500)
-        assertTrue(ProductionGuard.promptCandidates(long).all { it.length <= MAX_GUARDED_COMMAND_LENGTH })
+        // For a row read off the screen the cut happens in inspect and only there: a dialog quoting
+        // what was found has to say how much of it it is not showing, and the row is bounded by the
+        // terminal anyway. A pasted block is not bounded by anything and stays cut on the way in.
+        val long = "rm -rf /srv/" + "x".repeat(MAX_GUARDED_COMMAND_LENGTH)
+        val candidates = ProductionGuard.promptCandidates(long)
+        assertTrue(candidates.all { it.length > MAX_GUARDED_COMMAND_LENGTH }, "cut before the classifier")
+        val guarded = assertNotNull(ProductionGuard.inspect(candidates, GUARDING))
+        assertEquals(MAX_GUARDED_COMMAND_LENGTH, guarded.command.length)
+        assertEquals(long.length, guarded.fullLength)
     }
 
     @Test
@@ -110,6 +138,7 @@ class ProductionGuardTest {
         // before the cap in inspect() ever applies — the cap has to happen while splitting.
         val text = (0 until MAX_GUARDED_CANDIDATES + 500).joinToString("\n") { "echo line $it" }
         assertEquals(MAX_GUARDED_CANDIDATES, ProductionGuard.candidatesOf(text).size)
+        // And in length, so a two-line paste of a log file is not held in memory twice over.
         val longLine = "x".repeat(MAX_GUARDED_COMMAND_LENGTH + 500)
         assertTrue(ProductionGuard.candidatesOf(longLine).all { it.length <= MAX_GUARDED_COMMAND_LENGTH })
     }
