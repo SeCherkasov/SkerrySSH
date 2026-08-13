@@ -4,6 +4,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.skerry.ui.app.DesktopView
@@ -41,7 +42,7 @@ class ProductionGuardWiringTest {
         FakeShellInput.clear()
 
         runSelectedSnippet()
-        onNodeWithText(string(Res.string.guard_prod_command_title)).assertIsDisplayed()
+        awaitGuardDialog()
         assertTrue(FakeShellInput.all().none { it.contains(RISKY_COMMAND) }, "the guard must hold the command, not trail it")
 
         // By tag, not by caption: the guard's confirm button reads "Run" in English and so does the
@@ -57,11 +58,42 @@ class ProductionGuardWiringTest {
         FakeShellInput.clear()
 
         runSelectedSnippet()
+        awaitGuardDialog()
         onNodeWithTag(UiTags.FORM_CANCEL).performClick()
         waitForIdle()
 
         onNodeWithText(string(Res.string.guard_prod_command_title)).assertDoesNotExist()
         assertTrue(FakeShellInput.all().none { it.contains(RISKY_COMMAND) })
+    }
+
+    /**
+     * The dialog quotes the command so the user can read what is about to run, and Confirm replays
+     * the whole block that was held — not only the line that tripped the guard. A snippet is an
+     * ordinary way to send several lines at once, and the ones under the risky line ran unseen.
+     */
+    @Test
+    fun `the dialog shows every line the confirmation will run`() = runDesktopShell { shell ->
+        shell.seedRiskySnippet(MULTILINE_COMMAND)
+        openSnippets()
+        FakeShellInput.clear()
+
+        // Counted rather than matched: the library row behind the scrim quotes the snippet too, so
+        // what the dialog has to add is one more node carrying the line under the risky one.
+        val quotedBefore = onAllNodesWithText(TRAILING_LINE, substring = true).fetchSemanticsNodes().size
+        runSelectedSnippet()
+        // Waited for rather than asserted at once: the seeded session connects on its own coroutine,
+        // and the guard is armed for the pane only once it is live.
+        waitUntil(timeoutMillis = WAIT_MS) { onAllNodesWithText(string(Res.string.guard_prod_command_title)).fetchSemanticsNodes().isNotEmpty() }
+        val quotedAfter = onAllNodesWithText(TRAILING_LINE, substring = true).fetchSemanticsNodes().size
+        assertTrue(quotedAfter > quotedBefore, "the dialog quoted only the line that tripped the guard")
+    }
+
+    /**
+     * The snippet reaches the guard through the session's own coroutine, so the dialog is one frame
+     * behind the click that ran it — asserting straight away is a race, and it lost once here.
+     */
+    private fun ComposeUiTest.awaitGuardDialog() {
+        waitUntil(timeoutMillis = WAIT_MS) { onAllNodesWithText(string(Res.string.guard_prod_command_title)).fetchSemanticsNodes().isNotEmpty() }
     }
 
     private fun ComposeUiTest.openSnippets() {
@@ -75,9 +107,16 @@ class ProductionGuardWiringTest {
         waitForIdle()
     }
 
-    private fun DesktopShell.seedRiskySnippet() {
-        snippets.save(SnippetDraft(label = "Wipe the build tree", command = RISKY_COMMAND))
+    private fun DesktopShell.seedRiskySnippet(command: String = RISKY_COMMAND) {
+        snippets.save(SnippetDraft(label = "Wipe the build tree", command = command))
     }
 }
 
 private const val RISKY_COMMAND = "rm -rf /var/tmp/build"
+
+/** What runs after the risky line — held with it, replayed with it, and never quoted. */
+private const val TRAILING_LINE = "chown -R nobody:nogroup /srv/www"
+private const val MULTILINE_COMMAND = "$RISKY_COMMAND\n$TRAILING_LINE"
+
+/** The default second is not enough for a snippet to reach the guard on a loaded CI box. */
+private const val WAIT_MS = 5_000L

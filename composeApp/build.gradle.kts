@@ -49,6 +49,9 @@ kotlin {
             implementation(libs.compose.components.resources)
             implementation(libs.androidx.lifecycle.runtimeCompose)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
+            // Multiplatform lock (kotlinx.atomicfu.locks) — the production guard's hold is claimed
+            // from the UI thread and from a runbook's own dispatcher.
+            implementation(libs.kotlinx.atomicfu)
         }
         androidMain.dependencies {
             // androidx.activity.compose.BackHandler — intercepts the system "back" (PlatformBackHandler).

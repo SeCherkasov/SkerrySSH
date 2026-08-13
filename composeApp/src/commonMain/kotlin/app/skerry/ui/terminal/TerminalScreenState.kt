@@ -24,12 +24,13 @@ import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.shared.terminal.isSafeTerminalInputChar
+import app.skerry.shared.terminal.wrapsToNextRow
 import app.skerry.shared.terminal.TerminalStepMark
 import app.skerry.shared.terminal.bracketedPasteWrap
 import app.skerry.shared.terminal.encodeMouseReport
 import app.skerry.shared.terminal.lineSelectionAt
 import app.skerry.shared.terminal.wordSelectionAt
-import app.skerry.shared.terminal.wrapsToNextRow
 import kotlin.concurrent.Volatile
 import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
@@ -372,27 +373,8 @@ class TerminalScreenState(
     /** Apply one command to the emulator (does not publish a snapshot; the caller batches that). */
     private suspend fun applyCommand(cmd: TerminalCommand) {
         when (cmd) {
-            is TerminalCommand.Feed -> {
-                recorder?.let {
-                    it.record(cmd.chunk)
-                    if (it.truncated && !recordingTruncated) recordingTruncated = true
-                }
-                emulator.feed(cmd.chunk)
-                feedCount++
-            }
-            is TerminalCommand.StartRecording -> {
-                // Elapsed time comes off a monotonic source: a wall clock can step backwards (NTP,
-                // suspend/resume) and take the event timeline with it. The epoch stamp is only the
-                // header's "when was this recorded".
-                val started = TimeSource.Monotonic.markNow()
-                recorder = SessionRecorder(
-                    columns = cmd.columns,
-                    rows = cmd.rows,
-                    startedAtEpochSeconds = cmd.startedAtMillis / 1000,
-                    title = cmd.title,
-                    now = { started.elapsedNow().inWholeMilliseconds },
-                )
-            }
+            is TerminalCommand.Feed -> feed(cmd.chunk)
+            is TerminalCommand.StartRecording -> startRecorder(cmd)
             is TerminalCommand.StopRecording -> {
                 cmd.cast.complete(recorder?.finish())
                 recorder = null
@@ -416,6 +398,32 @@ class TerminalScreenState(
                 }
             }
         }
+    }
+
+    /** Feeds one PTY chunk to the parser, recording it first when a recording is running. */
+    private fun feed(chunk: ByteArray) {
+        recorder?.let {
+            it.record(chunk)
+            if (it.truncated && !recordingTruncated) recordingTruncated = true
+        }
+        emulator.feed(chunk)
+        feedCount++
+    }
+
+    /**
+     * Starts the recorder on the emulator's own coroutine. Elapsed time comes off a monotonic
+     * source: a wall clock can step backwards (NTP, suspend/resume) and take the event timeline with
+     * it. The epoch stamp is only the header's "when was this recorded".
+     */
+    private fun startRecorder(cmd: TerminalCommand.StartRecording) {
+        val started = TimeSource.Monotonic.markNow()
+        recorder = SessionRecorder(
+            columns = cmd.columns,
+            rows = cmd.rows,
+            startedAtEpochSeconds = cmd.startedAtMillis / 1000,
+            title = cmd.title,
+            now = { started.elapsedNow().inWholeMilliseconds },
+        )
     }
 
     /**
@@ -607,8 +615,8 @@ class TerminalScreenState(
 
     /**
      * Keyboard/IME user input: feeds the autocomplete engine (line and history tracking) and sends
-     * to the PTY. Separate from [send]/[sendBytes], used for mouse/focus reports, paste, and
-     * snippet output, which must not reach the engine or the tracked line would be corrupted.
+     * to the PTY. Separate from [send]/[sendBytes], which are the raw paths — what they carry
+     * reaches the tracked line only where the sender says what it did to it ([trackSentText]).
      */
     fun typeInput(text: String, guarded: Boolean = true, mirror: Boolean = true) {
         inputVersion++
@@ -635,7 +643,20 @@ class TerminalScreenState(
     }
 
     private fun deliverTypedInput(text: String, mirror: Boolean = true) {
+        // Taken before the input is applied: what the shell completed with a Tab is on the line now,
+        // and the engine is about to clear it.
+        val blind = autocomplete.linePartial
+        val typed = autocomplete.currentLine
         val committed = autocomplete.onUserInput(text.encodeToByteArray())
+            // The engine records nothing for a line it only holds a prefix of, and the prefix is not
+            // a command anyone ran. What the shell finished is on the screen, and this is the layer
+            // that can read it — without this a session where paths are tab-completed, which is most
+            // of them, builds no history at all.
+            // Only a block that runs the line as it stands: one that adds to it first leaves the
+            // screen a row short of what ran, and `typed` a row behind the screen.
+            ?: text.takeIf { blind && it.firstOrNull()?.let { c -> c in runLineControls } == true }
+                ?.let { completedLine(typed) }
+                ?.also { autocomplete.commandHistory.record(it) }
         refreshSuggestion(lineChanged = true)
         send(text)
         // Mirrored from here, not from typeInput: input held by the production guard must reach the
@@ -667,7 +688,7 @@ class TerminalScreenState(
 
     // What can make the shell run the line it is holding: Enter in both forms, plus readline's
     // accept-line-and-down-history (Ctrl-O), which the mobile keybar reaches as ctrl + "/".
-    private val runLineControls = charArrayOf('\r', '\n', '\u000F')
+    private val runLineControls = charArrayOf('\r', '\n', ACCEPT_LINE_AND_DOWN)
 
     /**
      * What the production guard asks about in this session (host tag, root login, the
@@ -679,6 +700,15 @@ class TerminalScreenState(
 
     /** Command held by the guard, awaiting the user's confirmation; `null` when nothing is pending. */
     val pendingGuarded: GuardedCommand? get() = guard.pending
+
+    /** What [confirmGuardedCommand] would run, as the confirmation has to quote it. */
+    val pendingGuardedQuote: String get() = guard.pendingQuote
+
+    /** How long that input really is — the quote stops at what a dialog can draw, this does not. */
+    val pendingGuardedQuoteLength: Int? get() = guard.pendingQuoteLength
+
+    /** The line the guard tripped on when the quote does not carry it; drawn beside the quote. */
+    val pendingGuardedAside: GuardAside? get() = guard.pendingAside
 
     /**
      * Holds [text] when it would run a risky command on a production session; `true` means nothing
@@ -695,25 +725,134 @@ class TerminalScreenState(
     private fun holdForProductionGuard(text: String): Boolean {
         if (altScreen) return false
         if (text.none { it in runLineControls }) return false
-        return guard.hold(text, HeldInputSource.Typed) {
-            // The first line continues whatever is already on the shell line; the rest of the block
-            // stands on its own. A soft-keyboard delta or an IME clipboard insert arrives whole, so
-            // a risky command can sit on any line of it, not just the first.
-            val lines = ProductionGuard.candidatesOf(text)
-            val typed = listOf(autocomplete.currentLine + lines.first()) + lines.drop(1)
-            ProductionGuard.promptCandidates(screenLineToCursor()) + typed
-        }
+        return guard.hold(
+            text,
+            HeldInputSource.Typed,
+            quote = quotedInput(text),
+            screenGuesses = { screenCandidates() },
+            partialGuess = { lineGuess(text) },
+        ) { ownCandidates(text) }
     }
 
     /**
      * Runs a ready-made command (snippet, palette, any caller that already has the full line) with
-     * the guard in front of it. Unlike [typeInput] the command is known verbatim, so it is
-     * classified as-is — nothing is guessed off the screen. Falls back to [sendUserInput] when the
-     * session is not production or the command is harmless.
+     * the guard in front of it. Unlike [typeInput] the command itself is known verbatim, but it
+     * still lands on whatever the line already holds — which is what [lineGuess] covers.
+     * Falls back to [sendUserInput] when the session is not production or the command is harmless.
      */
     fun sendUserInputGuarded(text: String) {
-        if (guard.hold(text, HeldInputSource.Command) { ProductionGuard.candidatesOf(text) }) return
+        val held = guard.hold(
+            text,
+            HeldInputSource.Command,
+            quote = quotedInput(text),
+            screenGuesses = { screenCandidates() },
+            partialGuess = { lineGuess(text) },
+        ) { ownCandidates(text) }
+        if (held) return
         sendUserInput(text)
+    }
+
+    /**
+     * What the client only *guesses* an input will run, as opposed to the lines it carries itself:
+     * the shell's line as the screen draws it, and the tracked line joined to the block's first line.
+     * Classified beside the block, never inside its budget — sharing one cap let a guess push the
+     * last line of a full-length paste out of the classification, and the end of a script is where
+     * its cleanup lives.
+     *
+     * Nothing off the alternate screen: inside vim or htop the cursor row is a line of a file, not a
+     * command, and classifying it holds a paste against text the user is only looking at.
+     *
+     * The join exists because a snippet fired onto a half-typed `rm -rf ` runs `rm -rf /srv`, and
+     * because the classifier's patterns are word-anchored — a tracked line ending in a word joins
+     * into `xyzrm -rf /srv` and reads as harmless, so the block's own first line is offered too
+     * ([ProductionGuard.candidatesOf]). The join is classified whatever the client still believes
+     * about the line; what belief decides is whether any of it may be *drawn* — see [PartialGuess].
+     * A line that wrapped onto another row is beyond all of this.
+     */
+    private fun lineGuess(text: String): PartialGuess? {
+        // Not on the alternate screen: what is being typed there goes into a file, not onto a shell
+        // line, and the guard would hold a paste against text the user is only editing.
+        if (altScreen) return null
+        val onLine = autocomplete.currentLine
+        // Whatever the client tracked, trusted or not: the classifier needs the join either way — a
+        // snippet fired onto a half-typed `rm -rf ` runs `rm -rf /srv`, and the block's own lines
+        // say nothing about that. What being trusted decides is only whether the quote can claim it;
+        // a line it cannot claim is drawn beside the quote instead, never as it.
+        if (onLine.isEmpty()) return null
+        // The controls that run a line are cut off the end, as [quotedInput] cuts them: a candidate
+        // carrying one is a candidate no quote can contain, and the dialog would draw it as a second
+        // line with the control spelled out.
+        val first = text.lineSequence().firstOrNull().orEmpty()
+        val join = (onLine + first).trimEnd { it in runLineControls }
+        // A bare Enter over a completed line leaves the prefix as the whole candidate, and a prefix
+        // the screen already carries says nothing the row does not — it would say it worse, since
+        // candidates tie on risk by length and the prefix would win and be quoted: `rm -rf /sr` for
+        // a line reading `rm -rf /srv/prod-db`. A block that carries text of its own is a different
+        // thing: the join is then the only candidate equal to what will run.
+        if (join == onLine && screenCandidates().any { it.contains(onLine) }) return null
+        // Drawable only while the shell has merely appended to it: once something is typed onto a
+        // completed line the two have parted company, and what is tracked is a string neither holds.
+        return PartialGuess(classify = join, onLine = onLine.takeIf { !autocomplete.lineSuspect || autocomplete.linePartial })
+    }
+
+    /**
+     * What the screen says is on the shell's line. Nothing off the alternate screen: inside vim or
+     * htop the cursor row is a line of a file, not a command, and classifying it holds a paste
+     * against text the user is only looking at.
+     */
+    private fun screenCandidates(): List<String> =
+        if (altScreen) emptyList() else ProductionGuard.promptCandidates(screenLineToCursor())
+
+    /**
+     * Follows what [text] — sent to the PTY without passing through [typeInput] — did to the shell's
+     * line, in the caller's own order: the guard reads the tracked line on the way to the next send.
+     *
+     * A block carrying a run-line control ran: what is left on the line is the tail after the last
+     * one, and nothing at all after Ctrl-O, which pulls the next history entry in. Anything else
+     * merely landed on the line — the assistant's Edit, the key panel's Esc and arrows — and the
+     * engine models those bytes better than this can: it clears on Esc, backs up on a backspace,
+     * and marks the line suspect for the edits it cannot follow.
+     */
+    private fun trackSentText(text: String) {
+        val ran = text.indexOfLast { it in runLineControls }
+        when {
+            ran >= 0 && text[ran] == ACCEPT_LINE_AND_DOWN -> autocomplete.lineRanElsewhere(null)
+            ran >= 0 -> autocomplete.lineRanElsewhere(text.substring(ran + 1))
+            else -> autocomplete.onUserInput(text.encodeToByteArray())
+        }
+        // The ghost belonged to the line as it was; drawn over the new one it offers a completion of
+        // text the shell does not have, and Tab would send its tail.
+        refreshSuggestion(lineChanged = true)
+    }
+
+    /**
+     * What [text] may run once it lands on the shell's line. A snippet fired onto a half-typed
+     * `rm -rf ` runs `rm -rf /srv`, so the tracked line joined to the first line is one candidate —
+     * classifying the block alone would let that through with no question asked.
+     *
+     * What it will land on is a guess and lives in [lineGuess] and [screenCandidates]; these are the lines the input
+     * carries itself, and all of them are read — a soft-keyboard delta or an IME clipboard insert
+     * arrives whole, so a risky command can sit on any line of it, not just the first.
+     */
+    private fun ownCandidates(text: String): List<String> = ProductionGuard.candidatesOf(text)
+
+    /**
+     * The same thing to quote in the confirmation, with the controls that make it run cut off the
+     * end — a `\r` or the mobile keybar's Ctrl-O is what sends the line, not a character of it.
+     *
+     * Only the prefix is dropped when the tracked line is known to be stale — a control byte the
+     * engine cannot replay (Ctrl-W, Ctrl-K) leaves it holding text the shell no longer has. What
+     * arrived now is still known verbatim and still runs, so it is still quoted; for a typed block
+     * that is a bare `\r` and the quote comes out empty, which is what makes the guard fall back to
+     * the line it tripped on.
+     */
+    private fun quotedInput(text: String): () -> String {
+        // The line is read here, beside [lineGuess]'s own read, and joined only if the guard finds
+        // something. Reading it again after the classification would let the two disagree — the
+        // dialog would explain a reason found for one line while quoting another — and joining it
+        // eagerly would build two copies of a multi-megabyte paste that turns out to be harmless.
+        val onLine = if (autocomplete.lineSuspect) "" else autocomplete.currentLine
+        return { (onLine + text).trimEnd { c -> c in runLineControls } }
     }
 
     /** Run the held command: replays the original input exactly as the path it came from would. */
@@ -731,7 +870,31 @@ class TerminalScreenState(
      * as they were typed) ready to be edited; a pasted or ready-made command never reached the
      * host, so dismissing discards it outright.
      */
+    // The tracked line is deliberately left alone. A question with no command in it came from the
+    // line itself, so dropping it would drop the only thing that asked — and the next Enter over the
+    // same shell line would go through unasked. Asking again is the annoying answer; Ctrl-C or
+    // Ctrl-U is the way out, and both really do clear the line.
     fun dismissGuardedCommand() = guard.dismiss()
+
+    /**
+     * The command the shell finished for a line this only holds the beginning of. Read off the
+     * screen because that is the only place it exists, and taken only when it starts with what was
+     * actually typed: the row is the host's to draw, and a line that wrapped leaves nothing but its
+     * tail on it. Recording nothing is what the engine would have done; recording the row itself
+     * would put a command nobody ran into the host's stored history and offer it back as a
+     * suggestion, on this host and in the palette across all of them — which draws what it stores,
+     * so a row carrying a bidi override would read there as a command it is not.
+     */
+    private fun completedLine(typed: String): String? {
+        // Same on the alternate screen: the cursor row is a line of a file, and a file's line is not
+        // a command that ran.
+        if (typed.isEmpty() || altScreen) return null
+        return ProductionGuard.promptCandidates(screenLineToCursor())
+            .lastOrNull()
+            // Strictly longer: a Tab whose completion has not echoed leaves the row reading exactly
+            // what was typed, and that is the prefix rather than a command anyone ran.
+            ?.takeIf { it.length > typed.length && it.startsWith(typed) && it.all(::isSafeTerminalInputChar) }
+    }
 
     /**
      * Visible cursor row up to the cursor column — the shell line as the user sees it, prompt
@@ -852,9 +1015,11 @@ class TerminalScreenState(
 
     // Whether the tracked line moved since the last published snapshot, i.e. the screen has not seen
     // the latest keystroke/paste yet.
+    @Volatile
     private var echoPending = false
 
     // Tracked line length at the last refresh, to tell a local erase from anything else.
+    @Volatile
     private var trackedLength = 0
 
     /**
@@ -879,13 +1044,31 @@ class TerminalScreenState(
     }
 
     /**
-     * [send] for user-pressed input that must not feed autocomplete: keybar control sequences,
+     * [send] for input that does not go through the typed-input path — keybar control sequences,
      * snippet output, an AI-confirmed command. Bumps [inputVersion] so the viewport snaps back to
      * the live screen like [typeInput] — unlike plain [send], whose programmatic traffic
      * (mouse/DSR/focus reports) must never yank the viewport.
      */
     fun sendUserInput(text: String) {
         inputVersion++
+        // The engine never sees this input by itself, so it is told what the input did to the line —
+        // otherwise the guard, the suggestion and the history all work off a line that was left
+        // behind two commands ago. Applied here rather than posted to the emulator's queue: the next
+        // keystroke is classified against the tracked line synchronously, and an update sitting
+        // behind a backlog of output would land after it and overwrite a newer line with an older
+        // one. Every field it writes is a value replaced whole, so a runbook step advancing on its
+        // own dispatcher can lose an update to the typist but cannot tear one.
+        // Not while a secret is being taken: the tracked line is where history comes from, and the
+        // typed and pasted paths already drop it there. A snippet answering a password prompt is
+        // input like any other.
+        if (awaitingSecret) {
+            autocomplete.reset()
+            // As [typeInput] does: with the echo off nothing else will redraw, and a ghost left over
+            // from the line that was just cleared would sit at the cursor of a password prompt.
+            refreshSuggestion()
+        } else {
+            trackSentText(text)
+        }
         send(text)
     }
 
@@ -960,7 +1143,14 @@ class TerminalScreenState(
         if (guardPolicy.production && !awaitingSecret &&
             text.any { it == '\n' || it == '\r' }
         ) {
-            if (guard.hold(text, HeldInputSource.Paste) { ProductionGuard.candidatesOf(text) }) return
+            val held = guard.hold(
+                text,
+                HeldInputSource.Paste,
+                quote = quotedInput(text),
+                screenGuesses = { screenCandidates() },
+                partialGuess = { lineGuess(text) },
+            ) { ownCandidates(text) }
+            if (held) return
         }
         deliverPaste(text, mirror)
     }
@@ -1180,3 +1370,7 @@ internal fun sameScreen(a: List<List<TermCell>>, b: List<List<TermCell>>): Boole
 private val SCREEN_SNAPSHOT_POLICY = object : SnapshotMutationPolicy<List<List<TermCell>>> {
     override fun equivalent(a: List<List<TermCell>>, b: List<List<TermCell>>): Boolean = sameScreen(a, b)
 }
+
+/** Ctrl-O — accept-line-and-down-history: it runs the line and recalls the next entry into it. */
+private const val ACCEPT_LINE_AND_DOWN = '\u000F'
+

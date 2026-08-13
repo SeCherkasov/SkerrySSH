@@ -74,4 +74,6 @@
     <string name="qr_scan_hint">Наведите камеру на QR-код, показанный на другом устройстве.</string>
     <string name="qr_permission_needed">Для сканирования кода связывания нужен доступ к камере.</string>
     <string name="qr_cancel">Отмена</string>
+    <string name="command_clipped_partial">показано частично</string>
+    <string name="command_clipped">показано частично · %1$d симв.</string>
 </resources>

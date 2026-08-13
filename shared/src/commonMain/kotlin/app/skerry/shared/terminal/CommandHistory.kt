@@ -1,5 +1,7 @@
 package app.skerry.shared.terminal
 
+import kotlin.concurrent.Volatile
+
 /**
  * History of entered commands for autocomplete (fish/zsh-autosuggestion style). Stores commands
  * newest-first, collapses duplicates by moving a repeated command back to the top, capped at
@@ -14,14 +16,25 @@ package app.skerry.shared.terminal
  */
 class CommandHistory(private val capacity: Int = 500) {
 
-    private val entries = ArrayDeque<String>() // index 0 is the most recent
+    /**
+     * The entries, newest first, as a value that is replaced rather than edited.
+     *
+     * A terminal reads its history from the coroutine that owns the emulator — every published
+     * screen refreshes the ghost suggestion — while the line that produced an entry is recorded from
+     * the thread the user typed on. A list being iterated while another thread adds to it is a
+     * `ConcurrentModificationException` on the reader, and the reader is a loop with nothing to
+     * catch it: the session would stop drawing while still looking connected. Replacing the value
+     * costs a copy per command entered, which is once per Enter.
+     */
+    @Volatile
+    private var entries: List<String> = emptyList() // index 0 is the most recent
 
     /** Snapshot of history, newest first. */
-    val commands: List<String> get() = entries.toList()
+    val commands: List<String> get() = entries
 
     /** Fills history from a ready-made list (e.g. loaded from a store); order is newest first. */
     fun preload(history: List<String>) {
-        entries.clear()
+        entries = emptyList()
         history.asReversed().forEach { record(it) }
     }
 
@@ -32,9 +45,7 @@ class CommandHistory(private val capacity: Int = 500) {
     fun record(command: String) {
         val trimmed = command.trim()
         if (trimmed.isEmpty()) return
-        entries.remove(trimmed)
-        entries.addFirst(trimmed)
-        while (entries.size > capacity) entries.removeLast()
+        entries = (listOf(trimmed) + entries.filterNot { it == trimmed }).take(capacity)
     }
 
     /**
@@ -62,5 +73,14 @@ class CommandHistory(private val capacity: Int = 500) {
     }
 
     /** Forgets [command] (e.g. a typo that produced "command not found"). `true` if it was present. */
-    fun forget(command: String): Boolean = entries.remove(command.trim())
+    fun forget(command: String): Boolean {
+        val trimmed = command.trim()
+        // One read for what is kept and for what it is compared against: taking the entries again
+        // would answer about a list this call never looked at, and then overwrite it.
+        val current = entries
+        val kept = current.filterNot { it == trimmed }
+        if (kept.size == current.size) return false
+        entries = kept
+        return true
+    }
 }

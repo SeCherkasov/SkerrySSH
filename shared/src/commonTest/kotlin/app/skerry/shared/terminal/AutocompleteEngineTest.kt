@@ -76,6 +76,92 @@ class CommandHistoryTest {
 
 class AutocompleteEngineTest {
 
+    /**
+     * A completion only stays a prefix until something is typed onto it: the shell inserted its own
+     * characters where the cursor was, and appending here makes a line neither side has. The guard
+     * would classify that invention and, being the shortest candidate, quote it as the command.
+     */
+    @Test
+    fun `a character typed after a completion is not a prefix of anything`() {
+        val engine = AutocompleteEngine()
+        engine.onUserInput("rm -rf /srv/pro\t".encodeToByteArray())
+        assertTrue(engine.linePartial)
+
+        engine.onUserInput("cache".encodeToByteArray())
+
+        assertTrue(engine.lineSuspect, "the line is still a guess")
+        assertFalse(engine.linePartial, "an invented line was offered as a prefix")
+    }
+
+    /** And a control byte that rewrites the line on the shell's side ends the prefix too. */
+    @Test
+    fun `a line edited on the shell side after a completion is not a prefix`() {
+        val engine = AutocompleteEngine()
+        engine.onUserInput("rm -rf /srv/dat\t".encodeToByteArray())
+
+        engine.onUserInput(byteArrayOf(16)) // Ctrl-P: the shell recalls another line entirely
+
+        assertTrue(engine.lineSuspect)
+        assertFalse(engine.linePartial)
+    }
+
+    /**
+     * Reverse search replaces the shell's line wholesale, like the history keys do, and what is
+     * typed after it goes into the search box rather than onto the line. Appending it here would
+     * quote `prod` as the thing being sent while `rm -rf /srv/prod-db` is what runs.
+     */
+    @Test
+    fun `a reverse search makes the line a guess`() {
+        val engine = AutocompleteEngine()
+        engine.onUserInput("rm -rf /srv".encodeToByteArray())
+
+        engine.onUserInput(byteArrayOf(18)) // Ctrl-R
+        engine.onUserInput("prod".encodeToByteArray())
+
+        assertTrue(engine.lineSuspect)
+        assertNull(engine.suggestionTail())
+    }
+
+    /**
+     * The engine models what is on the line, not where the cursor is in it. A control that moves the
+     * insertion point leaves the content right and the position wrong, and text typed afterwards
+     * lands somewhere this cannot predict — so the line stops being something to quote or complete.
+     */
+    @Test
+    fun `a cursor moved inside the line makes it a guess`() {
+        val engine = AutocompleteEngine()
+        engine.commandHistory.preload(listOf("deploy --dry-run"))
+        engine.onUserInput("deploy".encodeToByteArray())
+        assertEquals(" --dry-run", engine.suggestionTail())
+
+        engine.onUserInput(byteArrayOf(1)) // Ctrl-A: to the start of the line
+
+        assertTrue(engine.lineSuspect)
+        assertFalse(engine.linePartial)
+        assertNull(engine.suggestionTail())
+    }
+
+    /**
+     * A Tab the UI did not consume went to the shell, and the shell answers it by rewriting the line.
+     * Nothing local can follow that, so the line stops being trusted rather than staying a prefix
+     * that the guard would quote as the whole command.
+     */
+    @Test
+    fun `a tab sent to the shell makes the line a guess`() {
+        val engine = AutocompleteEngine()
+        engine.commandHistory.preload(listOf("rm -rf /srv/prod-db"))
+        engine.onUserInput("rm -rf /sr".encodeToByteArray())
+        assertEquals("v/prod-db", engine.suggestionTail())
+
+        engine.onUserInput("\t".encodeToByteArray())
+
+        assertTrue(engine.lineSuspect)
+        // And specifically a prefix of what the shell has, not a line of unknown contents: the
+        // production guard classifies the one and drops the other.
+        assertTrue(engine.linePartial)
+        assertNull(engine.suggestionTail())
+    }
+
     private fun engine(vararg history: String) =
         AutocompleteEngine(CommandHistory().apply { history.reversed().forEach { record(it) } })
 
@@ -268,5 +354,36 @@ class AutocompleteEngineTest {
         e.onUserInput("\r".encodeToByteArray())
         assertEquals(false, e.lineSuspect) // a fresh line is trustworthy again
         assertEquals(listOf("git push origin main"), e.commandHistory.commands)
+    }
+
+    /**
+     * A ready-made command never reaches [AutocompleteEngine.onUserInput], so the terminal tells the
+     * engine what it did to the line instead: the tail after the control that ran it, or nothing
+     * known at all when that control was Ctrl-O, which pulls the next history entry into the line.
+     */
+    @Test
+    fun a_line_that_ran_elsewhere_is_replaced_by_what_it_left() {
+        val engine = AutocompleteEngine()
+        engine.onUserInput("git pu".encodeToByteArray())
+
+        engine.lineRanElsewhere("cd /tmp")
+        assertEquals("cd /tmp", engine.currentLine)
+        assertFalse(engine.lineSuspect)
+
+        engine.lineRanElsewhere("")
+        assertEquals("", engine.currentLine)
+        assertFalse(engine.lineSuspect)
+    }
+
+    @Test
+    fun a_line_whose_new_contents_cannot_be_known_is_suspect() {
+        val engine = AutocompleteEngine()
+        engine.onUserInput("uptime".encodeToByteArray())
+
+        engine.lineRanElsewhere(null)
+
+        assertEquals("", engine.currentLine)
+        assertTrue(engine.lineSuspect)
+        assertNull(engine.suggestion())
     }
 }

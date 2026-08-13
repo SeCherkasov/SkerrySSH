@@ -90,9 +90,10 @@ private enum class ServerChar { Keep, Break, Space, Drop }
 /**
  * Letters and a symbol that draw nothing at all: the Hangul fillers (choseong, jungseong, the
  * compatibility one and its halfwidth form) and the blank braille pattern. They are `Lo`/`So`, not
- * format characters, so nothing else drops them and `isBlank()` calls a name made of them a name.
+ * format characters, so nothing else drops them — a name made of them passes `isBlank()`, and a
+ * quoted `curl\u2800evil.sh` reads as two words and runs as one.
  */
-private val INVISIBLE_LETTERS = charArrayOf('\u115F', '\u1160', '\u3164', '\uFFA0', '\u2800')
+internal val INVISIBLE_LETTERS = charArrayOf('\u115F', '\u1160', '\u3164', '\uFFA0', '\u2800')
 
 private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = when {
     ch == '\n' && allowNewlines -> ServerChar.Break
@@ -113,7 +114,7 @@ private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = w
     ch == LINE_SEPARATOR || ch == PARAGRAPH_SEPARATOR -> ServerChar.Drop
     // Letters and a symbol by category, nothing at all on screen: a name made only of these is not
     // blank to `isBlank()`, so it would slip past the stand-in a row falls back to and draw as an
-    // empty line. Three code points, not a confusables table — homoglyphs are a different problem
+    // empty line. Five code points, not a confusables table — homoglyphs are a different problem
     // and not one a client can close.
     ch in INVISIBLE_LETTERS -> ServerChar.Drop
     else -> ServerChar.Keep

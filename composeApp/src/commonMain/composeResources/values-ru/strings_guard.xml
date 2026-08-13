@@ -4,6 +4,10 @@
     <string name="guard_prod_connect_confirm">Подключиться</string>
     <string name="guard_prod_command_title">Выполнить это на продуктовой среде?</string>
     <string name="guard_prod_command_host">У хоста %1$s стоит тег #prod.</string>
+    <string name="guard_prod_nothing_to_show">показать нечего</string>
+    <string name="guard_prod_on_line">уже в строке</string>
+    <string name="guard_prod_further_in">дальше в этом вводе</string>
+    <string name="guard_prod_sending">отправляется</string>
     <string name="guard_prod_command_confirm">Выполнить</string>
     <string name="guard_prod_broadcast_title">Разослать на продуктовую среду?</string>
     <string name="guard_prod_broadcast_message">Среди выбранных сессий %1$d приходится на хосты продуктовой среды. Команда уйдёт во все сессии сразу.</string>

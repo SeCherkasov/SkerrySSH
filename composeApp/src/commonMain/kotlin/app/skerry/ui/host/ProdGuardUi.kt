@@ -2,17 +2,20 @@ package app.skerry.ui.host
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,7 +27,12 @@ import app.skerry.shared.guard.GuardedCommand
 import app.skerry.shared.host.Host
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.ConfirmActionDialog
-import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.ClippedNotice
+import app.skerry.ui.terminal.GuardAside
+import app.skerry.ui.design.CommandQuote
+import app.skerry.ui.design.FieldLabel
+import app.skerry.ui.design.Notice
+import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Txt
@@ -36,6 +44,10 @@ import app.skerry.ui.generated.resources.guard_prod_command_title
 import app.skerry.ui.generated.resources.guard_prod_connect_confirm
 import app.skerry.ui.generated.resources.guard_prod_connect_message
 import app.skerry.ui.generated.resources.guard_prod_connect_title
+import app.skerry.ui.generated.resources.guard_prod_further_in
+import app.skerry.ui.generated.resources.guard_prod_nothing_to_show
+import app.skerry.ui.generated.resources.guard_prod_on_line
+import app.skerry.ui.generated.resources.guard_prod_sending
 import app.skerry.ui.generated.resources.guard_prod_snippet_message
 import app.skerry.ui.generated.resources.guard_prod_snippet_title
 import app.skerry.ui.generated.resources.shell_cancel
@@ -172,6 +184,12 @@ fun ProdCommandGate(tab: Tab?) {
     ProdCommandDialog(
         hostLabel = held.title,
         guarded = guarded,
+        // Everything Confirm will run, not only the line that tripped the guard: a multi-line paste
+        // or snippet is held whole and replayed whole, and the lines under the risky one used to run
+        // without ever being on screen.
+        quote = terminal.pendingGuardedQuote,
+        quoteLength = terminal.pendingGuardedQuoteLength,
+        aside = terminal.pendingGuardedAside,
         onConfirm = { terminal.confirmGuardedCommand() },
         onDismiss = { terminal.dismissGuardedCommand() },
     )
@@ -216,11 +234,27 @@ fun ProdCommandDialog(
     guarded: GuardedCommand,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
+    /** Everything the confirmation will run; blank when nothing could be quoted truthfully. */
+    quote: String = "",
+    /**
+     * How long that input is when the quote could not carry all of it. Null says the quote is a
+     * beginning of something whose length nothing knows; zero — the default — says the caller has no
+     * separate length to state, and the quote is then taken to be all there is.
+     */
+    quoteLength: Int? = 0,
+    /** The line the guard tripped on, when the quote does not carry it. */
+    aside: GuardAside? = null,
 ) {
+    // No fallback to the tripped line: the hold quotes it itself where it is the honest thing to
+    // show, and where it left the quote empty there was nothing true to put in it.
     ProdCommandSheet(
         title = stringResource(Res.string.guard_prod_command_title),
         subtitle = stringResource(Res.string.guard_prod_command_host, hostLabel),
-        command = guarded.command,
+        command = quote,
+        aside = aside,
+        // Null survives: a quote known to be partial with no length behind it says so without a
+        // count, and maxOf would turn it into a claim that the whole command is on screen.
+        fullLength = quoteLength?.let { maxOf(it, quote.length) },
         reason = guarded.assessment.reason,
         confirmLabel = stringResource(Res.string.guard_prod_command_confirm),
         onConfirm = onConfirm,
@@ -262,6 +296,14 @@ private fun ProdCommandSheet(
     subtitle: String,
     command: String,
     reason: CommandRiskReason?,
+    /**
+     * The line the guard tripped on, when [command] does not carry it. Drawn in the order the two
+     * run in — a line already on the shell above, a line from further into this input below — and
+     * labelled, because only one of the two boxes is what Confirm sends.
+     */
+    aside: GuardAside? = null,
+    /** The held input's real length; larger than [command] when it could not all be quoted. */
+    fullLength: Int? = command.length,
     confirmLabel: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
@@ -276,7 +318,11 @@ private fun ProdCommandSheet(
                 .background(Skerry.colors.surfaceDeep)
                 .border(1.dp, Skerry.colors.sunset, RoundedCornerShape(12.dp))
                 .consumeClicks()
-                .padding(26.dp),
+                .padding(26.dp)
+                // The dialog scrolls as a whole: with a multi-line quote and a notice it is taller
+                // than a phone in landscape, and nothing else dismisses it — the scrim ignores a tap
+                // and there is no back handler, so buttons off the bottom edge would be a dead end.
+                .verticalScroll(rememberScrollState()),
         ) {
             Txt(
                 title,
@@ -287,19 +333,44 @@ private fun ProdCommandSheet(
                 color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 10.dp),
             )
-            // The command scrolls sideways instead of wrapping: a wrapped one-liner reads as several
-            // commands, and this dialog exists to be read exactly.
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Skerry.colors.terminalBg)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-                    .horizontalScroll(rememberScrollState()),
-            ) {
-                Txt(command, color = Skerry.colors.text, size = 12.sp, font = LocalFonts.current.mono, maxLines = 1)
+            // The command wraps instead of scrolling sideways, and the block grows to a bound and
+            // then scrolls. Sideways scrolling drew the head of a long line and left the rest past
+            // the right edge with nothing to say so, on the one dialog whose whole purpose is to be
+            // read before something runs on production. A wrapped line can be misread; a line that
+            // was never drawn cannot be read at all.
+            //
+            // Same block the assistant's card and the mobile bar draw, under the same rules: it
+            // wraps, it grows to six lines and then scrolls, and it says when it is not all there.
+            // The captions come in a pair or not at all: one block needs no name, two do, and the one
+            // that is sent is named whichever side the other sits on.
+            if (aside != null) {
+                if (aside.onLine) AsideQuote(aside)
+                FieldLabel(labelUppercase(stringResource(Res.string.guard_prod_sending)), bottom = 0.dp)
             }
+            var clipped by remember(command) { mutableStateOf(false) }
+            // No box at all when there is nothing to put in it: an empty one is a dark rectangle
+            // that says nothing, above a line that says it.
+            if (command.isNotEmpty()) CommandQuote(
+                command,
+                visibleLines = QUOTE_VISIBLE_LINES,
+                modifier = quoteBox(),
+                padding = QUOTE_PADDING,
+                label = if (aside == null) "" else stringResource(Res.string.guard_prod_sending),
+                onFit = { clipped = it == false },
+            )
+            // "Shown in part" is for a quote that has something in it. An empty one is the hold
+            // saying it had nothing true to show at all, and a blank box explains itself only to
+            // someone who can see it.
+            if (command.isEmpty()) {
+                Notice(stringResource(Res.string.guard_prod_nothing_to_show), Modifier.padding(top = 6.dp))
+            } else {
+                ClippedNotice(
+                    clipped || fullLength == null || command.length < fullLength,
+                    fullLength,
+                    Modifier.padding(top = 6.dp),
+                )
+            }
+            if (aside != null && !aside.onLine) AsideQuote(aside)
             reason?.let {
                 Txt(
                     commandRiskReasonText(it),
@@ -331,3 +402,44 @@ private fun ProdCommandSheet(
         }
     }
 }
+
+/** The second quote and its own caption; the block it belongs beside is captioned by the caller. */
+@Composable
+private fun AsideQuote(aside: GuardAside) {
+    val label = stringResource(if (aside.onLine) Res.string.guard_prod_on_line else Res.string.guard_prod_further_in)
+    FieldLabel(labelUppercase(label), bottom = 0.dp)
+    var clipped by remember(aside.line) { mutableStateOf(false) }
+    CommandQuote(
+        aside.line,
+        visibleLines = QUOTE_VISIBLE_LINES,
+        modifier = quoteBox(),
+        color = Skerry.colors.dim,
+        padding = QUOTE_PADDING,
+        label = label,
+        onFit = { clipped = it == false },
+    )
+    // Not announced: what Confirm sends is the block with the live region on it, and two of them
+    // firing as the dialog opens read as one sentence.
+    ClippedNotice(
+        clipped || aside.length == null || aside.line.length < aside.length,
+        aside.length,
+        Modifier.padding(top = 6.dp),
+        announce = false,
+    )
+}
+
+/** The block a quote is drawn in — same box whichever of the two it is. */
+@Composable
+private fun quoteBox(): Modifier = Modifier
+    .fillMaxWidth()
+    .padding(top = 6.dp)
+    .clip(RoundedCornerShape(8.dp))
+    .background(Skerry.colors.terminalBg)
+    .padding(horizontal = 12.dp)
+
+/**
+ * How tall the quoted command may get before it scrolls. A held block is usually one line and never
+ * many; past this the dialog would push its own buttons off a phone screen.
+ */
+private const val QUOTE_VISIBLE_LINES = 6
+private val QUOTE_PADDING = 10.dp

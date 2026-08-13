@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -86,6 +87,10 @@ fun Txt(
     // Left Unspecified, the paragraph base comes from the layout direction — right for prose, wrong
     // for anything whose order carries meaning regardless of the UI language (a shell line).
     textDirection: TextDirection = TextDirection.Unspecified,
+    // How the text actually laid out. Whether a command was shown whole is a fact only the layout
+    // has, and a confirmation's Run button depends on it — see [CommandQuote], which is what the
+    // surfaces that ask that question go through.
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
     val family = font ?: LocalFonts.current.ui
     BasicText(
@@ -93,6 +98,7 @@ fun Txt(
         modifier = modifier,
         maxLines = maxLines,
         overflow = overflow,
+        onTextLayout = onTextLayout,
         style = TextStyle(
             color = color,
             fontSize = size,

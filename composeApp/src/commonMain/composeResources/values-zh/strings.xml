@@ -74,4 +74,6 @@
     <string name="qr_scan_hint">将摄像头对准另一设备上显示的二维码。</string>
     <string name="qr_permission_needed">需要相机权限才能扫描配对码。</string>
     <string name="qr_cancel">取消</string>
+    <string name="command_clipped_partial">仅显示部分</string>
+    <string name="command_clipped">仅显示部分 · %1$d 字符</string>
 </resources>
