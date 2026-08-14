@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.terminal.isSafeTerminalInputChar
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.command_clipped
 import app.skerry.ui.generated.resources.command_clipped_partial
@@ -198,17 +197,17 @@ internal fun Notice(text: String, modifier: Modifier = Modifier) {
  * itself. Dropping them would be the other kind of lie — the drawn text would no longer be the text
  * that runs — so they are made visible.
  *
- * The predicate is the strict one, the same [isSafeTerminalInputChar] a command offered for
- * execution is filtered with: the looser display predicate keeps the zero-width set and the
- * directional marks, which reorder the digits of a path or a port and draw as nothing, and this is
- * the one place where the glyphs on screen have to be the bytes that will run. Newlines are the
- * exception — a quoted block is several lines by nature.
+ * The predicate is the strict one ([drawsAsItself]), stricter than the display filter untrusted
+ * prose gets: the looser predicate keeps the zero-width set and the directional marks, which
+ * reorder the digits of a path or a port and draw as nothing, and this is the one place where the
+ * glyphs on screen have to be the bytes that will run. Newlines are the exception — a quoted block
+ * is several lines by nature.
  *
  * Not reversible, and knowingly: a command that contains the literal text `<U+202E>` draws exactly
  * like one that contains the character. The ambiguity is one-directional — a real override is
  * always spelled out — so it can only warn about a line that needed no warning.
  */
-private fun visibleText(raw: String): String {
+internal fun visibleText(raw: String): String {
     // A block's lines arrive separated by CR on the way to a PTY — the Android IME funnel sends one
     // per line — so a CR is a break to draw, not a byte to spell out.
     val text = raw.replace("\r\n", "\n").replace('\r', '\n')
@@ -246,28 +245,29 @@ private fun StringBuilder.appendEscaped(code: Int) {
 }
 
 /**
- * Whether the character at [code] draws as what it is. [isSafeTerminalInputChar] is the strict predicate for text offered
- * for execution, but it passes the letters that draw as nothing at all ([INVISIBLE_LETTERS]) — and a
- * gap where a character should be is the same lie a bidi override tells: `curl\u2800evil.sh` reads as
- * two words and runs as one. A tab is left alone: a shell separates words on it too, so a gap there
+ * Whether the character at [code] draws as what it is. Decided by category, not by a list: the
+ * whole of CONTROL and FORMAT, the separators, and the letters that draw as nothing at all
+ * ([INVISIBLE_LETTERS], which no category names — `curl\u2800evil.sh` reads as two words and
+ * runs as one). A blocklist is one Unicode release behind by construction, and this is the block
+ * that promises the drawn text is the text that runs — the categories cover everything the
+ * hand-written `isSafeTerminalInputChar` pass here used to, and whatever the next Unicode revision
+ * adds to them, by default. A tab is left alone: a shell separates words on it too, so a gap there
  * is what it means.
  */
 private fun drawsAsItself(code: Int): Boolean {
-    if (code > Char.MAX_VALUE.code) return code !in INVISIBLE_ASTRAL
+    if (code > Char.MAX_VALUE.code) return INVISIBLE_ASTRAL.none { code in it }
     val c = code.toChar()
     if (c == '\n' || c == '\t' || c == ' ') return true
-    if (!isSafeTerminalInputChar(c) || c in INVISIBLE_LETTERS) return false
+    if (c in INVISIBLE_LETTERS) return false
     return when (c.category) {
         // A blank of space width that no shell splits a word on: `curl\u00A0evil.sh` is one argument
         // and reads as two. Ordinary space and tab are answered above — a shell does split on those.
         CharCategory.SPACE_SEPARATOR,
         CharCategory.LINE_SEPARATOR,
         CharCategory.PARAGRAPH_SEPARATOR,
-        // The whole format category rather than the list this predicate would otherwise carry:
-        // invisible operators, the Arabic number marks, the interlinear annotations. A blocklist is
-        // one Unicode release behind by construction, and this is the block that promises the drawn
-        // text is the text that runs.
+        // Invisible operators, bidi controls, the Arabic number marks, the interlinear annotations.
         CharCategory.FORMAT,
+        // C0, C1 and DEL — a control byte draws as less than nothing.
         CharCategory.CONTROL,
         // Half of a pair with no other half: it draws as the replacement glyph.
         CharCategory.SURROGATE,
@@ -296,11 +296,21 @@ private fun cutWholeTokens(cutOff: String): String {
 private const val ESCAPE_OPEN = "<U+"
 
 /**
- * Astral characters that draw nothing: the tag block (an invisible copy of ASCII) and the variation
- * selectors supplement. [isSafeTerminalInputChar] answers about one UTF-16 unit, so nothing else
- * reaches them.
+ * Astral characters that draw nothing. Format characters past the basic plane cannot be asked
+ * about the way the BMP is — `Char.category` sees one UTF-16 unit and `commonMain` has no
+ * `Character.getType(Int)` — so they are matched by block: every FORMAT (Cf) block above U+FFFF as
+ * of Unicode 15 plus the variation selectors supplement, which is equally invisible. Without the
+ * full list `curl\u{1D173}evil.sh` drew as two words and ran as one, the same lie the tag block
+ * told before it was closed.
  */
-private val INVISIBLE_ASTRAL = 0xE0000..0xE01EF
+private val INVISIBLE_ASTRAL = listOf(
+    0x110BD..0x110BD, // Kaithi number sign
+    0x110CD..0x110CD, // Kaithi number sign above
+    0x13430..0x1343F, // Egyptian hieroglyph format controls
+    0x1BCA0..0x1BCA3, // shorthand format controls
+    0x1D173..0x1D17A, // musical symbol beams and streams
+    0xE0000..0xE01EF, // tags + variation selectors supplement
+)
 
 /**
  * How much of a command a confirmation lays out. A few hundred kilobytes in one paragraph costs the

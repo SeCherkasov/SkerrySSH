@@ -262,6 +262,6 @@ private fun runSnippetInSession(
 ): Boolean {
     val pane = sessions?.tabs?.flatMap { it.panes }?.firstOrNull { it.id == targetId } ?: return false
     val terminal = (pane.controller.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
-    manager.run(snippetId, recording = terminal.recording, params = params) { text -> terminal.sendUserInputGuarded(text) }
+    manager.run(snippetId, recording = terminal.recording, params = params) { text, secrets -> terminal.sendUserInputGuarded(text, secrets) }
     return true
 }

@@ -56,6 +56,7 @@ import app.skerry.ui.runbook.RunbookPauseAnnouncer
 import app.skerry.ui.runbook.RunbookStartDialog
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetRunDialog
+import app.skerry.ui.snippet.maskSecrets
 import app.skerry.ui.terminal.CommandPalette
 import app.skerry.ui.terminal.CastPlayerOverlay
 import app.skerry.ui.terminal.recordingOutcomeMessage
@@ -110,6 +111,7 @@ import app.skerry.ui.host.HostSection
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.host.ProdConnectDialog
 import app.skerry.ui.host.ProdConnectRequest
+import app.skerry.ui.host.prodDisplayRisk
 import app.skerry.ui.host.prodConnectGate
 import app.skerry.ui.host.ProdCommandGate
 import app.skerry.ui.host.prodGuardDialogOpen
@@ -262,10 +264,19 @@ internal fun DesktopChrome(
     // line (newline included) once connected. Dynamic variables were confirmed before this point —
     // SnippetManager.run parks them in the dialog and only then hands the line over.
     val runSnippetOnHost = remember(sessions, credentials, hostManager, state) {
-        { host: Host, line: String ->
+        { host: Host, line: String, secrets: List<String> ->
             // The line goes into the confirmation: it runs the moment the session opens, before the
-            // session's own guard is bound to it, so this dialog is where it has to be read.
-            prodConnect = prodConnectGate(host, snippetLine = line) { connectOrAsk(PendingAuth.Snippet(host, line)) }
+            // session's own guard is bound to it, so this dialog is where it has to be read. Vault
+            // secrets are masked in what the dialog draws; the risk is classified over the REAL
+            // line (a masked span can hide the very pattern that makes it risky), and the real line
+            // is what connects and runs.
+            prodConnect = prodConnectGate(
+                host,
+                snippetLine = maskSecrets(line, secrets),
+                snippetRisk = prodDisplayRisk(line)?.assessment?.reason,
+            ) {
+                connectOrAsk(PendingAuth.Snippet(host, line))
+            }
         }
     }
 

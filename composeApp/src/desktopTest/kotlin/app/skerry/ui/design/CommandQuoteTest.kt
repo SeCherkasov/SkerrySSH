@@ -21,6 +21,7 @@ import app.skerry.ui.desktop.runForm
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.command_clipped
+import app.skerry.ui.generated.resources.command_clipped_partial
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -264,6 +265,19 @@ class CommandQuoteTest {
             // between is not observable from here; what this pins is that the live region is the
             // node carrying it, and that the message lands at all.
             onNode(polite).assertContentDescriptionEquals(noticeText(4200))
+        }
+    }
+
+    /**
+     * The null-length notice — a quote known to be partial with no honest count, the shape a screen
+     * row continuing past the cursor publishes (issue #246) — is announced the same way. Without it
+     * a screen-reader user is never told the recalled line runs longer than what is drawn.
+     */
+    @Test
+    fun `a notice without a count is still announced`() {
+        runForm({ ClippedNotice(clipped = true, fullLength = null) }) {
+            waitForIdle()
+            onNode(polite).assertContentDescriptionEquals(string(Res.string.command_clipped_partial))
         }
     }
 

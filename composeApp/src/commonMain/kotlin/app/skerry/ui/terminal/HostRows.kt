@@ -374,7 +374,7 @@ internal fun HostEntryRow(
                             SnippetPalette(snippets) { entry ->
                                 // Through the manager: a snippet with ${{…}} variables opens the confirm
                                 // dialog first; the resolved line (newline included) lands here after.
-                                snippets.run(entry.id) { line -> runSnippetOnHost(host, line) }
+                                snippets.run(entry.id) { line, secrets -> runSnippetOnHost(host, line, secrets) }
                                 snippetPickerOpen = false
                             }
                         }

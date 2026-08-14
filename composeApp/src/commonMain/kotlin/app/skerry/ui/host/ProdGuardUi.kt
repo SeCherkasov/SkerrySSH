@@ -73,21 +73,34 @@ import app.skerry.ui.app.UiTags
  * A connection to a production host waiting for confirmation: [host] names it in the dialog,
  * [proceed] is the connect that was held back, [snippetLine] carries the command of the "run a
  * snippet on this host" path (it opens a session AND runs a command, so the dialog quotes it).
+ * [snippetRisk] is that command's risk reason, classified by the caller over the REAL line —
+ * [snippetLine] may arrive with vault secrets masked, and a pattern that needs the resolved span
+ * would find nothing in the masked text.
  */
 @Immutable
-class ProdConnectRequest(val host: Host, val snippetLine: String? = null, val proceed: () -> Unit)
+class ProdConnectRequest(
+    val host: Host,
+    val snippetLine: String? = null,
+    val snippetRisk: CommandRiskReason? = null,
+    val proceed: () -> Unit,
+)
 
 /**
  * Gate in front of every connect path: a production host confirms first, anything else goes
  * straight through. Returns the pending request to show ([ProdConnectDialog]) or `null` when
  * [action] already ran.
  */
-fun prodConnectGate(host: Host, snippetLine: String? = null, action: () -> Unit): ProdConnectRequest? {
+fun prodConnectGate(
+    host: Host,
+    snippetLine: String? = null,
+    snippetRisk: CommandRiskReason? = null,
+    action: () -> Unit,
+): ProdConnectRequest? {
     if (!isProdHost(host)) {
         action()
         return null
     }
-    return ProdConnectRequest(host, snippetLine, action)
+    return ProdConnectRequest(host, snippetLine, snippetRisk, action)
 }
 
 /**
@@ -218,7 +231,9 @@ fun ProdConnectDialog(request: ProdConnectRequest, onDismiss: () -> Unit) {
         title = stringResource(Res.string.guard_prod_snippet_title),
         subtitle = stringResource(Res.string.guard_prod_snippet_message, request.host.rowLabel()),
         command = line,
-        reason = remember(line) { prodDisplayRisk(line) }?.assessment?.reason,
+        // Classified by the caller over the real line: [line] may carry masked vault secrets, and
+        // classifying the masked text loses any reason that lives inside the resolved span.
+        reason = request.snippetRisk,
         confirmLabel = stringResource(Res.string.guard_prod_connect_confirm),
         onConfirm = { onDismiss(); request.proceed() },
         onDismiss = onDismiss,

@@ -325,10 +325,14 @@ class AutocompleteEngine(
          * Ctrl-Y (yank), Ctrl-_ (undo). Ctrl-A/Ctrl-B/Ctrl-E/Ctrl-F leave the content alone and move the cursor,
          * which is worse for the same reason: what is typed next lands where the cursor is, not at
          * the end, so a line built by appending is one the shell does not have — and the production
-         * guard would quote it. The cost is wider than an edited line: Ctrl-A is also the tmux and
-         * screen prefix, and it reaches the PTY like any other Ctrl byte, so a window switch costs
-         * the next command its ghost and its history entry until the line is run or cleared. The
-         * alternative is a confirmation that names a command nobody wrote.
+         * guard would quote it. The cost is wider than an edited line: Ctrl-A and Ctrl-B double as
+         * the screen and tmux prefixes and reach the PTY like any other Ctrl byte, so a window
+         * switch costs the next command its ghost and its history entry until the line is run or
+         * cleared. Exempting the motions on an EMPTY line was tried for exactly that case and
+         * reverted (issue #246 review): a prefix is never pressed alone, and the command key after
+         * it — swallowed by the multiplexer, never seen by the shell — landed in the tracked line
+         * as content, so the next commit read `cuptime`, a command nobody ran, persisted and
+         * offered back. Losing an entry is the safe direction; fabricating one is not.
          *
          * Ctrl-U and Ctrl-C clear the line outright and are handled above; Ctrl-L only redraws.
          */

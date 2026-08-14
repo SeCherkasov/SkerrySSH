@@ -60,6 +60,38 @@ import app.skerry.ui.design.FormField
 /** Mask shown wherever a vault secret would otherwise be printed. */
 internal const val SECRET_MASK = "••••••"
 
+/**
+ * [text] with every resolved vault secret span replaced by [SECRET_MASK]. Display only: what is
+ * sent or classified stays the real text. Shared by the confirmations that quote a resolved line —
+ * the production guard's dialog and the connect-time snippet gate.
+ *
+ * A string that was CUT mid-secret — the classifier caps a candidate at 512 characters, and the
+ * cut can land inside a resolved value — ends with a prefix of the secret, which the exact replace
+ * cannot see. Any trailing prefix of a secret is masked as well: that can hide a legitimate
+ * character that merely coincides with the secret's start, but the other direction printed the
+ * secret's head in the guard's aside in clear. The mirror image — a string that BEGINS mid-secret,
+ * reachable only through a soft-wrapped screen row that happens to carry a resolved value — is
+ * accepted residual risk: a leading-suffix rule cannot tell a secret's tail from ordinary text.
+ *
+ * Longest secret first: with one resolved value a substring of another, replacing the shorter
+ * first would mask only the embedded span and print the longer secret's flanks in clear.
+ */
+internal fun maskSecrets(text: String, secrets: List<String>): String {
+    val hidden = secrets.filter { it.isNotBlank() }.sortedByDescending { it.length }
+    if (hidden.isEmpty()) return text
+    var masked = hidden.fold(text) { acc, secret -> acc.replace(secret, SECRET_MASK) }
+    for (secret in hidden) {
+        val longest = minOf(secret.length - 1, masked.length)
+        for (cut in longest downTo 1) {
+            if (masked.endsWith(secret.substring(0, cut))) {
+                masked = masked.dropLast(cut) + SECRET_MASK
+                break
+            }
+        }
+    }
+    return masked
+}
+
 /** Vault reference resolution, done once when the confirmation opens. */
 internal sealed interface VaultRef {
     data class Ok(val secret: String) : VaultRef
@@ -104,6 +136,13 @@ class TemplateVariableValues internal constructor(
 
     /** Current parameter values, to remember for this template's next run. */
     fun paramValues(): Map<String, String> = params.toMap()
+
+    /**
+     * The resolved vault secrets of this run — the spans a later confirmation (the production
+     * guard's) must mask rather than print, exactly as this dialog's own preview masked them.
+     */
+    fun vaultSecrets(): List<String> =
+        vaultResolutions.values.filterIsInstance<VaultRef.Ok>().map { it.secret }
 
     /** Whether every reference resolved: a missing vault entry has no value to send. */
     val canRun: Boolean

@@ -19,4 +19,5 @@
     <string name="risk_bulk_delete">批量删除匹配到的文件。</string>
     <string name="risk_truncates_content">清空文件内容。</string>
     <string name="risk_elevated">以提升的权限运行。</string>
+    <string name="risk_beyond_inspection">超出防护读取的范围 —— 部分输入未被分类。</string>
 </resources>

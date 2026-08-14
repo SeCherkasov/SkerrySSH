@@ -28,7 +28,7 @@ class SnippetVariablesFormTest {
         val manager = seededSnippets()
         val id = manager.save(SnippetDraft(label = "restart", command = "systemctl restart ${'$'}{{unit}}"))
         var sent: String? = null
-        manager.run(id) { sent = it }
+        manager.run(id) { line, _ -> sent = line }
 
         runForm({ SnippetRunDialog(manager) }) {
             onNodeWithContentDescription("unit").performTextInput("nginx")
@@ -44,7 +44,7 @@ class SnippetVariablesFormTest {
         val manager = seededSnippets()
         val id = manager.save(SnippetDraft(label = "restart", command = "systemctl restart ${'$'}{{unit}}"))
         var sent: String? = null
-        manager.run(id) { sent = it }
+        manager.run(id) { line, _ -> sent = line }
 
         runForm({ SnippetRunDialog(manager) }) {
             onNodeWithContentDescription("unit").performTextInput("nginx")
@@ -63,7 +63,7 @@ class SnippetVariablesFormTest {
         val manager = seededSnippets()
         val id = manager.save(SnippetDraft(label = "restart", command = "systemctl restart ${'$'}{{unit}}"))
         var sent: String? = null
-        manager.run(id) { sent = it }
+        manager.run(id) { line, _ -> sent = line }
 
         runForm({ SnippetRunDialog(manager) }) {
             onNodeWithTag(UiTags.FORM_SAVE).performClick()
@@ -80,7 +80,7 @@ class SnippetVariablesFormTest {
             SnippetDraft(label = "tail", command = "tail -n ${'$'}{{lines}} /var/log/${'$'}{{file}}"),
         )
         var sent: String? = null
-        manager.run(id) { sent = it }
+        manager.run(id) { line, _ -> sent = line }
 
         runForm({ SnippetRunDialog(manager) }) {
             onNodeWithContentDescription("lines").performTextInput("50")

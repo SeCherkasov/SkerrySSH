@@ -12,8 +12,12 @@ import app.skerry.shared.terminal.TerminalStepMark
 class RunbookTarget(
     /** Tab the run belongs to — the UI shows the run there and nowhere else. */
     val sessionId: String,
-    /** Sends a line to that terminal (bound to the guarded input path, production guard included). */
-    val send: (String) -> Unit,
+    /**
+     * Sends a line to that terminal (bound to the guarded input path, production guard included).
+     * The second argument is the run's resolved vault secrets, so the guard's confirmation can
+     * mask them instead of printing the resolved line in clear.
+     */
+    val send: (String, List<String>) -> Unit,
     /**
      * Declares the step about to be sent: which token the terminal should report, and the fragments
      * of the line that are protocol rather than the operator's command, so their echo is not drawn.

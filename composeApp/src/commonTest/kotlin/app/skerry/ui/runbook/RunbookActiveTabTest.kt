@@ -55,7 +55,7 @@ class RunbookActiveTabTest {
 
     private fun runbookTarget(sessionId: String) = RunbookTarget(
         sessionId = sessionId,
-        send = {},
+        send = { _, _ -> },
         expectStep = { _, _ -> },
         takeMark = { null },
         outputVersion = { 0L },

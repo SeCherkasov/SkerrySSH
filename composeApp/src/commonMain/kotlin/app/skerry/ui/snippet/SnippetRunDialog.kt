@@ -71,7 +71,7 @@ internal fun SnippetRunDialog(manager: SnippetManager) {
 @Composable
 private fun SnippetRunDialogContent(
     request: SnippetRunRequest,
-    onConfirm: (line: String, params: Map<String, String>) -> Unit,
+    onConfirm: (line: String, params: Map<String, String>, secrets: List<String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val mono = LocalFonts.current.mono
@@ -85,7 +85,15 @@ private fun SnippetRunDialogContent(
     val preview = SnippetTemplate.assemble(request.segments, machine) { contextValue(it, masked = true) }
     val canRun = values.canRun
     val confirm = {
-        if (canRun) onConfirm(SnippetTemplate.assemble(request.segments, machine) { contextValue(it, masked = false) }, values.paramValues())
+        // The vault secrets ride along so the production guard's confirmation — one dialog later on
+        // a #prod host — can mask the same spans this dialog's preview masked.
+        if (canRun) {
+            onConfirm(
+                SnippetTemplate.assemble(request.segments, machine) { contextValue(it, masked = false) },
+                values.paramValues(),
+                values.vaultSecrets(),
+            )
+        }
     }
 
     ModalScrim(onDismiss = onDismiss) {
