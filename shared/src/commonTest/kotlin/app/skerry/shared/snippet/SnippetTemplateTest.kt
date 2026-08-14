@@ -101,7 +101,7 @@ class SnippetTemplateTest {
     private val env = SnippetRunEnvironment(
         moment = SnippetMoment(year = 2026, month = 7, day = 3, hour = 9, minute = 5, second = 42, epochSeconds = 1_782_000_000L),
         newUuid = { "aabbccdd-0000-0000-0000-000000000000" },
-        randomChars = { n -> "x".repeat(n) },
+        randomChars = { n, _ -> "x".repeat(n) },
     )
 
     private fun variable(cmd: String) = SnippetTemplate.parse(cmd).single() as Variable
@@ -162,7 +162,7 @@ class SnippetTemplateTest {
     @Test
     fun `machine values are drawn once and stay stable across assemble calls`() {
         var draws = 0
-        val counting = SnippetRunEnvironment(env.moment, newUuid = { "uuid-${++draws}" }, randomChars = { "r".repeat(it) })
+        val counting = SnippetRunEnvironment(env.moment, newUuid = { "uuid-${++draws}" }, randomChars = { n, _ -> "r".repeat(n) })
         val segments = SnippetTemplate.parse("a ${'$'}{{uuid}} b ${'$'}{{uuid}} c")
 
         val machine = SnippetTemplate.machineValues(segments, counting)
@@ -199,8 +199,148 @@ class SnippetTemplateTest {
 
     @Test
     fun `a date-time format cannot smuggle bidi text into the line`() {
-        val segments = SnippetTemplate.parse("echo ${'$'}{{time:a‮b}}")
+        val segments = SnippetTemplate.parse("echo ${'$'}{{time:a\u202Eb}}")
         assertEquals("echo ab", SnippetTemplate.resolve(segments, env) { "" })
+    }
+
+    // --- random charsets ---
+
+    private class RecordingEnv {
+        val alphabets = mutableListOf<String>()
+        val env = SnippetRunEnvironment(
+            moment = SnippetMoment(year = 2026, month = 7, day = 3, hour = 9, minute = 5, second = 42, epochSeconds = 1_782_000_000L),
+            newUuid = { "u" },
+            randomChars = { n, alphabet ->
+                alphabets += alphabet
+                "x".repeat(n)
+            },
+        )
+    }
+
+    @Test
+    fun `random charset picks the alphabet`() {
+        val recording = RecordingEnv()
+        SnippetTemplate.resolveMachine(variable("${'$'}{{random:12,hex}}"), recording.env)
+        SnippetTemplate.resolveMachine(variable("${'$'}{{random:12,alnum}}"), recording.env)
+        SnippetTemplate.resolveMachine(variable("${'$'}{{random:12,special}}"), recording.env)
+        SnippetTemplate.resolveMachine(variable("${'$'}{{random:12}}"), recording.env)
+        assertEquals(
+            listOf(
+                SnippetRandomAlphabets.HEX,
+                SnippetRandomAlphabets.ALNUM,
+                SnippetRandomAlphabets.SPECIAL,
+                SnippetRandomAlphabets.DEFAULT,
+            ),
+            recording.alphabets,
+        )
+    }
+
+    @Test
+    fun `random charset keeps the requested length and clamp`() {
+        assertEquals(12, SnippetTemplate.resolveMachine(variable("${'$'}{{random:12,hex}}"), env)!!.length)
+        assertEquals(64, SnippetTemplate.resolveMachine(variable("${'$'}{{random:999,hex}}"), env)!!.length)
+    }
+
+    @Test
+    fun `random charset survives garbage and token order`() {
+        val recording = RecordingEnv()
+        // Unknown charset falls back to the default alphabet, the length is still honored.
+        assertEquals(16, SnippetTemplate.resolveMachine(variable("${'$'}{{random:16,bogus}}"), recording.env)!!.length)
+        // A charset alone keeps the default length.
+        assertEquals(8, SnippetTemplate.resolveMachine(variable("${'$'}{{random:hex}}"), recording.env)!!.length)
+        // Token order does not matter.
+        assertEquals(16, SnippetTemplate.resolveMachine(variable("${'$'}{{random:hex,16}}"), recording.env)!!.length)
+        assertEquals(
+            listOf(SnippetRandomAlphabets.DEFAULT, SnippetRandomAlphabets.HEX, SnippetRandomAlphabets.HEX),
+            recording.alphabets,
+        )
+    }
+
+    @Test
+    fun `random alphabets are shell-safe`() {
+        // The generated value is spliced unquoted into the confirmed line, so no character may be
+        // a shell metacharacter, a quote, whitespace, or a glob/expansion trigger — nor `#` (word
+        // -start comment truncates the confirmed line), `^` (history substitution at line start)
+        // or `=` (a first-word splice would parse as a variable assignment).
+        val unsafe = " \t\"'`\\${'$'}|&;()<>*?[]{}!~#^="
+        for (alphabet in listOf(
+            SnippetRandomAlphabets.DEFAULT,
+            SnippetRandomAlphabets.ALNUM,
+            SnippetRandomAlphabets.HEX,
+            SnippetRandomAlphabets.SPECIAL,
+        )) {
+            assertTrue(alphabet.isNotEmpty())
+            assertTrue(alphabet.none { it in unsafe }, "unsafe char in $alphabet")
+            assertEquals(alphabet.length, alphabet.toSet().size, "duplicate chars in $alphabet")
+        }
+        // The default alphabet is the historic one — `${'$'}{{random}}` output must not change shape.
+        assertEquals("abcdefghijklmnopqrstuvwxyz0123456789", SnippetRandomAlphabets.DEFAULT)
+        assertTrue(SnippetRandomAlphabets.HEX.all { it in "0123456789abcdef" })
+        assertTrue(SnippetRandomAlphabets.ALNUM.any { it.isUpperCase() })
+        assertTrue(SnippetRandomAlphabets.SPECIAL.any { !it.isLetterOrDigit() })
+    }
+
+    // --- param choices ---
+
+    @Test
+    fun `param choices split on pipe with the first as default`() {
+        val v = variable("${'$'}{{env:dev|staging|prod}}")
+        assertEquals(SnippetVariableKind.PARAM, v.kind)
+        assertEquals("dev", v.paramDefault())
+        assertEquals(listOf("dev", "staging", "prod"), v.paramChoices())
+    }
+
+    @Test
+    fun `param without pipe has a default and no choices`() {
+        val v = variable("${'$'}{{container:web-1}}")
+        assertEquals("web-1", v.paramDefault())
+        assertEquals(emptyList(), v.paramChoices())
+
+        val bare = variable("${'$'}{{container}}")
+        assertNull(bare.paramDefault())
+        assertEquals(emptyList(), bare.paramChoices())
+    }
+
+    @Test
+    fun `param choices drop blanks and duplicates and may lack a default`() {
+        val v = variable("${'$'}{{env:|dev|dev| prod }}")
+        assertNull(v.paramDefault())
+        assertEquals(listOf("dev", "prod"), v.paramChoices())
+    }
+
+    @Test
+    fun `choice options are sanitized so what is picked is what runs`() {
+        // The option list can arrive in a team-shared template; picker, selected highlight and the
+        // sent line must agree on one string, so options are sanitized at the parse, not on pick.
+        val v = variable("${'$'}{{env:a\tb|de\u202Ev}}")
+        assertEquals(listOf("a b", "dev"), v.paramChoices())
+        assertEquals("a b", v.paramDefault())
+    }
+
+    @Test
+    fun `an option of invisible characters is dropped, not offered as a blank row`() {
+        // Zero-width/bidi characters are not whitespace, so trim() keeps them; without the
+        // sanitize such an option renders as an empty row and splices as an empty string.
+        val v = variable("${'$'}{{env:\u200B\u202E|dev|prod}}")
+        assertNull(v.paramDefault())
+        assertEquals(listOf("dev", "prod"), v.paramChoices())
+    }
+
+    @Test
+    fun `sanitize strips invisible letters`() {
+        // Hangul fillers and the Braille blank count as letters, not format characters — kept by
+        // the format-category filter, invisible on screen. Two values differing only by one of
+        // these would draw identically and execute differently.
+        assertEquals("web-1", sanitizeSnippetValue("web-1\u3164"))
+        assertEquals("ab", sanitizeSnippetValue("a\u115F\u1160\uFFA0\u2800b"))
+        assertEquals("echo a", stripUnsafeFormatChars("echo a\u3164"))
+    }
+
+    @Test
+    fun `choices never apply to non-param variables`() {
+        // A vault entry named "a|b" is a name, not an option list.
+        assertEquals(emptyList(), variable("${'$'}{{vault:a|b}}").paramChoices())
+        assertNull(variable("${'$'}{{vault:a|b}}").paramDefault())
     }
 
     // --- value sanitization ---

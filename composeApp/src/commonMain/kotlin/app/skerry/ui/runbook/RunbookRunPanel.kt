@@ -31,6 +31,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_panel_close
+import app.skerry.ui.generated.resources.runbook_panel_complete_step
 import app.skerry.ui.generated.resources.runbook_panel_done
 import app.skerry.ui.generated.resources.runbook_panel_done_with_failures
 import app.skerry.ui.generated.resources.runbook_panel_failed
@@ -101,10 +102,17 @@ fun RunbookRunPanel(runner: RunbookRunner, run: RunbookSessionRun, modifier: Mod
                         fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
                     )
                 }
-                RunbookPhase.RUNNING -> GhostButton(
-                    stringResource(Res.string.runbook_panel_stop), onClick = runner::stop,
-                    fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
-                )
+                RunbookPhase.RUNNING -> {
+                    // An interactive step has no probe to report it done — the user says so here.
+                    if (run.steps.getOrNull(run.currentIndex)?.status == RunbookStepStatus.AWAITING_COMPLETE) {
+                        PrimaryButton(stringResource(Res.string.runbook_panel_complete_step), onClick = runner::completeStep)
+                        GhostButton(stringResource(Res.string.runbook_panel_skip_step), onClick = runner::skipStep)
+                    }
+                    GhostButton(
+                        stringResource(Res.string.runbook_panel_stop), onClick = runner::stop,
+                        fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
+                    )
+                }
                 else -> GhostButton(stringResource(Res.string.runbook_panel_close), onClick = runner::close)
             }
         }
@@ -118,7 +126,13 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(7.dp))
-            .background(if (state.status == RunbookStepStatus.AWAITING_CONFIRM) Skerry.colors.cyan10 else Color.Transparent)
+            .background(
+                if (state.status == RunbookStepStatus.AWAITING_CONFIRM || state.status == RunbookStepStatus.AWAITING_COMPLETE) {
+                    Skerry.colors.cyan10
+                } else {
+                    Color.Transparent
+                },
+            )
             .padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -150,9 +164,16 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
                 Txt(failureText(failure), color = Skerry.colors.sunset, size = 10.5.sp, lineHeight = 14.sp)
             }
         }
-        state.exitCode?.let { code ->
+        val code = state.exitCode
+        if (code != null) {
             Box(Modifier.padding(top = 1.dp)) {
                 Txt(exitCodeText(code), color = color, size = 10.5.sp, font = mono)
+            }
+        } else {
+            // The row's state in words, not only in icon and colour: the docked panel is read by
+            // screen readers too, and "waiting for you" is exactly what they must not miss.
+            Box(Modifier.padding(top = 1.dp)) {
+                Txt(stepStatusText(state), color = color, size = 10.5.sp, font = mono, maxLines = 1)
             }
         }
     }
@@ -162,6 +183,7 @@ private fun statusIcon(status: RunbookStepStatus): String = when (status) {
     RunbookStepStatus.PENDING -> "radio_button_unchecked"
     RunbookStepStatus.AWAITING_CONFIRM -> "pause_circle"
     RunbookStepStatus.RUNNING -> "play_circle"
+    RunbookStepStatus.AWAITING_COMPLETE -> "touch_app"
     RunbookStepStatus.SUCCEEDED -> "check_circle"
     RunbookStepStatus.FAILED -> "error"
     RunbookStepStatus.SKIPPED -> "skip_next"

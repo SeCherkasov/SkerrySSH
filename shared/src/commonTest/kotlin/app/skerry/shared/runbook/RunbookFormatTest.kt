@@ -51,6 +51,33 @@ class RunbookFormatTest {
     }
 
     @Test
+    fun `a step stored before interactive steps existed reads as a probed one`() {
+        val stored = """
+            {"id":"rb","label":"Deploy","steps":[
+              {"kind":"command","id":"s1","command":"uptime"}
+            ]}
+        """.trimIndent()
+
+        val runbook = json.decodeFromString(Runbook.serializer(), stored)
+
+        val step = assertIs<RunbookStep.Command>(runbook.steps.single())
+        assertEquals(false, step.interactive)
+    }
+
+    @Test
+    fun `an interactive step survives the stored round-trip`() {
+        val runbook = Runbook(
+            id = "rb", label = "Ops",
+            steps = listOf(RunbookStep.Command(id = "s1", command = "htop", interactive = true)),
+        )
+
+        val restored = json.decodeFromString(Runbook.serializer(), json.encodeToString(Runbook.serializer(), runbook))
+
+        val step = assertIs<RunbookStep.Command>(restored.steps.single())
+        assertEquals(true, step.interactive)
+    }
+
+    @Test
     fun `a runbook stored before run policy existed gets the default policy`() {
         val stored = """{"id":"rb","label":"Deploy","steps":[]}"""
 

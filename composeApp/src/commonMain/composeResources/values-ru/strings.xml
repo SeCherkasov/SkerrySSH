@@ -76,4 +76,10 @@
     <string name="qr_cancel">Отмена</string>
     <string name="command_clipped_partial">показано частично</string>
     <string name="command_clipped">показано частично · %1$d симв.</string>
+
+    <!-- Help dialogs (snippets / runbooks / vault) -->
+    <string name="help_button">Справка</string>
+    <string name="help_close">Закрыть</string>
+    <string name="help_add">Добавить</string>
+    <string name="help_added">Добавлено</string>
 </resources>

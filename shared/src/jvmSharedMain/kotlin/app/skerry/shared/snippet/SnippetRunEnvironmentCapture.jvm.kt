@@ -8,9 +8,6 @@ import java.util.UUID
 
 private val secureRandom = SecureRandom()
 
-/** Lowercase alphanumerics: safe in file names, hostnames and unquoted shell words. */
-private const val RANDOM_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789"
-
 actual fun captureSnippetRunEnvironment(): SnippetRunEnvironment {
     // One clock read: ${{timestamp}} and ${{time}} from the same run must agree on the second.
     val instant = Instant.now()
@@ -26,6 +23,6 @@ actual fun captureSnippetRunEnvironment(): SnippetRunEnvironment {
             epochSeconds = instant.epochSecond,
         ),
         newUuid = { UUID.randomUUID().toString() },
-        randomChars = { n -> buildString(n) { repeat(n) { append(RANDOM_ALPHABET[secureRandom.nextInt(RANDOM_ALPHABET.length)]) } } },
+        randomChars = { n, alphabet -> buildString(n) { repeat(n) { append(alphabet[secureRandom.nextInt(alphabet.length)]) } } },
     )
 }

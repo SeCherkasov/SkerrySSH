@@ -35,6 +35,7 @@ import app.skerry.ui.generated.resources.runbook_panel_done_with_failures
 import app.skerry.ui.generated.resources.runbook_panel_exit_code
 import app.skerry.ui.generated.resources.runbook_panel_failed
 import app.skerry.ui.generated.resources.runbook_panel_no_sftp
+import app.skerry.ui.generated.resources.runbook_status_interactive
 import app.skerry.ui.generated.resources.runbook_panel_running
 import app.skerry.ui.generated.resources.runbook_panel_status_unreadable
 import app.skerry.ui.generated.resources.runbook_panel_stopped
@@ -162,6 +163,7 @@ internal fun stepStatusText(state: RunbookStepState): String {
         RunbookStepStatus.PENDING -> stringResource(Res.string.runbook_status_waiting)
         RunbookStepStatus.AWAITING_CONFIRM -> stringResource(Res.string.runbook_status_confirm)
         RunbookStepStatus.RUNNING -> stringResource(Res.string.runbook_status_running)
+        RunbookStepStatus.AWAITING_COMPLETE -> stringResource(Res.string.runbook_status_interactive)
         RunbookStepStatus.SKIPPED -> stringResource(Res.string.runbook_status_skipped)
         RunbookStepStatus.STOPPED -> stringResource(Res.string.runbook_status_stopped)
         // A settled step always has a duration (it is written with the status), so this is the
@@ -203,6 +205,7 @@ internal fun runStatusColor(status: RunbookStepStatus): Color = when (status) {
     RunbookStepStatus.PENDING -> Skerry.colors.faint
     RunbookStepStatus.AWAITING_CONFIRM -> Skerry.colors.cyanBright
     RunbookStepStatus.RUNNING -> Skerry.colors.cyan
+    RunbookStepStatus.AWAITING_COMPLETE -> Skerry.colors.cyanBright
     RunbookStepStatus.SUCCEEDED -> Skerry.colors.moss
     RunbookStepStatus.FAILED -> Skerry.colors.sunset
     RunbookStepStatus.SKIPPED -> Skerry.colors.dim
@@ -216,6 +219,7 @@ internal fun runStatusIcon(status: RunbookStepStatus): String? = when (status) {
     RunbookStepStatus.SKIPPED -> "skip_next"
     RunbookStepStatus.STOPPED -> "stop_circle"
     RunbookStepStatus.AWAITING_CONFIRM -> "pause_circle"
+    RunbookStepStatus.AWAITING_COMPLETE -> "touch_app"
     RunbookStepStatus.PENDING, RunbookStepStatus.RUNNING -> null
 }
 

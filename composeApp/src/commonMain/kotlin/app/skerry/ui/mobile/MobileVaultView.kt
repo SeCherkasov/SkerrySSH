@@ -41,6 +41,7 @@ import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialUsage
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.vault_add_password
 import app.skerry.ui.generated.resources.vault_any_principal
 import app.skerry.ui.generated.resources.vault_badge_expired
@@ -80,6 +81,7 @@ import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.shortFingerprint
+import app.skerry.ui.vault.VaultHelpDialog
 import app.skerry.ui.vault.SecretCopyAuthorizer
 import app.skerry.ui.vault.SecretExport
 import app.skerry.ui.vault.privateKeyExport
@@ -183,6 +185,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     var category by remember { mutableStateOf(VaultCategoryKind.SSH_KEYS) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var showGenerate by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
     val secretFiles = LocalSecretFileReader.current
     var showImportCert by remember { mutableStateOf(false) }
@@ -200,7 +203,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     // writes the flag only on value change (not every list recomposition); DisposableEffect clears it
     // on leaving the tab so the tab bar isn't left hidden.
     val modalOpen = showGenerate || showAddPassword || showImportCert || showLinkKeyFile || pendingRename != null || pendingDelete != null ||
-        selectedCred != null || copyAuth.passwordPromptVisible || exportFailed
+        selectedCred != null || copyAuth.passwordPromptVisible || exportFailed || showHelp
     LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
 
@@ -210,7 +213,12 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
-            MobilePushHeader(stringResource(Res.string.vault_title), onBack = state::pop, plainBack = true)
+            MobilePushHeader(
+                stringResource(Res.string.vault_title), onBack = state::pop, plainBack = true,
+                actions = {
+                    GhostButton(stringResource(Res.string.help_button), onClick = { showHelp = true }, icon = "help")
+                },
+            )
             MobileVaultSummary(allCreds.size)
             MobileCategoryPills(category, allCreds) { category = it; selectedId = null }
             MobileVaultAction(
@@ -245,6 +253,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
             Spacer(Modifier.height(96.dp))
         }
 
+        if (showHelp) VaultHelpDialog(onDismiss = { showHelp = false })
         if (showGenerate && generator != null) {
             GenerateKeyDialog(
                 onDismiss = { showGenerate = false },

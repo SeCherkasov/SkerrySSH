@@ -34,9 +34,11 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.design.Chip
+import app.skerry.ui.design.ConfirmActionDialog
 import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.SidebarSearchField
@@ -45,7 +47,11 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_count
+import app.skerry.ui.generated.resources.runbook_delete
+import app.skerry.ui.generated.resources.runbook_delete_message
+import app.skerry.ui.generated.resources.runbook_delete_title
 import app.skerry.ui.generated.resources.runbook_empty
+import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.runbook_new
 import app.skerry.ui.generated.resources.runbook_no_matches
 import app.skerry.ui.generated.resources.runbook_section
@@ -106,6 +112,8 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
     var selectedId by remember { mutableStateOf<String?>(null) }
     var mode by remember { mutableStateOf<RunbookPanelMode>(RunbookPanelMode.Run) }
     var query by remember { mutableStateOf("") }
+    var helpOpen by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<RunbookEntry?>(null) }
     val history = LocalRunbookHistory.current
 
     val all = manager.runbooks
@@ -121,6 +129,7 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
             query = query,
             onQuery = { query = it },
             onNew = { mode = RunbookPanelMode.New },
+            onHelp = { helpOpen = true },
         )
         HLine()
         Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -174,17 +183,33 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
                             state = state,
                             mono = mono,
                             onEdit = { mode = RunbookPanelMode.Edit(selected.id) },
-                            onDelete = {
-                            manager.delete(selected.id)
-                            // The runbook is gone; its run log has nothing left to belong to.
-                            history?.forget(selected.id)
-                            selectedId = null
-                        },
+                            // Held for confirmation: deleting a whole procedure silently is one
+                            // misclick away from losing it and its run history.
+                            onDelete = { pendingDelete = selected },
                         )
                     }
                 }
             }
         }
+    }
+    if (helpOpen) RunbookHelpDialog(manager, onDismiss = { helpOpen = false })
+    pendingDelete?.let { entry ->
+        ConfirmActionDialog(
+            title = stringResource(Res.string.runbook_delete_title),
+            message = stringResource(
+                Res.string.runbook_delete_message,
+                entry.runbook.label.ifBlank { stringResource(Res.string.runbook_untitled) },
+            ),
+            confirmLabel = stringResource(Res.string.runbook_delete),
+            onConfirm = {
+                manager.delete(entry.id)
+                // The runbook is gone; its run log has nothing left to belong to.
+                history?.forget(entry.id)
+                if (selectedId == entry.id) selectedId = null
+                pendingDelete = null
+            },
+            onDismiss = { pendingDelete = null },
+        )
     }
 }
 
@@ -195,6 +220,7 @@ private fun RunbooksHeader(
     query: String,
     onQuery: (String) -> Unit,
     onNew: () -> Unit,
+    onHelp: (() -> Unit)? = null,
 ) {
     SectionHeader(
         title = stringResource(Res.string.runbook_section),
@@ -205,6 +231,9 @@ private fun RunbooksHeader(
         actions = {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 SidebarSearchField(query, onQuery, stringResource(Res.string.runbook_search), Modifier.width(SEARCH_WIDTH))
+                if (onHelp != null) {
+                    GhostButton(stringResource(Res.string.help_button), onClick = onHelp, icon = "help", modifier = Modifier.testTag(UiTags.HELP))
+                }
                 PrimaryButton(stringResource(Res.string.runbook_new), onClick = onNew, icon = "add", modifier = Modifier.testTag(UiTags.NEW_RUNBOOK))
             }
         },

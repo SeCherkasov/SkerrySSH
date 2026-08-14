@@ -32,14 +32,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.SnippetSegment
 import app.skerry.shared.snippet.SnippetVariableKind
+import app.skerry.shared.snippet.paramChoices
+import app.skerry.shared.snippet.paramDefault
 import app.skerry.shared.snippet.sanitizeSnippetValue
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.app.LocalCredentials
+import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippet_vars_clipboard
@@ -80,6 +84,8 @@ private fun resolveVaultRef(name: String, credentials: CredentialManagerControll
 class TemplateVariableValues internal constructor(
     /** Prompted parameters in first-appearance order. */
     val paramNames: List<String>,
+    /** Options per parameter (`${{name:default|opt1|opt2}}`); absent for free-text parameters. */
+    val paramChoices: Map<String, List<String>>,
     /** Distinct `${{vault:name}}` entry names referenced. */
     val vaultRefs: List<String>,
     /** Whether anything references `${{clipboard}}` (it is only read if so). */
@@ -132,18 +138,18 @@ fun rememberTemplateVariableValues(
     val credentials = LocalCredentials.current
     val clipboard = LocalClipboard.current
     val values = remember(request) {
-        val paramNames = variables.filter { it.kind == SnippetVariableKind.PARAM }.map { it.name }.distinct()
+        val params = variables.filter { it.kind == SnippetVariableKind.PARAM }
+        val paramNames = params.map { it.name }.distinct()
         val vaultRefs = variables.filter { it.kind == SnippetVariableKind.VAULT }.map { it.format.orEmpty() }.distinct()
+        val firstByName = paramNames.associateWith { name -> params.first { it.name == name } }
         TemplateVariableValues(
             paramNames = paramNames,
+            paramChoices = firstByName.mapValues { (_, v) -> v.paramChoices() }.filterValues { it.isNotEmpty() },
             vaultRefs = vaultRefs,
             needsClipboard = variables.any { it.kind == SnippetVariableKind.CLIPBOARD },
             vaultResolutions = vaultRefs.associateWith { resolveVaultRef(it, credentials) },
             params = mutableStateMapOf<String, String>().apply {
-                paramNames.forEach { name ->
-                    val default = variables.firstOrNull { it.kind == SnippetVariableKind.PARAM && it.name == name }?.format
-                    put(name, initialParams[name] ?: default ?: "")
-                }
+                paramNames.forEach { name -> put(name, paramSeed(firstByName.getValue(name), initialParams[name])) }
             },
         )
     }
@@ -162,23 +168,38 @@ fun rememberTemplateVariableValues(
 fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = true) {
     val mono = LocalFonts.current.mono
     val firstFieldFocus = remember { FocusRequester() }
-    values.paramNames.forEachIndexed { index, name ->
+    val firstTextParam = values.paramNames.firstOrNull { it !in values.paramChoices }
+    values.paramNames.forEach { name ->
         key(name) {
             // The caption is the variable's own name, not chrome: `${{token}}` and `${{TOKEN}}` are
             // two different keys, and uppercasing the caption would draw and announce them alike.
             FormField(name, uppercase = false) {
-                ParamField(
-                    value = values.params[name].orEmpty(),
-                    onChange = { values.params[name] = sanitizeSnippetValue(it) },
-                    modifier = if (index == 0) Modifier.focusRequester(firstFieldFocus) else Modifier,
-                    // The default from the template (or the previous run) is a suggestion: select it,
-                    // so the autofocused first field takes a replacement rather than a prefix.
-                    selectAllOnFocus = values.isSeeded(name),
-                )
+                val choices = values.paramChoices[name]
+                if (choices != null) {
+                    DropdownField(
+                        value = values.params[name].orEmpty(),
+                        options = choices,
+                        // Options come pre-sanitized from paramChoices(), so the picked string, the
+                        // selected highlight and the sent value are already one string. The label
+                        // filter adds the cap and space-folding every untrusted label carries — a
+                        // menu row may draw shortened, but the confirmed line shows the true value.
+                        label = { untrustedLabel(it) },
+                        onPick = { values.params[name] = it },
+                    )
+                } else {
+                    ParamField(
+                        value = values.params[name].orEmpty(),
+                        onChange = { values.params[name] = sanitizeSnippetValue(it) },
+                        modifier = if (name == firstTextParam) Modifier.focusRequester(firstFieldFocus) else Modifier,
+                        // The default from the template (or the previous run) is a suggestion: select it,
+                        // so the autofocused first field takes a replacement rather than a prefix.
+                        selectAllOnFocus = values.isSeeded(name),
+                    )
+                }
             }
         }
     }
-    if (values.paramNames.isNotEmpty() && autoFocus) {
+    if (firstTextParam != null && autoFocus) {
         LaunchedEffect(Unit) { firstFieldFocus.requestFocus() }
     }
     if (values.needsClipboard) {
@@ -213,6 +234,19 @@ fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = 
             }
         }
     }
+}
+
+/**
+ * What a parameter's field starts out holding. A free-text parameter keeps the previous run's
+ * value, else the inline default. A choice parameter must start on one of its options: the
+ * previous run's value only if it is still offered, else the default (always the first option
+ * when present), else the first option — a stale remembered value must not resurrect a choice
+ * the template no longer contains.
+ */
+internal fun paramSeed(variable: SnippetSegment.Variable, previous: String?): String {
+    val choices = variable.paramChoices()
+    if (choices.isEmpty()) return previous ?: variable.paramDefault() ?: ""
+    return previous?.takeIf { it in choices } ?: variable.paramDefault() ?: choices.first()
 }
 
 @Composable

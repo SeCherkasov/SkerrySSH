@@ -374,7 +374,9 @@ private fun MobileLockField(
         onValueChange = onValueChange,
         singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
-        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
+        // lineHeight pinned for the same reason as the desktop gate's LockPasswordField: without it
+        // the text sits high next to the taller icon and jumps when typing starts.
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui, lineHeight = 21.sp),
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
@@ -393,8 +395,8 @@ private fun MobileLockField(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Sym("lock", size = 19.sp, color = Skerry.colors.faint)
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 15.sp)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 15.sp, lineHeight = 21.sp)
                     inner()
                 }
             }
@@ -415,7 +417,7 @@ private fun MobileLockPlainField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 15.sp, fontFamily = LocalFonts.current.ui, lineHeight = 21.sp),
         cursorBrush = SolidColor(Skerry.colors.cyan),
         // Confirm word is uppercase (RESET): disable autocorrect (otherwise the IME rewrites it to
         // "Reset" and the comparison never matches) and force uppercase capitalization.
@@ -436,8 +438,8 @@ private fun MobileLockPlainField(
                     .padding(horizontal = 14.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 15.sp)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 15.sp, lineHeight = 21.sp)
                     inner()
                 }
             }

@@ -93,7 +93,9 @@ private enum class ServerChar { Keep, Break, Space, Drop }
  * format characters, so nothing else drops them — a name made of them passes `isBlank()`, and a
  * quoted `curl\u2800evil.sh` reads as two words and runs as one.
  */
-internal val INVISIBLE_LETTERS = charArrayOf('\u115F', '\u1160', '\u3164', '\uFFA0', '\u2800')
+// One definition for the whole app: the shared sanitizers drop exactly this set, and two
+// hand-synced copies would drift invisibly (the characters render as nothing).
+internal val INVISIBLE_LETTERS: Set<Char> = app.skerry.shared.snippet.INVISIBLE_LETTERS
 
 private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = when {
     ch == '\n' && allowNewlines -> ServerChar.Break

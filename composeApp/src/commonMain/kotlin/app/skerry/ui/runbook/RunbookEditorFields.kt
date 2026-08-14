@@ -60,6 +60,7 @@ import app.skerry.ui.generated.resources.runbook_step_add
 import app.skerry.ui.generated.resources.runbook_step_command
 import app.skerry.ui.generated.resources.runbook_step_confirm
 import app.skerry.ui.generated.resources.runbook_step_continue_on_error
+import app.skerry.ui.generated.resources.runbook_step_interactive
 import app.skerry.ui.generated.resources.runbook_step_down
 import app.skerry.ui.generated.resources.runbook_step_local
 import app.skerry.ui.generated.resources.runbook_step_n
@@ -231,6 +232,12 @@ private fun StepEditor(
         StepFlagRow(stringResource(Res.string.runbook_step_confirm), step.confirm) { step.confirm = !step.confirm }
         StepFlagRow(stringResource(Res.string.runbook_step_continue_on_error), step.continueOnError) {
             step.continueOnError = !step.continueOnError
+        }
+        // A transfer has no shell to hold, so the flag only exists on command rows.
+        if (step.kind == RunbookStepKind.COMMAND) {
+            StepFlagRow(stringResource(Res.string.runbook_step_interactive), step.interactive) {
+                step.interactive = !step.interactive
+            }
         }
     }
 }

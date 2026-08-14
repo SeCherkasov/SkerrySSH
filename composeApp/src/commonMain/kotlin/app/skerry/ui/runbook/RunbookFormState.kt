@@ -32,6 +32,7 @@ class RunbookStepDraft internal constructor(
     direction: RunbookTransferDirection = RunbookTransferDirection.UPLOAD,
     confirm: Boolean = true,
     continueOnError: Boolean = false,
+    interactive: Boolean = false,
 ) {
     var kind: RunbookStepKind by mutableStateOf(kind)
     var title: String by mutableStateOf(title)
@@ -41,6 +42,9 @@ class RunbookStepDraft internal constructor(
     var direction: RunbookTransferDirection by mutableStateOf(direction)
     var confirm: Boolean by mutableStateOf(confirm)
     var continueOnError: Boolean by mutableStateOf(continueOnError)
+
+    /** Command rows only; a transfer has no shell to hold ([RunbookStep.Command.interactive]). */
+    var interactive: Boolean by mutableStateOf(interactive)
 
     /** Whether the row says what to do: a command line, or both ends of a transfer. */
     internal val filled: Boolean
@@ -56,6 +60,7 @@ class RunbookStepDraft internal constructor(
             command = command,
             confirm = confirm,
             continueOnError = continueOnError,
+            interactive = interactive,
         )
         RunbookStepKind.TRANSFER -> RunbookStep.Transfer(
             id = stepId,
@@ -165,6 +170,7 @@ private fun RunbookStep.toDraft(): RunbookStepDraft = when (this) {
         command = command,
         confirm = confirm,
         continueOnError = continueOnError,
+        interactive = interactive,
     )
     is RunbookStep.Transfer -> RunbookStepDraft(
         stepId = id,

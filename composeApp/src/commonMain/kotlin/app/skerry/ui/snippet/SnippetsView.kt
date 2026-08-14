@@ -30,6 +30,7 @@ import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.SidebarSearchField
@@ -38,6 +39,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_command_count
 import app.skerry.ui.generated.resources.lib_snippets_empty
 import app.skerry.ui.generated.resources.lib_snippets_facts_variables
+import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.lib_snippets_new
 import app.skerry.ui.generated.resources.lib_snippets_no_matches
 import app.skerry.ui.generated.resources.lib_snippets_screen_title
@@ -93,6 +95,7 @@ private sealed interface PanelMode {
 private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibraryState, mono: FontFamily) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var mode by remember { mutableStateOf<PanelMode>(PanelMode.Run) }
+    var helpOpen by remember { mutableStateOf(false) }
 
     val all = manager.snippets
     val visible = library.visible(all)
@@ -111,6 +114,7 @@ private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibrarySta
             query = library.query,
             onQuery = { library.query = it },
             onNew = { mode = PanelMode.New },
+            onHelp = { helpOpen = true },
         )
         if (all.any { it.snippet.tags.isNotEmpty() }) {
             SnippetTagFilterRow(
@@ -176,6 +180,7 @@ private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibrarySta
             }
         }
     }
+    if (helpOpen) SnippetHelpDialog(manager, onDismiss = { helpOpen = false })
 }
 
 @Composable
@@ -184,6 +189,7 @@ private fun SnippetsHeader(
     query: String,
     onQuery: (String) -> Unit,
     onNew: () -> Unit,
+    onHelp: (() -> Unit)? = null,
 ) {
     val commands = pluralStringResource(Res.plurals.lib_snippets_command_count, facts.total, facts.total)
     SectionHeader(
@@ -198,6 +204,9 @@ private fun SnippetsHeader(
         actions = {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
                 SidebarSearchField(query, onQuery, stringResource(Res.string.lib_snippets_search), Modifier.width(SEARCH_WIDTH))
+                if (onHelp != null) {
+                    GhostButton(stringResource(Res.string.help_button), onClick = onHelp, icon = "help", modifier = Modifier.testTag(UiTags.HELP))
+                }
                 PrimaryButton(stringResource(Res.string.lib_snippets_new), onClick = onNew, icon = "add", modifier = Modifier.testTag(UiTags.NEW_SNIPPET))
             }
         },

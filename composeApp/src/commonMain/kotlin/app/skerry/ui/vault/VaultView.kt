@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
@@ -38,7 +39,9 @@ import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialUsage
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
+import app.skerry.ui.app.UiTags
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.vault_export_dismiss
 import app.skerry.ui.generated.resources.vault_export_failed_message
 import app.skerry.ui.generated.resources.vault_export_failed_title
@@ -144,6 +147,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     var category by remember { mutableStateOf(VaultCategoryKind.SSH_KEYS) }
     var selectedId by remember { mutableStateOf<String?>(null) }
     var showGenerate by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
     var showAddPassword by remember { mutableStateOf(false) }
     val secretFiles = LocalSecretFileReader.current
     var showImportCert by remember { mutableStateOf(false) }
@@ -172,6 +176,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                     onAddPassword = { showAddPassword = true },
                     onImportCert = { showImportCert = true },
                     onLinkKeyFile = { showLinkKeyFile = true },
+                    onHelp = { showHelp = true },
                 )
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     if (credItems.isEmpty()) {
@@ -228,6 +233,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                 }
             }
         }
+        if (showHelp) VaultHelpDialog(onDismiss = { showHelp = false })
         if (showGenerate && generator != null) {
             GenerateKeyDialog(
                 onDismiss = { showGenerate = false },
@@ -414,6 +420,7 @@ private fun VaultHeader(
     onAddPassword: () -> Unit,
     onImportCert: () -> Unit,
     onLinkKeyFile: () -> Unit,
+    onHelp: (() -> Unit)? = null,
 ) {
     SectionHeader(
         // The section names the whole keychain and how it is protected; which slice of it is on
@@ -424,6 +431,9 @@ private fun VaultHeader(
             pluralStringResource(Res.plurals.vault_item_count, itemCount, itemCount),
         ),
         actions = {
+            if (onHelp != null) {
+                GhostButton(stringResource(Res.string.help_button), onClick = onHelp, icon = "help", modifier = Modifier.testTag(UiTags.HELP))
+            }
             when (category) {
                 // "Link file" sits in both key and certificate categories: which one a file-backed
                 // secret lands in depends on whether it names a certificate.

@@ -95,7 +95,7 @@ class RunbookRunnerTest {
     private fun environment() = SnippetRunEnvironment(
         moment = SnippetMoment(2026, 7, 26, 14, 5, 9, epochSeconds = 1_784_000_000L),
         newUuid = { "uuid" },
-        randomChars = { n -> "r".repeat(n) },
+        randomChars = { n, _ -> "r".repeat(n) },
     )
 
     private fun runbook(vararg steps: RunbookStep, policy: RunbookPolicy = RunbookPolicy(watchdogMinutes = 1)) =
@@ -103,6 +103,9 @@ class RunbookRunnerTest {
 
     private fun step(id: String, command: String, confirm: Boolean = false, continueOnError: Boolean = false) =
         RunbookStep.Command(id = id, title = id, command = command, confirm = confirm, continueOnError = continueOnError)
+
+    private fun interactive(id: String, command: String, confirm: Boolean = false) =
+        RunbookStep.Command(id = id, title = id, command = command, confirm = confirm, interactive = true)
 
     private fun transfer(
         id: String,
@@ -716,6 +719,168 @@ class RunbookRunnerTest {
         assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
         assertEquals(RunbookPhase.STOPPED, r.phase)
         assertTrue(term.sent.isEmpty(), "the step after a stopped transfer must not be sent")
+    }
+
+    // --- interactive steps: the command is sent bare and the user decides when it is done ---
+
+    @Test
+    fun an_interactive_step_is_sent_bare_and_waits_for_the_user() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "htop")), term.target()) { "" }
+
+        // As-is: no probe around the line — an interactive program never exits, so a marker would
+        // never appear — and nothing declared to the terminal, so nothing is captured or hidden.
+        assertEquals(listOf("htop\n"), term.sent)
+        assertTrue(term.expected.isEmpty(), "no step token may be declared for an interactive step")
+        assertEquals(RunbookStepStatus.AWAITING_COMPLETE, r.only.steps[0].status)
+        assertEquals(RunbookPhase.RUNNING, r.phase)
+
+        // However long it runs, only the user finishes it — and the terminal is never polled for a
+        // mark that cannot come.
+        testScheduler.advanceTimeBy(stallAfter * 5); testScheduler.runCurrent()
+        assertEquals(RunbookStepStatus.AWAITING_COMPLETE, r.only.steps[0].status)
+        assertEquals(0, term.polls, "an interactive step has no mark to poll for")
+        assertFalse(r.only.steps[0].stalled, "the watchdog has no meaning without a probe")
+    }
+
+    @Test
+    fun completing_an_interactive_step_moves_to_the_next() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "mc"), step("s2", "df -h")), term.target()) { "" }
+
+        r.completeStep()
+
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
+        assertNull(r.only.steps[0].exitCode, "the user's word is not an exit code")
+        // The next step is an ordinary one again: probe and declaration return.
+        assertEquals(RunbookMarker.probeLine("df -h", RunbookMarker.token(RUN_ID, 1)) + "\n", term.sent[1])
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[1].status)
+    }
+
+    @Test
+    fun completing_the_last_interactive_step_finishes_the_run() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "htop")), term.target()) { "" }
+        r.completeStep()
+
+        assertEquals(RunbookPhase.DONE, r.phase)
+        assertFalse(r.hadFailures)
+    }
+
+    @Test
+    fun completing_is_refused_while_an_ordinary_step_runs() = runnerTest { r, term ->
+        r.startNow(runbook(step("s1", "sleep 5"), step("s2", "df -h")), term.target()) { "" }
+
+        r.completeStep()
+
+        // Only the shell's exit code may finish a probed step — the button must not exist for it.
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status)
+        assertEquals(1, term.sent.size)
+    }
+
+    @Test
+    fun skipping_an_interactive_step_moves_on_without_counting_it_done() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "mc"), step("s2", "uptime")), term.target()) { "" }
+
+        r.skipStep()
+
+        assertEquals(RunbookStepStatus.SKIPPED, r.only.steps[0].status)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[1].status)
+    }
+
+    @Test
+    fun stopping_an_interactive_step_settles_it() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "htop"), step("s2", "uptime")), term.target()) { "" }
+
+        r.stop()
+
+        assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
+        assertEquals(RunbookPhase.STOPPED, r.phase)
+        assertEquals(1, term.sent.size, "nothing further may be sent after Stop")
+    }
+
+    @Test
+    fun losing_the_session_ends_an_interactive_run() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "htop")), term.target()) { "" }
+        term.live = false
+        testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
+
+        assertEquals(RunbookPhase.STOPPED, r.phase)
+        assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
+    }
+
+    @Test
+    fun an_interactive_step_with_confirm_pauses_first() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "htop", confirm = true)), term.target()) { "" }
+
+        assertEquals(RunbookStepStatus.AWAITING_CONFIRM, r.only.steps[0].status)
+        assertTrue(term.sent.isEmpty())
+
+        r.confirmStep()
+
+        assertEquals(listOf("htop\n"), term.sent)
+        assertEquals(RunbookStepStatus.AWAITING_COMPLETE, r.only.steps[0].status)
+    }
+
+    @Test
+    fun an_interactive_line_still_resolves_its_variables() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "docker exec -it \${{container}} sh")), term.target()) { "web-1" }
+
+        assertEquals(listOf("docker exec -it web-1 sh\n"), term.sent)
+    }
+
+    @Test
+    fun a_late_complete_after_stop_is_refused() = runnerTest { r, term ->
+        // The liveness watcher's stop() and the user's click race on different threads; whichever
+        // settles the step first wins, and the loser must be a no-op. Here stop wins: the click
+        // landing afterwards must not overwrite STOPPED or type the next step into a dead session.
+        // (settleInteractive does its whole check-then-act under the lock for exactly this.)
+        r.startNow(runbook(interactive("s1", "htop"), step("s2", "uptime")), term.target()) { "" }
+        r.stop()
+
+        r.completeStep()
+
+        assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
+        assertEquals(RunbookPhase.STOPPED, r.phase)
+        assertEquals(1, term.sent.size, "a resurrected run would have typed s2")
+    }
+
+    @Test
+    fun a_late_skip_after_stop_is_refused() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "htop"), step("s2", "uptime")), term.target()) { "" }
+        r.stop()
+
+        r.skipStep()
+
+        assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
+        assertEquals(RunbookPhase.STOPPED, r.phase)
+        assertEquals(1, term.sent.size)
+    }
+
+    @Test
+    fun skipping_an_interactive_step_advances_into_a_transfer() = runnerTest { r, term ->
+        // The one step-kind hand-off new to this feature: an interactive settle must start SFTP
+        // for the next step exactly as an exit code would.
+        val sftp = FakeSftpClient()
+        sftp.seedDir("/srv/incoming")
+        term.sftp = sftp
+
+        r.startNow(runbook(interactive("s1", "mc"), transfer("s2")), term.target()) { "" }
+        r.skipStep()
+        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.SKIPPED, r.only.steps[0].status)
+        assertEquals("/tmp/release.tgz" to "/srv/incoming/release.tgz", sftp.lastUpload)
+        assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[1].status)
+        assertEquals(RunbookPhase.DONE, r.phase)
+    }
+
+    @Test
+    fun a_report_from_a_previous_step_cannot_finish_an_interactive_one() = runnerTest { r, term ->
+        // The interactive program may print anything, including a stale mark of an earlier run
+        // parked in the terminal. The user's click is the only way this step ends.
+        r.startNow(runbook(interactive("s1", "htop")), term.target()) { "" }
+        term.complete(0, 0)
+        testScheduler.advanceTimeBy(poll * 5); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.AWAITING_COMPLETE, r.only.steps[0].status)
     }
 
     private companion object {

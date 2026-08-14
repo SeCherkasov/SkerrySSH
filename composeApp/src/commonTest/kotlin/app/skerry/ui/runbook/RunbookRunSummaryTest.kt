@@ -54,7 +54,7 @@ class RunbookRunSummaryTest {
     private fun environment() = SnippetRunEnvironment(
         moment = SnippetMoment(2026, 7, 26, 14, 5, 9, epochSeconds = 1_784_000_000L),
         newUuid = { "uuid" },
-        randomChars = { n -> "r".repeat(n) },
+        randomChars = { n, _ -> "r".repeat(n) },
     )
 
     private fun runbook(steps: Int, policy: RunbookPolicy = RunbookPolicy(), continueOnError: Boolean = false) = Runbook(

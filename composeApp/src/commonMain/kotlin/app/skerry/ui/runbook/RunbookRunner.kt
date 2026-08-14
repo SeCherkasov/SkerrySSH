@@ -10,6 +10,7 @@ import app.skerry.shared.runbook.RunbookMarker
 import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookRunRecord
 import app.skerry.shared.runbook.RunbookScript
+import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.runbook.RunbookTransferDirection
 import app.skerry.shared.sftp.SftpProgress
 import app.skerry.shared.snippet.SnippetRunEnvironment
@@ -194,15 +195,56 @@ class RunbookRunner(
         flushReport()
     }
 
-    /** The user skipped the step the run is paused on; the run continues with the next one. */
+    /**
+     * The user skipped the step the run is waiting on — at a confirmation pause, or while an
+     * interactive step waits to be completed. The run continues with the next one.
+     */
     fun skipStep() {
         val run = run ?: return
-        if (run.phase != RunbookPhase.AWAITING_CONFIRM) return
         val index = run.currentIndex
-        run.steps.getOrNull(index)?.status = RunbookStepStatus.SKIPPED
+        val state = run.steps.getOrNull(index) ?: return
+        when (state.status) {
+            // No watcher exists during a confirmation pause, so nothing races this branch.
+            RunbookStepStatus.AWAITING_CONFIRM -> state.status = RunbookStepStatus.SKIPPED
+            RunbookStepStatus.AWAITING_COMPLETE -> if (!settleInteractive(state, RunbookStepStatus.SKIPPED)) return
+            else -> return
+        }
         advance(index + 1)
         flushReport()
     }
+
+    /**
+     * The user declared the interactive step done ([RunbookStep.Command.interactive]). There is no
+     * exit code to read — the click is the verdict — so the step is settled as succeeded with none,
+     * and the run moves on. No-op unless the run is waiting on exactly that.
+     */
+    fun completeStep() {
+        val run = run ?: return
+        val index = run.currentIndex
+        val state = run.steps.getOrNull(index) ?: return
+        if (!settleInteractive(state, RunbookStepStatus.SUCCEEDED)) return
+        advance(index + 1)
+        flushReport()
+    }
+
+    /**
+     * Ends the interactive step the run is waiting on, whole check-then-act inside the lock: the
+     * liveness watcher runs on a multi-threaded scope and its `stop()` can land between an
+     * unlocked status read and the settle — the click would then overwrite STOPPED and type the
+     * next command into a session already declared dead. Returns false (the caller must not
+     * advance) when the step is no longer waiting; the generation bump refuses any watcher poll
+     * still in flight, same discipline as [watch]'s finish path.
+     */
+    private fun settleInteractive(state: RunbookStepState, status: RunbookStepStatus): Boolean =
+        synchronized(lock) {
+            if (state.status != RunbookStepStatus.AWAITING_COMPLETE) return false
+            generation++
+            watchJob?.cancel()
+            watchJob = null
+            state.status = status
+            state.finishedAtMillis = now()
+            true
+        }
 
     /**
      * Ends the run where it stands: the step in flight is left as [RunbookStepStatus.STOPPED] and
@@ -223,6 +265,30 @@ class RunbookRunner(
             watchJob = null
             run?.let { stopRun(it) }
         }
+        phase = RunbookPhase.STOPPED
+        report()
+        flushReport()
+    }
+
+    /**
+     * A watcher's stop — refused when the run has already moved past the step the watcher was
+     * observing. The watcher's staleness check and its `isLive` read are not atomic: a Complete
+     * click can settle the step (bumping the generation) in between, and an unguarded [stop]
+     * would then stop the *next* step on the strength of an observation about the previous one.
+     * The user's own Stop carries no stamp — it always applies to whatever run is current.
+     */
+    private fun stopIfCurrent(generationAtStart: Int) {
+        synchronized(lock) {
+            if (generationAtStart != generation) return
+            if (!active) return
+            generation++
+            watchJob?.cancel()
+            watchJob = null
+            run?.let { stopRun(it) }
+        }
+        // Outside the lock, like [stop]: the terminal has its own synchronization, and anything
+        // racing this was already refused by the generation bump above.
+        run?.target?.expectStep(null, emptyList())
         phase = RunbookPhase.STOPPED
         report()
         flushReport()
@@ -281,6 +347,15 @@ class RunbookRunner(
         phase = RunbookPhase.RUNNING
         when (resolved) {
             is ResolvedRunbookStep.Command -> {
+                if ((state.step as? RunbookStep.Command)?.interactive == true) {
+                    // Sent as-is: an interactive program never exits, so a probe around the line
+                    // would never run — and nothing is declared to the terminal, so nothing of the
+                    // program's screen is captured or hidden. Only the user ends this step.
+                    state.status = RunbookStepStatus.AWAITING_COMPLETE
+                    run.target.send(resolved.line + "\n")
+                    watchLiveness(run)
+                    return
+                }
                 val token = RunbookMarker.token(runId, index)
                 // Declared before the line is sent, never after: the terminal reports only the step
                 // it was told to expect, and the echo it must hide starts arriving immediately.
@@ -290,6 +365,28 @@ class RunbookRunner(
             }
             is ResolvedRunbookStep.Transfer -> transfer(run, index, resolved)
         }
+    }
+
+    /**
+     * The only thing watched during an interactive step: whether the session is still there. There
+     * is no mark to poll for and no watchdog to feed — a TUI that redraws nothing for an hour is
+     * healthy — but a dropped connection must still end the run instead of leaving it waiting for
+     * a click that can no longer mean anything.
+     */
+    private fun watchLiveness(run: RunbookSessionRun) {
+        val generationAtStart = synchronized(lock) { generation }
+        val target = run.target
+        val job = scope.launch {
+            while (true) {
+                delay(pollIntervalMillis)
+                if (stale(generationAtStart)) return@launch
+                if (!target.isLive()) {
+                    stopIfCurrent(generationAtStart)
+                    return@launch
+                }
+            }
+        }
+        publishJob(job, generationAtStart)
     }
 
     /**
@@ -315,7 +412,7 @@ class RunbookRunner(
                 delay(pollIntervalMillis)
                 if (stale(generationAtStart)) return@launch
                 if (!target.isLive()) {
-                    stop()
+                    stopIfCurrent(generationAtStart)
                     return@launch
                 }
                 val mark = target.takeMark(token)
@@ -461,7 +558,11 @@ class RunbookRunner(
     /** Ends the run where it stands, leaving the step it was on marked as stopped. */
     private fun stopRun(run: RunbookSessionRun) {
         run.steps.getOrNull(run.currentIndex)?.let {
-            if (it.status == RunbookStepStatus.RUNNING || it.status == RunbookStepStatus.AWAITING_CONFIRM) {
+            if (
+                it.status == RunbookStepStatus.RUNNING ||
+                it.status == RunbookStepStatus.AWAITING_CONFIRM ||
+                it.status == RunbookStepStatus.AWAITING_COMPLETE
+            ) {
                 it.status = RunbookStepStatus.STOPPED
                 it.finishedAtMillis = now()
             }
@@ -480,17 +581,22 @@ class RunbookRunner(
      */
     private fun report() {
         val phase = phase ?: return
-        if (reported || phase == RunbookPhase.RUNNING || phase == RunbookPhase.AWAITING_CONFIRM) return
         val runbook = runbook ?: return
         val run = run ?: return
-        reported = true
-        pendingReport = run.runRecord(
-            id = runId,
-            runbookId = runbook.id,
-            startedAt = startedAt,
-            durationMillis = now() - startedAt,
-            phase = phase,
-        )
+        // Check-then-set under the lock: a watcher's stop tail and the user's own Stop can reach
+        // here concurrently, and an unlocked flag would let both park a record — one run, two
+        // history entries. The record build is cheap; the vault write stays in flushReport.
+        synchronized(lock) {
+            if (reported || phase == RunbookPhase.RUNNING || phase == RunbookPhase.AWAITING_CONFIRM) return
+            reported = true
+            pendingReport = run.runRecord(
+                id = runId,
+                runbookId = runbook.id,
+                startedAt = startedAt,
+                durationMillis = now() - startedAt,
+                phase = phase,
+            )
+        }
     }
 
     /**
