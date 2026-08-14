@@ -50,6 +50,8 @@
     <string name="runbook_panel_skip_step">跳过</string>
     <string name="runbook_panel_stop">停止运行</string>
     <string name="runbook_panel_close">关闭</string>
+    <string name="runbook_panel_collapse">收起面板</string>
+    <string name="runbook_panel_expand">展开面板</string>
     <string name="runbook_panel_exit_code">退出码 %1$d</string>
     <string name="runbook_panel_status_unreadable">状态无法读取</string>
     <string name="runbook_panel_progress">%1$d / %2$d</string>
@@ -98,6 +100,8 @@
     <string name="runbook_status_running">执行中</string>
     <string name="runbook_status_skipped">已跳过</string>
     <string name="runbook_status_stopped">已停止</string>
+    <string name="runbook_status_failed">失败</string>
+    <string name="runbook_status_failed_count">%1$d 个步骤失败</string>
     <string name="runbook_status_confirm">待确认</string>
     <string name="runbook_status_interactive">交互式——请手动完成</string>
     <string name="runbook_dur_seconds">%1$s 秒</string>

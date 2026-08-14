@@ -275,8 +275,9 @@ internal fun MobileChrome(
             // Confirmation for a snippet with ${{…}} variables — every launch path (terminal
             // palette, Snippets tab) parks such a run in SnippetManager.pendingRun. Desktop parity.
             LocalSnippets.current?.let { SnippetRunDialog(it) }
-            // Runbooks: the live progress panel (bottom of the terminal screen, non-modal so the
-            // output stays readable) and the start confirmation above it. Desktop parity.
+            // Runbooks: the live progress panel (bottom of the terminal screen, non-modal and
+            // collapsible to its header — on a phone the full panel covers the live output it
+            // exists to keep readable) and the start confirmation above it. Desktop parity.
             LocalRunbookRunner.current?.let { runner ->
                 // Not gated on the terminal route: a run paused on a confirmation would otherwise
                 // lose its only Run/Skip/Stop buttons the moment the user opened another screen,

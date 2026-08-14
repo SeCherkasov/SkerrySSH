@@ -198,7 +198,9 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
             title = stringResource(Res.string.runbook_delete_title),
             message = stringResource(
                 Res.string.runbook_delete_message,
-                entry.runbook.label.ifBlank { stringResource(Res.string.runbook_untitled) },
+                // Stripped like every other surface showing this label (a runbook can arrive over
+                // sync): this dialog is the last thing read before a delete.
+                stripUnsafeFormatChars(entry.runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
             ),
             confirmLabel = stringResource(Res.string.runbook_delete),
             onConfirm = {

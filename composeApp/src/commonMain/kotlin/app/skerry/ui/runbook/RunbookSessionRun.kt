@@ -179,6 +179,36 @@ class RunbookSessionRun internal constructor(internal val target: RunbookTarget,
     var hadFailures: Boolean by mutableStateOf(false)
         internal set
 
+    /**
+     * Whether the phone's docked panel is collapsed to its header ([RunbookRunPanel]). Lives on
+     * the run, not in the panel's composition: switching tabs and back must not reset the user's
+     * choice, and a new run — a new instance of this class — must start expanded. The desktop run
+     * surface ignores it.
+     */
+    var panelCollapsed: Boolean by mutableStateOf(false)
+
+    /**
+     * Failed steps the panel has already had on screen; a failure beyond this count reopens a
+     * collapsed panel. A count rather than a flag: with [RunbookStep.continueOnError] a run can
+     * fail more than once, and each new failure is news.
+     */
+    internal var panelSeenFailures: Int = 0
+
+    /**
+     * The last pause/end/stall signal the panel reopened for (`"PHASE:step"` / `"stalled:step"`).
+     * The reopen effect re-runs on every re-entry into composition, and without this memory a tab
+     * switch back would undo a deliberate re-collapse of the very same pause; a signal that fired
+     * while the panel was off-screen is still unseen and still reopens it.
+     */
+    internal var panelSeenSignal: String? = null
+
+    /**
+     * Failed steps counted as heard because another message took the live region over their line.
+     * A failure line actually on display marks nothing here — its own text (step index or count)
+     * is what dedups it. Announcer-side twin of [panelSeenFailures].
+     */
+    internal var announcedFailures: Int = 0
+
     /** Steps that already have a verdict — what "3 of 7" counts. */
     val finishedCount: Int
         get() = steps.count {
