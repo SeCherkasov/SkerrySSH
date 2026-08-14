@@ -178,4 +178,14 @@
     <string name="vault_meta_rotated">rotated %1$s</string>
     <string name="vault_meta_valid_until">valid until %1$s</string>
     <string name="vault_kv_changed">Changed</string>
+
+    <!-- Vault help dialog -->
+    <string name="vault_help_title">Vault</string>
+    <string name="vault_help_intro">Credentials for connections, stored encrypted under the master password. Sync moves only encrypted records.</string>
+    <string name="vault_help_categories">Categories</string>
+    <string name="vault_help_keys">generated here or linked from a file; used to authenticate to hosts</string>
+    <string name="vault_help_passwords">host and login passwords; copies are recorded in the usage log</string>
+    <string name="vault_help_certificates">SSH certificates imported from files, paired with a key</string>
+    <string name="vault_help_snippets">In snippets</string>
+    <string name="vault_help_snippets_hint">a snippet or runbook step references a stored password by entry name; it is masked in every preview</string>
 </resources>

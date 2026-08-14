@@ -62,6 +62,12 @@ enum class RunbookStepStatus {
 
     /** Sent to the shell (or moving over SFTP); waiting for it to report. */
     RUNNING,
+
+    /**
+     * An interactive step ([RunbookStep.Command.interactive]): its line was sent bare and only the
+     * user can end it — complete, skip or stop. There is no probe and no exit code to wait for.
+     */
+    AWAITING_COMPLETE,
     SUCCEEDED,
 
     /** Failed — a non-zero exit code, or a transfer that threw ([RunbookStepState.failure]). */

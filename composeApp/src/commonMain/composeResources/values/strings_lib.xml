@@ -281,4 +281,17 @@
     <string name="lib_teams_runbook_steps">%1$d steps</string>
     <string name="lib_teams_record_runbook">runbook</string>
     <string name="lib_teams_scope_access_unknown">Access list unavailable — the server did not answer</string>
+
+    <!-- Snippets help dialog -->
+    <string name="lib_snippets_help_title">Snippets</string>
+    <string name="lib_snippets_help_intro">A snippet is one command sent to the active session. ${{…}} placeholders resolve when it runs; the confirmation shows the exact line before anything is sent.</string>
+    <string name="lib_snippets_help_vars">Variables</string>
+    <string name="lib_snippets_help_var_date">date, time and Unix timestamp of the run; format tokens after a colon (YYYY, MM, DD, HH, mm, ss)</string>
+    <string name="lib_snippets_help_var_uuid">random UUID</string>
+    <string name="lib_snippets_help_var_random">random characters; length and charset after the colon — alnum, hex or special; an unknown name falls back to the default set</string>
+    <string name="lib_snippets_help_var_clipboard">system clipboard, read once at the confirmation</string>
+    <string name="lib_snippets_help_var_vault">password from the vault, by entry name</string>
+    <string name="lib_snippets_help_var_param">any other name asks for a value before the run; the part after the colon is the prefilled default</string>
+    <string name="lib_snippets_help_var_choices">options separated by | become a list to pick from; the first is the default</string>
+    <string name="lib_snippets_help_examples">Examples</string>
 </resources>

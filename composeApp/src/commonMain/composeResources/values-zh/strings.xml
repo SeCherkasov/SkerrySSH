@@ -76,4 +76,10 @@
     <string name="qr_cancel">取消</string>
     <string name="command_clipped_partial">仅显示部分</string>
     <string name="command_clipped">仅显示部分 · %1$d 字符</string>
+
+    <!-- Help dialogs (snippets / runbooks / vault) -->
+    <string name="help_button">帮助</string>
+    <string name="help_close">关闭</string>
+    <string name="help_add">添加</string>
+    <string name="help_added">已添加</string>
 </resources>

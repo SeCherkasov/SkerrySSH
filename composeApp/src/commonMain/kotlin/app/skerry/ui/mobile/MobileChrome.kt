@@ -47,7 +47,13 @@ import org.jetbrains.compose.resources.stringResource
  * each call site's prior behavior without visual changes.
  */
 @Composable
-internal fun MobilePushHeader(title: String, onBack: () -> Unit, plainBack: Boolean = false) {
+internal fun MobilePushHeader(
+    title: String,
+    onBack: () -> Unit,
+    plainBack: Boolean = false,
+    /** Drawn at the right edge — the help "?" on the library screens; most screens have none. */
+    actions: (@Composable () -> Unit)? = null,
+) {
     Row(
         Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -68,6 +74,10 @@ internal fun MobilePushHeader(title: String, onBack: () -> Unit, plainBack: Bool
             size = 27.sp, color = Skerry.colors.cyanBright, modifier = backModifier,
         )
         Txt(title, color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
+        if (actions != null) {
+            Box(Modifier.weight(1f))
+            actions()
+        }
     }
 }
 

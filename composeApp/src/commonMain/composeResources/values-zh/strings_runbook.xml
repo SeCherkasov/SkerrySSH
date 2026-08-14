@@ -26,8 +26,11 @@
     <string name="runbook_step_down">下移</string>
     <string name="runbook_step_confirm">运行前询问</string>
     <string name="runbook_step_continue_on_error">失败后继续</string>
+    <string name="runbook_step_interactive">交互式</string>
     <string name="runbook_save">保存</string>
     <string name="runbook_delete">删除</string>
+    <string name="runbook_delete_title">删除运行手册</string>
+    <string name="runbook_delete_message">“%1$s”及其运行历史将被删除。</string>
     <string name="runbook_run">运行</string>
     <string name="runbook_run_title">运行运行手册</string>
     <string name="runbook_run_needs_session">请先建立会话 — 运行手册在终端中执行。</string>
@@ -43,6 +46,7 @@
     <string name="runbook_panel_failed">因失败而停止</string>
     <string name="runbook_panel_stopped">已停止</string>
     <string name="runbook_panel_run_step">执行此步骤</string>
+    <string name="runbook_panel_complete_step">完成步骤</string>
     <string name="runbook_panel_skip_step">跳过</string>
     <string name="runbook_panel_stop">停止运行</string>
     <string name="runbook_panel_close">关闭</string>
@@ -95,6 +99,7 @@
     <string name="runbook_status_skipped">已跳过</string>
     <string name="runbook_status_stopped">已停止</string>
     <string name="runbook_status_confirm">待确认</string>
+    <string name="runbook_status_interactive">交互式——请手动完成</string>
     <string name="runbook_dur_seconds">%1$s 秒</string>
     <string name="runbook_dur_minutes">%1$d 分 %2$d 秒</string>
     <string name="runbook_transfer_of">%1$s / %2$s</string>
@@ -104,4 +109,13 @@
     <string name="runbook_history_empty">尚无运行记录</string>
     <string name="runbook_history_failed_at">第 %1$d 步失败</string>
     <string name="runbook_history_last">上次运行 %1$s</string>
+
+    <!-- Runbooks help dialog -->
+    <string name="runbook_help_title">运行手册</string>
+    <string name="runbook_help_intro">运行手册是在同一会话的 shell 中按顺序逐步执行的过程。退出码决定运行如何继续；${{…}} 的取值在开始时收集一次，供所有步骤共用。</string>
+    <string name="runbook_help_flags">步骤选项</string>
+    <string name="runbook_help_flag_confirm">在该步骤前暂停，直到你批准</string>
+    <string name="runbook_help_flag_continue">记录失败并继续运行</string>
+    <string name="runbook_help_flag_interactive">命令按原样发送，由你手动完成该步骤 — 适用于占住终端的 TUI 程序和菜单</string>
+    <string name="runbook_help_examples">示例</string>
 </resources>

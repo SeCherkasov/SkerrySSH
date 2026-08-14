@@ -18,7 +18,7 @@ class RunbookScriptTest {
         return SnippetRunEnvironment(
             moment = SnippetMoment(2026, 7, 26, 14, 5, 9, epochSeconds = 1_784_000_000L),
             newUuid = { "uuid-${++uuids}" },
-            randomChars = { n -> "r${++randoms}".padEnd(n, 'x') },
+            randomChars = { n, _ -> "r${++randoms}".padEnd(n, 'x') },
         )
     }
 

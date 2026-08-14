@@ -19,6 +19,7 @@ import app.skerry.ui.desktop.runDesktopShell
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_delete
+import app.skerry.ui.generated.resources.runbook_panel_complete_step
 import app.skerry.ui.generated.resources.runbook_run
 import app.skerry.ui.generated.resources.runbook_run_title
 import app.skerry.ui.generated.resources.shell_cancel
@@ -81,6 +82,37 @@ class RunbookRunTest {
     }
 
     @Test
+    fun `an interactive step is completed from the run view`() = runDesktopShell { shell ->
+        shell.runbooks.save(
+            RunbookDraft(
+                label = INTERACTIVE_RUNBOOK,
+                steps = listOf(
+                    RunbookStep.Command(id = "", title = "Look around", command = "htop", confirm = false, interactive = true),
+                    RunbookStep.Command(id = "", title = "Disk", command = "df -h", confirm = false),
+                ),
+            ),
+        )
+        openRunbooks()
+        FakeShellInput.clear()
+        onRunbookRow(INTERACTIVE_RUNBOOK).performClick()
+        waitForIdle()
+        onNodeWithText(string(Res.string.runbook_run)).performClick()
+        waitForIdle()
+        confirmStart()
+
+        // Sent as-is: the interactive line reaches the shell with no probe printf around it.
+        waitUntil { FakeShellInput.all().any { it.contains("htop") } }
+        assertTrue(FakeShellInput.all().none { it.contains("printf") })
+
+        // The user's click is the step's only ending — and it is what starts the next step.
+        onNodeWithText(string(Res.string.runbook_panel_complete_step)).performClick()
+        waitForIdle()
+
+        assertEquals(RunbookStepStatus.SUCCEEDED, shell.runner.run?.steps?.get(0)?.status)
+        waitUntil { FakeShellInput.all().any { it.contains("df -h") } }
+    }
+
+    @Test
     fun `deleting a runbook takes its row with it`() = runDesktopShell { shell ->
         shell.seedRunbook()
         openRunbooks()
@@ -88,6 +120,11 @@ class RunbookRunTest {
         waitForIdle()
 
         onNodeWithText(string(Res.string.runbook_delete)).performClick()
+        waitForIdle()
+
+        // Deleting is loud now: nothing happens until the confirmation is answered.
+        assertEquals(listOf(RUNBOOK_NAME), shell.runbooks.runbooks.map { it.runbook.label })
+        onNodeWithTag(UiTags.FORM_SAVE).performClick()
         waitForIdle()
 
         assertEquals(emptyList(), shell.runbooks.runbooks.map { it.runbook.label })
@@ -131,3 +168,4 @@ class RunbookRunTest {
 
 private const val RUNBOOK_NAME = "Morning check"
 private const val FIRST_COMMAND = "uptime"
+private const val INTERACTIVE_RUNBOOK = "Triage"

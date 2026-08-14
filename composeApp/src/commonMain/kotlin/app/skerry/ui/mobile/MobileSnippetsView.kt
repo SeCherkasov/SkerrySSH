@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.Snippet
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.snippet.SnippetHelpDialog
 import app.skerry.ui.snippet.SnippetDraft
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetFormState
@@ -42,6 +43,7 @@ import app.skerry.ui.snippet.installStarterPack
 import app.skerry.ui.snippet.matches
 import app.skerry.ui.snippet.snippetTagSuggestions
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.lib_snippets_add_tag
 import app.skerry.ui.generated.resources.lib_snippets_delete
 import app.skerry.ui.generated.resources.lib_snippets_edit
@@ -66,6 +68,7 @@ import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.ChipButton
+import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
@@ -111,10 +114,11 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
 
     var editing by remember { mutableStateOf<SnippetEntry?>(null) }
     var adding by remember { mutableStateOf(false) }
+    var helpOpen by remember { mutableStateOf(false) }
     var renamingTag by remember { mutableStateOf<String?>(null) }
     val editSheetOpen = adding || editing != null
     // Any sheet (edit or rename) hides the tab bar and the add FAB.
-    val sheetOpen = editSheetOpen || renamingTag != null
+    val sheetOpen = editSheetOpen || renamingTag != null || helpOpen
 
     // Open edit sheet hides the tab bar (otherwise it floats above the input fields over the keyboard).
     LaunchedEffect(sheetOpen) { state.modalOverlay(sheetOpen) }
@@ -126,7 +130,12 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
         Column(Modifier.fillMaxSize().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
             // A push screen since the library left the tab bar (More → Snippets), so it carries a
             // back arrow instead of a bare title.
-            MobilePushHeader(stringResource(Res.string.lib_snippets_screen_title), onBack = state::pop)
+            MobilePushHeader(
+                stringResource(Res.string.lib_snippets_screen_title), onBack = state::pop,
+                actions = {
+                    GhostButton(stringResource(Res.string.help_button), onClick = { helpOpen = true }, icon = "help")
+                },
+            )
             if (snippets.isEmpty()) {
                 Column(
                     Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 30.dp),
@@ -193,6 +202,8 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                 },
             )
         }
+
+        if (helpOpen) SnippetHelpDialog(manager, onDismiss = { helpOpen = false })
     }
 }
 

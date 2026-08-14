@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.shared.snippet.SnippetSegment
 import app.skerry.ui.design.CancelButton
@@ -132,6 +133,9 @@ private fun RunbookStartDialogContent(
                                 }
                                 if (step.confirm) Sym("pause_circle", size = 13.sp, color = Skerry.colors.cyanBright)
                                 if (step.continueOnError) Sym("skip_next", size = 13.sp, color = Skerry.colors.dim)
+                                if ((step as? RunbookStep.Command)?.interactive == true) {
+                                    Sym("touch_app", size = 13.sp, color = Skerry.colors.cyanBright)
+                                }
                             }
                             Txt(
                                 request.script.resolve(index) { values.value(it, masked = true) }?.summaryLine().orEmpty(),

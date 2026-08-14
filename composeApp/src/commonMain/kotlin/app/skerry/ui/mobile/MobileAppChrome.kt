@@ -56,6 +56,7 @@ import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.runbook.RunbookRunPanel
+import app.skerry.ui.runbook.RunbookPauseAnnouncer
 import app.skerry.ui.runbook.RunbookStartDialog
 import app.skerry.ui.runbook.runInActiveTab
 import app.skerry.ui.snippet.SnippetRunDialog
@@ -289,6 +290,9 @@ internal fun MobileChrome(
                     )
                 }
                 RunbookStartDialog(runner)
+                // Composed here — before any run exists — so the announcer observes the flip into a
+                // pause instead of appearing together with it (see RunbookPauseAnnouncer).
+                RunbookPauseAnnouncer(runner)
             }
             // Recording player: an overlay over whatever screen is up, so a recording can be watched
             // from More without an open session (desktop toolbar parity).

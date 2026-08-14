@@ -49,13 +49,70 @@ data class SnippetMoment(
 /**
  * Machine-value providers for one snippet run, captured once when the run is initiated so the
  * previewed command is exactly the one sent (see the TOCTOU rule in coding-guidelines §3).
- * [randomChars] returns the given number of characters from a cryptographically secure source.
+ * [randomChars] returns the given number of characters drawn uniformly from the given non-empty
+ * alphabet by a cryptographically secure source.
  */
 class SnippetRunEnvironment(
     val moment: SnippetMoment,
     val newUuid: () -> String,
-    val randomChars: (Int) -> String,
+    val randomChars: (Int, String) -> String,
 )
+
+/**
+ * Alphabets for `${'$'}{{random}}`. Every character must be safe to splice unquoted into the
+ * confirmed command line — no shell metacharacters, quotes, whitespace, or glob/expansion
+ * triggers (see the shell-safety test). [DEFAULT] is the historic alphabet used when no charset
+ * is named, kept unchanged so existing snippets keep their output shape.
+ */
+object SnippetRandomAlphabets {
+    const val DEFAULT = "abcdefghijklmnopqrstuvwxyz0123456789"
+    const val ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZ$DEFAULT"
+    const val HEX = "0123456789abcdef"
+
+    // No `#` (starts a shell comment at word start — the confirmed line would run truncated),
+    // no `^` (bash history substitution at line start), no `=` (a draw containing it, spliced as
+    // the line's first word, parses as a variable assignment; zsh aborts on word-initial `=`).
+    // Position-dependent, so a per-draw check can't save them: a value must be inert wherever
+    // the template splices it.
+    const val SPECIAL = "$ALNUM@%_+-:,./"
+
+    /** Alphabet for a `${'$'}{{random:…}}` charset token, or `null` if the token names none. */
+    fun forName(name: String): String? = when (name) {
+        "alnum" -> ALNUM
+        "hex" -> HEX
+        "special" -> SPECIAL
+        else -> null
+    }
+}
+
+/**
+ * Default value a PARAM prefills its prompt with: the format itself, or — when the format is an
+ * option list — its first entry, sanitized like the options are (`null` when nothing of it
+ * survives). Non-PARAM kinds have no default. A plain default (no `|`) is kept verbatim, as it
+ * always was.
+ */
+fun SnippetSegment.Variable.paramDefault(): String? {
+    if (kind != SnippetVariableKind.PARAM) return null
+    val format = format ?: return null
+    if ('|' !in format) return format
+    return sanitizeSnippetValue(format.substringBefore('|').trim()).ifEmpty { null }
+}
+
+/**
+ * Options a PARAM offers at run time (`${'$'}{{name:default|opt1|opt2}}`), each already in the form
+ * that will be spliced ([sanitizeSnippetValue]): what the picker offers, what it shows as selected
+ * and what the run sends must be one string, or a bidi/invisible character in a shared template
+ * makes the user pick one thing and run another. An option nothing survives of is dropped, not
+ * offered as a blank row (same rule the untrusted-label filter follows). Duplicates dropped; empty
+ * when the format holds no `|`-separated list or the kind is not PARAM. The default, when present,
+ * is always one of the options — it is the list's first surviving entry.
+ */
+fun SnippetSegment.Variable.paramChoices(): List<String> {
+    if (kind != SnippetVariableKind.PARAM) return emptyList()
+    val format = format ?: return emptyList()
+    if ('|' !in format) return emptyList()
+    return format.split('|').map { sanitizeSnippetValue(it.trim()) }.filter { it.isNotEmpty() }.distinct()
+}
 
 /**
  * Parser and machine-side resolver for dynamic snippet variables. Pure logic — clipboard, vault
@@ -106,8 +163,10 @@ object SnippetTemplate {
             SnippetVariableKind.TIME -> formatMoment(variable.format ?: "HH:mm:ss", env.moment)
             SnippetVariableKind.TIMESTAMP -> env.moment.epochSeconds.toString()
             SnippetVariableKind.UUID -> env.newUuid()
-            SnippetVariableKind.RANDOM ->
-                env.randomChars((variable.format?.toIntOrNull() ?: DEFAULT_RANDOM_LENGTH).coerceIn(1, MAX_RANDOM_LENGTH))
+            SnippetVariableKind.RANDOM -> {
+                val (length, alphabet) = randomSpec(variable.format)
+                env.randomChars(length, alphabet)
+            }
             else -> null
         }
 
@@ -190,6 +249,24 @@ object SnippetTemplate {
         )
     }
 
+    /**
+     * `${'$'}{{random:…}}` format: comma-separated tokens, the first numeric one is the length,
+     * the first known charset name picks the alphabet ([SnippetRandomAlphabets.forName]); order
+     * is free and unknown tokens are ignored — garbage degrades to the defaults, same as the
+     * historic length-only behavior.
+     */
+    private fun randomSpec(format: String?): Pair<Int, String> {
+        var length: Int? = null
+        var alphabet: String? = null
+        for (token in format.orEmpty().split(',')) {
+            val trimmed = token.trim()
+            if (length == null) length = trimmed.toIntOrNull()
+            if (alphabet == null) alphabet = SnippetRandomAlphabets.forName(trimmed)
+        }
+        return (length ?: DEFAULT_RANDOM_LENGTH).coerceIn(1, MAX_RANDOM_LENGTH) to
+            (alphabet ?: SnippetRandomAlphabets.DEFAULT)
+    }
+
     private fun isValidName(name: String): Boolean =
         name.isNotEmpty() && name.first().isLetter() &&
             name.all { it.isLetterOrDigit() || it == '_' || it == '-' }
@@ -224,6 +301,16 @@ object SnippetTemplate {
 }
 
 /**
+ * Characters that draw as nothing but count as letters (Hangul fillers U+115F/U+1160/U+3164/U+FFA0,
+ * Braille blank U+2800), so the format-category filters keep them: two strings differing only by
+ * one of these render identically while executing differently. Never legitimate in a command or a
+ * spliced value, so both filters below drop them. Public because the UI's untrusted-label filter
+ * rejects exactly this set — one definition, not two hand-synced copies. Escapes, not the raw
+ * glyphs: an invisible character in source is unreviewable.
+ */
+val INVISIBLE_LETTERS: Set<Char> = setOf('\u115F', '\u1160', '\u3164', '\uFFA0', '\u2800')
+
+/**
  * Removes bidi/format (and DEL/C1) characters from literal template text while keeping its
  * whitespace and newlines: a snippet can arrive via Teams sharing, so the literal part is not
  * trusted to render the same way it executes (Trojan Source in the preview/palette vs the PTY) —
@@ -231,7 +318,7 @@ object SnippetTemplate {
  * they are the user's own saved text, not a rendering trick.
  */
 fun stripUnsafeFormatChars(text: String): String =
-    text.filter { it.code < 0x20 || isSafeTerminalInputChar(it) }
+    text.filter { (it.code < 0x20 || isSafeTerminalInputChar(it)) && it !in INVISIBLE_LETTERS }
 
 /**
  * Flattens an untrusted variable value (clipboard contents, vault secret, user parameter) into
@@ -250,7 +337,7 @@ fun sanitizeSnippetValue(raw: String): String = buildString(raw.length) {
         }
         when {
             c == '\r' || c == '\n' || c == '\t' -> append(' ')
-            isSafeTerminalInputChar(c) -> append(c)
+            isSafeTerminalInputChar(c) && c !in INVISIBLE_LETTERS -> append(c)
         }
         i++
     }

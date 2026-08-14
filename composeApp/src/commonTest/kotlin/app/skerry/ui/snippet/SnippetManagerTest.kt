@@ -15,7 +15,7 @@ class SnippetManagerTest {
     private val fixedEnvironment = SnippetRunEnvironment(
         moment = SnippetMoment(year = 2026, month = 7, day = 3, hour = 9, minute = 5, second = 42, epochSeconds = 1_782_000_000L),
         newUuid = { "fixed-uuid" },
-        randomChars = { n -> "r".repeat(n) },
+        randomChars = { n, _ -> "r".repeat(n) },
     )
 
     private fun managerWith(

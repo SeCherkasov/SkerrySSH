@@ -176,4 +176,14 @@
     <string name="vault_meta_rotated">сменён %1$s</string>
     <string name="vault_meta_valid_until">действует до %1$s</string>
     <string name="vault_kv_changed">Изменён</string>
+
+    <!-- Vault help dialog -->
+    <string name="vault_help_title">Хранилище</string>
+    <string name="vault_help_intro">Учётные данные подключений, зашифрованные мастер-паролем. Синхронизация переносит только зашифрованные записи.</string>
+    <string name="vault_help_categories">Категории</string>
+    <string name="vault_help_keys">создаются здесь или подключаются из файла; используются для входа на хосты</string>
+    <string name="vault_help_passwords">пароли хостов и учёток; копирования фиксируются в журнале использования</string>
+    <string name="vault_help_certificates">SSH-сертификаты, импортированные из файлов, в паре с ключом</string>
+    <string name="vault_help_snippets">В сниппетах</string>
+    <string name="vault_help_snippets_hint">сниппет или шаг раннбука ссылается на сохранённый пароль по имени записи; во всех превью он маскируется</string>
 </resources>

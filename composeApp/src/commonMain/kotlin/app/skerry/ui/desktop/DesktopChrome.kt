@@ -52,6 +52,7 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.broadcastTargets
 import app.skerry.ui.session.PaneSyncBinder
 import app.skerry.ui.session.SessionsController
+import app.skerry.ui.runbook.RunbookPauseAnnouncer
 import app.skerry.ui.runbook.RunbookStartDialog
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetRunDialog
@@ -506,6 +507,9 @@ internal fun DesktopChrome(
             // (Viewport); the mobile chrome shows the run in its floating panel instead.
             val runSessions = LocalSessions.current
             LocalRunbookRunner.current?.let { runner ->
+                // Composed here — before any run exists — so the announcer observes the flip into a
+                // pause instead of appearing together with it (see RunbookPauseAnnouncer).
+                RunbookPauseAnnouncer(runner)
                 RunbookStartDialog(runner) { runSessions?.setActiveView(SessionView.Runbook) }
             }
             // Delete-host-profile confirmation (invoked from the sidebar's context menu). The keychain
