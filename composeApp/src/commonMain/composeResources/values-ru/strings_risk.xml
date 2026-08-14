@@ -19,4 +19,5 @@
     <string name="risk_bulk_delete">Массово удаляет найденные файлы.</string>
     <string name="risk_truncates_content">Обнуляет содержимое файлов.</string>
     <string name="risk_elevated">Выполняется с повышенными правами.</string>
+    <string name="risk_beyond_inspection">Превышает объём, который читает защита — часть ввода не классифицирована.</string>
 </resources>

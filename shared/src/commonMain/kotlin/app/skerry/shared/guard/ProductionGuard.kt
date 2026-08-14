@@ -7,6 +7,13 @@ import app.skerry.shared.ai.CommandRiskReason
 import app.skerry.shared.tag.PROD_TAG
 
 /**
+ * One candidate for the classifier: the text it may read — already cut to
+ * [MAX_GUARDED_COMMAND_LENGTH] — and how long the line really is. Carried separately because the
+ * dialog states the length, and measuring after the cut called a 900-character line "512 chars".
+ */
+data class GuardCandidate(val command: String, val fullLength: Int)
+
+/**
  * Longest command text the guard inspects. A candidate can come from a screen row, which may hold
  * program output rather than a command; truncating keeps a pathological line out of the regex
  * engine. Long enough for any realistic one-liner.
@@ -103,19 +110,78 @@ object ProductionGuard {
      * Ties go to the shortest candidate: the same command shows up with and without its prompt
      * prefix, and the dialog should quote what was run, not `root@host:~# …`.
      */
-    fun inspect(candidates: List<String>, policy: ProductionGuardPolicy): GuardedCommand? {
+    fun inspect(candidates: List<String>, policy: ProductionGuardPolicy): GuardedCommand? =
+        inspectCandidates(
+            candidates.map { candidate ->
+                val whole = candidate.trim()
+                GuardCandidate(whole.take(MAX_GUARDED_COMMAND_LENGTH), fullLength = whole.length)
+            },
+            policy,
+        )
+
+    /**
+     * [inspect] for candidates that already know their uncut length — what [candidatesOf] returns.
+     * A separate name, not an overload: both take a `List`, and the JVM cannot tell the two apart.
+     */
+    fun inspectCandidates(candidates: List<GuardCandidate>, policy: ProductionGuardPolicy): GuardedCommand? {
         if (!policy.production) return null
         var worst: GuardedCommand? = null
         for (candidate in candidates.take(MAX_GUARDED_CANDIDATES)) {
-            val whole = candidate.trim()
-            val command = whole.take(MAX_GUARDED_COMMAND_LENGTH)
+            val command = candidate.command
             if (command.isEmpty()) continue
             val assessment = CommandRiskClassifier.assess(command)
             if (!needsConfirmation(assessment, policy)) continue
-            worst = worse(worst, GuardedCommand(command, assessment, fullLength = whole.length))
+            worst = worse(worst, GuardedCommand(command, assessment, fullLength = candidate.fullLength))
         }
         return worst
     }
+
+    /**
+     * The finding for input the classifier could not fully read: the first non-blank line past the
+     * candidate cap ([MAX_GUARDED_CANDIDATES]), or the first line longer than what is classified
+     * ([MAX_GUARDED_COMMAND_LENGTH]). On a production host, exceeding what the classifier reads is
+     * itself worth a question — text past the caps used to run with no dialog at all. Consulted only
+     * when no rule found a reason ([ProductionGuardHold]): a real finding explains more than "part
+     * of this was not read", and one confirmation is asked either way.
+     *
+     * The command is the offending line as far as a dialog may quote it; the assessment carries no
+     * rule's reason, because no rule ever saw the text — which is exactly what the user is asked
+     * about.
+     */
+    fun overflow(text: String, policy: ProductionGuardPolicy): GuardedCommand? {
+        if (!policy.production) return null
+        var index = 0
+        for (line in text.lineSequence()) {
+            index++
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) {
+                // The scan is bounded, not only the finding: a run of blank lines would otherwise
+                // turn this into a second full pass over a multi-megabyte paste on the caller's
+                // thread. Past the bound the tail is unread by definition — the very thing this
+                // asks about — so it errs toward asking, with nothing to quote.
+                if (index > MAX_OVERFLOW_SCAN) return GuardedCommand("", BEYOND_INSPECTION, fullLength = 0)
+                continue
+            }
+            if (index > MAX_GUARDED_CANDIDATES || trimmed.length > MAX_GUARDED_COMMAND_LENGTH) {
+                return GuardedCommand(
+                    trimmed.take(MAX_GUARDED_COMMAND_LENGTH),
+                    BEYOND_INSPECTION,
+                    fullLength = trimmed.length,
+                )
+            }
+        }
+        return null
+    }
+
+    /** How far [overflow] reads before giving up on finding a non-blank line to quote. */
+    private const val MAX_OVERFLOW_SCAN = MAX_GUARDED_CANDIDATES * 2
+
+    /**
+     * Danger, because a block nobody could read is confirmed whatever the settings say —
+     * [needsConfirmation] never sees it, so the level must clear every bar on its own.
+     */
+    private val BEYOND_INSPECTION =
+        CommandAssessment(CommandRisk.Danger, CommandRiskReason.BeyondInspection)
 
     /**
      * The riskier of two findings by the same rule [inspect] ranks its candidates with. Public
@@ -137,16 +203,20 @@ object ProductionGuard {
     /**
      * Candidates from one input block (a paste, an IME commit, a ready-made command). Capped in
      * number while splitting rather than after — a multi-megabyte paste would otherwise materialize
-     * a String per line before [inspect] ever gets to drop them. Capped in length here as well: a
-     * paste is not bounded by anything, and holding it a second time in full to keep an exact
-     * [GuardedCommand.fullLength] for a line nobody quotes from is the wrong trade. The quote carries
-     * its own, uncut length; what the screen holds is bounded by the terminal and stays uncut in
-     * [promptCandidates], which is where a length past the cap can still be real.
+     * a String per line before [inspectCandidates] ever gets to drop them. Capped in length here as
+     * well: a paste is not bounded by anything, and holding it a second time in full to keep the
+     * text past the cut for a line nobody quotes from is the wrong trade. What survives the cut is
+     * the line's real length, carried in [GuardCandidate.fullLength] so the dialog's count is not an
+     * invention; what the screen holds is bounded by the terminal and stays uncut in
+     * [promptCandidates].
      */
-    fun candidatesOf(text: String): List<String> =
+    fun candidatesOf(text: String): List<GuardCandidate> =
         text.lineSequence()
             .take(MAX_GUARDED_CANDIDATES)
-            .map { it.take(MAX_GUARDED_COMMAND_LENGTH) }
+            .map { line ->
+                val whole = line.trim()
+                GuardCandidate(whole.take(MAX_GUARDED_COMMAND_LENGTH), fullLength = whole.length)
+            }
             .toList()
 
     /**

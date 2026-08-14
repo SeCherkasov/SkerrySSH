@@ -1,5 +1,6 @@
 package app.skerry.ui.terminal
 
+import app.skerry.shared.guard.ProductionGuard
 import app.skerry.shared.guard.ProductionGuardPolicy
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
@@ -29,7 +30,7 @@ class ProductionGuardHoldThreadingTest {
 
             fun holder(command: String) = thread(start = false) {
                 start.await()
-                hold.hold("$command\n", HeldInputSource.Paste, quote = { command }) { listOf(command) }
+                hold.hold("$command\n", HeldInputSource.Paste, quote = { command }) { policy -> ProductionGuard.inspect(listOf(command), policy) }
             }.apply {
                 setUncaughtExceptionHandler { _, t -> failures += t }
                 start()

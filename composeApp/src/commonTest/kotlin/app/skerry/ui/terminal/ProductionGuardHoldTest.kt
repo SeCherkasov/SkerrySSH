@@ -2,10 +2,14 @@ package app.skerry.ui.terminal
 
 import app.skerry.shared.guard.MAX_GUARDED_CANDIDATES
 import app.skerry.shared.guard.MAX_GUARDED_COMMAND_LENGTH
+import app.skerry.shared.ai.CommandRiskReason
+import app.skerry.shared.guard.ProductionGuard
 import app.skerry.shared.guard.ProductionGuardPolicy
+import app.skerry.ui.snippet.maskSecrets
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -23,7 +27,7 @@ class ProductionGuardHoldTest {
     fun a_session_with_no_guard_holds_nothing_and_never_classifies() {
         val hold = ProductionGuardHold()
         var asked = false
-        assertFalse(hold.hold("rm -rf /\n", HeldInputSource.Typed) { asked = true; listOf("rm -rf /") })
+        assertFalse(hold.hold("rm -rf /\n", HeldInputSource.Typed) { policy -> asked = true; ProductionGuard.inspect(listOf("rm -rf /"), policy) })
         // Reading the screen and the tracked line is wasted work off a production host.
         assertFalse(asked)
         assertNull(hold.pending)
@@ -32,7 +36,7 @@ class ProductionGuardHoldTest {
     @Test
     fun a_risky_block_is_held_with_the_input_to_replay() {
         val hold = guarding()
-        assertTrue(hold.hold("rm -rf /srv\n", HeldInputSource.Paste) { listOf("rm -rf /srv") })
+        assertTrue(hold.hold("rm -rf /srv\n", HeldInputSource.Paste) { policy -> ProductionGuard.inspect(listOf("rm -rf /srv"), policy) })
         assertEquals("rm -rf /srv", hold.pending?.command)
         assertEquals(HeldInput("rm -rf /srv\n", HeldInputSource.Paste), hold.take())
         assertNull(hold.pending)
@@ -41,11 +45,11 @@ class ProductionGuardHoldTest {
     @Test
     fun nothing_else_runs_while_something_is_held() {
         val hold = guarding()
-        hold.hold("rm -rf /srv\n", HeldInputSource.Typed) { listOf("rm -rf /srv") }
+        hold.hold("rm -rf /srv\n", HeldInputSource.Typed) { policy -> ProductionGuard.inspect(listOf("rm -rf /srv"), policy) }
 
         var asked = false
         // Harmless or not, it is held back — and it isn't even classified: the answer is the same.
-        assertTrue(hold.hold("uptime\n", HeldInputSource.Command) { asked = true; listOf("uptime") })
+        assertTrue(hold.hold("uptime\n", HeldInputSource.Command) { policy -> asked = true; ProductionGuard.inspect(listOf("uptime"), policy) })
         assertFalse(asked)
         // What was dropped stays dropped: the pending command is still the one being asked about.
         assertEquals("rm -rf /srv", hold.pending?.command)
@@ -61,7 +65,7 @@ class ProductionGuardHoldTest {
     fun a_held_paste_is_quoted_whole() {
         val hold = guarding()
         val block = "rm -rf /srv\nchown -R nobody /srv/www\n"
-        assertTrue(hold.hold(block, HeldInputSource.Paste) { listOf("rm -rf /srv", "chown -R nobody /srv/www", "") })
+        assertTrue(hold.hold(block, HeldInputSource.Paste) { policy -> ProductionGuard.inspect(listOf("rm -rf /srv", "chown -R nobody /srv/www", ""), policy) })
         assertEquals("rm -rf /srv", hold.pending?.command)
         assertEquals("rm -rf /srv\nchown -R nobody /srv/www", hold.pendingQuote)
     }
@@ -77,7 +81,7 @@ class ProductionGuardHoldTest {
         val hold = guarding()
         // Enter over a line recalled from history: nothing was typed, so the tracked lines are blank.
         assertTrue(
-            hold.hold("\r", HeldInputSource.Typed, screenGuesses = { listOf("rm -rf /srv/data") }) { listOf("", "") },
+            hold.hold("\r", HeldInputSource.Typed, screenGuesses = { listOf("rm -rf /srv/data") }) { policy -> ProductionGuard.inspect(listOf("", ""), policy) },
         )
         assertEquals("rm -rf /srv/data", hold.pending?.command)
         assertEquals("rm -rf /srv/data", hold.pendingQuote)
@@ -99,7 +103,7 @@ class ProductionGuardHoldTest {
                 HeldInputSource.Typed,
                 quote = { " --force" },
                 screenGuesses = { listOf("rm -rf /srv") },
-            ) { listOf(" --force", "") },
+            ) { policy -> ProductionGuard.inspect(listOf(" --force", ""), policy) },
         )
         assertEquals("rm -rf /srv", hold.pending?.command)
         assertEquals(" --force", hold.pendingQuote)
@@ -115,15 +119,15 @@ class ProductionGuardHoldTest {
     fun a_line_too_long_for_the_classifier_reports_its_real_length() {
         val hold = guarding()
         val long = "rm -rf /srv/" + "a".repeat(MAX_GUARDED_COMMAND_LENGTH)
-        assertTrue(hold.hold("\r", HeldInputSource.Typed, screenGuesses = { listOf(long) }) { listOf("", "") })
+        assertTrue(hold.hold("\r", HeldInputSource.Typed, screenGuesses = { listOf(long) }) { policy -> ProductionGuard.inspect(listOf("", ""), policy) })
         assertEquals(MAX_GUARDED_COMMAND_LENGTH, hold.pendingQuote.length)
         assertEquals(long.length, hold.pendingQuoteLength)
 
         // The same line as the guess drawn beside a quote, where it has a length of its own.
         val beside = guarding()
         assertTrue(
-            beside.hold("docker ps\n", HeldInputSource.Paste, screenGuesses = { listOf(long) }) {
-                listOf("docker ps", "")
+            beside.hold("docker ps\n", HeldInputSource.Paste, screenGuesses = { listOf(long) }) { policy ->
+                ProductionGuard.inspect(listOf("docker ps", ""), policy)
             },
         )
         assertEquals(MAX_GUARDED_COMMAND_LENGTH, beside.pendingAside?.line?.length)
@@ -144,7 +148,7 @@ class ProductionGuardHoldTest {
                 HeldInputSource.Typed,
                 quote = { "" },
                 partialGuess = { PartialGuess("rm -rf /srv/bac", "rm -rf /srv/bac") },
-            ) { listOf("", "") },
+            ) { policy -> ProductionGuard.inspect(listOf("", ""), policy) },
         )
         assertEquals("rm -rf /srv/bac", hold.pendingQuote)
         assertNull(hold.pendingQuoteLength)
@@ -164,7 +168,7 @@ class ProductionGuardHoldTest {
                 HeldInputSource.Paste,
                 quote = { "m -rf /var" },
                 partialGuess = { PartialGuess("sudo rm -rf /srv", "sudo rm -rf /srv") },
-            ) { listOf("m -rf /var", "") },
+            ) { policy -> ProductionGuard.inspect(listOf("m -rf /var", ""), policy) },
         )
         assertEquals("m -rf /var", hold.pendingQuote)
         assertEquals(GuardAside("sudo rm -rf /srv", null, onLine = true), hold.pendingAside)
@@ -184,7 +188,7 @@ class ProductionGuardHoldTest {
                 HeldInputSource.Command,
                 quote = { "uptime" },
                 partialGuess = { PartialGuess(classify = "rm -rf /sruptime", onLine = "rm -rf /sr") },
-            ) { listOf("uptime", "") },
+            ) { policy -> ProductionGuard.inspect(listOf("uptime", ""), policy) },
         )
         assertEquals("rm -rf /sruptime", hold.pending?.command, "the join is what found the reason")
         assertEquals("uptime", hold.pendingQuote)
@@ -204,7 +208,7 @@ class ProductionGuardHoldTest {
                 HeldInputSource.Paste,
                 quote = { "; systemctl restart nginx" },
                 partialGuess = { PartialGuess("rm -rf /srv/back; systemctl restart nginx", "rm -rf /srv/back") },
-            ) { listOf("; systemctl restart nginx", "") },
+            ) { policy -> ProductionGuard.inspect(listOf("; systemctl restart nginx", ""), policy) },
         )
         assertEquals("; systemctl restart nginx", hold.pendingQuote)
         assertEquals("rm -rf /srv/back", hold.pendingAside?.line)
@@ -225,7 +229,7 @@ class ProductionGuardHoldTest {
                 quote = { "docker ps" },
                 screenGuesses = { listOf("rm -rf /srv/data") },
                 partialGuess = { PartialGuess("apt-get instadocker ps", "apt-get insta") },
-            ) { listOf("docker ps", "") },
+            ) { policy -> ProductionGuard.inspect(listOf("docker ps", ""), policy) },
         )
         assertEquals("rm -rf /srv/data", hold.pending?.command)
         assertEquals("rm -rf /srv/data", hold.pendingAside?.line, "the dialog explained a line it never drew")
@@ -246,7 +250,7 @@ class ProductionGuardHoldTest {
                 quote = { "" },
                 screenGuesses = { listOf("sudo systemctl stop nginx") },
                 partialGuess = { PartialGuess(classify = "rm -rf /srv/backx", onLine = null) },
-            ) { listOf("", "") },
+            ) { policy -> ProductionGuard.inspect(listOf("", ""), policy) },
         )
         assertEquals("rm -rf /srv/backx", hold.pending?.command, "the worst is still what is asked about")
         assertEquals("", hold.pendingQuote)
@@ -263,7 +267,7 @@ class ProductionGuardHoldTest {
         val hold = guarding()
         val padding = "# keep the old unit file\n".repeat(400)
         val block = "rm -rf /srv\n$padding"
-        assertTrue(hold.hold(block, HeldInputSource.Paste) { listOf("rm -rf /srv") })
+        assertTrue(hold.hold(block, HeldInputSource.Paste) { policy -> ProductionGuard.inspect(listOf("rm -rf /srv"), policy) })
         assertEquals(block.trimEnd().length, hold.pendingQuoteLength)
         assertTrue(hold.pendingQuote.length < block.trimEnd().length, "the quote was not cut")
         assertTrue(hold.pendingQuote.startsWith("rm -rf /srv"), "the tripped line is not in the quote")
@@ -281,7 +285,7 @@ class ProductionGuardHoldTest {
         val hold = guarding()
         val padding = "# keep the old unit file\n".repeat(400)
         val block = padding + "rm -rf /srv\n"
-        assertTrue(hold.hold(block, HeldInputSource.Paste) { listOf("rm -rf /srv") })
+        assertTrue(hold.hold(block, HeldInputSource.Paste) { policy -> ProductionGuard.inspect(listOf("rm -rf /srv"), policy) })
         assertTrue(hold.pendingQuote.startsWith("# keep the old unit file"), "the quote is not the block")
         assertEquals(block.trimEnd().length, hold.pendingQuoteLength)
         assertEquals(GuardAside("rm -rf /srv", "rm -rf /srv".length, onLine = false), hold.pendingAside)
@@ -297,8 +301,8 @@ class ProductionGuardHoldTest {
         val hold = guarding()
         val block = "docker ps\nuptime\n"
         assertTrue(
-            hold.hold(block, HeldInputSource.Paste, screenGuesses = { listOf("rm -rf /srv/data") }) {
-                listOf("docker ps", "uptime", "")
+            hold.hold(block, HeldInputSource.Paste, screenGuesses = { listOf("rm -rf /srv/data") }) { policy ->
+                ProductionGuard.inspect(listOf("docker ps", "uptime", ""), policy)
             },
         )
         assertEquals("rm -rf /srv/data", hold.pending?.command, "the screen still gives the reason")
@@ -319,7 +323,7 @@ class ProductionGuardHoldTest {
                 " --one-file-system\n",
                 HeldInputSource.Paste,
                 screenGuesses = { listOf("rm -rf /srv/data/archive") },
-            ) { listOf(" --one-file-system", "") },
+            ) { policy -> ProductionGuard.inspect(listOf(" --one-file-system", ""), policy) },
         )
         assertEquals(" --one-file-system", hold.pendingQuote)
         assertEquals(" --one-file-system".length, hold.pendingQuoteLength)
@@ -341,7 +345,7 @@ class ProductionGuardHoldTest {
                 block,
                 HeldInputSource.Paste,
                 screenGuesses = { listOf("sudo rm -rf /var") },
-            ) { listOf("chmod 777 /tmp") },
+            ) { policy -> ProductionGuard.inspect(listOf("chmod 777 /tmp"), policy) },
         )
         assertEquals("sudo rm -rf /var", hold.pending?.command)
         assertEquals("sudo rm -rf /var", hold.pendingAside?.line)
@@ -363,7 +367,7 @@ class ProductionGuardHoldTest {
                 lines.joinToString("\n"),
                 HeldInputSource.Paste,
                 screenGuesses = { listOf("user@host:~$") },
-            ) { lines },
+            ) { policy -> ProductionGuard.inspect(lines, policy) },
         )
         assertEquals("rm -rf /srv", hold.pending?.command)
 
@@ -374,9 +378,84 @@ class ProductionGuardHoldTest {
                 List(MAX_GUARDED_CANDIDATES) { "echo $it" }.joinToString("\n"),
                 HeldInputSource.Paste,
                 screenGuesses = { listOf("rm -rf /srv") },
-            ) { List(MAX_GUARDED_CANDIDATES) { "echo $it" } },
+            ) { policy -> ProductionGuard.inspect(List(MAX_GUARDED_CANDIDATES) { "echo $it" }, policy) },
         )
         assertEquals("rm -rf /srv", guessing.pending?.command)
+    }
+
+    /**
+     * A screen row the cursor sits inside of is a beginning of the line that runs: the aside may
+     * draw it, but no count over it would be true — everything right of the cursor is not in it.
+     */
+    @Test
+    fun a_screen_finding_from_a_row_the_cursor_sits_inside_reports_no_count() {
+        val hold = guarding()
+        assertTrue(
+            hold.hold(
+                "docker ps\n",
+                HeldInputSource.Paste,
+                screenGuesses = { listOf("rm -rf /srv/data") },
+                screenLineCut = { true },
+            ) { policy -> ProductionGuard.inspect(listOf("docker ps"), policy) },
+        )
+        assertEquals("rm -rf /srv/data", hold.pendingAside?.line)
+        assertNull(hold.pendingAside?.length, "the row continues past the cursor; a count claims it is whole")
+    }
+
+    /**
+     * The mask covers the aside as well as the quote: the line that tripped the guard can carry the
+     * resolved secret, and drawing it beside a masked quote would undo the masking one box lower.
+     */
+    @Test
+    fun a_secret_in_the_aside_is_masked() {
+        val hold = guarding()
+        assertTrue(
+            hold.hold(
+                "docker ps\n",
+                HeldInputSource.Paste,
+                present = { maskSecrets(it, listOf("hunter2")) },
+                screenGuesses = { listOf("echo hunter2 | sudo -S systemctl stop nginx") },
+            ) { policy -> ProductionGuard.inspect(listOf("docker ps"), policy) },
+        )
+        val aside = hold.pendingAside
+        assertNotNull(aside, "the tripped line lost its aside")
+        assertFalse("hunter2" in aside.line, "the resolved secret is drawn in the aside: ${aside.line}")
+        // The count follows the mask, as the quote's does: the raw length beside a masked line read
+        // as "shown in part" over a box that is fully drawn.
+        assertEquals(aside.line.length, aside.length, "a fully drawn masked aside claimed a hidden tail")
+    }
+
+    /**
+     * A masked quote that is fully on screen claims nothing hidden: the count describes the drawn
+     * (masked) text, because a pre-mask count read as "shown in part" over a dialog with nothing
+     * left to scroll to — the mask itself already marks what is redacted.
+     */
+    @Test
+    fun a_masked_quote_fully_drawn_claims_no_hidden_tail() {
+        val hold = guarding()
+        val line = "echo hunter2 | sudo -S systemctl stop nginx"
+        assertTrue(
+            hold.hold("$line\n", HeldInputSource.Command, present = { maskSecrets(it, listOf("hunter2")) }) { policy ->
+                ProductionGuard.inspect(listOf(line), policy)
+            },
+        )
+        assertEquals(hold.pendingQuote.length, hold.pendingQuoteLength, "a fully drawn masked quote claimed a hidden tail")
+    }
+
+    /**
+     * A rule's finding outranks the overflow fallback: it explains a risk that was actually read,
+     * and one confirmation is asked either way. BeyondInspection may only stand when no rule fired.
+     */
+    @Test
+    fun a_rule_finding_outranks_beyond_inspection() {
+        val hold = guarding()
+        val block = (listOf("rm -rf /srv") + List(MAX_GUARDED_CANDIDATES + 20) { "echo $it" }).joinToString("\n")
+        assertTrue(
+            hold.hold(block, HeldInputSource.Paste) { policy ->
+                ProductionGuard.inspectCandidates(ProductionGuard.candidatesOf(block), policy)
+            },
+        )
+        assertEquals(CommandRiskReason.RecursiveForceDelete, hold.pending?.assessment?.reason)
     }
 
     /** A guess that loses says nothing: the dialog would be stating a line that is not the reason. */
@@ -388,7 +467,7 @@ class ProductionGuardHoldTest {
                 "rm -rf /srv\n",
                 HeldInputSource.Paste,
                 screenGuesses = { listOf("sudo systemctl stop nginx") },
-            ) { listOf("rm -rf /srv") },
+            ) { policy -> ProductionGuard.inspect(listOf("rm -rf /srv"), policy) },
         )
         assertEquals("rm -rf /srv", hold.pending?.command)
         assertNull(hold.pendingAside)
@@ -398,18 +477,18 @@ class ProductionGuardHoldTest {
     fun a_typed_block_is_quoted_from_what_it_will_run() {
         val hold = guarding()
         // As the terminal calls it: the quote is what the shell line already holds plus this block.
-        assertTrue(hold.hold("rf /srv\r", HeldInputSource.Typed, quote = { "rm -" + "rf /srv\r" }) { listOf("rm -rf /srv", "") })
+        assertTrue(hold.hold("rf /srv\r", HeldInputSource.Typed, quote = { "rm -" + "rf /srv\r" }) { policy -> ProductionGuard.inspect(listOf("rm -rf /srv", ""), policy) })
         assertEquals("rm -rf /srv", hold.pendingQuote)
     }
 
     @Test
     fun the_quote_is_dropped_with_the_hold() {
         val hold = guarding()
-        hold.hold("rm -rf /srv\n", HeldInputSource.Paste) { listOf("rm -rf /srv") }
+        hold.hold("rm -rf /srv\n", HeldInputSource.Paste) { policy -> ProductionGuard.inspect(listOf("rm -rf /srv"), policy) }
         hold.take()
         assertEquals("", hold.pendingQuote)
 
-        hold.hold("rm -rf /srv\n", HeldInputSource.Paste) { listOf("rm -rf /srv") }
+        hold.hold("rm -rf /srv\n", HeldInputSource.Paste) { policy -> ProductionGuard.inspect(listOf("rm -rf /srv"), policy) }
         hold.dismiss()
         assertEquals("", hold.pendingQuote)
     }
@@ -417,7 +496,7 @@ class ProductionGuardHoldTest {
     @Test
     fun a_harmless_block_is_not_held() {
         val hold = guarding()
-        assertFalse(hold.hold("uptime\n", HeldInputSource.Typed) { listOf("uptime") })
+        assertFalse(hold.hold("uptime\n", HeldInputSource.Typed) { policy -> ProductionGuard.inspect(listOf("uptime"), policy) })
         assertNull(hold.pending)
         assertNull(hold.take())
     }
@@ -425,7 +504,7 @@ class ProductionGuardHoldTest {
     @Test
     fun confirming_twice_replays_nothing_the_second_time() {
         val hold = guarding()
-        hold.hold("shutdown now\n", HeldInputSource.Command) { listOf("shutdown now") }
+        hold.hold("shutdown now\n", HeldInputSource.Command) { policy -> ProductionGuard.inspect(listOf("shutdown now"), policy) }
 
         assertEquals("shutdown now\n", hold.take()?.text)
         // A double click on Confirm must not run the command again.
@@ -435,12 +514,12 @@ class ProductionGuardHoldTest {
     @Test
     fun dismissing_drops_the_held_input() {
         val hold = guarding()
-        hold.hold("shutdown now\n", HeldInputSource.Typed) { listOf("shutdown now") }
+        hold.hold("shutdown now\n", HeldInputSource.Typed) { policy -> ProductionGuard.inspect(listOf("shutdown now"), policy) }
 
         hold.dismiss()
         assertNull(hold.pending)
         assertNull(hold.take())
         // The next command is judged on its own again.
-        assertTrue(hold.hold("rm -rf /etc\n", HeldInputSource.Typed) { listOf("rm -rf /etc") })
+        assertTrue(hold.hold("rm -rf /etc\n", HeldInputSource.Typed) { policy -> ProductionGuard.inspect(listOf("rm -rf /etc"), policy) })
     }
 }

@@ -839,7 +839,7 @@ class TerminalScreenStateTest {
      * paths are tab-completed, which is most of them.
      */
     @Test
-    fun `a command the shell completed is recorded as the shell has it`() = runTest {
+    fun `a command the shell completed serves the session but is not persisted`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         var saved: List<String>? = null
@@ -850,7 +850,12 @@ class TerminalScreenStateTest {
         session.emit("root@prod:~# systemctl restart nginx.service".encodeToByteArray())
         state.typeInput("\r")
 
-        assertEquals(listOf("systemctl restart nginx.service"), saved)
+        // The persisted snapshot carries nothing: the completed text is the host's drawing, and a
+        // stored copy would surface in the cross-host palette as a command nobody typed.
+        assertEquals(emptyList(), saved)
+        // The session's own ghost still knows it, as the shell has it — not as the typed prefix.
+        "systemctl restart ngin".forEach { state.typeInput(it.toString()) }
+        assertTrue(state.hasSuggestion, "the completed command stopped serving the in-session ghost")
         scope.cancel()
     }
 

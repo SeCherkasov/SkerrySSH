@@ -43,7 +43,7 @@ class RunbookPauseAnnouncerTest {
         )
         val target = RunbookTarget(
             sessionId = "tab-1",
-            send = {},
+            send = { _, _ -> },
             expectStep = { _, _ -> },
             takeMark = { null },
             outputVersion = { 0L },

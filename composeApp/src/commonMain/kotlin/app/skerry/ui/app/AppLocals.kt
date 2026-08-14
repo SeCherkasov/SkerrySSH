@@ -249,7 +249,8 @@ val LocalTerminalHistory: ProvidableCompositionLocal<TerminalHistoryStore?> = st
  * [LocalConnectHost] (keychain or password prompt). Supplied by [DesktopDesignApp]; default is a no-op
  * (mock path/preview).
  */
-val LocalRunSnippetOnHost: ProvidableCompositionLocal<(Host, String) -> Unit> = staticCompositionLocalOf { { _, _ -> } }
+val LocalRunSnippetOnHost: ProvidableCompositionLocal<(Host, String, List<String>) -> Unit> =
+    staticCompositionLocalOf { { _, _, _ -> } }
 
 /**
  * Unlocked [Vault] behind the master-password gate, needed by the settings screen (More) to toggle

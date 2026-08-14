@@ -35,7 +35,7 @@ class RunbookRunSummaryTest {
         fun target() = RunbookTarget(
             sessionId = id,
             label = id,
-            send = {},
+            send = { _, _ -> },
             expectStep = { _, _ -> },
             takeMark = { token ->
                 val parked = mark

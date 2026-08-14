@@ -63,7 +63,7 @@ fun RunbookStartDialog(runner: RunbookRunner, onStarted: () -> Unit = {}) {
     key(request) {
         RunbookStartDialogContent(
             request = request,
-            onConfirm = { values -> if (runner.confirmStart(values)) onStarted() },
+            onConfirm = { values, secrets -> if (runner.confirmStart(secrets, values)) onStarted() },
             onDismiss = runner::dismissStart,
         )
     }
@@ -72,7 +72,7 @@ fun RunbookStartDialog(runner: RunbookRunner, onStarted: () -> Unit = {}) {
 @Composable
 private fun RunbookStartDialogContent(
     request: RunbookStartRequest,
-    onConfirm: ((SnippetSegment.Variable) -> String) -> Unit,
+    onConfirm: (values: (SnippetSegment.Variable) -> String, secrets: List<String>) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val mono = LocalFonts.current.mono
@@ -81,8 +81,9 @@ private fun RunbookStartDialogContent(
 
     val canRun = values.canRun
     val confirm = {
-        // The values are read once, here, and handed over as a snapshot.
-        if (canRun) onConfirm(runbookValueSnapshot(variables) { values.value(it, masked = false) })
+        // The values are read once, here, and handed over as a snapshot. The vault secrets ride
+        // along so the production guard can mask them in its own confirmation.
+        if (canRun) onConfirm(runbookValueSnapshot(variables) { values.value(it, masked = false) }, values.vaultSecrets())
     }
 
     ModalScrim(onDismiss = onDismiss) {
