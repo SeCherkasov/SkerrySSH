@@ -67,7 +67,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Any text on screen | `ui/design/DesignPrimitives.Txt` — never a raw `Text()` |
 | Any icon | `ui/design/Sym` (Material Symbols glyph) + `DesignFonts` |
 | Fonts | `ui/design/DesignFoundation`: `rememberUiFont`, `rememberMono`, `rememberMaterialSymbols` |
-| Buttons | `PrimaryButton`, `GhostButton`, `CancelButton`, `IconBtn` |
+| Buttons | `PrimaryButton`, `GhostButton`, `CancelButton`, `IconBtn` (hover/tooltip chrome); `ui/design/GlyphButton` for a touch glyph box — square tap target, `Role.Button`, optional long-press — don't hand-roll the `Box`+`Sym`+`clickable` shape again |
 | Small controls | `Toggle`, `Badge`, `Dot`, `MeterBar`, `NumberStepper`, `HoverTooltip` |
 | A setting as a label + switch row | `ToggleRow` (optional second line); `SettingToggleRow` / `MobileSyncToggleRow` are its settings and sync scales and should converge onto it |
 | A fact as a label + value row in a detail panel | `KeyValueRow`; `InfoRow` (session info panel) and `CardRow` (tunnel dashboard) are the same shape and should converge onto it |

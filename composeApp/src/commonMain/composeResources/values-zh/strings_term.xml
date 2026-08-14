@@ -122,4 +122,7 @@
     <string name="term_header_monitor">主机监控</string>
     <string name="term_header_menu">会话菜单</string>
     <string name="term_session_new">新建会话</string>
+    <string name="term_autofit_shrink">缩小终端字体</string>
+    <string name="term_autofit_grow">放大终端字体</string>
+    <string name="term_autofit_restore">恢复字体大小</string>
 </resources>
