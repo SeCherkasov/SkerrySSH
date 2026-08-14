@@ -60,6 +60,10 @@ object UiTags {
     const val NEW_GROUP: String = "nav.newGroup"
     const val NEW_RUNBOOK: String = "nav.newRunbook"
 
+    /** Help button in a library screen's header and the dialog it opens (one screen at a time). */
+    const val HELP: String = "nav.help"
+    const val HELP_DIALOG: String = "nav.helpDialog"
+
     /**
      * Command box of a runbook step. The steps are a repeating list, not captioned fields, so there
      * is no label to name them after; the tag repeats per step, in step order.

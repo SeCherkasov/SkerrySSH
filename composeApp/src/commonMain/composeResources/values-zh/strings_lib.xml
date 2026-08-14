@@ -279,4 +279,17 @@
     <string name="lib_teams_runbook_steps">%1$d 步</string>
     <string name="lib_teams_record_runbook">运行手册</string>
     <string name="lib_teams_scope_access_unknown">无法获取访问列表 — 服务器未响应</string>
+
+    <!-- Snippets help dialog -->
+    <string name="lib_snippets_help_title">代码片段</string>
+    <string name="lib_snippets_help_intro">片段是发送到当前会话的一条命令。${{…}} 占位符在运行时解析；确认框会在发送前显示确切的命令行。</string>
+    <string name="lib_snippets_help_vars">变量</string>
+    <string name="lib_snippets_help_var_date">运行时的日期、时间和 Unix 时间戳；冒号后为格式标记（YYYY、MM、DD、HH、mm、ss）</string>
+    <string name="lib_snippets_help_var_uuid">随机 UUID</string>
+    <string name="lib_snippets_help_var_random">随机字符；冒号后为长度和字符集 — alnum、hex 或 special；未知名称回退到默认字符集</string>
+    <string name="lib_snippets_help_var_clipboard">系统剪贴板，确认时读取一次</string>
+    <string name="lib_snippets_help_var_vault">按条目名称取保险库中的密码</string>
+    <string name="lib_snippets_help_var_param">其他任意名称会在运行前询问取值；冒号后的部分为预填默认值</string>
+    <string name="lib_snippets_help_var_choices">用 | 分隔的选项会变成选择列表；第一项为默认值</string>
+    <string name="lib_snippets_help_examples">示例</string>
 </resources>

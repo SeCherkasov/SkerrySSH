@@ -411,7 +411,9 @@ private fun LockPasswordField(
         onValueChange = onValueChange,
         singleLine = true,
         visualTransformation = PasswordVisualTransformation(),
-        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui),
+        // lineHeight pinned (as ModalTextField pins it): without it the text takes the font's
+        // natural leading, sits high next to the taller icon, and jumps when typing starts.
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui, lineHeight = 20.sp),
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction, keyboardType = KeyboardType.Password),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
@@ -431,8 +433,8 @@ private fun LockPasswordField(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Sym("lock", size = 18.sp, color = Skerry.colors.faint)
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 14.sp)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 14.sp, lineHeight = 20.sp)
                     innerTextField()
                 }
             }
@@ -453,7 +455,7 @@ private fun LockTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
-        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui),
+        textStyle = TextStyle(color = Skerry.colors.text, fontSize = 14.sp, fontFamily = LocalFonts.current.ui, lineHeight = 20.sp),
         cursorBrush = SolidColor(Skerry.colors.cyan),
         keyboardOptions = KeyboardOptions(imeAction = imeAction),
         keyboardActions = KeyboardActions(onDone = { onSubmit() }, onGo = { onSubmit() }),
@@ -467,8 +469,8 @@ private fun LockTextField(
                     .padding(horizontal = 14.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(Modifier.weight(1f)) {
-                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 14.sp)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 14.sp, lineHeight = 20.sp)
                     innerTextField()
                 }
             }

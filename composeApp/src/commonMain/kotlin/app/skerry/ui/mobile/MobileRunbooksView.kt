@@ -38,11 +38,16 @@ import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.design.ConfirmActionDialog
+import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.runbook_delete
+import app.skerry.ui.generated.resources.runbook_delete_message
+import app.skerry.ui.generated.resources.runbook_delete_title
 import app.skerry.ui.generated.resources.runbook_empty_mobile
 import app.skerry.ui.generated.resources.runbook_new
 import app.skerry.ui.generated.resources.runbook_run
@@ -54,6 +59,7 @@ import app.skerry.ui.generated.resources.runbook_step_count
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.runbook.RunbookEditorFields
 import app.skerry.ui.runbook.RunbookEntry
+import app.skerry.ui.runbook.RunbookHelpDialog
 import app.skerry.ui.runbook.RunbookFormState
 import app.skerry.ui.runbook.RunbookManager
 import app.skerry.ui.runbook.runbookTarget
@@ -91,17 +97,24 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
 
     var editing by remember { mutableStateOf<RunbookEntry?>(null) }
     var adding by remember { mutableStateOf(false) }
+    var helpOpen by remember { mutableStateOf(false) }
     val sheetOpen = adding || editing != null
+    val overlayOpen = sheetOpen || helpOpen
 
     // An open sheet hides the tab bar, which would otherwise float over the fields above the keyboard.
-    LaunchedEffect(sheetOpen) { state.modalOverlay(sheetOpen) }
+    LaunchedEffect(overlayOpen) { state.modalOverlay(overlayOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
 
     val runbooks = manager.runbooks
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().background(Skerry.colors.bg).verticalScroll(rememberScrollState())) {
-            MobilePushHeader(stringResource(Res.string.runbook_section), onBack = state::pop)
+            MobilePushHeader(
+                stringResource(Res.string.runbook_section), onBack = state::pop,
+                actions = {
+                    GhostButton(stringResource(Res.string.help_button), onClick = { helpOpen = true }, icon = "help")
+                },
+            )
             if (runbooks.isEmpty()) {
                 Txt(
                     stringResource(Res.string.runbook_empty_mobile), color = Skerry.colors.faint, size = 13.sp,
@@ -121,7 +134,7 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
             Spacer(Modifier.height(176.dp))
         }
 
-        if (!sheetOpen) {
+        if (!overlayOpen) {
             MobileFabButton(
                 onClick = { adding = true; editing = null },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 22.dp, bottom = 104.dp).testTag(UiTags.NEW_RUNBOOK),
@@ -158,6 +171,8 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
                 },
             )
         }
+
+        if (helpOpen) RunbookHelpDialog(manager, onDismiss = { helpOpen = false })
     }
 }
 
@@ -210,6 +225,26 @@ private fun MobileRunbookEditSheet(
     // Shared form state (desktop <-> mobile): same fields, same validation, same draft assembly.
     val form = remember(entry) { RunbookFormState.fromEntry(entry) }
     val history = LocalRunbookHistory.current
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    if (confirmDelete && entry != null) {
+        ConfirmActionDialog(
+            title = stringResource(Res.string.runbook_delete_title),
+            message = stringResource(
+                Res.string.runbook_delete_message,
+                entry.runbook.label.ifBlank { stringResource(Res.string.runbook_untitled) },
+            ),
+            confirmLabel = stringResource(Res.string.runbook_delete),
+            onConfirm = {
+                confirmDelete = false
+                manager.delete(entry.id)
+                // The runbook is gone; its run log has nothing left to belong to.
+                history?.forget(entry.id)
+                onDeleted()
+            },
+            onDismiss = { confirmDelete = false },
+        )
+    }
 
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.92f) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -233,14 +268,11 @@ private fun MobileRunbookEditSheet(
                     modifier = Modifier.fillMaxWidth().testTag(UiTags.FORM_SAVE),
                 )
                 if (entry != null) {
+                    // Held for confirmation: deleting a whole procedure silently is one misclick
+                    // away from losing it and its run history (desktop parity).
                     MobileSheetButton(
                         stringResource(Res.string.runbook_delete),
-                        onClick = {
-                            manager.delete(entry.id)
-                            // The runbook is gone; its run log has nothing left to belong to.
-                            history?.forget(entry.id)
-                            onDeleted()
-                        },
+                        onClick = { confirmDelete = true },
                         filled = false, danger = true, modifier = Modifier.fillMaxWidth(),
                     )
                 }

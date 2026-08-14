@@ -20,7 +20,7 @@ class RunbookValueSnapshotTest {
     private val environment = SnippetRunEnvironment(
         moment = SnippetMoment(2026, 8, 4, 12, 0, 0, epochSeconds = 1_785_000_000L),
         newUuid = { "uuid" },
-        randomChars = { "r".repeat(it) },
+        randomChars = { n, _ -> "r".repeat(n) },
     )
 
     private fun scriptOf(vararg commands: String): RunbookScript = RunbookScript.of(

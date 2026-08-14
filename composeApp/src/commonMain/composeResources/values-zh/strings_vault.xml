@@ -170,4 +170,14 @@
     <string name="vault_meta_rotated">%1$s 轮换</string>
     <string name="vault_meta_valid_until">有效期至 %1$s</string>
     <string name="vault_kv_changed">更改于</string>
+
+    <!-- Vault help dialog -->
+    <string name="vault_help_title">保险库</string>
+    <string name="vault_help_intro">连接所用的凭据，以主密码加密存储。同步只传输加密记录。</string>
+    <string name="vault_help_categories">类别</string>
+    <string name="vault_help_keys">在此生成或从文件链接；用于主机身份验证</string>
+    <string name="vault_help_passwords">主机和账号密码；复制操作会记入使用日志</string>
+    <string name="vault_help_certificates">从文件导入的 SSH 证书，与密钥配对</string>
+    <string name="vault_help_snippets">在片段中</string>
+    <string name="vault_help_snippets_hint">片段或运行手册步骤按条目名称引用已存密码；在所有预览中均以掩码显示</string>
 </resources>

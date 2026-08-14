@@ -57,11 +57,16 @@ fun <T> DropdownField(
     )
 }
 
-/** Layout select trigger: value on the left, chevron on the right (clickable, opens the dropdown). */
+/**
+ * Layout select trigger: value on the left, chevron on the right (clickable, opens the dropdown).
+ * Carries [fieldValueName] itself: inside a captioned [FormField] a screen reader would otherwise
+ * announce only the picked value, never the field's name — and every call site would have to
+ * remember the fix by hand (two already did, on their own custom triggers).
+ */
 @Composable
 fun SelectTrigger(value: String, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).clickable(onClick = onClick).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).fieldValueName(value).clickable(onClick = onClick).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {

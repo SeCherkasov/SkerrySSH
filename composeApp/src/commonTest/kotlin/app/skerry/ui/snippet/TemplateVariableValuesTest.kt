@@ -9,6 +9,7 @@ class TemplateVariableValuesTest {
 
     private fun values(params: Map<String, String>) = TemplateVariableValues(
         paramNames = params.keys.toList(),
+        paramChoices = emptyMap(),
         vaultRefs = emptyList(),
         needsClipboard = false,
         vaultResolutions = emptyMap(),

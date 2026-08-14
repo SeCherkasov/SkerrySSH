@@ -77,4 +77,10 @@
     <string name="qr_cancel">Cancel</string>
     <string name="command_clipped_partial">shown in part</string>
     <string name="command_clipped">shown in part · %1$d chars</string>
+
+    <!-- Help dialogs (snippets / runbooks / vault) -->
+    <string name="help_button">Help</string>
+    <string name="help_close">Close</string>
+    <string name="help_add">Add</string>
+    <string name="help_added">Added</string>
 </resources>

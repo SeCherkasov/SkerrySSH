@@ -26,8 +26,11 @@
     <string name="runbook_step_down">Move down</string>
     <string name="runbook_step_confirm">Ask before running</string>
     <string name="runbook_step_continue_on_error">Keep going if it fails</string>
+    <string name="runbook_step_interactive">Interactive</string>
     <string name="runbook_save">Save</string>
     <string name="runbook_delete">Delete</string>
+    <string name="runbook_delete_title">Delete runbook</string>
+    <string name="runbook_delete_message">“%1$s” and its run history will be deleted.</string>
     <string name="runbook_run">Run</string>
     <string name="runbook_run_title">Run runbook</string>
     <string name="runbook_run_needs_session">Connect a session first — a runbook runs in a terminal.</string>
@@ -43,6 +46,7 @@
     <string name="runbook_panel_failed">Stopped on a failure</string>
     <string name="runbook_panel_stopped">Stopped</string>
     <string name="runbook_panel_run_step">Run this step</string>
+    <string name="runbook_panel_complete_step">Complete step</string>
     <string name="runbook_panel_skip_step">Skip</string>
     <string name="runbook_panel_stop">Stop run</string>
     <string name="runbook_panel_close">Close</string>
@@ -97,6 +101,7 @@
     <string name="runbook_status_skipped">skipped</string>
     <string name="runbook_status_stopped">stopped</string>
     <string name="runbook_status_confirm">needs a go-ahead</string>
+    <string name="runbook_status_interactive">interactive — complete it yourself</string>
     <string name="runbook_dur_seconds">%1$s s</string>
     <string name="runbook_dur_minutes">%1$d m %2$d s</string>
     <string name="runbook_transfer_of">%1$s of %2$s</string>
@@ -106,4 +111,13 @@
     <string name="runbook_history_empty">No runs yet</string>
     <string name="runbook_history_failed_at">failed at step %1$d</string>
     <string name="runbook_history_last">last run %1$s</string>
+
+    <!-- Runbooks help dialog -->
+    <string name="runbook_help_title">Runbooks</string>
+    <string name="runbook_help_intro">A runbook is an ordered procedure run in one session's shell, one step at a time. Exit codes decide how the run continues; ${{…}} values are collected once at start and shared by every step.</string>
+    <string name="runbook_help_flags">Step options</string>
+    <string name="runbook_help_flag_confirm">pauses before the step until you approve it</string>
+    <string name="runbook_help_flag_continue">a failure is recorded and the run continues</string>
+    <string name="runbook_help_flag_interactive">the line is sent as-is and you finish the step yourself — for TUI programs and menus that hold the terminal</string>
+    <string name="runbook_help_examples">Examples</string>
 </resources>

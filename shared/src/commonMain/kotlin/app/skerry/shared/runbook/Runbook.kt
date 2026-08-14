@@ -76,7 +76,14 @@ sealed interface RunbookStep {
     val confirm: Boolean
     val continueOnError: Boolean
 
-    /** A command line sent to the session's shell; its exit code decides how the run continues. */
+    /**
+     * A command line sent to the session's shell; its exit code decides how the run continues.
+     *
+     * [interactive] sends the line as-is, with no exit-code probe around it, and the run waits for
+     * the user to say the step is done — for programs that hold the terminal (a TUI, a menu waiting
+     * on a digit), whose probe would otherwise never run and leave the step stuck. The exit code is
+     * unknowable then; the user's go-ahead is the step's verdict.
+     */
     @Serializable
     data class Command(
         override val id: String,
@@ -84,6 +91,7 @@ sealed interface RunbookStep {
         val command: String,
         override val confirm: Boolean = true,
         override val continueOnError: Boolean = false,
+        val interactive: Boolean = false,
     ) : RunbookStep
 
     /**

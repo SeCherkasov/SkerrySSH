@@ -26,8 +26,11 @@
     <string name="runbook_step_down">Ниже</string>
     <string name="runbook_step_confirm">Спрашивать перед запуском</string>
     <string name="runbook_step_continue_on_error">Продолжать при ошибке</string>
+    <string name="runbook_step_interactive">Интерактивный</string>
     <string name="runbook_save">Сохранить</string>
     <string name="runbook_delete">Удалить</string>
+    <string name="runbook_delete_title">Удалить раннбук</string>
+    <string name="runbook_delete_message">«%1$s» и история его прогонов будут удалены.</string>
     <string name="runbook_run">Запустить</string>
     <string name="runbook_run_title">Запуск сценария</string>
     <string name="runbook_run_needs_session">Сначала подключитесь — сценарий выполняется в терминале.</string>
@@ -43,6 +46,7 @@
     <string name="runbook_panel_failed">Остановлен из-за ошибки</string>
     <string name="runbook_panel_stopped">Остановлен</string>
     <string name="runbook_panel_run_step">Выполнить шаг</string>
+    <string name="runbook_panel_complete_step">Завершить шаг</string>
     <string name="runbook_panel_skip_step">Пропустить</string>
     <string name="runbook_panel_stop">Остановить</string>
     <string name="runbook_panel_close">Закрыть</string>
@@ -101,6 +105,7 @@
     <string name="runbook_status_skipped">пропущен</string>
     <string name="runbook_status_stopped">остановлен</string>
     <string name="runbook_status_confirm">нужно подтверждение</string>
+    <string name="runbook_status_interactive">интерактивный — завершите сами</string>
     <string name="runbook_dur_seconds">%1$s с</string>
     <string name="runbook_dur_minutes">%1$d мин %2$d с</string>
     <string name="runbook_transfer_of">%1$s из %2$s</string>
@@ -110,4 +115,13 @@
     <string name="runbook_history_empty">Прогонов ещё не было</string>
     <string name="runbook_history_failed_at">сбой на шаге %1$d</string>
     <string name="runbook_history_last">последний прогон %1$s</string>
+
+    <!-- Runbooks help dialog -->
+    <string name="runbook_help_title">Раннбуки</string>
+    <string name="runbook_help_intro">Раннбук — упорядоченная процедура, выполняемая в шелле одной сессии, шаг за шагом. Коды выхода решают, как продолжается прогон; значения ${{…}} собираются один раз на старте и общие для всех шагов.</string>
+    <string name="runbook_help_flags">Параметры шага</string>
+    <string name="runbook_help_flag_confirm">пауза перед шагом, пока вы его не подтвердите</string>
+    <string name="runbook_help_flag_continue">ошибка фиксируется, прогон продолжается</string>
+    <string name="runbook_help_flag_interactive">строка отправляется как есть, шаг завершаете вы сами — для TUI-программ и меню, удерживающих терминал</string>
+    <string name="runbook_help_examples">Примеры</string>
 </resources>

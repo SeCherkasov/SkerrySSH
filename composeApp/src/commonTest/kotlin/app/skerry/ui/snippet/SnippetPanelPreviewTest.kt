@@ -12,7 +12,7 @@ class SnippetPanelPreviewTest {
     private val environment = SnippetRunEnvironment(
         moment = SnippetMoment(year = 2026, month = 8, day = 2, hour = 9, minute = 12, second = 0, epochSeconds = 1_785_000_000L),
         newUuid = { "fixed-uuid" },
-        randomChars = { n -> "r".repeat(n) },
+        randomChars = { n, _ -> "r".repeat(n) },
     )
 
     private fun preview(command: String, params: Map<String, String> = emptyMap()): String {

@@ -39,6 +39,17 @@ class RunbookFormStateTest {
     }
 
     @Test
+    fun `an interactive step survives the edit round-trip`() {
+        val form = RunbookFormState.fromEntry(
+            entry(RunbookStep.Command(id = "s1", command = "htop", interactive = true)),
+        )
+        assertTrue(form.steps[0].interactive)
+
+        val saved = form.toDraft().steps[0] as RunbookStep.Command
+        assertTrue(saved.interactive)
+    }
+
+    @Test
     fun `save needs a name and at least one command`() {
         val form = RunbookFormState.fromEntry(null)
         form.label = "Deploy"

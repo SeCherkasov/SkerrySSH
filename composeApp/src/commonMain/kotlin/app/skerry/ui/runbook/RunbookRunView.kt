@@ -46,6 +46,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_panel_close
+import app.skerry.ui.generated.resources.runbook_panel_complete_step
 import app.skerry.ui.generated.resources.runbook_panel_run_step
 import app.skerry.ui.generated.resources.runbook_panel_skip_step
 import app.skerry.ui.generated.resources.runbook_panel_stalled
@@ -180,10 +181,17 @@ private fun RunbookRunActions(runner: RunbookRunner, run: RunbookSessionRun, onC
                     fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
                 )
             }
-            RunbookPhase.RUNNING -> GhostButton(
-                stringResource(Res.string.runbook_panel_stop), onClick = runner::stop, icon = "stop_circle",
-                fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
-            )
+            RunbookPhase.RUNNING -> {
+                // An interactive step has no probe to report it done — the user says so here.
+                if (run.steps.getOrNull(run.currentIndex)?.status == RunbookStepStatus.AWAITING_COMPLETE) {
+                    PrimaryButton(stringResource(Res.string.runbook_panel_complete_step), onClick = runner::completeStep)
+                    GhostButton(stringResource(Res.string.runbook_panel_skip_step), onClick = runner::skipStep)
+                }
+                GhostButton(
+                    stringResource(Res.string.runbook_panel_stop), onClick = runner::stop, icon = "stop_circle",
+                    fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
+                )
+            }
             else -> GhostButton(stringResource(Res.string.runbook_panel_close), onClick = onClose)
         }
     }
