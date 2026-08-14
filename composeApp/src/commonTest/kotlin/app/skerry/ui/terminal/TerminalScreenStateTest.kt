@@ -1943,6 +1943,26 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `a failed resize does not poison the same-size dedup`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope)
+
+        // The PTY resize fails once (transient hiccup on a live connection)…
+        session.resizeError = { IllegalStateException("pty broke") }
+        state.resize(PtySize(cols = 50, rows = 12))
+        session.resizeError = null
+        // …and the next request at the SAME size must reach the session again. The failed
+        // attempt never landed, so deduping the retry away would leave the PTY at the old size
+        // for good — with auto-fit's settled-snapshot gate waiting on exactly that resize.
+        state.resize(PtySize(cols = 50, rows = 12))
+
+        assertEquals(listOf(PtySize(cols = 50, rows = 12)), session.resizes)
+        scope.cancel()
+    }
+
+    @Test
     fun `a cancellation during resize tears down the command handler`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,6 +47,7 @@ import app.skerry.ui.generated.resources.term_session_new
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.immersive.hiddenSystemBarsPadding
 import app.skerry.ui.design.Dot
+import app.skerry.ui.design.GlyphButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
@@ -145,22 +145,7 @@ private fun HeaderIcon(
     size: TextUnit = 21.sp,
     color: Color = Skerry.colors.dim,
     onClick: () -> Unit,
-) {
-    Box(
-        Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .semantics { contentDescription = label }
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Sym(icon, size = size, color = color)
-    }
-}
+) = GlyphButton(icon, label, onClick, iconSize = size, iconColor = color)
 
 /**
  * Session strip under the header: one chip per open shell plus a "+" that goes to the catalog.

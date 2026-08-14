@@ -123,4 +123,7 @@
     <string name="term_header_monitor">Host monitor</string>
     <string name="term_header_menu">Session menu</string>
     <string name="term_session_new">New session</string>
+    <string name="term_autofit_shrink">Shrink terminal font</string>
+    <string name="term_autofit_grow">Enlarge terminal font</string>
+    <string name="term_autofit_restore">Restore font size</string>
 </resources>
