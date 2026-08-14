@@ -19,4 +19,5 @@
     <string name="risk_bulk_delete">Bulk-deletes matched files.</string>
     <string name="risk_truncates_content">Discards file contents.</string>
     <string name="risk_elevated">Runs with elevated privileges.</string>
+    <string name="risk_beyond_inspection">Exceeds what the guard reads — part of this input was not classified.</string>
 </resources>

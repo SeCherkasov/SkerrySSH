@@ -64,7 +64,7 @@ internal fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, session
     ) ?: return false
     val entry = manager.forShortcut(combo) ?: return false
     val terminal = (sessions?.active?.focusedPane?.controller?.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
-    manager.run(entry.id, recording = terminal.recording) { terminal.sendUserInputGuarded(it) }
+    manager.run(entry.id, recording = terminal.recording) { text, secrets -> terminal.sendUserInputGuarded(text, secrets) }
     return true
 }
 

@@ -131,7 +131,11 @@ class ProductionGuardHold {
      * Whether [text] is held back instead of being sent. Every lambda is evaluated only when it can
      * matter — [screenGuesses] reads the screen, which is wasted work on a session with no guard.
      *
-     * [runLines] is what this input will actually run, line by line, and is what gets classified.
+     * [own] is the finding of what this input will actually run — classified by the caller
+     * ([ProductionGuard.inspectCandidates] over [ProductionGuard.candidatesOf] for a block), because
+     * only the caller knows what the input's lines and lengths are; the policy it must answer for is
+     * handed in.
+     *
      * [partialGuess] is a line the client knows it holds only the beginning of — the shell completed
      * it. It is classified like the rest and may stand in for a blank quote, but the length then goes
      * out as null: what is drawn is a prefix, and no count over it would be true.
@@ -140,13 +144,19 @@ class ProductionGuardHold {
      * *guesses* is on the shell line already — a row the host drew, or the tracked line joined to
      * this input — so building the quote from it would put a command in the dialog that this input
      * is not going to run. When a guess is what tripped the guard it is published as
-     * [pendingAside] and drawn beside the quote as its own statement.
+     * [pendingAside] and drawn beside the quote as its own statement. [screenLineCut] says the
+     * cursor row continues past the cursor — a screen-sourced finding is then a beginning of the
+     * line that runs, and no count over it would be true, so the length goes out as null.
      *
      * [quote] is what to show — [text] itself for anything ready-made, and for keystrokes whatever
-     * the caller knows the shell line already holds. It is not built from [runLines]: those are
-     * capped in number to bound the classifier's work, so a quote built from them would drop the
-     * lines past the cap, while
-     * [take] replays every byte.
+     * the caller knows the shell line already holds. It is not built from the classified candidates:
+     * those are capped in number to bound the classifier's work, so a quote built from them would
+     * drop the lines past the cap, while [take] replays every byte.
+     *
+     * [present] is applied to everything the dialog may draw — the quote and the aside — and to
+     * nothing that is classified or replayed. It exists for one case: input carrying a resolved
+     * vault secret, which the confirmation must mask exactly as the snippet dialog masked it one
+     * step earlier.
      *
      * `true` means the caller must send nothing: either the input is now waiting for confirmation,
      * or it was dropped because something else already is.
@@ -155,50 +165,83 @@ class ProductionGuardHold {
         text: String,
         from: HeldInputSource,
         quote: () -> String = { text },
+        present: (String) -> String = { it },
         screenGuesses: () -> List<String> = { emptyList() },
+        screenLineCut: () -> Boolean = { false },
         partialGuess: () -> PartialGuess? = { null },
-        runLines: () -> List<String>,
+        own: (ProductionGuardPolicy) -> GuardedCommand?,
     ): Boolean {
         if (!policy.production) return false
         // The claim and the publish are one step: two callers that both passed the "nothing pending"
         // check would leave the dialog describing one block and [take] replaying the other.
         return synchronized(claim) {
             if (pending != null) return@synchronized true
-            claimAndPublish(text, from, quote, Guesses(screenGuesses(), partialGuess()), runLines())
+            claimAndPublish(HeldInput(text, from), quote, present, Guesses(screenGuesses(), screenLineCut(), partialGuess()), own)
         }
     }
 
     private fun claimAndPublish(
-        text: String,
-        from: HeldInputSource,
+        input: HeldInput,
         quote: () -> String,
+        present: (String) -> String,
         guesses: Guesses,
-        runLines: List<String>,
+        own: (ProductionGuardPolicy) -> GuardedCommand?,
     ): Boolean {
-        // Two lists, two classifications: [MAX_GUARDED_CANDIDATES] bounds the work per list, and
+        // Separate classifications: [MAX_GUARDED_CANDIDATES] bounds the work per list, and
         // concatenating them let a prompt row on screen push the last line of a full-length paste out
         // of the classification — the end of a script is where its cleanup lives.
-        val own = ProductionGuard.inspect(runLines, policy)
+        val ownFinding = own(policy)
         val seen = ProductionGuard.inspect(guesses.screen, policy)
         // A prefix of the shell's line is classified beside what was read off the screen, and kept
         // apart from it: it is text the client tracked, not text the host drew, and it is by
         // definition not all of the line.
         val partial = guesses.partial
-        val prefix = ProductionGuard.inspect(listOfNotNull(partial?.classify), policy)
+        val prefix = partial?.let { ProductionGuard.inspect(listOf(it.classify), policy) }
         val guessed = ProductionGuard.worse(seen, prefix)
-        val guarded = ProductionGuard.worse(own, guessed) ?: return false
+        var guarded = ProductionGuard.worse(ownFinding, guessed)
+        // Only when no rule found a reason: input the classifier could not fully read — a line past
+        // the caps, or a join longer than any rule reads — is confirmed for that fact alone. A rule's
+        // finding wins outright, whatever its length: it explains a risk that was actually read,
+        // and one confirmation is asked either way.
+        var overflowedPrefix = false
+        var overflowedScreen = false
+        if (guarded == null) {
+            val blockOverflow = ProductionGuard.overflow(input.text, policy)
+            val joinOverflow = partial?.let { ProductionGuard.overflow(it.classify, policy) }
+            // The screen's own candidates need the same net: the visible shell line — a soft-wrap
+            // join now — can run past what any rule reads, and a recalled command whose risk sits
+            // beyond the classifier's window used to leave with no dialog at all.
+            val screenOverflow = guesses.screen.firstNotNullOfOrNull { ProductionGuard.overflow(it, policy) }
+            guarded = ProductionGuard.worse(ProductionGuard.worse(blockOverflow, joinOverflow), screenOverflow)
+                ?: return false
+            overflowedPrefix = guarded === joinOverflow
+            overflowedScreen = guarded === screenOverflow
+        }
         // A guess that won is drawn as the line itself, never as the join it was classified by. With
         // no drawable form there is nothing to put here: standing another finding in its place would
         // pair one line with another's reason, which is the shape this whole change removes.
+        val fromPrefix = guarded === prefix || overflowedPrefix
+        val rawFound = if (fromPrefix) partial?.onLine else guarded.command
+        val presented = rawFound?.let(present)
         val found = Found(
-            text = if (guarded === prefix) partial?.onLine else guarded.command,
-            fromPrefix = guarded === prefix,
-            fromScreen = guarded === guessed,
+            text = presented,
+            fromPrefix = fromPrefix,
+            fromScreen = guarded === guessed || overflowedScreen,
+            // The mask changed the drawn line: a raw count beside it would fire "shown in part"
+            // over a fully drawn box, exactly what the quote's masked count avoids.
+            masked = presented != null && presented != rawFound,
+            rawLength = rawFound?.length ?: 0,
         )
         // Before the publish, not after: a Confirm that arrives between the two finds the question
         // and the block it is about together, rather than a dialog with nothing behind it.
-        held = HeldInput(text, from)
-        publish(guarded, willRun = quote().trimEnd(), found = found, partial = partial)
+        held = input
+        publish(
+            guarded,
+            willRun = present(quote().trimEnd()),
+            found = found,
+            onLine = partial?.onLine?.let(present),
+            screenCut = guesses.screenCut,
+        )
         return true
     }
 
@@ -209,10 +252,17 @@ class ProductionGuardHold {
      * holds. A dialog then quotes what is being sent and nothing else — a reason with no line under
      * it is a poor dialog, and a line nobody will run is a wrong one.
      */
-    private data class Found(val text: String?, val fromPrefix: Boolean, val fromScreen: Boolean)
+    private data class Found(
+        val text: String?,
+        val fromPrefix: Boolean,
+        val fromScreen: Boolean,
+        val masked: Boolean = false,
+        /** Length of the drawable line before masking — what [GuardedCommand.fullLength] is compared against. */
+        val rawLength: Int = 0,
+    )
 
-    /** What the client only guesses about the shell's line: what the screen shows, and what it tracked. */
-    private data class Guesses(val screen: List<String>, val partial: PartialGuess?)
+    /** What the client only guesses about the shell's line: what the screen shows, whether the cursor row continues past the cursor, and what it tracked. */
+    private data class Guesses(val screen: List<String>, val screenCut: Boolean, val partial: PartialGuess?)
 
     /**
      * The four facts the dialog reads, published together. A recomposition that saw [pending] set
@@ -221,26 +271,20 @@ class ProductionGuardHold {
      * [found] is the line that tripped the guard as it may be *drawn* — for a guess about a line the
      * client only holds the beginning of, that is the beginning and not the join it was classified
      * by. A quote that cannot carry it gets it beside itself instead of in place of it.
+     *
+     * [screenCut] says the cursor row continues past the cursor: a screen-sourced line is then a
+     * beginning of what runs, so no count is published over it — the dialog says "shown in part"
+     * with no number rather than a number that claims the whole command is on screen.
      */
-    private fun publish(guarded: GuardedCommand, willRun: String, found: Found, partial: PartialGuess?) {
+    private fun publish(guarded: GuardedCommand, willRun: String, found: Found, onLine: String?, screenCut: Boolean) {
         val shown = willRun.take(MAX_DRAWN_COMMAND_CHARS)
         // One case, and one only: nothing to quote. A bare Enter over a line the client never saw
         // runs what the shell holds, so that line is the quote and there is nothing else to show.
         val standIn = found.text?.takeIf { shown.isBlank() }
-        // What the shell already holds comes first, whoever tripped the guard: the quote cannot claim
-        // a line the client is only guessing at, and leaving it out of the dialog draws a service
-        // restart over an `rm -rf` that runs before it. It carries no length — the client knows it
-        // holds a beginning, not how much more there is.
-        val onLine = partial?.onLine
-        val aside = when {
-            standIn != null -> null
-            // The line the reason is about comes first: there is one block, and a dialog explaining a
-            // recursive delete beside an unrelated fragment names neither.
-            found.text != null && !shown.contains(found.text) ->
-                GuardAside(found.text, guarded.fullLength.takeIf { !found.fromPrefix }, found.fromScreen)
-            onLine != null && !shown.contains(onLine) -> GuardAside(onLine, null, onLine = true)
-            else -> null
-        }
+        // A count is only true for a line whose whole extent something read: not for a prefix the
+        // shell completed, and not for a screen row the cursor sits inside of.
+        val partialFinding = found.fromPrefix || (found.fromScreen && screenCut)
+        val aside = if (standIn != null) null else asideFor(shown, guarded, found, onLine, partialFinding)
         // One snapshot for all four: a recomposition that saw `pending` before the quote was written
         // would draw the dialog with nothing in it.
         Snapshot.withMutableSnapshot {
@@ -251,13 +295,54 @@ class ProductionGuardHold {
             pendingAside = aside
             // A blank quote is a bare Enter over a line the client never saw, and then the tripped
             // line really is all there is — counting the input's own length would name characters the
-            // user is not being told about. A prefix has no count at all behind it.
+            // user is not being told about. A prefix — tracked or read off a row the cursor sits
+            // inside of — has no count at all behind it.
+            // The count describes the MASKED text the dialog draws, not the raw input: a pre-mask
+            // count fired "shown in part" over a fully drawn masked quote — an alarm with nothing
+            // to scroll to. What the mask hides, the mask itself already marks.
             pendingQuoteLength = when {
                 shown.isNotBlank() -> willRun.length
-                found.fromPrefix -> null
+                partialFinding -> null
+                // A masked stand-in follows the same rule as the aside: the raw count belongs to a
+                // string the dialog does not draw.
+                found.masked -> if (guarded.fullLength > found.rawLength) null else standIn?.length
                 else -> guarded.fullLength
             }
         }
+    }
+
+    /**
+     * The block drawn beside the quote when the quote does not carry the tripped line. What the
+     * shell already holds comes first, whoever tripped the guard: the quote cannot claim a line the
+     * client is only guessing at, and leaving it out of the dialog draws a service restart over an
+     * `rm -rf` that runs before it — and the line the reason is about outranks it: there is one
+     * block, and a dialog explaining a recursive delete beside an unrelated fragment names neither.
+     * The on-line half carries no length: the client knows it holds a beginning, not how much more
+     * there is.
+     */
+    private fun asideFor(
+        shown: String,
+        guarded: GuardedCommand,
+        found: Found,
+        onLine: String?,
+        partialFinding: Boolean,
+    ): GuardAside? = when {
+        found.text != null && !shown.contains(found.text) ->
+            GuardAside(found.text, asideLength(guarded, found, partialFinding), found.fromScreen)
+        onLine != null && !shown.contains(onLine) -> GuardAside(onLine, null, onLine = true)
+        else -> null
+    }
+
+    /**
+     * The count published beside an aside. A raw length is honest only for a line the mask never
+     * touched; a masked line that was also cut has no honest count at all (the uncut tail is
+     * unknown and the drawn text is not the raw text), and a masked line drawn whole counts as
+     * exactly what is on screen.
+     */
+    private fun asideLength(guarded: GuardedCommand, found: Found, partialFinding: Boolean): Int? = when {
+        partialFinding -> null
+        found.masked -> if (guarded.fullLength > found.rawLength) null else found.text?.length
+        else -> guarded.fullLength
     }
 
     /**

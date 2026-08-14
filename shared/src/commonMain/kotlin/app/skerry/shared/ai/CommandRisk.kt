@@ -22,6 +22,13 @@ enum class CommandRiskReason {
     RecursivePermissions,
     SecurityFileOverwrite,
     FirewallFlush,
+    /**
+     * Not a rule's finding: the input exceeds what the production guard's classifier reads
+     * ([app.skerry.shared.guard.MAX_GUARDED_CANDIDATES] lines /
+     * [app.skerry.shared.guard.MAX_GUARDED_COMMAND_LENGTH] chars of a line), so part of it was
+     * never classified at all — which on a production host is itself the thing to confirm.
+     */
+    BeyondInspection,
 
     // Warn
     DeletesFiles,

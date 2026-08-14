@@ -17,35 +17,70 @@ import kotlin.concurrent.Volatile
 class CommandHistory(private val capacity: Int = 500) {
 
     /**
-     * The entries, newest first, as a value that is replaced rather than edited.
+     * Entries (newest first) and the session-only marks, replaced together as ONE value.
      *
      * A terminal reads its history from the coroutine that owns the emulator — every published
-     * screen refreshes the ghost suggestion — while the line that produced an entry is recorded from
-     * the thread the user typed on. A list being iterated while another thread adds to it is a
-     * `ConcurrentModificationException` on the reader, and the reader is a loop with nothing to
-     * catch it: the session would stop drawing while still looking connected. Replacing the value
-     * costs a copy per command entered, which is once per Enter.
+     * screen refreshes the ghost suggestion — while the line that produced an entry is recorded
+     * from the thread the user typed on. A list being iterated while another thread adds to it is
+     * a `ConcurrentModificationException` on the reader; two separately-volatile fields were the
+     * subtler failure: a reader pairing a stale entries snapshot with fresher marks saw a
+     * host-authored entry unmarked and persisted it. One immutable holder makes the pair atomic —
+     * two writers can still lose an update to each other, but no reader can ever see entries and
+     * marks from different moments. Replacing the value costs a copy per command entered, which is
+     * once per Enter.
      */
+    private class State(val entries: List<String>, val sessionOnly: Set<String>)
+
     @Volatile
-    private var entries: List<String> = emptyList() // index 0 is the most recent
+    private var state = State(emptyList(), emptySet())
 
     /** Snapshot of history, newest first. */
-    val commands: List<String> get() = entries
+    val commands: List<String> get() = state.entries
+
+    /**
+     * The entries a store may persist: what the user typed, without the commands recorded off the
+     * screen. A completion the host drew serves the ghost and reverse search in THIS session, but
+     * persisting it would carry host-authored text into the cross-host command palette — which
+     * offers it back while the user is connected somewhere else.
+     */
+    val persistedCommands: List<String>
+        get() {
+            val current = state
+            if (current.sessionOnly.isEmpty()) return current.entries
+            return current.entries.filterNot { it in current.sessionOnly }
+        }
 
     /** Fills history from a ready-made list (e.g. loaded from a store); order is newest first. */
     fun preload(history: List<String>) {
-        entries = emptyList()
+        state = State(emptyList(), emptySet())
         history.asReversed().forEach { record(it) }
     }
 
     /**
      * Records an executed [command]. Empty/blank input is ignored; an existing entry is moved to
-     * the top (no duplicates), otherwise it's prepended. The tail beyond [capacity] is dropped.
+     * the top (no duplicates), otherwise it's prepended. The tail beyond [capacity] is dropped,
+     * and its session-only marks with it — a mark whose entry aged out would otherwise pin its
+     * string for the life of the session.
+     *
+     * [sessionOnly] keeps the entry out of [persistedCommands] — for a command completed by the
+     * host on its own screen row. Recording the same text again as the user's own lifts the mark:
+     * a command actually typed end to end is the user's to keep. The reverse never happens: a
+     * session-only record for text that is already the user's own entry leaves it the user's —
+     * otherwise the host, by drawing a completion equal to a stored command, could demote it and
+     * have the next save silently erase its persisted copy.
      */
-    fun record(command: String) {
+    fun record(command: String, sessionOnly: Boolean = false) {
         val trimmed = command.trim()
         if (trimmed.isEmpty()) return
-        entries = (listOf(trimmed) + entries.filterNot { it == trimmed }).take(capacity)
+        val current = state
+        val updated = listOf(trimmed) + current.entries.filterNot { it == trimmed }
+        var marks = when {
+            !sessionOnly -> current.sessionOnly - trimmed
+            trimmed in current.entries && trimmed !in current.sessionOnly -> current.sessionOnly
+            else -> current.sessionOnly + trimmed
+        }
+        if (updated.size > capacity) marks = marks - updated.drop(capacity).toSet()
+        state = State(updated.take(capacity), marks)
     }
 
     /**
@@ -60,7 +95,7 @@ class CommandHistory(private val capacity: Int = 500) {
      */
     fun matches(prefix: String): List<String> {
         if (prefix.isBlank()) return emptyList()
-        return entries.filter { it.length > prefix.length && it.startsWith(prefix) }
+        return state.entries.filter { it.length > prefix.length && it.startsWith(prefix) }
     }
 
     /**
@@ -69,18 +104,18 @@ class CommandHistory(private val capacity: Int = 500) {
      */
     fun search(query: String): List<String> {
         if (query.isBlank()) return emptyList()
-        return entries.filter { it.contains(query) }
+        return state.entries.filter { it.contains(query) }
     }
 
     /** Forgets [command] (e.g. a typo that produced "command not found"). `true` if it was present. */
     fun forget(command: String): Boolean {
         val trimmed = command.trim()
-        // One read for what is kept and for what it is compared against: taking the entries again
-        // would answer about a list this call never looked at, and then overwrite it.
-        val current = entries
-        val kept = current.filterNot { it == trimmed }
-        if (kept.size == current.size) return false
-        entries = kept
+        // One read for what is kept and for what it is compared against: taking the state again
+        // would answer about a value this call never looked at, and then overwrite it.
+        val current = state
+        val kept = current.entries.filterNot { it == trimmed }
+        if (kept.size == current.entries.size) return false
+        state = State(kept, current.sessionOnly - trimmed)
         return true
     }
 }

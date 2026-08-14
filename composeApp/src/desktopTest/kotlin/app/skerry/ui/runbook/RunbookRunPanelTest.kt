@@ -44,7 +44,7 @@ class RunbookRunPanelTest {
         )
         val target = RunbookTarget(
             sessionId = "tab-1",
-            send = { sent += it },
+            send = { line, _ -> sent += line },
             expectStep = { _, _ -> },
             takeMark = { null },
             outputVersion = { 0L },

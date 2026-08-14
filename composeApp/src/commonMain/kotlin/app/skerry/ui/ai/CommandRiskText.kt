@@ -3,6 +3,7 @@ package app.skerry.ui.ai
 import androidx.compose.runtime.Composable
 import app.skerry.shared.ai.CommandRiskReason
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.risk_beyond_inspection
 import app.skerry.ui.generated.resources.risk_bulk_delete
 import app.skerry.ui.generated.resources.risk_deletes_files
 import app.skerry.ui.generated.resources.risk_disk_device_write
@@ -44,6 +45,7 @@ fun commandRiskReasonText(reason: CommandRiskReason): String = stringResource(
         CommandRiskReason.RecursivePermissions -> Res.string.risk_recursive_permissions
         CommandRiskReason.SecurityFileOverwrite -> Res.string.risk_security_file_overwrite
         CommandRiskReason.FirewallFlush -> Res.string.risk_firewall_flush
+        CommandRiskReason.BeyondInspection -> Res.string.risk_beyond_inspection
         CommandRiskReason.DeletesFiles -> Res.string.risk_deletes_files
         CommandRiskReason.KillsProcesses -> Res.string.risk_kills_processes
         CommandRiskReason.UninstallsPackages -> Res.string.risk_uninstalls_packages

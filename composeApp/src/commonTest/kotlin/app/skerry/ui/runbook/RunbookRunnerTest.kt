@@ -66,7 +66,7 @@ class RunbookRunnerTest {
         fun target(sessionId: String = "tab-1") = RunbookTarget(
             sessionId = sessionId,
             // The PTY echoes the typed line; what the terminal was told to expect is captured with it.
-            send = { line -> sent += line; declaredWhenSent += expected.lastOrNull(); outputVersion++ },
+            send = { line, _ -> sent += line; declaredWhenSent += expected.lastOrNull(); outputVersion++ },
             expectStep = { token, hidden -> expected += token; hiddenEcho = hidden },
             // Consuming, and a report of another step is dropped — as TerminalScreenState does it.
             takeMark = { token ->
@@ -154,7 +154,7 @@ class RunbookRunnerTest {
         runbook: Runbook,
         target: RunbookTarget,
         contextValue: (SnippetSegment.Variable) -> String,
-    ): Boolean = requestStart(runbook, target) && confirmStart(contextValue)
+    ): Boolean = requestStart(runbook, target) && confirmStart(contextValue = contextValue)
 
     @Test
     fun a_step_that_goes_quiet_without_reporting_is_flagged() = runnerTest { r, term ->
@@ -447,7 +447,7 @@ class RunbookRunnerTest {
         var runner: RunbookRunner? = null
         val target = RunbookTarget(
             sessionId = "tab-1",
-            send = { line -> term.sent += line },
+            send = { line, _ -> term.sent += line },
             expectStep = { _, _ -> },
             takeMark = { token -> runner!!.stop(); TerminalStepMark(token, 0, "") },
             outputVersion = { 0L },

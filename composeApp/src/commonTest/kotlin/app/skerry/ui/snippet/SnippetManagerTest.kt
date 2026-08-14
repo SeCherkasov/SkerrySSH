@@ -72,7 +72,7 @@ class SnippetManagerTest {
         val id = manager.save(draft(command = "uptime"))
         var sent: String? = null
 
-        manager.run(id) { sent = it }
+        manager.run(id) { line, _ -> sent = line }
 
         assertEquals("uptime\n", sent)
     }
@@ -85,7 +85,7 @@ class SnippetManagerTest {
         val id = manager.save(draft(command = "echo a\u202Eb"))
         var sent: String? = null
 
-        manager.run(id) { sent = it }
+        manager.run(id) { line, _ -> sent = line }
 
         assertEquals("echo ab\n", sent)
     }
@@ -95,7 +95,7 @@ class SnippetManagerTest {
         val manager = managerWith()
         var sent: String? = null
 
-        manager.run("nope") { sent = it }
+        manager.run("nope") { line, _ -> sent = line }
 
         assertNull(sent)
     }
@@ -106,7 +106,7 @@ class SnippetManagerTest {
         val id = manager.save(draft(command = "echo ${'$'}{{date}}"))
         var sent: String? = null
 
-        manager.run(id) { sent = it }
+        manager.run(id) { line, _ -> sent = line }
 
         assertNull(sent)
         val pending = assertNotNull(manager.pendingRun)
@@ -119,7 +119,7 @@ class SnippetManagerTest {
         val manager = managerWith()
         val id = manager.save(draft(command = "echo ${'$'}{{date}}"))
         var sent: String? = null
-        manager.run(id) { sent = it }
+        manager.run(id) { line, _ -> sent = line }
 
         manager.confirmRun("echo 2026-07-03", emptyMap())
 
@@ -132,7 +132,7 @@ class SnippetManagerTest {
         val manager = managerWith()
         val id = manager.save(draft(command = "echo ${'$'}{{date}}"))
         var sent: String? = null
-        manager.run(id) { sent = it }
+        manager.run(id) { line, _ -> sent = line }
 
         manager.dismissRun()
 
@@ -144,11 +144,11 @@ class SnippetManagerTest {
     fun `confirmRun remembers parameters and prefills the next run of the same snippet`() {
         val manager = managerWith()
         val id = manager.save(draft(command = "ping ${'$'}{{target_host}}"))
-        manager.run(id) { }
+        manager.run(id) { _, _ -> }
         assertTrue(manager.pendingRun!!.initialParams.isEmpty())
 
         manager.confirmRun("ping web1", mapOf("target_host" to "web1"))
-        manager.run(id) { }
+        manager.run(id) { _, _ -> }
 
         assertEquals(mapOf("target_host" to "web1"), manager.pendingRun!!.initialParams)
     }
@@ -159,10 +159,10 @@ class SnippetManagerTest {
         // instead of making the user type them a second time.
         val manager = managerWith()
         val id = manager.save(draft(command = "ping ${'$'}{{target_host}}"))
-        manager.run(id) { }
+        manager.run(id) { _, _ -> }
         manager.confirmRun("ping old", mapOf("target_host" to "old"))
 
-        manager.run(id, params = mapOf("target_host" to "web9")) { }
+        manager.run(id, params = mapOf("target_host" to "web9")) { _, _ -> }
 
         assertEquals(mapOf("target_host" to "web9"), manager.pendingRun!!.initialParams)
     }
@@ -171,10 +171,10 @@ class SnippetManagerTest {
     fun `run without explicit parameters still falls back to the previous run's values`() {
         val manager = managerWith()
         val id = manager.save(draft(command = "ping ${'$'}{{target_host}}"))
-        manager.run(id) { }
+        manager.run(id) { _, _ -> }
         manager.confirmRun("ping old", mapOf("target_host" to "old"))
 
-        manager.run(id, params = emptyMap()) { }
+        manager.run(id, params = emptyMap()) { _, _ -> }
 
         assertEquals(mapOf("target_host" to "old"), manager.pendingRun!!.initialParams)
     }
@@ -184,9 +184,26 @@ class SnippetManagerTest {
         val manager = managerWith()
         val id = manager.save(draft(command = "echo ${'$'}{{date}}"))
 
-        manager.run(id, recording = true) { }
+        manager.run(id, recording = true) { _, _ -> }
 
         assertTrue(manager.pendingRun!!.recording)
+    }
+
+    /**
+     * The dialog's resolved vault secrets reach the terminal beside the line (issue #246): the
+     * production guard masks exactly the spans it is handed, so a wiring break that always sends
+     * an empty list would print the resolved secret in the guard's confirmation.
+     */
+    @Test
+    fun `confirmRun hands the resolved secrets to the terminal`() {
+        val manager = managerWith()
+        val id = manager.save(draft(command = "echo ${'$'}{{vault:db}}"))
+        var secrets: List<String>? = null
+        manager.run(id) { _, s -> secrets = s }
+
+        manager.confirmRun("echo hunter2", emptyMap(), listOf("hunter2"))
+
+        assertEquals(listOf("hunter2"), secrets)
     }
 
     @Test
@@ -201,10 +218,10 @@ class SnippetManagerTest {
         val manager = managerWith()
         val first = manager.save(draft(label = "first", command = "echo ${'$'}{{date}}"))
         val second = manager.save(draft(label = "second", command = "uptime"))
-        manager.run(first) { }
+        manager.run(first) { _, _ -> }
         var sent: String? = null
 
-        manager.run(second) { sent = it } // hotkey/palette while the dialog is up
+        manager.run(second) { line, _ -> sent = line } // hotkey/palette while the dialog is up
 
         assertNull(sent) // not even the plain fast path — first request wins
         assertEquals(first, manager.pendingRun!!.snippet.id)

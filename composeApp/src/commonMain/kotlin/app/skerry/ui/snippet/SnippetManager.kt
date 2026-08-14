@@ -53,7 +53,7 @@ class SnippetRunRequest internal constructor(
     val environment: SnippetRunEnvironment,
     val recording: Boolean,
     val initialParams: Map<String, String>,
-    internal val sendLine: (String) -> Unit,
+    internal val sendLine: (line: String, secrets: List<String>) -> Unit,
 )
 
 /** One row of the snippet list: the saved [snippet], updated via [SnippetManager.save]. */
@@ -173,11 +173,18 @@ class SnippetManager(
      * not untrusted input. A command with `${{…}}` variables never runs directly: it parks in
      * [pendingRun] until the dialog resolves and confirms it (variable values — clipboard, vault
      * secrets, Teams-shared templates — ARE untrusted; see [SnippetTemplate.resolve]).
+     * [send] also receives the resolved vault secrets of the run, so the terminal's own
+     * confirmation (the production guard) can mask them instead of printing the resolved line.
      * [recording] — whether the target terminal is recording, for the dialog's warning.
      * [params] seeds the dialog's prompted parameters (the snippets panel collects them before Run);
      * empty falls back to this snippet's previous run.
      */
-    fun run(id: String, recording: Boolean = false, params: Map<String, String> = emptyMap(), send: (String) -> Unit) {
+    fun run(
+        id: String,
+        recording: Boolean = false,
+        params: Map<String, String> = emptyMap(),
+        send: (line: String, secrets: List<String>) -> Unit,
+    ) {
         // A run initiated while the variable dialog is up would silently replace (or race) the
         // request the user is looking at — first request wins until confirmed or dismissed.
         if (pendingRun != null) return
@@ -186,7 +193,7 @@ class SnippetManager(
         if (segments.none { it is SnippetSegment.Variable }) {
             // Strip bidi/format tricks from the literal text too (Teams-shared snippets are not
             // "user-saved text"); an intentional multi-line script passes through unchanged.
-            send(stripUnsafeFormatChars(snippet.command) + "\n")
+            send(stripUnsafeFormatChars(snippet.command) + "\n", emptyList())
             return
         }
         pendingRun = SnippetRunRequest(
@@ -202,13 +209,14 @@ class SnippetManager(
     /**
      * The dialog confirmed the previewed [line]: send it (plus the newline) to the pending run's
      * terminal, remember [params] for the snippet's next run, close the dialog. No-op without a
-     * pending run (double-click after confirm).
+     * pending run (double-click after confirm). [secrets] are the resolved vault values inside
+     * [line] — passed along so the production guard's dialog can mask them.
      */
-    fun confirmRun(line: String, params: Map<String, String>) {
+    fun confirmRun(line: String, params: Map<String, String>, secrets: List<String> = emptyList()) {
         val pending = pendingRun ?: return
         pendingRun = null
         if (params.isNotEmpty()) lastParams[pending.snippet.id] = params
-        pending.sendLine(line + "\n")
+        pending.sendLine(line + "\n", secrets)
     }
 
     /** Close the variable dialog without running (Cancel/Esc/vault lock). */

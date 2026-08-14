@@ -111,6 +111,9 @@ class RunbookRunner(
 
     private var script: RunbookScript? = null
     private var contextValue: (SnippetSegment.Variable) -> String = { "" }
+    // The run's resolved vault secrets, handed to the terminal with every sent line so the
+    // production guard's confirmation can mask them. Dropped with the closure on stop/close.
+    private var runSecrets: List<String> = emptyList()
     private var policy: RunbookPolicy = RunbookPolicy()
     private var runId: String = ""
     private var startedAt: Long = 0L
@@ -159,14 +162,18 @@ class RunbookRunner(
      * clipboard/vault/prompted values it collected and is called per step, so every step gets what
      * the user actually confirmed.
      */
-    fun confirmStart(contextValue: (SnippetSegment.Variable) -> String): Boolean {
+    fun confirmStart(secrets: List<String> = emptyList(), contextValue: (SnippetSegment.Variable) -> String): Boolean {
         val request = pending ?: return false
         pending = null
-        return start(request, contextValue)
+        return start(request, secrets, contextValue)
     }
 
     /** Starts a prepared [request]. Returns false (changing nothing) if a run is already in flight. */
-    fun start(request: RunbookStartRequest, contextValue: (SnippetSegment.Variable) -> String): Boolean {
+    fun start(
+        request: RunbookStartRequest,
+        secrets: List<String> = emptyList(),
+        contextValue: (SnippetSegment.Variable) -> String,
+    ): Boolean {
         if (active) return false
         synchronized(lock) {
             generation++
@@ -176,6 +183,7 @@ class RunbookRunner(
         this.runbook = request.runbook
         this.policy = request.runbook.policy
         this.contextValue = contextValue
+        this.runSecrets = secrets
         this.script = request.script
         this.runId = newId()
         this.startedAt = now()
@@ -313,6 +321,7 @@ class RunbookRunner(
         script = null
         // Drop the closure holding this run's clipboard/vault/parameter values.
         contextValue = { "" }
+        runSecrets = emptyList()
         runId = ""
     }
 
@@ -352,7 +361,7 @@ class RunbookRunner(
                     // would never run — and nothing is declared to the terminal, so nothing of the
                     // program's screen is captured or hidden. Only the user ends this step.
                     state.status = RunbookStepStatus.AWAITING_COMPLETE
-                    run.target.send(resolved.line + "\n")
+                    run.target.send(resolved.line + "\n", runSecrets)
                     watchLiveness(run)
                     return
                 }
@@ -360,7 +369,7 @@ class RunbookRunner(
                 // Declared before the line is sent, never after: the terminal reports only the step
                 // it was told to expect, and the echo it must hide starts arriving immediately.
                 run.target.expectStep(token, RunbookMarker.echoFragments(resolved.line, token))
-                run.target.send(RunbookMarker.probeLine(resolved.line, token) + "\n")
+                run.target.send(RunbookMarker.probeLine(resolved.line, token) + "\n", runSecrets)
                 watch(run, index, token)
             }
             is ResolvedRunbookStep.Transfer -> transfer(run, index, resolved)
