@@ -26,6 +26,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.ai.AiAssistantController
+import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.mobile.MobileDesignApp
@@ -162,6 +163,20 @@ internal fun runDesktopShell(
             }
         }
         waitForIdle()
+        // The seeded session connects on the background scope, which waitForIdle does NOT wait
+        // for. A shortcut sent before it lands falls through the root handler (no Connected
+        // terminal to act on) and the test flakes only on a loaded runner — the CI shape of the
+        // `escape closes the find bar` failure. Hand the body the shell every test assumes: an
+        // active tab whose focused pane is connected.
+        if (sessions != null) {
+            waitUntil("seeded session reaches Connected", timeoutMillis = 10_000) {
+                val s = sessions.active?.focusedPane?.controller?.uiState
+                // A definitive failure must not burn the whole timeout and then report a generic
+                // "condition not satisfied" — the state carries the actual diagnosis.
+                if (s is ConnectionUiState.Error) error("seeded session failed to connect: ${s.message}")
+                s is ConnectionUiState.Connected
+            }
+        }
         val libraries = ShellLibraries(tunnels, snippets, runbooks, credentials, ai)
         body(DesktopShell(hosts, sessions, libraries, runner, state))
     } finally {

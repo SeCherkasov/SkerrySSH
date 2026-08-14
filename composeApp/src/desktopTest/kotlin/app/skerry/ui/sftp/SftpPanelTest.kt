@@ -85,7 +85,12 @@ class SftpPanelTest {
 
     private fun ComposeUiTest.openFiles() {
         onNodeWithContentDescription(string(Res.string.shell_tip_files)).performClick()
-        waitForIdle()
+        // The listing answers from the fake SFTP client on a background hop of its own: the Files
+        // view composes before the rows arrive, and a first-frame assertion on headers or rows
+        // flakes on a loaded runner. Hold until the remote pane has filled in.
+        waitUntil("remote listing shows $REMOTE_FILE", timeoutMillis = 10_000) {
+            onAllNodesWithText(REMOTE_FILE).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 }
 
