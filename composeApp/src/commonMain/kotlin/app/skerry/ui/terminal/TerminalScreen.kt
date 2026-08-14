@@ -90,6 +90,7 @@ import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
+import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermStyle
 import app.skerry.shared.terminal.highlight.HighlightKind
 import app.skerry.shared.terminal.highlight.applyTo
@@ -126,6 +127,19 @@ private const val REVERSE_SEARCH_ROWS = 6
 private const val HANDLE_RADIUS_DP = 7
 private const val HANDLE_TOUCH_RADIUS_DP = 22
 
+/**
+ * One consistent settled-screen read for the auto-fit machine (see the convergence effect in
+ * [TerminalScreen]). [version] sits first so the equality snapshotFlow dedupes on short-circuits
+ * before ever comparing the row list.
+ */
+private data class AutoFitScreenRead(
+    val version: Int,
+    val cols: Int,
+    val screen: List<List<TermCell>>,
+    val rows: Int,
+    val cursorRow: Int,
+)
+
 @Composable
 fun TerminalScreen(
     state: TerminalScreenState,
@@ -133,6 +147,11 @@ fun TerminalScreen(
     imeInput: Boolean = false,
     imeTransform: ((String) -> String)? = null,
     fixedGrid: PtySize? = null,
+    // Auto-shrink the font while wide output soft-wraps (issue #180, mobile: a narrow screen turns
+    // wide output into a wall of wrapped lines). The state machine lives on
+    // [TerminalScreenState.autoFit]; desktop keeps the user's font size. Ignored with a pinned
+    // grid, whose font is scaled to the recording's geometry instead.
+    autoFitEnabled: Boolean = false,
     // Whether this is the pane the user is typing into. On a split every pane draws its own
     // terminal, and only the focused one claims the keyboard — otherwise the last one composed
     // would take it and the accent border would point at a pane that receives nothing.
@@ -186,17 +205,30 @@ fun TerminalScreen(
     // With a pinned grid ([fixedGrid]) the font is scaled so that grid fills the viewport; the scale
     // is derived from metrics measured at the unscaled size, so the style has to be built twice.
     val baseMetrics = remember(baseStyle, density) { terminalMetrics(measurer, baseStyle, density) }
-    val fontScale = if (fixedGrid == null) 1f else fitFontScale(
-        viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, baseMetrics,
-        fixedGrid.cols, fixedGrid.rows,
-    )
-    val textStyle = remember(baseStyle, fontScale) {
+    val autoFitOn = autoFitEnabled && fixedGrid == null
+    val fontScale = when {
+        fixedGrid != null -> fitFontScale(
+            viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, baseMetrics,
+            fixedGrid.cols, fixedGrid.rows,
+        )
+        autoFitOn -> state.autoFit.scale
+        else -> 1f
+    }
+    // While auto-shrunk the row gap tightens toward the glyph height ([AUTOFIT_LINE_HEIGHT_RATIO]):
+    // the user's own line-height ratio is tuned for a reading size and leaves visually huge gaps at
+    // 7-8px. Restored together with the font size.
+    val autoFitShrunk = autoFitOn && fontScale < 1f
+    val textStyle = remember(baseStyle, fontScale, autoFitShrunk) {
         if (fontScale == 1f) {
             baseStyle
         } else {
             baseStyle.copy(
                 fontSize = baseStyle.fontSize * fontScale,
-                lineHeight = baseStyle.lineHeight * fontScale,
+                lineHeight = if (autoFitShrunk) {
+                    baseStyle.fontSize * fontScale * autoFitLineHeightRatio(appearance.lineHeight)
+                } else {
+                    baseStyle.lineHeight * fontScale
+                },
                 letterSpacing = baseStyle.letterSpacing * fontScale,
             )
         }
@@ -359,6 +391,51 @@ fun TerminalScreen(
         val content = gridSizeFor(viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, metrics)
         state.resize(if (fixedGrid == null) content else fixedGrid.copy(widthPx = content.widthPx, heightPx = content.heightPx))
         sized = true
+    }
+
+    // Auto-fit convergence (issue #180): one machine step per *settled* snapshot — one whose grid
+    // width matches what the current metrics imply. Right after a step the emulator still holds the
+    // previous, narrower grid with its old wrap flags; stepping again on it would run far past the
+    // fit, so snapshots are skipped until the resize above (debounce included) has landed. Each
+    // step shrinks the font -> metrics change -> the resize effect reflows the grid -> the next
+    // settled snapshot drives the next step, until the output fits or the floor is reached.
+    if (autoFitOn) {
+        val autoFitFloorScale = autoFitFloor(appearance.fontSizeSp)
+        LaunchedEffect(state, viewportSize, metrics, paddingPx, autoFitFloorScale) {
+            if (viewportSize.width == 0 || viewportSize.height == 0) return@LaunchedEffect
+            val expectedCols =
+                gridSizeFor(viewportSize.width.toFloat(), viewportSize.height.toFloat(), paddingPx, metrics).cols
+            // All four values are read inside snapshotFlow so they come from one consistent
+            // snapshot: publishes are individual writes from the session scope, and piecemeal
+            // reads in the collect body could pair a fresh screen with a stale cursor — counting
+            // the user's own wrapped command line as wide output and taking a spurious step.
+            // One scale-moving step per effect instance: after a step the grid keeps its old
+            // column count until recomposition rebuilds metrics and restarts this effect, so
+            // snapshots streaming in during that gap still pass the cols gate with stale wrap
+            // flags — stepping on them would run past the fit. A step that did not move the
+            // scale (already at the floor, Overshot -> Converged) restarts nothing and must
+            // not latch, or the machine would freeze there.
+            var stepped = false
+            snapshotFlow {
+                AutoFitScreenRead(state.snapshotVersion, state.cols, state.screen, state.rows, state.cursorRow)
+            }.collect { read ->
+                if (stepped) return@collect
+                // Nothing left to decide once the machine is done or handed over — skip the scan,
+                // not just the step: this collector outlives convergence by the whole session.
+                if (state.autoFit.converged || state.autoFit.locked) return@collect
+                // A dead session cannot reflow (its command queue closed with the output), so a
+                // step here would only rescale the frozen glyphs without re-wrapping them —
+                // exactly what the Disconnected screen declines to offer manually.
+                if (state.state.value is TerminalState.Closed) return@collect
+                if (read.cols != expectedCols) return@collect
+                val before = state.autoFit.scale
+                state.autoFit.onScreenSettled(
+                    wrapped = gridNeedsShrink(read.screen, read.rows, read.cursorRow),
+                    floor = autoFitFloorScale,
+                )
+                if (state.autoFit.scale != before) stepped = true
+            }
+        }
     }
 
     // Cursor blink phase: with blink on, toggle a boolean once per half-period; otherwise the cursor

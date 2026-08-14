@@ -32,7 +32,11 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
 import app.skerry.ui.immersive.ImmersiveScreen
+import androidx.compose.ui.Alignment
+import app.skerry.ui.terminal.LocalTerminalAppearance
+import app.skerry.ui.terminal.TerminalAutoFitControls
 import app.skerry.ui.terminal.TerminalScreen
+import app.skerry.ui.terminal.autoFitFloor
 import app.skerry.ui.terminal.RecordingOutcome
 import app.skerry.shared.share.ShareFrame
 import app.skerry.ui.app.LocalSessionShare
@@ -230,6 +234,14 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             Modifier.fillMaxSize(),
                             imeInput = true,
                             imeTransform = imeTransform,
+                            // Wide output on a phone turns into a wall of wrapped lines; the fit
+                            // converges once per session and the controls below nudge it after.
+                            autoFitEnabled = true,
+                        )
+                        TerminalAutoFitControls(
+                            fit = st.terminal.autoFit,
+                            floor = autoFitFloor(LocalTerminalAppearance.current.fontSizeSp),
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 8.dp),
                         )
                     }
                     // Desktop opens a path on Ctrl+click; touch has no such chord, so the affordance is
@@ -271,7 +283,13 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                 // Drop: frozen screen at the moment of loss, no keybar (channel is dead). Header status —
                 // "disconnected" in red. Detailed mobile parity (auto-reconnect) is a separate task.
                 is ConnectionUiState.Disconnected ->
-                    TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth())
+                    // autoFitEnabled keeps the frozen screen at its converged scale — snapping the
+                    // last output back to 100% at the moment of loss would re-wrap exactly the
+                    // lines the user may want to read. Deliberately no nudge controls here: the
+                    // session's command queue is closed, so a nudge could only rescale glyphs
+                    // without reflowing the grid — "+" would clip the tails of the very wide
+                    // lines being read.
+                    TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth(), autoFitEnabled = true)
             }
         }
         if (paletteOpen && snippets != null && activeTerminal != null) {

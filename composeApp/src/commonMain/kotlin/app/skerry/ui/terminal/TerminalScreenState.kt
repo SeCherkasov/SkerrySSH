@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.SnapshotMutationPolicy
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.AutocompleteEngine
 import app.skerry.shared.terminal.CommandHistory
@@ -122,6 +123,14 @@ class TerminalScreenState(
     /** Screen snapshot (rows top to bottom) for rendering. */
     var screen: List<List<TermCell>> by mutableStateOf(emptyList(), SCREEN_SNAPSHOT_POLICY)
         private set
+
+    /**
+     * Mobile auto-fit font scale (issue #180), advanced by [TerminalScreen] when it is composed
+     * with `autoFitEnabled`. Lives here rather than in composition on purpose: it must survive
+     * switching to another session's tab and back (composition state keyed on the active session
+     * resets on every switch, re-converging each time) and reset with the session on reconnect.
+     */
+    val autoFit = TerminalAutoFitState()
 
     /**
      * Monotonic snapshot publish counter, incremented on every feed/resize even if [screen] is
@@ -393,7 +402,12 @@ class TerminalScreenState(
                 } catch (e: CancellationException) {
                     throw e // do not swallow scope cancellation
                 } catch (_: Exception) {
-                    // only recoverable failures (e.g. PTY dropped); Error propagates
+                    // Only recoverable failures (e.g. PTY dropped); Error propagates. The dedup
+                    // memo is cleared so the next request at the same size is re-attempted rather
+                    // than silently dropped — auto-fit's settled-snapshot gate waits on exactly
+                    // that retry. Written off the UI thread; the worst a race costs is one
+                    // redundant resize command, and the dedup is best-effort anyway.
+                    lastRequestedSize = null
                 }
             }
         }
@@ -437,11 +451,17 @@ class TerminalScreenState(
 
     /** Publish the emulator snapshot into Compose state (after feed/resize). */
     private fun publishSnapshot() {
-        screen = emulator.lines // rows are already copied into immutable form inside the getter
-        cols = emulator.cols
-        rows = emulator.rows
-        cursorRow = emulator.cursorRow
-        cursorCol = emulator.cursorCol
+        // The grid and the cursor apply as one atomic group: auto-fit reads them as a tuple under
+        // snapshotFlow, and individual writes from this (session) thread could pair a fresh screen
+        // with a stale cursor there — counting the user's own wrapped command line as wide output.
+        // Single writer, so the apply cannot conflict.
+        Snapshot.withMutableSnapshot {
+            screen = emulator.lines // rows are already copied into immutable form inside the getter
+            cols = emulator.cols
+            rows = emulator.rows
+            cursorRow = emulator.cursorRow
+            cursorCol = emulator.cursorCol
+        }
         cursorVisible = emulator.cursorVisible
         cursorShape = emulator.cursorShape
         cursorBlink = emulator.cursorBlink
@@ -1165,9 +1185,10 @@ class TerminalScreenState(
         }
         // Sole owner of the emulator: feed and resize run strictly in order. Publishes one snapshot
         // per batch of immediately-available commands: under heavy output (build, cat) the PTY
-        // delivers many chunks in a row, and publishSnapshot copies the whole scrollback, so doing
-        // it per chunk is expensive (freezes/GC, especially on Android). When the queue is empty,
-        // behavior is unchanged (snapshot right away), so interactive latency does not grow.
+        // delivers many chunks in a row, and each publish re-copies the visible screen rows and
+        // renotifies every observer, so doing it per chunk is expensive (freezes/GC, especially on
+        // Android). When the queue is empty, behavior is unchanged (snapshot right away), so
+        // interactive latency does not grow.
         scope.launch {
             try {
                 for (cmd in commands) {
