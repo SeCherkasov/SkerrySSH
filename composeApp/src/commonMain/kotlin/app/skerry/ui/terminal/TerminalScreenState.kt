@@ -44,6 +44,7 @@ import kotlinx.coroutines.channels.ClosedSendChannelException
 import kotlinx.coroutines.selects.onTimeout
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -409,74 +410,14 @@ class TerminalScreenState(
     )
 
 
-    /**
-     * The emulator owner loop: applies commands strictly in order and publishes snapshots at a
-     * bounded rate. The first command after a quiet period publishes immediately; while commands
-     * keep arriving, the mid-window wait absorbs the stream and a publish happens once per
-     * [PUBLISH_MIN_INTERVAL_MS] — on the window edge if the stream pauses inside it (trailing
-     * publish), so the last batch of a burst is never left undrawn. select (not
-     * withTimeoutOrNull+receive) because select's clauses are atomic: a command cannot be lost to
-     * a timeout racing an in-flight receive.
-     */
-    @OptIn(ExperimentalCoroutinesApi::class)
+    /** The paced owner loop, extracted to its own class — see [EmulatorOwnerLoop]. */
     private suspend fun runEmulatorOwner() {
-        var lastPublishAt = Long.MIN_VALUE / 2
-        var dirty = false
-        var pending: ChannelResult<TerminalCommand>? = null
-        try {
-            while (true) {
-                val received = pending ?: commands.receiveCatching()
-                pending = null
-                val cmd = received.getOrNull() ?: break
-                applyCommand(cmd)
-                while (true) {
-                    val next = commands.tryReceive().getOrNull() ?: break
-                    applyCommand(next)
-                }
-                dirty = true
-                val now = nowMillis()
-                if (now - lastPublishAt >= PUBLISH_MIN_INTERVAL_MS) {
-                    publishSnapshot()
-                    lastPublishAt = now
-                    dirty = false
-                    continue
-                }
-                // The select below runs once per drained batch during a sub-window burst — its
-                // per-call allocation is bounded by burst cadence, not by the publish window.
-                val next = select<ChannelResult<TerminalCommand>?> {
-                    commands.onReceiveCatching { it }
-                    onTimeout(PUBLISH_MIN_INTERVAL_MS - (now - lastPublishAt)) { null }
-                }
-                if (next == null) {
-                    publishSnapshot()
-                    lastPublishAt = nowMillis()
-                    dirty = false
-                } else {
-                    pending = next
-                }
-            }
-        } finally {
-            // Every exit — channel close, parser fault, cancellation — lands the tail applied
-            // since the last publish: the coalescing window must never widen how much parsed
-            // output a fault can erase from the screen.
-            if (dirty) flushTailBestEffort()
-        }
-    }
-
-    /**
-     * Tail flush for [runEmulatorOwner]'s finally. [publishSnapshot] does not suspend, so no
-     * CancellationException can originate here; catching the rest keeps a flush-only failure
-     * from replacing an in-flight fault, while the trace keeps it visible on the clean-close
-     * path where this throw would otherwise be the only signal. No logging framework exists in
-     * this codebase — stderr is the convention (see the owner-level fault handler).
-     */
-    @Suppress("TooGenericExceptionCaught", "PrintStackTrace")
-    private fun flushTailBestEffort() {
-        try {
-            publishSnapshot()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        EmulatorOwnerLoop(
+            commands = commands,
+            nowMillis = nowMillis,
+            apply = ::applyCommand,
+            publish = ::publishSnapshot,
+        ).run()
     }
 
     /** Apply one command to the emulator (does not publish a snapshot; the caller batches that). */
@@ -1414,9 +1355,128 @@ internal const val FEED_BACKLOG_CHUNKS = 64
  * immediately (interactive echo latency is untouched); the cap only coalesces mid-stream.
  * 16ms aligns with the common 60Hz frame: Compose paints on the frame clock, so a faster cadence
  * only produces publishes whose work is thrown away between frames; the trailing-edge guarantee
- * bounds the added latency to one window either way.
+ * bounds the added latency to one window in steady state (a command landing mid-window starts a
+ * fresh drain budget, so one transitional interval can approach two windows — still bounded, not
+ * compounding). This constant is also the fairness bound of
+ * the emulator owner's drain (one window of parse work per publish, then a yield) — growing it
+ * grows the worst-case scheduling delay of the outbound writer on a saturated pool with it.
  */
 internal const val PUBLISH_MIN_INTERVAL_MS = 16L
+
+/**
+ * The emulator owner loop: applies commands strictly in order and publishes snapshots at a
+ * bounded rate. The first command after a quiet period publishes immediately; while commands keep
+ * arriving, the mid-window wait absorbs the stream and a publish happens once per
+ * [PUBLISH_MIN_INTERVAL_MS] — on the window edge if the stream pauses inside it (trailing
+ * publish), so the last batch of a burst is never left undrawn. select (not
+ * withTimeoutOrNull+receive) because select's clauses are atomic: a command cannot be lost to a
+ * timeout racing an in-flight receive.
+ *
+ * Its own class rather than methods on [TerminalScreenState]: the loop owns pacing only — the
+ * state object stays the sole owner of what applying and publishing mean.
+ */
+private class EmulatorOwnerLoop(
+    private val commands: Channel<TerminalCommand>,
+    private val nowMillis: () -> Long,
+    private val apply: suspend (TerminalCommand) -> Unit,
+    private val publish: () -> Unit,
+) {
+    private var lastPublishAt = Long.MIN_VALUE / 2
+    private var dirty = false
+
+    suspend fun run() {
+        var pending: ChannelResult<TerminalCommand>? = null
+        try {
+            while (true) {
+                val received = pending ?: commands.receiveCatching()
+                val cmd = received.getOrNull() ?: break
+                pending = step(cmd)
+            }
+        } finally {
+            // Every exit — channel close, parser fault, cancellation — lands the tail applied
+            // since the last publish: the coalescing window must never widen how much parsed
+            // output a fault can erase from the screen.
+            if (dirty) flushTailBestEffort()
+        }
+    }
+
+    /**
+     * One paced iteration: apply [cmd], drain up to a window's worth of queued work, then either
+     * publish (window elapsed) or wait for the window edge. Returns a command received while
+     * waiting — the caller's next iteration consumes it — or null when this step published.
+     */
+    private suspend fun step(cmd: TerminalCommand): ChannelResult<TerminalCommand>? {
+        val entered = nowMillis()
+        apply(cmd)
+        // Before the drain: a fault inside a drained command must still flush what this step
+        // already applied - the finally's guarantee covers the whole batch, not just its tail.
+        dirty = true
+        val windowSpentParsing = drainWithinWindow(entered)
+        val now = nowMillis()
+        if (now - lastPublishAt >= PUBLISH_MIN_INTERVAL_MS) {
+            publishNow(now)
+            // Mid-flood fairness: this coroutine shares the Default pool with the writer and
+            // other sessions; give them a slot before taking the next windowful.
+            if (windowSpentParsing) yield()
+            return null
+        }
+        val next = awaitWindowEdge(now - lastPublishAt)
+        if (next == null) publishNow(nowMillis())
+        return next
+    }
+
+    /**
+     * Applies queued commands until the queue empties or one window of parse time has passed
+     * [since] the step began; true when the budget was spent parsing. Budgeted from step entry,
+     * not from the last publish: after a quiet period the window is long expired, and a stale
+     * budget would return "spent" before draining anything — splitting an already-queued batch
+     * across two frames and mislabeling every interactive echo as a flood. A host that keeps the
+     * queue non-empty (dense flood at parse rate) still cannot postpone publishes or monopolize
+     * the dispatcher: at most one window of parse work per publish.
+     */
+    private suspend fun drainWithinWindow(since: Long): Boolean {
+        while (true) {
+            if (nowMillis() - since >= PUBLISH_MIN_INTERVAL_MS) return true
+            val next = commands.tryReceive().getOrNull() ?: return false
+            apply(next)
+        }
+    }
+
+    /**
+     * Waits for the next command or the window edge, whichever comes first; null means the edge.
+     * Runs once per drained batch during a sub-window burst — its per-call allocation is bounded
+     * by burst cadence, not by the publish window.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun awaitWindowEdge(elapsed: Long): ChannelResult<TerminalCommand>? =
+        select {
+            commands.onReceiveCatching { it }
+            onTimeout(PUBLISH_MIN_INTERVAL_MS - elapsed) { null }
+        }
+
+    private fun publishNow(at: Long) {
+        publish()
+        lastPublishAt = at
+        dirty = false
+    }
+
+    /**
+     * Tail flush for [run]'s finally. The publish callback ([TerminalScreenState.publishSnapshot])
+     * does not suspend, so no CancellationException can originate here; catching the rest keeps a
+     * flush-only failure from replacing an in-flight fault, while the trace keeps it visible on
+     * the clean-close path where this throw would otherwise be the only signal. No logging
+     * framework exists in this codebase — stderr is the convention (see the owner-level fault
+     * handler in [TerminalScreenState]).
+     */
+    @Suppress("TooGenericExceptionCaught", "PrintStackTrace")
+    private fun flushTailBestEffort() {
+        try {
+            publish()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+}
 
 /** Command to the sole emulator owner; the queue preserves feed/resize ordering. */
 private sealed interface TerminalCommand {

@@ -236,6 +236,65 @@ class TerminalScreenStateTest {
     }
 
     @Test
+    fun `a batch queued during a quiet period is published whole, not split`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FloodingTerminalSession(chunks = 5)
+        // Scheduler clock, no delays: the whole batch is pre-queued at t=0 and parsing consumes
+        // no window budget. The leading-edge publish must cover the entire available batch - a
+        // drain budgeted from the stale lastPublishAt would return "spent" before draining and
+        // tear the first paint into two frames.
+        val state = TerminalScreenState(session, scope, nowMillis = { testScheduler.currentTime })
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(5L, state.outputVersion)
+        assertEquals(1, state.snapshotVersion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a fault on a drained command still flushes the batch head`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FloodingTerminalSession(chunks = 5)
+        val state = TerminalScreenState(session, scope, nowMillis = { testScheduler.currentTime })
+        var applies = 0
+        state.applyInterceptor = { if (++applies == 2) error("injected fault on a drained command") }
+        testScheduler.advanceUntilIdle()
+
+        // Chunk 1 was applied at the step head; chunk 2 faulted inside the drain of the SAME
+        // step. The finally must still land chunk 1 - dirty is set before the drain, not after.
+        assertEquals(1L, state.outputVersion)
+        assertEquals(1, state.snapshotVersion)
+        assertTrue(session.closed)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a dense backlog is published per window of parse work, not once at the end`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val total = FEED_BACKLOG_CHUNKS
+        val session = FloodingTerminalSession(chunks = total)
+        // Every clock read advances 1ms: parse work itself consumes the window, the way real time
+        // does under a flood. Without the in-drain window check the whole backlog is one batch and
+        // one publish; with it, a publish lands roughly every windowful of parsing.
+        var tick = 0L
+        val state = TerminalScreenState(session, scope, nowMillis = { ++tick })
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(total.toLong(), state.outputVersion)
+        assertTrue(
+            state.snapshotVersion >= 3,
+            "expected a publish per parse window during a dense backlog, got ${state.snapshotVersion}",
+        )
+        // And the quota's own upper bound: a regression that publishes per drained command
+        // (~64 publishes) must fail here, not hide behind the floor.
+        assertTrue(
+            state.snapshotVersion <= total / (PUBLISH_MIN_INTERVAL_MS.toInt() / 2) + 2,
+            "expected at most ~1 publish per window, got ${state.snapshotVersion}",
+        )
+        scope.cancel()
+    }
+
+    @Test
     fun `a parser fault still lands the applied-but-unpublished tail`() = runTest {
         val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
         val session = FloodingTerminalSession(chunks = 5, interChunkDelayMs = 1)
