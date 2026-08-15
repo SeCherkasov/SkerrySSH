@@ -17,6 +17,7 @@ import app.skerry.shared.terminal.TerminalStepMark
 import app.skerry.shared.terminal.STEP_MARK_OSC
 import app.skerry.ui.session.paneSyncTargets
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -66,6 +67,129 @@ class TerminalScreenStateTest {
         session.emit(byteArrayOf(0x9F.toByte()))
 
         assertEquals("П", state.output)
+        scope.cancel()
+    }
+
+    // --- PTY backpressure ---
+
+    @Test
+    fun `pty backlog is bounded - the producer suspends until the emulator catches up`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val total = FEED_BACKLOG_CHUNKS * 4
+        var emitted = 0
+        var maxInFlight = 0
+        // Rebound after construction: the flow body runs at collection time, when `state` exists.
+        var applied: () -> Long = { 0L }
+        val session = object : TerminalSession {
+            override val state: StateFlow<TerminalState> = MutableStateFlow(TerminalState.Open)
+            override val output: Flow<ByteArray> = flow {
+                repeat(total) {
+                    emit(byteArrayOf('x'.code.toByte()))
+                    emitted++
+                    maxInFlight = maxOf(maxInFlight, emitted - applied().toInt())
+                }
+            }
+            override suspend fun send(data: ByteArray) = Unit
+            override suspend fun resize(size: PtySize) = Unit
+            override suspend fun close() = Unit
+        }
+        val state = TerminalScreenState(session, scope)
+        applied = { state.outputVersion }
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(total, emitted)
+        // The drain is asserted on what the emulator parsed, not on the producer's own counter:
+        // a Feed dropped after its permit was taken would leave emitted == total regardless.
+        assertEquals(total.toLong(), state.outputVersion)
+        assertTrue(
+            maxInFlight <= FEED_BACKLOG_CHUNKS + 1,
+            "unapplied backlog reached $maxInFlight chunks; cap is $FEED_BACKLOG_CHUNKS",
+        )
+        scope.cancel()
+    }
+
+    @Test
+    fun `control command lands behind a saturated feed backlog`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val total = FEED_BACKLOG_CHUNKS * 4
+        val gate = CompletableDeferred<Unit>()
+        val session = FloodingTerminalSession(total, resizeGate = gate)
+        val state = TerminalScreenState(session, scope)
+
+        // Park the owner inside the first resize's PTY call; the collector then floods the queue
+        // to the permit cap and suspends on acquire. Only now is the pipeline genuinely saturated.
+        state.resize(PtySize(cols = 90, rows = 30))
+        testScheduler.runCurrent()
+        assertEquals(FEED_BACKLOG_CHUNKS, session.emitted)
+
+        // Queued behind a full backlog of unparsed Feeds: must still be applied, exactly once.
+        state.resize(PtySize(cols = 100, rows = 40))
+        gate.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf(90 to 30, 100 to 40), session.resizes.map { it.cols to it.rows })
+        assertEquals(total.toLong(), state.outputVersion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `cancellation with a saturated backlog does not hang teardown`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val gate = CompletableDeferred<Unit>()
+        val session = FloodingTerminalSession(chunks = FEED_BACKLOG_CHUNKS * 4, resizeGate = gate)
+        val state = TerminalScreenState(session, scope)
+
+        // Same parked-owner construction as above: the collector is provably suspended on acquire
+        // with a full backlog (emitted == cap) when the scope dies - tab closed mid-`cat`.
+        state.resize(PtySize(cols = 90, rows = 30))
+        testScheduler.runCurrent()
+        assertEquals(FEED_BACKLOG_CHUNKS, session.emitted)
+
+        scope.cancel()
+        testScheduler.advanceUntilIdle()
+
+        // Terminates (a wedged collector would hang runTest) and the producer never ran past the
+        // cap: cancellation reached the acquire suspension point, not just the flow machinery.
+        assertEquals(FEED_BACKLOG_CHUNKS, session.emitted)
+        assertEquals(0L, state.outputVersion)
+    }
+
+    @Test
+    fun `parser fault closes the session and unwedges the collector`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val total = FEED_BACKLOG_CHUNKS * 2
+        val session = FloodingTerminalSession(total)
+        val state = TerminalScreenState(session, scope)
+        var applies = 0
+        // The faulting command's own permit is intentionally lost (the throw precedes the Feed
+        // branch's try/finally) - inert, the whole semaphore dies with the session right after.
+        state.applyInterceptor = { if (++applies == 3) error("injected parser fault") }
+        testScheduler.advanceUntilIdle()
+
+        // The owner died on the third command: two chunks parsed, the session was closed (the
+        // auto-reconnect trigger), and the collector exited via the closed queue instead of
+        // wedging on acquire - the producer stopped at the cap, not at `total`.
+        assertEquals(2L, state.outputVersion)
+        assertTrue(session.closed)
+        assertTrue(session.emitted < total)
+        scope.cancel()
+    }
+
+    @Test
+    fun `emulator resize fault propagates to the recovery handler`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FloodingTerminalSession(chunks = 4)
+        val state = TerminalScreenState(session, scope)
+        state.emulatorResizeInterceptor = { error("injected emulator resize fault") }
+
+        state.resize(PtySize(cols = 90, rows = 30))
+        testScheduler.advanceUntilIdle()
+
+        // The PTY resize succeeded (its failure is a locally absorbed hiccup), but the emulator
+        // half is a parser-class fault: it must reach the owner-level handler and close the
+        // session, not leave a silently stale grid.
+        assertEquals(listOf(90 to 30), session.resizes.map { it.cols to it.rows })
+        assertTrue(session.closed)
         scope.cancel()
     }
 
@@ -2868,6 +2992,44 @@ class TerminalScreenStateTest {
         assertEquals(redrawn, state.output, "the screen really is unchanged")
         assertEquals(start + 4, state.outputVersion)
         scope.cancel()
+    }
+}
+
+/**
+ * Emits [chunks] one-byte chunks as fast as the collector allows; records resizes. A [resizeGate]
+ * parks the emulator owner inside a Resize apply until completed — the only way, under the
+ * single-threaded test dispatcher, to hold a genuinely saturated feed backlog while the test acts.
+ */
+private class FloodingTerminalSession(
+    private val chunks: Int,
+    private val resizeGate: CompletableDeferred<Unit>? = null,
+) : TerminalSession {
+    private val _state = MutableStateFlow<TerminalState>(TerminalState.Open)
+    override val state: StateFlow<TerminalState> = _state
+
+    var emitted = 0
+        private set
+    val resizes = mutableListOf<PtySize>()
+
+    override val output: Flow<ByteArray> = flow {
+        repeat(chunks) {
+            emit(byteArrayOf('x'.code.toByte()))
+            emitted++
+        }
+    }
+
+    override suspend fun send(data: ByteArray) = Unit
+
+    override suspend fun resize(size: PtySize) {
+        resizeGate?.await()
+        resizes += size
+    }
+
+    var closed = false
+        private set
+
+    override suspend fun close() {
+        closed = true
     }
 }
 

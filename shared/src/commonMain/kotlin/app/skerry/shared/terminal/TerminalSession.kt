@@ -108,12 +108,18 @@ class ShellTerminalSession(
     override suspend fun close() {
         // Set state explicitly: collection may not have started yet (no subscriber), so the
         // collector's finally block would never run even though the session is already closed.
-        channel.close()
-        // Our own close is not a clean shell exit: cleanExit=false (the caller initiated it).
-        // Don't overwrite a [Closed] already set by collection: if the server sent a clean EOF
-        // first (cleanExit=true), that value must reach observers. Only transition from Open.
-        _state.update { current ->
-            if (current == TerminalState.Open) TerminalState.Closed(cleanExit = false) else current
+        try {
+            channel.close()
+        } finally {
+            // In finally: a close that throws (socket already broken by the fault being cleaned
+            // up) must still flip the state - observers key auto-reconnect off Closed, and a
+            // session stuck Open is a frozen pane. Our own close is not a clean shell exit:
+            // cleanExit=false (the caller initiated it). Don't overwrite a [Closed] already set
+            // by collection: if the server sent a clean EOF first (cleanExit=true), that value
+            // must reach observers. Only transition from Open.
+            _state.update { current ->
+                if (current == TerminalState.Open) TerminalState.Closed(cleanExit = false) else current
+            }
         }
     }
 }

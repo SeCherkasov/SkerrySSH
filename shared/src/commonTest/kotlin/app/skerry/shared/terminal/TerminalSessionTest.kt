@@ -145,6 +145,20 @@ class TerminalSessionTest {
     }
 
     @Test
+    fun `close moves to closed even when the channel close throws`() = runTest {
+        val dispatcher = UnconfinedTestDispatcher(testScheduler)
+        val scope = CoroutineScope(dispatcher)
+        val session = ShellTerminalSession(CloseFailingShellChannel(), scope)
+
+        // The close failure surfaces to the caller, but the state must flip regardless: observers
+        // (auto-reconnect) key off Closed, and a session stuck Open would freeze the pane.
+        assertFailsWith<SshConnectionException> { session.close() }
+
+        assertEquals(TerminalState.Closed(cleanExit = false), session.state.value)
+        scope.cancel()
+    }
+
+    @Test
     fun `transport error closes session without crashing the scope and without cleanExit`() = runTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
@@ -227,4 +241,15 @@ private class ThrowingShellChannel : ShellChannel {
     override suspend fun write(data: ByteArray) {}
     override suspend fun resize(size: PtySize) {}
     override suspend fun close() {}
+}
+
+/** Channel whose close itself fails — a socket already broken by the same fault being cleaned up. */
+private class CloseFailingShellChannel : ShellChannel {
+    override val isOpen: Boolean get() = true
+    override val output: Flow<ByteArray> = flow { }
+    override suspend fun write(data: ByteArray) {}
+    override suspend fun resize(size: PtySize) {}
+    override suspend fun close() {
+        throw SshConnectionException("close failed")
+    }
 }

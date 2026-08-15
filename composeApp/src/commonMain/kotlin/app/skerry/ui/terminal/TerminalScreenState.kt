@@ -38,6 +38,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.ClosedSendChannelException
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -336,7 +338,30 @@ class TerminalScreenState(
     // The emulator is single-threaded: feed and resize must not be called from different coroutines.
     // All interactions go through this command queue, drained by the single collector below, so
     // PTY output and resize stay serialized relative to each other.
+    //
+    // The queue itself stays UNLIMITED: control commands (resize, recording, settings) are sent
+    // with fire-and-forget trySend from UI paths and must never be dropped on a full buffer. What
+    // is bounded is the Feed traffic specifically — the session collector takes a permit per chunk
+    // and the emulator returns it after parsing, so a backlog of unparsed output suspends the
+    // collector (and transitively the socket read) without ever touching control commands.
     private val commands = Channel<TerminalCommand>(Channel.UNLIMITED)
+
+    /** Backpressure for Feed commands only — see [FEED_BACKLOG_CHUNKS] and the comment above. */
+    private val feedPermits = Semaphore(FEED_BACKLOG_CHUNKS)
+
+    /**
+     * Test seam: invoked before each command is applied. The emulator has no reachable throw site
+     * through its public surface, so without this the owner loop's fault-recovery path (trace,
+     * queue close, permit return, session close) could regress with the whole suite green.
+     */
+    internal var applyInterceptor: (() -> Unit)? = null
+
+    /**
+     * Second test seam, scoped to the emulator half of a Resize: the loop-level seam above fires
+     * before the PTY call, so it cannot produce the ordering this one covers — PTY resize already
+     * succeeded, then the deliberately unguarded [TerminalEmulator.resize] call faults.
+     */
+    internal var emulatorResizeInterceptor: (() -> Unit)? = null
 
     // Outbound byte queue to the PTY (input, mouse reports, DSR/DA responses). The single consumer
     // in init serializes writes, preserving order across sends from different coroutines. UNLIMITED
@@ -380,8 +405,18 @@ class TerminalScreenState(
 
     /** Apply one command to the emulator (does not publish a snapshot; the caller batches that). */
     private suspend fun applyCommand(cmd: TerminalCommand) {
+        applyInterceptor?.invoke()
         when (cmd) {
-            is TerminalCommand.Feed -> feed(cmd.chunk)
+            // The permit was acquired by the session collector when the chunk was queued; releasing
+            // it only after the parse is what makes the cap measure *unapplied* work. In finally:
+            // a parser exception kills this loop, and a permit that never returns would wedge the
+            // still-live collector (SupervisorJob scope - siblings do not die together) on acquire,
+            // stalling the socket read for every subscriber of the session flow.
+            is TerminalCommand.Feed -> try {
+                feed(cmd.chunk)
+            } finally {
+                feedPermits.release()
+            }
             is TerminalCommand.StartRecording -> startRecorder(cmd)
             is TerminalCommand.StopRecording -> {
                 cmd.cast.complete(recorder?.finish())
@@ -396,9 +431,9 @@ class TerminalScreenState(
                 // wider than the application knows and the tail of rows would stay undrawn. A PTY
                 // resize failure must not kill this coroutine, or feed stops being processed and
                 // the terminal freezes.
-                try {
+                val ptyResized = try {
                     session.resize(cmd.size)
-                    emulator.resize(cmd.size.cols, cmd.size.rows)
+                    true
                 } catch (e: CancellationException) {
                     throw e // do not swallow scope cancellation
                 } catch (_: Exception) {
@@ -408,6 +443,14 @@ class TerminalScreenState(
                     // that retry. Written off the UI thread; the worst a race costs is one
                     // redundant resize command, and the dedup is best-effort anyway.
                     lastRequestedSize = null
+                    false
+                }
+                // Outside the catch: an emulator fault is a parser-class bug, not a PTY hiccup —
+                // it propagates to the owner-level handler (trace + close) like a feed fault,
+                // instead of leaving a silently stale grid.
+                if (ptyResized) {
+                    emulatorResizeInterceptor?.invoke()
+                    emulator.resize(cmd.size.cols, cmd.size.rows)
                 }
             }
         }
@@ -1178,7 +1221,17 @@ class TerminalScreenState(
         // in `for (cmd in commands)`.
         scope.launch {
             try {
-                session.output.collect { chunk -> commands.send(TerminalCommand.Feed(chunk)) }
+                session.output.collect { chunk ->
+                    // If the owner closes the queue between acquire and send, this chunk's permit
+                    // is lost with the throwing send - inert: the instance is already being torn
+                    // down and a reconnect builds a fresh one.
+                    feedPermits.acquire()
+                    commands.send(TerminalCommand.Feed(chunk))
+                }
+            } catch (_: ClosedSendChannelException) {
+                // The emulator owner died (parser fault) and closed the queue on its way out: stop
+                // feeding it. Deliberately NOT rethrown: the session flow must stay live for its
+                // other subscribers (share pump), and EOF still moves the session to Closed.
             } finally {
                 commands.close()
             }
@@ -1199,12 +1252,48 @@ class TerminalScreenState(
                     }
                     publishSnapshot()
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+                // A parser fault must not be invisible: without this, the pane silently stops
+                // painting while the session still reports Open. There is no logging framework in
+                // this codebase, so the trace goes to stderr; closing the session flips the state
+                // to Closed, which the connection layer answers with auto-reconnect - a live
+                // terminal again instead of a frozen one. Not rethrown: an unhandled sibling
+                // failure under the SupervisorJob scope would reach the platform's fatal handler.
+                // Printing the trace is safe against escape/secret injection as long as emulator
+                // exceptions never interpolate input into their messages - today they don't
+                // (numeric indices only); keep it that way.
+                e.printStackTrace()
+                try {
+                    session.close()
+                } catch (ce: CancellationException) {
+                    throw ce // scope died while closing - not a close failure
+                } catch (closeFailure: Exception) {
+                    closeFailure.printStackTrace()
+                }
             } finally {
+                // The scope is a SupervisorJob: this coroutine dying (parser exception) does NOT
+                // take the session collector with it. Close the queue so the collector's next send
+                // fails fast instead of feeding a channel nobody drains, and return the permits of
+                // the chunks being discarded so it cannot wedge on acquire meanwhile.
+                commands.close()
                 // Cancellation can leave a stop-recording queued with nobody to answer it; hand the
                 // take over here rather than leave the exporting caller awaiting forever.
                 while (true) {
                     val left = commands.tryReceive().getOrNull() ?: break
-                    if (left is TerminalCommand.StopRecording) left.cast.complete(recorder?.finish())
+                    // Exhaustive on purpose (no else): a future variant carrying a completion or a
+                    // resource token must force a decision here, or its awaiter hangs at teardown.
+                    when (left) {
+                        is TerminalCommand.StopRecording -> left.cast.complete(recorder?.finish())
+                        is TerminalCommand.Feed -> feedPermits.release()
+                        is TerminalCommand.StartRecording,
+                        is TerminalCommand.SetCursorDefault,
+                        is TerminalCommand.SetMaxScrollback,
+                        is TerminalCommand.SetClipboardWriteEnabled,
+                        is TerminalCommand.ExpectStep,
+                        is TerminalCommand.Resize -> Unit
+                    }
                 }
             }
         }
@@ -1228,6 +1317,18 @@ private val STARTED_AT = TimeSource.Monotonic.markNow()
 
 /** How many soft-wrapped rows [TerminalScreenState.logicalLineRows] joins in each direction. */
 private const val MAX_JOINED_WRAP_ROWS = 64
+
+/**
+ * How many PTY chunks may sit unapplied between the session collector and the emulator before the
+ * collector suspends. The suspension is the backpressure path: collector -> session's SharedFlow
+ * (SUSPEND on full) -> channel flow emit -> the blocking socket read pauses -> the TCP window
+ * closes and the server stops sending. Without a bound, `cat` of a large file piles chunks up
+ * faster than the emulator parses them and the screen freezes, then jumps. ~8 KiB per chunk, so
+ * the cap bounds this queue at ~512 KiB; the total client-side cushion before the socket read
+ * actually stalls also includes the session flow's own 256-slot buffer upstream
+ * (TerminalSession), ~2.5 MiB combined per session.
+ */
+internal const val FEED_BACKLOG_CHUNKS = 64
 
 /** Command to the sole emulator owner; the queue preserves feed/resize ordering. */
 private sealed interface TerminalCommand {
