@@ -1446,7 +1446,18 @@ class TerminalEmulator(
      * — without the inverse flag the row tail would draw with the normal background. Glyph attributes
      * (bold/underline/strike) aren't carried on a blank cell: xterm doesn't apply them on erase.
      */
-    private fun blankCell() = TermCell(' ', TermStyle(fg = style.fg, bg = style.bg, inverse = style.inverse))
+    // Erases and scrolls fill whole regions with blanks, and a TermCell+TermStyle pair per cell
+    // made every clear O(cols) garbage. TermCell is immutable, so all blanks of the current style
+    // can be one instance; the cache holds the last one and is replaced when the style moved on.
+    private var cachedBlank = TermCell(' ', TermStyle())
+
+    private fun blankCell(): TermCell {
+        val cached = cachedBlank
+        val cs = cached.style
+        if (cs.fg == style.fg && cs.bg == style.bg && cs.inverse == style.inverse) return cached
+        return TermCell(' ', TermStyle(fg = style.fg, bg = style.bg, inverse = style.inverse))
+            .also { cachedBlank = it }
+    }
 
     private fun blankRow() = TermRow(MutableList(cols) { blankCell() })
 

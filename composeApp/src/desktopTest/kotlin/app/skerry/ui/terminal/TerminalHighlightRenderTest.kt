@@ -492,6 +492,138 @@ class TerminalHighlightRenderTest {
     }
 
     @Test
+    fun glyphRunsStayCachedAcrossSelectionRepaints() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val session = FakeSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        try {
+            ImageComposeScene(width = 420, height = 240, density = Density(1f)).use { scene ->
+                scene.setContent {
+                    SkerryTheme {
+                        CompositionLocalProvider(
+                            LocalTerminalTheme provides theme,
+                            LocalTerminalHighlight provides TerminalHighlight(commandLine = false, output = false),
+                            LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
+                        ) {
+                            TerminalScreen(state, Modifier.fillMaxSize())
+                        }
+                    }
+                }
+                var timeNanos = 0L
+                fun frame(): PixelMap {
+                    Snapshot.sendApplyNotifications()
+                    timeNanos += 16_666_667L
+                    return scene.render(timeNanos).toComposeImageBitmap().toPixelMap()
+                }
+                repeat(3) { frame() }
+                session.emit("hello world")
+                repeat(5) { frame() }
+                val segmentations = glyphRunSegmentations
+                assertTrue(segmentations > 0, "the draw pass must still segment rows into runs")
+
+                // A selection drag repaints the canvas per move; rows and highlights are unchanged,
+                // so every repaint must reuse the cached runs instead of re-segmenting the window.
+                scene.sendPointerEvent(PointerEventType.Press, Offset(20f, 20f))
+                scene.sendPointerEvent(PointerEventType.Move, Offset(60f, 24f))
+                val afterFirstMove = frame()
+                assertTrue(
+                    afterFirstMove.regionHasColor(selectionWash, 16..20, cell0InteriorY),
+                    "the drag must visibly paint the selection wash",
+                )
+                repeat(5) { step ->
+                    scene.sendPointerEvent(PointerEventType.Move, Offset(80f + step * 20f, 24f))
+                    frame()
+                }
+                scene.sendPointerEvent(PointerEventType.Release, Offset(180f, 24f))
+                frame()
+                assertEquals(segmentations, glyphRunSegmentations, "selection repaints must not re-segment rows")
+
+                // New content really does re-segment.
+                session.emit("!")
+                repeat(5) { frame() }
+                assertTrue(glyphRunSegmentations > segmentations, "new content must re-segment its rows")
+            }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun duplicateHighlightedRowsStayCachedAcrossRepaints() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val session = FakeSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        try {
+            ImageComposeScene(width = 420, height = 240, density = Density(1f)).use { scene ->
+                scene.setContent {
+                    SkerryTheme {
+                        CompositionLocalProvider(
+                            LocalTerminalTheme provides theme,
+                            LocalTerminalHighlight provides TerminalHighlight(commandLine = false, output = true),
+                            LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
+                        ) {
+                            TerminalScreen(state, Modifier.fillMaxSize())
+                        }
+                    }
+                }
+                var timeNanos = 0L
+                fun frame(): PixelMap {
+                    Snapshot.sendApplyNotifications()
+                    timeNanos += 16_666_667L
+                    return scene.render(timeNanos).toComposeImageBitmap().toPixelMap()
+                }
+                repeat(3) { frame() }
+                // Two content-equal rows carry two DISTINCT RowHighlight instances - a
+                // content-keyed cache aliases them into one entry and the identity check misses
+                // alternately, re-segmenting both rows on every repaint. Retry-loop logs are
+                // exactly this shape. An idle frame does not re-execute the draw lambda, so the
+                // repaints are forced with a selection drag (wash-guarded against a no-op).
+                session.emit("ERROR connection lost\r\nERROR connection lost\r\n")
+                repeat(5) { frame() }
+                val segmentations = glyphRunSegmentations
+                scene.sendPointerEvent(PointerEventType.Press, Offset(20f, 60f))
+                scene.sendPointerEvent(PointerEventType.Move, Offset(60f, 64f))
+                val afterFirstMove = frame()
+                // Probe columns 3..5 of the dragged row: the cursor block sits on column 0 and
+                // would read as cursor color, not wash.
+                assertTrue(
+                    afterFirstMove.regionHasColor(selectionWash, 40..56, 54..64),
+                    "the drag must visibly paint the selection wash",
+                )
+                repeat(4) { step ->
+                    scene.sendPointerEvent(PointerEventType.Move, Offset(80f + step * 20f, 64f))
+                    frame()
+                }
+                scene.sendPointerEvent(PointerEventType.Release, Offset(160f, 64f))
+                frame()
+                assertEquals(
+                    segmentations, glyphRunSegmentations,
+                    "repaints of duplicate highlighted rows must not re-segment",
+                )
+            }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun aHighlightChangeResegmentsItsRows() {
+        withScreen(TerminalHighlight(commandLine = true, output = false)) { session, frame ->
+            session.emit("$ ls -la")
+            repeat(5) { frame() }
+            val segmentations = glyphRunSegmentations
+            // A cursor move through the live line rebuilds that row's RowHighlight instance; the
+            // run cache must treat it as a miss - runs bake the highlight kinds in.
+            session.emit("\u001b[D")
+            repeat(5) { frame() }
+            assertTrue(
+                glyphRunSegmentations > segmentations,
+                "a rebuilt highlight must re-segment its row",
+            )
+        }
+    }
+
+    @Test
     fun rewritingTheLineUnderAStationaryCursorRecomputesTheOverlay() {
         withScreen(TerminalHighlight(commandLine = true, output = true)) { session, frame ->
             // Both lines are 8 cells, so after the rewrite the cursor lands on the same (row, col)

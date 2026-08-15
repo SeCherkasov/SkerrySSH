@@ -1,11 +1,34 @@
 package app.skerry.shared.terminal
 
 import kotlin.test.Test
+import kotlin.test.assertSame
+import kotlin.test.assertNotSame
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TerminalEmulatorTest {
+
+    @Test
+    fun `blank cells of an unchanged style share one instance`() {
+        // Erases and scrolls fill whole regions with blanks; allocating a TermCell+TermStyle per
+        // cell made every clear O(cols) garbage. TermCell is immutable, so sharing is safe.
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("x\u001b[K".encodeToByteArray())
+        val row = emu.lines[0]
+        assertSame(row[3], row[4])
+    }
+
+    @Test
+    fun `a style change produces a different blank`() {
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("\u001b[K".encodeToByteArray())
+        val plain = emu.lines[0][5]
+        emu.feed("\u001b[44m\u001b[K".encodeToByteArray())
+        val colored = emu.lines[0][5]
+        assertNotSame(plain, colored)
+        assertEquals(TermColor.Indexed(4), colored.style.bg)
+    }
 
     // ESC/BEL by number — no invisible control bytes in the source.
     private val esc = 27.toChar().toString()

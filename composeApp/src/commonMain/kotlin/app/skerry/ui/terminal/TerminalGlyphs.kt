@@ -202,6 +202,11 @@ internal data class GlyphRun(
  */
 private fun TermCell.isPlainAscii(): Boolean = text.length == 1 && text[0].code in 0x20..0x7e
 
+// Test-only counter of actual row segmentations (single-threaded: draw phase or the sequential
+// test JVM - revisit before enabling parallel test execution). Pins that repaints reuse cached
+// runs instead of re-segmenting every visible row per frame.
+internal var glyphRunSegmentations = 0
+
 /**
  * Segments a grid row into glyph runs. Consecutive same-style ASCII cells are merged into one run (the
  * fast monospace drawText), while each non-ASCII glyph (mc box-drawing, CJK, symbols) is split into its
@@ -214,6 +219,7 @@ private fun TermCell.isPlainAscii(): Boolean = text.length == 1 && text[0].code 
  * so a token boundary inside otherwise identical cells becomes a boundary between runs.
  */
 internal fun glyphRuns(row: List<TermCell>, highlight: RowHighlight? = null): List<GlyphRun> {
+    glyphRunSegmentations++
     val runs = ArrayList<GlyphRun>()
     fun kindAt(col: Int) = highlight?.kindAt(col) ?: HighlightKind.None
     var g = 0

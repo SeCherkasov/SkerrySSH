@@ -125,6 +125,9 @@ private const val CURSOR_BLINK_MS = 530L
  */
 private fun TermCell.blocksLinkUnderline(): Boolean = style.underline || style.hidden
 
+/** Rows the glyph-run cache may hold - several draw windows; see the cache's comment. */
+private const val GLYPH_RUN_CACHE_ROWS = 512
+
 // Test-only counter of TerminalScreen body executions (single-threaded: composition or the
 // sequential test JVM; revisit before enabling parallel test execution). Pins that the cursor
 // blink repaints its overlay without recomposing the screen.
@@ -725,6 +728,21 @@ fun TerminalScreen(
               linkScanPasses++
               linkSpansByRow(screen, searchWindow)
           }
+          // Glyph runs per visible row: segmentation is O(row) with a per-run allocation, and the
+          // draw lambda re-executes on every repaint (selection drag, scroll) while rows and
+          // highlights are unchanged. Keyed by row INDEX: the remember drops the map on every
+          // publish (screenVersion, like the sibling caches above), so within its lifetime the
+          // snapshot is fixed and an index can never alias a changed row - while a content-keyed
+          // map would pay an O(cols) structural hash per lookup and alias content-equal duplicate
+          // rows (retry-loop logs) into one entry that their distinct highlight instances then
+          // evict from each other every frame. The highlight instance rides in the value: a
+          // rebuilt highlight (cursor move through the live line) must re-segment its row. Filled
+          // lazily from the draw phase - single (UI) thread, like glyphStyleCache - and capped so
+          // paging through deep history in an idle session cannot retain runs for the whole
+          // scrollback (the wholesale clear costs one window's re-segmentation).
+          val glyphRunCache = remember(state, screenVersion) {
+              HashMap<Int, Pair<RowHighlight?, List<GlyphRun>>>()
+          }
           // clipToBounds after padding: the scrollback row at the scroll boundary is drawn at top=-chh and
           // would otherwise spill into the top padding zone (desktop has no default clip, unlike Android)
           // — after `clear` the command row would peek there. The clip cuts it at the content edge.
@@ -776,7 +794,15 @@ fun TerminalScreen(
                   // (mc box-drawing, CJK, symbols) is drawn at its own column separately: a fallback font
                   // gives a non-cellWidth advance, and a long run would accumulate drift (ragged box
                   // horizontals, colored rows sliding). A wide cell — span=2.
-                  for (run in glyphRuns(row, highlightByRow[r])) {
+                  val rowHighlight = highlightByRow[r]
+                  val cachedRuns = glyphRunCache[r]
+                  val runs = if (cachedRuns != null && cachedRuns.first === rowHighlight) {
+                      cachedRuns.second
+                  } else {
+                      if (glyphRunCache.size >= GLYPH_RUN_CACHE_ROWS) glyphRunCache.clear()
+                      glyphRuns(row, rowHighlight).also { glyphRunCache[r] = rowHighlight to it }
+                  }
+                  for (run in runs) {
                       val x = run.col * cw
                       if (run.text.isNotBlank()) {
                           val byKind = glyphStyleCache.getOrPut(run.style) { arrayOfNulls(HIGHLIGHT_KIND_COUNT) }
