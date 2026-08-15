@@ -42,7 +42,7 @@ class ConfirmationTailsTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
         val history = mutableListOf<List<String>>()
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it }, nowMillis = eagerPublishClock())
 
         session.emit("\u001b[?1049h".encodeToByteArray()) // vim: alternate screen on
         state.typeInput("api-token=hunter2\r") // Enter in insert mode
@@ -61,7 +61,7 @@ class ConfirmationTailsTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
         val history = mutableListOf<List<String>>()
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it }, nowMillis = eagerPublishClock())
 
         session.emit("\u001b[?1049h".encodeToByteArray())
         state.paste("secret-config-line\n")
@@ -79,7 +79,7 @@ class ConfirmationTailsTest {
     fun `a line sent into the alternate screen does not pollute the tracked line`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         session.emit("\u001b[?1049h".encodeToByteArray())
@@ -98,7 +98,7 @@ class ConfirmationTailsTest {
     fun `a half-typed line does not survive an alternate-screen round trip`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf ".forEach { state.typeInput(it.toString()) }
@@ -123,7 +123,7 @@ class ConfirmationTailsTest {
     fun `a screen quote cut at the cursor is not reported as complete`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // The host draws the recalled line, then the cursor steps back over "-db".
@@ -143,7 +143,7 @@ class ConfirmationTailsTest {
     fun `a screen quote with the cursor at the end keeps its count`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         session.emit("root@prod:~# rm -rf /srv/prod-db".encodeToByteArray())
@@ -162,7 +162,7 @@ class ConfirmationTailsTest {
     fun `a row with wide glyphs past the cursor still voids the count`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Three wide glyphs: 28 string characters in 31 columns. Two columns back leaves the last
@@ -184,7 +184,7 @@ class ConfirmationTailsTest {
     fun `a recalled line that wrapped is classified whole`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         val command = "rm -rf /srv/" + "x".repeat(70)
@@ -202,7 +202,7 @@ class ConfirmationTailsTest {
     fun `a soft-wrapped row is not reported with a complete count`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // 95 characters on an 80-column grid: the row wraps, and the host parks the cursor inside
@@ -224,7 +224,7 @@ class ConfirmationTailsTest {
     fun `a risky tail right of the cursor still trips the guard`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Cursor parked right after the prompt: everything the shell will run is right of it.
@@ -245,7 +245,7 @@ class ConfirmationTailsTest {
     fun `a recalled line the classifier cannot fully read is held`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // The risky span sits past the classifier's 512-character window of the joined line AND
@@ -269,7 +269,7 @@ class ConfirmationTailsTest {
     fun `a line padded past the classifier's length cap is held`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.paste("x".repeat(600) + " && rm -rf /srv\n")
@@ -283,7 +283,7 @@ class ConfirmationTailsTest {
     fun `a block padded past the classifier's line cap is held`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         val block = (1..200).joinToString("\n") { "echo $it" } + "\nrm -rf /srv\n"
@@ -298,7 +298,7 @@ class ConfirmationTailsTest {
     fun `a harmless block inside the caps is not held`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.paste("echo one\necho two\n")
@@ -318,7 +318,7 @@ class ConfirmationTailsTest {
     fun `the aside for a long input line states the uncut length`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // ~9000 chars of harmless filler push the risky line past MAX_DRAWN_COMMAND_CHARS, so it is
@@ -344,7 +344,7 @@ class ConfirmationTailsTest {
     fun `a ready-made line sent at a secret prompt is not held or quoted`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         session.echoOff = true // the transport reports a password prompt
 
@@ -369,7 +369,7 @@ class ConfirmationTailsTest {
     fun `a resolved vault secret is masked in the quote and replayed for real`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInputGuarded("echo hunter2 | sudo -S systemctl stop nginx\n", secrets = listOf("hunter2"))
@@ -399,7 +399,7 @@ class ConfirmationTailsTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
         val history = mutableListOf<List<String>>()
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it }, nowMillis = eagerPublishClock())
 
         "ls".forEach { state.typeInput(it.toString()) }
         session.emit("$ ls".encodeToByteArray()) // the echo of what was typed

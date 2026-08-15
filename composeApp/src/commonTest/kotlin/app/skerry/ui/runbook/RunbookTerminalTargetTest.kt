@@ -6,6 +6,7 @@ import app.skerry.shared.terminal.STEP_MARK_OSC
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.terminal.eagerPublishClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -37,7 +38,7 @@ class RunbookTerminalTargetTest {
     fun `a step declared through the target is reported back through it`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeSession()
-        val terminal = TerminalScreenState(session, scope)
+        val terminal = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val target = runbookTarget("tab-1", terminal, controller = null)
         val token = RunbookMarker.token("run", 0)
 

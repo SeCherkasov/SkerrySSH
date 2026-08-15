@@ -68,7 +68,7 @@ class SharedSessionLiveRenderTest {
     @Test
     fun `a watched session renders as a live terminal with the sharing hints over it`() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val terminal = TerminalScreenState(WatchedSession(), scope)
+        val terminal = TerminalScreenState(WatchedSession(), scope, nowMillis = eagerPublishClock())
         val scene = ImageComposeScene(width = 900, height = 200, density = Density(1f)) {
             SkerryTheme {
                 CompositionLocalProvider(

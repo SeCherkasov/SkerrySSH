@@ -68,7 +68,7 @@ class TerminalHighlightRenderTest {
         // Unconfined: feed/resize run synchronously at the emit point, making frames deterministic.
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         try {
             ImageComposeScene(width = 420, height = 240, density = Density(1f)).use { scene ->
                 scene.setContent {
@@ -150,7 +150,7 @@ class TerminalHighlightRenderTest {
         // through typeInput so the executed-command set is populated the way it is in a session.
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         try {
             ImageComposeScene(width = 420, height = 240, density = Density(1f)).use { scene ->
                 scene.setContent {

@@ -36,9 +36,13 @@ import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.ChannelResult
 import kotlinx.coroutines.channels.ClosedSendChannelException
+import kotlinx.coroutines.selects.onTimeout
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -75,8 +79,10 @@ class TerminalScreenState(
     // an untrusted host must not silently overwrite the system clipboard until the user opts in.
     // Snapshotted at connect; also pushed live into an open session via [applyClipboardWriteEnabled].
     clipboardWriteEnabled: Boolean = false,
-    // Monotonic milliseconds, injectable for tests. Only the search refresh throttle reads it, and
-    // it must not step backwards (a wall clock would), or a refresh could be skipped for minutes.
+    // Monotonic milliseconds, injectable for tests. Two readers: the search refresh throttle and
+    // the publish-rate cap in the emulator owner loop. Must not step backwards (a wall clock
+    // would) — a backwards step would skip search refreshes for minutes and stretch the publish
+    // window past PUBLISH_MIN_INTERVAL_MS.
     private val nowMillis: () -> Long = { STARTED_AT.elapsedNow().inWholeMilliseconds },
 ) {
     // OSC 52 requests to write to the system clipboard. extraBufferCapacity keeps tryEmit from the
@@ -403,6 +409,76 @@ class TerminalScreenState(
     )
 
 
+    /**
+     * The emulator owner loop: applies commands strictly in order and publishes snapshots at a
+     * bounded rate. The first command after a quiet period publishes immediately; while commands
+     * keep arriving, the mid-window wait absorbs the stream and a publish happens once per
+     * [PUBLISH_MIN_INTERVAL_MS] — on the window edge if the stream pauses inside it (trailing
+     * publish), so the last batch of a burst is never left undrawn. select (not
+     * withTimeoutOrNull+receive) because select's clauses are atomic: a command cannot be lost to
+     * a timeout racing an in-flight receive.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun runEmulatorOwner() {
+        var lastPublishAt = Long.MIN_VALUE / 2
+        var dirty = false
+        var pending: ChannelResult<TerminalCommand>? = null
+        try {
+            while (true) {
+                val received = pending ?: commands.receiveCatching()
+                pending = null
+                val cmd = received.getOrNull() ?: break
+                applyCommand(cmd)
+                while (true) {
+                    val next = commands.tryReceive().getOrNull() ?: break
+                    applyCommand(next)
+                }
+                dirty = true
+                val now = nowMillis()
+                if (now - lastPublishAt >= PUBLISH_MIN_INTERVAL_MS) {
+                    publishSnapshot()
+                    lastPublishAt = now
+                    dirty = false
+                    continue
+                }
+                // The select below runs once per drained batch during a sub-window burst — its
+                // per-call allocation is bounded by burst cadence, not by the publish window.
+                val next = select<ChannelResult<TerminalCommand>?> {
+                    commands.onReceiveCatching { it }
+                    onTimeout(PUBLISH_MIN_INTERVAL_MS - (now - lastPublishAt)) { null }
+                }
+                if (next == null) {
+                    publishSnapshot()
+                    lastPublishAt = nowMillis()
+                    dirty = false
+                } else {
+                    pending = next
+                }
+            }
+        } finally {
+            // Every exit — channel close, parser fault, cancellation — lands the tail applied
+            // since the last publish: the coalescing window must never widen how much parsed
+            // output a fault can erase from the screen.
+            if (dirty) flushTailBestEffort()
+        }
+    }
+
+    /**
+     * Tail flush for [runEmulatorOwner]'s finally. [publishSnapshot] does not suspend, so no
+     * CancellationException can originate here; catching the rest keeps a flush-only failure
+     * from replacing an in-flight fault, while the trace keeps it visible on the clean-close
+     * path where this throw would otherwise be the only signal. No logging framework exists in
+     * this codebase — stderr is the convention (see the owner-level fault handler).
+     */
+    @Suppress("TooGenericExceptionCaught", "PrintStackTrace")
+    private fun flushTailBestEffort() {
+        try {
+            publishSnapshot()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     /** Apply one command to the emulator (does not publish a snapshot; the caller batches that). */
     private suspend fun applyCommand(cmd: TerminalCommand) {
         applyInterceptor?.invoke()
@@ -492,7 +568,11 @@ class TerminalScreenState(
         if (token == null) stepMark = null
     }
 
-    /** Publish the emulator snapshot into Compose state (after feed/resize). */
+    /**
+     * Publish the emulator snapshot into Compose state (after feed/resize). Must stay
+     * non-suspend: [flushTailBestEffort]'s finally-safety (no swallowed cancellation) depends
+     * on no suspension point ever existing here.
+     */
     private fun publishSnapshot() {
         // The grid and the cursor apply as one atomic group: auto-fit reads them as a tuple under
         // snapshotFlow, and individual writes from this (session) thread could pair a fresh screen
@@ -1236,22 +1316,15 @@ class TerminalScreenState(
                 commands.close()
             }
         }
-        // Sole owner of the emulator: feed and resize run strictly in order. Publishes one snapshot
-        // per batch of immediately-available commands: under heavy output (build, cat) the PTY
-        // delivers many chunks in a row, and each publish re-copies the visible screen rows and
-        // renotifies every observer, so doing it per chunk is expensive (freezes/GC, especially on
-        // Android). When the queue is empty, behavior is unchanged (snapshot right away), so
-        // interactive latency does not grow.
+        // Sole owner of the emulator: feed and resize run strictly in order. Publishing is
+        // coalesced twice: a batch of immediately-available commands becomes one snapshot, and
+        // while the stream keeps producing, publishes are further capped to one per
+        // [PUBLISH_MIN_INTERVAL_MS] window (leading edge immediate, trailing edge guaranteed) —
+        // see the constant's doc. When the queue is empty, behavior is unchanged (snapshot right
+        // away), so interactive latency does not grow.
         scope.launch {
             try {
-                for (cmd in commands) {
-                    applyCommand(cmd)
-                    while (true) {
-                        val next = commands.tryReceive().getOrNull() ?: break
-                        applyCommand(next)
-                    }
-                    publishSnapshot()
-                }
+                runEmulatorOwner()
             } catch (e: CancellationException) {
                 throw e
             } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
@@ -1312,7 +1385,10 @@ class TerminalScreenState(
  */
 enum class MirroredInput { Typed, Pasted }
 
-/** Process start mark: the default monotonic clock behind [TerminalScreenState]'s refresh throttle. */
+/**
+ * Process start mark: the default monotonic clock behind [TerminalScreenState]'s search refresh
+ * throttle and its publish-rate cap.
+ */
 private val STARTED_AT = TimeSource.Monotonic.markNow()
 
 /** How many soft-wrapped rows [TerminalScreenState.logicalLineRows] joins in each direction. */
@@ -1329,6 +1405,18 @@ private const val MAX_JOINED_WRAP_ROWS = 64
  * (TerminalSession), ~2.5 MiB combined per session.
  */
 internal const val FEED_BACKLOG_CHUNKS = 64
+
+/**
+ * Minimum interval between snapshot publishes while the stream keeps producing. A publish costs a
+ * visible-grid copy, a policy compare, ~15 Compose state writes and a Main-dispatcher notification
+ * per registered snapshotFlow — at 200-500 PTY chunks/s that is hundreds of publishes per second
+ * for at most 60 visible frames. The first command after a quiet period always publishes
+ * immediately (interactive echo latency is untouched); the cap only coalesces mid-stream.
+ * 16ms aligns with the common 60Hz frame: Compose paints on the frame clock, so a faster cadence
+ * only produces publishes whose work is thrown away between frames; the trailing-edge guarantee
+ * bounds the added latency to one window either way.
+ */
+internal const val PUBLISH_MIN_INTERVAL_MS = 16L
 
 /** Command to the sole emulator owner; the queue preserves feed/resize ordering. */
 private sealed interface TerminalCommand {

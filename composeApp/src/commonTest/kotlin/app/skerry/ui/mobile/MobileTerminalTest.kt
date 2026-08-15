@@ -8,6 +8,7 @@ import app.skerry.ui.forward.RateParts
 import app.skerry.ui.forward.RateUnit
 import app.skerry.ui.forward.rateParts
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.terminal.eagerPublishClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -30,7 +31,7 @@ class MobileTerminalTest {
             override suspend fun resize(size: PtySize) {}
             override suspend fun close() {}
         }
-        return TerminalScreenState(session, CoroutineScope(Job()))
+        return TerminalScreenState(session, CoroutineScope(Job()), nowMillis = eagerPublishClock())
     }
 
     private fun connected(): ConnectionUiState.Connected = ConnectionUiState.Connected(screen())

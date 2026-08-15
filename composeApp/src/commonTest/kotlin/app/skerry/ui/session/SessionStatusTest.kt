@@ -8,6 +8,7 @@ import app.skerry.ui.remote.FakeRemoteDesktop
 import app.skerry.ui.remote.RemoteDesktopScreenState
 import app.skerry.ui.remote.RemoteDesktopUiState
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.terminal.eagerPublishClock
 import app.skerry.ui.vnc.VncFailure
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,7 +33,7 @@ class SessionStatusTest {
     @Test
     fun `a terminal connection maps every state onto its status`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val terminal = TerminalScreenState(FakeSession(), scope)
+        val terminal = TerminalScreenState(FakeSession(), scope, nowMillis = eagerPublishClock())
 
         assertEquals(SessionStatus.Idle, (null as ConnectionUiState?).asSessionStatus())
         assertEquals(SessionStatus.Idle, ConnectionUiState.Form.asSessionStatus())
@@ -45,7 +46,7 @@ class SessionStatusTest {
     @Test
     fun `a dropped shell is a failure until it exits cleanly or starts retrying`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val terminal = TerminalScreenState(FakeSession(), scope)
+        val terminal = TerminalScreenState(FakeSession(), scope, nowMillis = eagerPublishClock())
         fun dropped(reconnecting: Boolean, cleanExit: Boolean) =
             ConnectionUiState.Disconnected(terminal, reconnecting, attempt = 1, cleanExit = cleanExit)
 

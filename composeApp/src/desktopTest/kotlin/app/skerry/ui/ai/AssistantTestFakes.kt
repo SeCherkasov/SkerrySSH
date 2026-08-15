@@ -28,6 +28,7 @@ import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.design.FakeClipboard
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.terminal.eagerPublishClock
 import app.skerry.ui.theme.SkerryTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -108,7 +109,7 @@ internal fun terminalAi(reply: String) = TerminalAiController(
     scope = CoroutineScope(Dispatchers.Unconfined),
 )
 
-internal fun terminalState() = TerminalScreenState(SilentSession(), CoroutineScope(Dispatchers.Unconfined))
+internal fun terminalState() = TerminalScreenState(SilentSession(), CoroutineScope(Dispatchers.Unconfined), nowMillis = eagerPublishClock())
 
 /** Ctrl everywhere but macOS — what the selection manager listens for. */
 internal val COPY_MODIFIER: Key =

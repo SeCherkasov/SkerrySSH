@@ -86,7 +86,7 @@ class TerminalAutoFitLiveTest {
     fun `wide output converges the font once and a later wider line does not move it`() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val session = ScriptedSession()
-        val terminal = TerminalScreenState(session, scope)
+        val terminal = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         var scene = autoFitScene(terminal)
         try {
             // Let the first layout resize land before printing, as on a live connect: output fed
@@ -153,7 +153,7 @@ class TerminalAutoFitLiveTest {
     fun `a frozen session never takes a reflow-less step`() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val session = ScriptedSession()
-        val terminal = TerminalScreenState(session, scope)
+        val terminal = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val scene = autoFitScene(terminal)
         try {
             waitForFrames(scene) { terminal.cols in 20..50 } // first layout resize has landed
