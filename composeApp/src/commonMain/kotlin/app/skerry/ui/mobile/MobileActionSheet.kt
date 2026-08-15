@@ -114,17 +114,29 @@ internal fun MobileSheetButton(
     icon: String? = null,
     filled: Boolean = true,
     danger: Boolean = false,
+    enabled: Boolean = true,
 ) {
+    // A button that draws and announces as live but does nothing is worse than a dim one: the
+    // reason it cannot fire is written next to it, and the state has to match that reason.
     val fg = when {
+        !enabled -> Skerry.colors.faint
         filled -> Skerry.colors.ink
         danger -> Skerry.colors.sunset
         else -> Skerry.colors.text
     }
+    val fill = if (enabled) Skerry.colors.cyan else Skerry.colors.overlayMed
+    val outline = when {
+        // Disabled first, and dimmer than the live edge — cyan14 is already an alpha token, so
+        // copying an alpha onto it would replace 0.14 rather than reduce it.
+        !enabled -> Skerry.colors.cyan08
+        danger -> Skerry.colors.sunset.copy(alpha = 0.3f)
+        else -> Skerry.colors.cyan14
+    }
     val base = Modifier.clip(RoundedCornerShape(12.dp))
-        .then(if (filled) Modifier.background(Skerry.colors.cyan) else Modifier.border(1.dp, if (danger) Skerry.colors.sunset.copy(alpha = 0.3f) else Skerry.colors.cyan14, RoundedCornerShape(12.dp)))
+        .then(if (filled) Modifier.background(fill) else Modifier.border(1.dp, outline, RoundedCornerShape(12.dp)))
     Row(
         modifier.then(base)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, enabled = enabled, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 13.dp),
         horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,

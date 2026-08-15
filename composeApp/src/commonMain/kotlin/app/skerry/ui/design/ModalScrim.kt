@@ -4,8 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -134,3 +137,16 @@ object ModalPresence {
 @Composable
 fun Modifier.consumeClicks(): Modifier =
     clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
+
+/**
+ * Body of a modal or sheet whose actions sit under it: scrolls, and stays exactly as tall as its
+ * content when that content is short. Without it a long form pushes Save and Run past the panel's
+ * ceiling, where they are clipped and unreachable — the phone's runbook editor shipped that way.
+ *
+ * The actions are the unweighted sibling, so they are measured first and the body takes what is
+ * left; a floor on the body would be clamped away by the same constraint whenever the panel is
+ * tight, so there is none.
+ */
+@Composable
+fun ColumnScope.modalBody(): Modifier =
+    Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())

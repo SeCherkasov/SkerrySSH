@@ -134,6 +134,7 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.vault.SecretIcon
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.modalBody
 import app.skerry.ui.vault.SecretAuditRows
 import app.skerry.ui.vault.hasAuditTrail
 import app.skerry.ui.vault.SecretEncryptionRows
@@ -602,9 +603,7 @@ private fun MobileSecretDetailSheet(
     // close. It fits its content (a short password ⇒ short sheet) but not above 85% of the screen —
     // then content scrolls. A fixed height would inflate an empty sheet for a bodiless secret.
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.85f) {
-        // weight(fill = false): with short content the column hugs it; with long content it fills the
-        // remaining sheet height and scrolls (rather than overflowing the edge).
-        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 16.dp)) {
+        Column(modalBody().padding(horizontal = 20.dp, vertical = 16.dp)) {
                 Row(Modifier.padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
                     SecretIcon(icon, tinted = tinted, color = color, size = 40)
                     // No subtitle here: the Type fact row right below states it, and stating it twice

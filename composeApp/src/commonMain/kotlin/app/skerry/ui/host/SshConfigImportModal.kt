@@ -12,9 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +37,7 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
+import app.skerry.ui.design.modalBody
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_tip_close
@@ -107,7 +106,7 @@ fun SshConfigImportModal(state: DesktopDesignState, result: SshConfigParseResult
                     Txt(stringResource(Res.string.conn_import_select_all), color = Skerry.colors.dim, size = 12.sp, weight = FontWeight.Medium)
                 }
                 HLine()
-                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                Column(modalBody()) {
                     result.hosts.forEach { host ->
                         val isSelected = host.alias in selected
                         Row(

@@ -9,6 +9,7 @@
     <string name="runbook_select_or_create">选择一个运行手册，或新建一个。</string>
     <string name="runbook_empty">暂无运行手册</string>
     <string name="runbook_no_matches">无匹配项</string>
+    <string name="runbook_none_runnable">没有任何运行手册包含步骤</string>
     <string name="runbook_empty_mobile">暂无运行手册。点按 + 记录一套流程。</string>
     <string name="runbook_field_name">名称</string>
     <string name="runbook_field_description">说明</string>
@@ -35,6 +36,7 @@
     <string name="runbook_run_title">运行运行手册</string>
     <string name="runbook_run_needs_session">请先建立会话 — 运行手册在终端中执行。</string>
     <string name="runbook_run_busy">已有一个运行手册在执行。</string>
+    <string name="runbook_run_no_steps">请先保存步骤 — 运行手册执行已保存的步骤。</string>
     <string name="runbook_step_count">步骤：%1$d</string>
 
     <!-- Run panel -->

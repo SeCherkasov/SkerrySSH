@@ -16,9 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -110,6 +108,7 @@ import app.skerry.ui.ai.POLICY_OPTIONS
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.modalBody
 import app.skerry.ui.i18n.label
 import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
@@ -232,7 +231,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                 }
                 IconBtn("close", label = stringResource(Res.string.shell_tip_close), onClick = state::closeModal, modifier = Modifier.align(Alignment.TopEnd))
             }
-            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(start = 26.dp, end = 26.dp, top = 6.dp, bottom = 22.dp)) {
+            Column(modalBody().padding(start = 26.dp, end = 26.dp, top = 6.dp, bottom = 22.dp)) {
                 val namePlaceholder = if (section == HostSection.RemoteDesktops) "e.g. lab-desktop" else "e.g. prod-web-01"
                 Field(stringResource(Res.string.conn_field_name)) { ModalTextField(form.name, { form.name = it }, namePlaceholder) }
                 Spacer14()

@@ -9,6 +9,7 @@
     <string name="runbook_select_or_create">Select a runbook or create a new one.</string>
     <string name="runbook_empty">No runbooks yet</string>
     <string name="runbook_no_matches">No matches</string>
+    <string name="runbook_none_runnable">No runbook has a step to run</string>
     <string name="runbook_empty_mobile">No runbooks yet. Tap + to write a procedure.</string>
     <string name="runbook_field_name">Name</string>
     <string name="runbook_field_description">Description</string>
@@ -35,6 +36,7 @@
     <string name="runbook_run_title">Run runbook</string>
     <string name="runbook_run_needs_session">Connect a session first — a runbook runs in a terminal.</string>
     <string name="runbook_run_busy">Another runbook is already running.</string>
+    <string name="runbook_run_no_steps">Save a step first — a runbook runs its saved steps.</string>
     <string name="runbook_step_count">Steps: %1$d</string>
 
     <!-- Run panel -->

@@ -26,11 +26,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
@@ -43,6 +47,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.modalBody
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.runbook_delete
@@ -53,6 +58,7 @@ import app.skerry.ui.generated.resources.runbook_new
 import app.skerry.ui.generated.resources.runbook_run
 import app.skerry.ui.generated.resources.runbook_run_busy
 import app.skerry.ui.generated.resources.runbook_run_needs_session
+import app.skerry.ui.generated.resources.runbook_run_no_steps
 import app.skerry.ui.generated.resources.runbook_save
 import app.skerry.ui.generated.resources.runbook_section
 import app.skerry.ui.generated.resources.runbook_step_count
@@ -149,6 +155,10 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
                 mono = mono,
                 runHint = when {
                     target == null -> null
+                    // Every reason the runner would refuse the start, so the button is never live
+                    // when the tap would do nothing. A runbook with no steps only arrives by sync:
+                    // the editor's own Save will not produce one.
+                    target.runbook.steps.isEmpty() -> stringResource(Res.string.runbook_run_no_steps)
                     terminal == null -> stringResource(Res.string.runbook_run_needs_session)
                     runner == null || runner.active || runner.pending != null ->
                         stringResource(Res.string.runbook_run_busy)
@@ -165,9 +175,13 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
                         runbookTarget(session.id, terminal, session.controller),
                         recording = terminal.recording,
                     )
+                    // The hint covers every reason the runner refuses, but it is computed a frame
+                    // before the tap: a run started elsewhere in that window still lands here, and
+                    // closing the sheet would look exactly like a run that vanished.
+                    if (!started) return@run
                     adding = false; editing = null
                     // The confirmation dialog and the progress panel both live over the terminal.
-                    if (started) state.push(MobileRoute.Terminal)
+                    state.push(MobileRoute.Terminal)
                 },
             )
         }
@@ -191,7 +205,7 @@ private fun RunbookCard(entry: RunbookEntry, mono: FontFamily, onClick: () -> Un
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym("checklist", size = 17.sp, color = Skerry.colors.cyanBright)
             Txt(
-                runbook.label.ifBlank { stringResource(Res.string.runbook_untitled) },
+                stripUnsafeFormatChars(runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
                 color = Skerry.colors.textBright, size = 14.sp, weight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
@@ -203,7 +217,7 @@ private fun RunbookCard(entry: RunbookEntry, mono: FontFamily, onClick: () -> Un
         )
         if (runbook.description.isNotBlank()) {
             Txt(
-                runbook.description, color = Skerry.colors.dim, size = 12.sp, maxLines = 2,
+                stripUnsafeFormatChars(runbook.description), color = Skerry.colors.dim, size = 12.sp, maxLines = 2,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
             )
         }
@@ -232,7 +246,7 @@ private fun MobileRunbookEditSheet(
             title = stringResource(Res.string.runbook_delete_title),
             message = stringResource(
                 Res.string.runbook_delete_message,
-                entry.runbook.label.ifBlank { stringResource(Res.string.runbook_untitled) },
+                stripUnsafeFormatChars(entry.runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
             ),
             confirmLabel = stringResource(Res.string.runbook_delete),
             onConfirm = {
@@ -253,18 +267,33 @@ private fun MobileRunbookEditSheet(
                 color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold,
                 modifier = Modifier.padding(horizontal = 18.dp),
             )
-            RunbookEditorFields(form, mono, horizontalPadding = 18.dp)
-            Column(Modifier.padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // The fields scroll, the actions stay: a runbook with a description and two steps is
+            // taller than the sheet's ceiling, and a clipped Run button is a procedure the phone
+            // cannot start at all. weight(fill = false) keeps a short form short.
+            Column(modalBody()) {
+                RunbookEditorFields(form, mono, horizontalPadding = 18.dp)
+            }
+            Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (entry != null) {
                     MobileSheetButton(
-                        stringResource(Res.string.runbook_run), onClick = { if (runHint == null) onRun() },
-                        icon = "play_arrow", filled = false, modifier = Modifier.fillMaxWidth(),
+                        stringResource(Res.string.runbook_run), onClick = onRun,
+                        icon = "play_arrow", filled = false, enabled = runHint == null,
+                        // The reason sits in its own line below, which a screen reader would read a
+                        // swipe later and unattached: the button carries it as its state.
+                        modifier = Modifier.fillMaxWidth().semantics { runHint?.let { stateDescription = it } },
                     )
-                    if (runHint != null) Txt(runHint, color = Skerry.colors.faint, size = 11.sp)
+                    // Drawn for the eye only: the button announces the same string as its state, and
+                    // a second node would read it out again a swipe later.
+                    if (runHint != null) {
+                        Txt(runHint, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.clearAndSetSemantics {})
+                    }
                 }
                 MobileSheetButton(
                     stringResource(Res.string.runbook_save),
+                    // Guarded twice on purpose: `enabled` stops the finger, and an accessibility
+                    // click action fires even on a disabled control.
                     onClick = { if (form.canSave) { manager.save(form.toDraft()); onSaved() } },
+                    enabled = form.canSave,
                     modifier = Modifier.fillMaxWidth().testTag(UiTags.FORM_SAVE),
                 )
                 if (entry != null) {
