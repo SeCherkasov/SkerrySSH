@@ -329,6 +329,7 @@ class SessionsController(
     ): String {
         val controller = controllerFactory()
         val tab = openTab(Session(newId(), hostId, title, subtitle, controller))
+        controller.bindSessionId(tab.id)
         reportHostSession(hostId)
         controller.connect(target, auth, onConnected)
         return tab.id
@@ -362,6 +363,7 @@ class SessionsController(
             val pane = blank.panes.first()
             pane.bind(hostId, title, subtitle)
             reportHostSession(hostId)
+            pane.controller.bindSessionId(blank.id)
             pane.controller.connect(target, auth, onConnected)
             return blank.id
         }
@@ -490,6 +492,7 @@ class SessionsController(
         val tab = tab(id) ?: return null
         if (tab.isVnc || tab.isPlayer || tab.layout.isFull) return null
         val pane = Session(newId(), hostId = null, title = "", subtitle = "", controllerFactory())
+        pane.controller.bindSessionId(pane.id)
         tab.setPanes(tab.panes + pane)
         tab.setLayout(tab.layout.add(pane.id, slot ?: tab.layout.defaultSlot()))
         tab.setFocusedPane(pane.id)
@@ -520,6 +523,7 @@ class SessionsController(
         reportHostSession(hostId)
         if (existing.isBlank) {
             existing.bind(hostId, title, subtitle)
+            existing.controller.bindSessionId(existing.id)
             tab.setFocusedPane(existing.id)
             existing.controller.connect(target, auth)
             return
@@ -530,6 +534,7 @@ class SessionsController(
         // half-released here (the guard above is what keeps a framebuffer out today, not this line).
         existing.teardown()
         val replacement = Session(newId(), hostId, title, subtitle, controllerFactory())
+        replacement.controller.bindSessionId(replacement.id)
         tab.setPanes(tab.panes.map { if (it.id == paneId) replacement else it })
         tab.setLayout(tab.layout.replace(paneId, replacement.id))
         tab.setFocusedPane(replacement.id)

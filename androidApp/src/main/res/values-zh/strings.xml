@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chinese (values-zh). See values/strings.xml for the full set — keys must stay in sync across
+     values / values-zh / values-ru. -->
+<resources>
+    <string name="app_name">Skerry</string>
+    <string name="session_keepalive_channel_name">会话保活</string>
+    <string name="session_keepalive_title">SSH 会话保活中</string>
+    <string name="session_keepalive_text">点按返回此终端</string>
+    <plurals name="session_keepalive_count">
+        <item quantity="one">%1$d 个终端保持中</item>
+        <item quantity="other">%1$d 个终端保持中</item>
+    </plurals>
+</resources>

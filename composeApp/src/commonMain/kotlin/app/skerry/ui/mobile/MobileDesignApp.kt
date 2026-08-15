@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.CoroutineScope
 import app.skerry.shared.ai.AiSettingsStore
 import app.skerry.ui.ai.aiProviderFactory
 import app.skerry.ui.AppDependencies
@@ -84,6 +85,11 @@ fun MobileDesignApp(
     state: MobileDesignState = remember { MobileDesignState() },
     features: FeatureFlags = FeatureFlags(),
     sessions: SessionsController? = null,
+    // Process-scoped coroutine scope for sessions (Android: survives Activity recreation, so
+    // backgrounding the app — Activity may be recycled — keeps connections and the keep-alive
+    // service alive; tap a notification to come back to the same live terminal). Null falls back
+    // to the composition scope (desktop/preview/offscreen behavior).
+    processScope: CoroutineScope? = null,
     // AI controller supplied externally (offscreen render of the AI screen with a fake provider);
     // null builds it from deps.vault below, as usual.
     aiOverride: AiAssistantController? = null,
@@ -106,7 +112,7 @@ fun MobileDesignApp(
     // Session manager: supplied externally (offscreen render with a fake transport) or built from
     // the live transport — one shell per session.
     // Dispose our own graph; an externally supplied one is the caller's, leave it alone.
-    val scope = rememberCoroutineScope()
+    val scope = processScope ?: rememberCoroutineScope()
     // Per-host terminal command history over the encrypted vault: autocomplete writes it, the
     // command palette reads every host's. Hoisted out of the sessions factory so both can see it.
     val termHistory = remember(deps.vault) { deps.vault?.let { VaultTerminalHistoryStore(it) } }

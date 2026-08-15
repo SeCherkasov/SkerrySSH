@@ -25,6 +25,7 @@ import app.skerry.shared.terminal.TerminalHistoryStore
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.terminal.terminalHistoryKey
 import app.skerry.ui.terminal.ThroughputController
+import app.skerry.ui.keepalive.SessionKeepAlive
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.forward.PortForwardController
@@ -136,6 +137,10 @@ class ConnectionController(
     private val reconnectDelayMillis: (attempt: Int) -> Long = { attempt ->
         minOf(30_000L, 1_000L shl (attempt - 1).coerceIn(0, 16))
     },
+    // Stable identity of this session in the sessions list (e.g. "sess-3"). Set by the sessions
+    // controller when the pane is created; used by the platform keep-alive bridge to key its
+    // per-session notification and route taps back to this terminal. Default only for tests/blank.
+    private var sessionId: String = "ssh",
     // Per-host terminal command history persistence (for autocomplete). null means no persistence
     // (the session only learns from itself). The key is derived from the target
     // ([terminalHistoryKey]); saving happens on IO so file I/O never blocks the UI thread per
@@ -148,6 +153,15 @@ class ConnectionController(
 ) {
     var uiState: ConnectionUiState by mutableStateOf(ConnectionUiState.Form)
         private set
+
+    /**
+     * Assigns the stable pane id for the platform keep-alive bridge (per-session notification
+     * keying and tap routing). Called by the sessions controller right before [connect]; must be
+     * set before the session becomes usable.
+     */
+    fun bindSessionId(id: String) {
+        sessionId = id
+    }
 
     /**
      * The negotiated cipher of this session's live connection (for the info panel), or `null`
@@ -365,6 +379,10 @@ class ConnectionController(
                 ).also { it.start() }
             }
             uiState = ConnectionUiState.Connected(terminal)
+            // Fork: tell the platform keep-alive bridge that a session is now open (Android runs a
+            // foreground service while sessions exist; no-op on desktop). Done after Connected so
+            // the notification/keep-alive starts exactly when the session is usable.
+            SessionKeepAlive.bridge?.onSessionStarted(sessionId, target.host)
             // One-shot action for the first connect (Run on host): taken and cleared BEFORE a
             // possible drop, so a reconnect through this same establishSession doesn't repeat it.
             pendingOnConnected?.let { action -> pendingOnConnected = null; action(terminal) }
@@ -656,6 +674,9 @@ class ConnectionController(
      * cleaned-up controller is safe.
      */
     private fun releaseSessionResources() {
+        // Fork: this session is no longer open — the platform keep-alive bridge stops the
+        // foreground service once the last session goes (no-op on desktop). Idempotent.
+        SessionKeepAlive.bridge?.onSessionEnded(sessionId)
         metricsEpoch++
         val conn = connection
         val watched = attached

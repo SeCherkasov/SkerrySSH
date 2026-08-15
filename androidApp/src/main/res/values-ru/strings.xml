@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Russian (values-ru). See values/strings.xml for the full set — keys must stay in sync across
+     values / values-zh / values-ru. -->
+<resources>
+    <string name="app_name">Skerry</string>
+    <string name="session_keepalive_channel_name">Поддержание сеанса</string>
+    <string name="session_keepalive_title">Сеансы SSH активны</string>
+    <string name="session_keepalive_text">Нажмите, чтобы вернуться к этому терминалу</string>
+    <plurals name="session_keepalive_count">
+        <item quantity="one">%1$d подключение активно</item>
+        <item quantity="few">%1$d подключения активны</item>
+        <item quantity="other">%1$d подключений активно</item>
+    </plurals>
+</resources>
