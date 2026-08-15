@@ -35,6 +35,7 @@ internal fun TestScope.controllerWith(
     // No backoff by default (determinism). The reconnect-cancellation test sets a nonzero delay
     // so the attempt actually "hangs" on delay and can be cancelled (delay(0) doesn't suspend).
     reconnectDelayMillis: (Int) -> Long = { 0L },
+    keepAlive: app.skerry.ui.keepalive.SessionKeepAliveBridge? = null,
 ): Pair<ConnectionController, CoroutineScope> {
     val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
     val controller = ConnectionController(
@@ -43,6 +44,7 @@ internal fun TestScope.controllerWith(
         newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
         maxReconnectAttempts = maxReconnectAttempts,
         reconnectDelayMillis = reconnectDelayMillis,
+        keepAlive = keepAlive,
     )
     return controller to scope
 }

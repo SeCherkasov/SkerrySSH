@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Android platform resources only (launcher label). The app's UI strings live in
-  composeApp/src/commonMain/composeResources — this file exists so the manifest has no hardcoded
-  text and a locale-specific launcher label stays possible.
+  Android platform resources only (launcher label + session keep-alive notification). The app's UI
+  strings live in composeApp/src/commonMain/composeResources — this file exists so the manifest has
+  no hardcoded text and a locale-specific launcher label stays possible.
 -->
 <resources>
     <string name="app_name">Skerry</string>
+    <string name="session_keepalive_channel_name">Session keep-alive</string>
+    <!-- "Sessions", not "SSH sessions": the keep-alive covers every terminal transport
+         (SSH, Telnet, serial, Mosh, container exec). -->
+    <string name="session_keepalive_title">Sessions active</string>
+    <!-- Lock-screen (publicVersion) title of ONE redacted per-session notification — singular. -->
+    <string name="session_keepalive_public_title">Session active</string>
+    <string name="session_keepalive_text">Tap to return to this terminal</string>
+    <plurals name="session_keepalive_count">
+        <item quantity="one">%1$d session active</item>
+        <item quantity="other">%1$d sessions active</item>
+    </plurals>
 </resources>

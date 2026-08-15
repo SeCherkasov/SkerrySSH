@@ -9,6 +9,18 @@
     <!-- USB-OTG serial (CDC/FTDI/CP210x/CH34x adapters). Not mandatory: we do not cut off devices
          without USB Host — serial will simply show no ports. -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <!-- Foreground service while an SSH session is open (keep-alive in the background). connectedDevice
+         type: no timeout, and keeping a network connection to an external device alive is its purpose. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Required by targetSDK 36 to START a connectedDevice FGS: at least one of the anyOf set
+         (BLUETOOTH_*/CHANGE_NETWORK_STATE/CHANGE_WIFI_STATE/NFC/USB...) must be held. Normal
+         permission — granted at install time, no runtime prompt. SSH keeps a network connection
+         to an external device alive, hence CHANGE_NETWORK_STATE. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!-- Notification for the keep-alive service. Optional: without it the service still runs, the
+         notification is simply not shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="false"
@@ -21,6 +33,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|locale|layoutDirection"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -35,6 +48,12 @@
             android:name="app.skerry.shared.ai.local.LlmHostService"
             android:exported="false"
             android:process=":llm" />
+        <!-- Keeps the app process (and open SSH keep-alive loops) alive while sessions are open;
+             started/stopped by AndroidSessionKeepAlive via the shared ConnectionController. -->
+        <service
+            android:name="app.skerry.android.SessionKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
     </application>
 
 </manifest>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar small icon for the session keep-alive notification: monochrome (white alpha-only,
+     the system tints it) derivative of the brand mark in ic_launcher_foreground.xml — the "S"
+     stream plus the innermost signal arc. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+    <path
+        android:pathData="M75,40 A26,26 0 0 1 75,80"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.55" />
+    <path
+        android:pathData="M60,44 C60,37 53,34 46,34 C36,34 31,40 31,47 C31,60 60,54 60,68 C60,77 53,81 45,81 C36,81 31,77 31,70"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="13"
+        android:strokeLineCap="round" />
+</vector>
