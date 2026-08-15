@@ -103,9 +103,11 @@ fun MobileDesignApp(
         mono = rememberMono(),
         symbols = rememberMaterialSymbols(),
     )
-    // Session manager: supplied externally (offscreen render with a fake transport) or built from
-    // the live transport — one shell per session.
-    // Dispose our own graph; an externally supplied one is the caller's, leave it alone.
+    // Session manager: supplied externally (Android's process-scoped graph, or an offscreen render
+    // with a fake transport) or built from the live transport — one shell per session.
+    // Dispose our own graph; an externally supplied one is the caller's, leave it alone. The scope
+    // here stays composition-bound on purpose: the AI/updates controllers below must die with the
+    // composition; an external sessions graph carries its own (longer-lived) scope.
     val scope = rememberCoroutineScope()
     // Per-host terminal command history over the encrypted vault: autocomplete writes it, the
     // command palette reads every host's. Hoisted out of the sessions factory so both can see it.
