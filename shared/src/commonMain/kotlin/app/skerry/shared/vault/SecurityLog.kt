@@ -9,8 +9,8 @@ import okio.Path
 
 /**
  * Type of security event. Fixed set of what the app can honestly track: master password,
- * biometrics, and device-pairing lifecycle. UI labels are localized separately; only stable
- * identifiers live here.
+ * biometrics, device-pairing lifecycle, and key material leaving the vault. UI labels are
+ * localized separately; only stable identifiers live here.
  */
 enum class SecurityEventType {
     /** Vault created (initial master password setup) — baseline for "last password change". */
@@ -30,6 +30,13 @@ enum class SecurityEventType {
 
     /** New device paired (quick pairing) — [detail] carries the device name. */
     DevicePaired,
+
+    /**
+     * A private key left the vault as a file ("Export key", behind re-authentication) — [detail]
+     * carries the credential id, never the label: the vault treats labels as secret
+     * ([Credential.toString] redacts them), and this log is plaintext on disk.
+     */
+    KeyExported,
 }
 
 /**

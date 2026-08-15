@@ -169,6 +169,7 @@
     <string name="settings_event_biometric_disabled">Biometric unlock disabled</string>
     <string name="settings_event_unlocked_biometric">Unlocked with biometrics</string>
     <string name="settings_event_device_paired">New device paired</string>
+    <string name="settings_event_key_exported">Key exported to file</string>
     <string name="settings_event_with_detail">%1$s: %2$s</string>
     <string name="settings_event_line">%1$s · %2$s</string>
     <string name="settings_time_today">today %1$s</string>

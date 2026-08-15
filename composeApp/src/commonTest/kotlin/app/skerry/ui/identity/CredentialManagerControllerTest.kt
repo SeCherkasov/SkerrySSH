@@ -206,6 +206,17 @@ class CredentialManagerControllerTest {
     }
 
     @Test
+    fun `exporting a key is recorded against it`() = runTest {
+        val usage = FakeUsageLog()
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault()), usage = usage, scope = CoroutineScope(Dispatchers.Unconfined)) { "gen" }
+
+        controller.recordExported("gen")
+
+        assertEquals(listOf("exported:gen"), usage.events)
+        assertEquals(1, controller.usageOf("gen")?.exportedAt?.size)
+    }
+
+    @Test
     fun `usage events run off the caller thread in the order they were submitted`() = runTest {
         // The production lane: one thread, so a forget can't overtake a still-pending recordUsed and
         // the in-memory mirror can't lose an update to a concurrent one.
@@ -263,6 +274,11 @@ private class FakeUsageLog : CredentialUsageLog {
     override fun recordCopied(credentialId: String): CredentialUsage {
         events += "copied:$credentialId"
         return store(credentialId) { it.copy(copiedAt = it.copiedAt + "t") }
+    }
+
+    override fun recordExported(credentialId: String): CredentialUsage {
+        events += "exported:$credentialId"
+        return store(credentialId) { it.copy(exportedAt = it.exportedAt + "t") }
     }
 
     override fun forget(credentialId: String) {

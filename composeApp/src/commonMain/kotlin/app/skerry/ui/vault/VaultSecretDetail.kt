@@ -224,12 +224,12 @@ internal fun LiveSecretDetail(
         }
         SecretSectionLabel(encryptionSectionTitle())
         SecretEncryptionRows(syncing)
-        // Audit counts clipboard copies, and only a password ever leaves the vault that way: for a
-        // key or a certificate the copy button hands over the public half, which is not a secret.
-        // (An exported key is not a copy and is not counted — the log records clipboard events.)
-        if (secret is CredentialSecret.Password) {
+        // Audit shows for every secret whose material can leave the vault: a password (clipboard
+        // copies) and anything with an exportable private key (file exports). A file-backed secret
+        // has neither — its material never entered the vault.
+        if (hasAuditTrail(credential)) {
             SecretSectionLabel(auditSectionTitle())
-            SecretAuditRows(usage)
+            SecretAuditRows(credential, usage)
         }
     }
 }

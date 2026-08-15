@@ -3,8 +3,13 @@ package app.skerry.ui.vault
 import app.skerry.shared.io.safeFileStem
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.shared.vault.SecurityEventType
+import app.skerry.shared.vault.SecurityLog
+import app.skerry.ui.identity.CredentialManagerController
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * One file "Export" writes: the [fileName] offered in the Save-As dialog and the [content] written
@@ -109,17 +114,73 @@ fun secretActions(credential: Credential): SecretActions = when {
  * [ExportOutcome.worthReporting]); it never runs when authorization is refused, which is the
  * behaviour `SecretExportGateTest` pins down. [write] is [exportTextFile] in the app and a fake in
  * tests — the only way to exercise this without a native file dialog.
+ *
+ * [onSaved] is the audit hook (issue #221), and it is deliberately not defaulted: a screen that
+ * exports without saying what to record is the same silent-wiring bug class as #218. It runs only
+ * for [ExportOutcome.Saved] — a dismissed prompt, a closed Save-As and a failed write all leave no
+ * file, and an audit trail that says otherwise is worse than none. It must stay a plain non-suspend
+ * lambda: the `runCatching` around it would silently swallow a real cancellation if it ever
+ * suspended.
  */
 internal fun exportPrivateKey(
     auth: SecretCopyAuthorizer,
     export: SecretExport.PrivateKey,
     scope: CoroutineScope,
     write: suspend (SecretExport) -> ExportOutcome = { exportTextFile(it.fileName, it.content) },
+    onSaved: () -> Unit,
     onOutcome: (ExportOutcome) -> Unit,
 ) {
     auth.authorize(SecretAccess.EXPORT) {
-        scope.launch { onOutcome(guardedExport { write(export) }) }
+        scope.launch {
+            // The whole write-plus-audit stretch runs under NonCancellable, hoisted HERE and not
+            // only inside the platform writers: withContext's prompt-cancellation guarantee checks
+            // the *caller's* job at the dispatch back, so a writer's completed Saved would be
+            // discarded into a CancellationException if the screen's scope died mid-write — key on
+            // disk, no audit record, no outcome. With this job non-cancellable the result is
+            // always delivered. A write that itself throws CancellationException (the composition
+            // genuinely gone before anything landed) still propagates out of guardedExport and
+            // records nothing. runCatching around the hook: an audit-write failure (disk full)
+            // must not suppress the outcome report or cancel the screen's shared scope — the same
+            // best-effort rule the usage-log half documents on its own record path.
+            val outcome = withContext(NonCancellable) {
+                val written = guardedExport { write(export) }
+                if (written == ExportOutcome.Saved) runCatching { onSaved() }
+                written
+            }
+            onOutcome(outcome)
+        }
     }
+}
+
+/**
+ * What a saved key export records, in both places a user looks after something suspicious: the
+ * secret's own usage trail ("Exported — today 09:14" on its panel) and the security event log in
+ * Settings. One producer for both screens — the desktop panel and the mobile sheet wiring their own
+ * pairs would drift the first time one of them was edited.
+ *
+ * The security event carries [credentialId] only, never the label — the label is treated as secret
+ * everywhere else ([Credential.toString] redacts it) and the security log is plaintext on disk.
+ * A `null` [securityLog] (a build without one wired) still records the usage trail.
+ */
+internal fun keyExportAudit(
+    credentials: CredentialManagerController,
+    securityLog: SecurityLog?,
+    credentialId: String,
+): () -> Unit = {
+    credentials.recordExported(credentialId)
+    securityLog?.record(SecurityEventType.KeyExported, credentialId)
+}
+
+/**
+ * Whether the detail panel has an audit section to show: any secret whose material can leave the
+ * vault — a password (clipboard copy) or anything with an exportable private key. A file-backed
+ * secret has neither; its material never entered the vault. A type check rather than
+ * `privateKeyExport(credential) != null`: this runs on every recomposition of the detail panel,
+ * and building a PEM-carrying export object just to null-check it is allocation for nothing.
+ */
+internal fun hasAuditTrail(credential: Credential): Boolean = when (credential.secret) {
+    is CredentialSecret.Password, is CredentialSecret.PrivateKey, is CredentialSecret.Certificate -> true
+    is CredentialSecret.KeyFile -> false
 }
 
 /** Writes public material (the certificate) — no gate, the same as copying it to the clipboard. */
