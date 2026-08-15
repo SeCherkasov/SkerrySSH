@@ -75,24 +75,69 @@ internal fun TermStyle.acceptsHighlight(): Boolean =
  * The command line (rows around the cursor) and output (everything else) never overlap: the cursor's
  * own chain of rows is excluded from the output pass, so a typed `ERROR` isn't recolored as a log
  * level while it is still being typed.
+ *
+ * Composed of the two split passes so the equivalence stays pinned by one entry point; the
+ * composition layer calls the passes separately to cache them under different keys.
  */
 internal fun highlightRows(
     source: HighlightSource,
     window: IntRange,
     settings: TerminalHighlight,
     vocabulary: CommandVocabulary,
+): Map<Int, RowHighlight> = overlayLiveCommand(
+    base = backgroundHighlightRows(
+        source = source.copy(cursor = null),
+        window = window,
+        settings = settings,
+        vocabulary = vocabulary,
+        liveChainStart = liveChainStart(source),
+    ),
+    source = source,
+    settings = settings,
+    vocabulary = vocabulary,
+)
+
+/** The first row of the cursor's soft-wrap chain, or null off-grid/on the alt screen. */
+internal fun liveChainStart(source: HighlightSource): Int? {
+    val cursor = source.cursor ?: return null
+    if (source.altScreen || cursor.row !in source.screen.indices) return null
+    return chainStart(source.screen, cursor.row)
+}
+
+// Test-only counters (single-threaded: written from composition or the sequential test JVM -
+// revisit before enabling parallel test execution). They pin that cursor moves do not rescan the
+// window and that content changes do re-run the overlay.
+internal var backgroundHighlightPasses = 0
+internal var liveOverlayPasses = 0
+
+/**
+ * The near-cursor-independent passes — executed commands and output — over the whole [window].
+ * This is the expensive scan (every visible row); its only cursor input is [liveChainStart] (the
+ * row, not the column), which changes when the cursor crosses a chain boundary — line editing and
+ * history recall keep it stable, so the composition layer caches this pass across those. The
+ * source's own cursor is ignored ([HighlightSource.cursor] may be anything; callers pass null).
+ */
+internal fun backgroundHighlightRows(
+    source: HighlightSource,
+    window: IntRange,
+    settings: TerminalHighlight,
+    vocabulary: CommandVocabulary,
+    liveChainStart: Int?,
 ): Map<Int, RowHighlight> {
     if (!settings.commandLine && !settings.output) return emptyMap()
+    backgroundHighlightPasses++
     val screen = source.screen
     val out = HashMap<Int, RowHighlight>()
     val commandRows = HashSet<Int>()
     if (settings.commandLine) {
-        commandRows += tokenizeSlices(source, commandLineSlices(source), vocabulary, out)
         // Commands already run keep their colors: the cursor has moved to the next prompt, and
-        // without this pass a command would go plain the moment it is executed.
+        // without this pass a command would go plain the moment it is executed. The live chain's
+        // start row is excluded here unconditionally - the overlay cannot always reclaim it (a
+        // cursor inside a prompt parses no live command line), and the old single pass never let
+        // the cursor's own row read as executed.
         for (r in window) {
             if (r in commandRows) continue
-            commandRows += tokenizeSlices(source, executedCommandSlices(source, r), vocabulary, out)
+            commandRows += tokenizeSlices(source, executedCommandSlices(source, r, liveChainStart), vocabulary, out)
         }
     }
     if (settings.output && !source.altScreen) {
@@ -101,6 +146,32 @@ internal fun highlightRows(
             outputHighlight(screen[r])?.let { out[r] = it }
         }
     }
+    return out
+}
+
+/**
+ * The cursor-dependent half: tokenizes the live command chain (≤ a handful of rows) and lays it
+ * over [base], removing whatever the background painted on those rows first — a typed `ERROR`
+ * must read as an argument, not as a log level. Cheap per cursor move: one map copy of at most a
+ * window's worth of entries plus the small live chain.
+ */
+internal fun overlayLiveCommand(
+    base: Map<Int, RowHighlight>,
+    source: HighlightSource,
+    settings: TerminalHighlight,
+    vocabulary: CommandVocabulary,
+): Map<Int, RowHighlight> {
+    if (!settings.commandLine) return base
+    liveOverlayPasses++
+    val slices = commandLineSlices(source)
+    if (slices.isEmpty()) return base
+    val live = HashMap<Int, RowHighlight>()
+    val claimed = tokenizeSlices(source, slices, vocabulary, live)
+    if (claimed.isEmpty()) return base
+    val out = HashMap<Int, RowHighlight>(base.size + live.size)
+    out.putAll(base)
+    claimed.forEach { out.remove(it) }
+    out.putAll(live)
     return out
 }
 
@@ -193,18 +264,42 @@ internal fun rememberRowHighlights(
     window: IntRange,
 ): Map<Int, RowHighlight> {
     val settings = LocalTerminalHighlight.current
+    // Two caches under different keys: the background pass scans the whole window and depends
+    // only on content — a cursor move (arrows, history) must not rescan it; the live-command
+    // overlay is the only cursor-keyed piece and touches at most a handful of rows.
+    // `state` in the keys: the content version is per-emulator, and an in-place session switch
+    // could coincide on the counter — see the same note at TerminalScreen's searchWindow.
+    val liveSource = HighlightSource(
+        screen = screen,
+        cursor = TerminalPos(state.cursorRow, state.cursorCol),
+        altScreen = state.altScreen,
+        executedCommands = state.executedCommands,
+    )
+    // The chain-start ROW (not the column): stable across line editing and history recall, so the
+    // background cache survives them; it moves only when the cursor crosses a chain boundary.
+    val chainStart = liveChainStart(liveSource)
+    val background = remember(
+        state, state.screenContentVersion, window, settings, state.vocabulary, state.executedCommands,
+        state.altScreen, chainStart,
+    ) {
+        backgroundHighlightRows(
+            source = liveSource.copy(cursor = null),
+            window = window,
+            settings = settings,
+            vocabulary = state.vocabulary,
+            liveChainStart = chainStart,
+        )
+    }
+    // screenContentVersion in the keys, not just `background`: remember compares with equals(),
+    // and two content-equal background maps (both empty, say) would keep a stale overlay while
+    // the live line's text changed under a stationary cursor (Delete, same-length history recall).
     return remember(
-        screen, window, settings, state.vocabulary, state.executedCommands,
+        state, state.screenContentVersion, background, settings, state.vocabulary,
         state.cursorRow, state.cursorCol, state.altScreen,
     ) {
-        highlightRows(
-            source = HighlightSource(
-                screen = screen,
-                cursor = TerminalPos(state.cursorRow, state.cursorCol),
-                altScreen = state.altScreen,
-                executedCommands = state.executedCommands,
-            ),
-            window = window,
+        overlayLiveCommand(
+            base = background,
+            source = liveSource,
             settings = settings,
             vocabulary = state.vocabulary,
         )

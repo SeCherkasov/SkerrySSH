@@ -1,11 +1,34 @@
 package app.skerry.shared.terminal
 
 import kotlin.test.Test
+import kotlin.test.assertSame
+import kotlin.test.assertNotSame
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class TerminalEmulatorTest {
+
+    @Test
+    fun `blank cells of an unchanged style share one instance`() {
+        // Erases and scrolls fill whole regions with blanks; allocating a TermCell+TermStyle per
+        // cell made every clear O(cols) garbage. TermCell is immutable, so sharing is safe.
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("x\u001b[K".encodeToByteArray())
+        val row = emu.lines[0]
+        assertSame(row[3], row[4])
+    }
+
+    @Test
+    fun `a style change produces a different blank`() {
+        val emu = TerminalEmulator(cols = 10, rows = 3)
+        emu.feed("\u001b[K".encodeToByteArray())
+        val plain = emu.lines[0][5]
+        emu.feed("\u001b[44m\u001b[K".encodeToByteArray())
+        val colored = emu.lines[0][5]
+        assertNotSame(plain, colored)
+        assertEquals(TermColor.Indexed(4), colored.style.bg)
+    }
 
     // ESC/BEL by number — no invisible control bytes in the source.
     private val esc = 27.toChar().toString()
@@ -1459,5 +1482,95 @@ class TerminalEmulatorTest {
         emu.feed("${esc}c".encodeToByteArray()) // RIS
         assertEquals(4, emu.lines.size)
         assertEquals("", emu.asText())
+    }
+
+    // Snapshot identity: the render layer compares snapshots by identity (not structurally), so
+    // [TerminalEmulator.lines] must return the SAME instance while nothing visible mutated and a
+    // NEW one after any cell, wrap-flag, scrollback or geometry change.
+
+    @Test
+    fun `a cursor-only move keeps the snapshot instance`() {
+        val emu = emulate(chunks = arrayOf("hello"))
+        val before = emu.lines
+        emu.feed("${esc}[H".encodeToByteArray())
+        assertTrue(before === emu.lines)
+    }
+
+    @Test
+    fun `printing replaces the snapshot instance`() {
+        val emu = emulate(chunks = arrayOf("hello"))
+        val before = emu.lines
+        emu.feed("x".encodeToByteArray())
+        assertFalse(before === emu.lines)
+    }
+
+    @Test
+    fun `clearing a soft wrap replaces the snapshot even when no cell changes`() {
+        // 中 does not fit in the last column: row 0 is wrapped, its column 3 blank. EL from that
+        // blank column changes no cell, only the wrap flag - identity must still change, or the
+        // render layer's link joining reads stale flags.
+        val emu = emulate(cols = 4, rows = 4, chunks = arrayOf("ABC中"))
+        val before = emu.lines
+        emu.feed("${esc}[1;4H${esc}[K".encodeToByteArray())
+        assertFalse(before === emu.lines)
+    }
+
+    @Test
+    fun `scrolling replaces the snapshot instance`() {
+        val emu = emulate(cols = 10, rows = 2, chunks = arrayOf("a\r\nb"))
+        val before = emu.lines
+        emu.feed("\r\nc".encodeToByteArray())
+        assertFalse(before === emu.lines)
+    }
+
+    @Test
+    fun `resize replaces the snapshot instance`() {
+        val emu = emulate(chunks = arrayOf("hello"))
+        val before = emu.lines
+        emu.resize(100, 30)
+        assertFalse(before === emu.lines)
+    }
+
+    @Test
+    fun `every cell-mutating control sequence replaces the snapshot instance`() {
+        // The cache fails silently in exactly one direction - a mutator without markDirty freezes
+        // the screen - and single-read tests cannot see it. Each case reads the instance BEFORE
+        // the mutator, so a missed markDirty in any of them fails here.
+        fun assertReplaces(label: String, setup: String, mutator: String) {
+            val emu = emulate(cols = 10, rows = 4, chunks = arrayOf(setup))
+            val before = emu.lines
+            emu.feed(mutator.encodeToByteArray())
+            assertFalse(before === emu.lines, "expected a new snapshot after $label")
+        }
+        assertReplaces("ECH", "abc${esc}[1G", "${esc}[2X")
+        assertReplaces("ICH", "abc${esc}[1G", "${esc}[2@")
+        assertReplaces("DCH", "abc${esc}[1G", "${esc}[1P")
+        assertReplaces("IL", "a\r\nb${esc}[1;1H", "${esc}[1L")
+        assertReplaces("DL", "a\r\nb${esc}[1;1H", "${esc}[1M")
+        assertReplaces("RI at top scrolls down", "a${esc}[1;1H", "${esc}M")
+        assertReplaces("ED2 clear to scrollback", "abc", "${esc}[2J")
+        assertReplaces("EL", "abc${esc}[1G", "${esc}[K")
+        assertReplaces("RIS", "abc", "${esc}c")
+        assertReplaces("combining mark attach", "e", "́")
+    }
+
+    @Test
+    fun `shrinking scrollback on the fly replaces the snapshot instance`() {
+        val emu = TerminalEmulator(cols = 20, rows = 4)
+        emu.feedLines(1..50)
+        val before = emu.lines
+        emu.applyMaxScrollback(10)
+        assertFalse(before === emu.lines)
+    }
+
+    @Test
+    fun `entering and leaving the alternate screen replaces the snapshot instance`() {
+        val emu = emulate(chunks = arrayOf("hello"))
+        val before = emu.lines
+        emu.feed("${esc}[?1049h".encodeToByteArray())
+        val alt = emu.lines
+        assertFalse(before === alt)
+        emu.feed("${esc}[?1049l".encodeToByteArray())
+        assertFalse(alt === emu.lines)
     }
 }

@@ -6,8 +6,6 @@ import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
-import app.skerry.shared.terminal.TermCell
-import app.skerry.shared.terminal.TermSnapshotRow
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.wrapsToNextRow
 import app.skerry.shared.terminal.TerminalSearchError
@@ -17,6 +15,7 @@ import app.skerry.shared.terminal.TerminalStepMark
 import app.skerry.shared.terminal.STEP_MARK_OSC
 import app.skerry.ui.session.paneSyncTargets
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -25,6 +24,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -45,7 +45,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("ab".encodeToByteArray())
         session.emit("cd".encodeToByteArray())
@@ -59,7 +59,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         // "П" (U+041F) in UTF-8 = 0xD0 0x9F, split across two chunks.
         session.emit(byteArrayOf(0xD0.toByte()))
@@ -69,12 +69,312 @@ class TerminalScreenStateTest {
         scope.cancel()
     }
 
+    @Test
+    fun `a cursor-only publish keeps the screen instance and its content version`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+
+        session.emit("hello".encodeToByteArray())
+        val before = state.screen
+        val version = state.screenContentVersion
+
+        session.emit("${27.toChar()}[H".encodeToByteArray())
+        assertTrue(before === state.screen)
+        assertEquals(version, state.screenContentVersion)
+
+        session.emit("x".encodeToByteArray())
+        assertFalse(before === state.screen)
+        assertTrue(state.screenContentVersion > version)
+        scope.cancel()
+    }
+
+    // --- PTY backpressure ---
+
+    @Test
+    fun `pty backlog is bounded - the producer suspends until the emulator catches up`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val total = FEED_BACKLOG_CHUNKS * 4
+        var emitted = 0
+        var maxInFlight = 0
+        // Rebound after construction: the flow body runs at collection time, when `state` exists.
+        var applied: () -> Long = { 0L }
+        val session = object : TerminalSession {
+            override val state: StateFlow<TerminalState> = MutableStateFlow(TerminalState.Open)
+            override val output: Flow<ByteArray> = flow {
+                repeat(total) {
+                    emit(byteArrayOf('x'.code.toByte()))
+                    emitted++
+                    maxInFlight = maxOf(maxInFlight, emitted - applied().toInt())
+                }
+            }
+            override suspend fun send(data: ByteArray) = Unit
+            override suspend fun resize(size: PtySize) = Unit
+            override suspend fun close() = Unit
+        }
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        applied = { state.outputVersion }
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(total, emitted)
+        // The drain is asserted on what the emulator parsed, not on the producer's own counter:
+        // a Feed dropped after its permit was taken would leave emitted == total regardless.
+        assertEquals(total.toLong(), state.outputVersion)
+        assertTrue(
+            maxInFlight <= FEED_BACKLOG_CHUNKS + 1,
+            "unapplied backlog reached $maxInFlight chunks; cap is $FEED_BACKLOG_CHUNKS",
+        )
+        scope.cancel()
+    }
+
+    @Test
+    fun `control command lands behind a saturated feed backlog`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val total = FEED_BACKLOG_CHUNKS * 4
+        val gate = CompletableDeferred<Unit>()
+        val session = FloodingTerminalSession(total, resizeGate = gate)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+
+        // Park the owner inside the first resize's PTY call; the collector then floods the queue
+        // to the permit cap and suspends on acquire. Only now is the pipeline genuinely saturated.
+        state.resize(PtySize(cols = 90, rows = 30))
+        testScheduler.runCurrent()
+        assertEquals(FEED_BACKLOG_CHUNKS, session.emitted)
+
+        // Queued behind a full backlog of unparsed Feeds: must still be applied, exactly once.
+        state.resize(PtySize(cols = 100, rows = 40))
+        gate.complete(Unit)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf(90 to 30, 100 to 40), session.resizes.map { it.cols to it.rows })
+        assertEquals(total.toLong(), state.outputVersion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `cancellation with a saturated backlog does not hang teardown`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val gate = CompletableDeferred<Unit>()
+        val session = FloodingTerminalSession(chunks = FEED_BACKLOG_CHUNKS * 4, resizeGate = gate)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+
+        // Same parked-owner construction as above: the collector is provably suspended on acquire
+        // with a full backlog (emitted == cap) when the scope dies - tab closed mid-`cat`.
+        state.resize(PtySize(cols = 90, rows = 30))
+        testScheduler.runCurrent()
+        assertEquals(FEED_BACKLOG_CHUNKS, session.emitted)
+
+        scope.cancel()
+        testScheduler.advanceUntilIdle()
+
+        // Terminates (a wedged collector would hang runTest) and the producer never ran past the
+        // cap: cancellation reached the acquire suspension point, not just the flow machinery.
+        assertEquals(FEED_BACKLOG_CHUNKS, session.emitted)
+        assertEquals(0L, state.outputVersion)
+    }
+
+    // --- Publish rate cap ---
+
+    @Test
+    fun `sustained output coalesces publishes to the frame window`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val total = 100
+        val session = FloodingTerminalSession(chunks = total, interChunkDelayMs = 1)
+        val state = TerminalScreenState(session, scope, nowMillis = { testScheduler.currentTime })
+        testScheduler.advanceUntilIdle()
+
+        // Everything parsed, but published at the frame cadence, not once per chunk. Virtual time
+        // makes the count deterministic: ~total/window periodic publishes plus the leading edge
+        // and the close-fallback tail. The +3 margin stays below a half-effective cap (~2x rate),
+        // so that regression fails this bound too.
+        assertEquals(total.toLong(), state.outputVersion)
+        val expectedAtMost = total / PUBLISH_MIN_INTERVAL_MS.toInt() + 3
+        assertTrue(
+            state.snapshotVersion <= expectedAtMost,
+            "expected ~1 publish per ${PUBLISH_MIN_INTERVAL_MS}ms window, got ${state.snapshotVersion} for $total chunks",
+        )
+        scope.cancel()
+    }
+
+    @Test
+    fun `a single chunk after idle publishes immediately`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = { testScheduler.currentTime })
+
+        session.emit("x".encodeToByteArray())
+
+        // Leading edge: interactive echo is not deferred into a window.
+        assertEquals(1, state.snapshotVersion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `the tail of a burst is published when the stream ends mid-window`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FloodingTerminalSession(chunks = 5, interChunkDelayMs = 1)
+        val state = TerminalScreenState(session, scope, nowMillis = { testScheduler.currentTime })
+        testScheduler.advanceUntilIdle()
+
+        // Chunk 1 publishes on the leading edge; 2-5 land inside the window; the flow completes,
+        // so the close-fallback (not onTimeout) lands the tail. The live-pause case is next test.
+        assertEquals(5L, state.outputVersion)
+        assertEquals(2, state.snapshotVersion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a pause mid-window publishes the tail while the session stays open`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = { testScheduler.currentTime })
+
+        session.emit("a".encodeToByteArray())
+        testScheduler.runCurrent()
+        assertEquals(1, state.snapshotVersion) // leading edge
+
+        session.emit("b".encodeToByteArray())
+        testScheduler.runCurrent()
+        // Applied but deferred: still inside the window, stream paused, channel NOT closed.
+        assertEquals(2L, state.outputVersion)
+        assertEquals(1, state.snapshotVersion)
+
+        // The onTimeout edge is the only thing that can land this tail - the session is live.
+        testScheduler.advanceTimeBy(PUBLISH_MIN_INTERVAL_MS)
+        testScheduler.runCurrent()
+        assertEquals(2, state.snapshotVersion)
+
+        // The pipeline is still alive after the trailing publish: more output keeps flowing.
+        testScheduler.advanceTimeBy(PUBLISH_MIN_INTERVAL_MS)
+        session.emit("c".encodeToByteArray())
+        testScheduler.runCurrent()
+        assertEquals(3L, state.outputVersion)
+        assertEquals(3, state.snapshotVersion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a batch queued during a quiet period is published whole, not split`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FloodingTerminalSession(chunks = 5)
+        // Scheduler clock, no delays: the whole batch is pre-queued at t=0 and parsing consumes
+        // no window budget. The leading-edge publish must cover the entire available batch - a
+        // drain budgeted from the stale lastPublishAt would return "spent" before draining and
+        // tear the first paint into two frames.
+        val state = TerminalScreenState(session, scope, nowMillis = { testScheduler.currentTime })
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(5L, state.outputVersion)
+        assertEquals(1, state.snapshotVersion)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a fault on a drained command still flushes the batch head`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FloodingTerminalSession(chunks = 5)
+        val state = TerminalScreenState(session, scope, nowMillis = { testScheduler.currentTime })
+        var applies = 0
+        state.applyInterceptor = { if (++applies == 2) error("injected fault on a drained command") }
+        testScheduler.advanceUntilIdle()
+
+        // Chunk 1 was applied at the step head; chunk 2 faulted inside the drain of the SAME
+        // step. The finally must still land chunk 1 - dirty is set before the drain, not after.
+        assertEquals(1L, state.outputVersion)
+        assertEquals(1, state.snapshotVersion)
+        assertTrue(session.closed)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a dense backlog is published per window of parse work, not once at the end`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val total = FEED_BACKLOG_CHUNKS
+        val session = FloodingTerminalSession(chunks = total)
+        // Every clock read advances 1ms: parse work itself consumes the window, the way real time
+        // does under a flood. Without the in-drain window check the whole backlog is one batch and
+        // one publish; with it, a publish lands roughly every windowful of parsing.
+        var tick = 0L
+        val state = TerminalScreenState(session, scope, nowMillis = { ++tick })
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(total.toLong(), state.outputVersion)
+        assertTrue(
+            state.snapshotVersion >= 3,
+            "expected a publish per parse window during a dense backlog, got ${state.snapshotVersion}",
+        )
+        // And the quota's own upper bound: a regression that publishes per drained command
+        // (~64 publishes) must fail here, not hide behind the floor.
+        assertTrue(
+            state.snapshotVersion <= total / (PUBLISH_MIN_INTERVAL_MS.toInt() / 2) + 2,
+            "expected at most ~1 publish per window, got ${state.snapshotVersion}",
+        )
+        scope.cancel()
+    }
+
+    @Test
+    fun `a parser fault still lands the applied-but-unpublished tail`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FloodingTerminalSession(chunks = 5, interChunkDelayMs = 1)
+        val state = TerminalScreenState(session, scope, nowMillis = { testScheduler.currentTime })
+        var applies = 0
+        // Chunk 1 publishes (leading edge); chunk 2 is applied and deferred into the window;
+        // chunk 3 faults. The screen must still show chunk 2 - the coalescing window must not
+        // widen what a fault erases.
+        state.applyInterceptor = { if (++applies == 3) error("injected parser fault") }
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(2L, state.outputVersion)
+        assertEquals(2, state.snapshotVersion)
+        assertTrue(session.closed)
+        scope.cancel()
+    }
+
+    @Test
+    fun `parser fault closes the session and unwedges the collector`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val total = FEED_BACKLOG_CHUNKS * 2
+        val session = FloodingTerminalSession(total)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        var applies = 0
+        // The faulting command's own permit is intentionally lost (the throw precedes the Feed
+        // branch's try/finally) - inert, the whole semaphore dies with the session right after.
+        state.applyInterceptor = { if (++applies == 3) error("injected parser fault") }
+        testScheduler.advanceUntilIdle()
+
+        // The owner died on the third command: two chunks parsed, the session was closed (the
+        // auto-reconnect trigger), and the collector exited via the closed queue instead of
+        // wedging on acquire - the producer stopped at the cap, not at `total`.
+        assertEquals(2L, state.outputVersion)
+        assertTrue(session.closed)
+        assertTrue(session.emitted < total)
+        scope.cancel()
+    }
+
+    @Test
+    fun `emulator resize fault propagates to the recovery handler`() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FloodingTerminalSession(chunks = 4)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        state.emulatorResizeInterceptor = { error("injected emulator resize fault") }
+
+        state.resize(PtySize(cols = 90, rows = 30))
+        testScheduler.advanceUntilIdle()
+
+        // The PTY resize succeeded (its failure is a locally absorbed hiccup), but the emulator
+        // half is a parser-class fault: it must reach the owner-level handler and close the
+        // session, not leave a silently stale grid.
+        assertEquals(listOf(90 to 30), session.resizes.map { it.cols to it.rows })
+        assertTrue(session.closed)
+        scope.cancel()
+    }
+
     // --- Synchronized panes: the input mirror ---
 
     @Test
     fun `typed input is mirrored to the other panes`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        val state = TerminalScreenState(FakeTerminalSession(), scope, nowMillis = eagerPublishClock())
         val mirrored = mutableListOf<Pair<String, MirroredInput>>()
         state.inputMirror = { text, kind -> mirrored += text to kind }
 
@@ -89,7 +389,7 @@ class TerminalScreenStateTest {
     fun `mirrored input does not mirror again`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val mirrored = mutableListOf<String>()
         state.inputMirror = { text, _ -> mirrored += text }
 
@@ -111,7 +411,7 @@ class TerminalScreenStateTest {
     @Test
     fun `a snippet's line is tracked before the next input is classified`() = runTest {
         val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
-        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        val state = TerminalScreenState(FakeTerminalSession(), scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInput("rm -rf ") // a snippet leaves a half-written command on the line
@@ -124,7 +424,7 @@ class TerminalScreenStateTest {
     @Test
     fun `a command held by the production guard is mirrored only once confirmed`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        val state = TerminalScreenState(FakeTerminalSession(), scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         val mirrored = mutableListOf<String>()
         state.inputMirror = { text, _ -> mirrored += text }
@@ -142,7 +442,7 @@ class TerminalScreenStateTest {
     @Test
     fun `a dismissed command is never mirrored`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        val state = TerminalScreenState(FakeTerminalSession(), scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         val mirrored = mutableListOf<String>()
         state.inputMirror = { text, _ -> mirrored += text }
@@ -159,9 +459,9 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val originSession = FakeTerminalSession().apply { echoOff = true }
         val atPromptSession = FakeTerminalSession().apply { echoOff = true }
-        val origin = TerminalScreenState(originSession, scope)
-        val atPrompt = TerminalScreenState(atPromptSession, scope)
-        val atShell = TerminalScreenState(FakeTerminalSession(), scope)
+        val origin = TerminalScreenState(originSession, scope, nowMillis = eagerPublishClock())
+        val atPrompt = TerminalScreenState(atPromptSession, scope, nowMillis = eagerPublishClock())
+        val atShell = TerminalScreenState(FakeTerminalSession(), scope, nowMillis = eagerPublishClock())
 
         // Origin is at a password prompt: only the pane that is at one as well may take the secret.
         // The one sitting at an ordinary shell would echo it, store it in history and then run it.
@@ -177,7 +477,7 @@ class TerminalScreenStateTest {
     fun `an MFA prompt reads as a secret, ordinary output does not`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         // SSH never reports echo suppression (only telnet does), so the prompt line is all there is
         // to go by. Under synchronized input a miss no longer costs one host's history: the secret
@@ -195,7 +495,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         state.send("ls -la\n")
 
@@ -206,7 +506,7 @@ class TerminalScreenStateTest {
     @Test
     fun `typed input and paste bump inputVersion but programmatic sends do not`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        val state = TerminalScreenState(FakeTerminalSession(), scope, nowMillis = eagerPublishClock())
 
         val v0 = state.inputVersion
         state.send("ls\n")
@@ -228,7 +528,7 @@ class TerminalScreenStateTest {
         // by being fed through it character by character as typed input is.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         val v0 = state.inputVersion
         state.sendUserInput("uptime\r")
@@ -325,7 +625,7 @@ class TerminalScreenStateTest {
     fun `lastOutput reads the last command block from the live screen`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit(
             ("Last login: Fri Jul 24 11:51:03 2026 from 178.205.96.77\r\n" +
@@ -347,6 +647,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("git push origin main"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
         state.typeInput("git pu")
@@ -368,6 +669,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("git push origin main"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
 
@@ -394,6 +696,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("git push origin main", "git push origin main --force-with-lease"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
         state.typeInput("git pu")
@@ -419,6 +722,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("git push origin main"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
 
@@ -439,6 +743,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("lsof -i", "ll -h"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
         state.typeInput("ll")
@@ -458,7 +763,7 @@ class TerminalScreenStateTest {
         // Ctrl-O runs the current line just like Enter does; the mobile keybar reaches it as ctrl + "/".
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         state.typeInput("rm -rf /srv")
 
@@ -482,7 +787,7 @@ class TerminalScreenStateTest {
     fun `a joined guess is classified but the dialog draws the line itself`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         session.emit("root@prod:~# rm -rf /srv/prod-db".encodeToByteArray())
 
@@ -506,7 +811,7 @@ class TerminalScreenStateTest {
     fun `a block that finishes a completed line is classified as the joined command`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = false)
         session.emit("root@prod:~# sudo r".encodeToByteArray())
 
@@ -527,7 +832,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         var saved: List<String>? = null
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it }, nowMillis = eagerPublishClock())
 
         "systemctl restart ngi".forEach { state.typeInput(it.toString()) }
         state.typeInput("\t")
@@ -548,7 +853,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         var saved: List<String>? = null
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it }, nowMillis = eagerPublishClock())
 
         "echo hello".forEach { state.typeInput(it.toString()) }
         state.typeInput("\t")
@@ -569,7 +874,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         var saved: List<String>? = null
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it }, nowMillis = eagerPublishClock())
 
         "rm -rf /srv/bac".forEach { state.typeInput(it.toString()) }
         state.typeInput("\t")
@@ -589,7 +894,7 @@ class TerminalScreenStateTest {
     fun `a line typed onto after a completion is still classified`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf /var/log/nginx/arch".forEach { state.typeInput(it.toString()) }
@@ -610,7 +915,7 @@ class TerminalScreenStateTest {
     fun `a line the quote cannot claim is drawn beside it`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf /srv/back".forEach { state.typeInput(it.toString()) }
@@ -632,7 +937,7 @@ class TerminalScreenStateTest {
     fun `a line that diverged from the shell's is classified but not drawn as it`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         session.emit("root@prod:~# rm -rf /srv/backups-2019/x".encodeToByteArray())
 
@@ -656,7 +961,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         var saved: List<String>? = null
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it }, nowMillis = eagerPublishClock())
 
         "rm -rf /srv/ba".forEach { state.typeInput(it.toString()) }
         state.typeInput("\t")
@@ -676,7 +981,7 @@ class TerminalScreenStateTest {
     fun `a reason with nothing drawable behind it quotes nothing`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf /var/log/nginx/arch".forEach { state.typeInput(it.toString()) }
@@ -702,7 +1007,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         var saved: List<String>? = null
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it }, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         session.emit("\u001b[?1049h".encodeToByteArray())
 
@@ -724,7 +1029,7 @@ class TerminalScreenStateTest {
     fun `a line whose cursor moved is not quoted as an append`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         session.emit("root@prod:~# sudo rm -rf /srv; deploy".encodeToByteArray())
 
@@ -748,7 +1053,7 @@ class TerminalScreenStateTest {
     fun `dismissing a question does not disarm the line it was about`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf /srv/data".forEach { state.typeInput(it.toString()) }
@@ -773,7 +1078,7 @@ class TerminalScreenStateTest {
     fun `a secret sent by a snippet takes the ghost with the line`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope, initialHistory = listOf("git push origin main"))
+        val state = TerminalScreenState(session, scope, initialHistory = listOf("git push origin main"), nowMillis = eagerPublishClock())
         session.emit("$ ".encodeToByteArray())
         state.typeInput("git pu")
         session.emit("git pu".encodeToByteArray())
@@ -795,7 +1100,7 @@ class TerminalScreenStateTest {
     fun `a wrapped line completed by the shell is still held`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf /srv/bac".forEach { state.typeInput(it.toString()) }
@@ -821,7 +1126,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         var saved: List<String>? = null
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it }, nowMillis = eagerPublishClock())
         state.resize(PtySize(cols = 20, rows = 6))
 
         "systemctl restart ngi".forEach { state.typeInput(it.toString()) }
@@ -843,7 +1148,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         var saved: List<String>? = null
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it }, nowMillis = eagerPublishClock())
 
         "systemctl restart ngi".forEach { state.typeInput(it.toString()) }
         state.typeInput("\t")
@@ -869,7 +1174,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession().apply { echoOff = true }
         var saved: List<String>? = null
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { saved = it }, nowMillis = eagerPublishClock())
 
         state.sendUserInput("hunter2")
         session.echoOff = false // the prompt is answered; the shell echoes again
@@ -887,7 +1192,7 @@ class TerminalScreenStateTest {
     fun `a ready-made command is not guessed against the alternate screen`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         session.emit("\u001b[?1049h".encodeToByteArray()) // alt-screen
         session.emit("rm -rf /srv/data".encodeToByteArray()) // a line of the file being edited
@@ -906,7 +1211,7 @@ class TerminalScreenStateTest {
     fun `a keybar Ctrl-O leaves the line unknown rather than guessed`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "uptime".forEach { state.typeInput(it.toString()) }
@@ -929,7 +1234,7 @@ class TerminalScreenStateTest {
     fun `a line completed by the shell is not quoted as what was typed`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf /sr".forEach { state.typeInput(it.toString()) }
@@ -951,6 +1256,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("less /var/log/syslog", "ll -h"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
         state.typeInput("ll")
@@ -973,6 +1279,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("systemctl restart nginx"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
 
@@ -991,7 +1298,7 @@ class TerminalScreenStateTest {
         // "docker logs " — the key does something other than what the user is looking at.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         session.emit("$ ".encodeToByteArray())
         state.typeInput("docker")
         session.emit("docker".encodeToByteArray())
@@ -1015,6 +1322,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("backupdb", "backupfiles", "backends"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
         state.typeInput("back")
@@ -1039,6 +1347,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("echo 😀 done"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
         state.typeInput("echo 😀")
@@ -1057,6 +1366,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("git push origin main"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
         state.typeInput("git pu")
@@ -1080,6 +1390,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("uptime --pretty"),
+            nowMillis = eagerPublishClock(),
         )
         state.resize(PtySize(cols = 6, rows = 4))
         state.typeInput("uptime -")
@@ -1098,6 +1409,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("vimdiff a b"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
         state.typeInput("vim")
@@ -1118,6 +1430,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             FakeTerminalSession(), scope,
             onHistoryChanged = { snapshots += it },
+            nowMillis = eagerPublishClock(),
         )
         state.typeInput("uptime\n")
         assertEquals(listOf("uptime"), snapshots.last())
@@ -1131,6 +1444,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             session, scope,
             initialHistory = listOf("backupdb", "backupfiles"),
+            nowMillis = eagerPublishClock(),
         )
         session.emit("$ ".encodeToByteArray())
         state.typeInput("back")
@@ -1148,6 +1462,7 @@ class TerminalScreenStateTest {
         val state = TerminalScreenState(
             FakeTerminalSession(), scope,
             initialHistory = listOf("docker ps", "git status"),
+            nowMillis = eagerPublishClock(),
         )
         state.reverseSearch.open()
         state.reverseSearch.append("git")
@@ -1165,6 +1480,7 @@ class TerminalScreenStateTest {
             FakeTerminalSession(), scope,
             initialHistory = listOf("gti status", "git status"),
             onHistoryChanged = { snapshots += it },
+            nowMillis = eagerPublishClock(),
         )
         state.reverseSearch.open()
         state.reverseSearch.append("gti") // pick the typo entry
@@ -1181,7 +1497,7 @@ class TerminalScreenStateTest {
     fun `search finds matches in the buffer and selects one`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("alpha\r\nbeta\r\nalpha again\r\n".encodeToByteArray())
         state.search.open()
@@ -1198,7 +1514,7 @@ class TerminalScreenStateTest {
         // oldest one at the top of the scrollback.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hit\r\nfiller\r\nhit\r\nfiller\r\nhit\r\n".encodeToByteArray())
         state.search.open(anchorRow = 2) // viewport bottom sits on the second "hit"
@@ -1213,7 +1529,7 @@ class TerminalScreenStateTest {
     fun `next and previous cycle through matches`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hit\r\nhit\r\nhit\r\n".encodeToByteArray())
         state.search.open(anchorRow = 0)
@@ -1235,7 +1551,7 @@ class TerminalScreenStateTest {
     fun `case sensitivity and regex toggles re-run the search`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("Error 404\r\nerror 500\r\n".encodeToByteArray())
         state.search.open()
@@ -1257,7 +1573,7 @@ class TerminalScreenStateTest {
     fun `an invalid regex is reported without matches`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("anything\r\n".encodeToByteArray())
         state.search.open()
@@ -1342,7 +1658,9 @@ class TerminalScreenStateTest {
         // worth running even mid-stream.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope, nowMillis = { 0L }) // clock frozen: always throttled
+        // Eager clock: publishes are immediate (one window per read), while the total advance over
+        // this test stays below SEARCH_REFRESH_INTERVAL_MS - the search pass remains throttled.
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hit one\r\n".encodeToByteArray())
         state.search.open()
@@ -1364,7 +1682,7 @@ class TerminalScreenStateTest {
         // node — a visible panel that no longer reacts to anything.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope, initialHistory = listOf("uptime"))
+        val state = TerminalScreenState(session, scope, initialHistory = listOf("uptime"), nowMillis = eagerPublishClock())
 
         session.emit("hit\r\n".encodeToByteArray())
         state.reverseSearch.open()
@@ -1381,7 +1699,7 @@ class TerminalScreenStateTest {
         // A stray paste (a whole log line, a file) is not a search term; an unbounded pattern also
         // hands the regex compiler unbounded work.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val state = TerminalScreenState(FakeTerminalSession(), scope)
+        val state = TerminalScreenState(FakeTerminalSession(), scope, nowMillis = eagerPublishClock())
 
         state.search.open()
         state.search.updateQuery("x".repeat(MAX_SEARCH_QUERY_LENGTH + 500))
@@ -1396,7 +1714,7 @@ class TerminalScreenStateTest {
         // an incremental search re-selects around that, not around the live cursor.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hit\r\nfiller\r\nhit\r\nfiller\r\nhit\r\n".encodeToByteArray())
         state.search.setAnchorRow(2) // user scrolled up: second "hit" is the last visible row
@@ -1411,7 +1729,7 @@ class TerminalScreenStateTest {
     fun `closing search drops the query and matches`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hit\r\n".encodeToByteArray())
         state.search.open()
@@ -1429,7 +1747,7 @@ class TerminalScreenStateTest {
         // The buffer is walked on every published snapshot, so a closed panel must cost nothing.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         state.search.open()
         state.search.updateQuery("hit")
@@ -1446,7 +1764,7 @@ class TerminalScreenStateTest {
         // buffer as it is now.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hit\r\n".encodeToByteArray())
         state.search.open()
@@ -1463,7 +1781,7 @@ class TerminalScreenStateTest {
     fun `a committed command joins the vocabulary and the executed set`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         assertFalse(state.vocabulary.isCommand("pveversion"), "unknown before it is ever run")
         state.typeInput("pveversion -v")
@@ -1478,7 +1796,7 @@ class TerminalScreenStateTest {
     fun `input typed at a password prompt never reaches the executed set`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.echoOff = true
         state.typeInput("hunter2")
@@ -1492,7 +1810,7 @@ class TerminalScreenStateTest {
     fun `the executed set stays bounded over a long session`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         repeat(MAX_EXECUTED_COMMANDS + 50) { i ->
             state.typeInput("cmd$i")
@@ -1516,7 +1834,7 @@ class TerminalScreenStateTest {
     fun `a chunk arriving during construction does not break initialization`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = EagerOutputSession("hello\r\n".encodeToByteArray())
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         assertTrue(state.screen.isNotEmpty(), "the eager chunk was applied")
         assertFalse(state.hasSuggestion)
@@ -1527,7 +1845,7 @@ class TerminalScreenStateTest {
     fun `an empty query clears matches without erroring`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hit\r\n".encodeToByteArray())
         state.search.open()
@@ -1544,7 +1862,7 @@ class TerminalScreenStateTest {
     fun `next and previous are no-ops without matches`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         state.search.open()
         state.search.updateQuery("nothing here")
@@ -1561,7 +1879,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         state.resize(PtySize(cols = 100, rows = 30))
 
@@ -1574,7 +1892,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         // Narrow 5x3 grid: autowrap breaks the line at width 5.
         state.resize(PtySize(cols = 5, rows = 3))
@@ -1590,7 +1908,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         // Default 80x24 before the first layout, then the emulator's live size.
         assertEquals(80, state.cols)
@@ -1606,7 +1924,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         state.resize(PtySize(cols = 90, rows = 25))
         state.resize(PtySize(cols = 90, rows = 25)) // same size — dedup, don't nudge the PTY
@@ -1620,7 +1938,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         assertEquals(TerminalState.Open, state.state.value)
         scope.cancel()
@@ -1631,7 +1949,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         assertEquals(false, state.applicationCursorKeys)
@@ -1647,7 +1965,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         // Defaults: cursor visible, block, blinking.
@@ -1669,7 +1987,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello world".encodeToByteArray())
         state.beginSelection(TerminalPos(0, 0))
@@ -1684,7 +2002,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello".encodeToByteArray())
         state.beginSelection(TerminalPos(0, 0))
@@ -1701,7 +2019,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello world".encodeToByteArray())
         state.selectWordAt(TerminalPos(0, 8)) // tap lands on "world"
@@ -1715,7 +2033,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello world".encodeToByteArray())
         state.selectWordAt(TerminalPos(0, 0)) // tap lands on "h"
@@ -1729,7 +2047,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello world".encodeToByteArray())
         state.beginSelection(TerminalPos(0, 0))
@@ -1745,7 +2063,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello world".encodeToByteArray())
         state.beginSelection(TerminalPos(0, 0))
@@ -1761,7 +2079,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello".encodeToByteArray())
         state.moveSelectionStart(TerminalPos(0, 1))
@@ -1776,7 +2094,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         assertEquals(MouseTracking.Off, state.mouseTracking)
@@ -1792,7 +2110,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         assertEquals(MouseTracking.Off, state.mouseTracking)
@@ -1808,7 +2126,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         session.emit("$esc[?1000h$esc[?1006h".encodeToByteArray()) // Normal + SGR
@@ -1824,7 +2142,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello world".encodeToByteArray())
         state.selectWordAt(TerminalPos(0, 8)) // "world"
@@ -1840,7 +2158,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello".encodeToByteArray())
         val captured = state.capturePrimarySelection()
@@ -1855,7 +2173,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         assertEquals(false, state.mousePixels)
@@ -1869,7 +2187,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         session.emit("$esc[?1002h$esc[?1016h".encodeToByteArray()) // ButtonEvent + SGR-Pixels
@@ -1888,7 +2206,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         val handled = state.reportMouse(MouseButton.Left, MouseEventType.Press, TerminalPos(0, 0))
 
@@ -1902,7 +2220,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         session.emit("$esc[?2004h".encodeToByteArray()) // bracketed paste on
@@ -1917,7 +2235,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         state.paste("hi")
 
@@ -1930,7 +2248,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         // A recoverable PTY resize failure: the handler must not die — feed still works after it.
         session.resizeError = { IllegalStateException("pty broke") }
@@ -1947,7 +2265,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         // The PTY resize fails once (transient hiccup on a live connection)…
         session.resizeError = { IllegalStateException("pty broke") }
@@ -1967,7 +2285,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         // CancellationException must not be swallowed as a "recoverable failure": it must tear
         // down the handler coroutine (structured concurrency), or feed would keep working after cancellation.
@@ -1984,7 +2302,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         repeat(50) { state.send(it.toString()) }
 
@@ -1998,7 +2316,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         val before = state.snapshotVersion
         session.emit("a".encodeToByteArray())
@@ -2012,7 +2330,7 @@ class TerminalScreenStateTest {
     fun `osc 52 clipboard write is dropped when the gate is off by default`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         val copies = mutableListOf<String>()
@@ -2028,7 +2346,7 @@ class TerminalScreenStateTest {
     fun `osc 52 clipboard write reaches the UI once the gate is enabled`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope, clipboardWriteEnabled = true)
+        val state = TerminalScreenState(session, scope, clipboardWriteEnabled = true, nowMillis = eagerPublishClock())
         val esc = 27.toChar().toString()
 
         val copies = mutableListOf<String>()
@@ -2044,7 +2362,7 @@ class TerminalScreenStateTest {
     fun `applyClipboardWriteEnabled toggles the gate on an open session`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope) // starts off
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock()) // starts off
         val esc = 27.toChar().toString()
 
         val copies = mutableListOf<String>()
@@ -2066,7 +2384,7 @@ class TerminalScreenStateTest {
     fun `risky command is held before it reaches the pty on a production session`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf /var/lib".forEach { state.typeInput(it.toString()) }
@@ -2089,7 +2407,7 @@ class TerminalScreenStateTest {
     fun `the quote for a typed block continues the line already on screen`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf /sr".forEach { state.typeInput(it.toString()) }
@@ -2107,7 +2425,7 @@ class TerminalScreenStateTest {
     fun `the quote for a pasted block carries the lines under the risky one`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.paste("rm -rf /srv\nchown -R nobody /srv/www\n")
@@ -2125,7 +2443,7 @@ class TerminalScreenStateTest {
     fun `a command finishing a half-typed line is held and quoted whole`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "rm -rf ".forEach { state.typeInput(it.toString()) }
@@ -2143,7 +2461,7 @@ class TerminalScreenStateTest {
     fun `a paste finishing a half-typed line is quoted with it`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "echo ".forEach { state.typeInput(it.toString()) }
@@ -2162,7 +2480,7 @@ class TerminalScreenStateTest {
     fun `a line edited by a control the client cannot follow is not quoted from`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         session.emit("root@prod:~# rm -rf /srv/data".encodeToByteArray())
 
@@ -2186,7 +2504,7 @@ class TerminalScreenStateTest {
     fun `a command joined onto a word is still classified on its own`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "git".forEach { state.typeInput(it.toString()) }
@@ -2205,7 +2523,7 @@ class TerminalScreenStateTest {
     fun `a line left behind by a command that already ran is not joined onto the next`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "sudo ".forEach { state.typeInput(it.toString()) }
@@ -2227,7 +2545,7 @@ class TerminalScreenStateTest {
     fun `the line is tracked again after a command that ran elsewhere`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInputGuarded("docker ps\r") // harmless: not held, but it moved the line
@@ -2247,7 +2565,7 @@ class TerminalScreenStateTest {
     fun `a block pasted onto a line the client lost track of is still quoted whole`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         "foo bar".forEach { state.typeInput(it.toString()) }
@@ -2267,7 +2585,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val history = mutableListOf<List<String>>()
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it }, nowMillis = eagerPublishClock())
 
         state.sendUserInputGuarded("docker ps\r")
         session.emit("uptime".encodeToByteArray()) // echo, so the engine records what was typed
@@ -2288,7 +2606,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val history = mutableListOf<List<String>>()
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it }, nowMillis = eagerPublishClock())
 
         state.sendUserInputGuarded("uptime") // Edit: the command lands on the line, nothing runs
         session.emit("uptime".encodeToByteArray())
@@ -2308,7 +2626,7 @@ class TerminalScreenStateTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
         val history = mutableListOf<List<String>>()
-        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it })
+        val state = TerminalScreenState(session, scope, onHistoryChanged = { history += it }, nowMillis = eagerPublishClock())
 
         state.sendUserInput("\u001b[A") // arrow up from the key panel: the shell recalled a command
         "uptime".forEach { state.typeInput(it.toString()) }
@@ -2333,7 +2651,7 @@ class TerminalScreenStateTest {
     fun `a ready-made command is classified against the line on screen`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         session.emit("root@prod:~# rm -rf /srv/data".encodeToByteArray())
 
@@ -2353,7 +2671,7 @@ class TerminalScreenStateTest {
     fun `a paste is classified against the line on screen`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         session.emit("root@prod:~# rm -rf /srv/data".encodeToByteArray())
 
@@ -2374,7 +2692,7 @@ class TerminalScreenStateTest {
     fun `a long block finishing a half-typed line is still held`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // With a prompt on screen, as any live session has: the screen's candidates and the join are
@@ -2392,7 +2710,7 @@ class TerminalScreenStateTest {
     fun `confirming the held command sends it once`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.typeInput("rm -rf /var/lib\r")
@@ -2408,7 +2726,7 @@ class TerminalScreenStateTest {
     fun `dismissing the held command sends nothing`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.typeInput("shutdown now\r")
@@ -2423,7 +2741,7 @@ class TerminalScreenStateTest {
     fun `harmless commands and non-production sessions are not held`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
         state.typeInput("ls -la\r")
@@ -2440,7 +2758,7 @@ class TerminalScreenStateTest {
     fun `a command recalled from history is caught off the screen line`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Nothing was typed locally (arrow-up recall) — the command exists only on the screen.
@@ -2455,7 +2773,7 @@ class TerminalScreenStateTest {
     fun `a multi-line input block is judged by every line, not just the first`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // The soft keyboard delivers a whole IME delta in one call — a clipboard insert can carry
@@ -2471,7 +2789,7 @@ class TerminalScreenStateTest {
     fun `a command pasted without a newline is still caught on Enter`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Paste, then Enter before the host echoed anything back: the screen line is still empty,
@@ -2487,7 +2805,7 @@ class TerminalScreenStateTest {
     fun `a ready-made command is dropped while another one is pending`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInputGuarded("rm -rf /var/lib\n")
@@ -2503,7 +2821,7 @@ class TerminalScreenStateTest {
     fun `a snippet command is held and then sent without touching autocomplete`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInputGuarded("systemctl stop nginx\n")
@@ -2519,7 +2837,7 @@ class TerminalScreenStateTest {
     fun `a harmless snippet command goes straight through`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInputGuarded("uptime\n")
@@ -2533,7 +2851,7 @@ class TerminalScreenStateTest {
     fun `a second risky command while one is pending does not replace it`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.typeInput("rm -rf /var/lib\r")
@@ -2553,7 +2871,7 @@ class TerminalScreenStateTest {
     fun `a pasted command that would run is held too`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Paste carrying a newline runs on arrival — the classic "copied it off a wiki page" case.
@@ -2570,7 +2888,7 @@ class TerminalScreenStateTest {
     fun `a paste with no newline runs nothing and is not held`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Lands on the shell line for the user to read and edit; Enter is still guarded separately.
@@ -2585,7 +2903,7 @@ class TerminalScreenStateTest {
     fun `a password is never held or shown by the guard`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // At a password prompt the typed text is a secret, not a command: it must not be parked in
@@ -2602,7 +2920,7 @@ class TerminalScreenStateTest {
     fun `a password is still recognised once the session has scrollback`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // A real session is never on its first screenful: output scrolls history in long before any
@@ -2621,7 +2939,7 @@ class TerminalScreenStateTest {
     fun `a risky command recalled with arrow-up is still guarded after scrollback builds up`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Arrow-up recall: nothing is typed, the command is only on the screen line. The guard reads
@@ -2638,7 +2956,7 @@ class TerminalScreenStateTest {
     fun `full-screen apps are not guarded`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // vim/htop: there is no shell line to classify, and Enter there is not "run a command".
@@ -2656,7 +2974,7 @@ class TerminalScreenStateTest {
     fun `a paste is dropped while a confirmation is open`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.typeInput("rm -rf /var/lib\r")
@@ -2675,7 +2993,7 @@ class TerminalScreenStateTest {
     fun `a harmless paste is dropped while a confirmation is open too`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.typeInput("rm -rf /var/lib\r")
@@ -2692,7 +3010,7 @@ class TerminalScreenStateTest {
     fun `a pasted password is never held or shown by the guard`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         // Same rule as typing one: a password manager pastes the secret with a trailing newline, and
@@ -2709,7 +3027,7 @@ class TerminalScreenStateTest {
     fun `a harmless typed command is not sent while a confirmation is open`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.typeInput("rm -rf /var/lib\r")
@@ -2726,7 +3044,7 @@ class TerminalScreenStateTest {
     fun `a harmless ready-made command is dropped while a confirmation is open`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.guardPolicy = ProductionGuardPolicy(production = true, confirmWarnings = true)
 
         state.sendUserInputGuarded("rm -rf /var/lib\n")
@@ -2743,7 +3061,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         session.emit("hello".encodeToByteArray())
         state.beginSelection(TerminalPos(0, 2))
@@ -2758,7 +3076,7 @@ class TerminalScreenStateTest {
         val dispatcher = UnconfinedTestDispatcher(testScheduler)
         val scope = CoroutineScope(dispatcher)
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         state.resize(PtySize(cols = 4, rows = 4))
 
         // 中 does not fit in the last column: row 0 is marked wrapped and its column 3 stays blank.
@@ -2772,19 +3090,10 @@ class TerminalScreenStateTest {
         scope.cancel()
     }
 
-    @Test
-    fun `a snapshot differing only in the soft-wrap flag is not treated as unchanged`() {
-        // Compose skips a state write when the new value is equivalent to the old one, and list
-        // equality only sees cells. A row can lose its wrap (EL over an already-blank tail) without a
-        // single cell changing — publishing that as "no change" would leave link joining on stale flags.
-        val cells = listOf(TermCell('a'), TermCell('b'))
-        val wrapped = listOf<List<TermCell>>(TermSnapshotRow(cells, wrapped = true))
-        val plain = listOf<List<TermCell>>(TermSnapshotRow(cells, wrapped = false))
-
-        assertTrue(sameScreen(wrapped, listOf(TermSnapshotRow(cells, wrapped = true))))
-        assertFalse(sameScreen(wrapped, plain))
-        assertFalse(sameScreen(plain, listOf<List<TermCell>>(listOf(TermCell('a')))))
-    }
+    // The wrap-flag invariant (`ESC[K` dropping a wrap must republish even when no cell changes)
+    // moved to the source with the identity policy: the behavioral case lives above
+    // (`clearing a soft wrap republishes...`) and the emulator's own identity test
+    // (`clearing a soft wrap replaces the snapshot...`) pins the version bump.
 
     // --- Runbook step marks ---
 
@@ -2792,7 +3101,7 @@ class TerminalScreenStateTest {
     fun `a step report is taken once, by the step it belongs to`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar()
         val bel = 7.toChar()
         fun step(token: String, output: String, exitCode: Int) =
@@ -2821,7 +3130,7 @@ class TerminalScreenStateTest {
         // must not be able to park a copy of the screen in a field nothing ever clears.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar()
         val bel = 7.toChar()
 
@@ -2836,7 +3145,7 @@ class TerminalScreenStateTest {
     fun `ending the step drops the report the run never collected`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val esc = 27.toChar()
         val bel = 7.toChar()
         state.expectStepMark("sk_run_0")
@@ -2852,7 +3161,7 @@ class TerminalScreenStateTest {
     fun `output version moves on every batch from the host`() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeTerminalSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
 
         val start = state.outputVersion
         session.emit("a".encodeToByteArray())
@@ -2868,6 +3177,46 @@ class TerminalScreenStateTest {
         assertEquals(redrawn, state.output, "the screen really is unchanged")
         assertEquals(start + 4, state.outputVersion)
         scope.cancel()
+    }
+}
+
+/**
+ * Emits [chunks] one-byte chunks as fast as the collector allows; records resizes. A [resizeGate]
+ * parks the emulator owner inside a Resize apply until completed — the only way, under the
+ * single-threaded test dispatcher, to hold a genuinely saturated feed backlog while the test acts.
+ */
+private class FloodingTerminalSession(
+    private val chunks: Int,
+    private val resizeGate: CompletableDeferred<Unit>? = null,
+    private val interChunkDelayMs: Long = 0,
+) : TerminalSession {
+    private val _state = MutableStateFlow<TerminalState>(TerminalState.Open)
+    override val state: StateFlow<TerminalState> = _state
+
+    var emitted = 0
+        private set
+    val resizes = mutableListOf<PtySize>()
+
+    override val output: Flow<ByteArray> = flow {
+        repeat(chunks) {
+            if (interChunkDelayMs > 0) delay(interChunkDelayMs)
+            emit(byteArrayOf('x'.code.toByte()))
+            emitted++
+        }
+    }
+
+    override suspend fun send(data: ByteArray) = Unit
+
+    override suspend fun resize(size: PtySize) {
+        resizeGate?.await()
+        resizes += size
+    }
+
+    var closed = false
+        private set
+
+    override suspend fun close() {
+        closed = true
     }
 }
 

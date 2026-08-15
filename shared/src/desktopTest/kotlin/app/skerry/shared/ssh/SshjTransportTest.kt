@@ -63,6 +63,17 @@ class SshjTransportTest {
     }
 
     @Test
+    fun `transport socket has nagle disabled`() = runTest {
+        val connection = connect()
+        try {
+            val socket = (connection as SshjConnection).transportSocket
+            assertTrue(socket != null && socket.tcpNoDelay)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    @Test
     fun `exposes negotiated cipher after connect`() = runTest {
         val connection = connect()
         try {

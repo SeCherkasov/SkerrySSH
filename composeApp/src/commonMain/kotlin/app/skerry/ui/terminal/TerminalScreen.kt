@@ -119,6 +119,20 @@ private const val DOUBLE_CLICK_MS = 350
 /** Cursor blink half-period (ms), matching xterm's ~530ms phase. */
 private const val CURSOR_BLINK_MS = 530L
 
+/**
+ * Cells the link-underline passes (4-6) must not paint: an app underline is already there (no
+ * double line), or the cell is concealed (SGR 8) and the underline would trace the hidden run.
+ */
+private fun TermCell.blocksLinkUnderline(): Boolean = style.underline || style.hidden
+
+/** Rows the glyph-run cache may hold - several draw windows; see the cache's comment. */
+private const val GLYPH_RUN_CACHE_ROWS = 512
+
+// Test-only counter of TerminalScreen body executions (single-threaded: composition or the
+// sequential test JVM; revisit before enabling parallel test execution). Pins that the cursor
+// blink repaints its overlay without recomposing the screen.
+internal var terminalScreenCompositions = 0
+
 private const val PADDING_DP = 14
 // Number of history matches shown at once in the reverse-search (Ctrl-R) overlay.
 private const val REVERSE_SEARCH_ROWS = 6
@@ -167,6 +181,7 @@ fun TerminalScreen(
     // panel of its own (split pane, recording playback, preview).
     onOpenPath: ((String) -> Unit)? = null,
 ) {
+    terminalScreenCompositions++
     // Terminal font/size from Appearance settings ([LocalTerminalAppearance]); defaults to Hack 13px
     // where no provider is set (mobile target/preview/connection screen). Ligatures always disabled
     // ([NO_LIGATURES]) so `->`/`=>`/`!=` never merge regardless of font.
@@ -441,20 +456,24 @@ fun TerminalScreen(
     // Cursor blink phase: with blink on, toggle a boolean once per half-period; otherwise the cursor
     // stays solid. The cursor is drawn as an overlay (see below), so blinking repaints only a small
     // Canvas, not the whole screen text.
-    var blinkOn by remember { mutableStateOf(true) }
+    // A State object, not a delegated property: the blink phase is read ONLY inside the cursor
+    // overlay's draw lambda, so each 530ms toggle invalidates that one small canvas's draw and
+    // never recomposes this screen - a composition-time read here made every idle pane recompose
+    // twice a second, per pane, focused or not.
+    val blinkOn = remember { mutableStateOf(true) }
     LaunchedEffect(state.cursorBlink, state.cursorVisible, closed) {
         if (!state.cursorBlink || !state.cursorVisible || closed) {
-            blinkOn = true
+            blinkOn.value = true
             return@LaunchedEffect
         }
         while (true) {
-            blinkOn = true
+            blinkOn.value = true
             delay(CURSOR_BLINK_MS)
-            blinkOn = false
+            blinkOn.value = false
             delay(CURSOR_BLINK_MS)
         }
     }
-    val cursorVisibleNow = sized && !closed && state.cursorVisible && blinkOn
+    val cursorComposed = sized && !closed && state.cursorVisible
 
     // A single state snapshot per recomposition: both the text overlay and the cursor overlay read the
     // same screen/cursor — otherwise the snapshot could diverge between the two draw passes (cursor at a
@@ -521,14 +540,10 @@ fun TerminalScreen(
         return TerminalPos(row, p.col.coerceIn(0, snap[row].size))
     }
 
-    // Is there an openable link (OSC 8 or bare text URL) under this cell? Mirrors the Ctrl+click
-    // resolution so the hand cursor appears exactly where a click would open something.
-    fun linkUnderPos(pos: TerminalPos): Boolean {
-        // One snapshot for both lookups: the cell's own OSC 8 URI and the wrap-chain text around it.
-        val snap = state.screen
-        val uri = snap.getOrNull(pos.row)?.getOrNull(pos.col)?.hyperlink ?: linkAt(snap, pos.row, pos.col)
-        return uri != null && isSafeLinkUri(uri)
-    }
+    // Is there an openable link (OSC 8 or bare text URL) under this cell? Shares [openableLinkAt]
+    // with the Ctrl+click handler, so the hand cursor appears exactly where a click would open.
+    fun linkUnderPos(pos: TerminalPos): Boolean =
+        openableLinkAt(state.screen, pos.row, pos.col) != null
 
     // The file-path span under this cell, or null. Only consulted after [linkUnderPos] says no: a
     // URL always wins, so a path is never offered where a link would open instead.
@@ -668,7 +683,14 @@ fun TerminalScreen(
           // The same window the draw loop below walks, so a hit on the partly visible slack row is
           // highlighted too. derivedStateOf, not a plain read of scroll.value: this sits in
           // composition, and the raw value changes every pixel of a drag — the window changes per row.
-          val searchWindow by remember(metrics, viewportSize, screen) {
+          // Keys use the content VERSION, not the list: a remember key compares with equals(), and
+          // a structural list compare walks the scrollback on the Main thread on every publish.
+          // `state` stays in every version-keyed remember: the version is monotonic per EMULATOR,
+          // and an in-place session switch (mobile keeps the composition slot) could land on a
+          // coinciding counter — the state reference restores the per-session scope the screen
+          // instance used to provide.
+          val screenVersion = state.screenContentVersion
+          val searchWindow by remember(state, metrics, viewportSize, screenVersion) {
               derivedStateOf {
                   visibleRowWindow(scroll.value.toFloat(), viewportSize.height.toFloat(), metrics.cellHeight, screen.size)
               }
@@ -677,7 +699,7 @@ fun TerminalScreen(
           // layer knows the scroll position — so it keeps the state's anchor current.
           LaunchedEffect(state, searchWindow) { state.search.setAnchorRow(searchWindow.last) }
           val hitsByRow = remember(
-              screen, state.search.query, state.search.caseSensitive, state.search.regex, searchWindow,
+              state, screenVersion, state.search.query, state.search.caseSensitive, state.search.regex, searchWindow,
           ) {
               val query = state.search.query
               if (query.isNullOrEmpty()) {
@@ -694,6 +716,33 @@ fun TerminalScreen(
               }
           }
           val highlightByRow = rememberRowHighlights(state, screen, searchWindow)
+          // Plain-text URLs for the visible window: a URL cut by a soft wrap spans several rows,
+          // and its chain is joined and matched once rather than per row. Hoisted out of the draw
+          // phase like hitsByRow above - computed inline in the draw lambda it re-flattened and
+          // re-regexed the same rows on every repaint, sixty times a second during a scroll drag.
+          // searchWindow is a superset of the draw loop's window for any consistent scroll (it is
+          // built from the unpadded viewport height), and a fast drag inherits the same known,
+          // self-healing one-frame race as the search highlight - not new here; clicks resolve
+          // links from a fresh snapshot, never from this map.
+          val linksByRow = remember(state, screenVersion, searchWindow) {
+              linkScanPasses++
+              linkSpansByRow(screen, searchWindow)
+          }
+          // Glyph runs per visible row: segmentation is O(row) with a per-run allocation, and the
+          // draw lambda re-executes on every repaint (selection drag, scroll) while rows and
+          // highlights are unchanged. Keyed by row INDEX: the remember drops the map on every
+          // publish (screenVersion, like the sibling caches above), so within its lifetime the
+          // snapshot is fixed and an index can never alias a changed row - while a content-keyed
+          // map would pay an O(cols) structural hash per lookup and alias content-equal duplicate
+          // rows (retry-loop logs) into one entry that their distinct highlight instances then
+          // evict from each other every frame. The highlight instance rides in the value: a
+          // rebuilt highlight (cursor move through the live line) must re-segment its row. Filled
+          // lazily from the draw phase - single (UI) thread, like glyphStyleCache - and capped so
+          // paging through deep history in an idle session cannot retain runs for the whole
+          // scrollback (the wholesale clear costs one window's re-segmentation).
+          val glyphRunCache = remember(state, screenVersion) {
+              HashMap<Int, Pair<RowHighlight?, List<GlyphRun>>>()
+          }
           // clipToBounds after padding: the scrollback row at the scroll boundary is drawn at top=-chh and
           // would otherwise spill into the top padding zone (desktop has no default clip, unlike Android)
           // — after `clear` the command row would peek there. The clip cuts it at the content edge.
@@ -706,9 +755,6 @@ fun TerminalScreen(
               // whenever output streams while the user sits scrolled up in history. The search
               // highlight above derives its window from the same helper.
               val drawWindow = visibleRowWindow(scrollPx, size.height, chh, screen.size)
-              // Plain-text URLs for the whole window at once (pass 5 below): a URL cut by a soft wrap
-              // spans several rows, and its chain is joined and matched once rather than per row.
-              val linksByRow = linkSpansByRow(screen, drawWindow)
               for (r in drawWindow) {
                   val top = r * chh - scrollPx
                   val row = screen[r]
@@ -748,7 +794,15 @@ fun TerminalScreen(
                   // (mc box-drawing, CJK, symbols) is drawn at its own column separately: a fallback font
                   // gives a non-cellWidth advance, and a long run would accumulate drift (ragged box
                   // horizontals, colored rows sliding). A wide cell — span=2.
-                  for (run in glyphRuns(row, highlightByRow[r])) {
+                  val rowHighlight = highlightByRow[r]
+                  val cachedRuns = glyphRunCache[r]
+                  val runs = if (cachedRuns != null && cachedRuns.first === rowHighlight) {
+                      cachedRuns.second
+                  } else {
+                      if (glyphRunCache.size >= GLYPH_RUN_CACHE_ROWS) glyphRunCache.clear()
+                      glyphRuns(row, rowHighlight).also { glyphRunCache[r] = rowHighlight to it }
+                  }
+                  for (run in runs) {
                       val x = run.col * cw
                       if (run.text.isNotBlank()) {
                           val byKind = glyphStyleCache.getOrPut(run.style) { arrayOfNulls(HIGHLIGHT_KIND_COUNT) }
@@ -769,11 +823,15 @@ fun TerminalScreen(
                       val from = h
                       while (h < row.size && row[h].hyperlink == uri) h++
                       val to = h
+                      // blocksLinkUnderline skips concealed cells (SGR 8) in all three link passes:
+                      // LINK_UNDERLINE_STYLE carries its own color and hidden=false, so it bypasses
+                      // underlineDrawColor's hidden gate and would trace the hidden run's position.
+                      // Hit-testing refuses them too (openableLinkAt / filePathSpanAt).
                       var k = from
                       while (k < to) {
-                          if (row[k].style.underline) { k++; continue } // app already underlines — don't duplicate
+                          if (row[k].blocksLinkUnderline()) { k++; continue } // app already underlines — don't duplicate
                           val runStart = k
-                          while (k < to && !row[k].style.underline) k++
+                          while (k < to && !row[k].blocksLinkUnderline()) k++
                           drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette, underlineEffects, termTheme)
                       }
                   }
@@ -785,9 +843,9 @@ fun TerminalScreen(
                   for (link in linksByRow[r].orEmpty()) {
                       var k = link.start
                       while (k < link.endExclusive) {
-                          if (row[k].hyperlink != null || row[k].style.underline) { k++; continue }
+                          if (row[k].hyperlink != null || row[k].blocksLinkUnderline()) { k++; continue }
                           val runStart = k
-                          while (k < link.endExclusive && row[k].hyperlink == null && !row[k].style.underline) k++
+                          while (k < link.endExclusive && row[k].hyperlink == null && !row[k].blocksLinkUnderline()) k++
                           drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette, underlineEffects, termTheme)
                       }
                   }
@@ -797,9 +855,9 @@ fun TerminalScreen(
                   hoveredPath?.takeIf { it.row == r }?.let { hover ->
                       var k = hover.span.start
                       while (k < hover.span.endExclusive && k < row.size) {
-                          if (row[k].style.underline) { k++; continue }
+                          if (row[k].blocksLinkUnderline()) { k++; continue }
                           val runStart = k
-                          while (k < hover.span.endExclusive && k < row.size && !row[k].style.underline) k++
+                          while (k < hover.span.endExclusive && k < row.size && !row[k].blocksLinkUnderline()) k++
                           drawCellUnderline(LINK_UNDERLINE_STYLE, runStart * cw, top, (k - runStart) * cw, chh, palette, underlineEffects, termTheme)
                       }
                   }
@@ -1096,10 +1154,8 @@ fun TerminalScreen(
                         // row text. The URI comes from an untrusted server — open only safe web schemes,
                         // blocking file:/javascript:/anything else that could harm locally.
                         if (mods.isCtrlPressed) {
-                            val snap = state.screen
-                            val uri = snap.getOrNull(pos.row)?.getOrNull(pos.col)?.hyperlink
-                                ?: linkAt(snap, pos.row, pos.col)
-                            if (uri != null && isSafeLinkUri(uri)) {
+                            val uri = openableLinkAt(state.screen, pos.row, pos.col)
+                            if (uri != null) {
                                 runCatching { uriHandler.openUri(uri) }
                                 down.consume()
                                 return@awaitEachGesture
@@ -1181,11 +1237,18 @@ fun TerminalScreen(
 
       // Cursor overlay over the text per the DECSCUSR shape. Block — fill the cell + redraw the char in
       // a contrasting color; Underline — a bar at the bottom; Bar — a vertical line on the left. Geometry
-      // uses the same monospace metric as the text, offset by the scroll.
-      if (cursorVisibleNow && screen.isNotEmpty()) {
+      // uses the same monospace metric as the text, offset by the scroll. The blink phase gates
+      // the DRAW, not the composition: the canvas stays composed while the cursor exists, and the
+      // 530ms toggle repaints only this overlay.
+      if (cursorComposed && screen.isNotEmpty()) {
           val thickness = with(density) { 2.dp.toPx() }
-          val glyph = screen.getOrNull(cursorRow)?.getOrNull(cursorCol)?.text
+          // A concealed cell (SGR 8) must stay unreadable under the block cursor too: the text
+          // pass renders it transparent (TerminalGlyphs.toSpanStyle), and redrawing it here in
+          // the contrast color would reveal the one character the host asked to hide.
+          val glyph = screen.getOrNull(cursorRow)?.getOrNull(cursorCol)
+              ?.takeUnless { it.style.hidden }?.text
           Canvas(Modifier.fillMaxSize().padding(PADDING_DP.dp)) {
+              if (!blinkOn.value) return@Canvas
               val x = cursorCol * metrics.cellWidth
               val y = cursorRow * metrics.cellHeight - scroll.value.toFloat()
               when (state.cursorShape) {

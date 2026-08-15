@@ -124,14 +124,22 @@ internal fun rowFilePathSpans(row: List<TermCell>): List<TextLinkSpan> {
     // Runs per visible row on every Canvas draw — bail out with zero allocation on rows that cannot
     // contain a path before touching StringBuilder/detection.
     if (!rowHasPathMarker(row)) return emptyList()
+    // A span touching a hyperlink-owned cell is dropped (the hyperlink owns it); one touching a
+    // concealed cell (SGR 8) is dropped whole too - a path with a hidden segment would hand SFTP
+    // a location the user never saw, clicks on its visible prefix included.
     return rowTextSpans(row, ::detectFilePaths).filterNot { span ->
-        (span.start until span.endExclusive).any { row.getOrNull(it)?.hyperlink != null }
+        (span.start until span.endExclusive).any {
+            row.getOrNull(it)?.let { cell -> cell.hyperlink != null || cell.style.hidden } == true
+        }
     }
 }
 
 /** The file-path span under column [col] in [row], or `null`. Used for Ctrl+click hit-testing. */
-internal fun filePathSpanAt(row: List<TermCell>, col: Int): TextLinkSpan? =
-    rowFilePathSpans(row).firstOrNull { col >= it.start && col < it.endExclusive }
+internal fun filePathSpanAt(row: List<TermCell>, col: Int): TextLinkSpan? {
+    // A concealed cell (SGR 8) is not a click target: the user cannot read what would open.
+    if (row.getOrNull(col)?.style?.hidden == true) return null
+    return rowFilePathSpans(row).firstOrNull { col >= it.start && col < it.endExclusive }
+}
 
 /**
  * The path a touch selection stands for, or `null`. Only a selection that is exactly one path

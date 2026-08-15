@@ -51,8 +51,18 @@ internal object CharMetrics {
         cp in 0xFE20..0xFE2F ||          // combining half marks
         cp in 0xE0100..0xE01EF           // variation selectors supplement
 
+    // One shared instance per printable ASCII char: feed() calls codePointToString once per
+    // printed character, and streaming plain text allocated a fresh one-char String per byte.
+    private val ASCII_STRINGS = Array(0x7F - 0x20) { (0x20 + it).toChar().toString() }
+
+    // Box-drawing glyphs get the same treatment: TUI borders (tmux, mc, htop) repeat them across
+    // whole rows, and the generic BMP branch allocated one String per cell.
+    private val BOX_DRAWING_STRINGS = Array(0x80) { (0x2500 + it).toChar().toString() }
+
     /** Codepoint to string: BMP is one Char, astral is a surrogate pair, invalid is U+FFFD. */
     fun codePointToString(cp: Int): String = when {
+        cp in 0x20..0x7E -> ASCII_STRINGS[cp - 0x20]
+        cp in 0x2500..0x257F -> BOX_DRAWING_STRINGS[cp - 0x2500]
         cp in 0..0xFFFF && cp !in 0xD800..0xDFFF -> cp.toChar().toString()
         cp in 0x10000..0x10FFFF -> {
             val v = cp - 0x10000

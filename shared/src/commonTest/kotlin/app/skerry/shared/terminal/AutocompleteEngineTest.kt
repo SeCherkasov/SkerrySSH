@@ -1,6 +1,8 @@
 package app.skerry.shared.terminal
 
 import kotlin.test.Test
+import kotlin.test.assertSame
+import kotlin.test.assertNotSame
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
@@ -129,6 +131,22 @@ class CommandHistoryTest {
 }
 
 class AutocompleteEngineTest {
+
+    @Test
+    fun `session tokens are cached until history changes`() {
+        // The token scan is O(history x words) and runs per keystroke; history.commands is an
+        // immutable snapshot replaced on record, so instance identity is the cache key.
+        val history = CommandHistory()
+        val engine = AutocompleteEngine(history = history)
+        history.record("cat /var/log/syslog")
+        val first = engine.sessionTokens()
+        assertEquals(listOf("/var/log/syslog"), first)
+        assertSame(first, engine.sessionTokens())
+        history.record("cd /etc")
+        val second = engine.sessionTokens()
+        assertNotSame(first, second)
+        assertTrue("/etc" in second)
+    }
 
     /**
      * A completion only stays a prefix until something is typed onto it: the shell inserted its own

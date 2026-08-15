@@ -202,6 +202,11 @@ internal data class GlyphRun(
  */
 private fun TermCell.isPlainAscii(): Boolean = text.length == 1 && text[0].code in 0x20..0x7e
 
+// Test-only counter of actual row segmentations (single-threaded: draw phase or the sequential
+// test JVM - revisit before enabling parallel test execution). Pins that repaints reuse cached
+// runs instead of re-segmenting every visible row per frame.
+internal var glyphRunSegmentations = 0
+
 /**
  * Segments a grid row into glyph runs. Consecutive same-style ASCII cells are merged into one run (the
  * fast monospace drawText), while each non-ASCII glyph (mc box-drawing, CJK, symbols) is split into its
@@ -214,6 +219,7 @@ private fun TermCell.isPlainAscii(): Boolean = text.length == 1 && text[0].code 
  * so a token boundary inside otherwise identical cells becomes a boundary between runs.
  */
 internal fun glyphRuns(row: List<TermCell>, highlight: RowHighlight? = null): List<GlyphRun> {
+    glyphRunSegmentations++
     val runs = ArrayList<GlyphRun>()
     fun kindAt(col: Int) = highlight?.kindAt(col) ?: HighlightKind.None
     var g = 0
@@ -264,8 +270,14 @@ internal fun TermStyle.toSpanStyle(palette: Palette, theme: TerminalTheme): Span
         bg == TermColor.Default -> Color.Unspecified
         else -> resolvedBg
     }
-    if (hidden) fgColor = bgColor.takeIf { it != Color.Unspecified } ?: theme.background
     if (dim) fgColor = fgColor.copy(alpha = 0.6f)
+    // Transparent, not painted-as-background: a bg-colored glyph is faintly legible under the
+    // half-alpha selection and search washes drawn beneath the text - the concealed character
+    // must contribute no strokes at all. LAST, so no later attribute can restore visibility:
+    // dim's copy(alpha = 0.6f) REPLACES alpha, and applied after Transparent (= black at alpha 0)
+    // it would paint the secret in 60% black. The cell's real background is painted separately
+    // by cellBgColor - this override touches only the glyph strokes.
+    if (hidden) fgColor = Color.Transparent
     // Underline (including modern 4:x forms and the SGR 58 color) is drawn manually in Canvas — Compose
     // TextDecoration can't do wavy/dotted/double or a separate color. Here only strikethrough, which is native.
     return SpanStyle(
@@ -294,6 +306,9 @@ internal val LINK_UNDERLINE_STYLE = TermStyle(
  * color (accounting for inverse and dim). Rendered separately from the glyph, so the color is computed here.
  */
 internal fun TermStyle.underlineDrawColor(palette: Palette, theme: TerminalTheme): Color {
+    // A concealed cell must not reveal even the POSITION of its text: an SGR 8;4 underline in the
+    // text color would trace the run of the hidden characters.
+    if (hidden) return Color.Transparent
     val base = if (underlineColor == TermColor.Default) {
         if (inverse) {
             if (bg == TermColor.Default) theme.background else bg.toComposeColor(theme, palette)

@@ -61,7 +61,7 @@ class TerminalThemeSwitchRenderTest {
         // Unconfined: feed/resize run synchronously at the emit point, making test frames deterministic.
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val session = FakeSession()
-        val state = TerminalScreenState(session, scope)
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
         val theme = mutableStateOf(TerminalThemes.NightSea)
         try {
             ImageComposeScene(width = 400, height = 260, density = Density(1f)).use { scene ->

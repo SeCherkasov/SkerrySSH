@@ -47,6 +47,9 @@ internal class RowText(val text: String, private val rowOf: IntArray?, private v
     /** Column the character at string index [index] was drawn in (single-row callers). */
     fun column(index: Int): Int = colOf[index]
 
+    /** Grid row the character at string index [index] came from (0 for a single-row flatten). */
+    fun rowAt(index: Int): Int = rowOf?.get(index) ?: 0
+
     /**
      * The part of the string span `[start, endExclusive)` that landed on grid [row], as a column
      * range, or `null` when the span does not touch that row. Columns are contiguous within a row —

@@ -259,17 +259,37 @@ class AutocompleteEngine(
             .map { head + it }
     }
 
+    /**
+     * Cache for [sessionTokens], keyed on the history snapshot's identity: history.commands is an
+     * immutable list replaced as a whole on record/preload/forget, so `===` is exact. Key and
+     * value travel in ONE immutable holder behind a single Volatile field - sessionTokens is
+     * reached from the UI thread (typing) and the session scope (publish -> refreshSuggestion),
+     * and two separately published fields can pair a fresh key with a stale value: the exact tear
+     * [CommandHistory]'s own State holder exists to prevent. Two writers may lose an update to
+     * each other; no reader can ever see a mismatched pair.
+     */
+    private class TokensCache(val commands: List<String>, val tokens: List<String>)
+
+    @Volatile
+    private var tokensCache: TokensCache? = null
+
     /** Distinct arguments (not the first word) from command history, newest first, deduplicated. */
-    private fun sessionTokens(): List<String> {
+    // internal, not private: the caching contract (same instance until history changes) is pinned
+    // by an identity test. The scan is O(history x words) and used to run on every keystroke.
+    internal fun sessionTokens(): List<String> {
+        val commands = history.commands
+        tokensCache?.let { if (it.commands === commands) return it.tokens }
         val seen = LinkedHashSet<String>()
-        for (cmd in history.commands) {
+        for (cmd in commands) {
             val parts = cmd.split(' ')
             for (i in 1 until parts.size) {
                 val t = parts[i]
                 if (t.length >= 2) seen.add(t)
             }
         }
-        return seen.toList()
+        val tokens = seen.toList()
+        tokensCache = TokensCache(commands, tokens)
+        return tokens
     }
 
     /** Skips an ESC sequence (CSI/`ESC [ … final` or plain `ESC x`); returns the index past it. */

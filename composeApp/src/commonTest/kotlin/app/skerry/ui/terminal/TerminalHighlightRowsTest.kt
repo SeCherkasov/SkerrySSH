@@ -279,4 +279,14 @@ class TerminalHighlightRowsTest {
         val map = highlight(screen, cursorCol = 23, executed = setOf("git status"))
         assertEquals(HighlightKind.Command, map.getValue(0).kindAt(13))
     }
+
+    @Test
+    fun `the cursor's own row never reads as an executed command, even from inside the prompt`() {
+        // Cursor inside the prompt parses no live command line (read -p with a pre-filled answer),
+        // so the overlay cannot reclaim the row - the background's executed pass must exclude the
+        // live chain unconditionally, as the old single pass did.
+        val screen = listOf(row("user@host:~$ git status"))
+        val map = highlight(screen, cursorCol = 5, executed = setOf("git status"))
+        assertEquals(HighlightKind.None, map[0]?.kindAt(13) ?: HighlightKind.None)
+    }
 }
