@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
@@ -58,6 +59,11 @@ class TerminalHighlightRenderTest {
         override suspend fun close() {}
         fun emit(text: String) {
             check(_output.tryEmit(text.encodeToByteArray())) { "output buffer overflow" }
+        }
+
+        /** Transport drop: the session reports Closed, the way a dead connection does. */
+        fun die() {
+            _state.value = TerminalState.Closed()
         }
     }
 
@@ -194,6 +200,243 @@ class TerminalHighlightRenderTest {
         }
     }
 
+    /** Real-time poll: the blink coroutine delays on the wall clock, not the render clock. */
+    private fun pollFrames(frame: () -> PixelMap, tries: Int = 25, cond: (PixelMap) -> Boolean): Boolean {
+        repeat(tries) {
+            Thread.sleep(100)
+            if (cond(frame())) return true
+        }
+        return false
+    }
+
+    // NightSea's cursor #2BBDEE happens to equal ansi[6] (cyan) - the cursor-presence probes below
+    // are sound only because these scenarios emit plain uncolored text; re-verify if extending.
+    // The cell-0 interior region is tied to the defaults these scenes run under: 13px font, 18px
+    // line height, PADDING_DP=14, Density(1f) - re-derive on change; a drifted region fails
+    // loudly on the sampled-while-lit / drag-painted gates, never silently.
+    private val cell0InteriorX = 16..20
+    private val cell0InteriorY = 18..28
+
+    /** Cell 0 including the underline band at the row's bottom edge. */
+    private val cell0WithUnderlineY = 16..31
+
+    // Row 0's link-underline band under the 19 cells of "https://example.com". The link cyan
+    // equals theme.cursor, so the probe stays inside this band - the tests park the blink cursor
+    // on row 2, clear of it.
+    private val urlUnderlineX = 16..160
+    private val urlUnderlineY = 29..31
+
+    /** Row 0's underline band under the 4 cells of the OSC 8 anchor text "link". */
+    private val hyperlinkBandX = 16..44
+
+    /** LINK_UNDERLINE_STYLE's own color - carried by the style, not by the cell's text color. */
+    private val linkCyan = Color(0xFF2BBDEE).toArgb()
+
+    /** What a selected blank cell reads as on screen: the half-alpha wash over the background. */
+    private val selectionWash = theme.selection.compositeOver(theme.background).toArgb()
+
+    @Test
+    fun cursorBlinkRepaintsWithoutRecomposingTheScreen() {
+        withScreen(TerminalHighlight(commandLine = false, output = false)) { session, frame ->
+            session.emit("x")
+            repeat(5) { frame() }
+            // Two-phase poll: a single sample races the wall-clock blink phase on a cold JVM.
+            assertTrue(
+                pollFrames(frame) { it.hasColorNear(theme.cursor.toArgb()) },
+                "the cursor must become visible",
+            )
+            val compositions = terminalScreenCompositions
+            assertTrue(
+                pollFrames(frame) { !it.hasColorNear(theme.cursor.toArgb()) },
+                "the cursor must blink off within ~2.5s",
+            )
+            assertEquals(
+                compositions, terminalScreenCompositions,
+                "a blink toggle must repaint the overlay, not recompose the screen",
+            )
+        }
+    }
+
+    @Test
+    fun aSteadyCursorNeverBlanks() {
+        withScreen(TerminalHighlight(commandLine = false, output = false)) { session, frame ->
+            // DECSCUSR 2 = steady block; the effect's early-return must pin the phase on.
+            session.emit("${'\u001b'}[2 qx")
+            repeat(5) { frame() }
+            // Longer than two half-periods: a blink regression would blank at least once.
+            repeat(13) {
+                Thread.sleep(100)
+                assertTrue(frame().hasColorNear(theme.cursor.toArgb()), "a steady cursor must never blank")
+            }
+        }
+    }
+
+    @Test
+    fun aClosedSessionHidesTheCursor() {
+        withScreen(TerminalHighlight(commandLine = false, output = false)) { session, frame ->
+            session.emit("x")
+            assertTrue(
+                pollFrames(frame) { it.hasColorNear(theme.cursor.toArgb()) },
+                "the cursor must become visible first",
+            )
+            session.die()
+            repeat(3) { frame() }
+            // Gone and stays gone: the overlay is not composed for a dead session.
+            repeat(5) {
+                Thread.sleep(100)
+                assertFalse(frame().hasColorNear(theme.cursor.toArgb()), "a dead session must not draw a cursor")
+            }
+        }
+    }
+
+    @Test
+    fun concealedTextStaysHiddenUnderTheSelectionWash() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val session = FakeSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        try {
+            ImageComposeScene(width = 420, height = 240, density = Density(1f)).use { scene ->
+                scene.setContent {
+                    SkerryTheme {
+                        CompositionLocalProvider(
+                            LocalTerminalTheme provides theme,
+                            LocalTerminalHighlight provides TerminalHighlight(commandLine = false, output = false),
+                            LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
+                        ) {
+                            TerminalScreen(state, Modifier.fillMaxSize())
+                        }
+                    }
+                }
+                var timeNanos = 0L
+                fun frame(): PixelMap {
+                    Snapshot.sendApplyNotifications()
+                    timeNanos += 16_666_667L
+                    return scene.render(timeNanos).toComposeImageBitmap().toPixelMap()
+                }
+                repeat(3) { frame() }
+                // Concealed AND dim X at cell 0 (SGR 2;8 - the combination where a naive alpha
+                // override repainted the secret in 60% black); cursor sits at cell 1, clear of
+                // the probed region.
+                session.emit("${'\u001b'}[2;8mX")
+                repeat(5) { frame() }
+                // Select across the row: the wash paints under the glyph pass, and hidden strokes
+                // of any color read through it as non-uniformity.
+                scene.sendPointerEvent(PointerEventType.Press, Offset(16f, 20f))
+                scene.sendPointerEvent(PointerEventType.Move, Offset(120f, 24f))
+                repeat(3) { frame() }
+                val after = frame()
+                // Guard against a vacuous pass: the wash color itself must be present on blank
+                // cells clear of the cursor cell - a frame delta on the probed row would also be
+                // satisfied by a mere cursor blink.
+                assertTrue(
+                    after.regionHasColor(selectionWash, 60..110, cell0InteriorY),
+                    "the drag must visibly paint the selection wash",
+                )
+                assertTrue(
+                    after.regionIsUniform(cell0InteriorX, cell0InteriorY, tolerance = 8),
+                    "the concealed cell under the wash must be indistinguishable from blank cells",
+                )
+            }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun concealedTextDrawsNoUnderline() {
+        withScreen(TerminalHighlight(commandLine = false, output = false)) { session, frame ->
+            // SGR 8;4: concealed and underlined. The underline would trace the position and run
+            // length of the hidden text - the whole cell, band included, must stay blank.
+            session.emit("${'\u001b'}[8;4mX")
+            repeat(5) { frame() }
+            assertTrue(
+                frame().regionIsUniform(cell0InteriorX, cell0WithUnderlineY, tolerance = 8),
+                "a concealed cell must not draw its underline",
+            )
+        }
+    }
+
+    @Test
+    fun concealedUrlDrawsNoLinkUnderline() {
+        withScreen(TerminalHighlight(commandLine = false, output = false)) { session, frame ->
+            // Visible URL first: pins the probe region to where the link underline actually lands,
+            // so a drifted band cannot make the concealed assertion below pass vacuously.
+            session.emit("https://example.com\r\n\r\n")
+            repeat(5) { frame() }
+            assertTrue(
+                // Tolerance 90: the ~1.3px line antialiases against the near-black background,
+                // so no pixel reads as pure cyan (the strongest measures ~#1F8BB0, blue off by 62);
+                // 90 still cannot match the background itself (green differs by 175) or the
+                // foreground (red differs by 187).
+                frame().regionHasColor(linkCyan, urlUnderlineX, urlUnderlineY, tolerance = 90),
+                "a visible bare URL must get the link underline",
+            )
+            // The same URL concealed (SGR 8): LINK_UNDERLINE_STYLE carries its own color and
+            // hidden=false, so underlineDrawColor's hidden gate never sees it - the link passes
+            // themselves must skip concealed cells, or the underline traces the hidden run.
+            session.emit("${'\u001b'}[2J${'\u001b'}[H${'\u001b'}[8mhttps://example.com${'\u001b'}[0m\r\n\r\n")
+            repeat(5) { frame() }
+            assertFalse(
+                // The same wide tolerance makes this STRICTER: even a faint antialiased trace
+                // of the underline fails it.
+                frame().regionHasColor(linkCyan, urlUnderlineX, urlUnderlineY, tolerance = 90),
+                "a concealed URL must not draw the link underline",
+            )
+        }
+    }
+
+    @Test
+    fun concealedHyperlinkDrawsNoLinkUnderline() {
+        withScreen(TerminalHighlight(commandLine = false, output = false)) { session, frame ->
+            // Visible OSC 8 hyperlink first: pins the probe band for pass 4, a structurally
+            // separate loop (keyed on the cell's hyperlink) from the bare-URL pass 5 that
+            // concealedUrlDrawsNoLinkUnderline covers.
+            session.emit("\u001b]8;;https://example.com\u0007link\u001b]8;;\u0007\r\n\r\n")
+            repeat(5) { frame() }
+            assertTrue(
+                frame().regionHasColor(linkCyan, hyperlinkBandX, urlUnderlineY, tolerance = 90),
+                "a visible OSC 8 hyperlink must get the link underline",
+            )
+            // The same hyperlink concealed (SGR 8): the span filter that protects bare URLs never
+            // sees OSC 8 cells, so pass 4 needs its own hidden gate - and its own test.
+            session.emit(
+                "\u001b[2J\u001b[H\u001b]8;;https://example.com\u0007\u001b[8mlink\u001b[0m\u001b]8;;\u0007\r\n\r\n",
+            )
+            repeat(5) { frame() }
+            assertFalse(
+                frame().regionHasColor(linkCyan, hyperlinkBandX, urlUnderlineY, tolerance = 90),
+                "a concealed OSC 8 hyperlink must not draw the link underline",
+            )
+        }
+    }
+
+    @Test
+    fun concealedTextStaysHiddenUnderTheBlockCursor() {
+        withScreen(TerminalHighlight(commandLine = false, output = false)) { session, frame ->
+            // SGR 8 conceals X; CUB puts the block cursor onto it. The text pass renders the
+            // glyph transparent (TerminalGlyphs.toSpanStyle); the cursor overlay must not repaint
+            // it readable in the contrast color.
+            session.emit("${'\u001b'}[8mX${'\u001b'}[D")
+            repeat(5) { frame() }
+            var checkedWhileLit = false
+            var attempts = 0
+            while (!checkedWhileLit && attempts++ < 25) {
+                Thread.sleep(100)
+                val px = frame()
+                if (px.regionHasColor(theme.cursor.toArgb(), cell0InteriorX, cell0InteriorY)) {
+                    // A solid block: any glyph stroke inside the interior (antialiased or not)
+                    // breaks the uniform cursor fill and reveals the concealed character.
+                    assertTrue(
+                        px.regionAllNearColor(theme.cursor.toArgb(), cell0InteriorX, cell0InteriorY, tolerance = 40),
+                        "a concealed glyph must not be redrawn readable under the cursor",
+                    )
+                    checkedWhileLit = true
+                }
+            }
+            assertTrue(checkedWhileLit, "the block cursor must have been sampled while lit")
+        }
+    }
+
     @Test
     fun linkScanStaysCachedAcrossSelectionRepaints() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
@@ -221,7 +464,6 @@ class TerminalHighlightRenderTest {
                 repeat(3) { frame() }
                 session.emit("see https://example.com")
                 repeat(5) { frame() }
-                val before = frame()
                 val passes = linkScanPasses
                 assertTrue(passes > 0, "the hoisted link scan must still be wired into composition")
 
@@ -230,11 +472,11 @@ class TerminalHighlightRenderTest {
                 scene.sendPointerEvent(PointerEventType.Press, Offset(40f, 20f))
                 scene.sendPointerEvent(PointerEventType.Move, Offset(60f, 24f))
                 val afterFirstMove = frame()
-                // Guard against a vacuous pass: the drag must actually paint a selection - a
-                // no-op pointer sequence would leave nothing invalidated and assert nothing.
+                // Guard against a vacuous pass: the wash color must be present on the blank cell 3
+                // inside the dragged range - a frame delta would also be satisfied by cursor blink.
                 assertTrue(
-                    !before.sameRowPixels(afterFirstMove, y = 20),
-                    "the drag must visibly change the frame (selection highlight)",
+                    afterFirstMove.regionHasColor(selectionWash, 39..44, cell0InteriorY),
+                    "the drag must visibly paint the selection wash",
                 )
                 repeat(5) { step ->
                     scene.sendPointerEvent(PointerEventType.Move, Offset(80f + step * 20f, 24f))
@@ -289,12 +531,35 @@ class TerminalHighlightRenderTest {
         }
     }
 
-    /** Whether row [y] holds identical pixels in both frames — a cheap frame-delta probe. */
-    private fun PixelMap.sameRowPixels(other: PixelMap, y: Int): Boolean {
-        for (x in 0 until width) {
-            if (this[x, y].toArgb() != other[x, y].toArgb()) return false
+    /** Whether every pixel inside the region matches the region's own first pixel within [tolerance]. */
+    private fun PixelMap.regionIsUniform(xs: IntRange, ys: IntRange, tolerance: Int): Boolean {
+        val ref = this[xs.first, ys.first].toArgb()
+        for (y in ys) {
+            for (x in xs) {
+                if (x < width && y < height && !matches(this[x, y].toArgb(), ref, tolerance)) return false
+            }
         }
         return true
+    }
+
+    /** Whether every pixel inside the region matches [argb] within [tolerance]. */
+    private fun PixelMap.regionAllNearColor(argb: Int, xs: IntRange, ys: IntRange, tolerance: Int): Boolean {
+        for (y in ys) {
+            for (x in xs) {
+                if (x < width && y < height && !matches(this[x, y].toArgb(), argb, tolerance)) return false
+            }
+        }
+        return true
+    }
+
+    /** Whether any pixel inside the region matches [argb] within [tolerance]. */
+    private fun PixelMap.regionHasColor(argb: Int, xs: IntRange, ys: IntRange, tolerance: Int = 2): Boolean {
+        for (y in ys) {
+            for (x in xs) {
+                if (x < width && y < height && matches(this[x, y].toArgb(), argb, tolerance)) return true
+            }
+        }
+        return false
     }
 
     /** Whether opaque pixel [argb] matches [target] within [tolerance] on every channel. */

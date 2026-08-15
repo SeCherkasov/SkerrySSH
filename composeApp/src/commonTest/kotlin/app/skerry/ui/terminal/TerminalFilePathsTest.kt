@@ -2,6 +2,7 @@ package app.skerry.ui.terminal
 
 import app.skerry.shared.terminal.CellWidth
 import app.skerry.shared.terminal.TermCell
+import app.skerry.shared.terminal.TermStyle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -177,6 +178,26 @@ class TerminalFilePathsTest {
         val span = rowFilePathSpans(cells).single()
         assertEquals(3, span.start)
         assertEquals("/etc/hosts", filePathSpanAt(cells, 3)?.uri)
+    }
+
+    @Test
+    fun `a path with a concealed segment offers nothing`() {
+        // Visible "/var/log" + concealed "/../secret": SFTP would be handed a path the user never
+        // saw, so a span covering any hidden cell is dropped whole - clicks on the visible prefix
+        // included.
+        val hidden = TermStyle(hidden = true)
+        val cells = "see ".map { TermCell(it) } +
+            "/var/log".map { TermCell(it) } +
+            "/../secret".map { TermCell(it, hidden) }
+        assertTrue(rowFilePathSpans(cells).isEmpty())
+        assertNull(filePathSpanAt(cells, 5))
+    }
+
+    @Test
+    fun `a concealed cell offers no path to open`() {
+        // SGR 8: the pointed cell is invisible, so it must not be a click target.
+        val cells = "see /etc/hosts".map { TermCell(it, TermStyle(hidden = true)) }
+        assertNull(filePathSpanAt(cells, 6))
     }
 
     @Test

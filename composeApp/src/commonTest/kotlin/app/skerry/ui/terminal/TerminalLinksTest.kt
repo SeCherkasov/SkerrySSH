@@ -2,6 +2,7 @@ package app.skerry.ui.terminal
 
 import app.skerry.shared.terminal.TermCell
 import app.skerry.shared.terminal.TermSnapshotRow
+import app.skerry.shared.terminal.TermStyle
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -290,5 +291,68 @@ class TerminalLinksTest {
         val span = rowLinkSpans(listOf(cells), 0).single()
         assertEquals(3, span.start)                 // url starts after wide glyph (cols 0,1) + space (col 2)
         assertEquals("https://a.test", linkAt(listOf(cells), 0, 3))
+    }
+
+    // --- openableLinkAt: the single hover/Ctrl+click resolution point ---
+
+    @Test
+    fun `resolves the hyperlink and the bare url under a visible cell`() {
+        val osc = listOf(listOf(TermCell(text = "x", hyperlink = "https://osc.test")))
+        assertEquals("https://osc.test", openableLinkAt(osc, 0, 0))
+        val bare = listOf(row("https://a.test"))
+        assertEquals("https://a.test", openableLinkAt(bare, 0, 3))
+    }
+
+    @Test
+    fun `a concealed cell offers nothing to open`() {
+        // SGR 8: the cell's text is invisible, so there must be no invisible click target either -
+        // for the cell's own OSC 8 hyperlink and for a bare URL detected around it alike.
+        val hidden = TermStyle(hidden = true)
+        val osc = listOf(listOf(TermCell(text = "x", style = hidden, hyperlink = "https://osc.test")))
+        assertNull(openableLinkAt(osc, 0, 0))
+        val bare = listOf("https://a.test".map { TermCell(it, hidden) })
+        assertNull(openableLinkAt(bare, 0, 3))
+    }
+
+    @Test
+    fun `a url with a concealed tail is not a link at all`() {
+        // Visible "https://a.test" + concealed ".evil.tld/x" reads as one token to the detector;
+        // underlining only the visible prefix while opening the joined URI would make the spoof
+        // look MORE legitimate, so a span covering any hidden cell is dropped whole.
+        val hidden = TermStyle(hidden = true)
+        val cells = "https://a.test".map { TermCell(it) } + ".evil.tld/x".map { TermCell(it, hidden) }
+        assertTrue(rowLinkSpans(listOf(cells), 0).isEmpty())
+        assertNull(openableLinkAt(listOf(cells), 0, 3))
+    }
+
+    @Test
+    fun `a concealed tail on the wrapped row kills the whole link`() {
+        // The realistic shape of the spoof: the visible URL runs to the right margin and the
+        // concealed tail lands on the continuation row. Pins the multi-row rowAt mapping inside
+        // coversConcealedCell, which the single-row test above cannot reach.
+        val hidden = TermStyle(hidden = true)
+        val screen = listOf(
+            wrapped("go https://a.test"),
+            ".evil.tld/x".map { TermCell(it, hidden) },
+        )
+        assertTrue(rowLinkSpans(screen, 0).isEmpty())
+        assertTrue(rowLinkSpans(screen, 1).isEmpty())
+        assertNull(openableLinkAt(screen, 0, 5))
+    }
+
+    @Test
+    fun `the cell's own hyperlink wins over a bare url around it`() {
+        // A cell can carry an OSC 8 URI while sitting inside detectable bare-URL text; the
+        // explicit hyperlink is the server's declared target and must win.
+        val cells = "https://a.test".mapIndexed { i, ch ->
+            if (i == 0) TermCell(text = ch.toString(), hyperlink = "https://osc.test") else TermCell(ch)
+        }
+        assertEquals("https://osc.test", openableLinkAt(listOf(cells), 0, 0))
+    }
+
+    @Test
+    fun `an unsafe hyperlink never resolves`() {
+        val osc = listOf(listOf(TermCell(text = "x", hyperlink = "file:///etc/passwd")))
+        assertNull(openableLinkAt(osc, 0, 0))
     }
 }

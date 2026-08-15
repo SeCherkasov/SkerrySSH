@@ -152,7 +152,8 @@ private fun chainLinkSpans(
     if (!hasSchemeMarker(screen, chain.rows)) return emptyMap()
     val flat = rowsText(screen, chain.rows) ?: return emptyMap()
     val found = detectPlainTextLinks(flat.text).filterNot { span ->
-        (chain.startClipped && span.start == 0) || (chain.endClipped && span.endExclusive == flat.text.length)
+        (chain.startClipped && span.start == 0) || (chain.endClipped && span.endExclusive == flat.text.length) ||
+            flat.coversConcealedCell(screen, span)
     }
     if (found.isEmpty()) return emptyMap()
     var out: MutableMap<Int, List<TextLinkSpan>>? = null
@@ -163,6 +164,20 @@ private fun chainLinkSpans(
     return out ?: emptyMap()
 }
 
+/**
+ * Whether any character of [span] came from a concealed cell (SGR 8). A bare URL is offered on the
+ * strength of its visible text, so a span with a hidden part is dropped whole: a server could print
+ * `https://example.com` visible and a `.evil.tld/x` tail concealed, and underlining just the
+ * visible prefix while opening the joined URI would make the spoof look MORE legitimate. (OSC 8
+ * hyperlinks stay per-cell: their target is never on-screen to begin with.)
+ */
+private fun RowText.coversConcealedCell(screen: List<List<TermCell>>, span: TextLinkSpan): Boolean {
+    for (i in span.start until span.endExclusive) {
+        if (screen[rowAt(i)].getOrNull(column(i))?.style?.hidden == true) return true
+    }
+    return false
+}
+
 /** URL spans on row [r] alone — hit-testing a single pointer position, not the draw pass. */
 internal fun rowLinkSpans(screen: List<List<TermCell>>, r: Int): List<TextLinkSpan> =
     linkSpansByRow(screen, r..r)[r] ?: emptyList()
@@ -170,3 +185,19 @@ internal fun rowLinkSpans(screen: List<List<TermCell>>, r: Int): List<TextLinkSp
 /** The plain-text URL under row [r], column [col] of [screen], or `null`. Ctrl+click hit-testing. */
 internal fun linkAt(screen: List<List<TermCell>>, r: Int, col: Int): String? =
     rowLinkSpans(screen, r).firstOrNull { col >= it.start && col < it.endExclusive }?.uri
+
+/**
+ * The openable URI under row [r], column [col]: the cell's own OSC 8 hyperlink first, then a bare
+ * URL detected in the row text — filtered through [isSafeLinkUri]. The single resolution point for
+ * both the hover affordance and the Ctrl+click, so the hand cursor can never appear where a click
+ * would open nothing (or the reverse).
+ *
+ * A concealed cell (SGR 8) resolves to nothing: its text is invisible, and an invisible click
+ * target would let a server hide where a click leads.
+ */
+internal fun openableLinkAt(screen: List<List<TermCell>>, r: Int, col: Int): String? {
+    val cell = screen.getOrNull(r)?.getOrNull(col)
+    if (cell?.style?.hidden == true) return null
+    val uri = cell?.hyperlink ?: linkAt(screen, r, col)
+    return uri?.takeIf(::isSafeLinkUri)
+}
