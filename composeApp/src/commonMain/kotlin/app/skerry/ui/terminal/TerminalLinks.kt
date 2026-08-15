@@ -104,6 +104,11 @@ private fun lineStartOf(screen: List<List<TermCell>>, r: Int): Int {
     return start
 }
 
+// Test-only counter, incremented by TerminalScreen's composition cache (NOT here - hover/click
+// hit-testing also routes through linkSpansByRow and must not count). Single-threaded: written
+// from composition or the sequential test JVM; revisit before enabling parallel test execution.
+internal var linkScanPasses = 0
+
 /**
  * URL spans per grid row for rows [window] of [screen], in column coordinates. A row that auto-wrap
  * cut out of a longer logical line is detected together with its neighbours, so a URL split at the

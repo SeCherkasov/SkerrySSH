@@ -6,11 +6,13 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
@@ -193,6 +195,61 @@ class TerminalHighlightRenderTest {
     }
 
     @Test
+    fun linkScanStaysCachedAcrossSelectionRepaints() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val session = FakeSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        try {
+            ImageComposeScene(width = 420, height = 240, density = Density(1f)).use { scene ->
+                scene.setContent {
+                    SkerryTheme {
+                        CompositionLocalProvider(
+                            LocalTerminalTheme provides theme,
+                            LocalTerminalHighlight provides TerminalHighlight(commandLine = false, output = false),
+                            LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
+                        ) {
+                            TerminalScreen(state, Modifier.fillMaxSize())
+                        }
+                    }
+                }
+                var timeNanos = 0L
+                fun frame(): PixelMap {
+                    Snapshot.sendApplyNotifications()
+                    timeNanos += 16_666_667L
+                    return scene.render(timeNanos).toComposeImageBitmap().toPixelMap()
+                }
+                repeat(3) { frame() }
+                session.emit("see https://example.com")
+                repeat(5) { frame() }
+                val before = frame()
+                val passes = linkScanPasses
+                assertTrue(passes > 0, "the hoisted link scan must still be wired into composition")
+
+                // A selection drag repaints the canvas on every move; the scan keys on content and
+                // window, not on frames - computed in the draw phase it would rerun per repaint.
+                scene.sendPointerEvent(PointerEventType.Press, Offset(40f, 20f))
+                scene.sendPointerEvent(PointerEventType.Move, Offset(60f, 24f))
+                val afterFirstMove = frame()
+                // Guard against a vacuous pass: the drag must actually paint a selection - a
+                // no-op pointer sequence would leave nothing invalidated and assert nothing.
+                assertTrue(
+                    !before.sameRowPixels(afterFirstMove, y = 20),
+                    "the drag must visibly change the frame (selection highlight)",
+                )
+                repeat(5) { step ->
+                    scene.sendPointerEvent(PointerEventType.Move, Offset(80f + step * 20f, 24f))
+                    frame()
+                }
+                scene.sendPointerEvent(PointerEventType.Release, Offset(180f, 24f))
+                frame()
+                assertEquals(passes, linkScanPasses, "selection repaints must not rescan links")
+            }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun rewritingTheLineUnderAStationaryCursorRecomputesTheOverlay() {
         withScreen(TerminalHighlight(commandLine = true, output = true)) { session, frame ->
             // Both lines are 8 cells, so after the rewrite the cursor lands on the same (row, col)
@@ -230,6 +287,14 @@ class TerminalHighlightRenderTest {
             repeat(4) { frame() }
             assertTrue(backgroundHighlightPasses > passes, "new content must rescan")
         }
+    }
+
+    /** Whether row [y] holds identical pixels in both frames — a cheap frame-delta probe. */
+    private fun PixelMap.sameRowPixels(other: PixelMap, y: Int): Boolean {
+        for (x in 0 until width) {
+            if (this[x, y].toArgb() != other[x, y].toArgb()) return false
+        }
+        return true
     }
 
     /** Whether opaque pixel [argb] matches [target] within [tolerance] on every channel. */

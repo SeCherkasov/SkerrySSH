@@ -701,6 +701,18 @@ fun TerminalScreen(
               }
           }
           val highlightByRow = rememberRowHighlights(state, screen, searchWindow)
+          // Plain-text URLs for the visible window: a URL cut by a soft wrap spans several rows,
+          // and its chain is joined and matched once rather than per row. Hoisted out of the draw
+          // phase like hitsByRow above - computed inline in the draw lambda it re-flattened and
+          // re-regexed the same rows on every repaint, sixty times a second during a scroll drag.
+          // searchWindow is a superset of the draw loop's window for any consistent scroll (it is
+          // built from the unpadded viewport height), and a fast drag inherits the same known,
+          // self-healing one-frame race as the search highlight - not new here; clicks resolve
+          // links from a fresh snapshot, never from this map.
+          val linksByRow = remember(state, screenVersion, searchWindow) {
+              linkScanPasses++
+              linkSpansByRow(screen, searchWindow)
+          }
           // clipToBounds after padding: the scrollback row at the scroll boundary is drawn at top=-chh and
           // would otherwise spill into the top padding zone (desktop has no default clip, unlike Android)
           // — after `clear` the command row would peek there. The clip cuts it at the content edge.
@@ -713,9 +725,6 @@ fun TerminalScreen(
               // whenever output streams while the user sits scrolled up in history. The search
               // highlight above derives its window from the same helper.
               val drawWindow = visibleRowWindow(scrollPx, size.height, chh, screen.size)
-              // Plain-text URLs for the whole window at once (pass 5 below): a URL cut by a soft wrap
-              // spans several rows, and its chain is joined and matched once rather than per row.
-              val linksByRow = linkSpansByRow(screen, drawWindow)
               for (r in drawWindow) {
                   val top = r * chh - scrollPx
                   val row = screen[r]
