@@ -50,6 +50,8 @@
     <string name="runbook_panel_skip_step">Skip</string>
     <string name="runbook_panel_stop">Stop run</string>
     <string name="runbook_panel_close">Close</string>
+    <string name="runbook_panel_collapse">Collapse panel</string>
+    <string name="runbook_panel_expand">Expand panel</string>
     <string name="runbook_panel_exit_code">exit %1$d</string>
     <string name="runbook_panel_status_unreadable">status unreadable</string>
     <string name="runbook_panel_progress">%1$d of %2$d</string>
@@ -100,6 +102,8 @@
     <string name="runbook_status_running">running</string>
     <string name="runbook_status_skipped">skipped</string>
     <string name="runbook_status_stopped">stopped</string>
+    <string name="runbook_status_failed">failed</string>
+    <string name="runbook_status_failed_count">%1$d steps failed</string>
     <string name="runbook_status_confirm">needs a go-ahead</string>
     <string name="runbook_status_interactive">interactive — complete it yourself</string>
     <string name="runbook_dur_seconds">%1$s s</string>
