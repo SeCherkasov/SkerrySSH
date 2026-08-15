@@ -22,6 +22,7 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.theme.SkerryTheme
 import kotlin.math.abs
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.CoroutineScope
@@ -188,6 +189,46 @@ class TerminalHighlightRenderTest {
             }
         } finally {
             scope.cancel()
+        }
+    }
+
+    @Test
+    fun rewritingTheLineUnderAStationaryCursorRecomputesTheOverlay() {
+        withScreen(TerminalHighlight(commandLine = true, output = true)) { session, frame ->
+            // Both lines are 8 cells, so after the rewrite the cursor lands on the same (row, col)
+            // and the background map is empty both times (no output markers, nothing executed) -
+            // the exact shape where keying the overlay on the background map alone kept stale
+            // spans painted over the new text.
+            session.emit("$ ls -la")
+            repeat(5) { frame() }
+            val passes = liveOverlayPasses
+
+            session.emit("\r$ git st")
+            repeat(5) { frame() }
+            assertTrue(
+                liveOverlayPasses > passes,
+                "an in-place rewrite under a stationary cursor must recompute the live overlay",
+            )
+        }
+    }
+
+    @Test
+    fun cursorMovesDoNotRescanTheBackgroundPass() {
+        withScreen(TerminalHighlight(commandLine = true, output = true)) { session, frame ->
+            session.emit("\r\nERROR failed to bind\r\nuser@host:~$ echo hi")
+            repeat(4) { frame() }
+            val passes = backgroundHighlightPasses
+
+            // Pure cursor motion over the live line: the whole-window output/executed scan must
+            // stay cached - only the small live-command overlay may recompute.
+            session.emit("\u001b[D")
+            repeat(4) { frame() }
+            assertEquals(passes, backgroundHighlightPasses, "a cursor move must not rescan the window")
+
+            // Real content invalidates the background pass.
+            session.emit("x")
+            repeat(4) { frame() }
+            assertTrue(backgroundHighlightPasses > passes, "new content must rescan")
         }
     }
 

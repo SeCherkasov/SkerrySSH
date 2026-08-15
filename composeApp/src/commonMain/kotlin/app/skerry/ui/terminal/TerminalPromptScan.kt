@@ -23,7 +23,10 @@ internal data class CommandLineSlice(val row: Int, val startCol: Int, val endCol
  */
 internal data class HighlightSource(
     val screen: List<List<TermCell>>,
-    val cursor: TerminalPos,
+    // Null for the cursor-independent background pass: no live command line exists there. The
+    // executed pass never reads the cursor - its live-chain exclusion arrives as an explicit row
+    // (see executedCommandSlices' liveChainStart).
+    val cursor: TerminalPos?,
     val altScreen: Boolean,
     val executedCommands: Set<String> = emptySet(),
 )
@@ -54,7 +57,8 @@ internal class CommandLineText(val text: String, private val rows: IntArray, pri
  */
 internal fun commandLineSlices(source: HighlightSource): List<CommandLineSlice> {
     val screen = source.screen
-    val cursor = source.cursor
+    // No cursor - the background pass: there is no live command line to find.
+    val cursor = source.cursor ?: return emptyList()
     // A full-screen app (vim, htop, mc) has no shell line: whatever the cursor sits on is the app's.
     if (source.altScreen) return emptyList()
     if (cursor.row !in screen.indices) return emptyList()
@@ -76,14 +80,22 @@ internal fun commandLineSlices(source: HighlightSource): List<CommandLineSlice> 
  * text after the prompt must equal a command this session executed. Output that merely contains a
  * `$ ` never matches, because it would have to be character-for-character a command that ran.
  */
-internal fun executedCommandSlices(source: HighlightSource, row: Int): List<CommandLineSlice> {
+internal fun executedCommandSlices(
+    source: HighlightSource,
+    row: Int,
+    liveChainStart: Int?,
+): List<CommandLineSlice> {
     val screen = source.screen
     if (source.altScreen || source.executedCommands.isEmpty()) return emptyList()
-    if (row !in screen.indices || source.cursor.row !in screen.indices) return emptyList()
+    if (row !in screen.indices) return emptyList()
     // Only the first row of a wrapped chain starts a command; the rest are handled with it.
     if (row > 0 && isFilledToEdge(screen[row - 1])) return emptyList()
-    // The line under the cursor is the live command line and is highlighted by its own path.
-    if (row == chainStart(screen, source.cursor.row)) return emptyList()
+    // The line under the cursor is the live command line and never reads as "already executed" -
+    // unconditionally, even when no live command line parses (cursor inside a prompt with a
+    // pre-filled answer). The exclusion arrives as an explicit row rather than being derived from
+    // a cursor, so the cursor-independent background pass can apply it without depending on the
+    // cursor column.
+    if (row == liveChainStart) return emptyList()
     if (!rowHasPromptMarker(screen[row])) return emptyList()
 
     val startCol = promptEndColumn(screen[row])
@@ -166,7 +178,7 @@ private fun promptEndColumn(row: List<TermCell>): Int {
 }
 
 /** First row of the soft-wrap chain containing [row]. */
-private fun chainStart(screen: List<List<TermCell>>, row: Int): Int {
+internal fun chainStart(screen: List<List<TermCell>>, row: Int): Int {
     var first = row
     while (first > 0 && row - first < MAX_COMMAND_ROWS && isFilledToEdge(screen[first - 1])) first--
     return first

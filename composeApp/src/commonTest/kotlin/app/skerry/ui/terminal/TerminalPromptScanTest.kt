@@ -78,6 +78,15 @@ class TerminalPromptScanTest {
     }
 
     @Test
+    fun `the cursor left of a real prompt terminator yields nothing`() {
+        // Unlike the password case above (no terminator at all), this reaches the
+        // cursor-column-inside-the-prompt branch: a valid `$ ` terminator exists at col 12, and
+        // the cursor sits left of it.
+        val screen = screenOf("user@host:~$ git status")
+        assertTrue(commandLineSlices(HighlightSource(screen, TerminalPos(0, 5), altScreen = false)).isEmpty())
+    }
+
+    @Test
     fun `an empty prompt has no command line`() {
         val screen = screenOf("user@host:~$ ")
         assertTrue(commandLineSlices(HighlightSource(screen, TerminalPos(0, 13), altScreen = false)).isEmpty())
