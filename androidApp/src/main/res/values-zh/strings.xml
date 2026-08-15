@@ -4,10 +4,11 @@
 <resources>
     <string name="app_name">Skerry</string>
     <string name="session_keepalive_channel_name">会话保活</string>
-    <string name="session_keepalive_title">SSH 会话保活中</string>
+    <string name="session_keepalive_title">会话保持中</string>
+    <string name="session_keepalive_public_title">会话保持中</string>
     <string name="session_keepalive_text">点按返回此终端</string>
+    <!-- Chinese has a single CLDR plural category — only "other" is ever selected. -->
     <plurals name="session_keepalive_count">
-        <item quantity="one">%1$d 个终端保持中</item>
-        <item quantity="other">%1$d 个终端保持中</item>
+        <item quantity="other">%1$d 个会话保持中</item>
     </plurals>
 </resources>

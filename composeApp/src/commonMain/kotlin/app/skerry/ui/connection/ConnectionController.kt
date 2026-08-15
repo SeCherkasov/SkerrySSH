@@ -25,7 +25,8 @@ import app.skerry.shared.terminal.TerminalHistoryStore
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.terminal.terminalHistoryKey
 import app.skerry.ui.terminal.ThroughputController
-import app.skerry.ui.keepalive.SessionKeepAlive
+import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.keepalive.SessionKeepAliveBridge
 import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.forward.PortForwardController
@@ -141,6 +142,9 @@ class ConnectionController(
     // controller when the pane is created; used by the platform keep-alive bridge to key its
     // per-session notification and route taps back to this terminal. Default only for tests/blank.
     private var sessionId: String = "ssh",
+    // Platform keep-alive hook (Android: foreground service + one notification per session).
+    // Injected like every other controller dependency; null (desktop, tests) is a no-op.
+    private val keepAlive: SessionKeepAliveBridge? = null,
     // Per-host terminal command history persistence (for autocomplete). null means no persistence
     // (the session only learns from itself). The key is derived from the target
     // ([terminalHistoryKey]); saving happens on IO so file I/O never blocks the UI thread per
@@ -161,6 +165,25 @@ class ConnectionController(
      */
     fun bindSessionId(id: String) {
         sessionId = id
+    }
+
+    // Whether the bridge currently believes this session is open. The bridge learns "ended" exactly
+    // once per started session, and NOT on a drop that auto-reconnect will retry: on Android
+    // "ended" stops the foreground service, and restarting it from the background is forbidden
+    // (Android 12+) — reporting a transient drop would kill the reconnect it protects.
+    private var keepAliveOpen = false
+
+    private fun notifyKeepAliveStarted(host: String) {
+        keepAliveOpen = true
+        // The label crosses the untrusted-text filter: a peer-authored host profile must not steer
+        // the notification title with bidi/invisible characters (issue #227 precedent).
+        keepAlive?.onSessionStarted(sessionId, untrustedLabel(host))
+    }
+
+    private fun notifyKeepAliveEnded() {
+        if (!keepAliveOpen) return
+        keepAliveOpen = false
+        keepAlive?.onSessionEnded(sessionId)
     }
 
     /**
@@ -282,6 +305,9 @@ class ConnectionController(
                 // The serial transport wraps its typed failure into SshConnectionException, so the
                 // cause carries the reason the view localizes.
                 val serial = e as? SerialUnavailableException ?: e.cause as? SerialUnavailableException
+                // A throw after Connected was published (onConnected action, watcher setup) has
+                // already announced the session to the keep-alive bridge — retract it.
+                notifyKeepAliveEnded()
                 uiState = ConnectionUiState.Error(
                     // Transport text is diagnostics only: the view shows a localized base and keeps
                     // this as a parenthetical detail (sshj/okio messages are always English). It is
@@ -379,10 +405,10 @@ class ConnectionController(
                 ).also { it.start() }
             }
             uiState = ConnectionUiState.Connected(terminal)
-            // Fork: tell the platform keep-alive bridge that a session is now open (Android runs a
+            // Tell the platform keep-alive bridge that a session is now open (Android runs a
             // foreground service while sessions exist; no-op on desktop). Done after Connected so
             // the notification/keep-alive starts exactly when the session is usable.
-            SessionKeepAlive.bridge?.onSessionStarted(sessionId, target.host)
+            notifyKeepAliveStarted(target.host)
             // One-shot action for the first connect (Run on host): taken and cleared BEFORE a
             // possible drop, so a reconnect through this same establishSession doesn't repeat it.
             pendingOnConnected?.let { action -> pendingOnConnected = null; action(terminal) }
@@ -549,6 +575,7 @@ class ConnectionController(
         // commands to a session that is gone.
         historyKey = null
         releaseSessionResources()
+        notifyKeepAliveEnded()
         uiState = ConnectionUiState.Form
     }
 
@@ -560,6 +587,7 @@ class ConnectionController(
      * no attempts, and the user reconnects manually after unlocking.
      */
     fun clearReconnectCredentials() {
+        val wasReconnecting = reconnectJob != null
         reconnectJob?.cancel()
         reconnectJob = null
         lastAuth = null
@@ -567,6 +595,14 @@ class ConnectionController(
         // Lock also cancels the pending first-connect action (Run on host): a snippet command must
         // not fire into the terminal if the handshake completes after the vault is already locked.
         pendingOnConnected = null
+        // Cancelling a mid-flight auto-reconnect is a true end: the credentials are gone, so no
+        // path can ever bring this session back — retract the keep-alive (the cancelled loop never
+        // reaches its own exhaustion notify) and stop the pane claiming "reconnecting". A still-
+        // connected session is untouched: lock leaves the socket open by design (see doc above).
+        if (wasReconnecting && uiState !is ConnectionUiState.Connected) {
+            (uiState as? ConnectionUiState.Disconnected)?.let { uiState = it.copy(reconnecting = false) }
+            notifyKeepAliveEnded()
+        }
     }
 
     /**
@@ -603,12 +639,14 @@ class ConnectionController(
             // the secret (auth may carry a password/key): no point holding it, there won't be a new connect.
             lastAuth = null
             lastTarget = null
+            notifyKeepAliveEnded()
             uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0, cleanExit = true)
             return
         }
         val target = lastTarget
         val auth = lastAuth
         if (target == null || auth == null) {
+            notifyKeepAliveEnded()
             uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
             return
         }
@@ -622,9 +660,12 @@ class ConnectionController(
         if (!target.connectionType.carriedBySsh) {
             lastAuth = null
             lastTarget = null
+            notifyKeepAliveEnded()
             uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
             return
         }
+        // Entering auto-reconnect: the session is NOT reported ended — the platform keep-alive
+        // (foreground service) must survive the retry window, or the reconnect itself dies with it.
         startReconnect(frozen, target, auth)
     }
 
@@ -646,7 +687,11 @@ class ConnectionController(
                 delay(reconnectDelayMillis(attempt))
                 try {
                     establishSession(target, auth)
-                    return@launch // success: establishSession moved to Connected and resubscribed the observer
+                    // Success: establishSession moved to Connected and resubscribed the observer.
+                    // Null the job so a later vault lock doesn't read a completed reconnect as
+                    // "reconnecting" (clearReconnectCredentials keys off it).
+                    reconnectJob = null
+                    return@launch
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -658,6 +703,8 @@ class ConnectionController(
                     attempt++
                 }
             }
+            notifyKeepAliveEnded() // reconnect gave up — now the session is truly over
+            reconnectJob = null
             uiState = ConnectionUiState.Disconnected(
                 frozen,
                 reconnecting = false,
@@ -674,9 +721,6 @@ class ConnectionController(
      * cleaned-up controller is safe.
      */
     private fun releaseSessionResources() {
-        // Fork: this session is no longer open — the platform keep-alive bridge stops the
-        // foreground service once the last session goes (no-op on desktop). Idempotent.
-        SessionKeepAlive.bridge?.onSessionEnded(sessionId)
         metricsEpoch++
         val conn = connection
         val watched = attached

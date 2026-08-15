@@ -12,7 +12,10 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
+import androidx.core.content.ContextCompat
 import app.skerry.ui.keepalive.KeepAliveNotificationRegistry
+import java.util.UUID
 
 /**
  * Foreground service that keeps the app process — and with it the open SSH keep-alive loops —
@@ -39,8 +42,21 @@ class SessionKeepAliveService : Service() {
         const val ACTION_NOTIFICATION_DISMISSED = "app.skerry.android.action.KEEPALIVE_NOTIFICATION_DISMISSED"
         const val EXTRA_SESSION_ID = "app.skerry.android.extra.SESSION_ID"
         const val EXTRA_HOST_LABEL = "app.skerry.android.extra.HOST_LABEL"
+        const val EXTRA_TAP_NONCE = "app.skerry.android.extra.TAP_NONCE"
 
+        /**
+         * Per-process random token carried by every per-session tap intent. MainActivity is the
+         * exported launcher, so any app can send it an intent with [EXTRA_SESSION_ID]; only intents
+         * carrying this nonce (obtainable solely from our own PendingIntents) may steer the active
+         * terminal. Process death invalidates outstanding taps — their sessions died with it anyway.
+         */
+        val tapNonce: String = UUID.randomUUID().toString()
+
+        private const val TAG = "SkerryKeepAlive"
         private const val CHANNEL_ID = "session_keepalive"
+        // One shade group for the summary + per-session notifications; without it each session is
+        // a top-level notification and TalkBack announces every one separately.
+        private const val GROUP_KEY = "app.skerry.sessions"
         // Foreground summary notification (must stay up while the service is foreground).
         private const val SUMMARY_ID = 0x5E77
         // Per-session notifications start here and increment.
@@ -90,11 +106,7 @@ class SessionKeepAliveService : Service() {
             }
         }
         val filter = IntentFilter(ACTION_NOTIFICATION_DISMISSED)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            registerReceiver(receiver, filter)
-        }
+        ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         dismissReceiver = receiver
     }
 
@@ -122,6 +134,18 @@ class SessionKeepAliveService : Service() {
             replaySessionsFromBridge()
             return START_STICKY
         }
+        if (sessions.isEmpty) {
+            // A killed service can be re-created by a live ADD/REMOVE before the sticky null-intent
+            // restart lands. Seed from the authoritative bridge map first, so a single intent can't
+            // masquerade as the whole state (the other live sessions would lose their notifications
+            // and the last remove would stop the service under them). Cancel everything posted by
+            // the previous incarnation first — its ids may not line up with the reseeded registry,
+            // and a leftover would advertise a dead session forever (this service owns every
+            // notification the app posts, so cancelAll is safe).
+            notificationManager().cancelAll()
+            createChannel()
+            bridgeInstance?.snapshotSessions().orEmpty().forEach { (id, host) -> addSessionInternal(id, host) }
+        }
         when (intent.action) {
             ACTION_REMOVE -> removeSession(intent)
             else -> addSession(intent) // ACTION_ADD; also the plain-start fallback path
@@ -143,6 +167,11 @@ class SessionKeepAliveService : Service() {
      */
     private fun replaySessionsFromBridge() {
         createChannel()
+        // Notifications posted by the previous incarnation survive it in system_server, and the
+        // fresh registry re-derives CONTIGUOUS ids — after a mid-list removal the old sparse tail
+        // would linger as an undismissable duplicate. Clear everything and re-post (this service
+        // owns every notification the app posts); the immediate re-post below is flicker-free.
+        notificationManager().cancelAll()
         val snapshot = SessionKeepAliveService.bridgeInstance?.snapshotSessions().orEmpty()
         if (snapshot.isEmpty()) {
             startForegroundCompat(buildSummaryNotification(0))
@@ -176,8 +205,21 @@ class SessionKeepAliveService : Service() {
     }
 
     private fun addSession(intent: Intent) {
-        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: return
-        val hostLabel = intent.getStringExtra(EXTRA_HOST_LABEL) ?: return
+        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
+        val hostLabel = intent.getStringExtra(EXTRA_HOST_LABEL)
+        if (sessionId == null || hostLabel == null) {
+            // Malformed/replayed intent. If it arrived on the initial startForegroundService the OS
+            // still expects startForeground within its window — honor the contract, then let the
+            // empty service go, instead of crashing with ForegroundServiceDidNotStartInTime.
+            Log.w(TAG, "keep-alive add without extras dropped")
+            if (sessions.isEmpty) {
+                createChannel()
+                startForegroundCompat(buildSummaryNotification(0))
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+            }
+            return
+        }
         addSessionInternal(sessionId, hostLabel)
     }
 
@@ -195,8 +237,16 @@ class SessionKeepAliveService : Service() {
     }
 
     private fun removeSession(intent: Intent) {
-        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: return
-        val notifId = sessions.remove(sessionId) ?: return // idempotent
+        val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
+        if (sessionId == null) {
+            Log.w(TAG, "keep-alive remove without session id dropped")
+            return
+        }
+        val notifId = sessions.remove(sessionId)
+        if (notifId == null) { // idempotent; a lone stray remove must not leave an idle service
+            if (sessions.isEmpty) stopSelf()
+            return
+        }
         sessionHosts.remove(sessionId)
         notificationManager().cancel(notifId)
         if (sessions.isEmpty) {
@@ -237,9 +287,14 @@ class SessionKeepAliveService : Service() {
             .setContentText(
                 resources.getQuantityString(R.plurals.session_keepalive_count, count, count)
             )
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_notification_session)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
+            .setGroup(GROUP_KEY)
+            .setGroupSummary(true)
+            // A session count carries no host identity — showing it on the lock screen beats the
+            // system's "content hidden" placeholder (which TalkBack reads as exactly that).
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setContentIntent(contentIntent)
             .setDeleteIntent(notificationDismissedPendingIntent(SUMMARY_ID))
             .build()
@@ -253,15 +308,29 @@ class SessionKeepAliveService : Service() {
             this,
             notifId,
             Intent(this, MainActivity::class.java)
-                .putExtra(EXTRA_SESSION_ID, sessionId),
+                .putExtra(EXTRA_SESSION_ID, sessionId)
+                .putExtra(EXTRA_TAP_NONCE, tapNonce),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        // Redacted lock-screen version: no host name (the vault hides host identities behind the
+        // master password; the shade must not undo that). This honours the OS "hide sensitive
+        // content" setting — the platform's strongest app-side option; devices set to "show all
+        // content" still show the full notification.
+        val publicVersion = Notification.Builder(this, CHANNEL_ID)
+            .setContentTitle(getString(R.string.session_keepalive_public_title))
+            .setContentText(getString(R.string.session_keepalive_text))
+            .setSmallIcon(R.drawable.ic_notification_session)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .build()
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(hostLabel)
             .setContentText(getString(R.string.session_keepalive_text))
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_notification_session)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
+            .setGroup(GROUP_KEY)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion)
             .setContentIntent(tap)
             .setDeleteIntent(notificationDismissedPendingIntent(notifId))
             .build()
@@ -276,7 +345,9 @@ class SessionKeepAliveService : Service() {
         PendingIntent.getBroadcast(
             this,
             requestCode,
-            Intent(ACTION_NOTIFICATION_DISMISSED),
+            // Package-scoped: an implicit broadcast would never reach the NOT_EXPORTED receiver on
+            // Android 14+ (dead re-show path), and would let any app observe/forge dismissals.
+            Intent(ACTION_NOTIFICATION_DISMISSED).setPackage(packageName),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 

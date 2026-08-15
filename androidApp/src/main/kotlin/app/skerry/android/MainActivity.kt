@@ -10,9 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
@@ -31,7 +29,6 @@ import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.KeyFileResolver
 import app.skerry.shared.vault.OkioSecretFileReader
 import app.skerry.ui.vault.AndroidSecretFileReader
-import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.shared.ssh.HostCertificateVerifier
 import app.skerry.shared.ssh.SshjCaKeyParser
@@ -63,7 +60,6 @@ import app.skerry.ui.secure.WindowBridge
 import app.skerry.ui.sftp.SafBridge
 import app.skerry.ui.vault.AndroidLockContext
 import app.skerry.ui.host.HostManagerController
-import app.skerry.ui.keepalive.SessionKeepAlive
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.known.TrustedCaController
@@ -106,31 +102,6 @@ import java.util.UUID
  */
 class MainActivity : FragmentActivity() {
 
-    companion object {
-        // Process-scoped keep-alive graph: sessions + their coroutine scope survive Activity
-        // recreation (background recycle, task swipe). The foreground service keeps the process
-        // alive; this keeps the connections alive inside it, so returning to the app (or tapping a
-        // per-session notification) shows the same live terminal instead of a dropped session.
-        // Built lazily from the first dependency graph; null until the first onCreate.
-        @Volatile
-        private var keepAliveScope: CoroutineScope? = null
-        @Volatile
-        private var keepAliveSessions: app.skerry.ui.session.SessionsController? = null
-        // Terminal prefs read at connect time. Refreshed by the UI on every composition so a
-        // settings change applies to NEW sessions even when they're opened from the process-scoped
-        // controller (which outlives any composition). Never captures the Activity.
-        @Volatile
-        var currentTerminalPrefs: () -> app.skerry.ui.terminal.TerminalSessionPrefs =
-            { app.skerry.ui.terminal.TerminalSessionPrefs() }
-        // Session id routed from a per-session notification tap; the UI activates that tab once.
-        // Compose state (not @Volatile) so the LaunchedEffect key reacts to the tap.
-        var pendingSessionId by mutableStateOf<String?>(null)
-
-        fun keepAliveScope(): CoroutineScope =
-            keepAliveScope
-                ?: CoroutineScope(SupervisorJob() + Dispatchers.Default).also { keepAliveScope = it }
-    }
-
     // Tunnel manager scope, tied to Activity lifetime. Cancelled in onDestroy so a recreate (rotation)
     // doesn't leave the old polling scope orphaned; active tunnels are dropped in that case.
     private var tunnelScope: CoroutineScope? = null
@@ -156,13 +127,33 @@ class MainActivity : FragmentActivity() {
     override fun onDestroy() {
         tunnelScope?.cancel()
         tunnelScope = null
+        // Drop the process-scoped hook only if it is still ours: on a recreation the new Activity's
+        // onCreate has already replaced it, and clearing here would disarm the live one.
+        if (KeepAliveRuntime.onFirstSession === firstSessionHook) KeepAliveRuntime.onFirstSession = null
+        firstSessionHook = null
+        // Same identity rule for the dependency slice: swap ours for a teams-less copy, so the
+        // coordinator's lifecycleScope closures don't pin this destroyed Activity. Transport/vault
+        // hold only application-scoped state; sessions opened before the next launch simply skip
+        // the Teams activity report.
+        val published = publishedDeps
+        if (published != null && KeepAliveRuntime.deps === published) {
+            KeepAliveRuntime.deps = KeepAliveRuntime.GraphDeps(
+                published.transport, published.vncTransport, published.rdpTransport, published.vault, teams = null,
+            )
+        }
+        publishedDeps = null
         super.onDestroy()
     }
 
-    /** A per-session notification tap carries the session id — remember it for the UI to activate. */
+    /**
+     * A per-session notification tap carries the session id — remember it for the UI to activate.
+     * Honoured only with the per-process nonce from our own PendingIntents: MainActivity is the
+     * exported launcher, and a foreign intent must not be able to steer the active terminal.
+     */
     private fun routeSessionTap(intent: Intent?) {
-        val id = intent?.getStringExtra(SessionKeepAliveService.EXTRA_SESSION_ID)
-        id?.let { pendingSessionId = it }
+        if (intent?.getStringExtra(SessionKeepAliveService.EXTRA_TAP_NONCE) != SessionKeepAliveService.tapNonce) return
+        intent.getStringExtra(SessionKeepAliveService.EXTRA_SESSION_ID)
+            ?.let { KeepAliveRuntime.pendingSessionId = it }
     }
 
     // Launcher registered once (ActivityResult API requires registration before STARTED); the actual
@@ -171,6 +162,16 @@ class MainActivity : FragmentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     private var notificationPermissionAsked = false
+
+    // This Activity's instance of the process-scoped first-session hook, kept to recognise it in
+    // onDestroy (see there).
+    private var firstSessionHook: (() -> Unit)? = null
+
+    // The dependency slice this Activity published to KeepAliveRuntime, to recognise it in
+    // onDestroy: the TeamsCoordinator's closures capture lifecycleScope (this Activity), and a
+    // process singleton must not pin a destroyed Activity while the foreground service keeps the
+    // process alive for hours.
+    private var publishedDeps: KeepAliveRuntime.GraphDeps? = null
 
     /** Android 13+ runtime permission for the keep-alive notification; asked once, lazily. */
     private fun requestNotificationPermissionIfNeeded() {
@@ -191,15 +192,19 @@ class MainActivity : FragmentActivity() {
         // secrets (vault, master password entry); see SecureScreen. Weak reference, no Activity leak.
         WindowBridge.install(window)
 
-        // Session keep-alive: while any SSH session is open, run the foreground service so
-        // backgrounding the app doesn't freeze the connection (Android only; desktop never sets
-        // this). Notification permission (Android 13+) is requested lazily, on the FIRST session
-        // open, so it never interrupts app startup — the service still runs without it, the user
-        // simply doesn't see the "session active" notification until they grant it.
-        SessionKeepAlive.bridge = AndroidSessionKeepAlive(
-            applicationContext,
-            onFirstSession = { requestNotificationPermissionIfNeeded() },
-        )
+        // Session keep-alive: while any session is open, run the foreground service so backgrounding
+        // the app doesn't freeze the connection (Android only; desktop injects no bridge). The
+        // bridge is process-scoped and created ONCE — an instance per Activity would forget sessions
+        // started before a recreation and never stop the service. Only the notification-permission
+        // hook is per-Activity (requested lazily on the FIRST session open, marshalled to the main
+        // thread — bridge calls arrive on coroutine workers); cleared in onDestroy.
+        if (KeepAliveRuntime.bridge == null) {
+            KeepAliveRuntime.bridge = AndroidSessionKeepAlive(applicationContext) {
+                KeepAliveRuntime.onFirstSession?.invoke()
+            }
+        }
+        firstSessionHook = { runOnUiThread { requestNotificationPermissionIfNeeded() } }
+        KeepAliveRuntime.onFirstSession = firstSessionHook
 
         // Context for keyguard checks: auto-lock on background should trigger only when the device is
         // actually locked, not when a system picker is open (see deviceMandatesAutoLock).
@@ -231,12 +236,16 @@ class MainActivity : FragmentActivity() {
         runBlocking { initializeVaultCrypto() }
 
         val deps = buildDependencies()
-        // Process-scoped keep-alive: build the sessions graph once (lives across Activity
-        // recreation while the foreground service keeps the process alive). Recreated only on
-        // process death; notification taps route into it via pendingSessionId below.
-        if (keepAliveSessions == null && deps.transport != null) {
-            keepAliveSessions = buildKeepAliveSessions(deps)
+        // Process-scoped keep-alive: publish THIS Activity's dependency slice for the session
+        // graph's call-time reads (a graph pinned to the first Activity's vault would silently
+        // lose vault records — two FileVault caches over one file), then build the sessions
+        // controller once. It lives across Activity recreation while the foreground service keeps
+        // the process alive; notification taps route into it via pendingSessionId below.
+        publishedDeps = deps.transport?.let {
+            KeepAliveRuntime.GraphDeps(it, deps.vncTransport, deps.rdpTransport, deps.vault, deps.teams)
         }
+        KeepAliveRuntime.deps = publishedDeps
+        val keepAliveSessions = if (KeepAliveRuntime.deps != null) KeepAliveRuntime.sessionsController() else null
         routeSessionTap(intent)
         // Layout state with persisted collapsed host groups: the set of names survives restart.
         // Created once here and held by composition.
@@ -298,34 +307,42 @@ class MainActivity : FragmentActivity() {
                 // App theme at the root: reads designState.themeMode, so a change from the theme picker
                 // recomposes the whole tree with the new palette (mirrors the desktop wiring in main.kt).
                 SkerryTheme(mode = designState.themeMode) {
-                    // Terminal prefs are read at connect time; keep the process-scoped controller's
-                    // factory pointed at the live settings (it outlives this composition).
-                    LaunchedEffect(designState) {
-                        currentTerminalPrefs = {
-                            app.skerry.ui.terminal.TerminalSessionPrefs(
-                                designState.terminalScrollback,
-                                designState.terminalCursorStyle,
-                                clipboardWriteEnabled = designState.allowServerClipboardWrite,
-                            )
-                        }
+                    // Terminal prefs are read at connect time; keep the process-scoped controller
+                    // pointed at the live settings (it outlives this composition). A VALUE snapshot,
+                    // not a closure — a closure over designState would retain this Activity after
+                    // destruction for the process lifetime.
+                    LaunchedEffect(
+                        designState.terminalScrollback,
+                        designState.terminalCursorStyle,
+                        designState.allowServerClipboardWrite,
+                    ) {
+                        KeepAliveRuntime.terminalPrefs = app.skerry.ui.terminal.TerminalSessionPrefs(
+                            designState.terminalScrollback,
+                            designState.terminalCursorStyle,
+                            clipboardWriteEnabled = designState.allowServerClipboardWrite,
+                        )
                     }
-                    // A per-session notification tap: activate the tapped terminal tab AND navigate
-                    // to its screen. activate() alone switches the internal active tab but leaves the
-                    // user on whatever screen was up (Hosts) — the Sessions list does both steps, so a
-                    // notification tap must too. Cleared unconditionally — a stale id (session already
-                    // closed) must not wedge the state.
-                    LaunchedEffect(pendingSessionId) {
-                        val target = pendingSessionId
+                    // A per-session notification tap: activate the tapped terminal AND navigate to
+                    // its screen. activate() alone switches the internal active tab but leaves the
+                    // user on whatever screen was up (Hosts) — the Sessions list does both steps, so
+                    // a notification tap must too. Notifications are keyed by PANE id (a split pane
+                    // has its own), so the lookup matches panes, not just tab ids. Cleared
+                    // unconditionally — a stale id (session already closed) must not wedge the state.
+                    LaunchedEffect(KeepAliveRuntime.pendingSessionId) {
+                        val target = KeepAliveRuntime.pendingSessionId
                         if (target != null) {
                             val sessions = keepAliveSessions
-                            if (sessions != null) {
-                                val tab = sessions.tabs.firstOrNull { it.id == target }
-                                if (tab != null) {
-                                    sessions.activate(target)
-                                    designState.push(if (tab.isVnc) MobileRoute.Vnc else MobileRoute.Terminal)
-                                }
+                            val tab = sessions?.tabs?.firstOrNull { t ->
+                                t.id == target || t.panes.any { it.id == target }
                             }
-                            pendingSessionId = null
+                            if (tab != null) {
+                                sessions.activate(tab.id)
+                                sessions.focusPane(tab.id, target)
+                                // Keep-alive covers terminal sessions only (VNC/RDP tabs never get
+                                // a notification), so the destination is always the terminal.
+                                designState.push(MobileRoute.Terminal)
+                            }
+                            KeepAliveRuntime.pendingSessionId = null
                         }
                     }
                     MobileDesignApp(
@@ -333,7 +350,6 @@ class MainActivity : FragmentActivity() {
                         keyboardInteractive = keyboardInteractive,
                         state = designState,
                         sessions = keepAliveSessions,
-                        processScope = keepAliveScope(),
                         onVaultReset = onVaultReset,
                         // Secret migration + reload + sync session restore.
                         onVaultUnlocked = onVaultUnlocked,
@@ -580,63 +596,6 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    /**
-     * Builds the process-scoped sessions controller (keep-alive): it survives Activity recreation
-     * while the foreground service keeps the process alive, so backgrounding the app does not drop
-     * connections. Mirror of the MobileDesignApp internal factory, except the connection scope is
-     * process-scoped and terminal prefs come from [currentTerminalPrefs] (live settings, refreshed
-     * by the UI on every composition).
-     */
-    private fun buildKeepAliveSessions(deps: AppDependencies): app.skerry.ui.session.SessionsController {
-        val scope = keepAliveScope()
-        val t = deps.transport!!
-        var counter = 0
-        return app.skerry.ui.session.SessionsController(
-            newId = { "sess-${counter++}" },
-            vncControllerFactory = deps.vncTransport?.let { { app.skerry.ui.remote.RemoteDesktopController(scope) } },
-            openVncSession = deps.vncTransport?.let { vt ->
-                { target, auth -> app.skerry.shared.vnc.VncRemoteDesktop(vt.connect(target, auth)) }
-            },
-            openRdpSession = deps.rdpTransport?.let { rt ->
-                { request ->
-                    app.skerry.shared.rdp.RdpRemoteDesktop(
-                        rt.connect(
-                            app.skerry.shared.rdp.RdpTarget(
-                                host = request.host,
-                                port = request.port,
-                                desktopWidth = request.width,
-                                desktopHeight = request.height,
-                                clientName = request.clientName,
-                                loadBalanceInfo = request.loadBalanceInfo,
-                                audioOutput = request.audioOutput,
-                                audioDeviceId = request.audioDeviceId,
-                                clipboard = request.clipboard,
-                                imageQuality = request.imageQuality,
-                            ),
-                            app.skerry.shared.rdp.RdpCredentials(
-                                username = request.user,
-                                password = request.password,
-                                domain = request.domain,
-                            ),
-                        ),
-                    )
-                }
-            },
-            // Desktop parity: the session half of the Teams activity feed (the coordinator holds
-            // the privacy gates).
-            onHostSessionOpened = { hostId -> deps.teams?.reportSessionOpened(hostId) },
-            controllerFactory = {
-                ConnectionController(
-                    t, scope,
-                    history = deps.vault?.let { app.skerry.shared.terminal.VaultTerminalHistoryStore(it) },
-                    // Terminal settings are read at connect time — the process-scoped factory reads
-                    // the live settings via the static provider instead of capturing a composition.
-                    terminalPrefs = { currentTerminalPrefs() },
-                )
-            },
-        )
-    }
-
     private fun buildDependencies(): AppDependencies {
         val dir = filesDir
         val crypto = IonspinVaultCrypto()
@@ -881,11 +840,10 @@ class MainActivity : FragmentActivity() {
         // clears non-vault data and reflects the now-empty vault in the managers.
         onVaultReset = { resetScope ->
             tunnels.closeAll()
-            // The process-scoped keep-alive sessions belong to the wiped vault: tear them down and
-            // drop the graph so a fresh one is built after the reset (sessions carry credentials
-            // that are now meaningless).
-            keepAliveSessions?.disconnectAll()
-            keepAliveSessions = null
+            // The process-scoped keep-alive sessions carry credentials of the wiped vault: tear
+            // them down. The graph itself stays — it reads the current dependency slice per call,
+            // so it is not bound to the wiped instance.
+            KeepAliveRuntime.sessions?.disconnectAll()
             // Team keys lived in the wiped vault; team vaults can no longer be opened, so lock their in-memory trace.
             teams.lock()
             // Reset wiped the dataKey, so the biometric artifact (`vault.bio`) and the sealed sync
