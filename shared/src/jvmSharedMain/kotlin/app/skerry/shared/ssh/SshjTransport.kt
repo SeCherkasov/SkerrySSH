@@ -115,12 +115,13 @@ class SshjTransport(
                 .also { authenticate(it, next.username, next.auth, hop = true, host = next.host, port = next.port) }
         }
         val client = SSHClient(sshjConfig())
-        // TCP connect timeout: sshj's default is 0 = wait forever. Without this, "Test
-        // connection" to a nonexistent/firewalled address hangs with no way to cancel from the
-        // UI. (Protocol-level KEX/I-O timeout is separate, sshj default ~30s; round-trip ping
-        // is its own thing.) For a connectVia hop the TCP dial happened upstream; the timeout is
-        // harmless there.
+        // TCP connect timeout (see the constant's doc). Protocol-level KEX/I-O timeout is
+        // separate, sshj default ~30s; round-trip ping is its own thing. For a connectVia hop
+        // the TCP dial happened upstream; the timeout is harmless there.
         client.connectTimeout = CONNECT_TIMEOUT_MILLIS
+        // Keystroke latency: see TcpNoDelaySocketFactory. Only the entry-point client owns a TCP
+        // socket (hops ride upstream direct-tcpip channels, where setting it is a no-op).
+        client.socketFactory = TcpNoDelaySocketFactory
         configure(client)
         val hostKeyRefused = installHostKeyVerifier(client)
         opened += client
@@ -292,10 +293,6 @@ class SshjTransport(
         } catch (e: IOException) {
             throw SshConnectionException("Connection dropped during authentication", e)
         }
-    }
-
-    private companion object {
-        const val CONNECT_TIMEOUT_MILLIS = 10_000
     }
 }
 

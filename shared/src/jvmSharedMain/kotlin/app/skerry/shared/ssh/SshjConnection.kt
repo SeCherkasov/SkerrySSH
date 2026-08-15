@@ -35,6 +35,10 @@ internal class SshjConnection(
     override val isConnected: Boolean
         get() = client.isConnected && client.isAuthenticated
 
+    // Test-only view of the transport socket: the TCP_NODELAY wiring (TcpNoDelaySocketFactory
+    // installed in dial()) is not observable from the peer, so the test asserts on the socket.
+    internal val transportSocket: java.net.Socket? get() = client.socket
+
     override suspend fun exec(command: String): ExecResult = withContext(Dispatchers.IO) {
         try {
             // Entire exec is under a timeout: otherwise a server process that hangs without closing
