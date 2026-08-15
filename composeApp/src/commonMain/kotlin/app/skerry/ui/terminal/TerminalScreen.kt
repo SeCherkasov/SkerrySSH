@@ -668,7 +668,14 @@ fun TerminalScreen(
           // The same window the draw loop below walks, so a hit on the partly visible slack row is
           // highlighted too. derivedStateOf, not a plain read of scroll.value: this sits in
           // composition, and the raw value changes every pixel of a drag — the window changes per row.
-          val searchWindow by remember(metrics, viewportSize, screen) {
+          // Keys use the content VERSION, not the list: a remember key compares with equals(), and
+          // a structural list compare walks the scrollback on the Main thread on every publish.
+          // `state` stays in every version-keyed remember: the version is monotonic per EMULATOR,
+          // and an in-place session switch (mobile keeps the composition slot) could land on a
+          // coinciding counter — the state reference restores the per-session scope the screen
+          // instance used to provide.
+          val screenVersion = state.screenContentVersion
+          val searchWindow by remember(state, metrics, viewportSize, screenVersion) {
               derivedStateOf {
                   visibleRowWindow(scroll.value.toFloat(), viewportSize.height.toFloat(), metrics.cellHeight, screen.size)
               }
@@ -677,7 +684,7 @@ fun TerminalScreen(
           // layer knows the scroll position — so it keeps the state's anchor current.
           LaunchedEffect(state, searchWindow) { state.search.setAnchorRow(searchWindow.last) }
           val hitsByRow = remember(
-              screen, state.search.query, state.search.caseSensitive, state.search.regex, searchWindow,
+              state, screenVersion, state.search.query, state.search.caseSensitive, state.search.regex, searchWindow,
           ) {
               val query = state.search.query
               if (query.isNullOrEmpty()) {

@@ -134,6 +134,15 @@ class TerminalScreenState(
         private set
 
     /**
+     * The emulator's [TerminalEmulator.contentVersion] as of the last publish. Composition caches
+     * keyed on the screen's content (search hits, highlights, links) key on this cheap Long
+     * instead of the list itself — a structural list compare in a `remember` key walks the whole
+     * scrollback on the Main thread when the instance changed.
+     */
+    var screenContentVersion: Long by mutableStateOf(0L)
+        private set
+
+    /**
      * Mobile auto-fit font scale (issue #180), advanced by [TerminalScreen] when it is composed
      * with `autoFitEnabled`. Lives here rather than in composition on purpose: it must survive
      * switching to another session's tab and back (composition state keyed on the active session
@@ -520,7 +529,8 @@ class TerminalScreenState(
         // with a stale cursor there — counting the user's own wrapped command line as wide output.
         // Single writer, so the apply cannot conflict.
         Snapshot.withMutableSnapshot {
-            screen = emulator.lines // rows are already copied into immutable form inside the getter
+            screen = emulator.lines // the cached instance while nothing visible mutated
+            screenContentVersion = emulator.contentVersion
             cols = emulator.cols
             rows = emulator.rows
             cursorRow = emulator.cursorRow
@@ -1568,18 +1578,15 @@ internal fun lastCommandBlocks(text: String, count: Int): List<String> {
 internal fun lastCommandBlock(text: String): String? = lastCommandBlocks(text, 1).firstOrNull()
 
 /**
- * Whether two screen snapshots are the same as far as the UI is concerned — cell content **and** the
- * soft-wrap flags. Compose skips a state write whose new value is equivalent to the old one, and list
- * equality only compares cells: a row can drop its wrap without any cell changing (`ESC[K` over an
- * already-blank tail), and publishing that as "no change" would leave [TerminalScreen]'s link joining
- * reading wrap flags that no longer hold.
+ * Snapshots compare by IDENTITY, not structurally: at a full scrollback with repetitive output
+ * (`yes`, a spinner) a structural compare walked millions of equal cells per publish. The identity
+ * contract is upheld at the source — [TerminalEmulator.lines] returns the cached instance while
+ * nothing visible mutated and a new one after any cell, wrap-flag, scrollback or geometry change
+ * (see [TerminalEmulator.contentVersion]). The wrap-flag subtlety that used to force a structural
+ * compare (`ESC[K` dropping a wrap without any cell changing) is a version bump there too.
  */
-internal fun sameScreen(a: List<List<TermCell>>, b: List<List<TermCell>>): Boolean =
-    a == b && a.indices.all { a[it].wrapsToNextRow() == b[it].wrapsToNextRow() }
-
-/** [sameScreen] as the equivalence Compose uses to decide whether publishing a snapshot is a no-op. */
 private val SCREEN_SNAPSHOT_POLICY = object : SnapshotMutationPolicy<List<List<TermCell>>> {
-    override fun equivalent(a: List<List<TermCell>>, b: List<List<TermCell>>): Boolean = sameScreen(a, b)
+    override fun equivalent(a: List<List<TermCell>>, b: List<List<TermCell>>): Boolean = a === b
 }
 
 

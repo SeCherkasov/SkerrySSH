@@ -6,8 +6,6 @@ import app.skerry.shared.terminal.CursorShape
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
-import app.skerry.shared.terminal.TermCell
-import app.skerry.shared.terminal.TermSnapshotRow
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.wrapsToNextRow
 import app.skerry.shared.terminal.TerminalSearchError
@@ -68,6 +66,26 @@ class TerminalScreenStateTest {
         session.emit(byteArrayOf(0x9F.toByte()))
 
         assertEquals("П", state.output)
+        scope.cancel()
+    }
+
+    @Test
+    fun `a cursor-only publish keeps the screen instance and its content version`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeTerminalSession()
+        val state = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+
+        session.emit("hello".encodeToByteArray())
+        val before = state.screen
+        val version = state.screenContentVersion
+
+        session.emit("${27.toChar()}[H".encodeToByteArray())
+        assertTrue(before === state.screen)
+        assertEquals(version, state.screenContentVersion)
+
+        session.emit("x".encodeToByteArray())
+        assertFalse(before === state.screen)
+        assertTrue(state.screenContentVersion > version)
         scope.cancel()
     }
 
@@ -3072,19 +3090,10 @@ class TerminalScreenStateTest {
         scope.cancel()
     }
 
-    @Test
-    fun `a snapshot differing only in the soft-wrap flag is not treated as unchanged`() {
-        // Compose skips a state write when the new value is equivalent to the old one, and list
-        // equality only sees cells. A row can lose its wrap (EL over an already-blank tail) without a
-        // single cell changing — publishing that as "no change" would leave link joining on stale flags.
-        val cells = listOf(TermCell('a'), TermCell('b'))
-        val wrapped = listOf<List<TermCell>>(TermSnapshotRow(cells, wrapped = true))
-        val plain = listOf<List<TermCell>>(TermSnapshotRow(cells, wrapped = false))
-
-        assertTrue(sameScreen(wrapped, listOf(TermSnapshotRow(cells, wrapped = true))))
-        assertFalse(sameScreen(wrapped, plain))
-        assertFalse(sameScreen(plain, listOf<List<TermCell>>(listOf(TermCell('a')))))
-    }
+    // The wrap-flag invariant (`ESC[K` dropping a wrap must republish even when no cell changes)
+    // moved to the source with the identity policy: the behavioral case lives above
+    // (`clearing a soft wrap republishes...`) and the emulator's own identity test
+    // (`clearing a soft wrap replaces the snapshot...`) pins the version bump.
 
     // --- Runbook step marks ---
 

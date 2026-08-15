@@ -193,8 +193,10 @@ internal fun rememberRowHighlights(
     window: IntRange,
 ): Map<Int, RowHighlight> {
     val settings = LocalTerminalHighlight.current
+    // `state` in the keys: the content version is per-emulator, and an in-place session switch
+    // could coincide on the counter — see the same note at TerminalScreen's searchWindow.
     return remember(
-        screen, window, settings, state.vocabulary, state.executedCommands,
+        state, state.screenContentVersion, window, settings, state.vocabulary, state.executedCommands,
         state.cursorRow, state.cursorCol, state.altScreen,
     ) {
         highlightRows(

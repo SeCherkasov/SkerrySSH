@@ -227,10 +227,31 @@ class TerminalEmulator(
      */
     val lines: List<List<TermCell>>
         get() {
+            snapshotCache?.takeIf { snapshotVersion == contentVersion }?.let { return it }
             val screenRows = ArrayList<List<TermCell>>(grid.size)
                 .apply { grid.forEach { add(TermSnapshotRow(it.toList(), it.wrapped)) } }
-            return if (altScreen) screenRows else SnapshotLines(scrollback.frozen(), screenRows)
+            val built = if (altScreen) screenRows else SnapshotLines(scrollback.frozen(), screenRows)
+            snapshotCache = built
+            snapshotVersion = contentVersion
+            return built
         }
+
+    /**
+     * Bumped by every mutation that can change what [lines] returns — cell writes, wrap flags,
+     * scrollback, geometry, buffer switches. The render layer compares snapshots by identity, so
+     * an unchanged version returning the cached instance is what makes "nothing visible changed"
+     * (a cursor-only move, a mode switch) publish as a no-op; a missed [markDirty] site would
+     * freeze the screen, which is why every grid/scrollback writer calls it at its entry.
+     */
+    var contentVersion: Long = 0L
+        private set
+
+    private var snapshotCache: List<List<TermCell>>? = null
+    private var snapshotVersion: Long = -1L
+
+    private fun markDirty() {
+        contentVersion++
+    }
 
     private var style = TermStyle()
 
@@ -983,6 +1004,7 @@ class TerminalEmulator(
     // --- Printing and movement ------------------------------------------------
 
     private fun putCodePoint(cp: Int) {
+        markDirty()
         if (CharMetrics.isCombining(cp) && appendCombining(cp)) return // attached to the base — cursor unchanged
         val w = CharMetrics.charWidth(cp)
         if (pendingWrap) {
@@ -1032,6 +1054,7 @@ class TerminalEmulator(
         val base = row[baseCol]
         if (base.width == CellWidth.Continuation) return false                   // guard: never attach to a bare continuation
         if (base.text.length >= MAX_GRAPHEME_LEN) return true                    // cluster full — silently drop the mark
+        markDirty()
         row[baseCol] = base.copy(text = base.text + CharMetrics.codePointToString(cp))
         return true
     }
@@ -1068,12 +1091,14 @@ class TerminalEmulator(
     // --- Scrolling ---------------------------------------------------------
 
     private fun scrollUp(n: Int) = repeat(n.coerceAtMost(scrollBottom - scrollTop + 1)) {
+        markDirty()
         val removed = grid.removeAt(scrollTop)
         if (!altScreen && scrollTop == 0) pushScrollback(removed)
         grid.add(scrollBottom, blankRow())
     }
 
     private fun scrollDown(n: Int) = repeat(n.coerceAtMost(scrollBottom - scrollTop + 1)) {
+        markDirty()
         grid.removeAt(scrollBottom)
         grid.add(scrollTop, blankRow())
     }
@@ -1091,6 +1116,7 @@ class TerminalEmulator(
      */
     private fun trimScrollback() {
         val dropped = scrollback.trimTo(maxScrollback)
+        if (dropped > 0) markDirty()
         if (dropped == 0 || stepMarkRow == NO_STEP_MARK) return
         val shifted = stepMarkRow - dropped
         stepMarkRow = shifted.coerceAtLeast(0)
@@ -1102,6 +1128,7 @@ class TerminalEmulator(
     // --- Erase / insert / delete ------------------------------------------
 
     private fun eraseLine(mode: Int) {
+        markDirty()
         val row = grid[cy]
         when (mode) {
             // Erasing the tail (0) or the whole row (2) removes its continuation — clear wrapped so
@@ -1113,6 +1140,7 @@ class TerminalEmulator(
     }
 
     private fun eraseDisplay(mode: Int) {
+        markDirty()
         when (mode) {
             0 -> { eraseLine(0); for (r in cy + 1 until rows) blankLine(r) }
             1 -> { for (r in 0 until cy) blankLine(r); eraseLine(1) }
@@ -1131,6 +1159,7 @@ class TerminalEmulator(
      * scrollable. Trailing empty rows aren't moved to history, else every `clear` would spawn a screen
      * of blank rows. The alt screen has no scrollback — clear in place.
      */
+    // Caller must markDirty() first (eraseDisplay does): this writer relies on its entry frame.
     private fun clearScreenToScrollback() {
         if (altScreen) {
             for (r in 0 until rows) blankLine(r)
@@ -1149,17 +1178,20 @@ class TerminalEmulator(
     }
 
     private fun eraseChars(n: Int) {
+        markDirty()
         val row = grid[cy]
         for (c in cx until (cx + n).coerceAtMost(cols)) row[c] = blankCell()
     }
 
     private fun insertChars(n: Int) {
+        markDirty()
         val row = grid[cy]
         repeat(n.coerceAtMost(cols - cx)) { row.add(cx, blankCell()) }
         while (row.size > cols) row.removeAt(row.size - 1)
     }
 
     private fun deleteChars(n: Int) {
+        markDirty()
         val row = grid[cy]
         repeat(n.coerceAtMost(cols - cx)) { row.removeAt(cx) }
         while (row.size < cols) row.add(blankCell())
@@ -1167,6 +1199,7 @@ class TerminalEmulator(
 
     private fun insertLines(n: Int) {
         if (cy < scrollTop || cy > scrollBottom) return
+        markDirty()
         repeat(n.coerceAtMost(scrollBottom - cy + 1)) {
             grid.removeAt(scrollBottom)
             grid.add(cy, blankRow())
@@ -1177,6 +1210,7 @@ class TerminalEmulator(
 
     private fun deleteLines(n: Int) {
         if (cy < scrollTop || cy > scrollBottom) return
+        markDirty()
         repeat(n.coerceAtMost(scrollBottom - cy + 1)) {
             grid.removeAt(cy)
             grid.add(scrollBottom, blankRow())
@@ -1212,6 +1246,7 @@ class TerminalEmulator(
 
     private fun setAltScreen(on: Boolean, saveRestore: Boolean) {
         if (on == altScreen) return
+        markDirty()
         if (on) {
             if (saveRestore) saveCursor()
             val fresh = freshScreen()
@@ -1265,6 +1300,7 @@ class TerminalEmulator(
     }
 
     private fun reset() {
+        markDirty()
         primaryGrid = freshScreen()
         altGrid = null
         grid = primaryGrid
@@ -1329,6 +1365,7 @@ class TerminalEmulator(
         val nc = newCols.coerceIn(1, MAX_DIMENSION)
         val nr = newRows.coerceIn(1, MAX_DIMENSION)
         if (nc == cols && nr == rows) return
+        markDirty()
         val wasPendingWrap = pendingWrap
         val (newCy, newCx) = reflowPrimary(nc, nr, trackCursor = !altScreen)
         if (!altScreen) grid = primaryGrid
@@ -1356,6 +1393,7 @@ class TerminalEmulator(
      * result to state. Returns the new cursor position `(cy, cx)` in new-grid coordinates (meaningful
      * only with [trackCursor]).
      */
+    // Caller must markDirty() first (resize does): this writer relies on its entry frame.
     private fun reflowPrimary(nc: Int, nr: Int, trackCursor: Boolean): Pair<Int, Int> {
         val src = ArrayList<TermRow>(scrollback.size + primaryGrid.size).apply {
             addAll(scrollback.rows); addAll(primaryGrid)
@@ -1378,6 +1416,7 @@ class TerminalEmulator(
     }
 
     /** Resize the grid without reflow (alt-screen): trim/pad columns and rows. */
+    // Caller must markDirty() first (resize does): this writer relies on its entry frame.
     private fun resizeGrid(g: MutableList<TermRow>, nc: Int, nr: Int, activePrimary: Boolean) {
         for (row in g) {
             while (row.size > nc) row.removeAt(row.size - 1)
@@ -1412,6 +1451,7 @@ class TerminalEmulator(
     private fun blankRow() = TermRow(MutableList(cols) { blankCell() })
 
     private fun blankLine(r: Int) {
+        markDirty()
         val row = grid[r]
         for (c in 0 until cols) row[c] = blankCell()
         row.wrapped = false
