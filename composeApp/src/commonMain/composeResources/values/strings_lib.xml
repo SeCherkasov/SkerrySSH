@@ -103,6 +103,7 @@
     <string name="lib_snippet_vars_clipboard">Clipboard</string>
     <string name="lib_snippet_vars_clipboard_empty">(empty)</string>
     <string name="lib_snippet_vars_vault">Vault secrets</string>
+    <string name="lib_snippet_vars_vault_unnamed">(unprintable name)</string>
     <string name="lib_snippet_vars_vault_missing">No password named “%1$s” in the vault</string>
     <string name="lib_snippet_vars_vault_not_password">Vault entry “%1$s” is not a password</string>
     <string name="lib_snippet_vars_secret_note">Secrets are inserted as plain text — visible on screen, in scrollback and in shell history.</string>
@@ -286,9 +287,11 @@
     <string name="lib_snippets_help_title">Snippets</string>
     <string name="lib_snippets_help_intro">A snippet is one command sent to the active session. ${{…}} placeholders resolve when it runs; the confirmation shows the exact line before anything is sent.</string>
     <string name="lib_snippets_help_vars">Variables</string>
-    <string name="lib_snippets_help_var_date">date, time and Unix timestamp of the run; format tokens after a colon (YYYY, MM, DD, HH, mm, ss)</string>
+    <string name="lib_snippets_help_var_date">date of the run, YYYY-MM-DD; format tokens after a colon (YYYY, YY, MM, DD, HH, mm, ss)</string>
+    <string name="lib_snippets_help_var_time">time of the run, HH:mm:ss; format tokens after a colon (HH, mm, ss, YYYY, YY, MM, DD)</string>
+    <string name="lib_snippets_help_var_timestamp">Unix time of the run, in seconds</string>
     <string name="lib_snippets_help_var_uuid">random UUID</string>
-    <string name="lib_snippets_help_var_random">random characters; length and charset after the colon — alnum, hex or special; an unknown name falls back to the default set</string>
+    <string name="lib_snippets_help_var_random">random characters; length (64 at most) and charset after the colon — alnum, hex or special; an unknown name falls back to the default set</string>
     <string name="lib_snippets_help_var_clipboard">system clipboard, read once at the confirmation</string>
     <string name="lib_snippets_help_var_vault">password from the vault, by entry name</string>
     <string name="lib_snippets_help_var_param">any other name asks for a value before the run; the part after the colon is the prefilled default</string>

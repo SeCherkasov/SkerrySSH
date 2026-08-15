@@ -20,6 +20,8 @@ import app.skerry.ui.generated.resources.lib_snippets_help_var_clipboard
 import app.skerry.ui.generated.resources.lib_snippets_help_var_date
 import app.skerry.ui.generated.resources.lib_snippets_help_var_param
 import app.skerry.ui.generated.resources.lib_snippets_help_var_random
+import app.skerry.ui.generated.resources.lib_snippets_help_var_time
+import app.skerry.ui.generated.resources.lib_snippets_help_var_timestamp
 import app.skerry.ui.generated.resources.lib_snippets_help_var_uuid
 import app.skerry.ui.generated.resources.lib_snippets_help_var_vault
 import app.skerry.ui.generated.resources.lib_snippets_help_vars
@@ -57,7 +59,11 @@ val SNIPPET_HELP_EXAMPLES: List<SnippetDraft> = listOf(
 @Composable
 fun TemplateVariableHelpRows() {
     FieldLabel(stringResource(Res.string.lib_snippets_help_vars))
-    HelpCodeRow("\${{date}} · \${{time}} · \${{timestamp}}", stringResource(Res.string.lib_snippets_help_var_date))
+    // One placeholder per row: three in one badge left the description a two-word column at the
+    // right edge of a phone-width dialog (issue #256).
+    HelpCodeRow("\${{date}}", stringResource(Res.string.lib_snippets_help_var_date))
+    HelpCodeRow("\${{time}}", stringResource(Res.string.lib_snippets_help_var_time))
+    HelpCodeRow("\${{timestamp}}", stringResource(Res.string.lib_snippets_help_var_timestamp))
     HelpCodeRow("\${{uuid}}", stringResource(Res.string.lib_snippets_help_var_uuid))
     HelpCodeRow("\${{random:16,hex}}", stringResource(Res.string.lib_snippets_help_var_random))
     HelpCodeRow("\${{clipboard}}", stringResource(Res.string.lib_snippets_help_var_clipboard))

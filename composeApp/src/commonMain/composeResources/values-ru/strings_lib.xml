@@ -105,6 +105,7 @@
     <string name="lib_snippet_vars_clipboard">Буфер обмена</string>
     <string name="lib_snippet_vars_clipboard_empty">(пусто)</string>
     <string name="lib_snippet_vars_vault">Секреты хранилища</string>
+    <string name="lib_snippet_vars_vault_unnamed">(непечатаемое имя)</string>
     <string name="lib_snippet_vars_vault_missing">В хранилище нет пароля с именем «%1$s»</string>
     <string name="lib_snippet_vars_vault_not_password">Запись «%1$s» в хранилище — не пароль</string>
     <string name="lib_snippet_vars_secret_note">Секреты вставляются открытым текстом — они видны на экране, в прокрутке и в истории shell.</string>
@@ -287,9 +288,11 @@
     <string name="lib_snippets_help_title">Сниппеты</string>
     <string name="lib_snippets_help_intro">Сниппет — одна команда, отправляемая в активную сессию. Плейсхолдеры ${{…}} раскрываются при запуске; подтверждение показывает точную строку до отправки.</string>
     <string name="lib_snippets_help_vars">Переменные</string>
-    <string name="lib_snippets_help_var_date">дата, время и Unix-время запуска; токены формата после двоеточия (YYYY, MM, DD, HH, mm, ss)</string>
+    <string name="lib_snippets_help_var_date">дата запуска, YYYY-MM-DD; токены формата после двоеточия (YYYY, YY, MM, DD, HH, mm, ss)</string>
+    <string name="lib_snippets_help_var_time">время запуска, HH:mm:ss; токены формата после двоеточия (HH, mm, ss, YYYY, YY, MM, DD)</string>
+    <string name="lib_snippets_help_var_timestamp">Unix-время запуска, в секундах</string>
     <string name="lib_snippets_help_var_uuid">случайный UUID</string>
-    <string name="lib_snippets_help_var_random">случайные символы; длина и набор после двоеточия — alnum, hex или special; неизвестное имя откатывается к набору по умолчанию</string>
+    <string name="lib_snippets_help_var_random">случайные символы; длина (не больше 64) и набор после двоеточия — alnum, hex или special; неизвестное имя откатывается к набору по умолчанию</string>
     <string name="lib_snippets_help_var_clipboard">системный буфер обмена, читается один раз при подтверждении</string>
     <string name="lib_snippets_help_var_vault">пароль из хранилища по имени записи</string>
     <string name="lib_snippets_help_var_param">любое другое имя запрашивает значение перед запуском; часть после двоеточия — предзаполненное значение</string>

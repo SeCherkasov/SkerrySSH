@@ -65,6 +65,13 @@ object UiTags {
     const val HELP_DIALOG: String = "nav.helpDialog"
 
     /**
+     * A help syntax row and the mono badge inside it; both repeat, one per row, in row order. The
+     * badge tag sits outside its padding, so what it measures is the badge as drawn.
+     */
+    const val HELP_ROW: String = "nav.helpDialog.row"
+    const val HELP_CODE: String = "nav.helpDialog.code"
+
+    /**
      * Command box of a runbook step. The steps are a repeating list, not captioned fields, so there
      * is no label to name them after; the tag repeats per step, in step order.
      */
