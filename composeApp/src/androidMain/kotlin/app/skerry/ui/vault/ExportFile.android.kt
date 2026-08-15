@@ -3,6 +3,7 @@ package app.skerry.ui.vault
 import android.provider.DocumentsContract
 import app.skerry.ui.sftp.SafBridge
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 /**
@@ -21,7 +22,11 @@ import kotlinx.coroutines.withContext
 internal actual suspend fun exportTextFile(suggestedName: String, content: String): ExportOutcome {
     val ctx = SafBridge.context() ?: return ExportOutcome.Failed
     val uri = SafBridge.createDocument(suggestedName) ?: return ExportOutcome.Cancelled
-    return withContext(Dispatchers.IO) {
+    // NonCancellable, as on desktop: the document already exists at the Uri the user picked, so the
+    // write (or the cleanup delete, and the zeroing) runs to completion even if the screen is torn
+    // down mid-write. Delivery of the result to a cancelled caller is not this block's to promise —
+    // the key-export path hoists its own NonCancellable around the call; see exportPrivateKey.
+    return withContext(Dispatchers.IO + NonCancellable) {
         // Zeroed after the write, as on desktop: the String behind it can't be, but this copy can,
         // and a phone is the likelier of the two to have its heap dumped.
         val bytes = content.toByteArray(Charsets.UTF_8)

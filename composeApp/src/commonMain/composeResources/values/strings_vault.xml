@@ -173,6 +173,8 @@
         <item quantity="one">%1$d time in %2$d days</item>
         <item quantity="other">%1$d times in %2$d days</item>
     </plurals>
+    <string name="vault_kv_exported">Exported</string>
+    <string name="vault_never_exported">never</string>
 
     <!-- Row meta line: the facts about a secret, type excluded (the badge says it). -->
     <string name="vault_meta_rotated">rotated %1$s</string>

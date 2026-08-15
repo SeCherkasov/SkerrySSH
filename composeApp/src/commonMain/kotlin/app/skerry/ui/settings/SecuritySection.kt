@@ -32,6 +32,7 @@ import app.skerry.shared.vault.SecurityEvent
 import app.skerry.shared.vault.SecurityEventType
 import app.skerry.shared.vault.securityMoment
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.LocalCredentials
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.GhostButton
@@ -64,6 +65,7 @@ import app.skerry.ui.generated.resources.settings_change_pw_title
 import app.skerry.ui.generated.resources.settings_event_biometric_disabled
 import app.skerry.ui.generated.resources.settings_event_biometric_enabled
 import app.skerry.ui.generated.resources.settings_event_device_paired
+import app.skerry.ui.generated.resources.settings_event_key_exported
 import app.skerry.ui.generated.resources.settings_event_line
 import app.skerry.ui.generated.resources.settings_event_password_changed
 import app.skerry.ui.generated.resources.settings_event_unlocked_biometric
@@ -292,8 +294,27 @@ internal fun masterPasswordSubtitle(lastChangeAt: String?): String {
 @Composable
 internal fun securityEventLine(event: SecurityEvent): String {
     val label = event.type.eventLabel()
-    val head = event.detail?.let { stringResource(Res.string.settings_event_with_detail, label, it) } ?: label
+    val credentials = LocalCredentials.current
+    val detail = securityEventDisplayDetail(event.type, event.detail) { id -> credentials?.find(id)?.label }
+    val head = detail?.let { stringResource(Res.string.settings_event_with_detail, label, it) } ?: label
     return stringResource(Res.string.settings_event_line, head, securityEventTime(event.at))
+}
+
+/**
+ * The detail an event line shows, if any. Most events store a human detail and show it verbatim
+ * ([SecurityEventType.DevicePaired] — a device name). [SecurityEventType.KeyExported] stores the
+ * credential id (labels are secret, the log is plaintext on disk), and an id is not for humans:
+ * it is resolved to the label via [labelOf] at render time, and when it no longer resolves (the
+ * secret was deleted, or the keychain was not loaded this run) the line shows no detail rather
+ * than a raw UUID.
+ */
+internal fun securityEventDisplayDetail(
+    type: SecurityEventType,
+    detail: String?,
+    labelOf: (String) -> String?,
+): String? = when (type) {
+    SecurityEventType.KeyExported -> detail?.let(labelOf)
+    else -> detail
 }
 
 /** Localized event type label. */
@@ -306,6 +327,7 @@ private fun SecurityEventType.eventLabel(): String = stringResource(
         SecurityEventType.BiometricDisabled -> Res.string.settings_event_biometric_disabled
         SecurityEventType.UnlockedBiometric -> Res.string.settings_event_unlocked_biometric
         SecurityEventType.DevicePaired -> Res.string.settings_event_device_paired
+        SecurityEventType.KeyExported -> Res.string.settings_event_key_exported
     },
 )
 

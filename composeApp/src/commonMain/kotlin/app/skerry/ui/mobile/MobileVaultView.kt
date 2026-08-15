@@ -90,6 +90,7 @@ import app.skerry.ui.vault.SecretActions
 import app.skerry.ui.vault.secretActions
 import app.skerry.ui.vault.exportPrivateKey
 import app.skerry.ui.vault.exportPublic
+import app.skerry.ui.vault.keyExportAudit
 import app.skerry.ui.vault.VaultCategoryKind
 import app.skerry.ui.vault.VaultPresentation
 import app.skerry.ui.vault.title
@@ -117,6 +118,7 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalSync
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.app.LocalSecretFileReader
+import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.vault.KeyFileBadges
 import app.skerry.ui.vault.KeyFileDetailBody
 import app.skerry.ui.vault.LinkKeyFileDialog
@@ -133,6 +135,7 @@ import app.skerry.ui.vault.SecretIcon
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.vault.SecretAuditRows
+import app.skerry.ui.vault.hasAuditTrail
 import app.skerry.ui.vault.SecretEncryptionRows
 import app.skerry.ui.vault.SecretFactRows
 import app.skerry.ui.vault.SecretRow
@@ -180,6 +183,8 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     val vault = LocalVault.current
     val biometrics = LocalVaultBiometrics.current
     val copyAuth = remember(vault, biometrics, scope) { SecretCopyAuthorizer(vault, biometrics, scope) }
+    // A saved export is recorded in the usage trail and the security log (issue #221).
+    val securityLog = LocalSecurityLog.current
     var exportFailed by remember { mutableStateOf(false) }
 
     var category by remember { mutableStateOf(VaultCategoryKind.SSH_KEYS) }
@@ -363,7 +368,12 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                     copyAuth.authorize { credentials.recordCopied(credential.id); copyPasswordToClipboard(pwd) }
                 },
                 // Private key material: re-authenticated like a password copy; see VaultView.
-                onExportKey = { export -> exportPrivateKey(copyAuth, export, scope) { exportFailed = it.worthReporting } },
+                onExportKey = { export ->
+                    exportPrivateKey(
+                        copyAuth, export, scope,
+                        onSaved = keyExportAudit(credentials, securityLog, credential.id),
+                    ) { exportFailed = it.worthReporting }
+                },
                 onExportPublic = { export -> exportPublic(export, scope) { exportFailed = it.worthReporting } },
                 // Close the detail sheet before showing a centered dialog (rename/delete): otherwise the
                 // sheet, drawn on top, would cover it and leave only its edge visible.
@@ -660,10 +670,11 @@ private fun MobileSecretDetailSheet(
                 }
                 SecretSectionLabel(encryptionSectionTitle())
                 SecretEncryptionRows(syncing)
-                // Only a password is ever copied out of the vault; see the desktop panel.
-                if (secret is CredentialSecret.Password) {
+                // Same rule as the desktop panel: audit shows for every secret whose material can
+                // leave the vault — password copies and private-key exports.
+                if (hasAuditTrail(credential)) {
                     SecretSectionLabel(auditSectionTitle())
-                    SecretAuditRows(usage)
+                    SecretAuditRows(credential, usage)
                 }
                 Spacer(Modifier.height(8.dp))
             }

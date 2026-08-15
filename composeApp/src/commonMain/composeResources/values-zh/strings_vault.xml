@@ -166,6 +166,8 @@
     <plurals name="vault_copies_window">
         <item quantity="other">%2$d 天内 %1$d 次</item>
     </plurals>
+    <string name="vault_kv_exported">导出</string>
+    <string name="vault_never_exported">从未</string>
 
     <string name="vault_meta_rotated">%1$s 轮换</string>
     <string name="vault_meta_valid_until">有效期至 %1$s</string>
