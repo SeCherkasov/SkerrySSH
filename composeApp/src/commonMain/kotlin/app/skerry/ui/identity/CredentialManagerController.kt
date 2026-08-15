@@ -118,6 +118,13 @@ class CredentialManagerController(
      */
     fun recordCopied(id: String) = record(id, CredentialUsageLog::recordCopied)
 
+    /**
+     * Note that a secret's private material was written out to a file ("Export key"). Recorded only
+     * for a completed write — the caller ([app.skerry.ui.vault.keyExportAudit]) runs on
+     * [app.skerry.ui.vault.ExportOutcome.Saved] and nothing else.
+     */
+    fun recordExported(id: String) = record(id, CredentialUsageLog::recordExported)
+
     /** Usage trail of a secret: added / last used / copies. `null` when nothing was ever recorded. */
     fun usageOf(id: String): CredentialUsage? = usageById[id]
 

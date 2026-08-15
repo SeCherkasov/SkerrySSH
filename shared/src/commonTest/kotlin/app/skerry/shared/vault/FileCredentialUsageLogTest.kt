@@ -88,6 +88,36 @@ class FileCredentialUsageLogTest {
     }
 
     @Test
+    fun exportsAccumulateNewestLast() {
+        val l = log()
+        clock = 2
+        l.recordExported("cred-1")
+        clock = 6
+        l.recordExported("cred-1")
+        val exports = l.of("cred-1")!!.exportedAt
+        assertEquals(2, exports.size)
+        assertTrue(exports.last().endsWith(":06Z"))
+    }
+
+    @Test
+    fun exportCapDropsOldest() {
+        val l = log(maxCopies = 3)
+        repeat(5) { clock = it.toLong(); l.recordExported("cred-1") }
+        val exports = l.of("cred-1")!!.exportedAt
+        assertEquals(3, exports.size)
+        assertTrue(exports.first().endsWith(":02Z"))
+        assertTrue(exports.last().endsWith(":04Z"))
+    }
+
+    @Test
+    fun exportsPersistAcrossInstances() {
+        // An export is the audit event a user comes back to days later — it must survive restart.
+        clock = 7
+        log().recordExported("cred-1")
+        assertTrue(log().of("cred-1")!!.exportedAt.single().endsWith(":07Z"))
+    }
+
+    @Test
     fun usageIsPerCredential() {
         val l = log()
         clock = 1

@@ -169,6 +169,7 @@
     <string name="settings_event_biometric_disabled">生物识别解锁已禁用</string>
     <string name="settings_event_unlocked_biometric">通过生物识别解锁</string>
     <string name="settings_event_device_paired">新设备已配对</string>
+    <string name="settings_event_key_exported">密钥已导出到文件</string>
     <string name="settings_event_with_detail">%1$s：%2$s</string>
     <string name="settings_event_line">%1$s · %2$s</string>
     <string name="settings_time_today">今天 %1$s</string>

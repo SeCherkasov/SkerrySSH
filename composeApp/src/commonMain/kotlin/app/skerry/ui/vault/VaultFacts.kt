@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialUsage
 import app.skerry.shared.vault.VaultCrypto
@@ -20,6 +21,7 @@ import app.skerry.ui.generated.resources.vault_kv_added
 import app.skerry.ui.generated.resources.vault_kv_changed
 import app.skerry.ui.generated.resources.vault_kv_cipher
 import app.skerry.ui.generated.resources.vault_kv_copied
+import app.skerry.ui.generated.resources.vault_kv_exported
 import app.skerry.ui.generated.resources.vault_kv_fingerprint
 import app.skerry.ui.generated.resources.vault_kv_kdf
 import app.skerry.ui.generated.resources.vault_kv_last_used
@@ -32,6 +34,7 @@ import app.skerry.ui.generated.resources.vault_section_audit
 import app.skerry.ui.generated.resources.vault_section_encryption
 import app.skerry.ui.generated.resources.vault_stored_ciphertext
 import app.skerry.ui.generated.resources.vault_stored_local
+import app.skerry.ui.generated.resources.vault_never_exported
 import app.skerry.ui.generated.resources.vault_value_never
 import app.skerry.ui.generated.resources.vault_value_unknown
 import app.skerry.ui.design.KeyValueRow
@@ -115,18 +118,32 @@ fun SecretEncryptionRows(syncing: Boolean, modifier: Modifier = Modifier) {
 }
 
 /**
- * What this device did with the secret: how often it was copied to the clipboard inside the audit
- * window. Per-device by design (see [app.skerry.shared.vault.CredentialUsageLog]) — a copy made on
- * the phone is not counted here, and the log is not synced.
+ * What this device did with the secret — the ways its material left the vault. A password leaves
+ * via the clipboard, so its row counts copies inside the audit window; a key or a certificate
+ * leaves via "Export key", so its row states the last export ("never" until there was one — the
+ * panel of an exported key must not look like the panel of one that never left, issue #221).
+ * Per-device by design (see [app.skerry.shared.vault.CredentialUsageLog]) — a copy or an export
+ * made on the phone is not counted here, and the log is not synced.
  */
 @Composable
-fun SecretAuditRows(usage: CredentialUsage?, modifier: Modifier = Modifier) {
-    val copies = VaultPresentation.copiesWithin(usage, COPY_WINDOW_DAYS) { at -> securityMoment(at)?.daysAgo }
+fun SecretAuditRows(credential: Credential, usage: CredentialUsage?, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth()) {
-        KeyValueRow(
-            stringResource(Res.string.vault_kv_copied),
-            pluralStringResource(Res.plurals.vault_copies_window, copies, copies, COPY_WINDOW_DAYS),
-        )
+        if (credential.secret is CredentialSecret.Password) {
+            val copies = VaultPresentation.copiesWithin(usage, COPY_WINDOW_DAYS) { at -> securityMoment(at)?.daysAgo }
+            KeyValueRow(
+                stringResource(Res.string.vault_kv_copied),
+                pluralStringResource(Res.plurals.vault_copies_window, copies, copies, COPY_WINDOW_DAYS),
+            )
+        }
+        // Type check, not privateKeyExport(...) != null — same recomposition-allocation reasoning
+        // as hasAuditTrail.
+        if (credential.secret is CredentialSecret.PrivateKey || credential.secret is CredentialSecret.Certificate) {
+            KeyValueRow(
+                stringResource(Res.string.vault_kv_exported),
+                usage?.exportedAt?.lastOrNull()?.let { momentLabel(it) }
+                    ?: stringResource(Res.string.vault_never_exported),
+            )
+        }
     }
 }
 

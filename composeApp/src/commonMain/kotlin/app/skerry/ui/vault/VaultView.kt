@@ -39,6 +39,7 @@ import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialUsage
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
+import app.skerry.ui.app.LocalSecurityLog
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.help_button
@@ -142,6 +143,8 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     val vault = LocalVault.current
     val biometrics = LocalVaultBiometrics.current
     val copyAuth = remember(vault, biometrics, scope) { SecretCopyAuthorizer(vault, biometrics, scope) }
+    // A saved export is recorded in the usage trail and the security log (issue #221).
+    val securityLog = LocalSecurityLog.current
     var exportFailed by remember { mutableStateOf(false) }
 
     var category by remember { mutableStateOf(VaultCategoryKind.SSH_KEYS) }
@@ -220,7 +223,10 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                             // cancelled Save-As stays silent; a failed write must not, or the user
                             // walks away believing they have a backup.
                             onExportKey = { export ->
-                                exportPrivateKey(copyAuth, export, scope) { exportFailed = it.worthReporting }
+                                exportPrivateKey(
+                                    copyAuth, export, scope,
+                                    onSaved = keyExportAudit(credentials, securityLog, credential.id),
+                                ) { exportFailed = it.worthReporting }
                             },
                             // The certificate is public — no gate, like the Copy button next to it.
                             onExportPublic = { export ->

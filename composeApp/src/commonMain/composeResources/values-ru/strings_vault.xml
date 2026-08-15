@@ -172,6 +172,8 @@
         <item quantity="many">%1$d раз за %2$d дней</item>
         <item quantity="other">%1$d раза за %2$d дней</item>
     </plurals>
+    <string name="vault_kv_exported">Экспортировали</string>
+    <string name="vault_never_exported">ни разу</string>
 
     <string name="vault_meta_rotated">сменён %1$s</string>
     <string name="vault_meta_valid_until">действует до %1$s</string>

@@ -7,6 +7,7 @@ import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.getString
@@ -28,7 +29,12 @@ internal actual suspend fun exportTextFile(suggestedName: String, content: Strin
         val name = dialog.file ?: return@withContext null
         File(dir, name).absolutePath
     } ?: return ExportOutcome.Cancelled
-    return withContext(Dispatchers.IO) {
+    // NonCancellable: once the user has confirmed the Save-As, the write itself (and the zeroing in
+    // finally) runs to completion even if the calling scope dies mid-write — for every caller,
+    // recordings included. It does NOT guarantee delivery of the result: withContext's prompt
+    // cancellation checks the caller's job at the resume, so a caller that must not lose a Saved
+    // (the key-export audit) hoists its own NonCancellable around the call — see exportPrivateKey.
+    return withContext(Dispatchers.IO + NonCancellable) {
         // What travels through here is secret: a session recording holds whatever the server printed,
         // and a keychain export is the private key itself. writePrivateFile attaches 0600 as the file
         // is created (where the platform has permissions) — writing first and hardening after would

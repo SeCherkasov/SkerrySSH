@@ -11,8 +11,9 @@ import okio.Path
  * What the app can honestly say about one keychain secret's life: when it was added
  * ([addedAt] — first stamp wins, a later edit is not a second birth), when its material was last
  * replaced ([changedAt] — a rotated password, a re-imported key; a rename is not a rotation), when
- * it last authenticated a connection ([lastUsedAt]) and when it was copied to the clipboard
- * ([copiedAt], oldest first).
+ * it last authenticated a connection ([lastUsedAt]), when it was copied to the clipboard
+ * ([copiedAt], oldest first) and when its private material was written out to a file
+ * ([exportedAt], oldest first — the most consequential way material leaves the vault, issue #221).
  *
  * Timestamps are ISO-8601 strings from the app's clock, as in [SecurityEvent] — the UI turns them
  * into "today 09:14" / "3 days ago" via [securityMoment]. A secret with no entry has never been
@@ -25,6 +26,7 @@ data class CredentialUsage(
     val changedAt: String? = null,
     val lastUsedAt: String? = null,
     val copiedAt: List<String> = emptyList(),
+    val exportedAt: List<String> = emptyList(),
 )
 
 /**
@@ -62,6 +64,9 @@ interface CredentialUsageLog {
     /** Append a clipboard copy of the secret. */
     fun recordCopied(credentialId: String): CredentialUsage
 
+    /** Append an export of the secret's private material to a file. */
+    fun recordExported(credentialId: String): CredentialUsage
+
     /** Drop everything known about a secret (it was deleted from the keychain). */
     fun forget(credentialId: String)
 
@@ -74,8 +79,9 @@ interface CredentialUsageLog {
  * by desktop and Android (like [FileSecurityLog]). A corrupt or missing file reads as an empty log,
  * so a damaged audit trail degrades to "nothing known" instead of blocking the keychain.
  *
- * Only the last [maxCopies] copies of a secret are kept — the panel counts copies inside a window,
- * not since the beginning of time, and an unbounded list would grow with every clipboard action.
+ * Only the last [maxCopies] copies (and, separately, exports) of a secret are kept — the panel
+ * counts copies inside a window, not since the beginning of time, and an unbounded list would grow
+ * with every clipboard action. Exports are far rarer, but the same cap keeps the file bounded.
  *
  * Mutations are read-modify-write and are serialized with a multiplatform [SynchronizedObject]
  * (like [FileSecurityLog]): copies are recorded from the UI coroutine while a connection being
@@ -112,6 +118,10 @@ class FileCredentialUsageLog(
 
     override fun recordCopied(credentialId: String): CredentialUsage = update(credentialId) {
         it.copy(copiedAt = (it.copiedAt + clock()).takeLast(maxCopies))
+    }
+
+    override fun recordExported(credentialId: String): CredentialUsage = update(credentialId) {
+        it.copy(exportedAt = (it.exportedAt + clock()).takeLast(maxCopies))
     }
 
     override fun forget(credentialId: String): Unit = synchronized(lock) {

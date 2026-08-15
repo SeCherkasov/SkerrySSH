@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,7 +32,9 @@ fun KeyValueRow(
     valueColor: Color = Skerry.colors.text,
 ) {
     Row(
-        modifier.fillMaxWidth().padding(vertical = 3.dp),
+        // One fact, one accessibility node: a screen reader announces "Exported, never" in a single
+        // stop instead of a label and an orphaned value two swipes apart.
+        modifier.fillMaxWidth().padding(vertical = 3.dp).semantics(mergeDescendants = true) {},
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
