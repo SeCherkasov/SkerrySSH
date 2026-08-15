@@ -50,6 +50,8 @@
     <string name="runbook_panel_skip_step">Пропустить</string>
     <string name="runbook_panel_stop">Остановить</string>
     <string name="runbook_panel_close">Закрыть</string>
+    <string name="runbook_panel_collapse">Свернуть панель</string>
+    <string name="runbook_panel_expand">Развернуть панель</string>
     <string name="runbook_panel_exit_code">код %1$d</string>
     <string name="runbook_panel_status_unreadable">статус не прочитан</string>
     <string name="runbook_panel_progress">%1$d из %2$d</string>
@@ -104,6 +106,8 @@
     <string name="runbook_status_running">выполняется</string>
     <string name="runbook_status_skipped">пропущен</string>
     <string name="runbook_status_stopped">остановлен</string>
+    <string name="runbook_status_failed">не удался</string>
+    <string name="runbook_status_failed_count">шагов с ошибкой: %1$d</string>
     <string name="runbook_status_confirm">нужно подтверждение</string>
     <string name="runbook_status_interactive">интерактивный — завершите сами</string>
     <string name="runbook_dur_seconds">%1$s с</string>

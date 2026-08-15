@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -25,15 +26,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.design.GhostButton
+import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_panel_close
+import app.skerry.ui.generated.resources.runbook_panel_collapse
 import app.skerry.ui.generated.resources.runbook_panel_complete_step
 import app.skerry.ui.generated.resources.runbook_panel_done
 import app.skerry.ui.generated.resources.runbook_panel_done_with_failures
+import app.skerry.ui.generated.resources.runbook_panel_expand
 import app.skerry.ui.generated.resources.runbook_panel_failed
 import app.skerry.ui.generated.resources.runbook_panel_progress
 import app.skerry.ui.generated.resources.runbook_panel_run_step
@@ -52,6 +56,14 @@ import org.jetbrains.compose.resources.stringResource
  * whole point is that the user reads the command's real output while deciding whether to go on, so
  * the panel sits beside it and the terminal underneath stays usable (scroll, select, type).
  *
+ * On a phone the panel is nearly as wide as the screen and sits right over the live output — the
+ * opposite of its purpose — so it collapses to its header line. It reopens by itself whenever the
+ * run needs the user: a confirmation pause and a finished run have their only buttons here, a
+ * stalled step its warning, and a failed step its red row. An interactive step deliberately does
+ * not reopen it — a collapsed panel over a full-screen TUI is exactly what the user collapsed it
+ * for. The collapse flag lives on [RunbookSessionRun], so it survives the panel leaving
+ * composition (a tab switch) and dies with the run.
+ *
  * Renders nothing when no run is in flight, so a caller can place it unconditionally.
  */
 @Composable
@@ -59,6 +71,36 @@ fun RunbookRunPanel(runner: RunbookRunner, run: RunbookSessionRun, modifier: Mod
     val phase = runner.phase ?: return
     val runbook = runner.runbook ?: return
     val mono = LocalFonts.current.mono
+    val collapsed = run.panelCollapsed
+    val stalled = run.steps.getOrNull(run.currentIndex)?.stalled == true
+    // Reopens on a signal the run has not shown yet — another pause, the end, a step going quiet.
+    // The comparison is against the run's own memory, not the effect's keys: the effect re-runs on
+    // every re-entry into composition (a tab switch back), and acting on the bare condition there
+    // would undo a deliberate re-collapse of the very signal the user already saw. A signal that
+    // fired while the panel was off-screen is still unseen and still reopens it on return. The one
+    // string that can repeat is the same step stalling again after output resumed: that warning was
+    // dismissed once and stays dismissed — a step printing slightly slower than the watchdog must
+    // not yank the panel open every cycle (the announcer may still voice it; a spoken sentence
+    // costs less than a panel over the output).
+    val signal = when {
+        phase != RunbookPhase.RUNNING -> "${phase.name}:${run.currentIndex}"
+        stalled -> "stalled:${run.currentIndex}"
+        else -> null
+    }
+    LaunchedEffect(signal) {
+        if (signal != null && signal != run.panelSeenSignal) {
+            run.panelCollapsed = false
+            run.panelSeenSignal = signal
+        }
+    }
+    // A tolerated failure never leaves RUNNING (continueOnError, stopOnFirstFailure=false), so the
+    // phase key above never fires for it — each failure beyond the count already shown is its own
+    // reopen signal, or a phone-sized run could fail step after step behind a collapsed header.
+    val failedSteps = run.steps.count { it.status == RunbookStepStatus.FAILED }
+    LaunchedEffect(failedSteps) {
+        if (failedSteps > run.panelSeenFailures) run.panelCollapsed = false
+        run.panelSeenFailures = failedSteps
+    }
 
     Column(
         modifier
@@ -73,7 +115,9 @@ fun RunbookRunPanel(runner: RunbookRunner, run: RunbookSessionRun, modifier: Mod
             Sym("checklist", size = 16.sp, color = runPhaseColor(phase, runner.hadFailures))
             Column(Modifier.weight(1f)) {
                 Txt(
-                    runbook.label.ifBlank { stringResource(Res.string.runbook_untitled) },
+                    // Stripped like every other surface showing this label: a runbook can arrive
+                    // over sync, and while collapsed this line is the whole panel.
+                    stripUnsafeFormatChars(runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
                     color = Skerry.colors.textBright, size = 13.sp, weight = FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
@@ -83,37 +127,49 @@ fun RunbookRunPanel(runner: RunbookRunner, run: RunbookSessionRun, modifier: Mod
                     color = runPhaseColor(phase, runner.hadFailures), size = 11.sp,
                 )
             }
+            IconBtn(
+                name = if (collapsed) "expand_less" else "expand_more",
+                onClick = { run.panelCollapsed = !collapsed },
+                box = 24, icon = 16.sp,
+                label = stringResource(
+                    if (collapsed) Res.string.runbook_panel_expand else Res.string.runbook_panel_collapse,
+                ),
+            )
         }
 
-        Column(
-            Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            run.steps.forEach { state -> key(state) { StepRow(state, mono) } }
-        }
+        // Held outside the collapse branch, or every expand would land the list back at the top.
+        val stepScroll = rememberScrollState()
+        if (!collapsed) {
+            Column(
+                Modifier.heightIn(max = 260.dp).verticalScroll(stepScroll),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                run.steps.forEach { state -> key(state) { StepRow(state, mono) } }
+            }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            when (phase) {
-                RunbookPhase.AWAITING_CONFIRM -> {
-                    PrimaryButton(stringResource(Res.string.runbook_panel_run_step), onClick = runner::confirmStep)
-                    GhostButton(stringResource(Res.string.runbook_panel_skip_step), onClick = runner::skipStep)
-                    GhostButton(
-                        stringResource(Res.string.runbook_panel_stop), onClick = runner::stop,
-                        fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
-                    )
-                }
-                RunbookPhase.RUNNING -> {
-                    // An interactive step has no probe to report it done — the user says so here.
-                    if (run.steps.getOrNull(run.currentIndex)?.status == RunbookStepStatus.AWAITING_COMPLETE) {
-                        PrimaryButton(stringResource(Res.string.runbook_panel_complete_step), onClick = runner::completeStep)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                when (phase) {
+                    RunbookPhase.AWAITING_CONFIRM -> {
+                        PrimaryButton(stringResource(Res.string.runbook_panel_run_step), onClick = runner::confirmStep)
                         GhostButton(stringResource(Res.string.runbook_panel_skip_step), onClick = runner::skipStep)
+                        GhostButton(
+                            stringResource(Res.string.runbook_panel_stop), onClick = runner::stop,
+                            fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
+                        )
                     }
-                    GhostButton(
-                        stringResource(Res.string.runbook_panel_stop), onClick = runner::stop,
-                        fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
-                    )
+                    RunbookPhase.RUNNING -> {
+                        // An interactive step has no probe to report it done — the user says so here.
+                        if (run.steps.getOrNull(run.currentIndex)?.status == RunbookStepStatus.AWAITING_COMPLETE) {
+                            PrimaryButton(stringResource(Res.string.runbook_panel_complete_step), onClick = runner::completeStep)
+                            GhostButton(stringResource(Res.string.runbook_panel_skip_step), onClick = runner::skipStep)
+                        }
+                        GhostButton(
+                            stringResource(Res.string.runbook_panel_stop), onClick = runner::stop,
+                            fg = Skerry.colors.sunset, border = Skerry.colors.sunset.copy(alpha = 0.3f),
+                        )
+                    }
+                    else -> GhostButton(stringResource(Res.string.runbook_panel_close), onClick = runner::close)
                 }
-                else -> GhostButton(stringResource(Res.string.runbook_panel_close), onClick = runner::close)
             }
         }
     }
