@@ -101,36 +101,52 @@ class RdpCodecs(private val remoteFx: RemoteFxDecoder? = null) {
         else -> null
     }
 
+    // Reused across commands: an uncompressed full-desktop command otherwise allocates the whole
+    // screen per PDU (F-35). Safe because [decode]'s caller blits the pixels before the next call,
+    // and one RdpCodecs belongs to one session's read loop.
+    private var scratch = IntArray(0)
+
     /**
      * Raw pixels of a surface command. Unlike a legacy bitmap update these arrive top-down, which is
-     * the one difference that makes a picture come out upside down if it is missed.
+     * the one difference that makes a picture come out upside down if it is missed. Decoded with
+     * direct byte indexing — this is exactly the path of a host with no codec negotiated, where a
+     * reader call per byte made every full-screen paint a few million virtual calls (F-35).
+     *
+     * The returned array may be larger than `width * height`; pixels beyond the wire data are zero.
      */
     private fun uncompressed(data: ByteArray, width: Int, height: Int, bitsPerPixel: Int): IntArray {
         val bytesPerPixel = (bitsPerPixel + 7) / 8
-        val out = IntArray(width * height)
-        val reader = RdpReader(data)
-        for (row in 0 until height) {
-            for (column in 0 until width) {
-                if (reader.remaining < bytesPerPixel) return out
-                out[row * width + column] = when (bytesPerPixel) {
-                    2 -> InterleavedRle.rgb565ToArgb(reader.u16le())
-                    3 -> {
-                        val blue = reader.u8()
-                        val green = reader.u8()
-                        val red = reader.u8()
-                        OPAQUE or (red shl 16) or (green shl 8) or blue
-                    }
+        val count = width * height
+        if (scratch.size < count) scratch = IntArray(count)
+        val out = scratch
+        // Anything but 16 and 24 bpp is read as 32-bit, so the stride is what the branch consumes.
+        val stride = when (bytesPerPixel) {
+            2, 3 -> bytesPerPixel
+            else -> 4
+        }
+        val available = minOf(count, data.size / stride)
+        when (bytesPerPixel) {
+            2 -> for (p in 0 until available) {
+                val i = p * 2
+                val raw = (data[i].toInt() and 0xFF) or ((data[i + 1].toInt() and 0xFF) shl 8)
+                out[p] = InterleavedRle.rgb565ToArgb(raw)
+            }
 
-                    else -> {
-                        val blue = reader.u8()
-                        val green = reader.u8()
-                        val red = reader.u8()
-                        reader.u8()
-                        OPAQUE or (red shl 16) or (green shl 8) or blue
-                    }
-                }
+            3 -> for (p in 0 until available) {
+                val i = p * 3
+                out[p] = OPAQUE or ((data[i + 2].toInt() and 0xFF) shl 16) or
+                    ((data[i + 1].toInt() and 0xFF) shl 8) or (data[i].toInt() and 0xFF)
+            }
+
+            else -> for (p in 0 until available) {
+                val i = p * 4
+                out[p] = OPAQUE or ((data[i + 2].toInt() and 0xFF) shl 16) or
+                    ((data[i + 1].toInt() and 0xFF) shl 8) or (data[i].toInt() and 0xFF)
             }
         }
+        // Short wire data reads as unset, as it always has — and the scratch must not leak the
+        // previous command's pixels into this one.
+        out.fill(0, available, count)
         return out
     }
 

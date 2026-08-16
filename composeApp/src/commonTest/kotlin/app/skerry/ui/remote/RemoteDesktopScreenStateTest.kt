@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -41,14 +42,21 @@ class RemoteDesktopScreenStateTest {
     }
 
     @Test
-    fun region_update_bumps_the_frame_counter() = runTest {
+    fun region_updates_coalesce_into_one_published_frame() = runTest {
+        // A Windows server sends many small updates inside one logical frame; each must reach the
+        // pixel mirror at once, but the canvas is invalidated at most once per display frame — the
+        // view drains [frameRequests] on its frame clock and calls [publishFrame].
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
         val session = FakeRemoteDesktop(framebuffer = RemoteFramebuffer(2, 1), updates = updates)
         val screen = RemoteDesktopScreenState(session, scope)
 
         assertEquals(0, screen.frame)
-        updates.emit(RemoteDesktopUpdate.Region(listOf(RemoteRect(0, 0, 2, 1))))
+        repeat(5) { updates.emit(RemoteDesktopUpdate.Region(listOf(RemoteRect(0, 0, 2, 1)))) }
+        assertEquals(0, screen.frame, "no redraw per update — the frame clock publishes")
+
+        screen.frameRequests.first() // the five updates conflated into one pending request
+        screen.publishFrame()
         assertEquals(1, screen.frame)
         scope.cancel()
     }

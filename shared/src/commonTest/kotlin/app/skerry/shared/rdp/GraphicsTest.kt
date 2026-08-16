@@ -130,6 +130,30 @@ class GraphicsTest {
     }
 
     @Test
+    fun `uncompressed surface bits land top-down, and missing pixels stay black`() {
+        val framebuffer = RemoteFramebuffer(4, 4)
+        val body = RdpWriter(48).apply {
+            u16le(0x0001) // SET_SURFACE_BITS
+            u16le(1).u16le(1).u16le(3).u16le(3) // destination rect
+            u8(32).u8(0).u8(0).u8(0) // bpp, flags, reserved, codecId: uncompressed
+            u16le(2).u16le(2) // width, height
+            u32le(12) // three of the four pixels are on the wire
+            u8(0xEF).u8(0xCD).u8(0xAB).u8(0) // B,G,R,X of the first (top-left) pixel
+            u8(0xFF).u8(0xFF).u8(0xFF).u8(0)
+            u8(0xFF).u8(0xFF).u8(0xFF).u8(0)
+        }.toByteArray()
+
+        val updates = SurfaceDecoder().decode(RdpReader(body), framebuffer)
+
+        val region = updates.single() as RdpUpdate.Region
+        assertEquals(listOf(RdpRect(1, 1, 2, 2)), region.rects)
+        assertEquals(0xFFABCDEF.toInt(), framebuffer.pixels[1 * 4 + 1], "first wire pixel is the TOP row")
+        assertEquals(WHITE, framebuffer.pixels[1 * 4 + 2])
+        assertEquals(WHITE, framebuffer.pixels[2 * 4 + 1])
+        assertEquals(0, framebuffer.pixels[2 * 4 + 2], "the missing fourth pixel reads as unset")
+    }
+
+    @Test
     fun `surface bits of a size no screen has are refused`() {
         val body = RdpWriter(32).apply {
             u16le(0x0001) // SET_SURFACE_BITS

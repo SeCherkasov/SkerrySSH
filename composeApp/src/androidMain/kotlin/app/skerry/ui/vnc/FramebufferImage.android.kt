@@ -18,11 +18,17 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
     @Volatile
     private var bmp = createBitmap(width, height)
 
+    // setPixels mutates the bitmap in place, so one wrapper per bitmap is enough (F-01's sibling:
+    // the getter runs inside every draw pass and must not allocate).
+    @Volatile
+    private var wrapper = bmp.asImageBitmap()
+
     private fun createBitmap(w: Int, h: Int): Bitmap =
         Bitmap.createBitmap(w.coerceAtLeast(1), h.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
 
     actual fun resize(width: Int, height: Int) {
         bmp = createBitmap(width, height)
+        wrapper = bmp.asImageBitmap()
     }
 
     actual fun writeRects(rects: List<RemoteRect>, src: IntArray, srcWidth: Int) {
@@ -39,5 +45,5 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
     }
 
     actual val bitmap: ImageBitmap
-        get() = bmp.asImageBitmap()
+        get() = wrapper
 }

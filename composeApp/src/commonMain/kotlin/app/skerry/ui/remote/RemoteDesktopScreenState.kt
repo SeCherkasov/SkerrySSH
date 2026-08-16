@@ -17,8 +17,11 @@ import app.skerry.ui.vnc.VncCursorImage
 import app.skerry.ui.vnc.clampPan
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -31,8 +34,10 @@ import kotlin.time.TimeSource
  * [RemoteDesktopSession.updates] runs the session's read loop, so this owns that collection on
  * [scope] (the session's scope, cancelled by the controller on disconnect).
  *
- * [frame] is a snapshot counter bumped on every applied update; a composable that reads it redraws
- * with the latest [imageBitmap]. [desktopSize] tracks the remote resolution for coordinate mapping.
+ * [frame] is a snapshot counter the draw pass reads to pick up the latest [imageBitmap]; it is
+ * bumped by [publishFrame] on the view's frame clock, so however many updates arrive within one
+ * display frame the canvas invalidates once. [desktopSize] tracks the remote resolution for
+ * coordinate mapping.
  */
 @Stable
 class RemoteDesktopScreenState(
@@ -47,9 +52,25 @@ class RemoteDesktopScreenState(
         session.framebuffer.height.coerceAtLeast(1),
     )
 
-    /** Bumped on each applied framebuffer/resize update; read it in a composable to trigger redraw. */
+    /** Bumped on each published frame; read it in a draw pass to redraw with the latest pixels. */
     var frame by mutableStateOf(0)
         private set
+
+    // A region update writes pixels at once but does not invalidate the canvas: a server sends many
+    // small updates inside one logical frame, and a redraw per update multiplied the whole draw cost
+    // by their count (F-02). The view drains [frameRequests] on its own frame clock instead.
+    private val frameSignal = Channel<Unit>(Channel.CONFLATED)
+
+    /**
+     * One element per batch of applied updates since the last [publishFrame], conflated: however
+     * many arrive within a display frame, the view redraws once. Collected by the one live surface.
+     */
+    val frameRequests: Flow<Unit> = frameSignal.receiveAsFlow()
+
+    /** Publish the pixels written so far to the canvas — called by the view, on its frame clock. */
+    fun publishFrame() {
+        frame++
+    }
 
     /** Remote desktop resolution (updates on server resize). */
     var desktopSize by mutableStateOf(IntSize(session.framebuffer.width, session.framebuffer.height))
@@ -320,7 +341,7 @@ class RemoteDesktopScreenState(
                     val started = TimeSource.Monotonic.markNow()
                     image.writeRects(update.rects, session.framebuffer.pixels, session.framebuffer.width)
                     renderStats.bridgeTime(started.elapsedNow().inWholeNanoseconds)
-                    frame++
+                    frameSignal.trySend(Unit)
                 }
             }
 

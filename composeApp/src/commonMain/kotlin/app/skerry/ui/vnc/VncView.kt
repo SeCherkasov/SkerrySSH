@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -89,7 +90,9 @@ import app.skerry.ui.terminal.readPlainText
 import app.skerry.ui.app.remoteChromeHidden
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.receiveAsFlow
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 
@@ -246,8 +249,11 @@ fun VncView(state: DesktopDesignState) {
 
 /**
  * Draws the remote framebuffer scaled to fit and, when [interactive], forwards pointer and keyboard
- * input. Reads [RemoteDesktopScreenState.frame] so it redraws on every applied update. Pointer coordinates are
- * mapped back through the same [fitGeometry] the draw uses.
+ * input. The framebuffer draw reads [RemoteDesktopScreenState.frame] inside the draw pass — never
+ * in the composable body, where every applied update would recompose this whole function (F-34) —
+ * and frames are published here, on this composition's frame clock, so a burst of server updates
+ * costs one redraw (F-02). Pointer coordinates are mapped back through the same [fitGeometry] the
+ * draw uses.
  */
 @Composable
 fun VncSurface(
@@ -257,7 +263,6 @@ fun VncSurface(
     // it to know when the pointer has come up to summon it.
     onPointerY: (Float) -> Unit = {},
 ) {
-    val frame = screen.frame
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val focus = remember { FocusRequester() }
     // Tracks whether the mouse is over the drawn image rather than the letterbox around it — the
@@ -265,8 +270,26 @@ fun VncSurface(
     var pointerOverImage by remember { mutableStateOf(false) }
     // Last pointer position INSIDE the image, where the remote cursor therefore is. Deliberately not
     // cleared when the pointer leaves: the remote cursor stays put, so the sprite does too — exactly
-    // what a server-painted cursor looks like when you move off the framebuffer.
+    // what a server-painted cursor looks like when you move off the framebuffer. Snapshot state is
+    // written only on the frame clock below (F-08): a 1000 Hz mouse otherwise invalidates the
+    // sprite canvas per sample, and the sprite cannot be drawn more often than once a frame anyway.
     var pointerPos by remember { mutableStateOf<Offset?>(null) }
+    val latestPointer = remember(screen) { LatestPointer() }
+    val pointerTick = remember(screen) { Channel<Unit>(Channel.CONFLATED) }
+    // The frame pump: server updates land in the pixel mirror as they arrive, and this publishes
+    // them to the canvas at most once per display frame.
+    LaunchedEffect(screen) {
+        screen.frameRequests.collect {
+            withFrameNanos { }
+            screen.publishFrame()
+        }
+    }
+    LaunchedEffect(screen) {
+        pointerTick.receiveAsFlow().collect {
+            withFrameNanos { }
+            pointerPos = latestPointer.value
+        }
+    }
 
     // clipToBounds: a zoomed framebuffer must never draw outside its own area onto the app chrome.
     var mod = Modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged {
@@ -317,7 +340,8 @@ fun VncSurface(
                         // exactly when the local pointer has to come back.
                         pointerOverImage = fb != null
                         if (fb == null) { continue }
-                        pointerPos = change.position
+                        latestPointer.value = change.position
+                        pointerTick.trySend(Unit)
                         if (event.type == PointerEventType.Scroll) {
                             // Wheel goes to the server (scroll inside the remote desktop). No local
                             // zoom on desktop: without panning it only shows the center, and the fit
@@ -364,7 +388,9 @@ fun VncSurface(
 
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
-            @Suppress("UNUSED_EXPRESSION") frame // captured so the draw invalidates when it changes
+            // Read in the DRAW pass, deliberately: a composition-scope read would recompose the
+            // whole surface — modifier chain and all — on every published frame (F-34).
+            @Suppress("UNUSED_EXPRESSION") screen.frame
             val started = TimeSource.Monotonic.markNow()
             drawFramebuffer(screen)
             // On desktop this includes the pixel-bridge bitmap rebuild — the draw is where it runs.
@@ -457,6 +483,11 @@ internal fun RemoteDesktopQuality.label(): String = stringResource(
         RemoteDesktopQuality.High -> Res.string.vnc_quality_high
     },
 )
+
+/** Holder for the raw pointer position between frame ticks; deliberately not snapshot state. */
+private class LatestPointer {
+    var value: Offset? = null
+}
 
 @Composable
 private fun CenterNotice(icon: String, message: String, color: Color = Skerry.colors.dim) {

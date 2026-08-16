@@ -1,35 +1,60 @@
 package app.skerry.ui.vnc
 
-import app.skerry.shared.graphics.RemoteFramebuffer
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asComposeImageBitmap
 import app.skerry.shared.graphics.RemoteRect
-import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.IntBuffer
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.ImageInfo
+import org.jetbrains.skia.impl.BufferUtil
 
 /**
- * Desktop pixel bridge (Skia). Keeps an ARGB `IntArray` mirror and re-installs it into a Skia
- * [Bitmap] when [bitmap] is read. An ARGB `Int` (0xAARRGGBB) laid out little-endian is the byte
- * order B,G,R,A — exactly [ColorType.BGRA_8888] — so the copy is a straight int→byte reinterpret.
+ * Desktop pixel bridge (Skia). One long-lived [Bitmap] per desktop size, written through a direct
+ * view of its own pixel memory: an ARGB `Int` stored little-endian is the byte order B,G,R,A —
+ * exactly [ColorType.BGRA_8888] — so a dirty rectangle is a row-by-row `IntBuffer.put` into the
+ * bitmap, and nothing is allocated or copied whole per frame. The previous shape of this class
+ * rebuilt an 8 MB byte buffer, a fresh Skia bitmap and a fresh [ImageBitmap] for every applied
+ * update, whole-desktop, even for a 32×16 rectangle (F-01).
+ *
+ * [bitmap] hands the draw a *new* wrapper only when pixels changed since the last read:
+ * `notifyPixelsChanged` bumps the Skia generation (dropping any cached texture of the old pixels),
+ * and the fresh wrapper defeats any caching keyed on the [ImageBitmap] instance itself.
  */
 actual class FramebufferImage actual constructor(width: Int, height: Int) {
+
+    private class Surface(width: Int, height: Int) {
+        val bitmap = Bitmap().apply {
+            allocPixels(
+                ImageInfo(
+                    width.coerceAtLeast(1),
+                    height.coerceAtLeast(1),
+                    ColorType.BGRA_8888,
+                    ColorAlphaType.PREMUL,
+                ),
+            )
+        }
+        val width get() = bitmap.width
+        val height get() = bitmap.height
+
+        // Valid for as long as [bitmap] is alive, which this object guarantees by holding it.
+        val pixels: IntBuffer = run {
+            val pixmap = bitmap.peekPixels() ?: error("a raster bitmap always exposes its pixels")
+            BufferUtil.getByteBufferFromPointer(pixmap.addr, bitmap.width * bitmap.height * 4)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .asIntBuffer()
+        }
+    }
+
     // @Volatile for the same reason as RemoteFramebuffer's fields: writes happen on the session's read
     // loop (Dispatchers.Default) while the Compose draw thread reads them, and resize() swaps whole
     // objects that must publish safely. A torn dirty rect self-corrects on the next update.
     @Volatile
-    private var w = width
+    private var surface = Surface(width, height)
 
-    @Volatile
-    private var h = height
-
-    @Volatile
-    private var pixels = IntArray(width * height)
-
-    // Set when pixels change, so [bitmap] rebuilds the Skia image lazily (not on every recomposition).
+    // Set when pixels change, so [bitmap] rewraps lazily (not on every recomposition).
     @Volatile
     private var dirty = true
 
@@ -37,20 +62,25 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
     private var cached: ImageBitmap? = null
 
     actual fun resize(width: Int, height: Int) {
-        w = width
-        h = height
-        pixels = IntArray(width * height)
+        surface = Surface(width, height)
+        cached = null
         dirty = true
     }
 
     actual fun writeRects(rects: List<RemoteRect>, src: IntArray, srcWidth: Int) {
+        val target = surface
+        val pixels = target.pixels
+        val capacity = target.width * target.height
         for (r in rects) {
             var row = 0
             while (row < r.height) {
                 val srcOff = (r.y + row) * srcWidth + r.x
-                val dstOff = (r.y + row) * w + r.x
-                if (srcOff >= 0 && dstOff >= 0 && dstOff + r.width <= pixels.size && srcOff + r.width <= src.size) {
-                    src.copyInto(pixels, dstOff, srcOff, srcOff + r.width)
+                val dstOff = (r.y + row) * target.width + r.x
+                val inSource = srcOff >= 0 && srcOff + r.width <= src.size
+                val inTarget = dstOff >= 0 && dstOff + r.width <= capacity
+                if (inSource && inTarget) {
+                    pixels.position(dstOff)
+                    pixels.put(src, srcOff, r.width)
                 }
                 row++
             }
@@ -62,13 +92,9 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
         get() {
             val current = cached
             if (!dirty && current != null) return current
-            val bmp = Bitmap()
-            bmp.allocPixels(ImageInfo(w, h, ColorType.BGRA_8888, ColorAlphaType.PREMUL))
-            val bytes = ByteArray(w * h * 4)
-            val bb = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-            for (p in pixels) bb.putInt(p)
-            bmp.installPixels(bytes)
-            val image = bmp.asComposeImageBitmap()
+            val target = surface
+            target.bitmap.notifyPixelsChanged()
+            val image = target.bitmap.asComposeImageBitmap()
             cached = image
             dirty = false
             return image

@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -50,11 +51,18 @@ import kotlin.time.TimeSource
  */
 @Composable
 fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modifier, interactive: Boolean = true) {
-    val frame = screen.frame
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val pad = remember(screen) { VncTrackpad(screen.desktopSize) }
     // A server-side resize moves the desktop out from under the cursor; keep it inside the new bounds.
     LaunchedEffect(pad, screen.desktopSize) { pad.onDesktopSize(screen.desktopSize) }
+    // The frame pump, as on desktop: pixels land in the mirror as they arrive, the canvas
+    // invalidates at most once per display frame (F-02).
+    LaunchedEffect(screen) {
+        screen.frameRequests.collect {
+            withFrameNanos { }
+            screen.publishFrame()
+        }
+    }
 
     var mod = modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged {
         canvasSize = it
@@ -65,7 +73,9 @@ fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modif
 
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
-            @Suppress("UNUSED_EXPRESSION") frame // captured so the draw invalidates when it changes
+            // Read in the DRAW pass — a composition-scope read would recompose the whole surface
+            // on every published frame (F-34).
+            @Suppress("UNUSED_EXPRESSION") screen.frame
             val started = TimeSource.Monotonic.markNow()
             drawFramebuffer(screen)
             screen.renderStats.drawTime(started.elapsedNow().inWholeNanoseconds)
