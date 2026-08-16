@@ -43,6 +43,7 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
+import app.skerry.ui.design.spaceLabel
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -51,6 +52,7 @@ import app.skerry.ui.generated.resources.lib_snippet_vars_clipboard_empty
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault_missing
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault_not_password
+import app.skerry.ui.generated.resources.lib_snippet_vars_vault_unnamed
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.terminal.fetchSystemClipboardText
 import app.skerry.ui.theme.Skerry
@@ -91,6 +93,16 @@ internal fun maskSecrets(text: String, secrets: List<String>): String {
     }
     return masked
 }
+
+/**
+ * A `${'$'}{{vault:name}}` entry name as it may be drawn. The name comes from the template, which may
+ * have arrived from a team member: a bidi override in it would name one credential while another is
+ * looked up, in the row whose whole job is to say which secret goes into the command. A name that
+ * filters away to nothing gets a stand-in, or the row would name no entry at all.
+ */
+@Composable
+internal fun vaultEntryLabel(name: String): String =
+    spaceLabel(name, fallback = stringResource(Res.string.lib_snippet_vars_vault_unnamed))
 
 /** Vault reference resolution, done once when the confirmation opens. */
 internal sealed interface VaultRef {
@@ -212,7 +224,10 @@ fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = 
         key(name) {
             // The caption is the variable's own name, not chrome: `${{token}}` and `${{TOKEN}}` are
             // two different keys, and uppercasing the caption would draw and announce them alike.
-            FormField(name, uppercase = false) {
+            // The caption is also the field's accessible name. The parser bounds what a name may
+            // contain but not how long it is: unfiltered, a shared template could push the preview
+            // and the Run button out of the dialog with one very long parameter.
+            FormField(untrustedLabel(name), uppercase = false) {
                 val choices = values.paramChoices[name]
                 if (choices != null) {
                     DropdownField(
@@ -257,18 +272,19 @@ fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = 
         FieldLabel(stringResource(Res.string.lib_snippet_vars_vault))
         values.vaultRefs.forEach { name ->
             key(name) {
+                val shown = vaultEntryLabel(name)
                 when (values.vaultResolutions[name]) {
                     is VaultRef.Ok -> Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Txt(name, color = Skerry.colors.text, size = 11.5.sp, font = mono)
+                        Txt(shown, color = Skerry.colors.text, size = 11.5.sp, font = mono)
                         Txt(SECRET_MASK, color = Skerry.colors.faint, size = 11.5.sp, font = mono)
                     }
                     VaultRef.NotAPassword ->
-                        Txt(stringResource(Res.string.lib_snippet_vars_vault_not_password, name), color = Skerry.colors.sunset, size = 11.5.sp)
+                        Txt(stringResource(Res.string.lib_snippet_vars_vault_not_password, shown), color = Skerry.colors.sunset, size = 11.5.sp)
                     else ->
-                        Txt(stringResource(Res.string.lib_snippet_vars_vault_missing, name), color = Skerry.colors.sunset, size = 11.5.sp)
+                        Txt(stringResource(Res.string.lib_snippet_vars_vault_missing, shown), color = Skerry.colors.sunset, size = 11.5.sp)
                 }
             }
         }

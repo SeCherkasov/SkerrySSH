@@ -19,6 +19,15 @@ class FileNamesTest {
     }
 
     @Test
+    fun letters_that_draw_as_nothing_collapse_like_any_other_separator() {
+        // U+3164 is a letter to isLetterOrDigit but draws as nothing, so two exports of different
+        // secrets could offer file names the Save-As dialog cannot tell apart. Escaped, not the raw
+        // glyph — an invisible character in source is unreviewable.
+        assertEquals("prod-db", safeFileStem("prod\u3164db", fallback = "x"))
+        assertEquals("key", safeFileStem("\uFFA0", fallback = "key"))
+    }
+
+    @Test
     fun a_stem_with_nothing_printable_falls_back() {
         assertEquals("session", safeFileStem("   ", fallback = "session"))
         assertEquals("session", safeFileStem("///", fallback = "session"))

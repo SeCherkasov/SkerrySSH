@@ -47,6 +47,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.labelUppercase
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_clipboard_ref
@@ -245,9 +246,19 @@ private fun VariableRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Txt(variable.name, color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.weight(1f))
+        // A vault entry name is the whole text after `vault:` — unconstrained, and from a template
+        // that may have been shared; a parameter name is grammar-constrained but unbounded in
+        // length. Both are drawn through the filter the confirmation uses.
+        val label = if (variable.kind == SnippetVariableKind.VAULT) {
+            vaultEntryLabel(variable.name)
+        } else {
+            untrustedLabel(variable.name)
+        }
+        Txt(label, color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.weight(1f))
         if (variable.editable) {
-            ParamInput(value, onValueChange, mono, Modifier.width(190.dp))
+            // The field sits outside a FormField, so it takes the caption beside it as its name
+            // explicitly — otherwise it is an unnamed input in a form that feeds a remote command.
+            ParamInput(value, onValueChange, mono, label, Modifier.width(190.dp))
         } else {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Sym(if (variable.kind == SnippetVariableKind.VAULT) "lock" else "content_paste", size = 13.sp, color = Skerry.colors.faint)
@@ -262,7 +273,13 @@ private fun VariableRow(
 }
 
 @Composable
-private fun ParamInput(value: String, onValueChange: (String) -> Unit, mono: FontFamily, modifier: Modifier = Modifier) {
+private fun ParamInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    mono: FontFamily,
+    name: String,
+    modifier: Modifier = Modifier,
+) {
     val textColor = Skerry.colors.text
     val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 11.5.sp, fontFamily = mono) }
     // The caller sanitizes what it stores, so the caret has to survive a value coming back
@@ -274,7 +291,7 @@ private fun ParamInput(value: String, onValueChange: (String) -> Unit, mono: Fon
         singleLine = true,
         textStyle = style,
         cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = modifier.fieldFocus(draft).fieldName(),
+        modifier = modifier.fieldFocus(draft).fieldName(fallback = name),
         decorationBox = { inner ->
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Skerry.colors.bg)

@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,13 +67,20 @@ fun HelpDialog(title: String, closeLabel: String, onDismiss: () -> Unit, content
 @Composable
 fun HelpCodeRow(code: String, description: String) {
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        // One entry, one accessibility node: read as two, the placeholder announces as
+        // "$ { { date } }" and what it does arrives a swipe later with nothing tying them together.
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp)
+            .semantics(mergeDescendants = true) {}
+            .testTag(UiTags.HELP_ROW),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Txt(
             code, color = Skerry.colors.cyanBright, size = 11.5.sp, font = LocalFonts.current.mono,
             modifier = Modifier
+                .testTag(UiTags.HELP_CODE)
                 .clip(RoundedCornerShape(5.dp))
                 .background(Skerry.colors.terminalBg)
                 .padding(horizontal = 7.dp, vertical = 3.dp),

@@ -92,6 +92,18 @@ class SnippetTemplateTest {
     }
 
     @Test
+    fun `a name carrying a character that draws as nothing stays literal`() {
+        // U+3164 is a letter, so the name rule accepted it: in a shared template the name with the
+        // filler and the name without it prompt for two values under one caption, and the one the
+        // user never fills is spliced from its inline default. Escaped, not the raw glyph — it
+        // draws as nothing, and an invisible character in source is unreviewable.
+        val filler = "echo ${'$'}{{token\u3164}}"
+        assertEquals(listOf(Literal(filler)), SnippetTemplate.parse(filler))
+        val blank = "echo ${'$'}{{\u3164}}"
+        assertEquals(listOf(Literal(blank)), SnippetTemplate.parse(blank))
+    }
+
+    @Test
     fun `shell syntax does not trigger parsing`() {
         assertFalse(SnippetTemplate.hasVariables("echo ${'$'}HOME ${'$'}{PATH} ${'$'}(date) ${'$'}${'$'}"))
     }

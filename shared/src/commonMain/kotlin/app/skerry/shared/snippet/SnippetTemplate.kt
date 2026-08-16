@@ -267,9 +267,12 @@ object SnippetTemplate {
             (alphabet ?: SnippetRandomAlphabets.DEFAULT)
     }
 
+    // The invisible letters are letters to `isLetterOrDigit`, so a shared template could carry two
+    // names that draw and announce identically — one prompted, the other spliced from its inline
+    // default without the user ever seeing a second field. Such a placeholder stays literal text.
     private fun isValidName(name: String): Boolean =
         name.isNotEmpty() && name.first().isLetter() &&
-            name.all { it.isLetterOrDigit() || it == '_' || it == '-' }
+            name.all { (it.isLetterOrDigit() || it == '_' || it == '-') && it !in INVISIBLE_LETTERS }
 
     private fun kindFor(name: String): SnippetVariableKind = when (name) {
         "date" -> SnippetVariableKind.DATE
