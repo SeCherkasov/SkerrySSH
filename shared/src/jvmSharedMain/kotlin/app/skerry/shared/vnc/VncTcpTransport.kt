@@ -1,6 +1,8 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
+import app.skerry.shared.graphics.remoteStatsTrace
 import app.skerry.shared.ssh.SshTarget
 import java.io.BufferedOutputStream
 import java.io.DataInputStream
@@ -74,9 +76,15 @@ class VncSocketSession(
 
     override val framebuffer = RemoteFramebuffer(1, 1)
 
-    private val source = VncSource { dst, offset, len -> input.readFully(dst, offset, len) }
+    override val diagnostics = RemoteDesktopDiagnostics()
+
+    private val source = VncSource { dst, offset, len ->
+        input.readFully(dst, offset, len)
+        diagnostics.readBytes(len)
+    }
     private val sink = VncSink { bytes -> writeRaw(bytes) }
-    private val codec = RfbCodec(source, sink, framebuffer, inflaterFactory, challengeResponder, imageDecoder)
+    private val codec =
+        RfbCodec(source, sink, framebuffer, inflaterFactory, challengeResponder, imageDecoder, diagnostics = diagnostics)
 
     private var _serverName = ""
     override val serverName: String get() = _serverName
@@ -117,6 +125,7 @@ class VncSocketSession(
                 val incremental = batch.none { it is VncUpdate.Resize }
                 codec.writeFramebufferUpdateRequest(incremental, 0, 0, framebuffer.width, framebuffer.height)
             }
+            remoteStatsTrace("vnc $serverName", diagnostics)
         }
     }.flowOn(Dispatchers.IO)
         // Close the socket when collection ends — including cancellation (e.g. the UI leaving, or a
@@ -160,6 +169,7 @@ class VncSocketSession(
     private suspend fun writeRaw(bytes: ByteArray) = writeLock.withLock {
         out.write(bytes)
         out.flush()
+        diagnostics.wroteBytes(bytes.size)
     }
 
     private fun closeSocket() {

@@ -294,9 +294,9 @@ private fun StatusItem(
 }
 
 /**
- * The desktop size an RDP session asks for. RDP fixes it at connect time, and the Display Control
- * channel that would let it follow the window is not implemented yet, so a common resolution is
- * requested and the view scales it to fit.
+ * The desktop size an RDP session falls back to when the window has not been measured yet. The
+ * normal path asks for the viewport itself (see `rdpDesktopSize`, F-06), and once connected the
+ * Display Control channel lets the session follow the window.
  */
 internal const val RDP_DEFAULT_WIDTH = 1920
 internal const val RDP_DEFAULT_HEIGHT = 1080

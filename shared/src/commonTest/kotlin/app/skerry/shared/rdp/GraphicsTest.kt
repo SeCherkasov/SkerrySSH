@@ -6,6 +6,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val WHITE = 0xFFFFFFFF.toInt()
@@ -130,6 +131,55 @@ class GraphicsTest {
     }
 
     @Test
+    fun `uncompressed surface bits land top-down, and missing pixels stay black`() {
+        val framebuffer = RemoteFramebuffer(4, 4)
+        val body = RdpWriter(48).apply {
+            u16le(0x0001) // SET_SURFACE_BITS
+            u16le(1).u16le(1).u16le(3).u16le(3) // destination rect
+            u8(32).u8(0).u8(0).u8(0) // bpp, flags, reserved, codecId: uncompressed
+            u16le(2).u16le(2) // width, height
+            u32le(12) // three of the four pixels are on the wire
+            u8(0xEF).u8(0xCD).u8(0xAB).u8(0) // B,G,R,X of the first (top-left) pixel
+            u8(0xFF).u8(0xFF).u8(0xFF).u8(0)
+            u8(0xFF).u8(0xFF).u8(0xFF).u8(0)
+        }.toByteArray()
+
+        val updates = SurfaceDecoder().decode(RdpReader(body), framebuffer)
+
+        val region = updates.single() as RdpUpdate.Region
+        assertEquals(listOf(RdpRect(1, 1, 2, 2)), region.rects)
+        assertEquals(0xFFABCDEF.toInt(), framebuffer.pixels[1 * 4 + 1], "first wire pixel is the TOP row")
+        assertEquals(WHITE, framebuffer.pixels[1 * 4 + 2])
+        assertEquals(WHITE, framebuffer.pixels[2 * 4 + 1])
+        assertEquals(0, framebuffer.pixels[2 * 4 + 2], "the missing fourth pixel reads as unset")
+    }
+
+    @Test
+    fun `the reused surface scratch never leaks one command's pixels into the next`() {
+        // The decode buffer is reused across commands (F-35); a later command with short wire data
+        // must read as unset, not as the previous command's colours.
+        val framebuffer = RemoteFramebuffer(8, 8)
+        val decoder = SurfaceDecoder()
+        decoder.decode(RdpReader(uncompressedSurfaceBits(y = 0, width = 4, pixelCount = 4)), framebuffer)
+
+        decoder.decode(RdpReader(uncompressedSurfaceBits(y = 2, width = 2, pixelCount = 1)), framebuffer)
+
+        assertEquals(WHITE, framebuffer.pixels[2 * 8], "the one provided pixel lands")
+        assertEquals(0, framebuffer.pixels[2 * 8 + 1], "the missing pixel is unset, not the last command's white")
+    }
+
+    /** One SET_SURFACE_BITS of [width]×1 white 32-bit pixels, of which only [pixelCount] are sent. */
+    private fun uncompressedSurfaceBits(y: Int, width: Int, pixelCount: Int): ByteArray =
+        RdpWriter(64).apply {
+            u16le(0x0001)
+            u16le(0).u16le(y).u16le(width).u16le(y + 1)
+            u8(32).u8(0).u8(0).u8(0)
+            u16le(width).u16le(1)
+            u32le(pixelCount * 4)
+            repeat(pixelCount) { u8(0xFF).u8(0xFF).u8(0xFF).u8(0) }
+        }.toByteArray()
+
+    @Test
     fun `surface bits of a size no screen has are refused`() {
         val body = RdpWriter(32).apply {
             u16le(0x0001) // SET_SURFACE_BITS
@@ -182,6 +232,129 @@ class GraphicsTest {
         assertEquals(RED, shape.argb[0]) // opaque red where the AND bit is clear
         assertEquals(0, shape.argb[1]) // transparent
         assertEquals(0, shape.argb[2])
+    }
+
+    @Test
+    fun `a 32-bit pointer keeps the alpha its pixels carry`() {
+        // 1x1 new pointer, xorBpp 32: colour 0x332211 with alpha 0x80. Windows sends every modern
+        // cursor this way, with an all-zero AND mask — dropping the alpha byte painted the
+        // antialiased edge and the drop shadow fully opaque (F-19).
+        val body = RdpWriter(32).apply {
+            u16le(32) // xorBpp
+            u16le(0) // cacheIndex
+            u16le(0).u16le(0) // hotspot
+            u16le(1).u16le(1) // width, height
+            u16le(2) // lengthAndMask: one row padded to 2
+            u16le(4) // lengthXorMask
+            u8(0x11).u8(0x22).u8(0x33).u8(0x80) // B, G, R, A
+            u8(0x00).u8(0x00) // AND mask: opaque
+        }.toByteArray()
+
+        val shape = PointerUpdate.newPointer(RdpReader(body), PointerCache())
+
+        assertEquals(0x80332211.toInt(), shape.argb[0])
+    }
+
+    @Test
+    fun `a 32-bit pointer whose alpha plane is all zero falls back to the AND mask`() {
+        // FreeRDP's heuristic: an all-zero alpha plane is not "everything invisible", it is a shape
+        // with no real alpha — the AND mask decides, as it does for the lower depths.
+        val body = RdpWriter(32).apply {
+            u16le(32)
+            u16le(0)
+            u16le(0).u16le(0)
+            u16le(2).u16le(1) // 2x1
+            u16le(2) // lengthAndMask
+            u16le(8) // lengthXorMask: 2 px * 4 bytes
+            u8(0).u8(0).u8(0xFF).u8(0) // red, alpha 0
+            u8(0).u8(0).u8(0x00).u8(0) // black, alpha 0
+            u8(0x40).u8(0x00) // AND 01......: first pixel opaque, second transparent
+        }.toByteArray()
+
+        val shape = PointerUpdate.newPointer(RdpReader(body), PointerCache())
+
+        assertEquals(RED, shape.argb[0], "AND=0 keeps the pixel opaque")
+        assertEquals(0, shape.argb[1], "AND=1 with black is fully transparent")
+    }
+
+    @Test
+    fun `the inverting pixels travel on a plane of their own`() {
+        // AND=1 with a non-zero XOR is "invert the screen underneath" — the text I-beam. Painted
+        // opaque white it disappears on a white field (F-20); the UI needs it as its own plane to
+        // draw with a difference blend.
+        val body = RdpWriter(64).apply {
+            u16le(0) // cacheIndex
+            u16le(0).u16le(0) // hotspot
+            u16le(2).u16le(1) // 2x1
+            u16le(2) // lengthAndMask
+            u16le(8) // lengthXorMask: 2 px * 3 bytes padded to 8
+            u8(0xFF).u8(0xFF).u8(0xFF) // white: the inverting pixel
+            u8(0).u8(0).u8(0)
+            u8(0).u8(0)
+            u8(0xC0).u8(0x00) // AND 11......: both pixels in the AND=1 half
+        }.toByteArray()
+
+        val shape = PointerUpdate.colorPointer(RdpReader(body), PointerCache())
+
+        assertEquals(0, shape.argb[0], "an inverting pixel is not part of the opaque sprite")
+        assertEquals(WHITE, shape.invert!![0], "the inverting pixel lives on the invert plane")
+        assertEquals(0, shape.invert!![1], "AND=1 with black stays plain transparent")
+    }
+
+    @Test
+    fun `a pointer with no inverting pixels carries no invert plane`() {
+        val body = RdpWriter(32).apply {
+            u16le(0)
+            u16le(0).u16le(0)
+            u16le(1).u16le(1)
+            u16le(2)
+            u16le(4)
+            u8(0).u8(0).u8(0xFF).u8(0) // red, padded row
+            u8(0x00).u8(0x00) // opaque
+        }.toByteArray()
+
+        val shape = PointerUpdate.colorPointer(RdpReader(body), PointerCache())
+
+        assertNull(shape.invert, "no invert plane to composite when nothing inverts")
+    }
+
+    @Test
+    fun `a truncated pointer mask reads as opaque, because a wrong cursor beats no cursor`() {
+        // No AND-mask bytes at all: every lookup misses. Reading the miss as transparent made the
+        // whole cursor invisible (F-24/F-42); opaque shows whatever colour data there is.
+        val body = RdpWriter(32).apply {
+            u16le(0)
+            u16le(0).u16le(0)
+            u16le(1).u16le(1)
+            u16le(0) // lengthAndMask: none
+            u16le(4)
+            u8(0).u8(0).u8(0xFF).u8(0) // red
+        }.toByteArray()
+
+        val shape = PointerUpdate.colorPointer(RdpReader(body), PointerCache())
+
+        assertEquals(RED, shape.argb[0])
+    }
+
+    @Test
+    fun `a malformed pointer update is skipped, not the whole session`() {
+        // An unsupported depth throws inside the pointer decoder; a bitmap rectangle with the same
+        // problem is contained, and a cursor is worth strictly less than the session (F-40).
+        val decoder = FastPathDecoder(RemoteFramebuffer(4, 4), SessionPalette(), DroppedGraphics(), PointerCache())
+        val pointer = RdpWriter(32).apply {
+            u16le(7) // xorBpp: no such depth
+            u16le(0)
+            u16le(0).u16le(0)
+            u16le(1).u16le(1)
+            u16le(2)
+            u16le(2)
+            u8(0).u8(0)
+            u8(0).u8(0)
+        }.toByteArray()
+
+        val updates = decoder.decode(fastPathPacket(updateCode = 0xB, fragmentation = 0, body = pointer), SurfaceDecoder())
+
+        assertTrue(updates.isEmpty(), "the broken shape is dropped and the session lives: $updates")
     }
 
     @Test

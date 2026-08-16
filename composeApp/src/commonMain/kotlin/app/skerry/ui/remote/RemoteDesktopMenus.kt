@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,6 +47,7 @@ import app.skerry.ui.generated.resources.rd_audio
 import app.skerry.ui.generated.resources.rd_audio_device_lost
 import app.skerry.ui.generated.resources.rd_screenshot_failed
 import app.skerry.ui.generated.resources.rd_screenshot_saved
+import app.skerry.ui.generated.resources.rd_stats
 import app.skerry.ui.generated.resources.vnc_quality
 import app.skerry.ui.generated.resources.vnc_reset_zoom
 import app.skerry.ui.generated.resources.vnc_resize_to_window
@@ -195,6 +198,7 @@ internal fun DisplayMenu(
             CheckRow(stringResource(Res.string.rd_audio), !screen.audioMuted, screen::toggleAudioMuted)
             if (screen.audioFailed && !screen.audioMuted) AudioLostNote()
         }
+        CheckRow(stringResource(Res.string.rd_stats), screen.showStats, screen::toggleStats)
         if (showResetZoom) {
             MenuRow(stringResource(Res.string.vnc_reset_zoom), selected = false) { screen.resetZoom() }
         }
@@ -300,7 +304,10 @@ internal fun MenuRow(label: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 internal fun CheckRow(label: String, checked: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp)).clickable(onClick = onClick)
+        // toggleable, not clickable: the glyph swap that shows the on/off state never reaches the
+        // accessibility tree (Sym clears its semantics), so the row itself must carry the value.
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp))
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onClick() })
             .padding(horizontal = ROW_PADDING, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

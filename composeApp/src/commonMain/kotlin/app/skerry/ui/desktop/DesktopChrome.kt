@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -134,6 +135,11 @@ internal fun DesktopChrome(
     windowChrome: WindowChrome? = null,
 ) {
     val termHistory = LocalTerminalHistory.current
+    // The stable holder, not `.containerSize`: reading the size in the composable body would
+    // recompose this whole function on every resize tick. It is read at the moment a session is
+    // dialled — RDP fixes its desktop at connect time, and asking for the viewport is what avoids
+    // a scaled picture (F-06).
+    val windowInfo = LocalWindowInfo.current
     // Keychain secrets live in the open vault — behind the master-password gate we first fire
     // [onVaultUnlocked], then reload (secrets + synced empty folders).
     LaunchedEffect(credentials) {
@@ -186,6 +192,10 @@ internal fun DesktopChrome(
     // Opens an RDP tab with the password in hand — from the profile's secret or from the prompt.
     fun openRdpWith(host: Host, password: String) {
         state.recordRecentHost(host.id)
+        val desktop = app.skerry.ui.remote.rdpDesktopSize(
+            windowInfo.containerSize,
+            fallback = androidx.compose.ui.unit.IntSize(RDP_DEFAULT_WIDTH, RDP_DEFAULT_HEIGHT),
+        )
         sessions?.openRdp(
             host.id,
             host.rowLabel(),
@@ -195,8 +205,9 @@ internal fun DesktopChrome(
                 port = host.port,
                 username = host.username,
                 password = password,
-                width = RDP_DEFAULT_WIDTH,
-                height = RDP_DEFAULT_HEIGHT,
+                width = desktop.width,
+                height = desktop.height,
+                keyboardLayout = app.skerry.ui.remote.currentKeyboardLayout(),
                 clientName = RDP_CLIENT_NAME,
                 loadBalanceInfo = host.rdp?.loadBalanceInfo.orEmpty(),
                 audioOutput = host.rdp?.audioOutput == true,

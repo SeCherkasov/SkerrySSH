@@ -126,6 +126,36 @@ class ClientCapabilitiesTest {
     }
 
     @Test
+    fun `the input set advertises the session's keyboard layout, not a hardcoded US`() {
+        // The layout the session comes up in is the one the remote OS starts typing with; a
+        // Cyrillic or German machine stuck on 0x409 types the wrong characters (F-16).
+        val pdu = ClientCapabilities.confirmActive(0, 1007, 1024, 768, remoteFx = false, keyboardLayout = 0x419)
+        val reader = RdpReader(pdu)
+        RdpShare.readControlHeader(reader)
+        reader.u32le() // shareId
+        reader.u16le() // originatorId
+        val sourceLength = reader.u16le()
+        reader.u16le() // lengthCombinedCapabilities
+        reader.skip(sourceLength)
+        val count = reader.u16le()
+        reader.u16le() // pad
+        var layout = -1
+        repeat(count) {
+            val type = reader.u16le()
+            val length = reader.u16le()
+            if (type == CapabilitySetType.INPUT) {
+                reader.u16le() // inputFlags
+                reader.u16le() // pad2octetsA
+                layout = reader.u32le()
+                reader.skip(length - 4 - 8)
+            } else {
+                reader.skip(length - 4)
+            }
+        }
+        assertEquals(0x419, layout)
+    }
+
+    @Test
     fun `the codecs set is added only when the server offered RemoteFX`() {
         assertTrue(CapabilitySetType.BITMAP_CODECS !in capabilitySetLengths(remoteFx = false))
         val length = capabilitySetLengths(remoteFx = true)[CapabilitySetType.BITMAP_CODECS]

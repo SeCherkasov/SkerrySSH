@@ -70,4 +70,12 @@ object VncButton {
     const val WHEEL_DOWN = 1 shl 4
     const val WHEEL_LEFT = 1 shl 5
     const val WHEEL_RIGHT = 1 shl 6
+
+    /**
+     * The browser-style navigation buttons (F-15). RDP carries both (PTRXFLAGS_BUTTON1/2); the RFB
+     * wire truncates its mask to a byte, so [BACK] goes out as button 8 and [FORWARD] cannot travel
+     * at all — better than remapping it onto a button the server would misread.
+     */
+    const val BACK = 1 shl 7
+    const val FORWARD = 1 shl 8
 }

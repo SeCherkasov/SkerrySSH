@@ -41,11 +41,20 @@ class RdpConnection(
     /** Blocking pull source; [DataInputStream.readFully] is exactly the "N bytes or throw" contract. */
     val source = RdpSource { dst, offset, len -> input.readFully(dst, offset, len) }
 
+    /**
+     * Called under the write lock with each payload's size. The diagnostics byte counter hangs
+     * here rather than around [sink]: its increment is a plain read-modify-write, and only inside
+     * this lock is it serialised against the concurrent writers (the input actor, the read loop's
+     * frame acknowledgements).
+     */
+    var onWrite: (Int) -> Unit = {}
+
     /** Serialized sink: input events, channel data and heartbeat PDUs share one socket. */
     val sink = RdpSink { bytes ->
         writeLock.withLock {
             output.write(bytes)
             output.flush()
+            onWrite(bytes.size)
         }
     }
 

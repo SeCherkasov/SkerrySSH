@@ -140,6 +140,7 @@ internal object KeepAliveRuntime {
                             audioDeviceId = request.audioDeviceId,
                             clipboard = request.clipboard,
                             imageQuality = request.imageQuality,
+                            keyboardLayout = request.keyboardLayout,
                         ),
                         RdpCredentials(
                             username = request.user,

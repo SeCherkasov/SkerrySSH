@@ -3,7 +3,9 @@ package app.skerry.shared.rdp
 import app.skerry.shared.audio.RemoteAudioPlayer
 import app.skerry.shared.audio.audioTrace
 import app.skerry.shared.audio.RemoteAudioPlayerFactory
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
+import app.skerry.shared.graphics.remoteStatsTrace
 import app.skerry.shared.rdp.egfx.AvcCodec
 import app.skerry.shared.rdp.egfx.ClearCodec
 import app.skerry.shared.rdp.egfx.DynamicChannels
@@ -195,8 +197,21 @@ class RdpSocketSession(
         state.capabilities.desktopHeight.coerceAtLeast(1),
     )
 
+    override val diagnostics = RemoteDesktopDiagnostics()
+
+    init {
+        // Counted inside the connection's write lock — the callers race, the counter's increment
+        // must not (see RdpConnection.onWrite). Reads are the read loop's alone, counted below.
+        connection.onWrite = { size -> diagnostics.wroteBytes(size) }
+    }
+
     private val codec = RdpSessionCodec(
-        source = connection.source,
+        // Counted around the connection's own streams, so the overlay's bytes are the session's
+        // wire traffic (TLS excluded — that is the socket's business, not the protocol's).
+        source = RdpSource { dst, offset, len ->
+            connection.source.readFully(dst, offset, len)
+            diagnostics.readBytes(len)
+        },
         sink = connection.sink,
         framebuffer = framebuffer,
         state = state,
@@ -205,6 +220,7 @@ class RdpSocketSession(
         // The codec is plugged in unconditionally; whether the server uses it was settled in the
         // capability exchange, and a decoder that is never called costs nothing.
         remoteFx = RemoteFx(),
+        diagnostics = diagnostics,
     )
 
     private val clipboard = ClipboardChannel(
@@ -246,6 +262,7 @@ class RdpSocketSession(
             avc = h264Decoders?.takeIf { it.available }?.let { AvcCodec(it, trace = h264Trace) },
         ),
         trace = h264Trace,
+        diagnostics = diagnostics,
         send = { data -> dynamicChannels.sendTo(GraphicsChannel.NAME, data) },
     )
 
@@ -319,6 +336,7 @@ class RdpSocketSession(
             for (text in clipboard.drainIncoming()) emit(RdpUpdate.ClipboardText(text))
             // Playback runs on its own scope and cannot emit; the read loop asks it instead.
             audio?.drainPlaybackChange()?.let { emit(RdpUpdate.AudioPlayback(it)) }
+            remoteStatsTrace("rdp $connectedHost", diagnostics)
         }
     }.flowOn(Dispatchers.IO)
         // Runs on the collector side, so it fires even while the read loop is parked in a blocking

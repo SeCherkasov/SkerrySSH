@@ -24,6 +24,12 @@ interface RemoteDesktopSession {
     val capabilities: RemoteDesktopCapabilities
 
     /**
+     * Live counters for the diagnostics overlay, written by the read loop. The default is the inert
+     * [RemoteDesktopDiagnostics.NONE] so a test double needs nothing; a real session overrides it.
+     */
+    val diagnostics: RemoteDesktopDiagnostics get() = RemoteDesktopDiagnostics.NONE
+
+    /**
      * Pointer state in framebuffer coordinates. [buttonMask] follows the RFB convention, which is
      * the more expressive of the two: bit 0 left, 1 middle, 2 right, 3/4 wheel up/down, 5/6 wheel
      * left/right, 7/8 the extended buttons. Protocols that send *transitions* rather than state
@@ -33,6 +39,12 @@ interface RemoteDesktopSession {
 
     /** A key press or release; each protocol picks the field it needs out of [RemoteKeyEvent]. */
     suspend fun sendKey(event: RemoteKeyEvent, down: Boolean)
+
+    /**
+     * Report the local Caps/Num/Scroll state so the remote session does not drift out of step. A
+     * no-op where the protocol keeps no lock state of its own (RFB sends keysyms and has none).
+     */
+    suspend fun syncLockKeys(scroll: Boolean, num: Boolean, caps: Boolean) = Unit
 
     /** Send local clipboard text to the remote machine. */
     suspend fun sendClipboardText(text: String)
@@ -111,20 +123,30 @@ sealed interface RemoteDesktopUpdate {
     /** The server accepts resize requests (RFB's ExtendedDesktopSize; always true for RDP). */
     data object RemoteResizeSupported : RemoteDesktopUpdate
 
-    /** A cursor sprite, ARGB row-major, with the pixel that sits under the pointer. */
+    /**
+     * A cursor sprite, ARGB row-major, with the pixel that sits under the pointer. [invert] is the
+     * shape's screen-inverting plane (RDP's text I-beam) — opaque white where the pixels underneath
+     * flip, null when the shape has none — drawn with a difference blend over the framebuffer.
+     *
+     * A re-announced cached shape (RDP's pointer cache) arrives as the *same instance*, which is
+     * what lets the view reuse the sprite it already built instead of comparing whole pixel arrays.
+     */
     data class CursorShape(
         val argb: IntArray,
         val width: Int,
         val height: Int,
         val hotspotX: Int,
         val hotspotY: Int,
+        val invert: IntArray? = null,
     ) : RemoteDesktopUpdate {
         override fun equals(other: Any?): Boolean =
             other is CursorShape && width == other.width && height == other.height &&
-                hotspotX == other.hotspotX && hotspotY == other.hotspotY && argb.contentEquals(other.argb)
+                hotspotX == other.hotspotX && hotspotY == other.hotspotY &&
+                argb.contentEquals(other.argb) && invert.contentEquals(other.invert)
 
         override fun hashCode(): Int =
-            (((width * 31 + height) * 31 + hotspotX) * 31 + hotspotY) * 31 + argb.contentHashCode()
+            ((((width * 31 + height) * 31 + hotspotX) * 31 + hotspotY) * 31 + argb.contentHashCode()) * 31 +
+                invert.contentHashCode()
     }
 
     /** The server moved the pointer itself. */

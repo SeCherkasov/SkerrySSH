@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
@@ -24,12 +25,14 @@ class RdpSessionCodec(
     remoteFx: RemoteFxDecoder? = null,
     /** Injected so a test can hold the clock still while it drives [readMessage]. */
     private val timeSource: TimeSource = TimeSource.Monotonic,
+    /** The session's counters for the diagnostics overlay; a private default when nobody reads them. */
+    private val diagnostics: RemoteDesktopDiagnostics = RemoteDesktopDiagnostics(),
 ) {
     private val palette = SessionPalette()
     private val dropped = DroppedGraphics()
     private val pointerCache = PointerCache()
-    private val fastPath = FastPathDecoder(framebuffer, palette, dropped, pointerCache)
-    private val surfaces = SurfaceDecoder(RdpCodecs(remoteFx))
+    private val fastPath = FastPathDecoder(framebuffer, palette, dropped, pointerCache, diagnostics)
+    private val surfaces = SurfaceDecoder(RdpCodecs(remoteFx), diagnostics)
 
     /** When the last repaint was asked for, or null if none has been; see [repaintDropped]. */
     private var lastRepaint: TimeMark? = null
@@ -44,14 +47,24 @@ class RdpSessionCodec(
      */
     suspend fun readMessage(): List<RdpUpdate> {
         val packet = Tpkt.readPacket(source)
+        // Timed from after the blocking read: waiting for a still desktop is not decode work. Only
+        // the fast path is timed here — slow-path graphics time inside [slowPath], and channel
+        // data is not timed at this level at all: the EGFX pipeline times itself in
+        // GraphicsChannel (counting it here as well recorded every pipeline PDU twice), and the
+        // other channels' parsing (clipboard, audio framing) is below the overlay's noise floor.
         val updates = if (Tpkt.isFastPath(packet[0].toInt() and 0xFF)) {
+            val started = timeSource.markNow()
             fastPath.decode(packet, surfaces)
+                .also { diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds) }
         } else {
             slowPath(packet)
         }
         // Acknowledge completed frames before returning: the server paces itself on these.
         for (update in updates) {
-            if (update is RdpUpdate.Frame && !update.begin) acknowledgeFrame(update.frameId)
+            if (update is RdpUpdate.Frame && !update.begin) {
+                diagnostics.serverFrame()
+                acknowledgeFrame(update.frameId)
+            }
         }
         if (dropped.take()) repaintDropped()
         return updates
@@ -70,6 +83,7 @@ class RdpSessionCodec(
         if (!state.capabilities.refreshRectSupported) return
         if (lastRepaint?.elapsedNow()?.let { it < MIN_REPAINT_INTERVAL } == true) return
         lastRepaint = timeSource.markNow()
+        diagnostics.fullRepaint()
         requestRefresh(listOf(RdpRect(0, 0, desktopWidth, desktopHeight)))
     }
 
@@ -86,7 +100,11 @@ class RdpSessionCodec(
         }
         val header = RdpShare.readControlHeader(pdu.payload)
         return when (header.pduType) {
-            RdpShare.PDUTYPE_DATA -> dataPdu(pdu.payload)
+            RdpShare.PDUTYPE_DATA -> {
+                val started = timeSource.markNow()
+                dataPdu(pdu.payload)
+                    .also { diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds) }
+            }
             RdpShare.PDUTYPE_DEACTIVATE_ALL -> reactivate()
             RdpShare.PDUTYPE_SERVER_REDIRECT ->
                 listOf(RdpUpdate.Closed(cleanExit = true, reason = "the server redirected the session"))
@@ -115,7 +133,11 @@ class RdpSessionCodec(
 
     /** Slow-path graphics: the same payloads as fast-path, wrapped in a share data PDU. */
     private fun slowPathUpdate(reader: RdpReader): List<RdpUpdate> = when (reader.u16le()) {
-        UPDATETYPE_BITMAP -> listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors, dropped))
+        UPDATETYPE_BITMAP -> {
+            diagnostics.notePath("Bitmap")
+            listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors, dropped, diagnostics))
+        }
+
         UPDATETYPE_PALETTE -> {
             palette.colors = BitmapUpdate.readPalette(reader)
             emptyList()
@@ -124,6 +146,7 @@ class RdpSessionCodec(
         // Skipped and repainted rather than fatal, for the reason spelled out in [FastPathDecoder].
         UPDATETYPE_ORDERS -> {
             dropped.record()
+            diagnostics.droppedOrder()
             emptyList()
         }
 
@@ -136,10 +159,12 @@ class RdpSessionCodec(
         return when (messageType) {
             PTR_MSGTYPE_SYSTEM -> listOf(RdpUpdate.PointerVisible(reader.u32le() != SYSPTR_NULL))
             PTR_MSGTYPE_POSITION -> listOf(RdpUpdate.PointerPosition(reader.u16le(), reader.u16le()))
-            PTR_MSGTYPE_COLOR -> listOf(PointerUpdate.colorPointer(reader, pointerCache))
+            // Contained like a bitmap rectangle: a broken shape costs the cursor, not the session
+            // (F-40) — same containment as the fast-path dispatcher.
+            PTR_MSGTYPE_COLOR -> pointerOrNothing { PointerUpdate.colorPointer(reader, pointerCache) }
             PTR_MSGTYPE_CACHED -> PointerUpdate.cachedPointer(reader, pointerCache)
-            PTR_MSGTYPE_POINTER -> listOf(PointerUpdate.newPointer(reader, pointerCache))
-            PTR_MSGTYPE_LARGE_POINTER -> listOf(PointerUpdate.largePointer(reader, pointerCache))
+            PTR_MSGTYPE_POINTER -> pointerOrNothing { PointerUpdate.newPointer(reader, pointerCache) }
+            PTR_MSGTYPE_LARGE_POINTER -> pointerOrNothing { PointerUpdate.largePointer(reader, pointerCache) }
             else -> emptyList()
         }
     }

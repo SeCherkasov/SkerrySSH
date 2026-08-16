@@ -1,6 +1,7 @@
 package app.skerry.ui.remote
 
 import app.skerry.shared.graphics.RemoteDesktopCapabilities
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
 import app.skerry.shared.graphics.RemoteDesktopUpdate
@@ -14,7 +15,16 @@ open class FakeRemoteDesktop(
     override val title: String = "fake-desktop",
     override val framebuffer: RemoteFramebuffer = RemoteFramebuffer(2, 1),
     override val updates: Flow<RemoteDesktopUpdate> = MutableSharedFlow(),
+    override val capabilities: RemoteDesktopCapabilities = RemoteDesktopCapabilities(
+        adjustableQuality = true,
+        remoteResize = true,
+        cursorHandover = true,
+        audio = true,
+        clipboard = true,
+    ),
 ) : RemoteDesktopSession {
+    override val diagnostics = RemoteDesktopDiagnostics()
+
     val pointers = mutableListOf<Triple<Int, Int, Int>>()
     val keys = mutableListOf<Pair<RemoteKeyEvent, Boolean>>()
     val clipboard = mutableListOf<String>()
@@ -26,14 +36,6 @@ open class FakeRemoteDesktop(
 
     val audioMutes = mutableListOf<Boolean>()
 
-    override val capabilities = RemoteDesktopCapabilities(
-        adjustableQuality = true,
-        remoteResize = true,
-        cursorHandover = true,
-        audio = true,
-        clipboard = true,
-    )
-
     override suspend fun setAudioMuted(muted: Boolean) {
         audioMutes += muted
     }
@@ -44,6 +46,12 @@ open class FakeRemoteDesktop(
 
     override suspend fun sendKey(event: RemoteKeyEvent, down: Boolean) {
         keys += event to down
+    }
+
+    val lockSyncs = mutableListOf<Triple<Boolean, Boolean, Boolean>>()
+
+    override suspend fun syncLockKeys(scroll: Boolean, num: Boolean, caps: Boolean) {
+        lockSyncs += Triple(scroll, num, caps)
     }
 
     override suspend fun sendClipboardText(text: String) {

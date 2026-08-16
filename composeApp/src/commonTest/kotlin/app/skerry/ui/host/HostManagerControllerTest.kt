@@ -8,6 +8,7 @@ import app.skerry.shared.rdp.RdpSpec
 import app.skerry.shared.ssh.SshConfigHost
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.test.assertNull
 
@@ -34,6 +35,29 @@ class HostManagerControllerTest {
             controller.hosts,
         )
         assertEquals(controller.hosts, store.all())
+    }
+
+    @Test
+    fun `a new remote-desktop profile starts following the window`() {
+        // What every other client does (F-06): a fresh RDP/VNC profile resizes with the viewport.
+        val store = FakeHostStore()
+        val controller = HostManagerController(store) { "gen-id" }
+
+        controller.save(HostDraft(label = "win", address = "w", port = 3389, username = "u", connectionType = ConnectionType.RDP))
+
+        assertTrue(store.all().single().vncResizeToWindow)
+    }
+
+    @Test
+    fun `an existing profile keeps its stored resize choice on re-save`() {
+        val store = FakeHostStore(
+            Host("1", "win", "w", 3389, "u", connectionType = ConnectionType.RDP, vncResizeToWindow = false),
+        )
+        val controller = HostManagerController(store) { error("must not be called") }
+
+        controller.save(HostDraft(id = "1", label = "win", address = "w", port = 3389, username = "u", connectionType = ConnectionType.RDP))
+
+        assertFalse(store.all().single().vncResizeToWindow, "the user turned it off; a form save must not flip it back")
     }
 
     @Test

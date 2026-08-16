@@ -1,5 +1,6 @@
 package app.skerry.ui.vnc
 
+import app.skerry.ui.remote.readLockKeys
 import app.skerry.ui.remote.remoteKeyEvent
 import app.skerry.ui.remote.REMOTE_BAR_AUTO_HIDE_MS
 import app.skerry.ui.remote.REMOTE_BAR_EDGE
@@ -10,6 +11,7 @@ import app.skerry.ui.remote.rememberClipboardActions
 import app.skerry.ui.remote.rememberScreenshotAction
 import app.skerry.ui.remote.RemoteDesktopController
 import app.skerry.ui.remote.RemoteDesktopUiState
+import app.skerry.ui.remote.RemoteStatsOverlay
 import app.skerry.ui.remote.ReportOutputVisibility
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
@@ -32,18 +34,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.key.KeyEventType
@@ -51,7 +57,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isBackPressed
+import androidx.compose.ui.input.pointer.isForwardPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
@@ -87,7 +96,10 @@ import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.terminal.readPlainText
 import app.skerry.ui.app.remoteChromeHidden
 import kotlin.math.roundToInt
+import kotlin.time.TimeSource
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.receiveAsFlow
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 
@@ -244,8 +256,11 @@ fun VncView(state: DesktopDesignState) {
 
 /**
  * Draws the remote framebuffer scaled to fit and, when [interactive], forwards pointer and keyboard
- * input. Reads [RemoteDesktopScreenState.frame] so it redraws on every applied update. Pointer coordinates are
- * mapped back through the same [fitGeometry] the draw uses.
+ * input. The framebuffer draw reads [RemoteDesktopScreenState.frame] inside the draw pass — never
+ * in the composable body, where every applied update would recompose this whole function (F-34) —
+ * and frames are published here, on this composition's frame clock, so a burst of server updates
+ * costs one redraw (F-02). Pointer coordinates are mapped back through the same [fitGeometry] the
+ * draw uses.
  */
 @Composable
 fun VncSurface(
@@ -255,7 +270,6 @@ fun VncSurface(
     // it to know when the pointer has come up to summon it.
     onPointerY: (Float) -> Unit = {},
 ) {
-    val frame = screen.frame
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val focus = remember { FocusRequester() }
     // Tracks whether the mouse is over the drawn image rather than the letterbox around it — the
@@ -263,14 +277,37 @@ fun VncSurface(
     var pointerOverImage by remember { mutableStateOf(false) }
     // Last pointer position INSIDE the image, where the remote cursor therefore is. Deliberately not
     // cleared when the pointer leaves: the remote cursor stays put, so the sprite does too — exactly
-    // what a server-painted cursor looks like when you move off the framebuffer.
+    // what a server-painted cursor looks like when you move off the framebuffer. Snapshot state is
+    // written only on the frame clock below (F-08): a 1000 Hz mouse otherwise invalidates the
+    // sprite canvas per sample, and the sprite cannot be drawn more often than once a frame anyway.
     var pointerPos by remember { mutableStateOf<Offset?>(null) }
+    val latestPointer = remember(screen) { LatestPointer() }
+    val pointerTick = remember(screen) { Channel<Unit>(Channel.CONFLATED) }
+    // The frame pump: server updates land in the pixel mirror as they arrive, and this publishes
+    // them to the canvas at most once per display frame.
+    LaunchedEffect(screen) {
+        screen.frameRequests.collect {
+            withFrameNanos { }
+            screen.publishFrame()
+        }
+    }
+    LaunchedEffect(screen) {
+        pointerTick.receiveAsFlow().collect {
+            withFrameNanos { }
+            pointerPos = latestPointer.value
+        }
+    }
 
     // clipToBounds: a zoomed framebuffer must never draw outside its own area onto the app chrome.
     var mod = Modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged {
         canvasSize = it
         screen.onViewportSize(it)
     }
+    // Whether a sprite exists at all changes rarely (null ↔ non-null); WHICH shape it is changes
+    // constantly (arrow ↔ I-beam). derivedStateOf keeps the composition subscribed to the former
+    // only — the shape itself is read inside the cursor canvas's draw pass, so a shape switch
+    // invalidates one draw, not this whole function (the same argument as F-34's frame counter).
+    val hasSprite by remember(screen) { derivedStateOf { screen.cursor != null } }
     // Something remote already tracks the mouse — our sprite, or a cursor the server painted into the
     // framebuffer — so the OS pointer on top would be a second one. See [shouldHideLocalCursor].
     if (
@@ -279,6 +316,7 @@ fun VncSurface(
             viewOnly = screen.viewOnly,
             pointerOverImage = pointerOverImage,
             systemCursor = screen.systemCursor,
+            remoteTracksPointer = hasSprite || screen.capabilities.cursorHandover,
         )
     ) {
         hiddenPointerIcon()?.let { mod = mod.pointerHoverIcon(it) }
@@ -290,6 +328,13 @@ fun VncSurface(
         mod = mod
             .pointerInput(screen) {
                 awaitPointerEventScope {
+                    // The button state last forwarded, so a release over the letterbox is
+                    // recognisable as a state change worth clamping onto the image (F-37).
+                    var lastMask = 0
+                    // Fractional wheel deltas accumulate per axis instead of rounding to one notch
+                    // or nothing (F-14).
+                    val wheelX = WheelCarry()
+                    val wheelY = WheelCarry()
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull() ?: continue
@@ -314,30 +359,60 @@ fun VncSurface(
                         // Set before the null-check below: leaving the image (onto the letterbox) is
                         // exactly when the local pointer has to come back.
                         pointerOverImage = fb != null
-                        if (fb == null) { continue }
-                        pointerPos = change.position
                         if (event.type == PointerEventType.Scroll) {
+                            if (fb == null) { continue }
+                            latestPointer.value = change.position
+                            pointerTick.trySend(Unit)
                             // Wheel goes to the server (scroll inside the remote desktop). No local
                             // zoom on desktop: without panning it only shows the center, and the fit
-                            // already fills the tab.
-                            val dy = change.scrollDelta.y
-                            if (dy != 0f) {
-                                val bit = if (dy < 0f) VncButton.WHEEL_UP else VncButton.WHEEL_DOWN
-                                screen.onPointer(fb.x, fb.y, bit)   // wheel = press+release
-                                screen.onPointer(fb.x, fb.y, 0)
-                            }
-                        } else {
-                            var mask = 0
-                            if (event.buttons.isPrimaryPressed) mask = mask or VncButton.LEFT
-                            if (event.buttons.isTertiaryPressed) mask = mask or VncButton.MIDDLE
-                            if (event.buttons.isSecondaryPressed) mask = mask or VncButton.RIGHT
-                            screen.onPointer(fb.x, fb.y, mask)
+                            // already fills the tab. Magnitude counts — a three-line step is three
+                            // notches, a trackpad's fractions accumulate (F-14) — and the buttons a
+                            // drag is holding ride on every mask (F-38).
+                            val held = buttonsOf(event.buttons)
+                            val vertical = wheelMasks(
+                                held, wheelY.add(change.scrollDelta.y),
+                                negative = VncButton.WHEEL_UP, positive = VncButton.WHEEL_DOWN,
+                            )
+                            val horizontal = wheelMasks(
+                                held, wheelX.add(change.scrollDelta.x),
+                                negative = VncButton.WHEEL_LEFT, positive = VncButton.WHEEL_RIGHT,
+                            )
+                            for (mask in vertical + horizontal) screen.onPointer(fb.x, fb.y, mask)
+                            change.consume()
+                            continue
                         }
+                        val mask = buttonsOf(event.buttons)
+                        // A move on the letterbox is nothing to the server, and a fresh press there
+                        // is the user clicking dead space — clamping it would deliver a real click
+                        // onto the desktop's edge (taskbar, a maximised app's close button). But a
+                        // button change while something was already held is the tail of a drag that
+                        // started on the image, and dropping it leaves the server holding the
+                        // button for the rest of the session (F-37) — that one is clamped onto the
+                        // nearest edge.
+                        val target = fb
+                            ?: if (lastMask != 0 && mask != lastMask) {
+                                geom.toFramebufferClamped(change.position.x, change.position.y)
+                            } else {
+                                null
+                            }
+                        if (target == null) { continue }
+                        if (fb != null) {
+                            latestPointer.value = change.position
+                            pointerTick.trySend(Unit)
+                        }
+                        screen.onPointer(target.x, target.y, mask)
+                        lastMask = mask
                         change.consume()
                     }
                 }
             }
             .focusRequester(focus)
+            // Focus loss releases whatever keys are held (F-12), the same way the terminal reports
+            // its focus; focus gain re-syncs the lock keys (F-13).
+            .onFocusChanged { state ->
+                if (state.isFocused) screen.onLockKeys(readLockKeys(null))
+                screen.notifyFocus(state.isFocused)
+            }
             // onPreviewKeyEvent MUST sit before focusable(): preview key events are dispatched from
             // the focus root down TO the focused node and stop there. Placed after focusable() this
             // handler is a descendant of the focus target and never sees a key — the terminal's
@@ -348,6 +423,8 @@ fun VncSurface(
                     KeyEventType.KeyUp -> false
                     else -> return@onPreviewKeyEvent false
                 }
+                // The lock keys ride on every event, so a Caps toggled mid-session syncs too.
+                screen.onLockKeys(readLockKeys(ev))
                 val event = remoteKeyEvent(ev.key, ev.utf16CodePoint)
                 if (event == null) return@onPreviewKeyEvent false
                 screen.onKey(event, down)
@@ -356,24 +433,43 @@ fun VncSurface(
             .focusable()
     }
 
-    // The sprite is ours to draw only while we're the ones moving the remote cursor; in view-only the
-    // server paints it into the framebuffer instead. See [RemoteDesktopScreenState.toggleViewOnly].
-    val sprite = if (interactive && !screen.viewOnly) screen.cursor else null
+    // The sprite is ours to draw while we're the ones moving the remote cursor — and also in
+    // view-only on a protocol whose cursor is always client-side (RDP): there the sprite at the
+    // server-reported position is the only remote pointer there is (F-27). On RFB view-only hands
+    // the cursor back and the server paints it into the framebuffer instead.
+    val spriteVisible =
+        interactive && hasSprite && (!screen.viewOnly || !screen.capabilities.cursorHandover)
 
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
-            @Suppress("UNUSED_EXPRESSION") frame // captured so the draw invalidates when it changes
+            // Read in the DRAW pass, deliberately: a composition-scope read would recompose the
+            // whole surface — modifier chain and all — on every published frame (F-34).
+            @Suppress("UNUSED_EXPRESSION") screen.frame
+            val started = TimeSource.Monotonic.markNow()
             drawFramebuffer(screen)
+            // On desktop this includes the pixel-bridge bitmap rebuild — the draw is where it runs.
+            screen.renderStats.drawTime(started.elapsedNow().inWholeNanoseconds)
         }
         // The cursor sprite lives on its OWN canvas: pointerPos changes on every raw mouse move, and
         // only this layer reads it (inside the draw block), so a move redraws just the small sprite.
         // In one canvas with the framebuffer, every mouse-pixel step re-filtered the whole frame at
         // canvas resolution — enough to pin a core at fullscreen on a software-Skia backend.
-        if (sprite != null) {
+        if (spriteVisible) {
             Canvas(Modifier.fillMaxSize()) {
-                pointerPos?.let { drawCursor(screen, sprite, it) }
+                val sprite = screen.cursor ?: return@Canvas
+                // A server-side warp wins until the local mouse next speaks (F-21). In view-only
+                // the server position is the ONLY truth — no events are sent, so a sprite at the
+                // local mouse would lie about where the remote pointer is (same rule as the touch
+                // surface's drawTouchCursor).
+                val warped = screen.serverPointer
+                when {
+                    warped != null -> drawCursorAtCell(screen, sprite, warped)
+                    screen.viewOnly -> Unit
+                    else -> pointerPos?.let { drawCursor(screen, sprite, it) }
+                }
             }
         }
+        if (screen.showStats) RemoteStatsOverlay(screen, Modifier.align(Alignment.TopStart))
     }
 
     if (interactive) {
@@ -425,19 +521,49 @@ internal fun DrawScope.drawFramebuffer(screen: RemoteDesktopScreenState) {
  * on — the framebuffer image itself.
  */
 internal fun DrawScope.drawCursor(screen: RemoteDesktopScreenState, sprite: VncCursorImage, pointerPos: Offset) {
+    val geom = cursorGeometry(screen) ?: return
+    val at = cursorTopLeft(geom, pointerPos.x, pointerPos.y, sprite.hotspotX, sprite.hotspotY) ?: return
+    drawCursorSprite(sprite, at, geom.scale)
+}
+
+/** The sprite at a framebuffer cell the server named (a warp, or view-only's only source; F-21). */
+internal fun DrawScope.drawCursorAtCell(screen: RemoteDesktopScreenState, sprite: VncCursorImage, cell: IntOffset) {
+    val geom = cursorGeometry(screen) ?: return
+    val at = Offset(
+        geom.offsetX + (cell.x - sprite.hotspotX) * geom.scale,
+        geom.offsetY + (cell.y - sprite.hotspotY) * geom.scale,
+    )
+    drawCursorSprite(sprite, at, geom.scale)
+}
+
+private fun DrawScope.cursorGeometry(screen: RemoteDesktopScreenState): FitGeometry? {
     val geom = fitGeometry(
         size.width, size.height, screen.desktopSize.width, screen.desktopSize.height,
         screen.userScale, screen.userOffset.x, screen.userOffset.y,
     )
-    if (geom.scale <= 0f) return
-    val at = cursorTopLeft(geom, pointerPos.x, pointerPos.y, sprite.hotspotX, sprite.hotspotY) ?: return
+    return geom.takeIf { it.scale > 0f }
+}
+
+internal fun DrawScope.drawCursorSprite(sprite: VncCursorImage, at: Offset, scale: Float) {
+    val dstOffset = IntOffset(at.x.roundToInt(), at.y.roundToInt())
+    val dstSize = IntSize((sprite.width * scale).roundToInt(), (sprite.height * scale).roundToInt())
     // Scaled and filtered like the framebuffer it sits on: a cursor is remote pixels too, so under
     // zoom it grows with them rather than staying a lone sharp sprite on a blown-up screen.
     drawImage(
         image = sprite.bitmap,
-        dstOffset = IntOffset(at.x.roundToInt(), at.y.roundToInt()),
-        dstSize = IntSize((sprite.width * geom.scale).roundToInt(), (sprite.height * geom.scale).roundToInt()),
-        filterQuality = framebufferFilterQuality(geom.scale),
+        dstOffset = dstOffset,
+        dstSize = dstSize,
+        filterQuality = framebufferFilterQuality(scale),
+    )
+    // The inverting pixels (the I-beam) flip what is underneath: difference against white is an
+    // inversion, which keeps the caret visible on any background (F-20).
+    val invert = sprite.invertBitmap ?: return
+    drawImage(
+        image = invert,
+        dstOffset = dstOffset,
+        dstSize = dstSize,
+        filterQuality = framebufferFilterQuality(scale),
+        blendMode = BlendMode.Difference,
     )
 }
 
@@ -451,6 +577,22 @@ internal fun RemoteDesktopQuality.label(): String = stringResource(
         RemoteDesktopQuality.High -> Res.string.vnc_quality_high
     },
 )
+
+/** Holder for the raw pointer position between frame ticks; deliberately not snapshot state. */
+private class LatestPointer {
+    var value: Offset? = null
+}
+
+/** Every mouse button the shared mask carries — the navigation pair included (F-15). */
+private fun buttonsOf(buttons: PointerButtons): Int {
+    var mask = 0
+    if (buttons.isPrimaryPressed) mask = mask or VncButton.LEFT
+    if (buttons.isTertiaryPressed) mask = mask or VncButton.MIDDLE
+    if (buttons.isSecondaryPressed) mask = mask or VncButton.RIGHT
+    if (buttons.isBackPressed) mask = mask or VncButton.BACK
+    if (buttons.isForwardPressed) mask = mask or VncButton.FORWARD
+    return mask
+}
 
 @Composable
 private fun CenterNotice(icon: String, message: String, color: Color = Skerry.colors.dim) {

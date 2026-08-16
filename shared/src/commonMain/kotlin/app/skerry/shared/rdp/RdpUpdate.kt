@@ -27,7 +27,10 @@ sealed interface RdpUpdate {
 
     /**
      * A cursor sprite. [argb] is [width]×[height] row-major with alpha already applied from the
-     * AND/XOR masks; ([hotspotX], [hotspotY]) is the pixel that sits under the pointer.
+     * AND/XOR masks; ([hotspotX], [hotspotY]) is the pixel that sits under the pointer. [invert]
+     * carries the shape's screen-inverting pixels (the text I-beam) as a plane of their own —
+     * opaque white where the screen underneath flips, transparent elsewhere, null when the shape
+     * has none — because inversion is a blend, not a colour, and cannot ride in [argb].
      */
     data class PointerShape(
         val argb: IntArray,
@@ -35,13 +38,16 @@ sealed interface RdpUpdate {
         val height: Int,
         val hotspotX: Int,
         val hotspotY: Int,
+        val invert: IntArray? = null,
     ) : RdpUpdate {
         override fun equals(other: Any?): Boolean =
             other is PointerShape && width == other.width && height == other.height &&
-                hotspotX == other.hotspotX && hotspotY == other.hotspotY && argb.contentEquals(other.argb)
+                hotspotX == other.hotspotX && hotspotY == other.hotspotY &&
+                argb.contentEquals(other.argb) && invert.contentEquals(other.invert)
 
         override fun hashCode(): Int =
-            (((width * 31 + height) * 31 + hotspotX) * 31 + hotspotY) * 31 + argb.contentHashCode()
+            ((((width * 31 + height) * 31 + hotspotX) * 31 + hotspotY) * 31 + argb.contentHashCode()) * 31 +
+                invert.contentHashCode()
     }
 
     /** The server moved the pointer itself (a program warped it, not the user). */

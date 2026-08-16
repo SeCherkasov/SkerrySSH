@@ -36,6 +36,18 @@ data class FitGeometry(
         if (fx < 0f || fy < 0f || fx >= fbWidth || fy >= fbHeight) return null
         return IntOffset(fx.toInt().coerceIn(0, fbWidth - 1), fy.toInt().coerceIn(0, fbHeight - 1))
     }
+
+    /**
+     * Map a canvas point to the nearest framebuffer pixel, clamping a point outside the image onto
+     * its edge. For events that must not be lost to the letterbox: a button released after a drag
+     * ended outside the picture would otherwise leave the server holding that button (F-37).
+     */
+    fun toFramebufferClamped(px: Float, py: Float): IntOffset? {
+        if (scale <= 0f || fbWidth <= 0 || fbHeight <= 0) return null
+        val fx = ((px - offsetX) / scale).toInt().coerceIn(0, fbWidth - 1)
+        val fy = ((py - offsetY) / scale).toInt().coerceIn(0, fbHeight - 1)
+        return IntOffset(fx, fy)
+    }
 }
 
 /**

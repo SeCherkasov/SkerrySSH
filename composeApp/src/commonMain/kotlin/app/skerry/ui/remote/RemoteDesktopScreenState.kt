@@ -7,7 +7,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import app.skerry.shared.graphics.IdentityCache
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
 import app.skerry.shared.graphics.RemoteDesktopUpdate
@@ -17,12 +19,18 @@ import app.skerry.ui.vnc.VncCursorImage
 import app.skerry.ui.vnc.clampPan
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.TimeSource
 
 /**
  * UI-side state for one live remote desktop, whichever protocol serves it: bridges the raw
@@ -30,8 +38,10 @@ import kotlin.coroutines.cancellation.CancellationException
  * [RemoteDesktopSession.updates] runs the session's read loop, so this owns that collection on
  * [scope] (the session's scope, cancelled by the controller on disconnect).
  *
- * [frame] is a snapshot counter bumped on every applied update; a composable that reads it redraws
- * with the latest [imageBitmap]. [desktopSize] tracks the remote resolution for coordinate mapping.
+ * [frame] is a snapshot counter the draw pass reads to pick up the latest [imageBitmap]; it is
+ * bumped by [publishFrame] on the view's frame clock, so however many updates arrive within one
+ * display frame the canvas invalidates once. [desktopSize] tracks the remote resolution for
+ * coordinate mapping.
  */
 @Stable
 class RemoteDesktopScreenState(
@@ -46,9 +56,32 @@ class RemoteDesktopScreenState(
         session.framebuffer.height.coerceAtLeast(1),
     )
 
-    /** Bumped on each applied framebuffer/resize update; read it in a composable to trigger redraw. */
+    /** Bumped on each published frame; read it in a draw pass to redraw with the latest pixels. */
     var frame by mutableStateOf(0)
         private set
+
+    // A region update writes pixels at once but does not invalidate the canvas: a server sends many
+    // small updates inside one logical frame, and a redraw per update multiplied the whole draw cost
+    // by their count (F-02). The view drains [frameRequests] on its own frame clock instead.
+    private val frameSignal = Channel<Unit>(Channel.CONFLATED)
+
+    /**
+     * One element per batch of applied updates since the last [publishFrame], conflated: however
+     * many arrive within a display frame, the view redraws once. Collected by the one live surface.
+     */
+    val frameRequests: Flow<Unit> = frameSignal.receiveAsFlow()
+
+    /** Publish the pixels written so far to the canvas — called by the view, on its frame clock. */
+    fun publishFrame() {
+        frame++
+    }
+
+    // Declared above the init block on purpose: the actor launched there reads it, and on an
+    // eager dispatcher it does so before any property declared below the block exists.
+    private val inputActor = RemoteInputActor(session)
+
+    @Volatile
+    private var lastLockKeys: LockKeys? = null
 
     /** Remote desktop resolution (updates on server resize). */
     var desktopSize by mutableStateOf(IntSize(session.framebuffer.width, session.framebuffer.height))
@@ -84,6 +117,20 @@ class RemoteDesktopScreenState(
     var quality by mutableStateOf(RemoteDesktopQuality.Auto)
         private set
 
+    /** The session's protocol-side counters, shown by the diagnostics overlay. */
+    val diagnostics = session.diagnostics
+
+    /** The render-side counters (pixel bridge, draw), filled in here and by the draw pass. */
+    val renderStats = RemoteRenderStats()
+
+    /** Whether the diagnostics overlay is shown over the picture. */
+    var showStats by mutableStateOf(false)
+        private set
+
+    fun toggleStats() {
+        showStats = !showStats
+    }
+
     /** True once the server has said it accepts resize requests. */
     var canResizeRemote by mutableStateOf(false)
         private set
@@ -97,8 +144,17 @@ class RemoteDesktopScreenState(
         private set
 
     // Last known viewport (canvas) size in pixels — the resize target when [remoteResize] is on.
+    // @Volatile: written by the UI thread, read by [scheduleRemoteResize] when the session's read
+    // loop reacts to RemoteResizeSupported — without it that reader can see a stale Zero and skip
+    // the seeded resize.
+    @Volatile
     private var viewport = IntSize.Zero
+
+    // Guarded by [resizeLock]: the debounce job is cancelled-and-replaced from both the UI thread
+    // and the read loop, and an unguarded swap can leave two jobs alive with the stale size
+    // landing last.
     private var resizeJob: Job? = null
+    private val resizeLock = Mutex()
 
     /** Toggle following the viewport; turning it on resizes to the current viewport right away. */
     fun toggleRemoteResize() {
@@ -107,8 +163,12 @@ class RemoteDesktopScreenState(
         if (remoteResize) {
             scheduleRemoteResize()
         } else {
-            resizeJob?.cancel()
-            resizeJob = null
+            scope.launch {
+                resizeLock.withLock {
+                    resizeJob?.cancel()
+                    resizeJob = null
+                }
+            }
         }
     }
 
@@ -124,17 +184,26 @@ class RemoteDesktopScreenState(
      * swallow-the-write discipline as [send].
      */
     private fun scheduleRemoteResize() {
-        val target = viewport
-        if (!canResizeRemote || target.width <= 0 || target.height <= 0) return
-        resizeJob?.cancel()
-        resizeJob = scope.launch {
-            delay(RESIZE_DEBOUNCE_MS)
-            if (target == desktopSize) return@launch
-            try {
-                session.setDesktopSize(target.width, target.height)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
+        if (!canResizeRemote) return
+        scope.launch {
+            resizeLock.withLock {
+                resizeJob?.cancel()
+                resizeJob = scope.launch {
+                    delay(RESIZE_DEBOUNCE_MS)
+                    // Read at fire time, not capture time: the wrappers race across pool threads,
+                    // and a wrapper carrying a stale captured size could win the lock last. The
+                    // volatile [viewport] is always the freshest, and re-checking [remoteResize]
+                    // honours a toggle-off that landed while this debounce was pending.
+                    if (!remoteResize) return@launch
+                    val target = viewport
+                    if (target.width <= 0 || target.height <= 0 || target == desktopSize) return@launch
+                    try {
+                        session.setDesktopSize(target.width, target.height)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                    }
+                }
             }
         }
     }
@@ -151,6 +220,21 @@ class RemoteDesktopScreenState(
      */
     var cursor: VncCursorImage? by mutableStateOf(null)
         private set
+
+    /**
+     * Where the server last put the pointer itself (SetCursorPos — installers, remote apps that
+     * recentre the mouse). Drawn instead of the local position until the local mouse next speaks,
+     * so the user is not aiming at one place while clicking in another (F-21). In view-only it is
+     * the only pointer source there is, since no local events are sent.
+     */
+    var serverPointer: IntOffset? by mutableStateOf(null)
+        private set
+
+    // Sprites already built, keyed by the shape *instance*: a cached pointer re-announcement is
+    // the same object end to end, so switching arrow ↔ I-beam costs a list scan, not a bitmap
+    // rebuild (F-26).
+    private val spriteCache =
+        IdentityCache<RemoteDesktopUpdate.CursorShape, VncCursorImage?>(SPRITE_CACHE_SIZE)
 
     /**
      * The server asked for the ordinary system pointer instead of a shape of its own (RDP's
@@ -173,6 +257,10 @@ class RemoteDesktopScreenState(
      */
     fun toggleViewOnly() {
         viewOnly = !viewOnly
+        // No handover, nothing to hand: on RDP setLocalCursor is a documented no-op and the
+        // cursor stays the client's to draw — the sprite keeps showing at the server-reported
+        // position — so the full repaint bought nothing (F-27).
+        if (!capabilities.cursorHandover) return
         val localCursor = !viewOnly
         send {
             session.setLocalCursor(localCursor)
@@ -202,6 +290,9 @@ class RemoteDesktopScreenState(
     fun setVisible(visible: Boolean) {
         if (visible == outputVisible) return
         outputVisible = visible
+        // A hidden session takes no more key events, so whatever is down now stays down on the
+        // server until it comes back — release it on the way out, like a focus loss (F-12).
+        if (!visible) releaseHeldKeys()
         val previous = visibilityJob
         visibilityJob = send {
             previous?.join()
@@ -248,11 +339,10 @@ class RemoteDesktopScreenState(
      */
     fun sendCtrlAltDel() {
         if (viewOnly) return
+        // Through the actor like every other key, so the sequence cannot interleave with typing.
         val keys = CTRL_ALT_DEL.mapNotNull { remoteKeyEvent(it, 0) }
-        send {
-            keys.forEach { session.sendKey(it, down = true) }
-            keys.asReversed().forEach { session.sendKey(it, down = false) }
-        }
+        keys.forEach { inputActor.submit(RemoteInputActor.KeyWrite(it, down = true)) }
+        keys.asReversed().forEach { inputActor.submit(RemoteInputActor.KeyWrite(it, down = false)) }
     }
 
     private val _close = MutableStateFlow<RemoteDesktopUpdate.Closed?>(null)
@@ -280,6 +370,18 @@ class RemoteDesktopScreenState(
 
     init {
         scope.launch {
+            // The same belt-and-braces net as the updates collector below, for the same reason: on
+            // a supervisor scope a dying actor cancels nothing else, so without this a bug in the
+            // actor's own control flow would leave a live-looking picture with silently dead input.
+            try {
+                inputActor.run()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _close.compareAndSet(null, RemoteDesktopUpdate.Closed(cleanExit = false))
+            }
+        }
+        scope.launch {
             // The transports already turn a decode failure into a Closed update; this is the
             // belt-and-braces net, so a throwing session surfaces as a dropped session (the UI shows
             // "Connection lost") instead of an uncaught exception that would kill the collector
@@ -302,8 +404,10 @@ class RemoteDesktopScreenState(
                 // An empty region is a protocol event with no pixels behind it (an RDP frame
                 // marker); redrawing on it would burn a frame for nothing.
                 if (update.rects.isNotEmpty()) {
+                    val started = TimeSource.Monotonic.markNow()
                     image.writeRects(update.rects, session.framebuffer.pixels, session.framebuffer.width)
-                    frame++
+                    renderStats.bridgeTime(started.elapsedNow().inWholeNanoseconds)
+                    frameSignal.trySend(Unit)
                 }
             }
 
@@ -311,6 +415,9 @@ class RemoteDesktopScreenState(
                 image.resize(update.width, update.height)
                 desktopSize = IntSize(update.width, update.height)
                 frame++
+                // An RDP resize can be a reactivation, which resets the server's input state —
+                // resend the lock keys so Caps/Num survive it (F-13).
+                lastLockKeys?.let { inputActor.submit(RemoteInputActor.LockWrite(it)) }
             }
 
             is RemoteDesktopUpdate.RemoteResizeSupported -> {
@@ -337,14 +444,11 @@ class RemoteDesktopScreenState(
     private fun onPeripheralUpdate(update: RemoteDesktopUpdate) {
         when (update) {
             is RemoteDesktopUpdate.CursorShape -> {
-                cursor = VncCursorImage.of(update)
+                cursor = spriteCache.getOrPut(update) { VncCursorImage.of(update) }
                 systemCursor = false
             }
 
-            // The pointer the server warps is not ours to move: the sprite tracks the local pointer,
-            // and jumping it would desynchronise the two. The position is still applied by the
-            // server to its own screen, which is what the user sees.
-            is RemoteDesktopUpdate.CursorPosition -> Unit
+            is RemoteDesktopUpdate.CursorPosition -> serverPointer = IntOffset(update.x, update.y)
             // "Visible" here is the server asking for its default pointer, not for the shape it sent
             // last: the sprite goes, and the local pointer takes over. Hidden drops both.
             is RemoteDesktopUpdate.CursorVisible -> {
@@ -372,14 +476,61 @@ class RemoteDesktopScreenState(
     /** Forward a pointer event (framebuffer coordinates + button mask). No-op in view-only mode. */
     fun onPointer(x: Int, y: Int, buttonMask: Int) {
         if (viewOnly) return
-        send { session.sendPointer(x, y, buttonMask) }
+        // The local mouse speaking takes the cursor back from a server-side warp (F-21).
+        serverPointer = null
+        inputActor.submit(RemoteInputActor.PointerWrite(x, y, buttonMask))
     }
 
     /** Forward a key event. No-op in view-only mode. */
     fun onKey(event: RemoteKeyEvent, down: Boolean) {
         if (viewOnly) return
-        send { session.sendKey(event, down) }
+        val id = keyIdentity(event)
+        if (down) heldKeys[id] = event else heldKeys.remove(id)
+        inputActor.submit(RemoteInputActor.KeyWrite(event, down))
     }
+
+    // Keys currently down on the server, in press order; written from the UI thread only.
+    private val heldKeys = LinkedHashMap<Long, RemoteKeyEvent>()
+
+    private fun releaseHeldKeys() {
+        for (event in heldKeys.values.toList().asReversed()) {
+            inputActor.submit(RemoteInputActor.KeyWrite(event, false))
+        }
+        heldKeys.clear()
+    }
+
+    /** What makes a press and its release the same key, whichever field the protocol will use. */
+    private fun keyIdentity(event: RemoteKeyEvent): Long = when {
+        event.scancode != 0 -> event.scancode.toLong() or (if (event.extended) 1L shl 32 else 0L)
+        event.keySym != 0L -> event.keySym or (1L shl 40)
+        else -> event.codePoint.toLong() or (1L shl 48)
+    }
+
+    /**
+     * The surface gained or lost keyboard focus. Losing it releases everything held (F-12): the
+     * key-up for an Alt+Tab goes to the local desktop, so without this the server keeps Alt down
+     * for the rest of the session. Gaining it re-syncs the lock keys (F-13) — while the session was
+     * in the background the user may have toggled one, and only this side can notice.
+     */
+    fun notifyFocus(focused: Boolean) {
+        if (focused) {
+            lastLockKeys?.let { inputActor.submit(RemoteInputActor.LockWrite(it)) }
+        } else {
+            releaseHeldKeys()
+        }
+    }
+
+    /**
+     * The platform's current lock-key state, read where the UI can see it; null = unknown. Synced
+     * to the server when it changes — the remote session keeps its own Caps/Num/Scroll and drifts
+     * apart silently otherwise (F-13).
+     */
+    fun onLockKeys(keys: LockKeys?) {
+        if (keys == null || keys == lastLockKeys) return
+        lastLockKeys = keys
+        inputActor.submit(RemoteInputActor.LockWrite(keys))
+    }
+
 
     /** Send local clipboard text to the server. */
     fun onLocalClipboard(text: String) {
@@ -409,6 +560,9 @@ class RemoteDesktopScreenState(
 
     private companion object {
         const val RESIZE_DEBOUNCE_MS = 400L
+
+        /** Matches the RDP pointer cache (25 slots) with room for uncached shapes on top. */
+        const val SPRITE_CACHE_SIZE = 32
 
         val CTRL_ALT_DEL = listOf(Key.CtrlLeft, Key.AltLeft, Key.Delete)
     }

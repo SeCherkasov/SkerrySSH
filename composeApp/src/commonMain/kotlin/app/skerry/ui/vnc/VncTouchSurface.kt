@@ -1,6 +1,7 @@
 package app.skerry.ui.vnc
 
 import app.skerry.ui.remote.RemoteDesktopScreenState
+import app.skerry.ui.remote.RemoteStatsOverlay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -13,6 +14,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -48,11 +51,18 @@ import kotlin.time.TimeSource
  */
 @Composable
 fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modifier, interactive: Boolean = true) {
-    val frame = screen.frame
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     val pad = remember(screen) { VncTrackpad(screen.desktopSize) }
     // A server-side resize moves the desktop out from under the cursor; keep it inside the new bounds.
     LaunchedEffect(pad, screen.desktopSize) { pad.onDesktopSize(screen.desktopSize) }
+    // The frame pump, as on desktop: pixels land in the mirror as they arrive, the canvas
+    // invalidates at most once per display frame (F-02).
+    LaunchedEffect(screen) {
+        screen.frameRequests.collect {
+            withFrameNanos { }
+            screen.publishFrame()
+        }
+    }
 
     var mod = modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged {
         canvasSize = it
@@ -63,12 +73,17 @@ fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modif
 
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
-            @Suppress("UNUSED_EXPRESSION") frame // captured so the draw invalidates when it changes
+            // Read in the DRAW pass — a composition-scope read would recompose the whole surface
+            // on every published frame (F-34).
+            @Suppress("UNUSED_EXPRESSION") screen.frame
+            val started = TimeSource.Monotonic.markNow()
             drawFramebuffer(screen)
+            screen.renderStats.drawTime(started.elapsedNow().inWholeNanoseconds)
         }
         // Own canvas, as on desktop: the cursor moves far more often than the framebuffer changes,
         // and only this layer reads its position, so a move redraws just the sprite.
         if (interactive) Canvas(Modifier.fillMaxSize()) { drawTouchCursor(screen, pad) }
+        if (screen.showStats) RemoteStatsOverlay(screen, Modifier.align(Alignment.TopStart))
     }
 
     if (interactive) VncClipboardBridge(screen)
@@ -76,28 +91,31 @@ fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modif
 
 /** The remote cursor at the trackpad's position: the server's sprite, or our own arrow if it sent none. */
 internal fun DrawScope.drawTouchCursor(screen: RemoteDesktopScreenState, pad: VncTrackpad) {
-    // View-only sends no pointer events, so nothing follows our cursor — the server paints the real
-    // one into the framebuffer instead, and a second one here would only lie about where it is.
-    if (screen.viewOnly) return
+    // View-only sends no pointer events, so nothing follows our cursor. Where the server can paint
+    // the real one into the framebuffer (RFB) a sprite here would only lie about where it is; on a
+    // protocol whose cursor is always client-side (RDP) the server-reported position is the only
+    // pointer there is, and it still deserves drawing (F-27).
+    if (screen.viewOnly && screen.capabilities.cursorHandover) return
     val geom = fitGeometry(
         size.width, size.height, screen.desktopSize.width, screen.desktopSize.height,
         screen.userScale, screen.userOffset.x, screen.userOffset.y,
     )
     if (geom.scale <= 0f) return
-    val at = pad.canvasPosition(geom)
     val sprite = screen.cursor
+    if (screen.viewOnly) {
+        val cell = screen.serverPointer ?: return
+        if (sprite != null) drawCursorAtCell(screen, sprite, cell)
+        return
+    }
+    val at = pad.canvasPosition(geom)
     if (sprite == null) {
         drawFallbackCursor(at)
         return
     }
-    drawImage(
-        image = sprite.bitmap,
-        dstOffset = IntOffset(
-            (at.x - sprite.hotspotX * geom.scale).roundToInt(),
-            (at.y - sprite.hotspotY * geom.scale).roundToInt(),
-        ),
-        dstSize = IntSize((sprite.width * geom.scale).roundToInt(), (sprite.height * geom.scale).roundToInt()),
-        filterQuality = framebufferFilterQuality(geom.scale),
+    drawCursorSprite(
+        sprite,
+        Offset(at.x - sprite.hotspotX * geom.scale, at.y - sprite.hotspotY * geom.scale),
+        geom.scale,
     )
 }
 

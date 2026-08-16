@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
 
 /**
@@ -26,6 +27,8 @@ class FastPathDecoder(
      * arrive on this path and be recalled by a Cached Pointer Update on the other.
      */
     private val pointerCache: PointerCache,
+    /** The session's counters for the diagnostics overlay; a private default when nobody reads them. */
+    private val diagnostics: RemoteDesktopDiagnostics = RemoteDesktopDiagnostics(),
 ) {
     private var fragmentType = -1
     private val fragments = mutableListOf<ByteArray>()
@@ -126,7 +129,8 @@ class FastPathDecoder(
         when (updateCode) {
             UPDATETYPE_BITMAP -> {
                 reader.u16le() // updateType, repeated inside the payload
-                listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors, dropped))
+                diagnostics.notePath("Bitmap")
+                listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors, dropped, diagnostics))
             }
 
             UPDATETYPE_PALETTE -> {
@@ -135,13 +139,18 @@ class FastPathDecoder(
                 emptyList()
             }
 
-            UPDATETYPE_SURFCMDS -> surfaceDecoder.decode(reader, framebuffer)
+            UPDATETYPE_SURFCMDS -> {
+                diagnostics.notePath("Surface bits")
+                surfaceDecoder.decode(reader, framebuffer)
+            }
             UPDATETYPE_PTR_NULL -> listOf(RdpUpdate.PointerVisible(false))
             UPDATETYPE_PTR_DEFAULT -> listOf(RdpUpdate.PointerVisible(true))
             UPDATETYPE_PTR_POSITION -> listOf(RdpUpdate.PointerPosition(reader.u16le(), reader.u16le()))
-            UPDATETYPE_COLOR_POINTER -> listOf(PointerUpdate.colorPointer(reader, pointerCache))
-            UPDATETYPE_POINTER -> listOf(PointerUpdate.newPointer(reader, pointerCache))
-            UPDATETYPE_LARGE_POINTER -> listOf(PointerUpdate.largePointer(reader, pointerCache))
+            // Contained like a bitmap rectangle: a shape this client cannot read costs the cursor
+            // staying as it is, which is strictly less than the session (F-40).
+            UPDATETYPE_COLOR_POINTER -> pointerOrNothing { PointerUpdate.colorPointer(reader, pointerCache) }
+            UPDATETYPE_POINTER -> pointerOrNothing { PointerUpdate.newPointer(reader, pointerCache) }
+            UPDATETYPE_LARGE_POINTER -> pointerOrNothing { PointerUpdate.largePointer(reader, pointerCache) }
             UPDATETYPE_CACHED_POINTER -> PointerUpdate.cachedPointer(reader, pointerCache)
             UPDATETYPE_SYNCHRONIZE -> emptyList()
             // Orders were never claimed in the capability exchange (MS-RDPEGDI), so a server sending
@@ -150,6 +159,7 @@ class FastPathDecoder(
             // the same trade as a bitmap rectangle that fails to decode.
             UPDATETYPE_ORDERS -> {
                 dropped.record()
+                diagnostics.droppedOrder()
                 emptyList()
             }
 
@@ -194,6 +204,7 @@ object BitmapUpdate {
         framebuffer: RemoteFramebuffer,
         palette: IntArray?,
         dropped: DroppedGraphics,
+        diagnostics: RemoteDesktopDiagnostics = RemoteDesktopDiagnostics(),
     ): RdpUpdate.Region {
         val count = reader.u16le()
         val rects = mutableListOf<RdpRect>()
@@ -220,6 +231,7 @@ object BitmapUpdate {
             if (width <= 0 || height <= 0) return@repeat
 
             val bytesPerPixel = (bitsPerPixel + 7) / 8
+            diagnostics.noteCodec(bitmapCodecLabel(flags, bytesPerPixel))
             val pixels = try {
                 decodeBitmap(data, width, height, bitsPerPixel, bytesPerPixel, flags, palette)
             } catch (e: RdpProtocolException) {
@@ -227,12 +239,20 @@ object BitmapUpdate {
                 // under it stay as they were until the repaint the recorded drop asks for, which is
                 // a briefly scarred screen instead of a dropped connection.
                 dropped.record()
+                diagnostics.droppedRect()
                 return@repeat
             }
             blit(framebuffer, pixels, left, top, width, height)
             rects += RdpRect(left, top, width, height)
         }
         return RdpUpdate.Region(rects)
+    }
+
+    /** Which codec [decodeBitmap] will pick for these header fields, as the overlay's label. */
+    private fun bitmapCodecLabel(flags: Int, bytesPerPixel: Int): String = when {
+        flags and BITMAP_COMPRESSION != 0 && bytesPerPixel == 4 -> "Planar"
+        flags and BITMAP_COMPRESSION != 0 -> "RLE"
+        else -> "Raw"
     }
 
     private fun decodeBitmap(
@@ -248,7 +268,8 @@ object BitmapUpdate {
         // pixels are allocated from it before a byte of the payload is read.
         RdpImageBounds.requireSize(width, height, "a bitmap update")
         // Interleaved RLE covers 8, 15, 16 and 24-bit sessions; a 32-bit one compresses with the
-        // planar codec instead, and the depth is the only thing that says which.
+        // planar codec instead, and the depth is the only thing that says which (see
+        // [bitmapCodecLabel], which mirrors this dispatch for the diagnostics overlay).
         return when {
             flags and BITMAP_COMPRESSION != 0 && bytesPerPixel == 4 ->
                 PlanarCodec.decode(data, width, height)
@@ -316,6 +337,17 @@ object BitmapUpdate {
             framebuffer.blitRow(x, y + row, width, pixels, row * width)
         }
     }
+}
+
+/**
+ * A malformed pointer shape is skipped and the cursor keeps its last shape (F-40) — the same
+ * containment either decode path applies, hence a shared function rather than two copies.
+ */
+@Suppress("SwallowedException") // deliberate: a broken cursor is worth less than the session
+internal fun pointerOrNothing(read: () -> RdpUpdate): List<RdpUpdate> = try {
+    listOf(read())
+} catch (e: RdpProtocolException) {
+    emptyList()
 }
 
 /**

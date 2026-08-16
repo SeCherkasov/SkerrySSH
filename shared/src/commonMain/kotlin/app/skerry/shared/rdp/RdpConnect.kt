@@ -69,6 +69,7 @@ class RdpConnectionSequence(
                     width = capabilities.desktopWidth,
                     height = capabilities.desktopHeight,
                     remoteFx = capabilities.supportedCodecs.contains(RdpCodecId.RemoteFx),
+                    keyboardLayout = settings.keyboardLayout,
                 ),
             ),
         )
@@ -94,6 +95,7 @@ class RdpConnectionSequence(
                     width = capabilities.desktopWidth,
                     height = capabilities.desktopHeight,
                     remoteFx = capabilities.supportedCodecs.contains(RdpCodecId.RemoteFx),
+                    keyboardLayout = settings.keyboardLayout,
                 ),
             ),
         )

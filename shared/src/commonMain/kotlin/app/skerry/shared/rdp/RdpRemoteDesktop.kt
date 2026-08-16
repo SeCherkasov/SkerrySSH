@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp
 
+import app.skerry.shared.graphics.IdentityCache
 import app.skerry.shared.graphics.RemoteDesktopCapabilities
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
@@ -9,8 +10,6 @@ import app.skerry.shared.graphics.RemoteKeyEvent
 import app.skerry.shared.graphics.RemoteRect
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Presents an [RdpSession] as a [RemoteDesktopSession].
@@ -29,10 +28,13 @@ class RdpRemoteDesktop(
     override val title: String = session.connectedHost,
 ) : RemoteDesktopSession {
 
-    private val pointerLock = Mutex()
+    // Written from the UI's single input actor; the mask-to-transition translation needs no lock
+    // once callers are serialised, and they are — see RemoteDesktopScreenState's input actor (F-10).
     private var lastButtons = 0
 
     override val framebuffer: RemoteFramebuffer get() = session.framebuffer
+
+    override val diagnostics get() = session.diagnostics
 
     override val capabilities = RemoteDesktopCapabilities(
         // RDP negotiates its own codecs at connect time and has no per-session quality knob, and the
@@ -55,13 +57,7 @@ class RdpRemoteDesktop(
 
             is RdpUpdate.Resize -> RemoteDesktopUpdate.Resize(update.width, update.height)
             is RdpUpdate.ResizeSupported -> RemoteDesktopUpdate.RemoteResizeSupported
-            is RdpUpdate.PointerShape -> RemoteDesktopUpdate.CursorShape(
-                argb = update.argb,
-                width = update.width,
-                height = update.height,
-                hotspotX = update.hotspotX,
-                hotspotY = update.hotspotY,
-            )
+            is RdpUpdate.PointerShape -> mappedShape(update)
 
             is RdpUpdate.PointerPosition -> RemoteDesktopUpdate.CursorPosition(update.x, update.y)
             is RdpUpdate.PointerVisible -> RemoteDesktopUpdate.CursorVisible(update.visible)
@@ -75,7 +71,7 @@ class RdpRemoteDesktop(
         }
     }
 
-    override suspend fun sendPointer(x: Int, y: Int, buttonMask: Int) = pointerLock.withLock {
+    override suspend fun sendPointer(x: Int, y: Int, buttonMask: Int) {
         val wheelBits = buttonMask and WHEEL_MASK
         if (wheelBits != 0) {
             // A wheel "click" arrives as a press of one of these bits; the release that follows
@@ -86,13 +82,13 @@ class RdpRemoteDesktop(
                 wheelBits and WHEEL_LEFT != 0 -> session.sendWheel(-1, RdpWheelAxis.Horizontal, x, y)
                 wheelBits and WHEEL_RIGHT != 0 -> session.sendWheel(1, RdpWheelAxis.Horizontal, x, y)
             }
-            return@withLock
+            return
         }
 
         val buttons = buttonMask and BUTTON_MASK
         if (buttons == lastButtons) {
             session.sendPointerMove(x, y)
-            return@withLock
+            return
         }
         for ((bit, button) in BUTTONS) {
             val wasDown = lastButtons and bit != 0
@@ -101,6 +97,24 @@ class RdpRemoteDesktop(
         }
         lastButtons = buttons
     }
+
+    // A cached pointer re-announcement is the same PointerShape instance; wrapping it into a fresh
+    // CursorShape each time destroyed that identity before the UI could use it, so every arrow ↔
+    // I-beam switch rebuilt a sprite (F-26). One wrapper per instance keeps identity end to end.
+    private val mappedShapes =
+        IdentityCache<RdpUpdate.PointerShape, RemoteDesktopUpdate.CursorShape>(MAPPED_SHAPE_CACHE)
+
+    private fun mappedShape(update: RdpUpdate.PointerShape): RemoteDesktopUpdate.CursorShape =
+        mappedShapes.getOrPut(update) {
+            RemoteDesktopUpdate.CursorShape(
+                argb = update.argb,
+                width = update.width,
+                height = update.height,
+                hotspotX = update.hotspotX,
+                hotspotY = update.hotspotY,
+                invert = update.invert,
+            )
+        }
 
     override suspend fun sendKey(event: RemoteKeyEvent, down: Boolean) {
         // A scancode replays into the remote keyboard driver, which is what makes the remote layout
@@ -111,6 +125,9 @@ class RdpRemoteDesktop(
             event.codePoint != 0 -> session.sendUnicode(event.codePoint, down)
         }
     }
+
+    override suspend fun syncLockKeys(scroll: Boolean, num: Boolean, caps: Boolean) =
+        session.sendLockKeys(scroll, num, caps)
 
     override suspend fun sendClipboardText(text: String) = session.sendClipboardText(text)
 
@@ -158,6 +175,9 @@ class RdpRemoteDesktop(
         const val WHEEL_RIGHT = 1 shl 6
         const val BUTTON_BACK = 1 shl 7
         const val BUTTON_FORWARD = 1 shl 8
+
+        /** The protocol's pointer cache holds 25 slots; a few extra cover uncached shapes. */
+        const val MAPPED_SHAPE_CACHE = 32
 
         const val WHEEL_MASK = WHEEL_UP or WHEEL_DOWN or WHEEL_LEFT or WHEEL_RIGHT
         const val BUTTON_MASK = BUTTON_LEFT or BUTTON_MIDDLE or BUTTON_RIGHT or BUTTON_BACK or BUTTON_FORWARD

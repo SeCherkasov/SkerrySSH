@@ -12,6 +12,7 @@ import app.skerry.shared.rdp.RdpFileHost
 import app.skerry.shared.rdp.RdpFileImport
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.isRdp
+import app.skerry.shared.ssh.isRemoteDesktop
 import app.skerry.shared.ssh.SshConfigHost
 import app.skerry.shared.ssh.SshConfigImport
 import app.skerry.shared.vault.Credential
@@ -109,8 +110,11 @@ class HostManagerController(
                 keepAliveSeconds = draft.keepAliveSeconds,
                 notes = draft.notes,
                 container = draft.container,
-                // Not a form field — toggled from the live VNC session; a form save must not reset it.
-                vncResizeToWindow = find(id)?.vncResizeToWindow ?: false,
+                // Not a form field — toggled from the live session; a form save must not reset it.
+                // A NEW remote-desktop profile starts following the window (F-06): that is what
+                // every mature client defaults to, and a fixed-size desktop in a differently sized
+                // viewport is a scaled, soft picture.
+                vncResizeToWindow = find(id)?.vncResizeToWindow ?: draft.connectionType.isRemoteDesktop,
                 // On an RDP profile the draft owns these: the form was prefilled from the stored
                 // spec, so it carries the farm routing token back even though nobody edits it.
                 // Any other profile type keeps what is stored — it has no RDP fields to speak with.
