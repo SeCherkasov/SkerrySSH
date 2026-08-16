@@ -25,6 +25,7 @@
     <string name="vtail_error_password_mismatch">Пароли не совпадают.</string>
     <string name="vtail_error_wrong_password">Неверный мастер-пароль.</string>
     <string name="vtail_error_corrupted">Файл хранилища повреждён или не читается.</string>
+    <string name="vtail_error_not_writable">Не удалось записать файл хранилища — проверьте права на папку и свободное место.</string>
     <string name="vtail_error_biometric_reset">Биометрия сброшена — войдите мастер-паролем.</string>
     <string name="vtail_error_biometric_failed">Биометрия не сработала — введите мастер-пароль.</string>
     <string name="vtail_error_biometric_locked_out">Биометрия заблокирована — введите мастер-пароль.</string>

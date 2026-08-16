@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.BrandMark
 import app.skerry.ui.design.BrandPlate
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldName
@@ -346,6 +347,9 @@ private fun MobileLockScaffold(
         Spacer(Modifier.height(26.dp))
         Column(Modifier.width(300.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             fields()
+            // Same rule as the desktop gate: composed unconditionally so the announcement survives
+            // the error appearing (see LockScaffold).
+            StatusAnnouncer(error?.let { vaultGateErrorMessage(it) } ?: "")
             if (error != null) {
                 Spacer(Modifier.height(12.dp))
                 Txt(vaultGateErrorMessage(error), color = Skerry.colors.storm, size = 12.sp)

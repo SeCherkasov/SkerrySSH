@@ -15,6 +15,7 @@ import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -101,6 +102,9 @@ enum class VaultGateError {
 
     /** Vault file unreadable/corrupt. */
     Corrupted,
+
+    /** The vault file could not be written — a read-only or full config directory. */
+    NotWritable,
 
     /** Biometrics reset (new fingerprint/face) — it's disabled, the master password is needed. */
     BiometricReset,
@@ -238,7 +242,18 @@ class VaultGateController(
                 verifying = true
                 scope.launch {
                     try {
-                        withContext(kdfDispatcher) { vault.create(password) }
+                        // Only the write is guarded, and only for the error it names: everything
+                        // after it runs on a vault that exists and is open, so reporting "could not
+                        // write the vault" for a failing security-log write or biometrics probe
+                        // would be a wrong diagnosis on a screen the user cannot leave.
+                        try {
+                            withContext(kdfDispatcher) { vault.create(password) }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            error = VaultGateError.NotWritable
+                            return@launch
+                        }
                         // Baseline for the "last password change" caption in the Security section.
                         securityLog?.record(SecurityEventType.VaultCreated)
                         // New vault is open. First (if the platform provided a form) offer to connect

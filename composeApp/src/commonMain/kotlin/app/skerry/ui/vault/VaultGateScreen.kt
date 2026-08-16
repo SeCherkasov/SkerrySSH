@@ -44,6 +44,7 @@ import app.skerry.shared.vault.BiometricPrompt
 import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_error_biometric_failed
 import app.skerry.ui.generated.resources.vtail_error_biometric_locked_out
@@ -52,6 +53,7 @@ import app.skerry.ui.generated.resources.vtail_bio_verify_title
 import app.skerry.ui.generated.resources.vtail_error_biometric_reset
 import app.skerry.ui.generated.resources.vtail_error_biometric_unsupported
 import app.skerry.ui.generated.resources.vtail_error_corrupted
+import app.skerry.ui.generated.resources.vtail_error_not_writable
 import app.skerry.ui.generated.resources.vtail_error_password_mismatch
 import app.skerry.ui.generated.resources.vtail_error_password_too_short
 import app.skerry.ui.generated.resources.vtail_error_wrong_password
@@ -508,6 +510,11 @@ private fun VaultFormScaffold(
         Text(title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         fields()
+        // Composed even when there is no error, so the announcer outlives the change: a node
+        // inserted together with its text announces nothing. Without it every failure on this
+        // screen — a wrong password, a corrupt file, a vault that cannot be written — is silent to
+        // a screen reader, which is the same defect class as a checkbox with no state.
+        StatusAnnouncer(error?.let { vaultGateErrorMessage(it) } ?: "")
         if (error != null) {
             Text(vaultGateErrorMessage(error), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
@@ -538,6 +545,7 @@ internal fun vaultGateErrorMessage(error: VaultGateError): String = when (error)
     VaultGateError.PasswordMismatch -> stringResource(Res.string.vtail_error_password_mismatch)
     VaultGateError.WrongPassword -> stringResource(Res.string.vtail_error_wrong_password)
     VaultGateError.Corrupted -> stringResource(Res.string.vtail_error_corrupted)
+    VaultGateError.NotWritable -> stringResource(Res.string.vtail_error_not_writable)
     VaultGateError.BiometricReset -> stringResource(Res.string.vtail_error_biometric_reset)
     VaultGateError.BiometricFailed -> stringResource(Res.string.vtail_error_biometric_failed)
     VaultGateError.BiometricLockedOut -> stringResource(Res.string.vtail_error_biometric_locked_out)
