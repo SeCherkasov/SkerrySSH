@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -26,7 +25,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -53,7 +51,6 @@ import app.skerry.ui.generated.resources.sync_connecting
 import app.skerry.ui.generated.resources.sync_zero_knowledge
 import app.skerry.ui.generated.resources.sync_cancel
 import app.skerry.ui.generated.resources.sync_connect
-import app.skerry.ui.generated.resources.sync_keep_connected
 import app.skerry.ui.generated.resources.sync_keep_connected_sub_long
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.CancelButton
@@ -154,7 +151,11 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 SyncField(stringResource(Res.string.sync_placeholder_master_password), password, "key", KeyboardType.Password, ImeAction.Done, secret = true, onSubmit = { submit() }) { password = it }
             }
 
-            KeepConnectedRow(keepConnected) { keepConnected = it }
+            KeepConnectedRow(
+                checked = keepConnected,
+                subtitle = stringResource(Res.string.sync_keep_connected_sub_long),
+                compact = true,
+            ) { keepConnected = it }
 
             // http:// is allowed (local test/LAN without a TLS proxy) but defenseless against MITM — warn explicitly.
             if (form.isInsecureUrl) {
@@ -185,29 +186,6 @@ fun SyncSetupDialog(sync: SyncCoordinator, onDismiss: () -> Unit) {
                 CancelButton(stringResource(Res.string.sync_cancel), onClick = onDismiss)
                 PrimaryButton(stringResource(Res.string.sync_connect), onClick = { submit() }, enabled = canSubmit, modifier = Modifier.testTag(UiTags.FORM_SAVE))
             }
-        }
-    }
-}
-
-/** "Keep me connected" checkbox: remember the link and restore the session without re-entering the password. */
-@Composable
-private fun KeepConnectedRow(checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 14.dp).clickable { onChange(!checked) },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(
-            Modifier.size(18.dp).clip(RoundedCornerShape(5.dp))
-                .background(if (checked) Skerry.colors.cyan else Color.Transparent)
-                .border(1.dp, if (checked) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(5.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (checked) Sym("check", size = 13.sp, color = Skerry.colors.ink)
-        }
-        Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.sync_keep_connected), color = Skerry.colors.text, size = 12.5.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.sync_keep_connected_sub_long), color = Skerry.colors.faint, size = 11.sp)
         }
     }
 }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -24,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,7 +81,14 @@ fun MobileSshImportSheet(state: MobileDesignState, result: SshConfigParseResult)
                 Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(10.dp))
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                    // toggleable, not clickable: the tick is a Sym glyph, which clears its own
+                    // semantics, so the row is what carries the checked state (issue #228).
+                    .toggleable(
+                        value = allSelected,
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        role = Role.Checkbox,
+                    ) {
                         selected = if (allSelected) emptySet() else result.hosts.map { it.alias }.toSet()
                     }
                     .padding(vertical = 10.dp),
@@ -97,7 +106,12 @@ fun MobileSshImportSheet(state: MobileDesignState, result: SshConfigParseResult)
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isSelected) Skerry.colors.cyan10 else Color.Transparent)
-                            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                            .toggleable(
+                                value = isSelected,
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                role = Role.Checkbox,
+                            ) {
                                 selected = if (isSelected) selected - host.alias else selected + host.alias
                             }
                             .padding(horizontal = 4.dp, vertical = 11.dp),

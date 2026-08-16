@@ -1,7 +1,11 @@
 package app.skerry.ui.session
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsToggleable
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import app.skerry.ui.app.UiTags
@@ -68,6 +72,24 @@ class BroadcastFormTest {
             waitForIdle()
         }
         assertTrue(sent["prod"].isNullOrEmpty(), "a destructive broadcast reached production unconfirmed")
+    }
+
+    /**
+     * Issue #228: the tick beside a target is a Material Symbol ligature, and `Sym` clears its own
+     * semantics — so a row carrying nothing but a click tells a screen reader neither that it is a
+     * checkbox nor which sessions the next send will reach. The row is the checkbox.
+     */
+    @Test
+    fun `a target row reads as a checkbox with a state`() {
+        val targets = listOf(target("a", mutableMapOf()))
+        val controller = BroadcastController()
+
+        runForm({ BroadcastPanel(controller, targets, onDismiss = {}) }) {
+            onNodeWithText("a").assertIsToggleable().assertIsOff().performClick()
+            waitForIdle()
+            onNodeWithText("a").assertIsOn()
+        }
+        assertTrue(controller.isSelected("a"), "the row's toggle did not reach the controller")
     }
 
     private fun target(id: String, log: MutableMap<String, MutableList<String>>, production: Boolean = false) =
