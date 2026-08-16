@@ -3,6 +3,11 @@
     <string name="appearance_title">Оформление</string>
     <string name="appearance_subtitle">Тема, язык интерфейса и боковая панель.</string>
     <string name="appearance_theme">Тема оформления</string>
+    <string name="appearance_rendering">Отрисовка</string>
+    <string name="appearance_rendering_desc">Skia-бэкенд всего приложения; декодирование H.264 следует за ним. Читается на старте — вступает в силу после перезапуска.</string>
+    <string name="render_backend_auto">Автоматически</string>
+    <string name="render_backend_hardware">Аппаратный</string>
+    <string name="render_backend_software">Программный</string>
     <string name="theme_system">Системная</string>
     <string name="theme_light">Skerry Светлая</string>
     <string name="theme_dark">Skerry Тёмная</string>

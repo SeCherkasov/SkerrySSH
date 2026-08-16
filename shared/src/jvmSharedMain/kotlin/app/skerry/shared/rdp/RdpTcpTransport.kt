@@ -217,9 +217,9 @@ class RdpSocketSession(
         state = state,
         settings = settings,
         logon = logon,
-        // The codec is plugged in unconditionally; whether the server uses it was settled in the
-        // capability exchange, and a decoder that is never called costs nothing.
-        remoteFx = RemoteFx(),
+        // Only when the profile advertises it: the setting is an attack-surface knob, so a server
+        // ignoring the capability exchange must hit "not negotiated", not a live decoder.
+        remoteFx = if (settings.wantsRemoteFx) RemoteFx() else null,
         diagnostics = diagnostics,
     )
 
@@ -257,10 +257,17 @@ class RdpSocketSession(
             remoteFx = RemoteFx(),
             progressive = Progressive(),
             clear = ClearCodec(),
-            // Only when this machine actually has a decoder: the codec being plugged in here is what
-            // makes the client advertise H.264, so a factory that answers no has to leave it out.
-            avc = h264Decoders?.takeIf { it.available }?.let { AvcCodec(it, trace = h264Trace) },
+            // Only when this machine has a decoder AND the profile allows H.264: leaving the codec
+            // out is what keeps the decoder unreachable for a server that ignores the capability
+            // exchange, and it keeps the overlay's decoder row honest for a session with H.264 off.
+            avc = h264Decoders
+                ?.takeIf { it.available && settings.h264 != RdpH264Mode.Off && settings.wantsGraphicsPipeline }
+                ?.let {
+                    diagnostics.noteDecoder(it.description)
+                    AvcCodec(it, trace = h264Trace)
+                },
         ),
+        h264Mode = settings.h264,
         trace = h264Trace,
         diagnostics = diagnostics,
         send = { data -> dynamicChannels.sendTo(GraphicsChannel.NAME, data) },

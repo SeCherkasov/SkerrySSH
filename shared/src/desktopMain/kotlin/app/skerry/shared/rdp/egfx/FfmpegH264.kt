@@ -20,7 +20,15 @@ import java.lang.ProcessBuilder.Redirect
  * No `ffmpeg` on PATH means [available] is false, the client never tells the server it can take
  * H.264, and the session runs on the codecs it runs on today. That is the whole failure mode.
  */
-class FfmpegH264Decoders(private val trace: (String) -> Unit = h264Trace) : H264DecoderFactory {
+class FfmpegH264Decoders(
+    private val trace: (String) -> Unit = h264Trace,
+    /**
+     * Ask ffmpeg for `-hwaccel auto` (F-29): the platform's VA-API/NVDEC/DXVA2 when one works,
+     * ffmpeg's own silent fall-back to software when it does not. Off pins the decode to software
+     * outright — the app-level Rendering setting drives it together with the render backend.
+     */
+    private val hardwareDecode: Boolean = true,
+) : H264DecoderFactory {
 
     private val binary: String? by lazy {
         resolveExecutableOnPath(BINARY).also { found ->
@@ -30,9 +38,12 @@ class FfmpegH264Decoders(private val trace: (String) -> Unit = h264Trace) : H264
 
     override val available: Boolean get() = binary != null
 
+    override val description: String
+        get() = if (hardwareDecode) "$BINARY (hwaccel auto)" else "$BINARY (software)"
+
     override fun open(width: Int, height: Int): H264Decoder? {
         val binary = binary ?: return null
-        return runCatching { FfmpegH264Decoder(binary, trace) }
+        return runCatching { FfmpegH264Decoder(binary, hardwareDecode, trace) }
             .onFailure { trace("$BINARY would not start: $it") }
             .getOrNull()
     }
@@ -90,9 +101,13 @@ private fun List<String>.dimension(tag: String): Int =
  * Called only from the session's read loop, one access unit at a time, which is what makes the
  * one-picture-per-call exchange below safe without a lock.
  */
-private class FfmpegH264Decoder(binary: String, private val trace: (String) -> Unit) : H264Decoder {
+private class FfmpegH264Decoder(
+    binary: String,
+    hardwareDecode: Boolean,
+    private val trace: (String) -> Unit,
+) : H264Decoder {
 
-    private val process: Process = ProcessBuilder(command(binary))
+    private val process: Process = ProcessBuilder(ffmpegH264Command(binary, hardwareDecode))
         // Discarded rather than read: an unread stderr pipe fills up and stops the decoder dead.
         .redirectError(Redirect.DISCARD)
         .start()
@@ -227,26 +242,30 @@ private class FfmpegH264Decoder(binary: String, private val trace: (String) -> U
         const val MAX_LINE = 256
 
         const val PICTURE_TIMEOUT_NANOS = 5_000_000_000L
-
-        fun command(binary: String): List<String> = listOf(
-            binary,
-            "-hide_banner", "-loglevel", "quiet", "-nostdin",
-            // Decode with no reordering delay, and never with frame threading: both would hold a
-            // picture back, and the exchange above is one picture per access unit.
-            "-flags", "low_delay", "-thread_type", "slice",
-            // Start decoding on the first access unit instead of collecting seconds of stream to
-            // guess a frame rate from. The rate is stated instead, and nothing here uses it.
-            "-probesize", "32", "-analyzeduration", "0", "-framerate", "30",
-            "-f", "h264", "-i", "pipe:0",
-            // Every picture the decoder produces, exactly once: the frame-rate machinery would
-            // otherwise drop or duplicate pictures to fit the rate stated above.
-            "-fps_mode", "passthrough",
-            "-pix_fmt", "yuv420p",
-            "-f", "yuv4mpegpipe", "-strict", "-1",
-            // Without this the muxer holds pictures until its 32 KB buffer fills, which on a small
-            // surface is several frames of latency.
-            "-flush_packets", "1",
-            "pipe:1",
-        )
     }
+}
+
+/** The ffmpeg invocation; top-level so the command shape is testable without a binary. */
+internal fun ffmpegH264Command(binary: String, hardwareDecode: Boolean): List<String> = buildList {
+    add(binary)
+    addAll(listOf("-hide_banner", "-loglevel", "quiet", "-nostdin"))
+    // Decode with no reordering delay, and never with frame threading: both would hold a
+    // picture back, and the exchange above is one picture per access unit.
+    addAll(listOf("-flags", "low_delay", "-thread_type", "slice"))
+    // Start decoding on the first access unit instead of collecting seconds of stream to
+    // guess a frame rate from. The rate is stated instead, and nothing here uses it.
+    addAll(listOf("-probesize", "32", "-analyzeduration", "0", "-framerate", "30"))
+    // An input option, so it must precede -i. `auto` falls back to software inside ffmpeg when
+    // no acceleration works, which is exactly the containment F-29 asked for.
+    if (hardwareDecode) addAll(listOf("-hwaccel", "auto"))
+    addAll(listOf("-f", "h264", "-i", "pipe:0"))
+    // Every picture the decoder produces, exactly once: the frame-rate machinery would
+    // otherwise drop or duplicate pictures to fit the rate stated above.
+    addAll(listOf("-fps_mode", "passthrough"))
+    addAll(listOf("-pix_fmt", "yuv420p"))
+    addAll(listOf("-f", "yuv4mpegpipe", "-strict", "-1"))
+    // Without this the muxer holds pictures until its 32 KB buffer fills, which on a small
+    // surface is several frames of latency.
+    addAll(listOf("-flush_packets", "1"))
+    add("pipe:1")
 }

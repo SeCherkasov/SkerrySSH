@@ -18,6 +18,8 @@ import java.nio.ByteBuffer
  */
 class MediaCodecH264Decoders(private val trace: (String) -> Unit = h264Trace) : H264DecoderFactory {
 
+    override val description: String get() = "MediaCodec"
+
     override val available: Boolean by lazy {
         val probe = MediaFormat.createVideoFormat(MIME, PROBE_SIZE, PROBE_SIZE)
         val decoder = runCatching {

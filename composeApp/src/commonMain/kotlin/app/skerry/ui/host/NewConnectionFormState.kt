@@ -9,6 +9,7 @@ import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.normalizeNotes
+import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpImageQuality
 import app.skerry.shared.rdp.RdpSpec
 import app.skerry.shared.tag.MAX_TAGS_PER_RECORD
@@ -167,6 +168,15 @@ class NewConnectionFormState {
      * token dropped here would send the next connection to an arbitrary host of the farm.
      */
     var rdpLoadBalanceInfo: String by mutableStateOf("")
+
+    /** Ask for the MS-RDPEGFX pipeline; off falls back to the legacy drawing path (F-28). */
+    var rdpGraphicsPipeline: Boolean by mutableStateOf(true)
+
+    /** Advertise RemoteFX on the legacy path when the server offers it. */
+    var rdpRemoteFx: Boolean by mutableStateOf(true)
+
+    /** Which H.264 ladder the pipeline advertises (see [app.skerry.shared.rdp.RdpH264Mode]). */
+    var rdpH264: RdpH264Mode by mutableStateOf(RdpH264Mode.Auto)
 
     /** Saved SSH profile to tunnel through (ProxyJump), `null` — connect directly. */
     var jumpHostId: String? by mutableStateOf(null)
@@ -328,6 +338,9 @@ class NewConnectionFormState {
         audioOutputDeviceId = if (rdpAudioOutput) rdpAudioDeviceId else "",
         clipboard = rdpClipboard,
         quality = rdpQuality,
+        graphicsPipeline = rdpGraphicsPipeline,
+        remoteFx = rdpRemoteFx,
+        h264 = rdpH264,
     )
 
     companion object {
@@ -377,6 +390,9 @@ class NewConnectionFormState {
                 rdpAudioDeviceId = spec.audioOutputDeviceId
                 rdpClipboard = spec.clipboard
                 rdpQuality = spec.quality
+                rdpGraphicsPipeline = spec.graphicsPipeline
+                rdpRemoteFx = spec.remoteFx
+                rdpH264 = spec.h264
             }
             host.container?.let { spec ->
                 containerRuntime = spec.runtime

@@ -24,6 +24,10 @@ data class RdpClientSettings(
     val channels: List<String> = emptyList(),
     /** Ask for the MS-RDPEGFX pipeline (the server must also have advertised it in the negotiation). */
     val wantsGraphicsPipeline: Boolean = true,
+    /** Advertise RemoteFX in the Bitmap Codecs set when the server offers it. */
+    val wantsRemoteFx: Boolean = true,
+    /** Which H.264 ladder the graphics pipeline advertises. */
+    val h264: RdpH264Mode = RdpH264Mode.Auto,
     /** Session a redirection told us to rejoin (see [RdpTarget.redirectedSessionId]); 0 if none. */
     val redirectedSessionId: Int = 0,
     /** How much of the desktop the server is asked to draw; goes into the Client Info PDU. */
@@ -76,6 +80,8 @@ fun RdpTarget.clientSettings(selectedProtocol: Int, audioOpened: Boolean): RdpCl
         keyboardLayout = keyboardLayout,
         redirectedSessionId = redirectedSessionId,
         wantsGraphicsPipeline = graphicsPipeline,
+        wantsRemoteFx = remoteFx,
+        h264 = h264,
         imageQuality = imageQuality,
         channels = buildList {
             if (clipboard) add(RdpClientSettings.CHANNEL_CLIPBOARD)

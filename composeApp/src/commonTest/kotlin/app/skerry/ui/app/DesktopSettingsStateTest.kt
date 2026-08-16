@@ -166,6 +166,17 @@ class DesktopSettingsStateTest {
     }
 
     @Test
+    fun chooseRenderBackend_updates_and_reports_once_skipping_repeat() {
+        val seen = mutableListOf<RenderBackend>()
+        val s = DesktopSettingsState(onRenderBackendChange = { seen += it })
+        assertEquals(RenderBackend.DEFAULT, s.renderBackend)
+        s.chooseRenderBackend(RenderBackend.SOFTWARE)
+        s.chooseRenderBackend(RenderBackend.SOFTWARE) // repeat — no-op
+        assertEquals(RenderBackend.SOFTWARE, s.renderBackend)
+        assertEquals(listOf(RenderBackend.SOFTWARE), seen)
+    }
+
+    @Test
     fun setTerminalFontSize_updates_and_reports_skipping_repeat_and_out_of_range() {
         val seen = mutableListOf<Int>()
         val s = DesktopSettingsState(onTerminalFontSizeChange = { seen += it })

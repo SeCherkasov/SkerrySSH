@@ -79,7 +79,11 @@ class DesktopSettingsState(
     private val onShowRecentChange: (Boolean) -> Unit = {},
     initialRecentLimit: Int = MAX_RECENT_HOSTS,
     private val onRecentLimitChange: (Int) -> Unit = {},
+    initialRenderBackend: RenderBackend = RenderBackend.DEFAULT,
+    private val onRenderBackendChange: (RenderBackend) -> Unit = {},
 ) {
+    /** Skia render backend (Appearance → Rendering). Read at startup — a change needs a restart. */
+    var renderBackend: RenderBackend by mutableStateOf(initialRenderBackend); private set
     /** Selected terminal font (Appearance → Font). Threaded via [app.skerry.ui.terminal.LocalTerminalAppearance]. */
     var terminalFont: TerminalFont by mutableStateOf(initialTerminalFont); private set
 
@@ -189,6 +193,13 @@ class DesktopSettingsState(
     fun toggleCustomTerminalTheme() {
         customTerminalTheme = !customTerminalTheme
         onCustomTerminalThemeChange(customTerminalTheme)
+    }
+
+    /** Choose the render backend and report outward (for persistence); applied on next start. */
+    fun chooseRenderBackend(backend: RenderBackend) {
+        if (backend == renderBackend) return
+        renderBackend = backend
+        onRenderBackendChange(backend)
     }
 
     /** Choose the app theme and report outward (for persistence). */

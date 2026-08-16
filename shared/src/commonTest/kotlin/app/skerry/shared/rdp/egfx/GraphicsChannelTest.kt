@@ -2,6 +2,7 @@ package app.skerry.shared.rdp.egfx
 
 import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
+import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpRect
 import app.skerry.shared.rdp.RdpUpdate
@@ -50,6 +51,78 @@ class GraphicsChannelTest {
         assertEquals(0x10, advertise.u32(30) and 0x10, "8.1 carries H.264 only with the flag set")
         assertEquals(0x000A0400, advertise.u32(34), "version 10.4, which adds 4:4:4 H.264")
         assertEquals(0, advertise.u32(42) and 0x20, "10.4 must not carry the flag that disables AVC")
+    }
+
+    @Test
+    fun `h264 mode Off advertises version 8 only, even with a decoder on hand`() = runTest {
+        // The profile's escape hatch (F-28): a host whose H.264 path misbehaves can be pinned to
+        // the non-AVC codecs without uninstalling ffmpeg.
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = RecordingAvc()), h264Mode = RdpH264Mode.Off,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        val advertise = sent.single()
+        assertEquals(1, advertise.u16(8), "one capability set")
+        assertEquals(0x00080004, advertise.u32(10), "version 8, which has no H.264")
+    }
+
+    @Test
+    fun `h264 mode Avc420 leaves out the 4 to 4 to 4 version`() = runTest {
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = RecordingAvc()), h264Mode = RdpH264Mode.Avc420,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        val advertise = sent.single()
+        assertEquals(2, advertise.u16(8), "two capability sets")
+        assertEquals(0x00080004, advertise.u32(10), "version 8 as the fallback")
+        assertEquals(0x00080105, advertise.u32(22), "version 8.1 for 4:2:0")
+        assertEquals(0x10, advertise.u32(30) and 0x10, "8.1 must carry the AVC420 flag")
+    }
+
+    @Test
+    fun `h264 mode Avc444 advertises the full ladder, like Auto`() = runTest {
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = RecordingAvc()), h264Mode = RdpH264Mode.Avc444,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        assertEquals(3, sent.single().u16(8), "three capability sets")
+    }
+
+    @Test
+    fun `h264 mode Avc420 refuses a 4 to 4 to 4 bitmap the profile never advertised`() = runTest {
+        // The escape hatch must hold on the receive side too: a server ignoring the capability
+        // exchange must not reach the AVC444 path when the profile pinned the session to 4:2:0.
+        val avc = RecordingAvc()
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = avc), h264Mode = RdpH264Mode.Avc420,
+        ) { }
+        channel.onMessage(bulk(createSurface(id = 1, width = 8, height = 8)))
+
+        val failure = assertFailsWith<RdpProtocolException> {
+            channel.onMessage(bulk(wireToSurfaceRaw(1, codecId = 0x000E, payload = byteArrayOf(1))))
+        }
+
+        assertTrue(failure.message.orEmpty().contains("not advertised"), failure.message.orEmpty())
+        assertTrue(avc.decoded444.isEmpty(), "the refused bitmap still reached the decoder")
+    }
+
+    @Test
+    fun `an explicit h264 mode without a decoder still advertises version 8 only`() = runTest {
+        // The mode expresses preference; the decoder decides possibility. Advertising AVC with
+        // nothing to decode it trades a working session for a frozen screen.
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(), h264Mode = RdpH264Mode.Avc444,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        assertEquals(1, sent.single().u16(8), "one capability set")
     }
 
     @Test

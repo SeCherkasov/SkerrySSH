@@ -1,6 +1,7 @@
 package app.skerry.ui
 
 import app.skerry.ui.app.DesktopSettingsState
+import app.skerry.ui.app.RenderBackend
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -509,7 +510,11 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
             // Playback for a profile that asks for the session's sound (MS-RDPEA).
             audioPlayers = app.skerry.shared.audio.JavaSoundPlayers(),
             // H.264 in the graphics pipeline, on a machine that has an ffmpeg to decode it with.
-            h264Decoders = app.skerry.shared.rdp.egfx.FfmpegH264Decoders(),
+            // Pinning the app to software rendering pins the decode too (F-29/F-30).
+            h264Decoders = app.skerry.shared.rdp.egfx.FfmpegH264Decoders(
+                hardwareDecode = prefs.id("render_backend", RenderBackend.DEFAULT, RenderBackend::fromId) !=
+                    RenderBackend.SOFTWARE,
+            ),
         ),
         workspaceLayout = workspaceLayout,
         ai = ai,
@@ -517,6 +522,12 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         onVaultUnlocked = onVaultUnlocked,
         onVaultReset = onVaultReset,
     )
+}
+
+/** Turn the persisted Rendering choice into Skiko's property (F-30); see [skikoRenderApiFor]. */
+private fun applyRenderBackend(backend: RenderBackend) {
+    val value = app.skerry.ui.app.skikoRenderApiFor(backend, org.jetbrains.skiko.hostOs) ?: return
+    System.setProperty("skiko.renderApi", value)
 }
 
 fun main(args: Array<String>) {
@@ -534,6 +545,9 @@ fun main(args: Array<String>) {
     // read inside it, and the build isn't part of composition (so it wouldn't rebuild on root recomposition).
     val dir = configDir()
     val prefs = FilePrefs(dir)
+    // Before application{}: Skiko reads skiko.renderApi when the first window's layer is created,
+    // and by then the choice is burned in for the process (F-30).
+    applyRenderBackend(prefs.id("render_backend", RenderBackend.DEFAULT, RenderBackend::fromId))
     val graph = buildDesktopGraph(dir, prefs)
     application {
         val deps = graph.deps
@@ -622,6 +636,8 @@ fun main(args: Array<String>) {
                             onCustomTerminalThemeChange = { prefs.set("custom_terminal_theme", it) },
                             initialThemeMode = currentThemeMode.value,
                             onThemeModeChange = { prefs.set("app_theme", it.id); currentThemeMode.value = it },
+                            initialRenderBackend = prefs.id("render_backend", RenderBackend.DEFAULT, RenderBackend::fromId),
+                            onRenderBackendChange = { prefs.set("render_backend", it.id) },
                             initialLocalShellPath = prefs.id("local_shell_path", "") { it },
                             onLocalShellPathChange = { prefs.set("local_shell_path", it) },
                             initialUiLanguage = currentUiLanguage.value,

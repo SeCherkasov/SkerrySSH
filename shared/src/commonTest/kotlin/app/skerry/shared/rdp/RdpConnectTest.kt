@@ -3,6 +3,7 @@ package app.skerry.shared.rdp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
@@ -40,6 +41,28 @@ class RdpConnectTest {
         assertTrue(server.sawConfirmActive, "the client confirmed the capabilities")
         assertTrue(server.sawFontList, "the client finished the finalization sequence")
         assertEquals(SERVER_SHARE_ID, server.confirmedShareId)
+    }
+
+    @Test
+    fun `remoteFx off keeps the codec set out of the confirm active a server offer cannot revive`() = runTest {
+        // The model server offers RemoteFX; the profile declined it. The Bitmap Codecs set must be
+        // absent — this is the escape hatch F-32 exists for, and only the wire proves it.
+        val server = ModelServer()
+
+        RdpConnectionSequence(
+            server.source, server.sink, settings.copy(wantsRemoteFx = false), logon, FakeLicenseCrypto,
+        ).run()
+
+        assertFalse(CapabilitySetType.BITMAP_CODECS in server.confirmedCapabilityTypes)
+    }
+
+    @Test
+    fun `remoteFx on advertises the codec set when the server offers it`() = runTest {
+        val server = ModelServer()
+
+        RdpConnectionSequence(server.source, server.sink, settings, logon, FakeLicenseCrypto).run()
+
+        assertTrue(CapabilitySetType.BITMAP_CODECS in server.confirmedCapabilityTypes)
     }
 
     @Test
@@ -156,6 +179,9 @@ class RdpConnectTest {
         private var joinedChannels = 0
         var sawConfirmActive = false
             private set
+
+        /** Capability-set types the client's Confirm Active carried. */
+        val confirmedCapabilityTypes = mutableSetOf<Int>()
         var sawFontList = false
             private set
         var confirmedShareId = 0
@@ -242,6 +268,20 @@ class RdpConnectTest {
                 RdpShare.PDUTYPE_CONFIRM_ACTIVE -> {
                     sawConfirmActive = true
                     confirmedShareId = body.u32le()
+                    // Walk the capability sets (MS-RDPBCGR 2.2.1.13.2): what the client actually
+                    // advertised is the only proof the profile's codec switches reached the wire.
+                    body.skip(2) // originatorId
+                    val sourceLength = body.u16le()
+                    body.skip(sourceLength)
+                    body.skip(2) // lengthCombinedCapabilities
+                    val setCount = body.u16le()
+                    body.skip(2) // padding
+                    repeat(setCount) {
+                        val type = body.u16le()
+                        val length = body.u16le()
+                        confirmedCapabilityTypes += type
+                        body.skip(length - 4)
+                    }
                 }
 
                 RdpShare.PDUTYPE_DATA -> {

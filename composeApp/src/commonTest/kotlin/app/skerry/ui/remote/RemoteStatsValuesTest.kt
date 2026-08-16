@@ -54,6 +54,7 @@ class RemoteStatsValuesTest {
             notePath("Surface bits")
             notePath("Bitmap")
             noteCodec("RemoteFX")
+            noteDecoder("ffmpeg (hwaccel auto)")
             droppedOrder()
             droppedOrder()
             droppedRect()
@@ -65,6 +66,7 @@ class RemoteStatsValuesTest {
 
         assertEquals("Surface bits + Bitmap", values.path)
         assertEquals("RemoteFX", values.codec)
+        assertEquals("ffmpeg (hwaccel auto)", values.decoder)
         assertEquals("2 / 1", values.dropped)
         assertEquals("1", values.repaints)
     }

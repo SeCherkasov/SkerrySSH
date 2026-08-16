@@ -3,6 +3,11 @@
     <string name="appearance_title">外观</string>
     <string name="appearance_subtitle">主题、界面语言和侧边栏。</string>
     <string name="appearance_theme">应用主题</string>
+    <string name="appearance_rendering">渲染</string>
+    <string name="appearance_rendering_desc">整个应用的 Skia 渲染后端；H.264 解码随之切换。启动时读取，重启后生效。</string>
+    <string name="render_backend_auto">自动</string>
+    <string name="render_backend_hardware">硬件</string>
+    <string name="render_backend_software">软件</string>
     <string name="theme_system">跟随系统</string>
     <string name="theme_light">Skerry 浅色</string>
     <string name="theme_dark">Skerry 深色</string>

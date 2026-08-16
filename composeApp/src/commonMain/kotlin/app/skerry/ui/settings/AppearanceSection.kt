@@ -51,6 +51,12 @@ import app.skerry.ui.generated.resources.theme_tokyo_night
 import app.skerry.ui.generated.resources.theme_dark
 import app.skerry.ui.generated.resources.theme_light
 import app.skerry.ui.generated.resources.theme_system
+import app.skerry.ui.app.RenderBackend
+import app.skerry.ui.generated.resources.appearance_rendering
+import app.skerry.ui.generated.resources.appearance_rendering_desc
+import app.skerry.ui.generated.resources.render_backend_auto
+import app.skerry.ui.generated.resources.render_backend_hardware
+import app.skerry.ui.generated.resources.render_backend_software
 import app.skerry.ui.i18n.UiLanguage
 import app.skerry.ui.i18n.label
 import app.skerry.ui.theme.ThemeMode
@@ -65,6 +71,32 @@ internal fun AppearanceSection(state: DesktopDesignState) {
     SettingRow(label = stringResource(Res.string.appearance_language), modifier = Modifier) {
         Box(Modifier.width(180.dp)) { LanguagePicker(state.settings.uiLanguage, onPick = state.settings::chooseUiLanguage) }
     }
+    HLine(modifier = Modifier.padding(top = 12.dp))
+    // Skia render backend (F-30): read at startup, so the hint states the restart plainly.
+    SettingRow(
+        label = stringResource(Res.string.appearance_rendering),
+        modifier = Modifier,
+        hasHint = true,
+        isDefault = state.settings.renderBackend == RenderBackend.DEFAULT,
+        defaultText = RenderBackend.DEFAULT.label(),
+        onReset = { state.settings.chooseRenderBackend(RenderBackend.DEFAULT) },
+    ) {
+        Box(Modifier.width(180.dp)) {
+            DropdownField(
+                state.settings.renderBackend,
+                RenderBackend.entries,
+                label = { it.label() },
+                onPick = state.settings::chooseRenderBackend,
+            )
+        }
+    }
+    Txt(
+        stringResource(Res.string.appearance_rendering_desc),
+        color = Skerry.colors.dim,
+        size = 11.sp,
+        lineHeight = 15.sp,
+        modifier = Modifier.padding(top = 4.dp),
+    )
     HLine(modifier = Modifier.padding(top = 12.dp))
     // RECENT section in the sidebar: whether to show it and how many hosts. The count is a
     // sub-setting of the toggle (indented, attached right below) so it reads as one block.
@@ -147,6 +179,15 @@ internal fun AppearanceSection(state: DesktopDesignState) {
 private fun LanguagePicker(current: UiLanguage, onPick: (UiLanguage) -> Unit) {
     DropdownField(current, UiLanguage.entries, label = { it.label() }, onPick = onPick)
 }
+
+@Composable
+private fun RenderBackend.label(): String = stringResource(
+    when (this) {
+        RenderBackend.AUTO -> Res.string.render_backend_auto
+        RenderBackend.HARDWARE -> Res.string.render_backend_hardware
+        RenderBackend.SOFTWARE -> Res.string.render_backend_software
+    },
+)
 
 /**
  * App theme card: a mini chrome mock (tab pills, a host row) rendered in the mode's actual

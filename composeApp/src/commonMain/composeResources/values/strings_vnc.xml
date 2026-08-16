@@ -17,6 +17,8 @@
     <string name="rd_stats_path">Path</string>
     <string name="rd_stats_codec">Codec</string>
     <string name="rd_stats_negotiated">Negotiated</string>
+    <string name="rd_stats_decoder">Decoder</string>
+    <string name="rd_stats_rendering">Rendering</string>
     <string name="rd_stats_server_fps">Server fps</string>
     <string name="rd_stats_redraw_fps">Redraws/s</string>
     <string name="rd_stats_decode">Decode, ms</string>

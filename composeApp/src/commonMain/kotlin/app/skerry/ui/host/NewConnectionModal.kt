@@ -61,6 +61,7 @@ import app.skerry.ui.generated.resources.conn_duplicate_name
 import app.skerry.ui.generated.resources.conn_field_ai_policy
 import app.skerry.ui.generated.resources.conn_field_audio
 import app.skerry.ui.generated.resources.conn_field_clipboard
+import app.skerry.ui.generated.resources.conn_field_display
 import app.skerry.ui.generated.resources.conn_field_image_quality
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
@@ -311,6 +312,8 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                     Field(stringResource(Res.string.conn_field_clipboard)) { RdpClipboardSection(form) }
                     Spacer14()
                     Field(stringResource(Res.string.conn_field_image_quality)) { RdpQualitySection(form) }
+                    Spacer14()
+                    Field(stringResource(Res.string.conn_field_display)) { RdpDisplaySection(form) }
                 }
                 // Container profiles: which container/pod on that host to enter. Sits after auth
                 // because "Browse" dials the host with exactly these credentials.

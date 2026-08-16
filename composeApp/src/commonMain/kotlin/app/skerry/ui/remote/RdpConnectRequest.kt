@@ -1,6 +1,7 @@
 package app.skerry.ui.remote
 
 import app.skerry.shared.rdp.RdpClientSettings
+import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpImageQuality
 
 /**
@@ -31,6 +32,12 @@ data class RdpConnectRequest(
     val imageQuality: RdpImageQuality = RdpImageQuality.DEFAULT,
     /** The local machine's keyboard layout (LCID), so the session types what the keyboard types. */
     val keyboardLayout: Int = RdpClientSettings.KEYBOARD_LAYOUT_US,
+    /** Ask for the MS-RDPEGFX pipeline; off is the profile's fallback to the legacy path (F-28). */
+    val graphicsPipeline: Boolean = true,
+    /** Advertise RemoteFX on the legacy path when the server offers it. */
+    val remoteFx: Boolean = true,
+    /** Which H.264 ladder the pipeline advertises. */
+    val h264: RdpH264Mode = RdpH264Mode.Auto,
 ) {
     /** The domain half of `DOMAIN\user`, or empty when the name carries none. */
     val domain: String get() = username.substringBefore('\\', missingDelimiterValue = "")

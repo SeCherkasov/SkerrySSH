@@ -267,6 +267,9 @@ fun DesktopDesignApp(
                                     clipboard = request.clipboard,
                                     imageQuality = request.imageQuality,
                                     keyboardLayout = request.keyboardLayout,
+                                    graphicsPipeline = request.graphicsPipeline,
+                                    remoteFx = request.remoteFx,
+                                    h264 = request.h264,
                                 ),
                                 app.skerry.shared.rdp.RdpCredentials(
                                     username = request.user,

@@ -36,4 +36,32 @@ class RdpSpecTest {
         assertTrue(RdpSpec().isEmpty)
         assertFalse(RdpSpec(quality = RdpImageQuality.Low).isEmpty)
     }
+
+    // --- F-28: graphics-path settings ---
+
+    @Test
+    fun `a profile saved before the display settings keeps today's graphics path`() {
+        val stored = """{"loadBalanceInfo":"tsv://x"}"""
+
+        val spec = json.decodeFromString(RdpSpec.serializer(), stored)
+
+        assertTrue(spec.graphicsPipeline)
+        assertTrue(spec.remoteFx)
+        assertEquals(RdpH264Mode.Auto, spec.h264)
+    }
+
+    @Test
+    fun `the h264 mode is stored by name, so reordering the enum cannot switch codecs`() {
+        val encoded = json.encodeToString(RdpSpec.serializer(), RdpSpec(h264 = RdpH264Mode.Avc444))
+
+        assertTrue(encoded.contains("\"h264\":\"Avc444\""), encoded)
+        assertEquals(RdpH264Mode.Avc444, json.decodeFromString(RdpSpec.serializer(), encoded).h264)
+    }
+
+    @Test
+    fun `any non-default display setting makes the spec worth storing`() {
+        assertFalse(RdpSpec(graphicsPipeline = false).isEmpty)
+        assertFalse(RdpSpec(remoteFx = false).isEmpty)
+        assertFalse(RdpSpec(h264 = RdpH264Mode.Off).isEmpty)
+    }
 }

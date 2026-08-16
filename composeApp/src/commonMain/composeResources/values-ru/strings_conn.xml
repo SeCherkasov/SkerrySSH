@@ -171,6 +171,15 @@
     <string name="conn_image_quality_medium_desc">Без обоев, тем и анимаций.</string>
     <string name="conn_image_quality_high_desc">Полный рабочий стол, сглаживание шрифтов и композиция.</string>
     <string name="conn_image_quality_note">Применяется при подключении: RDP фиксирует это на всю сессию.</string>
+    <string name="conn_field_display">Дисплей</string>
+    <string name="conn_rdp_gfx">Графический конвейер (MS-RDPEGFX)</string>
+    <string name="conn_rdp_gfx_desc">Выключен — сессия рисует по легаси-пути.</string>
+    <string name="conn_rdp_remotefx">RemoteFX</string>
+    <string name="conn_rdp_remotefx_desc">Кодек легаси-пути; предлагается, когда сервер его поддерживает.</string>
+    <string name="conn_rdp_h264">H.264</string>
+    <string name="conn_rdp_h264_auto">Авто</string>
+    <string name="conn_rdp_h264_off">Выкл</string>
+    <string name="conn_rdp_h264_desc">Нужен локальный декодер H.264 (на десктопе — ffmpeg); «Авто» предлагает всё, что можно декодировать.</string>
     <!-- Host key refusals (HostKeyRefusal) — one line each, ending in what to do -->
     <string name="conn_err_hostkey_changed">Ключ хоста изменился. Разберитесь в «Известных хостах».</string>
     <string name="conn_err_hostkey_untrusted">Ключ хоста ещё не доверенный. Подключитесь раз терминалом или добавьте его CA в «Известных хостах».</string>

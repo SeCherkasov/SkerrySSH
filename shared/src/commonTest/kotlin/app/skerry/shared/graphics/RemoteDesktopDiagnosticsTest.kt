@@ -18,6 +18,17 @@ class RemoteDesktopDiagnosticsTest {
     }
 
     @Test
+    fun `the decoder note survives into the snapshot`() {
+        // F-29: which H.264 decoder is live (ffmpeg hwaccel vs software, MediaCodec) is otherwise
+        // invisible — a switch whose effect cannot be seen is a switch nobody can use.
+        assertEquals(null, diagnostics.snapshot().decoder)
+
+        diagnostics.noteDecoder("ffmpeg (hwaccel auto)")
+
+        assertEquals("ffmpeg (hwaccel auto)", diagnostics.snapshot().decoder)
+    }
+
+    @Test
     fun `counters accumulate and the snapshot carries all of them at once`() {
         diagnostics.noteCodec("RemoteFX")
         diagnostics.noteNegotiated("GFX 10.4")

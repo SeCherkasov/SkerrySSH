@@ -3,6 +3,11 @@
     <string name="appearance_title">Appearance</string>
     <string name="appearance_subtitle">Theme, interface language, and the sidebar.</string>
     <string name="appearance_theme">App theme</string>
+    <string name="appearance_rendering">Rendering</string>
+    <string name="appearance_rendering_desc">Skia backend for the whole app; H.264 decode follows it. Read at startup — takes effect after restart.</string>
+    <string name="render_backend_auto">Automatic</string>
+    <string name="render_backend_hardware">Hardware</string>
+    <string name="render_backend_software">Software</string>
     <string name="theme_system">System</string>
     <string name="theme_light">Skerry Light</string>
     <string name="theme_dark">Skerry Dark</string>

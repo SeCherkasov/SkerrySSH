@@ -17,6 +17,8 @@
     <string name="rd_stats_path">路径</string>
     <string name="rd_stats_codec">编解码器</string>
     <string name="rd_stats_negotiated">协商结果</string>
+    <string name="rd_stats_decoder">解码器</string>
+    <string name="rd_stats_rendering">渲染</string>
     <string name="rd_stats_server_fps">服务器帧/秒</string>
     <string name="rd_stats_redraw_fps">重绘/秒</string>
     <string name="rd_stats_decode">解码，毫秒</string>
