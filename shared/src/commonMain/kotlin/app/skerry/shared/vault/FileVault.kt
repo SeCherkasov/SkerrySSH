@@ -338,8 +338,12 @@ class FileVault(
         // under the current key (adoptDataKey leftovers).
         val version = current.version + 1
         val at = now()
-        val blob = crypto.seal(key, ByteArray(0), recordAad(current.id, current.type, version, current.deviceId, deleted = true, updatedAt = at))
-        val tombstone = current.copy(deleted = true, version = version, updatedAt = at, blob = blob)
+        // Stamped with THIS device, like every other write: the deviceId is the tie-break of the
+        // last-writer-wins rule (here and on the server), so a tombstone wearing the original
+        // author's id ties exactly with that author's own next edit — and a tie neither side can
+        // break leaves the two devices permanently disagreeing about whether the record exists.
+        val blob = crypto.seal(key, ByteArray(0), recordAad(current.id, current.type, version, deviceId, deleted = true, updatedAt = at))
+        val tombstone = current.copy(deleted = true, version = version, updatedAt = at, deviceId = deviceId, blob = blob)
         val updated = records.toMutableList().also { it[index] = tombstone }
         commit(currentMeta, updated)
         _localChanges.tryEmit(Unit) // local delete → wake live-sync push

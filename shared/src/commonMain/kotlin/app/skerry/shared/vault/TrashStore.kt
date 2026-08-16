@@ -188,7 +188,9 @@ class TrashStore(
      * layout store holds no state of its own, so a separate instance is safe here.
      */
     private fun restoreHostOrder(hostId: String) {
-        val current = layout.read()
+        // readOrNull: an unreadable layout record must not be replaced by a one-host order (see
+        // [app.skerry.shared.host.VaultHostStore.put]). The host is restored either way.
+        val current = layout.readOrNull() ?: return
         if (hostId !in current.hostOrder) layout.write(current.copy(hostOrder = current.hostOrder + hostId))
     }
 

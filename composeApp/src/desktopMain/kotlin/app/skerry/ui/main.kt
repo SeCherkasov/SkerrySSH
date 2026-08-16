@@ -601,11 +601,9 @@ fun main(args: Array<String>) {
                     // customGroupsProvider after unlock, writes changes to the layout record.
                     initialCustomGroups = emptyList(),
                     onCustomGroupsChange = { groups ->
-                        workspaceLayout.write(
-                            workspaceLayout.read().copy(
-                                groups = groups.filter { it.section == HostSection.Terminal }.map { it.name },
-                                remoteDesktopGroups = groups.filter { it.section == HostSection.RemoteDesktops }.map { it.name },
-                            ),
+                        workspaceLayout.updateGroups(
+                            groups = groups.filter { it.section == HostSection.Terminal }.map { it.name },
+                            remoteDesktopGroups = groups.filter { it.section == HostSection.RemoteDesktops }.map { it.name },
                         )
                     },
                     customGroupsProvider = {

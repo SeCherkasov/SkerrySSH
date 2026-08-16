@@ -47,8 +47,30 @@ class WorkspaceLayoutStore(private val vault: Vault) {
 
     fun read(): WorkspaceLayout = store.load()
 
+    /**
+     * The layout, or null when the record exists but cannot be read. Every write here is a
+     * read-modify-write over the whole account's host order, so a reader that cannot tell an
+     * unreadable record from a missing one replaces that order with whatever it is holding — and
+     * LWW then carries the replacement to every device. Callers that write skip the update instead.
+     */
+    fun readOrNull(): WorkspaceLayout? = store.loadOrNull()
+
     fun write(layout: WorkspaceLayout) {
         store.save(layout)
+    }
+
+    /**
+     * Replaces the empty-folder lists, keeping the host order the record also carries.
+     *
+     * Lives here rather than in the caller because it is a read-modify-write of the one record, and
+     * every one of those has to hold the same two rules: it runs under [Vault.transaction], so a
+     * merge from background sync cannot land between the read and the write, and it skips entirely
+     * when the record cannot be read — writing over an unreadable layout would replace the whole
+     * account's host order with an empty one, and LWW would carry that to every device.
+     */
+    fun updateGroups(groups: List<String>, remoteDesktopGroups: List<String>): Unit = vault.transaction {
+        val current = readOrNull() ?: return@transaction
+        write(current.copy(groups = groups, remoteDesktopGroups = remoteDesktopGroups))
     }
 
     companion object {

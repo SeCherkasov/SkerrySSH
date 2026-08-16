@@ -8,6 +8,7 @@ import app.skerry.shared.vault.SyncMeta
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecord
+import app.skerry.shared.vault.WorkspaceLayoutStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -25,6 +26,57 @@ class VaultHostStoreTest {
         store.put(host("h1", "Web"))
         assertEquals(listOf("h1"), store.all().map { it.id })
         assertEquals("Web", store.all().single().label)
+    }
+
+    /**
+     * The layout is one record holding the whole account's host order, and every write to it is a
+     * read-modify-write. A record that exists but no longer decrypts (what adopting an account
+     * dataKey leaves behind) reads as "no layout at all", so the next saved host would replace the
+     * order of every host with a one-element list — and LWW would carry that to every device.
+     */
+    @Test
+    fun `an unreadable layout record is left alone instead of being overwritten`() {
+        val vault = FakeVault()
+        val store = VaultHostStore(vault)
+        store.put(host("a"))
+        store.put(host("b"))
+
+        vault.unreadable += WorkspaceLayoutStore.LAYOUT_ID
+        store.put(host("c"))
+        vault.unreadable -= WorkspaceLayoutStore.LAYOUT_ID
+
+        assertEquals(
+            listOf("a", "b"),
+            WorkspaceLayoutStore(vault).read().hostOrder,
+            "the order of every host was replaced by the one host saved while it was unreadable",
+        )
+    }
+
+    /**
+     * The same record, written by the other owner: the group layer replaces the empty-folder lists
+     * and must keep the host order beside them — and skip entirely when the record cannot be read,
+     * or one renamed folder wipes the order of every host on the account.
+     */
+    @Test
+    fun `updating groups keeps the host order, and skips an unreadable record`() {
+        val vault = FakeVault()
+        val store = VaultHostStore(vault)
+        store.put(host("a"))
+        store.put(host("b"))
+        val layout = WorkspaceLayoutStore(vault)
+
+        layout.updateGroups(groups = listOf("prod"), remoteDesktopGroups = listOf("lab"))
+
+        assertEquals(listOf("a", "b"), layout.read().hostOrder, "the host order was dropped")
+        assertEquals(listOf("prod"), layout.read().groups)
+        assertEquals(listOf("lab"), layout.read().remoteDesktopGroups)
+
+        vault.unreadable += WorkspaceLayoutStore.LAYOUT_ID
+        layout.updateGroups(groups = listOf("staging"), remoteDesktopGroups = emptyList())
+        vault.unreadable -= WorkspaceLayoutStore.LAYOUT_ID
+
+        assertEquals(listOf("a", "b"), layout.read().hostOrder, "an unreadable layout was overwritten")
+        assertEquals(listOf("prod"), layout.read().groups, "the update landed on a record it could not read")
     }
 
     @Test

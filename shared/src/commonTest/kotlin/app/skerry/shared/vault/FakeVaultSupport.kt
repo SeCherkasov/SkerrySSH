@@ -16,6 +16,12 @@ internal class FakeVault : Vault {
     /** Flip to exercise the locked-vault path of a store; unlocked by default. */
     var locked: Boolean = false
 
+    /**
+     * Records that exist and are live but whose payload no longer decrypts — what an adopted
+     * account key leaves behind (blobs sealed under the previous one).
+     */
+    val unreadable: MutableSet<String> = mutableSetOf()
+
     /** Nesting depth of [transaction] (0 = no transaction held) — lets tests assert atomic sequences. */
     private var transactionDepth = 0
 
@@ -45,7 +51,7 @@ internal class FakeVault : Vault {
     override fun mergeRemote(remote: List<VaultRecord>): MergeResult = MergeResult.EMPTY
 
     override fun openPayload(id: String): ByteArray? =
-        entries[id]?.takeIf { !it.record.deleted }?.payload
+        if (id in unreadable) null else entries[id]?.takeIf { !it.record.deleted }?.payload
 
     override fun put(id: String, type: RecordType, payload: ByteArray) = putAtLeast(id, type, payload, minVersion = 0L)
 
