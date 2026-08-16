@@ -9,6 +9,7 @@
     <string name="runbook_select_or_create">Выберите сценарий или создайте новый.</string>
     <string name="runbook_empty">Сценариев пока нет</string>
     <string name="runbook_no_matches">Ничего не найдено</string>
+    <string name="runbook_none_runnable">Ни в одном сценарии нет шагов</string>
     <string name="runbook_empty_mobile">Сценариев пока нет. Нажмите +, чтобы записать процедуру.</string>
     <string name="runbook_field_name">Название</string>
     <string name="runbook_field_description">Описание</string>
@@ -35,6 +36,7 @@
     <string name="runbook_run_title">Запуск сценария</string>
     <string name="runbook_run_needs_session">Сначала подключитесь — сценарий выполняется в терминале.</string>
     <string name="runbook_run_busy">Другой сценарий уже выполняется.</string>
+    <string name="runbook_run_no_steps">Сначала сохраните шаг — сценарий выполняет сохранённые шаги.</string>
     <string name="runbook_step_count">Шагов: %1$d</string>
 
     <!-- Run panel -->

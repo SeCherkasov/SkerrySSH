@@ -2,7 +2,10 @@ package app.skerry.ui.mobile
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import app.skerry.ui.app.MobileRoute
@@ -47,7 +50,11 @@ class MobileSnippetFormTest {
         waitForIdle()
         openEditor()
         onField(Res.string.lib_snippets_field_name).performTextInput(NAME)
-        onNodeWithTag(UiTags.FORM_SAVE).performClick()
+
+        // Refused where the user can see it, and refused for real: a disabled control still carries
+        // the click action an accessibility service invokes.
+        onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+        onNodeWithTag(UiTags.FORM_SAVE).performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
 
         assertNull(shell.snippets.snippets.firstOrNull { it.snippet.label == NAME })

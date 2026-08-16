@@ -5,6 +5,9 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.ui.app.MobileRoute
@@ -44,13 +47,18 @@ class MobileRunbookFormTest {
     }
 
     @Test
-    fun `a runbook with no step is not saved`() = runMobileShell { shell ->
+    fun `a runbook with no step cannot be saved`() = runMobileShell { shell ->
         shell.state.push(MobileRoute.Runbooks)
         waitForIdle()
         openEditor()
         onField(Res.string.runbook_field_name).performTextInput(NAME)
-        press(UiTags.FORM_SAVE)
 
+        // Save is refused where the user can see it, not silently on the tap.
+        onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+        // And refused for real: a disabled control still carries its click action, which is the
+        // one an accessibility service invokes.
+        onNodeWithTag(UiTags.FORM_SAVE).performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
         assertTrue(shell.runbooks.runbooks.none { it.runbook.label == NAME })
     }
 

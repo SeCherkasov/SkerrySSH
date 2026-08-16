@@ -14,9 +14,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import app.skerry.ui.nav.PlatformBackHandler
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import app.skerry.ui.app.UiTags
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -65,7 +67,8 @@ fun MobileBottomSheet(
                 .background(Skerry.colors.surface2)
                 // Absorb clicks on the panel so tapping the sheet doesn't dismiss it (dismiss is scrim/swipe only).
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = {})
-                .then(panelModifier),
+                .then(panelModifier)
+                .testTag(UiTags.SHEET_PANEL),
         ) {
             SheetHandle(drag)
             content()

@@ -76,6 +76,7 @@ import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.modalBody
 import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
@@ -299,8 +300,14 @@ private fun MobileSnippetEditSheet(
     val form = remember { SnippetFormState.fromEntry(entry) }
 
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.9f) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Txt(if (entry == null) stringResource(Res.string.lib_snippets_new) else stringResource(Res.string.lib_snippets_edit), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
+        Txt(
+            if (entry == null) stringResource(Res.string.lib_snippets_new) else stringResource(Res.string.lib_snippets_edit),
+            color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 18.dp).padding(bottom = 16.dp),
+        )
+        // Fields scroll, actions stay: a long command and a wrapped tag row used to push Save and
+        // Delete past the sheet's ceiling, where nothing could reach them.
+        Column(modalBody().fillMaxWidth().padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             MobileFormField(stringResource(Res.string.lib_snippets_field_name)) {
                 MobileFormInput(form.label, { form.label = it }, stringResource(Res.string.lib_snippets_ph_name))
             }
@@ -324,12 +331,16 @@ private fun MobileSnippetEditSheet(
                     menuBackground = Skerry.colors.surface2,
                 )
             }
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (canRun) {
                 MobileSheetButton(stringResource(Res.string.lib_snippets_run_in_terminal), onClick = onRun, icon = "bolt", filled = false, modifier = Modifier.fillMaxWidth())
             }
             MobileSheetButton(
                 stringResource(Res.string.lib_snippets_save_snippet),
+                // Guarded twice: an accessibility click action fires even on a disabled control.
                 onClick = { if (form.canSave) onSave(form.toDraft()) },
+                enabled = form.canSave,
                 modifier = Modifier.fillMaxWidth().testTag(UiTags.FORM_SAVE),
             )
             if (onDelete != null) {

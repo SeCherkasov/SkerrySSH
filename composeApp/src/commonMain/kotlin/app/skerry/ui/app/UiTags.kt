@@ -60,6 +60,9 @@ object UiTags {
     const val NEW_GROUP: String = "nav.newGroup"
     const val NEW_RUNBOOK: String = "nav.newRunbook"
 
+    /** The panel of a phone bottom sheet — what its content must stay inside to be reachable. */
+    const val SHEET_PANEL: String = "nav.sheetPanel"
+
     /** Help button in a library screen's header and the dialog it opens (one screen at a time). */
     const val HELP: String = "nav.help"
     const val HELP_DIALOG: String = "nav.helpDialog"

@@ -10,9 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,10 +48,8 @@ fun HelpDialog(title: String, closeLabel: String, onDismiss: () -> Unit, content
             Txt(title, color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
             // Sized against the viewport, not a fixed cap: on a short screen (landscape phone) a
             // fixed content height would push the Close row past the edge with no way to reach it.
-            // weight(fill = false) lets short content stay short and long content stop where the
-            // title and the button row still fit.
             Column(
-                Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
+                modalBody(),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) { content() }
             Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {

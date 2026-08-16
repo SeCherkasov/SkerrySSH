@@ -25,6 +25,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import app.skerry.shared.runbook.RunbookScript
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.snippet.captureSnippetRunEnvironment
@@ -56,6 +59,7 @@ import app.skerry.ui.generated.resources.runbook_policy_watchdog_value
 import app.skerry.ui.generated.resources.runbook_run
 import app.skerry.ui.generated.resources.runbook_run_busy
 import app.skerry.ui.generated.resources.runbook_run_needs_session
+import app.skerry.ui.generated.resources.runbook_run_no_steps
 import app.skerry.ui.generated.resources.runbook_step_confirm
 import app.skerry.ui.generated.resources.runbook_step_continue_on_error
 import app.skerry.ui.generated.resources.runbook_step_n
@@ -102,7 +106,10 @@ internal fun RunbookRunCard(
     // A run needs both halves of the session; keeping them in one value keeps the click handler flat.
     val target = if (session != null && terminal != null) runbookTarget(session.id, terminal, session.controller) else null
     val recording = terminal?.recording == true
-    val canRun = runner != null && target != null && !busy
+    // A runbook with no steps is one the runner refuses; it only arrives by sync, and the phone's
+    // sheet says so too — the two must not disagree about why Run is inert.
+    val hasSteps = runbook.steps.isNotEmpty()
+    val canRun = runner != null && target != null && !busy && hasSteps
 
     Column(
         Modifier.width(RUNBOOK_PANEL_WIDTH).fillMaxHeight().background(Skerry.colors.surface2)
@@ -159,12 +166,18 @@ internal fun RunbookRunCard(
         // The section is app-level and can be open with no session at all; say why Run is inert
         // instead of leaving a button that quietly does nothing.
         val hint = when {
+            !hasSteps -> stringResource(Res.string.runbook_run_no_steps)
             session == null || terminal == null -> stringResource(Res.string.runbook_run_needs_session)
             busy -> stringResource(Res.string.runbook_run_busy)
             else -> null
         }
         when {
-            hint != null -> Txt(hint, color = Skerry.colors.faint, size = 11.5.sp, lineHeight = 16.sp)
+            // Drawn for the eye; the button below announces the same string as its state, and a
+            // second node would read it out again to a screen reader.
+            hint != null -> Txt(
+                hint, color = Skerry.colors.faint, size = 11.5.sp, lineHeight = 16.sp,
+                modifier = Modifier.clearAndSetSemantics {},
+            )
             session != null -> Chip(session.displayTitle, active = true)
         }
 
@@ -180,7 +193,7 @@ internal fun RunbookRunCard(
                 },
                 icon = "play_arrow",
                 enabled = canRun,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).semantics { hint?.let { stateDescription = it } },
             )
             GhostButton(stringResource(Res.string.runbook_edit), onClick = onEdit, modifier = Modifier.weight(1f))
         }

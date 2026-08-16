@@ -50,6 +50,7 @@ import app.skerry.ui.design.rememberModalPresence
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_empty
 import app.skerry.ui.generated.resources.runbook_no_matches
+import app.skerry.ui.generated.resources.runbook_none_runnable
 import app.skerry.ui.generated.resources.runbook_palette_placeholder
 import app.skerry.ui.generated.resources.runbook_run_open
 import app.skerry.ui.generated.resources.runbook_step_count
@@ -128,7 +129,10 @@ private fun RunbookPalette(manager: RunbookManager, onPick: (RunbookEntry) -> Un
     rememberModalPresence()
     val mono = LocalFonts.current.mono
     var query by remember { mutableStateOf("") }
-    val all = manager.runbooks
+    // The palette exists to start a run: a runbook with no steps would close the popup and start
+    // nothing, so it is not offered here (the section's card explains it instead).
+    val saved = manager.runbooks
+    val all = saved.filter { it.runbook.steps.isNotEmpty() }
     val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
     val searchFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { searchFocus.requestFocus() }
@@ -159,7 +163,12 @@ private fun RunbookPalette(manager: RunbookManager, onPick: (RunbookEntry) -> Un
         Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
             if (filtered.isEmpty()) {
                 Txt(
-                    if (all.isEmpty()) stringResource(Res.string.runbook_empty) else stringResource(Res.string.runbook_no_matches),
+                    // Three different facts: nothing saved, nothing runnable, nothing matching.
+                    when {
+                        saved.isEmpty() -> stringResource(Res.string.runbook_empty)
+                        all.isEmpty() -> stringResource(Res.string.runbook_none_runnable)
+                        else -> stringResource(Res.string.runbook_no_matches)
+                    },
                     color = Skerry.colors.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp),
                 )
             } else {

@@ -8,9 +8,12 @@ import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.design.LocalFonts
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -20,6 +23,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import app.skerry.ui.AppDependencies
 import app.skerry.ui.app.DesktopDesignState
@@ -202,10 +206,17 @@ internal class MobileShell(
 
 /**
  * Mobile shell over the seeded catalog, in a phone-sized box (390x844dp, as the mobile screenshot
- * renders it). The scene itself is the desktop default; the box is what the layout sees.
+ * renders it) — clamped by the scene's own 1024x768, so the layout actually sees 390x768. The box
+ * is only ever tighter than it asks for, which is the safe direction for a clipping test.
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun runMobileShell(
+    // Seeded sessions cost a fake transport per host, so screens that never look at a session keep
+    // the cheap shell; the run paths (a snippet or a runbook needs a live terminal) ask for them.
+    withSessions: Boolean = false,
+    size: DpSize = DpSize(PHONE_WIDTH, PHONE_HEIGHT),
+    /** System font scale, for the layouts that have to survive one: 1f is the phone's default. */
+    fontScale: Float = 1f,
     body: ComposeUiTest.(MobileShell) -> Unit,
 ) = runComposeUiTest {
     val hosts = seededHosts()
@@ -216,24 +227,49 @@ internal fun runMobileShell(
     val tunnels = seededTunnels(hosts, scope)
     val mobileRunbooks = seededRunbooks()
     val ai = seededAi(scope)
+    val sessions = if (withSessions) seededSessions(hosts, scope) else null
+    var runSeq = 0
+    val runner = RunbookRunner(scope = scope, newId = { "run-exec-${runSeq++}" })
+    FakeShellInput.clear()
     try {
         setContent {
             SkerryTheme {
-                Box(Modifier.size(width = PHONE_WIDTH, height = PHONE_HEIGHT)) {
-                    MobileDesignApp(
-                        deps = AppDependencies(hosts = hosts, snippets = snippets, tunnels = tunnels, runbooks = mobileRunbooks),
-                        state = state,
-                        sessions = null,
-                        // The AI screen draws only its header without a controller behind it.
-                        aiOverride = ai,
-                    )
+                Box(Modifier.size(size)) {
+                    CompositionLocalProvider(
+                        LocalDensity provides Density(LocalDensity.current.density, fontScale),
+                    ) {
+                        MobileDesignApp(
+                            deps = AppDependencies(
+                                hosts = hosts, snippets = snippets, tunnels = tunnels,
+                                runbooks = mobileRunbooks, runbookRunner = runner,
+                            ),
+                            state = state,
+                            sessions = sessions,
+                            // The AI screen draws only its header without a controller behind it.
+                            aiOverride = ai,
+                        )
+                    }
                 }
             }
         }
         waitForIdle()
+        // Same wait as [runDesktopShell]: the seeded session connects on the background scope, and
+        // a screen that reads Connected (the Run button of a runbook) would otherwise be measured
+        // before the fake transport lands — a flake only a loaded runner sees.
+        if (sessions != null) {
+            waitUntil("seeded session reaches Connected", timeoutMillis = 10_000) {
+                val s = sessions.active?.focusedPane?.controller?.uiState
+                if (s is ConnectionUiState.Error) error("seeded session failed to connect: ${s.message}")
+                s is ConnectionUiState.Connected
+            }
+        }
         body(MobileShell(hosts, state, snippets, tunnels, mobileRunbooks, ai))
     } finally {
+        runner.close()
+        sessions?.disconnectAll()
         scope.cancel()
+        // A write already dispatched must not land in the next test's log.
+        FakeShellInput.clear()
     }
 }
 
@@ -324,7 +360,9 @@ internal fun ComposeUiTest.onPickerAt(label: StringResource, index: Int = 0): Se
  */
 @OptIn(ExperimentalTestApi::class)
 internal fun ComposeUiTest.press(tag: String) {
-    onNodeWithTag(tag).performSemanticsAction(SemanticsActions.OnClick)
+    // The click action is registered even on a disabled control, so pressing one by semantics would
+    // drive a path the user cannot take: the state is asserted first.
+    onNodeWithTag(tag).assertIsEnabled().performSemanticsAction(SemanticsActions.OnClick)
     waitForIdle()
 }
 
