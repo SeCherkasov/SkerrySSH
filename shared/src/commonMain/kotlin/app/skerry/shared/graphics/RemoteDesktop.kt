@@ -40,6 +40,12 @@ interface RemoteDesktopSession {
     /** A key press or release; each protocol picks the field it needs out of [RemoteKeyEvent]. */
     suspend fun sendKey(event: RemoteKeyEvent, down: Boolean)
 
+    /**
+     * Report the local Caps/Num/Scroll state so the remote session does not drift out of step. A
+     * no-op where the protocol keeps no lock state of its own (RFB sends keysyms and has none).
+     */
+    suspend fun syncLockKeys(scroll: Boolean, num: Boolean, caps: Boolean) = Unit
+
     /** Send local clipboard text to the remote machine. */
     suspend fun sendClipboardText(text: String)
 

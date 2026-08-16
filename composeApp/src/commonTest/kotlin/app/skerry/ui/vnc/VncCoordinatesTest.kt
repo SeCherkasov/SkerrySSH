@@ -81,4 +81,15 @@ class VncCoordinatesTest {
     fun panning_without_a_measured_viewport_is_left_untouched() {
         assertEquals(Offset(7f, 7f), clampPan(Offset(7f, 7f), IntSize.Zero, 100, 100, 2f))
     }
+
+    @Test
+    fun a_point_outside_the_image_clamps_onto_its_edge() {
+        // 100x100 desktop centered in a 200x100 canvas: the image spans x = 50..150.
+        val geom = fitGeometry(200f, 100f, 100, 100)
+        // A release over the letterbox must still land on the desktop (F-37), at the nearest edge.
+        assertEquals(IntOffset(0, 20), geom.toFramebufferClamped(10f, 20f))
+        assertEquals(IntOffset(99, 99), geom.toFramebufferClamped(500f, 500f))
+        // Inside the image it agrees with the exact mapping.
+        assertEquals(geom.toFramebuffer(70f, 30f), geom.toFramebufferClamped(70f, 30f))
+    }
 }

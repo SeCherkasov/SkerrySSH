@@ -9,8 +9,6 @@ import app.skerry.shared.graphics.RemoteKeyEvent
 import app.skerry.shared.graphics.RemoteRect
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * Presents an [RdpSession] as a [RemoteDesktopSession].
@@ -29,7 +27,8 @@ class RdpRemoteDesktop(
     override val title: String = session.connectedHost,
 ) : RemoteDesktopSession {
 
-    private val pointerLock = Mutex()
+    // Written from the UI's single input actor; the mask-to-transition translation needs no lock
+    // once callers are serialised, and they are — see RemoteDesktopScreenState's input actor (F-10).
     private var lastButtons = 0
 
     override val framebuffer: RemoteFramebuffer get() = session.framebuffer
@@ -77,7 +76,7 @@ class RdpRemoteDesktop(
         }
     }
 
-    override suspend fun sendPointer(x: Int, y: Int, buttonMask: Int) = pointerLock.withLock {
+    override suspend fun sendPointer(x: Int, y: Int, buttonMask: Int) {
         val wheelBits = buttonMask and WHEEL_MASK
         if (wheelBits != 0) {
             // A wheel "click" arrives as a press of one of these bits; the release that follows
@@ -88,13 +87,13 @@ class RdpRemoteDesktop(
                 wheelBits and WHEEL_LEFT != 0 -> session.sendWheel(-1, RdpWheelAxis.Horizontal, x, y)
                 wheelBits and WHEEL_RIGHT != 0 -> session.sendWheel(1, RdpWheelAxis.Horizontal, x, y)
             }
-            return@withLock
+            return
         }
 
         val buttons = buttonMask and BUTTON_MASK
         if (buttons == lastButtons) {
             session.sendPointerMove(x, y)
-            return@withLock
+            return
         }
         for ((bit, button) in BUTTONS) {
             val wasDown = lastButtons and bit != 0
@@ -113,6 +112,9 @@ class RdpRemoteDesktop(
             event.codePoint != 0 -> session.sendUnicode(event.codePoint, down)
         }
     }
+
+    override suspend fun syncLockKeys(scroll: Boolean, num: Boolean, caps: Boolean) =
+        session.sendLockKeys(scroll, num, caps)
 
     override suspend fun sendClipboardText(text: String) = session.sendClipboardText(text)
 

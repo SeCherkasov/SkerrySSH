@@ -1,5 +1,6 @@
 package app.skerry.ui.vnc
 
+import app.skerry.ui.remote.readLockKeys
 import app.skerry.ui.remote.remoteKeyEvent
 import app.skerry.ui.remote.REMOTE_BAR_AUTO_HIDE_MS
 import app.skerry.ui.remote.REMOTE_BAR_EDGE
@@ -45,6 +46,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -315,6 +317,9 @@ fun VncSurface(
         mod = mod
             .pointerInput(screen) {
                 awaitPointerEventScope {
+                    // The button state last forwarded, so a release over the letterbox is
+                    // recognisable as a state change worth clamping onto the image (F-37).
+                    var lastMask = 0
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull() ?: continue
@@ -339,10 +344,10 @@ fun VncSurface(
                         // Set before the null-check below: leaving the image (onto the letterbox) is
                         // exactly when the local pointer has to come back.
                         pointerOverImage = fb != null
-                        if (fb == null) { continue }
-                        latestPointer.value = change.position
-                        pointerTick.trySend(Unit)
                         if (event.type == PointerEventType.Scroll) {
+                            if (fb == null) { continue }
+                            latestPointer.value = change.position
+                            pointerTick.trySend(Unit)
                             // Wheel goes to the server (scroll inside the remote desktop). No local
                             // zoom on desktop: without panning it only shows the center, and the fit
                             // already fills the tab.
@@ -352,18 +357,41 @@ fun VncSurface(
                                 screen.onPointer(fb.x, fb.y, bit)   // wheel = press+release
                                 screen.onPointer(fb.x, fb.y, 0)
                             }
-                        } else {
-                            var mask = 0
-                            if (event.buttons.isPrimaryPressed) mask = mask or VncButton.LEFT
-                            if (event.buttons.isTertiaryPressed) mask = mask or VncButton.MIDDLE
-                            if (event.buttons.isSecondaryPressed) mask = mask or VncButton.RIGHT
-                            screen.onPointer(fb.x, fb.y, mask)
+                            change.consume()
+                            continue
                         }
+                        var mask = 0
+                        if (event.buttons.isPrimaryPressed) mask = mask or VncButton.LEFT
+                        if (event.buttons.isTertiaryPressed) mask = mask or VncButton.MIDDLE
+                        if (event.buttons.isSecondaryPressed) mask = mask or VncButton.RIGHT
+                        // A move on the letterbox is nothing to the server, but a button CHANGE
+                        // there is a press or release that must not be dropped — the server would
+                        // keep the button held for the rest of the session (F-37). Clamp it onto
+                        // the nearest edge of the image instead.
+                        val target = fb
+                            ?: if (mask != lastMask) {
+                                geom.toFramebufferClamped(change.position.x, change.position.y)
+                            } else {
+                                null
+                            }
+                        if (target == null) { continue }
+                        if (fb != null) {
+                            latestPointer.value = change.position
+                            pointerTick.trySend(Unit)
+                        }
+                        screen.onPointer(target.x, target.y, mask)
+                        lastMask = mask
                         change.consume()
                     }
                 }
             }
             .focusRequester(focus)
+            // Focus loss releases whatever keys are held (F-12), the same way the terminal reports
+            // its focus; focus gain re-syncs the lock keys (F-13).
+            .onFocusChanged { state ->
+                if (state.isFocused) screen.onLockKeys(readLockKeys(null))
+                screen.notifyFocus(state.isFocused)
+            }
             // onPreviewKeyEvent MUST sit before focusable(): preview key events are dispatched from
             // the focus root down TO the focused node and stop there. Placed after focusable() this
             // handler is a descendant of the focus target and never sees a key — the terminal's
@@ -374,6 +402,8 @@ fun VncSurface(
                     KeyEventType.KeyUp -> false
                     else -> return@onPreviewKeyEvent false
                 }
+                // The lock keys ride on every event, so a Caps toggled mid-session syncs too.
+                screen.onLockKeys(readLockKeys(ev))
                 val event = remoteKeyEvent(ev.key, ev.utf16CodePoint)
                 if (event == null) return@onPreviewKeyEvent false
                 screen.onKey(event, down)

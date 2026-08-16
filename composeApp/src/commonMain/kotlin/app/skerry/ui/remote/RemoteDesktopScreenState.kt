@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 /**
@@ -71,6 +72,13 @@ class RemoteDesktopScreenState(
     fun publishFrame() {
         frame++
     }
+
+    // Declared above the init block on purpose: the actor launched there reads it, and on an
+    // eager dispatcher it does so before any property declared below the block exists.
+    private val input = Channel<InputWrite>(Channel.UNLIMITED)
+
+    @Volatile
+    private var lastLockKeys: LockKeys? = null
 
     /** Remote desktop resolution (updates on server resize). */
     var desktopSize by mutableStateOf(IntSize(session.framebuffer.width, session.framebuffer.height))
@@ -238,6 +246,9 @@ class RemoteDesktopScreenState(
     fun setVisible(visible: Boolean) {
         if (visible == outputVisible) return
         outputVisible = visible
+        // A hidden session takes no more key events, so whatever is down now stays down on the
+        // server until it comes back — release it on the way out, like a focus loss (F-12).
+        if (!visible) releaseHeldKeys()
         val previous = visibilityJob
         visibilityJob = send {
             previous?.join()
@@ -284,11 +295,10 @@ class RemoteDesktopScreenState(
      */
     fun sendCtrlAltDel() {
         if (viewOnly) return
+        // Through the actor like every other key, so the sequence cannot interleave with typing.
         val keys = CTRL_ALT_DEL.mapNotNull { remoteKeyEvent(it, 0) }
-        send {
-            keys.forEach { session.sendKey(it, down = true) }
-            keys.asReversed().forEach { session.sendKey(it, down = false) }
-        }
+        keys.forEach { input.trySend(KeyWrite(it, down = true)) }
+        keys.asReversed().forEach { input.trySend(KeyWrite(it, down = false)) }
     }
 
     private val _close = MutableStateFlow<RemoteDesktopUpdate.Closed?>(null)
@@ -315,6 +325,7 @@ class RemoteDesktopScreenState(
     val imageBitmap: ImageBitmap get() = image.bitmap
 
     init {
+        scope.launch { runInputActor() }
         scope.launch {
             // The transports already turn a decode failure into a Closed update; this is the
             // belt-and-braces net, so a throwing session surfaces as a dropped session (the UI shows
@@ -349,6 +360,9 @@ class RemoteDesktopScreenState(
                 image.resize(update.width, update.height)
                 desktopSize = IntSize(update.width, update.height)
                 frame++
+                // An RDP resize can be a reactivation, which resets the server's input state —
+                // resend the lock keys so Caps/Num survive it (F-13).
+                lastLockKeys?.let { input.trySend(LockWrite(it)) }
             }
 
             is RemoteDesktopUpdate.RemoteResizeSupported -> {
@@ -410,13 +424,140 @@ class RemoteDesktopScreenState(
     /** Forward a pointer event (framebuffer coordinates + button mask). No-op in view-only mode. */
     fun onPointer(x: Int, y: Int, buttonMask: Int) {
         if (viewOnly) return
-        send { session.sendPointer(x, y, buttonMask) }
+        input.trySend(PointerWrite(x, y, buttonMask))
     }
 
     /** Forward a key event. No-op in view-only mode. */
     fun onKey(event: RemoteKeyEvent, down: Boolean) {
         if (viewOnly) return
-        send { session.sendKey(event, down) }
+        val id = keyIdentity(event)
+        if (down) heldKeys[id] = event else heldKeys.remove(id)
+        input.trySend(KeyWrite(event, down))
+    }
+
+    /**
+     * The surface gained or lost keyboard focus. Losing it releases everything held (F-12): the
+     * key-up for an Alt+Tab goes to the local desktop, so without this the server keeps Alt down
+     * for the rest of the session. Gaining it re-syncs the lock keys (F-13) — while the session was
+     * in the background the user may have toggled one, and only this side can notice.
+     */
+    fun notifyFocus(focused: Boolean) {
+        if (focused) {
+            lastLockKeys?.let { input.trySend(LockWrite(it)) }
+        } else {
+            releaseHeldKeys()
+        }
+    }
+
+    /**
+     * The platform's current lock-key state, read where the UI can see it; null = unknown. Synced
+     * to the server when it changes — the remote session keeps its own Caps/Num/Scroll and drifts
+     * apart silently otherwise (F-13).
+     */
+    fun onLockKeys(keys: LockKeys?) {
+        if (keys == null || keys == lastLockKeys) return
+        lastLockKeys = keys
+        input.trySend(LockWrite(keys))
+    }
+
+    // ---- the input actor (F-10) ----
+
+    private sealed interface InputWrite
+    private data class PointerWrite(val x: Int, val y: Int, val mask: Int) : InputWrite
+    private data class KeyWrite(val event: RemoteKeyEvent, val down: Boolean) : InputWrite
+    private data class LockWrite(val keys: LockKeys) : InputWrite
+
+    // Keys currently down on the server, in press order; written from the UI thread only.
+    private val heldKeys = LinkedHashMap<Long, RemoteKeyEvent>()
+
+    private fun releaseHeldKeys() {
+        for (event in heldKeys.values.toList().asReversed()) input.trySend(KeyWrite(event, false))
+        heldKeys.clear()
+    }
+
+    /** What makes a press and its release the same key, whichever field the protocol will use. */
+    private fun keyIdentity(event: RemoteKeyEvent): Long = when {
+        event.scancode != 0 -> event.scancode.toLong() or (if (event.extended) 1L shl 32 else 0L)
+        event.keySym != 0L -> event.keySym or (1L shl 40)
+        else -> event.codePoint.toLong() or (1L shl 48)
+    }
+
+    /**
+     * The one writer (F-10): draining a single channel is what gives input the order it was made
+     * in — the fire-and-forget launches this replaces raced each other across dispatcher threads,
+     * so a key-up could overtake its key-down and a click could run ahead of the move that aimed
+     * it. It is also the only place moves coalesce (F-11): a run of pure moves collapses to the
+     * freshest and is paced to [MOVE_INTERVAL], while a queued click, key or wheel is never made
+     * to wait behind that pacing — the pending move goes out first, so a click always lands at a
+     * fresh position.
+     */
+    private suspend fun runInputActor() {
+        var pending: InputWrite? = null
+        while (true) {
+            val event = pending ?: input.receive()
+            pending = when (event) {
+                is PointerWrite ->
+                    if (event.mask == actorLastMask) {
+                        sendCollapsedMove(event)
+                    } else {
+                        write { session.sendPointer(event.x, event.y, event.mask) }
+                        // Wheel bits are edges, not state: the mask a later move repeats has none.
+                        actorLastMask = event.mask and BUTTONS_ONLY
+                        null
+                    }
+
+                is KeyWrite -> {
+                    write { session.sendKey(event.event, event.down) }
+                    null
+                }
+
+                is LockWrite -> {
+                    write { session.syncLockKeys(event.keys.scroll, event.keys.num, event.keys.caps) }
+                    null
+                }
+            }
+        }
+    }
+
+    // The actor's own state; nothing outside [runInputActor]'s call tree touches these.
+    private var actorLastMask = 0
+    private var lastMoveAt: TimeSource.Monotonic.ValueTimeMark? = null
+
+    /**
+     * Send the freshest of the queued pure moves, pacing the stream to [MOVE_INTERVAL] — but only
+     * while nothing else waits. Returns the first non-move it ran into, which the caller handles
+     * next, so a click is delivered right after the move that positioned it and is never delayed.
+     */
+    private suspend fun sendCollapsedMove(first: PointerWrite): InputWrite? {
+        var move = first
+        var interrupt: InputWrite? = null
+        fun collapseQueuedMoves() {
+            while (interrupt == null) {
+                val queued = input.tryReceive().getOrNull() ?: return
+                if (queued is PointerWrite && queued.mask == actorLastMask) move = queued else interrupt = queued
+            }
+        }
+        collapseQueuedMoves()
+        if (interrupt == null) {
+            val since = lastMoveAt?.elapsedNow()
+            if (since != null && since < MOVE_INTERVAL) {
+                delay(MOVE_INTERVAL - since)
+                collapseQueuedMoves()
+            }
+        }
+        lastMoveAt = TimeSource.Monotonic.markNow()
+        write { session.sendPointer(move.x, move.y, move.mask) }
+        return interrupt
+    }
+
+    /** Same swallow-the-write discipline as [send], for the actor's own writes. */
+    private suspend fun write(block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+        }
     }
 
     /** Send local clipboard text to the server. */
@@ -447,6 +588,12 @@ class RemoteDesktopScreenState(
 
     private companion object {
         const val RESIZE_DEBOUNCE_MS = 400L
+
+        /** Floor between two pure moves: ~120/s, about what a mature client sends (F-11). */
+        val MOVE_INTERVAL = 8.milliseconds
+
+        /** The state-carrying bits of the RFB mask; wheel bits (3..6) are edges and never repeat. */
+        const val BUTTONS_ONLY = 0b110000111
 
         val CTRL_ALT_DEL = listOf(Key.CtrlLeft, Key.AltLeft, Key.Delete)
     }

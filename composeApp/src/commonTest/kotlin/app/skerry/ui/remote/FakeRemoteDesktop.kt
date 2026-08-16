@@ -49,6 +49,12 @@ open class FakeRemoteDesktop(
         keys += event to down
     }
 
+    val lockSyncs = mutableListOf<Triple<Boolean, Boolean, Boolean>>()
+
+    override suspend fun syncLockKeys(scroll: Boolean, num: Boolean, caps: Boolean) {
+        lockSyncs += Triple(scroll, num, caps)
+    }
+
     override suspend fun sendClipboardText(text: String) {
         clipboard += text
     }
