@@ -57,8 +57,7 @@ fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit)
             onClose = exit,
             setFullscreen = fullscreen::apply,
             dragArea = { content ->
-                val doubleClick = Modifier.onUnconsumedDoubleClick(toggleMaximize)
-                Box(doubleClick.then(Modifier.titlebarDrag(awtWindow, state, useNativeMove))) { content() }
+                Box(Modifier.titlebarDragArea(awtWindow, state, useNativeMove, toggleMaximize)) { content() }
             },
         )
     }
@@ -68,6 +67,28 @@ fun WindowScope.rememberSkerryWindowChrome(state: WindowState, exit: () -> Unit)
 // regardless. The wait is counted in events, not milliseconds, because it happens inside the pointer
 // handler: a drag delivers events continuously, and counting them keeps a release visible instantly.
 private const val RESTORE_EVENTS = 16
+
+// startMove is a pointerInput key: an unstable default would restart the handler (cancelling any
+// gesture in flight) on recomposition. Hoisted to a val so that stability is guaranteed by this
+// declaration, not by the compiler's non-capturing-lambda singleton optimization.
+private val WM_START_MOVE: (java.awt.Window, Int, Int) -> Boolean = { w, x, y -> NativeWindowMove.startMove(w, x, y) }
+
+/**
+ * The production gesture chain of the titlebar drag area: double-click-to-maximize plus the window
+ * drag, on one box. The order is load-bearing — [titlebarDrag] must be the INNER modifier, because
+ * the Main pass dispatches inner-first: [awaitDragStart] then reads the placement of the press
+ * BEFORE [onUnconsumedDoubleClick] (outer) toggles it on the same event, which is what lets the
+ * mid-press placement guard tell the toggle's window jump from a real drag (issue #176). Built in
+ * one place so the tests exercise this very chain, not a hand-assembled copy.
+ */
+internal fun Modifier.titlebarDragArea(
+    window: java.awt.Window,
+    state: WindowState,
+    useNativeMove: Boolean,
+    toggleMaximize: () -> Unit,
+    startMove: (java.awt.Window, Int, Int) -> Boolean = WM_START_MOVE,
+): Modifier = onUnconsumedDoubleClick(toggleMaximize)
+    .then(Modifier.titlebarDrag(window, state, useNativeMove, startMove))
 
 /**
  * The one titlebar drag gesture. It branches per press instead of per placement, because a
@@ -91,11 +112,13 @@ private fun Modifier.titlebarDrag(
     window: java.awt.Window,
     state: WindowState,
     useNativeMove: Boolean,
-): Modifier = pointerInput(window, state, useNativeMove) {
+    // Injectable for tests: the real thing asks the WM over X11, which a test scene cannot.
+    startMove: (java.awt.Window, Int, Int) -> Boolean = WM_START_MOVE,
+): Modifier = pointerInput(window, state, useNativeMove, startMove) {
     val slop = viewConfiguration.touchSlop
     val isFloating = { state.placement == WindowPlacement.Floating }
     awaitEachGesture {
-        var pointer = awaitDragStart(slop) ?: return@awaitEachGesture
+        var pointer = awaitDragStart(slop) { state.placement } ?: return@awaitEachGesture
         if (state.placement == WindowPlacement.Maximized) {
             val maximized = window.bounds
             state.placement = WindowPlacement.Floating
@@ -106,7 +129,7 @@ private fun Modifier.titlebarDrag(
             pointer = MouseInfo.getPointerInfo()?.location ?: pointer
             window.location = restoredWindowOrigin(maximized, restored, pointer)
         }
-        if (useNativeMove && NativeWindowMove.startMove(window, pointer.x, pointer.y)) return@awaitEachGesture
+        if (useNativeMove && startMove(window, pointer.x, pointer.y)) return@awaitEachGesture
         followPointer(window, pointer, isFloating)
     }
 }
@@ -116,12 +139,22 @@ private fun Modifier.titlebarDrag(
  * reached, or null when the press ended as a click. Absolute ([MouseInfo]) rather than local,
  * because local positions travel with the window being moved and would feed back into the drag.
  */
-private suspend fun AwaitPointerEventScope.awaitDragStart(slop: Float): Point? {
+private suspend fun AwaitPointerEventScope.awaitDragStart(
+    slop: Float,
+    placement: () -> WindowPlacement,
+): Point? {
     val down = awaitFirstDown(requireUnconsumed = true)
+    val placementAtDown = placement()
     while (true) {
         val event = awaitPointerEvent()
         val change = event.changes.firstOrNull() ?: return null
         if (!change.pressed) return null // released without dragging — leave it for click/double-click
+        // The double-click detector on the same box toggles maximize on the SECOND press, while the
+        // button is still down. The WM then resizes the window under the held pointer, and the
+        // window-local position jumps by the moved origin — a jump that crosses touch slop without
+        // the mouse moving at all. Reading it as a drag would restore-on-drag the very maximize the
+        // double-click just applied (issue #176), so a placement change mid-press voids the gesture.
+        if (placement() != placementAtDown) return null
         if ((change.position - down.position).getDistance() <= slop) continue
         // Consumed only once there is a position to drag from: an unconsumed press still reaches the
         // double-click detector on the same box, a consumed one would be swallowed for nothing.

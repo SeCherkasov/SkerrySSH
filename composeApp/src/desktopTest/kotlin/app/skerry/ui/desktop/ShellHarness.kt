@@ -128,6 +128,9 @@ internal fun seededRunbooks(): RunbookManager {
 @OptIn(ExperimentalTestApi::class)
 internal fun runDesktopShell(
     withSessions: Boolean = true,
+    // Custom window chrome, for the tests that drive the titlebar's window gestures. null (the
+    // default) renders the decorated-window titlebar, like the offscreen previews.
+    windowChrome: WindowChrome? = null,
     body: ComposeUiTest.(DesktopShell) -> Unit,
 ) = runComposeUiTest {
     val keyGenerator = BouncyCastleSshKeyGenerator()
@@ -163,6 +166,7 @@ internal fun runDesktopShell(
                     runbooks = runbooks,
                     runbookRunner = runner,
                     ai = ai,
+                    windowChrome = windowChrome,
                 )
             }
         }
