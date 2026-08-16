@@ -47,6 +47,15 @@ class RfbCodec(
     @Volatile
     private var screenFlags = 0
 
+    /**
+     * True while the server streams updates on its own (ContinuousUpdates enabled). The transport
+     * reads it to stop the per-update FramebufferUpdateRequests. @Volatile: written by the read
+     * loop, read wherever the transport's request decision runs.
+     */
+    @Volatile
+    var continuousUpdates = false
+        private set
+
     // One persistent ZRLE zlib stream for the whole connection (created on first ZRLE rect).
     private var zrleInflater: Inflater? = null
     // Up to four independent persistent Tight zlib streams, created lazily as control bytes name them.
@@ -93,6 +102,8 @@ class RfbCodec(
                 MSG_SET_COLOUR_MAP -> skipSetColourMap() // true-colour forced; consume and continue
                 MSG_BELL -> return listOf(VncUpdate.Bell)
                 MSG_SERVER_CUT_TEXT -> return listOf(VncUpdate.ClipboardText(readServerCutText()))
+                MSG_END_OF_CONTINUOUS_UPDATES -> enableContinuousUpdates() // support announcement
+                MSG_FENCE -> answerFence(source, sink)
                 else -> throw VncProtocolException("unknown server message type $type")
             }
         }
@@ -211,6 +222,11 @@ class RfbCodec(
             }
         }
         diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds)
+        // The enabled ContinuousUpdates region is a fixed rectangle, not "the screen": after a
+        // resize it must be re-enabled at the new size or the grown part never streams.
+        if (continuousUpdates && pseudo.any { it is VncUpdate.Resize }) {
+            writeEnableContinuousUpdates(sink, fb.width, fb.height)
+        }
         return pseudo + VncUpdate.Region(rects)
     }
 
@@ -351,6 +367,20 @@ class RfbCodec(
         return readBoundedLatin1(MAX_CLIPBOARD_LEN, "server cut text")
     }
 
+    /**
+     * EndOfContinuousUpdates (150, body-less). Its first arrival is how a server announces it
+     * supports the ContinuousUpdates extension (it must send one on seeing the pseudo-encoding);
+     * we answer by turning the stream on for the whole framebuffer, which frees the frame rate
+     * from the request/response round trip (V-01). We never turn the stream off, so a repeat of
+     * this message (the "stream stopped" acknowledgement) has nothing to do.
+     */
+    private suspend fun enableContinuousUpdates() {
+        if (continuousUpdates) return
+        continuousUpdates = true
+        diagnostics.notePath("ContinuousUpdates")
+        writeEnableContinuousUpdates(sink, fb.width, fb.height)
+    }
+
     // ---- client → server messages ----
 
     private suspend fun writeSetPixelFormat() {
@@ -360,9 +390,11 @@ class RfbCodec(
     }
 
     private suspend fun writeSetEncodings() {
-        // Base encodings + Cursor (while we draw it) + Tight quality/compression pseudo-encodings.
+        // Base encodings + Cursor (while we draw it) + the streaming pseudo-encodings (always: they
+        // are protocol machinery, not a preference) + Tight quality/compression pseudo-encodings.
         val cursor = if (localCursor) intArrayOf(ENC_CURSOR) else IntArray(0)
-        val all = requestedEncodings + cursor + qualityPseudoEncodings(quality)
+        val streaming = intArrayOf(ENC_CONTINUOUS_UPDATES, ENC_FENCE)
+        val all = requestedEncodings + cursor + streaming + qualityPseudoEncodings(quality)
         val n = all.size
         val msg = ByteArray(4 + n * 4)
         msg[0] = 2 // SetEncodings
@@ -510,6 +542,19 @@ class RfbCodec(
         const val MSG_SET_COLOUR_MAP = 1
         const val MSG_BELL = 2
         const val MSG_SERVER_CUT_TEXT = 3
+        const val MSG_END_OF_CONTINUOUS_UPDATES = 150
+        const val MSG_FENCE = 248
+
+        // Fence flags. The blocking modes are trivially honoured by a serial reader; SyncNext is
+        // not supported and must therefore be dropped from any reply. Request marks a fence that
+        // demands a reply (as opposed to being one).
+        const val FENCE_BLOCK_BEFORE = 1
+        const val FENCE_BLOCK_AFTER = 2
+        const val FENCE_SYNC_NEXT = 4
+        const val FENCE_REQUEST = 1 shl 31
+
+        /** The spec caps a fence payload at 64 bytes; anything longer is hostile, not a fence. */
+        const val MAX_FENCE_PAYLOAD = 64
 
         // Caps on server-supplied sizes, applied before allocation to bound memory use against a
         // hostile/buggy server (the socket is plaintext and fully untrusted). Generous vs. any real
@@ -532,6 +577,8 @@ class RfbCodec(
         const val ENC_CURSOR = -239
         const val ENC_DESKTOP_SIZE = -223
         const val ENC_EXTENDED_DESKTOP_SIZE = -308
+        const val ENC_FENCE = -312
+        const val ENC_CONTINUOUS_UPDATES = -313
 
         /** ExtendedDesktopSize rect header x: 1 = the change answers this client's SetDesktopSize. */
         const val REASON_CLIENT_REQUEST = 1
