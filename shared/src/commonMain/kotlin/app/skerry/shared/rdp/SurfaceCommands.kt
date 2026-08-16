@@ -98,6 +98,8 @@ class RdpCodecs(private val remoteFx: RemoteFxDecoder? = null) {
     fun decode(codecId: Int, data: ByteArray, width: Int, height: Int, bitsPerPixel: Int): IntArray? = when (codecId) {
         CODEC_ID_NONE -> uncompressed(data, width, height, bitsPerPixel)
         ClientCapabilities.CODEC_ID_REMOTEFX -> remoteFx?.decode(data, width, height)
+        // Always on: NSCodec is advertised unconditionally (F-33), so it must decode unconditionally.
+        ClientCapabilities.CODEC_ID_NSCODEC -> NsCodec.decode(RdpReader(data), width, height)
         else -> null
     }
 

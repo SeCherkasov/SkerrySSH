@@ -1,11 +1,17 @@
 package app.skerry.ui.vnc
 
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.toPixelMap
 import app.skerry.shared.graphics.RemoteRect
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotSame
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /**
  * The desktop pixel bridge, around the F-01 rewrite: the bitmap keeps long-lived pixel storage and
@@ -58,6 +64,25 @@ class FramebufferImageDesktopTest {
         assertEquals(3, image.bitmap.width)
         assertEquals(1, image.bitmap.height)
         assertEquals(0, pixels.buffer[0], "the old picture must not survive into the new size")
+    }
+
+    @Test
+    fun `a straight-alpha sprite composites at its true coverage`() {
+        // The cursor sprite contract carries STRAIGHT alpha (RemoteDesktopUpdate.CursorShape), but
+        // this Skia surface is premultiplied. A half-transparent white pixel (0x80FFFFFF) drawn
+        // over opaque black must come out ~50% grey; written raw it reads as an invalid premul
+        // pixel and composites full white — the bright halo around every anti-aliased cursor edge.
+        val sprite = FramebufferImage(1, 1, straightAlpha = true)
+        sprite.writeRects(listOf(RemoteRect(0, 0, 1, 1)), intArrayOf(0x80FFFFFF.toInt()), 1)
+
+        val target = ImageBitmap(1, 1)
+        val canvas = Canvas(target)
+        canvas.drawRect(0f, 0f, 1f, 1f, Paint().apply { color = Color.Black })
+        canvas.drawImage(sprite.bitmap, Offset.Zero, Paint())
+
+        val composited = target.toPixelMap().buffer[0]
+        val red = (composited shr 16) and 0xFF
+        assertTrue(red in 0x7E..0x82, "expected ~50% grey over black, got channel 0x${red.toString(16)}")
     }
 
     @Test

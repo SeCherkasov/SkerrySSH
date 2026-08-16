@@ -1,6 +1,7 @@
 package app.skerry.shared.rdp
 
 import app.skerry.shared.graphics.RemoteDesktopUpdate
+import app.skerry.shared.graphics.RemoteKeyEvent
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -32,6 +33,46 @@ class RdpRemoteDesktopTest {
             RemoteDesktopUpdate.AudioPlaybackFailing(failing = false),
         )
         assertEquals(expected, seen)
+    }
+
+    @Test
+    fun a_multi_scancode_key_goes_down_in_order_and_up_in_reverse() = runTest {
+        // PrintScreen's full sequence (F-18): releases must mirror presses, as the hardware sends
+        // them, or the server is left holding the first half of the pair.
+        val session = FakeRdpSession()
+        val printScreen = RemoteKeyEvent(
+            sequence = listOf(
+                app.skerry.shared.graphics.RemoteScan(0x2A, extended = true),
+                app.skerry.shared.graphics.RemoteScan(0x37, extended = true),
+            ),
+        )
+        val desktop = RdpRemoteDesktop(session)
+
+        desktop.sendKey(printScreen, down = true)
+        desktop.sendKey(printScreen, down = false)
+
+        assertEquals(
+            listOf(
+                "key(42,true,true,false)", "key(55,true,true,false)",
+                "key(55,false,true,false)", "key(42,false,true,false)",
+            ),
+            session.calls,
+        )
+    }
+
+    @Test
+    fun the_e1_prefix_of_a_sequence_reaches_the_session() = runTest {
+        val session = FakeRdpSession()
+        val pause = RemoteKeyEvent(
+            sequence = listOf(
+                app.skerry.shared.graphics.RemoteScan(0x1D, extended1 = true),
+                app.skerry.shared.graphics.RemoteScan(0x45),
+            ),
+        )
+
+        RdpRemoteDesktop(session).sendKey(pause, down = true)
+
+        assertEquals(listOf("key(29,true,false,true)", "key(69,true,false,false)"), session.calls)
     }
 
     @Test

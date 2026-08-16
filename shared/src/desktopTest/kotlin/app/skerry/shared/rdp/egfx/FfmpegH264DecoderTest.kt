@@ -6,6 +6,7 @@ import kotlin.io.encoding.Base64
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -91,6 +92,19 @@ class FfmpegH264DecoderTest {
 
         assertEquals(null, decoder.decode(stream().first()), "a closed decoder answered with a picture")
         decoder.close()
+    }
+
+    @Test
+    fun `a decoder that died keeps saying so instead of going quiet`() {
+        // The contract: a dead decoder THROWS on every call — a quiet null after an internal
+        // failure would read as "no picture this update" and freeze the surface without a word.
+        // Garbage that is not an H.264 stream makes ffmpeg give up; worst case this waits out the
+        // reader's own deadline once, never twice.
+        val decoder = assertNotNull(FfmpegH264Decoders().open(WIDTH, HEIGHT))
+        val first = runCatching { decoder.decode(ByteArray(64) { 0x5A }) }
+        assumeTrue(first.isFailure, "this ffmpeg accepted garbage; nothing to verify here")
+
+        assertFailsWith<IllegalStateException> { decoder.decode(stream().first()) }
     }
 
     private fun stream(): List<ByteArray> = ACCESS_UNITS.map { Base64.decode(it) }

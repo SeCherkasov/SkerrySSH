@@ -80,9 +80,9 @@ object RfxDwt {
      * Reconstruct the tile from its [coefficients] (already dequantized), in place: on return the
      * buffer holds 64×64 samples in row order.
      */
-    fun inverseTransform(coefficients: IntArray) {
+    fun inverseTransform(coefficients: IntArray, scratch: IntArray = IntArray(TILE_COEFFICIENTS)) {
         require(coefficients.size >= TILE_COEFFICIENTS) { "a tile is $TILE_COEFFICIENTS coefficients" }
-        val scratch = IntArray(TILE_COEFFICIENTS)
+        require(scratch.size >= TILE_COEFFICIENTS) { "scratch smaller than a tile" }
         for ((base, side) in LEVELS) inverseLevel(coefficients, base, side, scratch)
     }
 

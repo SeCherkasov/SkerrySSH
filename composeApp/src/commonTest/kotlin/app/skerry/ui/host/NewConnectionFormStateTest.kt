@@ -206,6 +206,34 @@ class NewConnectionFormStateTest {
     }
 
     @Test
+    fun rdp_display_settings_round_trip_through_the_form() {
+        val f = NewConnectionFormState().apply { name = "desk"; address = "10.0.0.9"; username = "admin" }
+        f.chooseConnectionType(app.skerry.shared.ssh.ConnectionType.RDP)
+        // Untouched, the display settings are today's behaviour and store nothing.
+        assertNull(f.toDraft().rdp)
+
+        f.rdpGraphicsPipeline = false
+        f.rdpRemoteFx = false
+        f.rdpH264 = app.skerry.shared.rdp.RdpH264Mode.Off
+        val rdp = checkNotNull(f.toDraft().rdp)
+        assertEquals(false, rdp.graphicsPipeline)
+        assertEquals(false, rdp.remoteFx)
+        assertEquals(app.skerry.shared.rdp.RdpH264Mode.Off, rdp.h264)
+
+        val host = Host(
+            "1", "desk", "10.0.0.9", 3389, "admin",
+            connectionType = app.skerry.shared.ssh.ConnectionType.RDP,
+            rdp = app.skerry.shared.rdp.RdpSpec(
+                graphicsPipeline = false,
+                h264 = app.skerry.shared.rdp.RdpH264Mode.Avc420,
+            ),
+        )
+        val loaded = NewConnectionFormState.fromHost(host)
+        assertEquals(false, loaded.rdpGraphicsPipeline)
+        assertEquals(app.skerry.shared.rdp.RdpH264Mode.Avc420, loaded.rdpH264)
+    }
+
+    @Test
     fun rdp_form_carries_the_farm_routing_token_it_was_prefilled_with() {
         // The token isn't editable (it comes from an imported .rdp file), but the form is what hands
         // the profile's RDP settings back on save — dropping it would send the next connection to an

@@ -19,11 +19,15 @@ enum class RdpWheelAxis { Vertical, Horizontal }
  */
 object RdpInput {
 
-    /** Press or release a key by its PC/AT set 1 [scancode]. [extended] marks the E0-prefixed keys. */
-    fun key(scancode: Int, down: Boolean, extended: Boolean = false): ByteArray {
+    /**
+     * Press or release a key by its PC/AT set 1 [scancode]. [extended] marks the E0-prefixed keys;
+     * [extended1] the E1 prefix, which on a real keyboard only Pause carries (F-18).
+     */
+    fun key(scancode: Int, down: Boolean, extended: Boolean = false, extended1: Boolean = false): ByteArray {
         var flags = 0
         if (!down) flags = flags or KBDFLAGS_RELEASE
         if (extended) flags = flags or KBDFLAGS_EXTENDED
+        if (extended1) flags = flags or KBDFLAGS_EXTENDED1
         return packet(
             RdpWriter(4)
                 .u8((EVENT_SCANCODE shl 5) or flags)
@@ -131,6 +135,7 @@ object RdpInput {
 
     private const val KBDFLAGS_RELEASE = 0x01
     private const val KBDFLAGS_EXTENDED = 0x02
+    private const val KBDFLAGS_EXTENDED1 = 0x04
 
     private const val PTRFLAGS_HWHEEL = 0x0400
     private const val PTRFLAGS_WHEEL = 0x0200

@@ -41,6 +41,16 @@ object Rlgr {
         return out
     }
 
+    /**
+     * [decode] into a caller-owned [out] (F-05's buffer reuse). Zeroed first: a stream that ends
+     * early must leave zeroes behind it, exactly as a fresh allocation would — the previous tile's
+     * coefficients bleeding through would paint ghosts of it.
+     */
+    fun decode(data: ByteArray, out: IntArray, mode: Mode) {
+        out.fill(0)
+        Decoder(BitReader(data), mode).decodeInto(out)
+    }
+
     private class Decoder(private val bits: BitReader, private val mode: Mode) {
         private var k = 1
         private var kp = 1 shl LSGR

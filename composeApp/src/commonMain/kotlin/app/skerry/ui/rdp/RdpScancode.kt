@@ -1,12 +1,13 @@
 package app.skerry.ui.rdp
 
 import androidx.compose.ui.input.key.Key
+import app.skerry.shared.graphics.RemoteScan
 
 /**
- * A key as RDP carries it: a PC/AT set 1 scancode, plus the E0 prefix flag that tells the two
- * halves of a keyboard apart (right Ctrl from left Ctrl, the arrow block from the numeric keypad).
+ * A key as RDP carries it: one or more PC/AT set 1 scancodes (F-18 — PrintScreen is two, Pause is
+ * an E1-prefixed pair), each with the prefix flags that tell the halves of a keyboard apart.
  */
-data class RdpKeyCode(val scancode: Int, val extended: Boolean)
+data class RdpKeyCode(val scans: List<RemoteScan>)
 
 /**
  * Maps a Compose [Key] to its PC/AT set 1 scancode.
@@ -18,13 +19,16 @@ data class RdpKeyCode(val scancode: Int, val extended: Boolean)
  * `RdpSession.sendUnicode`).
  *
  * Pure and platform-neutral, like `keySymFor` on the VNC side, so it is unit-tested without a UI.
- * Returns null for keys with no scancode of their own.
+ * Returns null for keys with no scancode of their own. [platformScancodeExtras] carries the keys
+ * only a platform can name — F13–F24 have no common `Key` constant, but AWT names them on desktop.
  */
-fun scancodeFor(key: Key): RdpKeyCode? = scancodes[key]
+fun scancodeFor(key: Key): RdpKeyCode? = scancodes[key] ?: platformScancodeExtras[key]
 
-private fun plain(code: Int) = RdpKeyCode(code, extended = false)
+internal expect val platformScancodeExtras: Map<Key, RdpKeyCode>
 
-private fun extended(code: Int) = RdpKeyCode(code, extended = true)
+private fun plain(code: Int) = RdpKeyCode(listOf(RemoteScan(code)))
+
+private fun extended(code: Int) = RdpKeyCode(listOf(RemoteScan(code, extended = true)))
 
 private val scancodes: Map<Key, RdpKeyCode> = buildMap {
     // Row 1: escape, digits, backspace.
@@ -144,6 +148,9 @@ private val scancodes: Map<Key, RdpKeyCode> = buildMap {
     put(Key.MetaLeft, extended(0x5B))
     put(Key.MetaRight, extended(0x5C))
     put(Key.Menu, extended(0x5D))
-    put(Key.PrintScreen, extended(0x37))
-    put(Key.Break, extended(0x46))
+    // Multi-scancode keys (F-18). PrintScreen is the full E0 2A E0 37 — Windows tolerates the bare
+    // second half, other servers do not. Pause is not an E0 key at all: it is the E1-prefixed pair,
+    // and the old extended(0x46) was Ctrl+Break's code, a different key.
+    put(Key.PrintScreen, RdpKeyCode(listOf(RemoteScan(0x2A, extended = true), RemoteScan(0x37, extended = true))))
+    put(Key.Break, RdpKeyCode(listOf(RemoteScan(0x1D, extended1 = true), RemoteScan(0x45))))
 }

@@ -65,6 +65,9 @@ interface H264DecoderFactory {
     /** Whether this machine can decode H.264. Asked once per session, so it may probe. */
     val available: Boolean
 
+    /** Human-readable name of the decoder for the diagnostics overlay ("ffmpeg (hwaccel auto)"). */
+    val description: String get() = "H.264"
+
     /**
      * A decoder for one surface's stream, sized to what the picture will be. `null` when the
      * platform would not open one after all — the surface then draws nothing on the H.264 path.

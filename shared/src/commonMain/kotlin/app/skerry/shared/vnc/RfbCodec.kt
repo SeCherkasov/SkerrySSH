@@ -47,6 +47,18 @@ class RfbCodec(
     @Volatile
     private var screenFlags = 0
 
+    /**
+     * True while the server streams updates on its own (ContinuousUpdates enabled). The transport
+     * reads it to stop the per-update FramebufferUpdateRequests. @Volatile: written by the read
+     * loop, read wherever the transport's request decision runs.
+     */
+    @Volatile
+    var continuousUpdates = false
+        private set
+
+    // Decoder working buffers, reused across rectangles (V-04); serial read loop, so one set.
+    private val scratch = RfbScratch()
+
     // One persistent ZRLE zlib stream for the whole connection (created on first ZRLE rect).
     private var zrleInflater: Inflater? = null
     // Up to four independent persistent Tight zlib streams, created lazily as control bytes name them.
@@ -93,6 +105,8 @@ class RfbCodec(
                 MSG_SET_COLOUR_MAP -> skipSetColourMap() // true-colour forced; consume and continue
                 MSG_BELL -> return listOf(VncUpdate.Bell)
                 MSG_SERVER_CUT_TEXT -> return listOf(VncUpdate.ClipboardText(readServerCutText()))
+                MSG_END_OF_CONTINUOUS_UPDATES -> enableContinuousUpdates() // support announcement
+                MSG_FENCE -> answerFence(source, sink)
                 else -> throw VncProtocolException("unknown server message type $type")
             }
         }
@@ -203,6 +217,7 @@ class RfbCodec(
                 }
                 ENC_EXTENDED_DESKTOP_SIZE -> readExtendedDesktopSize(reason = x, status = y, width = w, height = h, out = pseudo)
                 ENC_CURSOR -> pseudo += readCursor(hotspotX = x, hotspotY = y, width = w, height = h)
+                ENC_CURSOR_WITH_ALPHA -> pseudo += readAlphaCursor(hotspotX = x, hotspotY = y, width = w, height = h)
                 else -> {
                     diagnostics.noteCodec(encodingLabel(encoding))
                     decodeRectangle(encoding, VncRect(x, y, w, h))
@@ -211,6 +226,11 @@ class RfbCodec(
             }
         }
         diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds)
+        // The enabled ContinuousUpdates region is a fixed rectangle, not "the screen": after a
+        // resize it must be re-enabled at the new size or the grown part never streams.
+        if (continuousUpdates && pseudo.any { it is VncUpdate.Resize }) {
+            writeEnableContinuousUpdates(sink, fb.width, fb.height)
+        }
         return pseudo + VncUpdate.Region(rects)
     }
 
@@ -278,14 +298,46 @@ class RfbCodec(
             var x = 0
             while (x < width) {
                 val opaque = (mask[y * maskStride + x / 8].toInt() shr (7 - (x % 8))) and 1 == 1
-                // Masked-out pixels are zeroed whole, not just their alpha: the desktop bitmap hands
-                // these bytes to Skia as premultiplied, where alpha 0 over non-zero RGB is invalid
-                // and renders as a halo around the sprite.
+                // Masked-out pixels are zeroed whole, not just their alpha: a transparent pixel
+                // must carry no stray colour for any consumer to blend or convert wrongly.
                 argb[i] = if (opaque) CanonicalPixelFormat.argbFromPixel(pixels, i * CanonicalPixelFormat.PIXEL_BYTES) else 0
                 i++
                 x++
             }
             y++
+        }
+        return VncUpdate.CursorShape(argb, width, height, hotspotX, hotspotY)
+    }
+
+    /**
+     * Cursor With Alpha pseudo-encoding (-314): an s32 naming the nested encoding, then the sprite
+     * in fixed 32-bit RGBA with **premultiplied** alpha, regardless of the session pixel format.
+     * Only Raw is accepted inside — every real server sends Raw and the reference client (TigerVNC)
+     * accepts nothing else. The premultiplied wire values are converted back to the straight ARGB
+     * the shared [VncUpdate.CursorShape] contract carries (what the RDP pointer path produces),
+     * clamping components that exceed their alpha — invalid premul from a hostile server must not
+     * overflow into a neighbouring channel.
+     */
+    private suspend fun readAlphaCursor(hotspotX: Int, hotspotY: Int, width: Int, height: Int): VncUpdate.CursorShape {
+        if (width > MAX_CURSOR_DIMENSION || height > MAX_CURSOR_DIMENSION) {
+            throw VncProtocolException("cursor ${width}x$height exceeds max $MAX_CURSOR_DIMENSION")
+        }
+        val nested = readS32()
+        if (nested != ENC_RAW) throw VncProtocolException("unsupported cursor-with-alpha encoding $nested")
+        if (width == 0 || height == 0) return VncUpdate.CursorShape(EMPTY_ARGB, 0, 0, 0, 0)
+        val rgba = readBytes(width * height * 4)
+        val argb = IntArray(width * height)
+        for (i in argb.indices) {
+            val off = i * 4
+            val alpha = rgba[off + 3].toInt() and 0xFF
+            // Fully transparent pixels are zeroed whole, not just their alpha — same rule as
+            // readCursor: no stray colour under alpha 0.
+            if (alpha == 0) continue
+            fun channel(o: Int): Int {
+                val premul = rgba[off + o].toInt() and 0xFF
+                return if (alpha == 0xFF) premul else minOf(0xFF, premul * 0xFF / alpha)
+            }
+            argb[i] = (alpha shl 24) or (channel(0) shl 16) or (channel(1) shl 8) or channel(2)
         }
         return VncUpdate.CursorShape(argb, width, height, hotspotX, hotspotY)
     }
@@ -303,10 +355,10 @@ class RfbCodec(
             throw VncProtocolException("rectangle ${rect.width}x${rect.height} exceeds max $MAX_DIMENSION")
         }
         when (encoding) {
-            ENC_RAW -> decodeRaw(source, fb, rect)
+            ENC_RAW -> decodeRaw(source, fb, rect, scratch)
             ENC_COPY_RECT -> decodeCopyRect(source, fb, rect)
-            ENC_HEXTILE -> decodeHextile(source, fb, rect)
-            ENC_ZRLE -> decodeZrle(source, fb, rect, zrleStream())
+            ENC_HEXTILE -> decodeHextile(source, fb, rect, scratch)
+            ENC_ZRLE -> decodeZrle(source, fb, rect, zrleStream(), scratch)
             ENC_TIGHT -> decodeTight(source, fb, rect, ::tightStream, ::resetTight, imageDecoder)
             else -> throw VncProtocolException("unsupported encoding $encoding for rect $rect")
         }
@@ -351,6 +403,20 @@ class RfbCodec(
         return readBoundedLatin1(MAX_CLIPBOARD_LEN, "server cut text")
     }
 
+    /**
+     * EndOfContinuousUpdates (150, body-less). Its first arrival is how a server announces it
+     * supports the ContinuousUpdates extension (it must send one on seeing the pseudo-encoding);
+     * we answer by turning the stream on for the whole framebuffer, which frees the frame rate
+     * from the request/response round trip (V-01). We never turn the stream off, so a repeat of
+     * this message (the "stream stopped" acknowledgement) has nothing to do.
+     */
+    private suspend fun enableContinuousUpdates() {
+        if (continuousUpdates) return
+        continuousUpdates = true
+        diagnostics.notePath("ContinuousUpdates")
+        writeEnableContinuousUpdates(sink, fb.width, fb.height)
+    }
+
     // ---- client → server messages ----
 
     private suspend fun writeSetPixelFormat() {
@@ -360,9 +426,12 @@ class RfbCodec(
     }
 
     private suspend fun writeSetEncodings() {
-        // Base encodings + Cursor (while we draw it) + Tight quality/compression pseudo-encodings.
-        val cursor = if (localCursor) intArrayOf(ENC_CURSOR) else IntArray(0)
-        val all = requestedEncodings + cursor + qualityPseudoEncodings(quality)
+        // Base encodings + Cursor (while we draw it; alpha variant first — order is preference) +
+        // the streaming pseudo-encodings (always: protocol machinery, not a preference) + Tight
+        // quality/compression pseudo-encodings.
+        val cursor = if (localCursor) intArrayOf(ENC_CURSOR_WITH_ALPHA, ENC_CURSOR) else IntArray(0)
+        val streaming = intArrayOf(ENC_CONTINUOUS_UPDATES, ENC_FENCE)
+        val all = requestedEncodings + cursor + streaming + qualityPseudoEncodings(quality)
         val n = all.size
         val msg = ByteArray(4 + n * 4)
         msg[0] = 2 // SetEncodings
@@ -510,6 +579,19 @@ class RfbCodec(
         const val MSG_SET_COLOUR_MAP = 1
         const val MSG_BELL = 2
         const val MSG_SERVER_CUT_TEXT = 3
+        const val MSG_END_OF_CONTINUOUS_UPDATES = 150
+        const val MSG_FENCE = 248
+
+        // Fence flags. The blocking modes are trivially honoured by a serial reader; SyncNext is
+        // not supported and must therefore be dropped from any reply. Request marks a fence that
+        // demands a reply (as opposed to being one).
+        const val FENCE_BLOCK_BEFORE = 1
+        const val FENCE_BLOCK_AFTER = 2
+        const val FENCE_SYNC_NEXT = 4
+        const val FENCE_REQUEST = 1 shl 31
+
+        /** The spec caps a fence payload at 64 bytes; anything longer is hostile, not a fence. */
+        const val MAX_FENCE_PAYLOAD = 64
 
         // Caps on server-supplied sizes, applied before allocation to bound memory use against a
         // hostile/buggy server (the socket is plaintext and fully untrusted). Generous vs. any real
@@ -530,8 +612,11 @@ class RfbCodec(
         const val ENC_TIGHT = 7
         const val ENC_ZRLE = 16
         const val ENC_CURSOR = -239
+        const val ENC_CURSOR_WITH_ALPHA = -314
         const val ENC_DESKTOP_SIZE = -223
         const val ENC_EXTENDED_DESKTOP_SIZE = -308
+        const val ENC_FENCE = -312
+        const val ENC_CONTINUOUS_UPDATES = -313
 
         /** ExtendedDesktopSize rect header x: 1 = the change answers this client's SetDesktopSize. */
         const val REASON_CLIENT_REQUEST = 1

@@ -2,6 +2,7 @@ package app.skerry.ui.remote
 
 import app.skerry.shared.graphics.RemoteDesktopUpdate
 import app.skerry.shared.graphics.RemoteKeyEvent
+import app.skerry.shared.graphics.RemoteScan
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -126,6 +127,34 @@ class RemoteInputOrderTest {
             session.keys.map { it.first.scancode to it.second },
             "held keys are released newest-first; a key already up is not released again",
         )
+        scope.cancel()
+    }
+
+    @Test
+    fun two_held_sequence_keys_are_both_released_on_focus_loss() = runTest {
+        // PrintScreen and Pause carry no flat scancode — only a sequence (F-18). Their identities
+        // in the held-key map must still differ, or losing focus releases one and leaves the other
+        // latched on the server for the rest of the session.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+        val printScreen = RemoteKeyEvent(
+            sequence = listOf(RemoteScan(0x2A, extended = true), RemoteScan(0x37, extended = true)),
+        )
+        val pause = RemoteKeyEvent(
+            sequence = listOf(RemoteScan(0x1D, extended1 = true), RemoteScan(0x45)),
+        )
+
+        screen.onKey(printScreen, down = true)
+        screen.onKey(pause, down = true)
+        advanceUntilIdle()
+        screen.notifyFocus(false)
+        advanceUntilIdle()
+
+        val downs = session.keys.count { it.second }
+        val ups = session.keys.count { !it.second }
+        assertEquals(2, downs)
+        assertEquals(2, ups, "both held sequence keys must be released, not just the last one")
         scope.cancel()
     }
 

@@ -45,6 +45,10 @@ data class RdpTarget(
      * both off is what leaves that channel out of the connection request altogether.
      */
     val dynamicResize: Boolean = true,
+    /** Advertise RemoteFX when the server offers it; off pins the legacy path to the other codecs. */
+    val remoteFx: Boolean = true,
+    /** Which H.264 ladder the graphics pipeline advertises (see [RdpH264Mode]). */
+    val h264: RdpH264Mode = RdpH264Mode.Auto,
     /**
      * Play the session's sound on this machine (MS-RDPEA). Off unless the profile asks for it: the
      * audio channel costs bandwidth on every notification beep, and a session opened to run one
@@ -118,7 +122,7 @@ interface RdpSession {
     /** Live counters for the diagnostics overlay; inert by default, a real session overrides it. */
     val diagnostics: RemoteDesktopDiagnostics get() = RemoteDesktopDiagnostics.NONE
 
-    suspend fun sendKey(scancode: Int, down: Boolean, extended: Boolean = false)
+    suspend fun sendKey(scancode: Int, down: Boolean, extended: Boolean = false, extended1: Boolean = false)
 
     suspend fun sendUnicode(code: Int, down: Boolean)
 

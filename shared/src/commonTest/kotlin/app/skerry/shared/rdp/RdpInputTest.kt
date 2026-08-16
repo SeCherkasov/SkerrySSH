@@ -27,6 +27,14 @@ class RdpInputTest {
     }
 
     @Test
+    fun `the E1 prefix reaches the wire, which is what Pause is made of`() {
+        // Pause is not an E0 key: its two scancodes ride the EXTENDED1 flag (MS-RDPBCGR 2.2.8.1.2.2.1).
+        val pauseHalf = RdpInput.key(scancode = 0x1D, down = true, extended1 = true)
+
+        assertEquals(0x04, pauseHalf[3].toInt() and 0x1F)
+    }
+
+    @Test
     fun `mouse buttons use the pointer flags of their family`() {
         val left = RdpInput.mouseButton(RdpMouseButton.Left, down = true, x = 100, y = 200)
         val middle = RdpInput.mouseButton(RdpMouseButton.Middle, down = false, x = 100, y = 200)

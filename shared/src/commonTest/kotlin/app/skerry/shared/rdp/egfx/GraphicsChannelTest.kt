@@ -2,6 +2,7 @@ package app.skerry.shared.rdp.egfx
 
 import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
+import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpRect
 import app.skerry.shared.rdp.RdpUpdate
@@ -50,6 +51,95 @@ class GraphicsChannelTest {
         assertEquals(0x10, advertise.u32(30) and 0x10, "8.1 carries H.264 only with the flag set")
         assertEquals(0x000A0400, advertise.u32(34), "version 10.4, which adds 4:4:4 H.264")
         assertEquals(0, advertise.u32(42) and 0x20, "10.4 must not carry the flag that disables AVC")
+    }
+
+    @Test
+    fun `a large cache drops the small-cache flag from every advertised version`() = runTest {
+        // F-07: small cache means more retransmission on a busy desktop. Where memory allows the
+        // full 100 MB, the flag goes away — on every set, or the server takes the strictest one.
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = RecordingAvc()), smallCache = false,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        val advertise = sent.single()
+        assertEquals(0, advertise.u32(18) and 0x02, "version 8 must not ask for a small cache")
+        assertEquals(0, advertise.u32(30) and 0x02, "8.1 must not ask for a small cache")
+        assertEquals(0x10, advertise.u32(30) and 0x10, "8.1 keeps its AVC flag")
+        assertEquals(0, advertise.u32(42) and 0x02, "10.4 must not ask for a small cache")
+    }
+
+    @Test
+    fun `h264 mode Off advertises version 8 only, even with a decoder on hand`() = runTest {
+        // The profile's escape hatch (F-28): a host whose H.264 path misbehaves can be pinned to
+        // the non-AVC codecs without uninstalling ffmpeg.
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = RecordingAvc()), h264Mode = RdpH264Mode.Off,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        val advertise = sent.single()
+        assertEquals(1, advertise.u16(8), "one capability set")
+        assertEquals(0x00080004, advertise.u32(10), "version 8, which has no H.264")
+    }
+
+    @Test
+    fun `h264 mode Avc420 leaves out the 4 to 4 to 4 version`() = runTest {
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = RecordingAvc()), h264Mode = RdpH264Mode.Avc420,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        val advertise = sent.single()
+        assertEquals(2, advertise.u16(8), "two capability sets")
+        assertEquals(0x00080004, advertise.u32(10), "version 8 as the fallback")
+        assertEquals(0x00080105, advertise.u32(22), "version 8.1 for 4:2:0")
+        assertEquals(0x10, advertise.u32(30) and 0x10, "8.1 must carry the AVC420 flag")
+    }
+
+    @Test
+    fun `h264 mode Avc444 advertises the full ladder, like Auto`() = runTest {
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = RecordingAvc()), h264Mode = RdpH264Mode.Avc444,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        assertEquals(3, sent.single().u16(8), "three capability sets")
+    }
+
+    @Test
+    fun `h264 mode Avc420 refuses a 4 to 4 to 4 bitmap the profile never advertised`() = runTest {
+        // The escape hatch must hold on the receive side too: a server ignoring the capability
+        // exchange must not reach the AVC444 path when the profile pinned the session to 4:2:0.
+        val avc = RecordingAvc()
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = avc), h264Mode = RdpH264Mode.Avc420,
+        ) { }
+        channel.onMessage(bulk(createSurface(id = 1, width = 8, height = 8)))
+
+        val failure = assertFailsWith<RdpProtocolException> {
+            channel.onMessage(bulk(wireToSurfaceRaw(1, codecId = 0x000E, payload = byteArrayOf(1))))
+        }
+
+        assertTrue(failure.message.orEmpty().contains("not advertised"), failure.message.orEmpty())
+        assertTrue(avc.decoded444.isEmpty(), "the refused bitmap still reached the decoder")
+    }
+
+    @Test
+    fun `an explicit h264 mode without a decoder still advertises version 8 only`() = runTest {
+        // The mode expresses preference; the decoder decides possibility. Advertising AVC with
+        // nothing to decode it trades a working session for a frozen screen.
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(), h264Mode = RdpH264Mode.Avc444,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        assertEquals(1, sent.single().u16(8), "one capability set")
     }
 
     @Test
@@ -196,6 +286,41 @@ class GraphicsChannelTest {
         assertEquals(0xFF00AABB.toInt(), framebuffer.pixels[8 * 64 + 8])
         assertEquals(0xFF00AABB.toInt(), framebuffer.pixels[11 * 64 + 11])
         assertEquals(0, framebuffer.pixels[12 * 64 + 12], "the cached region spilled past its size")
+    }
+
+    @Test
+    fun `the large cache keeps entries the small budget would have evicted`() = runTest {
+        // F-07's two halves must agree: the advertisement promised the spec's full cache, so the
+        // eviction budget has to honour it — 10M pixels of entries stay, where 8M was the old cap.
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(progressive = progressive), smallCache = false,
+        ) { }
+        channel.onMessage(bulk(createSurface(id = 1, width = 2048, height = 1024)))
+        channel.onMessage(bulk(mapToOutput(surfaceId = 1, x = 0, y = 0)))
+        channel.onMessage(bulk(wireToSurface(surfaceId = 1, rect = RdpRect(0, 0, 4, 4), colour = 0x00AABB)))
+        for (slot in 1..5) {
+            channel.onMessage(bulk(surfaceToCache(surfaceId = 1, slot = slot, rect = RdpRect(0, 0, 2048, 1024))))
+        }
+
+        channel.onMessage(bulk(cacheToSurface(slot = 1, surfaceId = 1, x = 8, y = 8)))
+
+        assertEquals(0xFF00AABB.toInt(), framebuffer.pixels[8 * 64 + 8], "slot 1 must survive a 10M-pixel load")
+    }
+
+    @Test
+    fun `the small cache still evicts at its old budget`() = runTest {
+        // The same 10M-pixel load under the default small cache: slot 1 goes, and a restore of an
+        // evicted slot paints nothing — the client must not pretend to hold what it promised away.
+        deliver(createSurface(id = 1, width = 2048, height = 1024))
+        deliver(mapToOutput(surfaceId = 1, x = 0, y = 0))
+        deliver(wireToSurface(surfaceId = 1, rect = RdpRect(0, 0, 4, 4), colour = 0x00AABB))
+        for (slot in 1..5) {
+            deliver(surfaceToCache(surfaceId = 1, slot = slot, rect = RdpRect(0, 0, 2048, 1024)))
+        }
+
+        deliver(cacheToSurface(slot = 1, surfaceId = 1, x = 8, y = 8))
+
+        assertEquals(0, framebuffer.pixels[8 * 64 + 8], "an evicted slot must not paint")
     }
 
     @Test

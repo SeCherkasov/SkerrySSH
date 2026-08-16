@@ -29,6 +29,11 @@ class RemoteDesktopDiagnostics {
     var negotiated: String? = null
         private set
 
+    /** Which H.264 decoder serves the session ("ffmpeg (hwaccel auto)"); null without one (F-29). */
+    @Volatile
+    var decoder: String? = null
+        private set
+
     /** Completed server frames (frame markers / EGFX frame ends). */
     @Volatile
     var serverFrames: Long = 0
@@ -78,6 +83,10 @@ class RemoteDesktopDiagnostics {
         negotiated = text
     }
 
+    fun noteDecoder(text: String) {
+        decoder = text
+    }
+
     fun serverFrame() {
         serverFrames++
     }
@@ -112,6 +121,7 @@ class RemoteDesktopDiagnostics {
         paths = paths,
         lastCodec = lastCodec,
         negotiated = negotiated,
+        decoder = decoder,
         serverFrames = serverFrames,
         droppedOrders = droppedOrders,
         droppedRects = droppedRects,
@@ -126,6 +136,7 @@ class RemoteDesktopDiagnostics {
         val paths: List<String>,
         val lastCodec: String?,
         val negotiated: String?,
+        val decoder: String?,
         val serverFrames: Long,
         val droppedOrders: Long,
         val droppedRects: Long,

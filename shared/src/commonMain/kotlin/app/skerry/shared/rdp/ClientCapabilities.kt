@@ -37,8 +37,11 @@ object ClientCapabilities {
     private const val DRAW_ALLOW_COLOR_SUBSAMPLING = 0x04
     private const val DRAW_ALLOW_SKIP_ALPHA = 0x08
 
-    // TS_LARGE_POINTER_CAPABILITYSET::largePointerSupportFlags.
+    // TS_LARGE_POINTER_CAPABILITYSET::largePointerSupportFlags. Both flags go out (F-23): the
+    // pointer decoder accepts shapes up to 384×384, and advertising only 96×96 is what kept a
+    // conformant server from ever sending the HiDPI cursors it was sized for.
     private const val LARGE_POINTER_FLAG_96x96 = 0x00000001
+    private const val LARGE_POINTER_FLAG_384x384 = 0x00000002
 
     /** Codec ids this client assigns; the server quotes them back in every surface command. */
     const val CODEC_ID_REMOTEFX = 3
@@ -91,10 +94,13 @@ object ClientCapabilities {
         add(CapabilitySetType.SHARE, RdpWriter(4).u16le(0).u16le(0).toByteArray())
         add(CapabilitySetType.FONT, RdpWriter(4).u16le(1).u16le(0).toByteArray()) // FONTSUPPORT_FONTLIST
         add(CapabilitySetType.MULTIFRAGMENT_UPDATE, RdpWriter(4).u32le(MAX_REQUEST_SIZE).toByteArray())
-        add(CapabilitySetType.LARGE_POINTER, RdpWriter(2).u16le(LARGE_POINTER_FLAG_96x96).toByteArray())
+        add(
+            CapabilitySetType.LARGE_POINTER,
+            RdpWriter(2).u16le(LARGE_POINTER_FLAG_96x96 or LARGE_POINTER_FLAG_384x384).toByteArray(),
+        )
         add(CapabilitySetType.SURFACE_COMMANDS, surfaceCommandsCapabilities())
         add(CapabilitySetType.FRAME_ACKNOWLEDGE, RdpWriter(4).u32le(MAX_UNACKNOWLEDGED_FRAMES).toByteArray())
-        if (remoteFx) add(CapabilitySetType.BITMAP_CODECS, bitmapCodecsCapabilities())
+        add(CapabilitySetType.BITMAP_CODECS, bitmapCodecsCapabilities(remoteFx))
 
         val capabilities = sets.toByteArray()
         val sourceDescriptor = SOURCE_DESCRIPTOR
@@ -219,17 +225,30 @@ object ClientCapabilities {
     }.toByteArray()
 
     /**
-     * The Bitmap Codecs set for RemoteFX. The capture flags say what the *client* can decode:
-     * image mode (whole-frame tiles) and video mode (differential frames), both entropy-coded.
+     * The Bitmap Codecs set. NSCodec is always offered (F-33) — it is pure Kotlin and always
+     * decodable here, so a host with RemoteFX off falls back to it instead of raw bitmaps.
+     * RemoteFX joins when the server offered it and the profile did not decline it; its capture
+     * flags say what the *client* can decode: image mode (whole-frame tiles) and video mode
+     * (differential frames), both entropy-coded.
      */
-    private fun bitmapCodecsCapabilities(): ByteArray {
-        val properties = remoteFxClientCapabilities()
-        return RdpWriter(properties.size + 24).apply {
-            u8(1) // bitmapCodecCount
-            bytes(Capabilities.GUID_REMOTEFX)
-            u8(CODEC_ID_REMOTEFX)
-            u16le(properties.size)
-            bytes(properties)
+    private fun bitmapCodecsCapabilities(remoteFx: Boolean): ByteArray {
+        val rfxProperties = remoteFxClientCapabilities()
+        return RdpWriter(rfxProperties.size + 48).apply {
+            u8(if (remoteFx) 2 else 1) // bitmapCodecCount
+            bytes(Capabilities.GUID_NSCODEC)
+            u8(CODEC_ID_NSCODEC)
+            u16le(3)
+            // TS_NSCODEC_CAPABILITYSET (MS-RDPNSC 2.2.1): the decoder takes dynamic fidelity,
+            // subsampling, and any loss level; 3 is the quality preference reference clients state.
+            u8(1) // fAllowDynamicFidelity
+            u8(1) // fAllowSubsampling
+            u8(3) // colorLossLevel
+            if (remoteFx) {
+                bytes(Capabilities.GUID_REMOTEFX)
+                u8(CODEC_ID_REMOTEFX)
+                u16le(rfxProperties.size)
+                bytes(rfxProperties)
+            }
         }.toByteArray()
     }
 

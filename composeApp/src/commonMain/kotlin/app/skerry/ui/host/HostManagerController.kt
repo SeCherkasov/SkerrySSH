@@ -115,6 +115,7 @@ class HostManagerController(
                 // every mature client defaults to, and a fixed-size desktop in a differently sized
                 // viewport is a scaled, soft picture.
                 vncResizeToWindow = find(id)?.vncResizeToWindow ?: draft.connectionType.isRemoteDesktop,
+                vncQuality = find(id)?.vncQuality ?: app.skerry.shared.graphics.RemoteDesktopQuality.Auto,
                 // On an RDP profile the draft owns these: the form was prefilled from the stored
                 // spec, so it carries the farm routing token back even though nobody edits it.
                 // Any other profile type keeps what is stored — it has no RDP fields to speak with.
@@ -172,6 +173,13 @@ class HostManagerController(
     fun setVncResizeToWindow(id: String, enabled: Boolean) {
         val host = find(id) ?: return
         store.put(host.copy(vncResizeToWindow = enabled))
+        hosts = canonicalHosts()
+    }
+
+    /** Remember the live session's quality choice on the profile (V-03). */
+    fun setVncQuality(id: String, quality: app.skerry.shared.graphics.RemoteDesktopQuality) {
+        val host = find(id) ?: return
+        store.put(host.copy(vncQuality = quality))
         hosts = canonicalHosts()
     }
 

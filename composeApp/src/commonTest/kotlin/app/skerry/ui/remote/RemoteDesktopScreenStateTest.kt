@@ -341,6 +341,53 @@ class RemoteDesktopScreenStateTest {
     }
 
     @Test
+    fun the_profile_quality_is_applied_at_connect_and_changes_are_reported() = runTest {
+        // V-03: without this, every session starts at Auto and the live menu's choice dies with
+        // the tab — same persistence shape as remoteResize/vncResizeToWindow.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val applied = mutableListOf<RemoteDesktopQuality>()
+        val session = object : FakeRemoteDesktop() {
+            override suspend fun setQuality(quality: RemoteDesktopQuality) {
+                applied += quality
+            }
+        }
+        val reported = mutableListOf<RemoteDesktopQuality>()
+        val screen = RemoteDesktopScreenState(
+            session,
+            scope,
+            qualityInitial = RemoteDesktopQuality.High,
+            onQualityChanged = { reported += it },
+        )
+
+        assertEquals(RemoteDesktopQuality.High, screen.quality)
+        assertEquals(listOf(RemoteDesktopQuality.High), applied, "the profile's choice must reach the session")
+        assertEquals(emptyList(), reported, "seeding from the profile is not a change to report")
+
+        screen.applyQuality(RemoteDesktopQuality.Low)
+
+        assertEquals(listOf(RemoteDesktopQuality.Low), reported)
+        assertEquals(listOf(RemoteDesktopQuality.High, RemoteDesktopQuality.Low), applied)
+        scope.cancel()
+    }
+
+    @Test
+    fun an_auto_profile_quality_asks_the_session_for_nothing() = runTest {
+        // Auto is the wire default; telling the server "Auto" at connect would be noise.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val applied = mutableListOf<RemoteDesktopQuality>()
+        val session = object : FakeRemoteDesktop() {
+            override suspend fun setQuality(quality: RemoteDesktopQuality) {
+                applied += quality
+            }
+        }
+
+        RemoteDesktopScreenState(session, scope)
+
+        assertEquals(emptyList(), applied)
+        scope.cancel()
+    }
+
+    @Test
     fun the_default_system_pointer_drops_the_sprite_and_gives_the_local_one_back() = runTest {
         // RDP's System Pointer Update (SYSPTR_DEFAULT) means "back to the ordinary arrow". Keeping the
         // last sprite there is how an I-beam gets stuck on screen after leaving a text field.

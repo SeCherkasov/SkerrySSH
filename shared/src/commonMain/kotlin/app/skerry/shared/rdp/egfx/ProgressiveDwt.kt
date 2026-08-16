@@ -15,10 +15,14 @@ package app.skerry.shared.rdp.egfx
  */
 internal object ProgressiveDwt {
 
-    /** Reconstruct a 64×64 tile from [buffer], in place. */
-    fun inverse(buffer: IntArray) {
+    /**
+     * Reconstruct a 64×64 tile from [buffer], in place. [scratch] is working storage the caller
+     * may reuse across tiles (F-05); the default keeps one-off callers and tests allocation-free
+     * of ceremony, not of memory.
+     */
+    fun inverse(buffer: IntArray, scratch: IntArray = IntArray(Progressive.TILE_COEFFICIENTS)) {
         require(buffer.size >= Progressive.TILE_COEFFICIENTS) { "a tile is 4096 coefficients" }
-        val scratch = IntArray(Progressive.TILE_COEFFICIENTS)
+        require(scratch.size >= Progressive.TILE_COEFFICIENTS) { "scratch smaller than a tile" }
         decodeLevel(buffer, base = 3807, level = 3, scratch)
         decodeLevel(buffer, base = 3007, level = 2, scratch)
         decodeLevel(buffer, base = 0, level = 1, scratch)

@@ -120,10 +120,14 @@ class VncSocketSession(
             if (batch.any { it is VncUpdate.Closed }) break
             // Steady state: one request per applied framebuffer update, not per update in it — a
             // batch is a single server message, and asking once per part would just pile up requests.
-            // After a resize the framebuffer content is undefined, so ask for the full screen.
-            if (batch.any { it is VncUpdate.Region || it is VncUpdate.Resize }) {
-                val incremental = batch.none { it is VncUpdate.Resize }
-                codec.writeFramebufferUpdateRequest(incremental, 0, 0, framebuffer.width, framebuffer.height)
+            // After a resize the framebuffer content is undefined, so ask for the full screen — even
+            // under ContinuousUpdates, where only the incremental round trip is obsolete (the codec
+            // has already re-enabled the stream at the new size; a non-incremental request is still
+            // honoured and repaints the undefined buffer).
+            if (batch.any { it is VncUpdate.Resize }) {
+                codec.writeFramebufferUpdateRequest(false, 0, 0, framebuffer.width, framebuffer.height)
+            } else if (batch.any { it is VncUpdate.Region } && !codec.continuousUpdates) {
+                codec.writeFramebufferUpdateRequest(true, 0, 0, framebuffer.width, framebuffer.height)
             }
             remoteStatsTrace("vnc $serverName", diagnostics)
         }

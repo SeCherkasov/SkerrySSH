@@ -397,6 +397,111 @@ class RfbCodecTest {
         assertTrue(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR))
     }
 
+    // --- Cursor With Alpha pseudo-encoding (V-02) ---
+
+    @Test
+    fun set_encodings_offers_the_alpha_cursor_ahead_of_the_plain_one() = runTest {
+        // Order is preference: a server that can send -314 must pick it over the 1-bit-mask -239.
+        // Both ride the localCursor toggle — they are the same "we draw the cursor" claim.
+        val server = Wire()
+            .str("RFB 003.008\n").u8(1).u8(RfbCodec.SEC_NONE).s32(0).serverInit(2, 1, "x")
+            .build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(server), sink, RemoteFramebuffer(1, 1))
+        c.handshake(VncAuth.None)
+
+        val encodings = sink.lastEncodings()
+        assertTrue(encodings.indexOf(RfbCodec.ENC_CURSOR_WITH_ALPHA) in 0 until encodings.indexOf(RfbCodec.ENC_CURSOR))
+
+        c.setLocalCursor(false)
+        assertFalse(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR_WITH_ALPHA))
+        assertFalse(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR))
+    }
+
+    @Test
+    fun cursor_with_alpha_decodes_premultiplied_rgba_to_straight_argb() = runTest {
+        // 3x1 sprite, hotspot (1,0), nested Raw. Wire pixels are premultiplied RGBA: opaque red;
+        // half-transparent white (0x80,0x80,0x80,0x80 → straight 0x80FFFFFF); and an invalid
+        // premul (component > alpha) that must clamp, not overflow. Framebuffer stays untouched.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(1).u16(0).u16(3).u16(1).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .s32(RfbCodec.ENC_RAW)
+            .bytes(byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()))                            // opaque red
+            .bytes(byteArrayOf(0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte()))    // half white
+            .bytes(byteArrayOf(0xFF.toByte(), 0, 0, 0x80.toByte()))                            // hostile: R > A
+            .build()
+        val fb = RemoteFramebuffer(3, 1)
+        val updates = codec(FixtureSource(update), CapturingSink(), fb).readMessage()
+
+        val cursor = updates.filterIsInstance<VncUpdate.CursorShape>().single()
+        assertEquals(3, cursor.width)
+        assertEquals(1, cursor.height)
+        assertEquals(1, cursor.hotspotX)
+        assertEquals(0, cursor.hotspotY)
+        assertContentEquals(
+            intArrayOf(0xFFFF0000.toInt(), 0x80FFFFFF.toInt(), 0x80FF0000.toInt()),
+            cursor.argb,
+        )
+        assertEquals(0, fb.pixels[0]) // a cursor rect never touches the framebuffer
+    }
+
+    @Test
+    fun cursor_with_alpha_zero_alpha_pixel_is_zeroed_whole() = runTest {
+        // Same rule as the 1-bit mask: fully transparent pixels are zeroed whole, so no stray
+        // colour survives under alpha 0 for a consumer to blend or convert wrongly.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(1).u16(1).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .s32(RfbCodec.ENC_RAW)
+            .bytes(byteArrayOf(12, 34, 56, 0))
+            .build()
+        val cursor = codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1))
+            .readMessage().filterIsInstance<VncUpdate.CursorShape>().single()
+
+        assertContentEquals(intArrayOf(0), cursor.argb)
+    }
+
+    @Test
+    fun empty_cursor_with_alpha_means_no_cursor() = runTest {
+        // A 0x0 shape still carries the nested-encoding header, then no pixels.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(0).u16(0).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .s32(RfbCodec.ENC_RAW)
+            .build()
+        val cursor = codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1))
+            .readMessage().filterIsInstance<VncUpdate.CursorShape>().single()
+
+        assertEquals(0, cursor.width)
+        assertEquals(0, cursor.height)
+    }
+
+    @Test
+    fun cursor_with_alpha_rejects_a_nested_encoding_other_than_raw() = runTest {
+        // The spec allows any advertised encoding inside, but every real server sends Raw and the
+        // reference client accepts only Raw — a different value here is corruption, not a choice.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(1).u16(1).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .s32(RfbCodec.ENC_TIGHT)
+            .build()
+        assertFailsWith<VncProtocolException> {
+            codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
+        }
+    }
+
+    @Test
+    fun oversized_cursor_with_alpha_throws_before_allocating() = runTest {
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(65535).u16(65535).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .build()
+        assertFailsWith<VncProtocolException> {
+            codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
+        }
+    }
+
     // --- ExtendedDesktopSize / SetDesktopSize ---
 
     @Test
@@ -471,6 +576,151 @@ class RfbCodecTest {
         val sink = CapturingSink()
         codec(FixtureSource(ByteArray(0)), sink, RemoteFramebuffer(1, 1)).writeSetDesktopSize(640, 480)
         assertTrue(sink.messages.isEmpty())
+    }
+
+    // --- ContinuousUpdates + Fence (V-01) ---
+
+    @Test
+    fun set_encodings_advertises_continuous_updates_and_fence() = runTest {
+        val server = Wire()
+            .str("RFB 003.008\n").u8(1).u8(RfbCodec.SEC_NONE).s32(0).serverInit(2, 1, "x")
+            .build()
+        val sink = CapturingSink()
+        codec(FixtureSource(server), sink, RemoteFramebuffer(1, 1)).handshake(VncAuth.None)
+
+        assertTrue(sink.lastEncodings().contains(RfbCodec.ENC_CONTINUOUS_UPDATES))
+        assertTrue(sink.lastEncodings().contains(RfbCodec.ENC_FENCE))
+    }
+
+    @Test
+    fun end_of_continuous_updates_enables_streaming_for_the_whole_screen() = runTest {
+        // The server announces support by sending EndOfContinuousUpdates after our SetEncodings;
+        // the client answers by turning the stream on for the full framebuffer.
+        val stream = Wire()
+            .u8(RfbCodec.MSG_END_OF_CONTINUOUS_UPDATES)
+            .u8(RfbCodec.MSG_BELL) // something that makes readMessage return
+            .build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(stream), sink, RemoteFramebuffer(6, 4))
+        assertFalse(c.continuousUpdates)
+
+        assertEquals(VncUpdate.Bell, c.readMessage().single())
+
+        assertTrue(c.continuousUpdates)
+        val enable = sink.messages.single()
+        assertEquals(10, enable.size)
+        assertEquals(150, enable[0].toInt() and 0xFF) // EnableContinuousUpdates
+        assertEquals(1, enable[1].toInt())            // enable
+        assertEquals(0, u16At(enable, 2))             // x
+        assertEquals(0, u16At(enable, 4))             // y
+        assertEquals(6, u16At(enable, 6))             // width = whole framebuffer
+        assertEquals(4, u16At(enable, 8))             // height
+    }
+
+    @Test
+    fun a_resize_reenables_continuous_updates_for_the_new_region() = runTest {
+        // The enabled region is a fixed rectangle, not "the screen": after a resize the stream must
+        // be re-enabled for the new size or the grown part of the desktop never updates.
+        val stream = Wire()
+            .u8(RfbCodec.MSG_END_OF_CONTINUOUS_UPDATES)
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(8).u16(5).s32(RfbCodec.ENC_DESKTOP_SIZE)
+            .build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(stream), sink, RemoteFramebuffer(2, 1))
+        c.readMessage()
+
+        val enables = sink.messages.filter { it.isNotEmpty() && (it[0].toInt() and 0xFF) == 150 }
+        assertEquals(2, enables.size) // once on discovery, once after the resize
+        assertEquals(8, u16At(enables.last(), 6))
+        assertEquals(5, u16At(enables.last(), 8))
+    }
+
+    @Test
+    fun repeated_end_of_continuous_updates_enables_the_stream_once() = runTest {
+        // A conforming server can repeat the message (it acknowledges disables with it too); only
+        // the first one may answer with an enable, or a hostile server could pump a reply loop.
+        val stream = Wire()
+            .u8(RfbCodec.MSG_END_OF_CONTINUOUS_UPDATES)
+            .u8(RfbCodec.MSG_END_OF_CONTINUOUS_UPDATES)
+            .u8(RfbCodec.MSG_BELL)
+            .build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(stream), sink, RemoteFramebuffer(2, 1))
+
+        assertEquals(VncUpdate.Bell, c.readMessage().single())
+
+        assertTrue(c.continuousUpdates)
+        assertEquals(1, sink.messages.size)
+    }
+
+    @Test
+    fun fence_payload_at_the_cap_is_echoed_whole() = runTest {
+        // 64 bytes is the spec's maximum, not past it — the bound must be exclusive of the cap.
+        val payload = ByteArray(RfbCodec.MAX_FENCE_PAYLOAD) { it.toByte() }
+        val stream = Wire()
+            .u8(RfbCodec.MSG_FENCE).u8(0).u8(0).u8(0)
+            .s32(RfbCodec.FENCE_REQUEST).u8(payload.size).bytes(payload)
+            .u8(RfbCodec.MSG_BELL)
+            .build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(stream), sink, RemoteFramebuffer(1, 1))
+
+        assertEquals(VncUpdate.Bell, c.readMessage().single())
+
+        val reply = sink.messages.single()
+        assertEquals(RfbCodec.MAX_FENCE_PAYLOAD, reply[8].toInt() and 0xFF)
+        assertContentEquals(payload, reply.copyOfRange(9, 9 + payload.size))
+    }
+
+    @Test
+    fun fence_request_is_echoed_without_the_request_bit() = runTest {
+        // Flags: Request | BlockBefore | SyncNext, 3-byte payload. The reply must clear Request,
+        // keep only the modes we honour (a serial reader trivially honours the blocking ones), and
+        // echo the payload byte for byte.
+        val flags = RfbCodec.FENCE_REQUEST or RfbCodec.FENCE_BLOCK_BEFORE or RfbCodec.FENCE_SYNC_NEXT
+        val stream = Wire()
+            .u8(RfbCodec.MSG_FENCE).u8(0).u8(0).u8(0)
+            .s32(flags).u8(3).str("abc")
+            .u8(RfbCodec.MSG_BELL)
+            .build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(stream), sink, RemoteFramebuffer(1, 1))
+
+        assertEquals(VncUpdate.Bell, c.readMessage().single())
+
+        val reply = sink.messages.single()
+        assertEquals(248, reply[0].toInt() and 0xFF)
+        assertEquals(RfbCodec.FENCE_BLOCK_BEFORE, s32At(reply, 4))
+        assertEquals(3, reply[8].toInt())
+        assertContentEquals("abc".encodeToByteArray(), reply.copyOfRange(9, 12))
+    }
+
+    @Test
+    fun fence_response_without_the_request_bit_is_ignored() = runTest {
+        // A response correlates with a fence WE sent — we send none, so nothing goes out.
+        val stream = Wire()
+            .u8(RfbCodec.MSG_FENCE).u8(0).u8(0).u8(0)
+            .s32(RfbCodec.FENCE_BLOCK_BEFORE).u8(1).u8(0x7A)
+            .u8(RfbCodec.MSG_BELL)
+            .build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(stream), sink, RemoteFramebuffer(1, 1))
+
+        assertEquals(VncUpdate.Bell, c.readMessage().single())
+        assertTrue(sink.messages.isEmpty())
+    }
+
+    @Test
+    fun oversized_fence_payload_throws() = runTest {
+        // The spec caps the payload at 64 bytes; beyond that it is a hostile message, not a fence.
+        val stream = Wire()
+            .u8(RfbCodec.MSG_FENCE).u8(0).u8(0).u8(0)
+            .s32(RfbCodec.FENCE_REQUEST).u8(65).bytes(ByteArray(65))
+            .build()
+        assertFailsWith<VncProtocolException> {
+            codec(FixtureSource(stream), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
+        }
     }
 }
 

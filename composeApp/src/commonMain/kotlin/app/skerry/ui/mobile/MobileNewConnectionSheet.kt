@@ -61,6 +61,7 @@ import app.skerry.ui.generated.resources.conn_field_notes
 import app.skerry.ui.generated.resources.conn_field_tags
 import app.skerry.ui.generated.resources.conn_notes_placeholder
 import app.skerry.ui.generated.resources.conn_field_domain
+import app.skerry.ui.generated.resources.conn_field_display
 import app.skerry.ui.generated.resources.conn_field_image_quality
 import app.skerry.ui.generated.resources.conn_field_username
 import app.skerry.ui.generated.resources.conn_save_changes
@@ -286,6 +287,10 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 Spacer(Modifier.height(14.dp))
                 MobileFormField(stringResource(Res.string.conn_field_image_quality)) {
                     app.skerry.ui.host.RdpQualitySection(form)
+                }
+                Spacer(Modifier.height(14.dp))
+                MobileFormField(stringResource(Res.string.conn_field_display)) {
+                    app.skerry.ui.host.RdpDisplaySection(form)
                 }
                 Spacer(Modifier.height(14.dp))
             } else if (form.connectionType.isVnc) {

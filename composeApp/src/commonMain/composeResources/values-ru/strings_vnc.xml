@@ -17,6 +17,8 @@
     <string name="rd_stats_path">Путь</string>
     <string name="rd_stats_codec">Кодек</string>
     <string name="rd_stats_negotiated">Согласовано</string>
+    <string name="rd_stats_decoder">Декодер</string>
+    <string name="rd_stats_rendering">Отрисовка</string>
     <string name="rd_stats_server_fps">Кадры сервера/с</string>
     <string name="rd_stats_redraw_fps">Перерисовки/с</string>
     <string name="rd_stats_decode">Декодирование, мс</string>

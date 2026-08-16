@@ -2,6 +2,7 @@ package app.skerry.shared.rdp.egfx
 
 import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
+import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpImageBounds
 import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpReader
@@ -27,6 +28,13 @@ class GraphicsChannel(
     private val framebuffer: RemoteFramebuffer,
     private val codecs: GraphicsCodecs,
     private val surfaceBudgetPixels: Int = MAX_SURFACE_PIXELS,
+    /** Which H.264 ladder to advertise (F-28); capped by whether [GraphicsCodecs.avc] exists. */
+    private val h264Mode: RdpH264Mode = RdpH264Mode.Auto,
+    /**
+     * Advertise CAPS_FLAG_SMALL_CACHE (F-07). Small cache trades memory for retransmission on a
+     * busy desktop; the default keeps it, desktop turns it off and budgets the spec's full cache.
+     */
+    private val smallCache: Boolean = true,
     /**
      * Where a line about the capability exchange goes; silent by default. Which version the server
      * picked decides whether it may use H.264 at all, and nothing else on the wire says so.
@@ -42,6 +50,9 @@ class GraphicsChannel(
      * every server accepts — so only this direction needs one.
      */
     private val bulk = Zgfx()
+
+    /** What the advertisement promised is what eviction honours — a server sizes its slots on it. */
+    private val cacheBudgetPixels = if (smallCache) MAX_CACHE_PIXELS else LARGE_CACHE_PIXELS
 
     private val surfaces = mutableMapOf<Int, GraphicsSurface>()
     private val cache = mutableMapOf<Int, CachedBitmap>()
@@ -209,6 +220,26 @@ class GraphicsChannel(
         send(pdu(CMDID_FRAME_ACKNOWLEDGE, acknowledge))
     }
 
+    /**
+     * One H.264 bitmap onto [surface]. The rectangle in the PDU is the whole frame; which parts
+     * were redrawn is in the message's own region list, in surface coordinates. The mode gates the
+     * receive side too: a server ignoring the capability exchange must not reach a codec path the
+     * profile advertised away (F-28's escape-hatch promise).
+     */
+    private fun decodeAvc(codecId: Int, data: ByteArray, surface: GraphicsSurface) {
+        val avc = codecs.avc
+            ?: throw RdpProtocolException("the server used ${GraphicsCodecs.codecName(codecId)}, not advertised")
+        if (codecId != GraphicsCodecs.CODEC_AVC420 && h264Mode == RdpH264Mode.Avc420) {
+            throw RdpProtocolException("the server used ${GraphicsCodecs.codecName(codecId)}, not advertised")
+        }
+        val touched = if (codecId == GraphicsCodecs.CODEC_AVC420) {
+            avc.decodeAvc420(data, surface)
+        } else {
+            avc.decodeAvc444(data, surface, version2 = codecId == GraphicsCodecs.CODEC_AVC444_V2)
+        }
+        for (region in touched) present(surface, region)
+    }
+
     private fun wireToSurface(body: RdpReader) {
         val surfaceId = body.u16le()
         val codecId = body.u16le()
@@ -236,16 +267,7 @@ class GraphicsChannel(
         }
 
         if (codecId in AVC_CODECS) {
-            // The rectangle above is the whole frame; which parts of it were redrawn is in the
-            // message's own region list, in surface coordinates.
-            val avc = codecs.avc
-                ?: throw RdpProtocolException("the server used ${GraphicsCodecs.codecName(codecId)}, not advertised")
-            val touched = if (codecId == GraphicsCodecs.CODEC_AVC420) {
-                avc.decodeAvc420(data, surface)
-            } else {
-                avc.decodeAvc444(data, surface, version2 = codecId == GraphicsCodecs.CODEC_AVC444_V2)
-            }
-            for (region in touched) present(surface, region)
+            decodeAvc(codecId, data, surface)
             return
         }
 
@@ -391,7 +413,7 @@ class GraphicsChannel(
         cachedPixels += bitmap.pixels.size
         // The server keeps its own idea of the cache, so an entry dropped here is not an error —
         // the region it would have restored simply stays as it was until the server sends it again.
-        while (cachedPixels > MAX_CACHE_PIXELS && cacheOrder.isNotEmpty()) {
+        while (cachedPixels > cacheBudgetPixels && cacheOrder.isNotEmpty()) {
             evict(cacheOrder.first())
         }
     }
@@ -420,12 +442,19 @@ class GraphicsChannel(
      * scales the whole desktop, in the view.
      */
     private fun capsAdvertise(): ByteArray {
-        val h264 = codecs.avc != null
-        val writer = RdpWriter(40).u16le(if (h264) 3 else 1) // capsSetCount
-        writer.u32le(CAPVERSION_8).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE)
-        if (h264) {
-            writer.u32le(CAPVERSION_8_1).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE or CAPS_FLAG_AVC420_ENABLED)
-            writer.u32le(CAPVERSION_10_4).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE)
+        // The mode is a preference, the decoder a possibility: both must agree before a version
+        // that implies H.264 goes out, or the server would send pictures nothing here can decode.
+        val avc420 = codecs.avc != null && h264Mode != RdpH264Mode.Off
+        val avc444 = avc420 && h264Mode != RdpH264Mode.Avc420
+        val sets = 1 + (if (avc420) 1 else 0) + (if (avc444) 1 else 0)
+        val cacheFlag = if (smallCache) CAPS_FLAG_SMALL_CACHE else 0
+        val writer = RdpWriter(40).u16le(sets) // capsSetCount
+        writer.u32le(CAPVERSION_8).u32le(4).u32le(cacheFlag)
+        if (avc420) {
+            writer.u32le(CAPVERSION_8_1).u32le(4).u32le(cacheFlag or CAPS_FLAG_AVC420_ENABLED)
+        }
+        if (avc444) {
+            writer.u32le(CAPVERSION_10_4).u32le(4).u32le(cacheFlag)
         }
         return writer.toByteArray()
     }
@@ -506,5 +535,8 @@ class GraphicsChannel(
 
         /** 32 MB of cached pixels — well past what a server told to keep a small cache will use. */
         private const val MAX_CACHE_PIXELS = 8 * 1024 * 1024
+
+        /** The spec's full cache once the small-cache flag is dropped (F-07): 100 MB as pixels. */
+        private const val LARGE_CACHE_PIXELS = 25 * 1024 * 1024
     }
 }

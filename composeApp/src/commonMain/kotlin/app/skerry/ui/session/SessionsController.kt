@@ -383,9 +383,11 @@ class SessionsController(
         auth: VncAuth,
         remoteResize: Boolean = false,
         onRemoteResizeChanged: (Boolean) -> Unit = {},
+        quality: app.skerry.shared.graphics.RemoteDesktopQuality = app.skerry.shared.graphics.RemoteDesktopQuality.Auto,
+        onQualityChanged: (app.skerry.shared.graphics.RemoteDesktopQuality) -> Unit = {},
     ): String? {
         val open = openVncSession ?: return null
-        return openRemoteDesktop(hostId, title, subtitle, remoteResize, onRemoteResizeChanged) {
+        return openRemoteDesktop(hostId, title, subtitle, remoteResize, onRemoteResizeChanged, quality, onQualityChanged) {
             open(target, auth)
         }
     }
@@ -401,9 +403,11 @@ class SessionsController(
         request: RdpConnectRequest,
         remoteResize: Boolean = false,
         onRemoteResizeChanged: (Boolean) -> Unit = {},
+        quality: app.skerry.shared.graphics.RemoteDesktopQuality = app.skerry.shared.graphics.RemoteDesktopQuality.Auto,
+        onQualityChanged: (app.skerry.shared.graphics.RemoteDesktopQuality) -> Unit = {},
     ): String? {
         val open = openRdpSession ?: return null
-        return openRemoteDesktop(hostId, title, subtitle, remoteResize, onRemoteResizeChanged) {
+        return openRemoteDesktop(hostId, title, subtitle, remoteResize, onRemoteResizeChanged, quality, onQualityChanged) {
             open(request)
         }
     }
@@ -415,6 +419,8 @@ class SessionsController(
         subtitle: String,
         remoteResize: Boolean = false,
         onRemoteResizeChanged: (Boolean) -> Unit = {},
+        quality: app.skerry.shared.graphics.RemoteDesktopQuality = app.skerry.shared.graphics.RemoteDesktopQuality.Auto,
+        onQualityChanged: (app.skerry.shared.graphics.RemoteDesktopQuality) -> Unit = {},
         openSession: suspend () -> RemoteDesktopSession,
     ): String? {
         val controller = vncControllerFactory?.invoke() ?: return null
@@ -423,7 +429,7 @@ class SessionsController(
         val tab = openTab(session)
         tab.setView(SessionView.Vnc)
         reportHostSession(hostId)
-        controller.connect(remoteResize, onRemoteResizeChanged, openSession)
+        controller.connect(remoteResize, onRemoteResizeChanged, quality, onQualityChanged, openSession)
         return tab.id
     }
 

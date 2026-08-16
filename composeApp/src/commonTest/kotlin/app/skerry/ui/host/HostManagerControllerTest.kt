@@ -49,6 +49,27 @@ class HostManagerControllerTest {
     }
 
     @Test
+    fun `the live quality choice is remembered and survives a form re-save`() {
+        // V-03: the graphics menu's quality pick used to die with the tab; now it lands on the
+        // profile, and — like vncResizeToWindow — a form save must not reset it.
+        val store = FakeHostStore(Host("1", "v", "v.local", 5900, "", connectionType = ConnectionType.VNC))
+        val controller = HostManagerController(store) { error("must not be called") }
+
+        controller.setVncQuality("1", app.skerry.shared.graphics.RemoteDesktopQuality.High)
+        assertEquals(
+            app.skerry.shared.graphics.RemoteDesktopQuality.High,
+            store.all().single().vncQuality,
+        )
+
+        controller.save(HostDraft(id = "1", label = "v", address = "v.local", port = 5900, username = "", connectionType = ConnectionType.VNC))
+        assertEquals(
+            app.skerry.shared.graphics.RemoteDesktopQuality.High,
+            store.all().single().vncQuality,
+            "the user picked it live; a form save must not flip it back",
+        )
+    }
+
+    @Test
     fun `an existing profile keeps its stored resize choice on re-save`() {
         val store = FakeHostStore(
             Host("1", "win", "w", 3389, "u", connectionType = ConnectionType.RDP, vncResizeToWindow = false),

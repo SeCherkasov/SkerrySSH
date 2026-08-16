@@ -12,9 +12,13 @@ import androidx.compose.ui.input.key.Key
  */
 fun keySymFor(key: Key, codePoint: Int): Long {
     special[key]?.let { return it }
+    platformKeySymExtras[key]?.let { return it }
     if (codePoint != 0) return unicodeKeySym(codePoint)
     return 0L
 }
+
+/** Keysyms only a platform can name — F13–F24 have no common `Key` constant (F-18). */
+internal expect val platformKeySymExtras: Map<Key, Long>
 
 /** X11 keysym for a Unicode code point: Latin-1 (< 0x100) is the code itself; above that, 0x01000000 + code. */
 private fun unicodeKeySym(codePoint: Int): Long =
@@ -30,6 +34,9 @@ private val special: Map<Key, Long> = buildMap {
     put(Key.Delete, 0xFFFFL)
     put(Key.Insert, 0xFF63L)
     put(Key.Spacebar, 0x020L)
+    // The two keys RDP sends as multi-scancode sequences (F-18); RFB names them directly.
+    put(Key.PrintScreen, 0xFF61L)
+    put(Key.Break, 0xFF13L)
     put(Key.Home, 0xFF50L)
     put(Key.MoveEnd, 0xFF57L)
     put(Key.PageUp, 0xFF55L)

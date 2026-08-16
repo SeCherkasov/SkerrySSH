@@ -78,9 +78,14 @@ internal fun openMobileRdp(
             audioDeviceId = host.rdp?.audioOutputDeviceId.orEmpty(),
             clipboard = host.rdp?.clipboard != false,
             imageQuality = host.rdp?.quality ?: app.skerry.shared.rdp.RdpImageQuality.DEFAULT,
+            graphicsPipeline = host.rdp?.graphicsPipeline != false,
+            remoteFx = host.rdp?.remoteFx != false,
+            h264 = host.rdp?.h264 ?: app.skerry.shared.rdp.RdpH264Mode.Auto,
         ),
         remoteResize = host.vncResizeToWindow,
         onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+        quality = host.vncQuality,
+        onQualityChanged = { q -> hostManager?.setVncQuality(host.id, q) },
     )
     if (sessions != null) state.push(MobileRoute.Vnc)
 }
@@ -96,6 +101,8 @@ internal fun openMobileVnc(
         host.id, host.rowLabel(), host.connectionSubtitle(), host.toTarget(), auth,
         remoteResize = host.vncResizeToWindow,
         onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+        quality = host.vncQuality,
+        onQualityChanged = { q -> hostManager?.setVncQuality(host.id, q) },
     )
     if (sessions != null) state.push(MobileRoute.Vnc)
 }

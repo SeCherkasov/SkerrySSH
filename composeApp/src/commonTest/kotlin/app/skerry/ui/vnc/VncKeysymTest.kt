@@ -21,6 +21,9 @@ class VncKeysymTest {
         assertEquals(0xFF09L, keySymFor(Key.Tab, 0))
         assertEquals(0xFF51L, keySymFor(Key.DirectionLeft, 0))
         assertEquals(0xFF54L, keySymFor(Key.DirectionDown, 0))
+        // The two keys RDP sends as scancode sequences (F-18); dead on VNC until these rows.
+        assertEquals(0xFF61L, keySymFor(Key.PrintScreen, 0))
+        assertEquals(0xFF13L, keySymFor(Key.Break, 0))
         assertEquals(0xFFE3L, keySymFor(Key.CtrlLeft, 0))
         assertEquals(0xFFBEL, keySymFor(Key.F1, 0))
         assertEquals(0xFFC9L, keySymFor(Key.F12, 0))

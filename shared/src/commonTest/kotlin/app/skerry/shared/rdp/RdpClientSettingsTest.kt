@@ -22,6 +22,8 @@ class RdpClientSettingsTest {
         keyboardLayout = 0x419,
         imageQuality = RdpImageQuality.High,
         redirectedSessionId = 42,
+        remoteFx = false,
+        h264 = RdpH264Mode.Avc420,
     )
 
     @Test
@@ -36,6 +38,9 @@ class RdpClientSettingsTest {
         assertEquals(42, settings.redirectedSessionId)
         assertEquals(RdpImageQuality.High, settings.imageQuality)
         assertTrue(settings.wantsGraphicsPipeline)
+        // Non-default in the fixture on purpose: a dropped mapping would read back the default.
+        assertFalse(settings.wantsRemoteFx)
+        assertEquals(RdpH264Mode.Avc420, settings.h264)
     }
 
     @Test

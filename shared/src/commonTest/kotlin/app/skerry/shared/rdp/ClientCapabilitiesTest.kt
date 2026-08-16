@@ -156,10 +156,62 @@ class ClientCapabilitiesTest {
     }
 
     @Test
-    fun `the codecs set is added only when the server offered RemoteFX`() {
-        assertTrue(CapabilitySetType.BITMAP_CODECS !in capabilitySetLengths(remoteFx = false))
-        val length = capabilitySetLengths(remoteFx = true)[CapabilitySetType.BITMAP_CODECS]
-        assertTrue(length != null && length > 4, "the codecs set carries the RemoteFX container")
+    fun `the codecs set always offers NSCodec, and RemoteFX only when the server offered it`() {
+        // F-33: NSCodec is pure Kotlin and always decodable here, so it is always on the table —
+        // a host with RemoteFX off then falls back to NSCodec instead of raw bitmaps.
+        val withoutRfx = bitmapCodecGuids(remoteFx = false)
+        assertEquals(listOf(Capabilities.GUID_NSCODEC.toList()), withoutRfx)
+
+        val withRfx = bitmapCodecGuids(remoteFx = true)
+        assertEquals(
+            listOf(Capabilities.GUID_NSCODEC.toList(), Capabilities.GUID_REMOTEFX.toList()),
+            withRfx,
+        )
+    }
+
+    @Test
+    fun `the large pointer set asks for the full 384 pixel shapes the decoder accepts`() {
+        // F-23: PointerUpdate takes shapes up to 384×384, but only the 96×96 flag went out — so a
+        // conformant server never sent the HiDPI cursors the decoder was sized for.
+        val pdu = ClientCapabilities.confirmActive(0, 1007, 1024, 768, remoteFx = false)
+        val flags = capabilitySetPayload(pdu, CapabilitySetType.LARGE_POINTER)!!
+        val value = (flags[0].toInt() and 0xFF) or ((flags[1].toInt() and 0xFF) shl 8)
+
+        assertEquals(0x0003, value, "96x96 | 384x384")
+    }
+
+    /** The codec GUIDs of the Bitmap Codecs set, in order; empty when the set is absent. */
+    private fun bitmapCodecGuids(remoteFx: Boolean): List<List<Byte>> {
+        val pdu = ClientCapabilities.confirmActive(0, 1007, 1024, 768, remoteFx = remoteFx)
+        val payload = capabilitySetPayload(pdu, CapabilitySetType.BITMAP_CODECS) ?: return emptyList()
+        val reader = RdpReader(payload)
+        return buildList {
+            repeat(reader.u8()) {
+                add(reader.bytes(16).toList())
+                reader.u8() // codecId
+                reader.skip(reader.u16le())
+            }
+        }
+    }
+
+    /** The payload bytes of capability set [type] inside a Confirm Active [pdu], or null. */
+    private fun capabilitySetPayload(pdu: ByteArray, type: Int): ByteArray? {
+        val reader = RdpReader(pdu)
+        RdpShare.readControlHeader(reader)
+        reader.u32le()
+        reader.u16le()
+        val sourceLength = reader.u16le()
+        reader.u16le()
+        reader.skip(sourceLength)
+        val count = reader.u16le()
+        reader.u16le()
+        repeat(count) {
+            val setType = reader.u16le()
+            val length = reader.u16le()
+            if (setType == type) return reader.bytes(length - 4)
+            reader.skip(length - 4)
+        }
+        return null
     }
 
     @Test

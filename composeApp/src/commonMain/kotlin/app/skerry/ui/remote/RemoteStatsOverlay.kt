@@ -28,7 +28,9 @@ import app.skerry.ui.generated.resources.rd_stats_decode
 import app.skerry.ui.generated.resources.rd_stats_draw
 import app.skerry.ui.generated.resources.rd_stats_dropped
 import app.skerry.ui.generated.resources.rd_stats_in
+import app.skerry.ui.generated.resources.rd_stats_decoder
 import app.skerry.ui.generated.resources.rd_stats_negotiated
+import app.skerry.ui.generated.resources.rd_stats_rendering
 import app.skerry.ui.generated.resources.rd_stats_out
 import app.skerry.ui.generated.resources.rd_stats_path
 import app.skerry.ui.generated.resources.rd_stats_redraw_fps
@@ -93,6 +95,8 @@ internal data class RemoteStatsValues(
     val path: String,
     val codec: String,
     val negotiated: String?,
+    /** Which H.264 decoder serves the session (F-29); null without one. */
+    val decoder: String?,
     val serverFps: String,
     val redrawFps: String,
     val decodeMs: String,
@@ -114,6 +118,7 @@ internal fun remoteStatsValues(
         path = now.diagnostics.paths.joinToString(" + ").ifEmpty { ABSENT },
         codec = now.diagnostics.lastCodec ?: ABSENT,
         negotiated = now.diagnostics.negotiated,
+        decoder = now.diagnostics.decoder,
         serverFps = fmt1((now.diagnostics.serverFrames - previous.diagnostics.serverFrames) / seconds),
         redrawFps = fmt1((now.redraws - previous.redraws) / seconds),
         decodeMs = averageMs(
@@ -182,6 +187,10 @@ fun RemoteStatsOverlay(screen: RemoteDesktopScreenState, modifier: Modifier = Mo
         StatRow(stringResource(Res.string.rd_stats_path), v.path)
         StatRow(stringResource(Res.string.rd_stats_codec), v.codec)
         v.negotiated?.let { StatRow(stringResource(Res.string.rd_stats_negotiated), it) }
+        v.decoder?.let { StatRow(stringResource(Res.string.rd_stats_decoder), it) }
+        // The app's render backend (F-30) — a process-wide fact fixed at startup, so it is read
+        // once, from the platform rather than the diagnostics. Null where no such knob exists.
+        remember { effectiveRenderApi() }?.let { StatRow(stringResource(Res.string.rd_stats_rendering), it) }
         StatRow(stringResource(Res.string.rd_stats_server_fps), v.serverFps)
         StatRow(stringResource(Res.string.rd_stats_redraw_fps), v.redrawFps)
         StatRow(stringResource(Res.string.rd_stats_decode), v.decodeMs)
