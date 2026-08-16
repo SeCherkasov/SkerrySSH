@@ -48,7 +48,11 @@ fun moshInflate(data: ByteArray, maxSize: Int = 8 * 1024 * 1024): ByteArray? {
                 out = out.copyOf(minOf(maxSize, out.size * 2))
             }
             val n = inflater.inflate(out, size, out.size - size)
-            if (n == 0 && inflater.needsInput()) return null // truncated stream
+            // Every way inflate() can stop making progress, not just the truncated one: a header
+            // with FDICT set asks for a preset dictionary we have none of, and answers 0 with
+            // needsInput() false and finished() false — no exit at all, so the loop spins on a
+            // core forever, and it never suspends, so cancelling the session cannot stop it.
+            if (n == 0 && (inflater.needsInput() || inflater.needsDictionary())) return null
             size += n
         }
         return out.copyOf(size)

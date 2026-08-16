@@ -1,9 +1,11 @@
 package app.skerry.shared.rdp.egfx
 
 import app.skerry.shared.rdp.PlanarCodec
+import app.skerry.shared.rdp.RdpClientSettings
 import app.skerry.shared.rdp.RdpRect
 import app.skerry.shared.rdp.RdpReader
 import app.skerry.shared.rdp.RemoteFxDecoder
+import app.skerry.shared.rdp.rfx.RemoteFx
 
 /**
  * The codecs the graphics pipeline may use (MS-RDPEGFX 2.2.4.x), keyed by the ids the wire carries.
@@ -51,6 +53,20 @@ class GraphicsCodecs(
     }
 
     companion object {
+        /**
+         * The codec set a profile asks for. The switches are attack-surface knobs, so what the
+         * pipeline can decode has to follow them exactly as the legacy surface path does: a codec
+         * the profile turned off is left out, and a server that sends it anyway hits "not
+         * advertised" instead of a live decoder. [avc] is separate because whether this machine has
+         * an H.264 decoder at all is a platform question, answered before this is called.
+         */
+        fun forSettings(settings: RdpClientSettings, avc: AvcDecoder? = null): GraphicsCodecs = GraphicsCodecs(
+            remoteFx = if (settings.wantsRemoteFx) RemoteFx() else null,
+            progressive = Progressive(),
+            clear = ClearCodec(),
+            avc = avc,
+        )
+
         const val CODEC_UNCOMPRESSED = 0x0000
         const val CODEC_REMOTEFX = 0x0003
         const val CODEC_CLEARCODEC = 0x0008

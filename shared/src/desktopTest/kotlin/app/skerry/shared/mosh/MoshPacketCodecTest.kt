@@ -111,4 +111,29 @@ class MoshCompressionTest {
     fun `inflate returns null on garbage`() {
         assertNull(moshInflate(byteArrayOf(1, 2, 3, 4)))
     }
+
+    /**
+     * A zlib header with FDICT set asks for a preset dictionary. `inflate()` then returns 0 with
+     * `needsDictionary()` true and neither `needsInput()` nor `finished()` — none of the loop's
+     * exits — so it spins on a core forever. The datagram carrying it is authenticated, but the
+     * server holds the session key: a compromised mosh-server can produce one, and the loop does
+     * not suspend, so cancelling the session cannot break it either.
+     */
+    @Test
+    fun `inflate refuses a preset-dictionary stream instead of spinning`() {
+        // 0x78 0x20: CMF deflate/32K window, FLG with FDICT set and a valid FCHECK
+        // ((0x78 * 256 + 0x20) % 31 == 0), then the four-byte dictionary id and a byte of body —
+        // with input still unread, needsInput() is false too, so no exit condition holds at all.
+        val presetDictionary = byteArrayOf(0x78, 0x20, 1, 2, 3, 4, 0x63)
+        var answered = false
+        var result: ByteArray? = ByteArray(0)
+        val worker = kotlin.concurrent.thread(isDaemon = true, name = "inflate-fdict") {
+            result = moshInflate(presetDictionary)
+            answered = true
+        }
+        worker.join(2_000)
+
+        assertTrue(answered, "moshInflate never returned: a preset-dictionary stream spins forever")
+        assertNull(result)
+    }
 }

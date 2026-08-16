@@ -48,6 +48,27 @@ class TightDecoderTest {
         assertEquals(G, fb.pixels[1])
     }
 
+    /**
+     * A one-colour palette is not what a conforming server sends (it uses Fill), so the bit plane
+     * that follows is whatever the peer chose — and a set bit indexes past a one-element palette.
+     * The rest of the session must not die on it: the decoder clamps, exactly as the byte-indexed
+     * palette path beside it already does.
+     */
+    @Test
+    fun basic_palette_one_colour_clamps_instead_of_throwing() = runTest {
+        val data = join(
+            byteArrayOf(0x40), // control: basic, explicit filter, stream 0
+            byteArrayOf(1), // filter id = palette
+            byteArrayOf(0), // numColors-1 = 0 → a single colour
+            tp(0xFF, 0, 0), // palette: red
+            byteArrayOf(0xFF.toByte()), // every bit set: index 1 into a one-element palette
+        )
+        val fb = RemoteFramebuffer(2, 1)
+        decodeTight(TightBytes(data), fb, VncRect(0, 0, 2, 1), noStream, noReset, null)
+        assertEquals(R, fb.pixels[0])
+        assertEquals(R, fb.pixels[1])
+    }
+
     @Test
     fun basic_palette_two_colours_raw() = runTest {
         // 4x2 palette, 1 bit/pixel, rowSize 1 → 2 bytes raw. mode 4 (filter flag), filterId 1 (palette).

@@ -7,13 +7,11 @@ import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.graphics.remoteStatsTrace
 import app.skerry.shared.rdp.egfx.AvcCodec
-import app.skerry.shared.rdp.egfx.ClearCodec
 import app.skerry.shared.rdp.egfx.DynamicChannels
 import app.skerry.shared.rdp.egfx.GraphicsChannel
 import app.skerry.shared.rdp.egfx.GraphicsCodecs
 import app.skerry.shared.rdp.egfx.H264DecoderFactory
 import app.skerry.shared.rdp.egfx.h264Trace
-import app.skerry.shared.rdp.egfx.Progressive
 import app.skerry.shared.rdp.nla.CredSspClient
 import app.skerry.shared.rdp.nla.JvmNtlmCrypto
 import app.skerry.shared.rdp.nla.NtlmCredentials
@@ -261,10 +259,11 @@ class RdpSocketSession(
      */
     private val graphics = GraphicsChannel(
         framebuffer = framebuffer,
-        codecs = GraphicsCodecs(
-            remoteFx = RemoteFx(),
-            progressive = Progressive(),
-            clear = ClearCodec(),
+        // The profile's codec switches decide this set, exactly as they do on the legacy surface
+        // path: a codec turned off is left out, so a server ignoring the capability exchange hits
+        // "not advertised" rather than a live decoder.
+        codecs = GraphicsCodecs.forSettings(
+            settings,
             // Only when this machine has a decoder AND the profile allows H.264: leaving the codec
             // out is what keeps the decoder unreachable for a server that ignores the capability
             // exchange, and it keeps the overlay's decoder row honest for a session with H.264 off.
