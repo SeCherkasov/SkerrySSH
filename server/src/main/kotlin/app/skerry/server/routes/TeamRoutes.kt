@@ -89,7 +89,10 @@ fun Route.teamRoutes(services: Services) {
     post("/teams") {
         val principal = call.jwtPrincipal()
         val req = call.receive<TeamCreateRequest>()
-        if (req.teamId.isBlank() || anyTooLong(req.teamId)) throw BadRequestException("bad teamId")
+        // Same charset and length as a scope id, and for the same reason: the id becomes a vault
+        // file name on every member's device, so a client refuses anything else (TeamScopeRef
+        // .isSafeId) — and anything past varchar(64) fails the insert as a 500 rather than a 400.
+        if (!isSafeTeamId(req.teamId)) throw BadRequestException("bad teamId")
         if (!services.teams.create(req.teamId, principal.accountId, System.currentTimeMillis())) {
             call.respond(HttpStatusCode.Conflict, ErrorResponse("team already exists"))
             return@post

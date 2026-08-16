@@ -199,9 +199,7 @@ private suspend fun ApplicationCall.requireScopeHolder(
  * held to the same charset as a team id (`[a-z0-9-]`). Rejected before any side effect.
  */
 internal suspend fun ApplicationCall.validScopeId(value: String): String? {
-    val ok = value.isNotEmpty() && value.length <= MAX_SCOPE_ID &&
-        value.all { it in 'a'..'z' || it in '0'..'9' || it == '-' }
-    if (!ok) {
+    if (!isSafeTeamId(value)) {
         respond(HttpStatusCode.BadRequest, ErrorResponse("bad scopeId"))
         return null
     }
@@ -218,3 +216,12 @@ private suspend fun ApplicationCall.validEnvelope(value: String): ByteArray? {
 }
 
 internal const val MAX_SCOPE_ID = 64
+
+/**
+ * The id shape a team space is allowed to have — `[a-z0-9-]`, at most [MAX_SCOPE_ID] characters.
+ * Team ids and scope ids share it: both are client-chosen, both become a vault file name on every
+ * member's device, and both are stored in a `varchar(64)`.
+ */
+internal fun isSafeTeamId(value: String): Boolean =
+    value.isNotEmpty() && value.length <= MAX_SCOPE_ID &&
+        value.all { it in 'a'..'z' || it in '0'..'9' || it == '-' }

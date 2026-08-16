@@ -104,6 +104,46 @@ class ActivityRepositoryTest {
         assertEquals(2, repo.recentForTeam("team-1").size)
     }
 
+    /**
+     * The same partition argument, one level down: team rows are kept per team, but the
+     * account-level bucket was "every row with no team" across every account on the instance. One
+     * account syncing all day therefore evicted everybody else's logins, device revocations and
+     * password changes — the rows an audit trail exists for.
+     */
+    @Test
+    fun `one account cannot evict another account's log`() = withTestDb { db ->
+        val repo = ActivityRepository(db, maxRows = 3)
+        repeat(2) { i -> repo.record("quiet@example.com", "auth.login", "quiet $i", now = i.toLong()) }
+
+        repeat(20) { i -> repo.record("busy@example.com", "sync.push", "busy $i", now = 100L + i) }
+
+        assertEquals(
+            listOf("quiet 1", "quiet 0"),
+            repo.recentForAccount("quiet@example.com").map { it.detail },
+            "a busy account evicted another account's audit trail",
+        )
+        assertEquals(3, repo.recentForAccount("busy@example.com").size, "the busy account still trims its own")
+    }
+
+    /**
+     * The ceiling over every account's rows together. Per-account retention alone lets the table
+     * grow with the number of accounts, which on an instance with open registration is whatever
+     * anyone cares to register — and the accounts that get there are small ones, none of which ever
+     * trips its own cap.
+     */
+    @Test
+    fun `a ceiling bounds the account log across accounts, not just per account`() = withTestDb { db ->
+        val repo = ActivityRepository(db, maxRows = 100, accountRowsTotal = 6)
+
+        repeat(4) { i -> repo.record("a@example.com", "auth.login", "a $i", now = i.toLong()) }
+        repeat(4) { i -> repo.record("b@example.com", "auth.login", "b $i", now = 100L + i) }
+
+        // Neither account came near its own cap, so only the global ceiling can have trimmed this.
+        assertEquals(6, repo.recent(50).size)
+        // The oldest rows went first, newest kept.
+        assertEquals(listOf("b 3", "b 2", "b 1", "b 0", "a 3", "a 2"), repo.recent(50).map { it.detail })
+    }
+
     @Test
     fun `one team cannot evict another team's history, nor the account log`() = withTestDb { db ->
         // Any active member (a viewer included) can append to their team's bucket by reporting

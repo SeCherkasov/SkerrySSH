@@ -105,6 +105,10 @@ object ActivityLog : Table("activity_log") {
 
     init {
         index("idx_activity_team", false, teamId, seq)
+        // The account-level bucket is retained per account, so both the retention probe and
+        // `recentForAccount` select on (account_id, seq) — without this they scan every account's
+        // rows on every event written.
+        index("idx_activity_account", false, accountId, seq)
     }
 }
 
