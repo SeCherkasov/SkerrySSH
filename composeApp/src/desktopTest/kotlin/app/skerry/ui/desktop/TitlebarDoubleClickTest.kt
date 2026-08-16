@@ -231,6 +231,39 @@ class TitlebarDoubleClickTest {
     }
 
     @Test
+    fun pressInsideTouchSlopNeverArmsTheDrag() {
+        // Issue #152: keeping a plain click from nudging the window is awaitDragStart's touch-slop
+        // gate, not anything downstream. Below slop the gesture is left to the click handlers —
+        // nothing is handed to the window manager and no in-app drag starts.
+        var moves = 0
+        val chrome = runTitlebarScene(useNativeMove = true, startMove = { _, _, _ -> moves++; true }) {
+            val down = PointerButtons(isPrimaryPressed = true)
+            val up = PointerButtons()
+            sendPointerEvent(PointerEventType.Press, Offset(300f, 22f), timeMillis = 100, buttons = down, button = PointerButton.Primary)
+            sendPointerEvent(PointerEventType.Move, Offset(302f, 23f), timeMillis = 130, buttons = down)
+            sendPointerEvent(PointerEventType.Move, Offset(303f, 22f), timeMillis = 160, buttons = down)
+            sendPointerEvent(PointerEventType.Release, Offset(303f, 22f), timeMillis = 200, buttons = up, button = PointerButton.Primary)
+        }
+        assertEquals(0, moves, "a press that never leaves touch slop must not start a window move")
+        assertEquals(WindowPlacement.Floating, chrome.state.placement)
+    }
+
+    @Test
+    fun pressPastTouchSlopArmsTheDrag() {
+        // The other side of the same gate: once slop is crossed the press is a drag, and on a
+        // floating window it goes straight to the window manager.
+        var moves = 0
+        runTitlebarScene(useNativeMove = true, startMove = { _, _, _ -> moves++; true }) {
+            val down = PointerButtons(isPrimaryPressed = true)
+            val up = PointerButtons()
+            sendPointerEvent(PointerEventType.Press, Offset(300f, 22f), timeMillis = 100, buttons = down, button = PointerButton.Primary)
+            sendPointerEvent(PointerEventType.Move, Offset(360f, 24f), timeMillis = 130, buttons = down)
+            sendPointerEvent(PointerEventType.Release, Offset(360f, 24f), timeMillis = 200, buttons = up, button = PointerButton.Primary)
+        }
+        assertEquals(1, moves, "a press past touch slop must start exactly one window move")
+    }
+
+    @Test
     fun twoSlowClicksDoNotToggle() {
         val chrome = runTitlebarScene {
             sendPointerEvent(PointerEventType.Press, Offset(300f, 22f), timeMillis = 100)

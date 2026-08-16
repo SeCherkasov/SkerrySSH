@@ -130,7 +130,7 @@ private fun Modifier.titlebarDrag(
             window.location = restoredWindowOrigin(maximized, restored, pointer)
         }
         if (useNativeMove && startMove(window, pointer.x, pointer.y)) return@awaitEachGesture
-        followPointer(window, pointer, isFloating)
+        followPointer(window, isFloating)
     }
 }
 
@@ -185,17 +185,16 @@ private suspend fun AwaitPointerEventScope.awaitRestoredSize(
 
 /**
  * Moves the window with the pointer until the button is released, for platforms the window manager
- * can't do it for. Gated by [WindowDragGesture], which also stops the drag if the window stops
- * floating mid-gesture (a double-click maximizes it while the button is still down — issue #76).
- * The dead zone is zero here: it was already crossed by [awaitDragStart].
+ * can't do it for. [WindowDragGesture] does the grab arithmetic and stops the drag if the window
+ * stops floating mid-gesture (a double-click maximizes it while the button is still down — issue
+ * #76). Whether this is a drag at all was already decided by [awaitDragStart]'s touch-slop gate.
  */
 private suspend fun AwaitPointerEventScope.followPointer(
     window: java.awt.Window,
-    from: Point,
     isFloating: () -> Boolean,
 ) {
-    val gesture = WindowDragGesture(deadZone = 0)
-    gesture.press(from)
+    val gesture = WindowDragGesture()
+    gesture.press()
     try {
         while (true) {
             val event = awaitPointerEvent()
