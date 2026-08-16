@@ -9,6 +9,8 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -30,12 +32,42 @@ class SyncEngineNewTypeBatchTest {
         now = { "2026-07-27T00:00:00Z" },
     )
 
-    /** A server that predates the type: it rejects any batch containing it, as the real one does. */
-    private class OldServer(private val unknown: RecordType) : FakeSyncClient() {
+    /**
+     * A server that predates the type. [refusal] is how it answers a batch carrying one: a real one
+     * fails the type's validation (400 → PROTOCOL) or has no route for it at all (404).
+     */
+    private class OldServer(
+        private val unknown: RecordType,
+        private val refusal: SyncException.Kind = SyncException.Kind.PROTOCOL,
+    ) : FakeSyncClient() {
         override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage {
-            if (records.any { it.type == unknown.name }) error("unknown record type: ${unknown.name}")
+            if (records.any { it.type == unknown.name }) {
+                throw SyncException(refusal, "unknown record type: ${unknown.name}")
+            }
             return super.push(session, records)
         }
+    }
+
+    /**
+     * The other failures of that same batch are NOT "the server is just old" and must not be
+     * swallowed as one: a 401 says the session is over, a 429 says to back off, a 5xx says the
+     * server is broken. Hidden, a batch that will never be accepted looked exactly like an optional
+     * one, and nothing anywhere said otherwise.
+     */
+    @Test
+    fun `a real failure of the optional batch is not mistaken for an old server`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = newVault("devC")
+        vault.create(password.toCharArray())
+        vault.put("h1", RecordType.HOST, "host".encodeToByteArray())
+        vault.put("ca1", RecordType.TRUSTED_CA, "ca".encodeToByteArray())
+
+        val client = OldServer(RecordType.TRUSTED_CA, refusal = SyncException.Kind.UNAUTHORIZED)
+
+        val failure = assertFailsWith<SyncException> {
+            SyncEngine(client, vault, InMemorySyncStateStore()).sync(session)
+        }
+        assertEquals(SyncException.Kind.UNAUTHORIZED, failure.kind)
     }
 
     @Test

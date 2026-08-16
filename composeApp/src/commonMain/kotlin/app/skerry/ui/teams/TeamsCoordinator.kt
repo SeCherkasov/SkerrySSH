@@ -507,7 +507,18 @@ class TeamsCoordinator(
                 // so records shared after removal are encrypted under keys the removed member lacks
                 // (forward secrecy against a leaked backup / compromised server). Best-effort: a rotation
                 // failure still leaves the member removed — surfaced via lastError.
-                rotateTeamKey(sess, c, teamId)
+                // Guarded like the scopes below, and for the same reason: a failed team rotation
+                // must not skip them. Unguarded it unwound past the loop, so one 5xx on the rekey
+                // left the removed member holding every scope key they had — the exact hole the
+                // rotation exists to close — with nothing to retry it.
+                var teamRotation: Exception? = null
+                try {
+                    rotateTeamKey(sess, c, teamId)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    teamRotation = e
+                }
                 // Each scope rotates independently: one failing must not leave the rest un-rotated,
                 // since every skipped scope is a key the removed member still holds.
                 heldScopes.forEach { scopeId ->
@@ -519,6 +530,10 @@ class TeamsCoordinator(
                         markError(e.toFailure())
                     }
                 }
+                // Reported last on purpose: `lastError` holds one value, and the team key is the
+                // more serious of the two — a scope failure landing after it would otherwise hide
+                // "the removed member still holds the team key" behind "one scope did not rotate".
+                teamRotation?.let { markError(it.toFailure()) }
             }
             refreshUnlocked(sess, c)
         }
