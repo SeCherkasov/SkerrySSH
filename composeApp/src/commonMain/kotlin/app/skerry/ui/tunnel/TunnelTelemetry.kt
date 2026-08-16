@@ -2,6 +2,7 @@ package app.skerry.ui.tunnel
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
@@ -60,7 +61,9 @@ class TunnelTelemetry(private val pollIntervalMillis: Long) {
 
     // Cause per failing tunnel, not a bare set: a retry that fails for a *different* reason is news,
     // and deduplicating on the id alone would leave the card asserting a cause that no longer holds.
-    private val failing = mutableMapOf<String, TunnelFailureKind>()
+    // A snapshot map, not a plain one: the telemetry poll writes it from its own thread every
+    // second (a tunnel found dead) while the UI thread removes entries on delete/reload.
+    private val failing = mutableStateMapOf<String, TunnelFailureKind>()
 
     /** Records one poll tick of aggregate throughput and advances the clock the events age against. */
     fun sample(up: Long, down: Long) {

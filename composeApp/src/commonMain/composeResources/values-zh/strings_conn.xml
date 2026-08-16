@@ -100,6 +100,7 @@
 
     <string name="conn_tunnel_error_host_missing">未找到主机</string>
     <string name="conn_tunnel_error_no_credential">没有已保存的凭据</string>
+    <string name="conn_tunnel_error_link_lost">连接已断开</string>
 
     <string name="conn_serial_err_unsupported">此设备不支持串口。</string>
     <string name="conn_serial_err_not_found">未找到端口 %1$s。请重新连接设备或选择其他端口。</string>

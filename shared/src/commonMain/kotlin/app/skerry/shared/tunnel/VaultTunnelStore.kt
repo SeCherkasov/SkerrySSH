@@ -26,6 +26,11 @@ class VaultTunnelStore(
         return codec.list()
     }
 
+    override fun liveIds(): Set<String> {
+        if (!vault.isUnlocked) return emptySet()
+        return codec.liveIds()
+    }
+
     override fun put(tunnel: Tunnel) {
         codec.put(tunnel.id, tunnel)
     }
