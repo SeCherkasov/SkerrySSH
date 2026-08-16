@@ -39,16 +39,30 @@ private fun pump(input: InputStream, output: OutputStream, counter: AtomicLong) 
  * Bidirectional pump between an accepted local connection ([near]) and an SSH channel ([far]):
  * the upstream direction (near->far) runs on a separate daemon thread, downstream (far->near) on
  * the caller. [up] counts bytes sent into the channel (to the server), [down] counts bytes
- * received from it. On near's EOF, half-closes the channel's write side so the server sees EOF,
- * closes the destination, and the downstream direction finishes. Returns once both directions end.
+ * received from it. Either direction ending half-closes the other side's write end, so the peer
+ * sees EOF and finishes its own direction. Returns once both directions end.
+ *
+ * Both half-closes are needed, and the far->near one is the one with teeth: a destination that
+ * hangs up first (a close-delimited HTTP/1.0 body, or the SSH transport dropping) ends the
+ * downstream pump, while upstream is still parked in a read on a local peer that has no reason to
+ * write or close. Without the shutdown that peer waits for bytes forever and this tunnel's thread,
+ * socket and channel stay in the forward's live set for the rest of the session.
  */
 private fun tunnel(near: Socket, far: Channel, up: AtomicLong, down: AtomicLong, name: String) {
     val upstream = thread(isDaemon = true, name = "$name-up") {
         runCatching { pump(near.getInputStream(), far.outputStream, up); far.outputStream.close() }
     }
     runCatching { pump(far.inputStream, near.getOutputStream(), down) }
-    upstream.join()
+    // Half-close succeeded: the peer has been told the far side is done and still owns its own
+    // direction, so the wait stays unbounded. A `-R` forward's response, or an upload still in
+    // flight, would otherwise be cut off mid-write when this returns and the caller closes both
+    // ends. A peer that never closes is what `close()` on the forward is for.
+    val halfClosed = runCatching { near.shutdownOutput() }.isSuccess
+    if (halfClosed) upstream.join() else upstream.join(TUNNEL_JOIN_MILLIS)
 }
+
+/** How long [tunnel] waits for its upstream thread when the socket could not be half-closed. */
+private const val TUNNEL_JOIN_MILLIS = 2000L
 
 /**
  * Shared forward state: activity/pause flags, traffic counters, and the set of live resources of

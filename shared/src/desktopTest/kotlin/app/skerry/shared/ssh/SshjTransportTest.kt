@@ -1,5 +1,6 @@
 package app.skerry.shared.ssh
 
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.server.auth.pubkey.PublickeyAuthenticator
@@ -18,6 +19,9 @@ import kotlin.test.assertTrue
 
 private const val USER = "skerry"
 private const val PASSWORD = "correct horse battery staple"
+
+/** How long the test server takes to answer authentication, so a cancel can land inside it. */
+private const val AUTH_DELAY_MILLIS = 400L
 
 private val acceptAllKeys = HostKeyVerifier { null }
 
@@ -60,6 +64,37 @@ class SshjTransportTest {
         assertTrue(connection.isConnected)
         connection.disconnect()
         assertFalse(connection.isConnected)
+    }
+
+    /**
+     * The dial is blocking from the first byte to the last, with no cancellation point in it: a
+     * cancel arriving mid-handshake is noticed only once TCP, key exchange and userauth have all
+     * finished, and `withContext` then throws away the connection they produced. Unless that
+     * connection is closed on the way out, the user who closed the pane leaves an authenticated
+     * session open on the server — one per ProxyJump hop, for the life of the process.
+     */
+    @Test
+    fun `a connect cancelled mid-handshake leaves no session behind`() = kotlinx.coroutines.runBlocking {
+        val live = java.util.concurrent.atomic.AtomicInteger()
+        server.addSessionListener(object : org.apache.sshd.common.session.SessionListener {
+            override fun sessionCreated(session: org.apache.sshd.common.session.Session) { live.incrementAndGet() }
+            override fun sessionClosed(session: org.apache.sshd.common.session.Session) { live.decrementAndGet() }
+        })
+        val reachedAuth = java.util.concurrent.CountDownLatch(1)
+        server.setPasswordAuthenticator { user, password, _ ->
+            reachedAuth.countDown()
+            Thread.sleep(AUTH_DELAY_MILLIS) // long enough for the cancel to land while it runs
+            user == USER && password == PASSWORD
+        }
+
+        val job = launch(kotlinx.coroutines.Dispatchers.IO) { connect() }
+        assertTrue(reachedAuth.await(5, java.util.concurrent.TimeUnit.SECONDS), "authentication never started")
+        job.cancel() // the user closes the pane while it is connecting
+        job.join()
+
+        val deadline = System.currentTimeMillis() + 5_000
+        while (live.get() > 0 && System.currentTimeMillis() < deadline) Thread.sleep(50)
+        assertEquals(0, live.get(), "an authenticated session was left open on the server")
     }
 
     @Test

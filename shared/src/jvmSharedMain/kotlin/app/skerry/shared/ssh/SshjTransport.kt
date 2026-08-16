@@ -9,6 +9,8 @@ import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
 import org.bouncycastle.jce.provider.BouncyCastleProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -44,19 +46,45 @@ class SshjTransport(
     private val keyboardInteractiveResponder: KeyboardInteractiveResponder? = null,
 ) : SshTransport {
 
-    override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection =
-        withContext(Dispatchers.IO) {
-            // Every client dialed so far (ProxyJump hops entry-point-first, the target's own client
-            // last). On ANY failure the whole chain is closed here, in reverse dial order — the
-            // per-step helpers below don't close anything themselves.
-            val opened = mutableListOf<SSHClient>()
-            try {
-                connectChain(target, auth, opened)
-            } catch (e: Exception) {
-                opened.asReversed().forEach { runCatching { it.close() } }
-                throw e
-            }
+    override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection {
+        // Every client dialed so far (ProxyJump hops entry-point-first, the target's own client
+        // last). On ANY failure the whole chain is closed here, in reverse dial order — the
+        // per-step helpers below don't close anything themselves.
+        //
+        // The list and its cleanup live OUTSIDE `withContext` on purpose. The chain is blocking end
+        // to end with no cancellation point in it, so a cancel that arrived mid-handshake is only
+        // noticed once TCP, KEX and userauth have all finished — and `withContext` itself throws on
+        // the way out, discarding the connection they produced. Catching that here, rather than
+        // inside the block, is what keeps a cancelled connect from leaving an authenticated session
+        // live on the server (one per ProxyJump hop) for the rest of the process.
+        val opened = mutableListOf<SSHClient>()
+        try {
+            return withContext(Dispatchers.IO) { connectChain(target, auth, opened) }
+        } catch (e: CancellationException) {
+            // The one this has to catch by hand: `withContext` throws it on the way out, after the
+            // blocking chain has already produced a live, authenticated client.
+            closeAll(opened)
+            throw e
+        } catch (e: Exception) {
+            closeAll(opened)
+            throw e
         }
+    }
+
+    /**
+     * Closes a dialed chain in reverse dial order; close failures are not the caller's problem.
+     *
+     * On IO and under [NonCancellable]: `close()` writes a disconnect and joins sshj's reader
+     * thread, which on a chain whose network has gone away takes as long as the socket does — and
+     * the caller here is a UI coroutine. NonCancellable because the path that matters most is the
+     * one entered *because* the job was cancelled.
+     */
+    private suspend fun closeAll(opened: List<SSHClient>) {
+        if (opened.isEmpty()) return
+        withContext(NonCancellable + Dispatchers.IO) {
+            opened.asReversed().forEach { runCatching { it.close() } }
+        }
+    }
 
     private fun connectChain(target: SshTarget, auth: SshAuth, opened: MutableList<SSHClient>): SshConnection {
         ensureCryptoProvider()
