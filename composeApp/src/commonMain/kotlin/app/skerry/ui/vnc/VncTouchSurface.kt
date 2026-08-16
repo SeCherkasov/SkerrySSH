@@ -1,6 +1,7 @@
 package app.skerry.ui.vnc
 
 import app.skerry.ui.remote.RemoteDesktopScreenState
+import app.skerry.ui.remote.RemoteStatsOverlay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -13,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -64,11 +66,14 @@ fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modif
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
             @Suppress("UNUSED_EXPRESSION") frame // captured so the draw invalidates when it changes
+            val started = TimeSource.Monotonic.markNow()
             drawFramebuffer(screen)
+            screen.renderStats.drawTime(started.elapsedNow().inWholeNanoseconds)
         }
         // Own canvas, as on desktop: the cursor moves far more often than the framebuffer changes,
         // and only this layer reads its position, so a move redraws just the sprite.
         if (interactive) Canvas(Modifier.fillMaxSize()) { drawTouchCursor(screen, pad) }
+        if (screen.showStats) RemoteStatsOverlay(screen, Modifier.align(Alignment.TopStart))
     }
 
     if (interactive) VncClipboardBridge(screen)

@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
@@ -24,12 +25,14 @@ class RdpSessionCodec(
     remoteFx: RemoteFxDecoder? = null,
     /** Injected so a test can hold the clock still while it drives [readMessage]. */
     private val timeSource: TimeSource = TimeSource.Monotonic,
+    /** The session's counters for the diagnostics overlay; a private default when nobody reads them. */
+    private val diagnostics: RemoteDesktopDiagnostics = RemoteDesktopDiagnostics(),
 ) {
     private val palette = SessionPalette()
     private val dropped = DroppedGraphics()
     private val pointerCache = PointerCache()
-    private val fastPath = FastPathDecoder(framebuffer, palette, dropped, pointerCache)
-    private val surfaces = SurfaceDecoder(RdpCodecs(remoteFx))
+    private val fastPath = FastPathDecoder(framebuffer, palette, dropped, pointerCache, diagnostics)
+    private val surfaces = SurfaceDecoder(RdpCodecs(remoteFx), diagnostics)
 
     /** When the last repaint was asked for, or null if none has been; see [repaintDropped]. */
     private var lastRepaint: TimeMark? = null
@@ -44,14 +47,20 @@ class RdpSessionCodec(
      */
     suspend fun readMessage(): List<RdpUpdate> {
         val packet = Tpkt.readPacket(source)
+        // Timed from after the blocking read: waiting for a still desktop is not decode work.
+        val started = timeSource.markNow()
         val updates = if (Tpkt.isFastPath(packet[0].toInt() and 0xFF)) {
             fastPath.decode(packet, surfaces)
         } else {
             slowPath(packet)
         }
+        diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds)
         // Acknowledge completed frames before returning: the server paces itself on these.
         for (update in updates) {
-            if (update is RdpUpdate.Frame && !update.begin) acknowledgeFrame(update.frameId)
+            if (update is RdpUpdate.Frame && !update.begin) {
+                diagnostics.serverFrame()
+                acknowledgeFrame(update.frameId)
+            }
         }
         if (dropped.take()) repaintDropped()
         return updates
@@ -70,6 +79,7 @@ class RdpSessionCodec(
         if (!state.capabilities.refreshRectSupported) return
         if (lastRepaint?.elapsedNow()?.let { it < MIN_REPAINT_INTERVAL } == true) return
         lastRepaint = timeSource.markNow()
+        diagnostics.fullRepaint()
         requestRefresh(listOf(RdpRect(0, 0, desktopWidth, desktopHeight)))
     }
 
@@ -115,7 +125,11 @@ class RdpSessionCodec(
 
     /** Slow-path graphics: the same payloads as fast-path, wrapped in a share data PDU. */
     private fun slowPathUpdate(reader: RdpReader): List<RdpUpdate> = when (reader.u16le()) {
-        UPDATETYPE_BITMAP -> listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors, dropped))
+        UPDATETYPE_BITMAP -> {
+            diagnostics.notePath("Bitmap")
+            listOf(BitmapUpdate.apply(reader, framebuffer, palette.colors, dropped, diagnostics))
+        }
+
         UPDATETYPE_PALETTE -> {
             palette.colors = BitmapUpdate.readPalette(reader)
             emptyList()
@@ -124,6 +138,7 @@ class RdpSessionCodec(
         // Skipped and repainted rather than fatal, for the reason spelled out in [FastPathDecoder].
         UPDATETYPE_ORDERS -> {
             dropped.record()
+            diagnostics.droppedOrder()
             emptyList()
         }
 

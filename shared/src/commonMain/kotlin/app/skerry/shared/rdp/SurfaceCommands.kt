@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
 
 /**
@@ -10,7 +11,11 @@ import app.skerry.shared.graphics.RemoteFramebuffer
  * each frame, and the server uses those acknowledgements to pace itself — a client that never
  * answers gets throttled to the two frames it allowed in flight.
  */
-class SurfaceDecoder(private val codecs: RdpCodecs = RdpCodecs()) {
+class SurfaceDecoder(
+    private val codecs: RdpCodecs = RdpCodecs(),
+    /** The session's counters for the diagnostics overlay; a private default when nobody reads them. */
+    private val diagnostics: RemoteDesktopDiagnostics = RemoteDesktopDiagnostics(),
+) {
 
     /** Decode a run of surface commands, applying pixels to [framebuffer]. */
     fun decode(reader: RdpReader, framebuffer: RemoteFramebuffer): List<RdpUpdate> {
@@ -55,6 +60,13 @@ class SurfaceDecoder(private val codecs: RdpCodecs = RdpCodecs()) {
         if (width <= 0 || height <= 0) return emptyList()
         RdpImageBounds.requireSize(width, height, "surface bits")
 
+        diagnostics.noteCodec(
+            when (codecId) {
+                0 -> "Raw"
+                ClientCapabilities.CODEC_ID_REMOTEFX -> "RemoteFX"
+                else -> "0x${codecId.toString(16)}"
+            },
+        )
         val pixels = codecs.decode(codecId, data, width, height, bitsPerPixel)
             ?: throw RdpProtocolException("server used codec $codecId, which was not negotiated")
         for (row in 0 until height) {

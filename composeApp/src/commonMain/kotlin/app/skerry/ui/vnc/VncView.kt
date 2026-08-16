@@ -10,6 +10,7 @@ import app.skerry.ui.remote.rememberClipboardActions
 import app.skerry.ui.remote.rememberScreenshotAction
 import app.skerry.ui.remote.RemoteDesktopController
 import app.skerry.ui.remote.RemoteDesktopUiState
+import app.skerry.ui.remote.RemoteStatsOverlay
 import app.skerry.ui.remote.ReportOutputVisibility
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
@@ -87,6 +88,7 @@ import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.terminal.readPlainText
 import app.skerry.ui.app.remoteChromeHidden
 import kotlin.math.roundToInt
+import kotlin.time.TimeSource
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
@@ -363,7 +365,10 @@ fun VncSurface(
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
             @Suppress("UNUSED_EXPRESSION") frame // captured so the draw invalidates when it changes
+            val started = TimeSource.Monotonic.markNow()
             drawFramebuffer(screen)
+            // On desktop this includes the pixel-bridge bitmap rebuild — the draw is where it runs.
+            screen.renderStats.drawTime(started.elapsedNow().inWholeNanoseconds)
         }
         // The cursor sprite lives on its OWN canvas: pointerPos changes on every raw mouse move, and
         // only this layer reads it (inside the draw block), so a move redraws just the small sprite.
@@ -374,6 +379,7 @@ fun VncSurface(
                 pointerPos?.let { drawCursor(screen, sprite, it) }
             }
         }
+        if (screen.showStats) RemoteStatsOverlay(screen, Modifier.align(Alignment.TopStart))
     }
 
     if (interactive) {

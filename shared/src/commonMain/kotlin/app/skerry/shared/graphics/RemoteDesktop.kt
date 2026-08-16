@@ -24,6 +24,12 @@ interface RemoteDesktopSession {
     val capabilities: RemoteDesktopCapabilities
 
     /**
+     * Live counters for the diagnostics overlay, written by the read loop. The default is the inert
+     * [RemoteDesktopDiagnostics.NONE] so a test double needs nothing; a real session overrides it.
+     */
+    val diagnostics: RemoteDesktopDiagnostics get() = RemoteDesktopDiagnostics.NONE
+
+    /**
      * Pointer state in framebuffer coordinates. [buttonMask] follows the RFB convention, which is
      * the more expressive of the two: bit 0 left, 1 middle, 2 right, 3/4 wheel up/down, 5/6 wheel
      * left/right, 7/8 the extended buttons. Protocols that send *transitions* rather than state

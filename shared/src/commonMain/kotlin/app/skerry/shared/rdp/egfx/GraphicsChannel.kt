@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp.egfx
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.rdp.RdpImageBounds
 import app.skerry.shared.rdp.RdpProtocolException
@@ -7,6 +8,7 @@ import app.skerry.shared.rdp.RdpReader
 import app.skerry.shared.rdp.RdpRect
 import app.skerry.shared.rdp.RdpUpdate
 import app.skerry.shared.rdp.RdpWriter
+import kotlin.time.TimeSource
 
 /**
  * The graphics pipeline (MS-RDPEGFX): the dynamic channel a modern server prefers over surface
@@ -30,6 +32,8 @@ class GraphicsChannel(
      * picked decides whether it may use H.264 at all, and nothing else on the wire says so.
      */
     private val trace: (String) -> Unit = {},
+    /** The session's counters for the diagnostics overlay; a private default when nobody reads them. */
+    private val diagnostics: RemoteDesktopDiagnostics = RemoteDesktopDiagnostics(),
     private val send: suspend (ByteArray) -> Unit,
 ) : DynamicChannelHandler {
 
@@ -57,6 +61,9 @@ class GraphicsChannel(
     }
 
     override suspend fun onMessage(data: ByteArray) {
+        // Decompression and decoding are one number in the overlay: both stand between a received
+        // PDU and pixels on screen, and the split would not change any decision the number drives.
+        val started = TimeSource.Monotonic.markNow()
         // Every message on this channel is bulk-encoded, whatever the dynamic channel layer did
         // with it: the two compressions are independent, and each keeps its own history.
         val reader = RdpReader(bulk.decompress(data))
@@ -71,6 +78,7 @@ class GraphicsChannel(
         }
         // A server that draws without bracketing its work in frames still has to reach the screen.
         if (!insideFrame) flushDamage()
+        diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds)
     }
 
     /**
@@ -95,10 +103,15 @@ class GraphicsChannel(
     private suspend fun handle(commandId: Int, body: RdpReader) {
         when (commandId) {
             // The confirmation names the version the server picked out of what was advertised. There
-            // is nothing to do with it — a version this client offered is one it can decode, and the
-            // codec id of every bitmap says which codec it is anyway — but it is the only place that
-            // says whether the server took the offer of H.264, so it is worth a line.
-            CMDID_CAPS_CONFIRM -> trace("the server confirmed capability version 0x${body.u32le().toString(16)}")
+            // is nothing to decode differently — a version this client offered is one it can take,
+            // and the codec id of every bitmap says which codec it is anyway — but it is the only
+            // place that says whether the server took the offer of H.264, so it goes to the trace
+            // and to the diagnostics overlay.
+            CMDID_CAPS_CONFIRM -> {
+                val version = body.u32le()
+                trace("the server confirmed capability version 0x${version.toString(16)}")
+                diagnostics.noteNegotiated("GFX ${gfxVersionName(version)}")
+            }
             CMDID_RESET_GRAPHICS -> resetGraphics(body)
             CMDID_CREATE_SURFACE -> createSurface(body)
             CMDID_DELETE_SURFACE -> deleteSurface(body)
@@ -186,6 +199,7 @@ class GraphicsChannel(
         val frameId = body.u32le()
         insideFrame = false
         framesDecoded++
+        diagnostics.serverFrame()
         flushDamage()
         val acknowledge = RdpWriter(12)
             .u32le(QUEUE_DEPTH_UNAVAILABLE)
@@ -198,6 +212,8 @@ class GraphicsChannel(
     private fun wireToSurface(body: RdpReader) {
         val surfaceId = body.u16le()
         val codecId = body.u16le()
+        diagnostics.notePath("EGFX")
+        diagnostics.noteCodec(codecLabel(codecId))
         body.u8() // pixelFormat
         val rect = readRect(body)
         val length = body.u32le()
@@ -252,6 +268,8 @@ class GraphicsChannel(
     private fun wireToSurfaceProgressive(body: RdpReader) {
         val surfaceId = body.u16le()
         val codecId = body.u16le()
+        diagnostics.notePath("EGFX")
+        diagnostics.noteCodec(codecLabel(codecId))
         body.u32le() // codecContextId
         body.u8() // pixelFormat
         // A length field sits here in the specification, but the stream that follows runs to the end
@@ -410,6 +428,25 @@ class GraphicsChannel(
             writer.u32le(CAPVERSION_10_4).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE)
         }
         return writer.toByteArray()
+    }
+
+    /** Overlay label of a pipeline codec id — shorter than [GraphicsCodecs.codecName]'s error text. */
+    private fun codecLabel(codecId: Int): String = when (codecId) {
+        GraphicsCodecs.CODEC_UNCOMPRESSED -> "Raw"
+        GraphicsCodecs.CODEC_REMOTEFX -> "RemoteFX"
+        GraphicsCodecs.CODEC_CLEARCODEC -> "ClearCodec"
+        GraphicsCodecs.CODEC_PROGRESSIVE -> "Progressive"
+        GraphicsCodecs.CODEC_PLANAR -> "Planar"
+        GraphicsCodecs.CODEC_AVC420 -> "AVC420"
+        GraphicsCodecs.CODEC_AVC444, GraphicsCodecs.CODEC_AVC444_V2 -> "AVC444"
+        else -> "0x${codecId.toString(16)}"
+    }
+
+    private fun gfxVersionName(version: Int): String = when (version) {
+        CAPVERSION_8 -> "8"
+        CAPVERSION_8_1 -> "8.1"
+        CAPVERSION_10_4 -> "10.4"
+        else -> "0x${version.toString(16)}"
     }
 
     private fun pdu(commandId: Int, body: ByteArray): ByteArray = RdpWriter(body.size + HEADER_SIZE)

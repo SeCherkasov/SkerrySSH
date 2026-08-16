@@ -1,6 +1,7 @@
 package app.skerry.ui.remote
 
 import app.skerry.shared.graphics.RemoteDesktopCapabilities
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
 import app.skerry.shared.graphics.RemoteDesktopUpdate
@@ -15,6 +16,8 @@ open class FakeRemoteDesktop(
     override val framebuffer: RemoteFramebuffer = RemoteFramebuffer(2, 1),
     override val updates: Flow<RemoteDesktopUpdate> = MutableSharedFlow(),
 ) : RemoteDesktopSession {
+    override val diagnostics = RemoteDesktopDiagnostics()
+
     val pointers = mutableListOf<Triple<Int, Int, Int>>()
     val keys = mutableListOf<Pair<RemoteKeyEvent, Boolean>>()
     val clipboard = mutableListOf<String>()

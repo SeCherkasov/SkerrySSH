@@ -1,5 +1,6 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.ssh.SshTarget
 import kotlinx.coroutines.flow.Flow
@@ -51,6 +52,9 @@ interface VncSession {
 
     /** The remote screen's pixels; read by the UI, written only by the read loop. */
     val framebuffer: RemoteFramebuffer
+
+    /** Live counters for the diagnostics overlay; inert by default, a real session overrides it. */
+    val diagnostics: RemoteDesktopDiagnostics get() = RemoteDesktopDiagnostics.NONE
 
     /** Cold, single-collector server→client message stream. Collecting it runs the session. */
     val updates: Flow<VncUpdate>

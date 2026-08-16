@@ -45,6 +45,7 @@ import app.skerry.ui.generated.resources.rd_audio
 import app.skerry.ui.generated.resources.rd_audio_device_lost
 import app.skerry.ui.generated.resources.rd_screenshot_failed
 import app.skerry.ui.generated.resources.rd_screenshot_saved
+import app.skerry.ui.generated.resources.rd_stats
 import app.skerry.ui.generated.resources.vnc_quality
 import app.skerry.ui.generated.resources.vnc_reset_zoom
 import app.skerry.ui.generated.resources.vnc_resize_to_window
@@ -195,6 +196,7 @@ internal fun DisplayMenu(
             CheckRow(stringResource(Res.string.rd_audio), !screen.audioMuted, screen::toggleAudioMuted)
             if (screen.audioFailed && !screen.audioMuted) AudioLostNote()
         }
+        CheckRow(stringResource(Res.string.rd_stats), screen.showStats, screen::toggleStats)
         if (showResetZoom) {
             MenuRow(stringResource(Res.string.vnc_reset_zoom), selected = false) { screen.resetZoom() }
         }

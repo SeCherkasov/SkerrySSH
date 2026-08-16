@@ -54,6 +54,29 @@ class RemoteDesktopScreenStateTest {
     }
 
     @Test
+    fun region_update_accumulates_pixel_bridge_time_for_the_overlay() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(framebuffer = RemoteFramebuffer(2, 1), updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        updates.emit(RemoteDesktopUpdate.Region(listOf(RemoteRect(0, 0, 2, 1))))
+        assertEquals(1, screen.renderStats.bridgeCount)
+        scope.cancel()
+    }
+
+    @Test
+    fun the_stats_overlay_is_off_until_asked_for() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val screen = RemoteDesktopScreenState(FakeRemoteDesktop(), scope)
+
+        assertFalse(screen.showStats)
+        screen.toggleStats()
+        assertTrue(screen.showStats)
+        scope.cancel()
+    }
+
+    @Test
     fun resize_update_tracks_the_new_desktop_size() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)

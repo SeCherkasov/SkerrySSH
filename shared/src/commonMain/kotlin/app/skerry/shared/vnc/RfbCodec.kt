@@ -1,6 +1,8 @@
 package app.skerry.shared.vnc
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
+import kotlin.time.TimeSource
 
 /**
  * Pure RFB (VNC) protocol state machine — no sockets, no threads. It pulls bytes through [VncSource]
@@ -24,6 +26,8 @@ class RfbCodec(
     private val challengeResponder: VncChallengeResponder,
     private val imageDecoder: VncImageDecoder? = null,
     private val requestedEncodings: IntArray = DEFAULT_ENCODINGS,
+    /** The session's counters for the diagnostics overlay; a private default when nobody reads them. */
+    private val diagnostics: RemoteDesktopDiagnostics = RemoteDesktopDiagnostics(),
 ) {
     // Current quality/compression preference, advertised as Tight pseudo-encodings in SetEncodings.
     private var quality: VncQuality = VncQuality.Auto
@@ -179,6 +183,11 @@ class RfbCodec(
      */
     private suspend fun readFramebufferUpdate(): List<VncUpdate> {
         readU8() // padding
+        // One FramebufferUpdate is the closest thing RFB has to a server frame, and the wait for
+        // its bytes is decode time here too: the pull model interleaves reading and decoding, so
+        // the two cannot be told apart without restructuring the codec.
+        diagnostics.serverFrame()
+        val started = TimeSource.Monotonic.markNow()
         val rectCount = readU16()
         val rects = ArrayList<VncRect>(rectCount)
         val pseudo = ArrayList<VncUpdate>()
@@ -195,12 +204,23 @@ class RfbCodec(
                 ENC_EXTENDED_DESKTOP_SIZE -> readExtendedDesktopSize(reason = x, status = y, width = w, height = h, out = pseudo)
                 ENC_CURSOR -> pseudo += readCursor(hotspotX = x, hotspotY = y, width = w, height = h)
                 else -> {
+                    diagnostics.noteCodec(encodingLabel(encoding))
                     decodeRectangle(encoding, VncRect(x, y, w, h))
                     rects += VncRect(x, y, w, h)
                 }
             }
         }
+        diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds)
         return pseudo + VncUpdate.Region(rects)
+    }
+
+    private fun encodingLabel(encoding: Int): String = when (encoding) {
+        ENC_RAW -> "Raw"
+        ENC_COPY_RECT -> "CopyRect"
+        ENC_HEXTILE -> "Hextile"
+        ENC_TIGHT -> "Tight"
+        ENC_ZRLE -> "ZRLE"
+        else -> encoding.toString()
     }
 
     /**

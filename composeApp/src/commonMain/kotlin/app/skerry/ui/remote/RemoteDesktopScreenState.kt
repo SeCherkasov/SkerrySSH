@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.TimeSource
 
 /**
  * UI-side state for one live remote desktop, whichever protocol serves it: bridges the raw
@@ -83,6 +84,20 @@ class RemoteDesktopScreenState(
     /** Current image quality/compression preference (Graphics settings). */
     var quality by mutableStateOf(RemoteDesktopQuality.Auto)
         private set
+
+    /** The session's protocol-side counters, shown by the diagnostics overlay. */
+    val diagnostics = session.diagnostics
+
+    /** The render-side counters (pixel bridge, draw), filled in here and by the draw pass. */
+    val renderStats = RemoteRenderStats()
+
+    /** Whether the diagnostics overlay is shown over the picture. */
+    var showStats by mutableStateOf(false)
+        private set
+
+    fun toggleStats() {
+        showStats = !showStats
+    }
 
     /** True once the server has said it accepts resize requests. */
     var canResizeRemote by mutableStateOf(false)
@@ -302,7 +317,9 @@ class RemoteDesktopScreenState(
                 // An empty region is a protocol event with no pixels behind it (an RDP frame
                 // marker); redrawing on it would burn a frame for nothing.
                 if (update.rects.isNotEmpty()) {
+                    val started = TimeSource.Monotonic.markNow()
                     image.writeRects(update.rects, session.framebuffer.pixels, session.framebuffer.width)
+                    renderStats.bridgeTime(started.elapsedNow().inWholeNanoseconds)
                     frame++
                 }
             }

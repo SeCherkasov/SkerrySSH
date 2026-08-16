@@ -19,6 +19,8 @@ class VncRemoteDesktop(private val session: VncSession) : RemoteDesktopSession {
 
     override val framebuffer: RemoteFramebuffer get() = session.framebuffer
 
+    override val diagnostics get() = session.diagnostics
+
     override val title: String get() = session.serverName
 
     override val capabilities = RemoteDesktopCapabilities(

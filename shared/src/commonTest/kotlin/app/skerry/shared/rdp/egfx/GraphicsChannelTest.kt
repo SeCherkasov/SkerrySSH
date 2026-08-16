@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp.egfx
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpRect
@@ -280,6 +281,33 @@ class GraphicsChannelTest {
         val truncated = RdpWriter(8).u16le(0x0009).u16le(0).u32le(9999).toByteArray()
 
         assertFailsWith<RdpProtocolException> { deliver(truncated) }
+    }
+
+    @Test
+    fun `frames, codec and the confirmed version are counted for the diagnostics overlay`() = runTest {
+        val diagnostics = RemoteDesktopDiagnostics()
+        val channel = GraphicsChannel(
+            framebuffer,
+            GraphicsCodecs(progressive = progressive),
+            diagnostics = diagnostics,
+        ) { }
+
+        channel.onMessage(bulk(pdu(0x0013, RdpWriter(4).u32le(0x000A0400).toByteArray())))
+        channel.onMessage(bulk(createSurface(id = 1, width = 16, height = 16)))
+        channel.onMessage(bulk(mapToOutput(surfaceId = 1, x = 0, y = 0)))
+        channel.onMessage(
+            bulk(
+                startFrame(7) +
+                    wireToSurface(surfaceId = 1, rect = RdpRect(0, 0, 8, 8), colour = 0x123456) +
+                    endFrame(7),
+            ),
+        )
+
+        assertEquals("GFX 10.4", diagnostics.negotiated)
+        assertEquals(listOf("EGFX"), diagnostics.paths)
+        assertEquals("Raw", diagnostics.lastCodec)
+        assertEquals(1, diagnostics.serverFrames)
+        assertTrue(diagnostics.decodeCount > 0, "decode work was timed")
     }
 
     // ---- PDU builders ----

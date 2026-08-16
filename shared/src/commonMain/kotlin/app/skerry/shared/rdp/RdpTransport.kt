@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp
 
+import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
 import kotlinx.coroutines.flow.Flow
 
@@ -113,6 +114,9 @@ interface RdpSession {
     /** Desktop size the server settled on, which may differ from what was requested. */
     val desktopWidth: Int
     val desktopHeight: Int
+
+    /** Live counters for the diagnostics overlay; inert by default, a real session overrides it. */
+    val diagnostics: RemoteDesktopDiagnostics get() = RemoteDesktopDiagnostics.NONE
 
     suspend fun sendKey(scancode: Int, down: Boolean, extended: Boolean = false)
 

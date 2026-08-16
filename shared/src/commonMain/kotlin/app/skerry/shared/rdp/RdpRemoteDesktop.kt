@@ -34,6 +34,8 @@ class RdpRemoteDesktop(
 
     override val framebuffer: RemoteFramebuffer get() = session.framebuffer
 
+    override val diagnostics get() = session.diagnostics
+
     override val capabilities = RemoteDesktopCapabilities(
         // RDP negotiates its own codecs at connect time and has no per-session quality knob, and the
         // cursor is always drawn by the client, so neither control would do anything. Resizing is a
