@@ -118,6 +118,7 @@
     <string name="shell_tip_close">Закрыть</string>
     <string name="shell_tip_show_options">Показать варианты</string>
     <string name="shell_tip_show_hosts">Показать хосты</string>
+    <string name="shell_tip_hide_hosts">Скрыть хосты</string>
     <string name="shell_tip_back">Назад</string>
     <string name="shell_tip_remove">Удалить</string>
     <string name="shell_tip_pause">Пауза</string>

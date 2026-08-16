@@ -118,6 +118,7 @@
     <string name="shell_tip_close">关闭</string>
     <string name="shell_tip_show_options">显示选项</string>
     <string name="shell_tip_show_hosts">显示主机</string>
+    <string name="shell_tip_hide_hosts">隐藏主机</string>
     <string name="shell_tip_back">返回</string>
     <string name="shell_tip_remove">移除</string>
     <string name="shell_tip_pause">暂停</string>

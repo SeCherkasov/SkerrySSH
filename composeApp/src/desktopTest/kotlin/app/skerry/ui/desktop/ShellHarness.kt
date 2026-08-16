@@ -3,6 +3,11 @@ package app.skerry.ui.desktop
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontFamily
 import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.design.LocalFonts
@@ -155,19 +160,21 @@ internal fun runDesktopShell(
             SkerryTheme {
                 // A live AI controller only so the settings panel offers its AI tab: without one the
                 // tab is hidden, and a walk over SETTINGS_NAV would silently skip an entry.
-                DesktopDesignApp(
-                    state = state,
-                    hosts = hosts,
-                    sessions = sessions,
-                    credentials = credentials,
-                    keyGenerator = keyGenerator,
-                    tunnels = tunnels,
-                    snippets = snippets,
-                    runbooks = runbooks,
-                    runbookRunner = runner,
-                    ai = ai,
-                    windowChrome = windowChrome,
-                )
+                WithTestLifecycle {
+                    DesktopDesignApp(
+                        state = state,
+                        hosts = hosts,
+                        sessions = sessions,
+                        credentials = credentials,
+                        keyGenerator = keyGenerator,
+                        tunnels = tunnels,
+                        snippets = snippets,
+                        runbooks = runbooks,
+                        runbookRunner = runner,
+                        ai = ai,
+                        windowChrome = windowChrome,
+                    )
+                }
             }
         }
         waitForIdle()
@@ -196,6 +203,22 @@ internal fun runDesktopShell(
         // A write already dispatched must not land in the next test's log.
         FakeShellInput.clear()
     }
+}
+
+/**
+ * A window-lifecycle owner for the test composition, pinned to STARTED. The real shell gets one
+ * from `Window`; `runComposeUiTest` provides none, and a connected remote desktop reads it
+ * ([app.skerry.ui.remote.ReportOutputVisibility]) — without an owner the first VNC frame throws.
+ * `createUnsafe` because there is no Android main thread to enforce here.
+ */
+@Composable
+private fun WithTestLifecycle(content: @Composable () -> Unit) {
+    val owner = remember {
+        object : LifecycleOwner {
+            override val lifecycle: LifecycleRegistry = LifecycleRegistry.createUnsafe(this)
+        }.also { it.lifecycle.currentState = Lifecycle.State.STARTED }
+    }
+    CompositionLocalProvider(LocalLifecycleOwner provides owner, content = content)
 }
 
 /** What a mobile test can reach behind the UI. */
@@ -242,16 +265,20 @@ internal fun runMobileShell(
                     CompositionLocalProvider(
                         LocalDensity provides Density(LocalDensity.current.density, fontScale),
                     ) {
-                        MobileDesignApp(
-                            deps = AppDependencies(
-                                hosts = hosts, snippets = snippets, tunnels = tunnels,
-                                runbooks = mobileRunbooks, runbookRunner = runner,
-                            ),
-                            state = state,
-                            sessions = sessions,
-                            // The AI screen draws only its header without a controller behind it.
-                            aiOverride = ai,
-                        )
+                        // Same lifecycle owner as the desktop shell: the mobile VNC screen reads it
+                        // too (MobileVncScreen -> ReportOutputVisibility).
+                        WithTestLifecycle {
+                            MobileDesignApp(
+                                deps = AppDependencies(
+                                    hosts = hosts, snippets = snippets, tunnels = tunnels,
+                                    runbooks = mobileRunbooks, runbookRunner = runner,
+                                ),
+                                state = state,
+                                sessions = sessions,
+                                // The AI screen draws only its header without a controller behind it.
+                                aiOverride = ai,
+                            )
+                        }
                     }
                 }
             }

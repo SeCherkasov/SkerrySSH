@@ -20,6 +20,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,6 +72,8 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_no_session
 import app.skerry.ui.generated.resources.rd_pick_to_connect
+import app.skerry.ui.generated.resources.shell_tip_hide_hosts
+import app.skerry.ui.generated.resources.shell_tip_show_hosts
 import app.skerry.ui.generated.resources.vnc_connecting
 import app.skerry.ui.generated.resources.vnc_connection_lost
 import app.skerry.ui.generated.resources.vnc_quality_auto
@@ -80,7 +83,6 @@ import app.skerry.ui.generated.resources.vnc_quality_medium
 import app.skerry.ui.generated.resources.vnc_session_closed
 import app.skerry.ui.design.EmptyState
 import app.skerry.ui.terminal.HostsSidebar
-import app.skerry.ui.terminal.SidebarReopenHandle
 import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.terminal.readPlainText
 import app.skerry.ui.app.remoteChromeHidden
@@ -116,11 +118,14 @@ fun RemoteDesktopsView(state: DesktopDesignState) {
             // selected tab (see workAreaSection).
             HostsSidebar(state, state.section)
         }
+        // The section renders no work bar, so this strip is its only sidebar control — present
+        // whether the panel is open or shut, one click either way (issue #178). Only full-window
+        // mode takes it off screen, along with the rest of the chrome.
         AnimatedVisibility(
-            visible = state.sidebarHidden && !immersive,
+            visible = !immersive,
             enter = fadeIn() + expandHorizontally(expandFrom = Alignment.Start),
             exit = fadeOut() + shrinkHorizontally(shrinkTowards = Alignment.Start),
-        ) { SidebarReopenHandle(onClick = state::toggleSidebar) }
+        ) { SidebarToggleHandle(hidden = state.sidebarHidden, onClick = state::toggleSidebar) }
         Box(Modifier.weight(1f).fillMaxHeight()) {
             if (sessions?.activeDesktop != null) {
                 VncView(state)
@@ -133,6 +138,28 @@ fun RemoteDesktopsView(state: DesktopDesignState) {
                 )
             }
         }
+    }
+}
+
+/**
+ * Slim strip on the hosts panel's edge, painted in the panel's own surface so it reads as the panel
+ * peeking out. The chevron points the way the panel will travel, like the work bar's toggle does in
+ * the terminal section — and the strip is all chevron, so it carries the action's name itself.
+ */
+@Composable
+private fun SidebarToggleHandle(hidden: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.width(16.dp).fillMaxHeight().background(Skerry.colors.surface2).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Sym(
+            if (hidden) "chevron_right" else "chevron_left",
+            contentDescription = stringResource(
+                if (hidden) Res.string.shell_tip_show_hosts else Res.string.shell_tip_hide_hosts,
+            ),
+            size = 16.sp,
+            color = Skerry.colors.faint,
+        )
     }
 }
 
