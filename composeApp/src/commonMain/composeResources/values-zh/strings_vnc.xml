@@ -34,6 +34,10 @@
     <string name="rd_clipboard">剪贴板</string>
     <string name="rd_clipboard_from_remote">来自远程主机</string>
     <string name="rd_clipboard_empty">尚未复制任何内容</string>
+    <!-- Preview of a remote clipboard holding nothing but spaces, tabs or line breaks -->
+    <string name="rd_clipboard_blank">仅含空白字符</string>
+    <!-- Preview of a remote clipboard whose every character draws as nothing -->
+    <string name="rd_clipboard_unprintable">无法显示的文本</string>
     <string name="rd_clipboard_copy_here">复制到本机</string>
     <string name="rd_clipboard_send">发送本机内容</string>
     <string name="rd_audio">声音</string>

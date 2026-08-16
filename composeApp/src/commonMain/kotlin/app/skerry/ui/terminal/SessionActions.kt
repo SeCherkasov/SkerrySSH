@@ -1,19 +1,10 @@
 package app.skerry.ui.terminal
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,11 +12,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.app.DesktopDesignState
@@ -34,8 +23,8 @@ import app.skerry.ui.app.LocalSessionShare
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.design.IconBtn
-import app.skerry.ui.design.Sym
-import app.skerry.ui.design.Txt
+import app.skerry.ui.design.MenuActionRow
+import app.skerry.ui.design.MenuPanel
 import app.skerry.ui.design.VLine
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_toolbar_tip
@@ -144,6 +133,14 @@ private val WORK_BAR_TITLE_ROOM = 240.dp
  * whole work area, so this comes off the top — the row used to float over a pane and had none of it.
  */
 private val WORK_BAR_CHROME = 62.dp
+
+/**
+ * Fixed rather than measured, unlike the menus whose rows never change: which actions land in here
+ * depends on how narrow the window is, and a panel that sized itself to them would open at a
+ * different width after every resize — with its right edge pinned to the button, so the whole menu
+ * would sit somewhere else each time.
+ */
+internal val OVERFLOW_MENU_WIDTH = 220.dp
 
 /**
  * Session action icons (sync / add pane / SFTP / monitor / snippets / runbooks / sharing /
@@ -384,7 +381,7 @@ internal fun overflowedActions(
  * quietly start acting on the tab that just became active.
  */
 @Composable
-private fun OverflowActionsButton(
+internal fun OverflowActionsButton(
     hidden: Set<ToolbarAction>,
     state: DesktopDesignState,
     tabKey: Any?,
@@ -396,15 +393,7 @@ private fun OverflowActionsButton(
         IconBtn("more_horiz", onClick = { open = !open }, tooltip = stringResource(Res.string.shell_tip_more_actions))
         if (open) {
             Popup(alignment = Alignment.TopEnd, onDismissRequest = { open = false }, properties = PopupProperties(focusable = true)) {
-                Column(
-                    Modifier
-                        .padding(top = WORK_BAR_HEIGHT)
-                        .width(220.dp)
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(Skerry.colors.surface2)
-                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                        .padding(4.dp),
-                ) {
+                MenuPanel(Modifier.padding(top = WORK_BAR_HEIGHT), width = OVERFLOW_MENU_WIDTH) {
                     // Listed the way they sit in the row, so the menu reads as its continuation.
                     hidden.sortedBy { TOOLBAR_ROW_ORDER.indexOf(it) }.forEach { action ->
                         val run: () -> Unit = when (action) {
@@ -424,23 +413,6 @@ private fun OverflowActionsButton(
                 }
             }
         }
-    }
-}
-
-/** One line of a chrome menu: glyph, label, whole row clickable. */
-@Composable
-internal fun MenuActionRow(icon: String, label: String, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(5.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Sym(icon, size = 15.sp, color = Skerry.colors.cyanBright)
-        Txt(label, color = Skerry.colors.dim, size = 12.sp)
     }
 }
 

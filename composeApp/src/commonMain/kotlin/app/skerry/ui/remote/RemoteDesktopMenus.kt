@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -29,8 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalClipboard
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,33 +37,22 @@ import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.HoverTooltip
+import app.skerry.ui.design.MenuPanel
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_audio
 import app.skerry.ui.generated.resources.rd_audio_device_lost
-import app.skerry.ui.generated.resources.rd_clipboard_copy_here
-import app.skerry.ui.generated.resources.rd_clipboard_empty
-import app.skerry.ui.generated.resources.rd_clipboard_failed
-import app.skerry.ui.generated.resources.rd_clipboard_from_remote
-import app.skerry.ui.generated.resources.rd_clipboard_send
-import app.skerry.ui.generated.resources.rd_clipboard_share
 import app.skerry.ui.generated.resources.rd_screenshot_failed
 import app.skerry.ui.generated.resources.rd_screenshot_saved
 import app.skerry.ui.generated.resources.vnc_quality
 import app.skerry.ui.generated.resources.vnc_reset_zoom
 import app.skerry.ui.generated.resources.vnc_resize_to_window
 import app.skerry.ui.generated.resources.vnc_view_only
-import app.skerry.ui.terminal.fetchSystemClipboardText
-import app.skerry.ui.terminal.writeSystemClipboardDirect
-import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.vnc.label
-import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -165,10 +151,11 @@ internal fun RemoteMenuHost(
                 // die until the user clicked the picture again.
                 properties = PopupProperties(focusable = false),
             ) {
-                Box(
-                    Modifier.width(REMOTE_MENU_WIDTH).clip(RoundedCornerShape(9.dp)).background(Skerry.colors.surfaceDeep)
-                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(9.dp)).padding(vertical = 4.dp),
-                ) { content() }
+                // Fixed width rather than the panel's own measure: these menus hang off buttons
+                // side by side, so a panel that sized itself to its rows would open at a different
+                // width from one button to the next — and one of them holds a preview of whatever
+                // text the remote machine put on its clipboard, which cannot be measured at all.
+                MenuPanel(width = REMOTE_MENU_WIDTH) { content() }
             }
         }
     }
@@ -192,7 +179,7 @@ internal fun DisplayMenu(
                 stringResource(Res.string.vnc_quality),
                 color = Skerry.colors.faint,
                 size = 10.5.sp,
-                modifier = Modifier.padding(start = 12.dp, top = 6.dp, bottom = 2.dp),
+                modifier = Modifier.padding(start = ROW_PADDING, top = 6.dp, bottom = 2.dp),
             )
             RemoteDesktopQuality.entries.forEach { q ->
                 MenuRow(q.label(), selected = screen.quality == q) { screen.applyQuality(q) }
@@ -226,47 +213,9 @@ internal fun AudioLostNote() {
         stringResource(Res.string.rd_audio_device_lost),
         color = Skerry.colors.sunset,
         size = 10.5.sp,
-        modifier = Modifier.padding(start = 34.dp, end = 12.dp, bottom = 4.dp),
+        // Indented past the checkbox of the switch it belongs to, not past the panel edge.
+        modifier = Modifier.padding(start = ROW_PADDING + 22.dp, end = ROW_PADDING, bottom = 4.dp),
     )
-}
-
-/**
- * Whether text crosses at all, what the remote machine last put on its clipboard, and the two ways
- * to move it. The gate sits here rather than in the display menu: it is the clipboard's own switch,
- * and it has to be reachable from the button it turns off.
- */
-@Composable
-internal fun ClipboardMenu(screen: RemoteDesktopScreenState, actions: ClipboardActions) {
-    val shared = screen.clipboardShared
-    Column(Modifier.fillMaxWidth()) {
-        CheckRow(stringResource(Res.string.rd_clipboard_share), shared, screen::toggleClipboardShared)
-        if (shared) {
-            HLine(modifier = Modifier.padding(vertical = 4.dp))
-            val remote = screen.serverClipboard
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Txt(stringResource(Res.string.rd_clipboard_from_remote), color = Skerry.colors.faint, size = 10.sp)
-                Txt(
-                    remote?.take(CLIPBOARD_PREVIEW) ?: stringResource(Res.string.rd_clipboard_empty),
-                    color = if (remote == null) Skerry.colors.dim else Skerry.colors.text,
-                    size = 11.5.sp,
-                    maxLines = 4,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (remote != null) {
-                        SmallButton(stringResource(Res.string.rd_clipboard_copy_here)) { actions.copyHere(remote) }
-                    }
-                    SmallButton(stringResource(Res.string.rd_clipboard_send), onClick = actions.sendMine)
-                }
-                if (actions.failed) {
-                    Txt(stringResource(Res.string.rd_clipboard_failed), color = Skerry.colors.sunset, size = 10.5.sp)
-                }
-            }
-        }
-    }
 }
 
 /**
@@ -276,82 +225,6 @@ internal fun ClipboardMenu(screen: RemoteDesktopScreenState, actions: ClipboardA
  */
 @Immutable
 class ScreenshotAction(val note: String?, val take: () -> Unit)
-
-/**
- * Moving text across, and whether the last attempt failed. Remembered by the screen for the same
- * reason as [ScreenshotAction]: the menu these buttons live in is a popup that closes on the click
- * that dismisses it, and a clipboard call launched in its scope would be cancelled on the way out.
- */
-@Immutable
-class ClipboardActions(val failed: Boolean, val copyHere: (String) -> Unit, val sendMine: () -> Unit)
-
-@Composable
-fun rememberClipboardActions(screen: RemoteDesktopScreenState?): ClipboardActions {
-    val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboard.current
-    // The system clipboard refuses often enough to be worth saying so: a busy X11 owner, a sandboxed
-    // Android app. Both directions are user-initiated presses, so silence would read as "nothing to
-    // send" rather than "this did not work".
-    var failed by remember { mutableStateOf(false) }
-    // Counted, not just flagged: a second failure while the note is up is not a state change, so
-    // without this the timer would keep the first one's schedule and the note would vanish right
-    // after the user pressed again — the same reason [RemoteBarState.revealCount] exists.
-    var failures by remember { mutableStateOf(0) }
-    LaunchedEffect(failed, failures) {
-        if (failed) {
-            delay(SHOT_NOTE_MS)
-            failed = false
-        }
-    }
-    val report: (Boolean) -> Unit = { ok ->
-        if (!ok) {
-            failed = true
-            failures++
-        }
-    }
-    return remember(screen, scope, failed) {
-        ClipboardActions(
-            failed = failed,
-            copyHere = { text ->
-                scope.launch {
-                    report(
-                        try {
-                            // Wayland reads go through wl-paste ([fetchSystemClipboardText]), so the
-                            // write takes wl-copy first — otherwise the two ends of this menu would
-                            // be on different buffers and "Send mine" would return older text.
-                            if (!withContext(Dispatchers.Default) { writeSystemClipboardDirect(text) }) {
-                                clipboard.setClipEntry(plainTextClipEntry(text))
-                            }
-                            true
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (_: Exception) {
-                            false
-                        },
-                    )
-                }
-                Unit
-            },
-            sendMine = {
-                if (screen != null) {
-                    scope.launch {
-                        report(
-                            try {
-                                fetchSystemClipboardText(clipboard)?.let(screen::onLocalClipboard)
-                                true
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (_: Exception) {
-                                false
-                            },
-                        )
-                    }
-                }
-                Unit
-            },
-        )
-    }
-}
 
 /**
  * Remembered by the screen rather than by the bar or the panel: both of those come and go (the bar
@@ -407,8 +280,11 @@ internal fun SmallButton(label: String, onClick: () -> Unit) {
 @Composable
 internal fun MenuRow(label: String, selected: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        // Clipped like every other menu row: the panel insets its rows, so a selected one would
+        // otherwise draw a square-cornered bar inside a rounded panel.
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp))
+            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
+            .clickable(onClick = onClick).padding(horizontal = ROW_PADDING, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Txt(
@@ -424,7 +300,8 @@ internal fun MenuRow(label: String, selected: Boolean, onClick: () -> Unit) {
 @Composable
 internal fun CheckRow(label: String, checked: Boolean, onClick: () -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp)).clickable(onClick = onClick)
+            .padding(horizontal = ROW_PADDING, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -444,5 +321,7 @@ internal fun CheckRow(label: String, checked: Boolean, onClick: () -> Unit) {
 
 internal val REMOTE_ICON_BOX = 34.dp
 internal val REMOTE_MENU_WIDTH = 220.dp
-internal const val CLIPBOARD_PREVIEW = 400
+
+/** Inside a row, so a row and the panel's own 4dp inset together read as the 12dp of a menu. */
+internal val ROW_PADDING = 8.dp
 internal const val SHOT_NOTE_MS = 2500L

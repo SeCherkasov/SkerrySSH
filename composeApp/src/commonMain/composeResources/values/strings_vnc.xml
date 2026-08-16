@@ -34,6 +34,10 @@
     <string name="rd_clipboard">Clipboard</string>
     <string name="rd_clipboard_from_remote">From the remote machine</string>
     <string name="rd_clipboard_empty">Nothing copied yet</string>
+    <!-- Preview of a remote clipboard holding nothing but spaces, tabs or line breaks -->
+    <string name="rd_clipboard_blank">Whitespace only</string>
+    <!-- Preview of a remote clipboard whose every character draws as nothing -->
+    <string name="rd_clipboard_unprintable">Unprintable text</string>
     <string name="rd_clipboard_copy_here">Copy here</string>
     <string name="rd_clipboard_send">Send mine</string>
     <string name="rd_audio">Sound</string>

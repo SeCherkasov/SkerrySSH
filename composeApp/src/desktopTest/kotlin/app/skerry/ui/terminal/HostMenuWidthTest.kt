@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
 import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.MENU_FLOOR
+import app.skerry.ui.design.widestRun
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.theme.SkerryTheme
 import kotlin.test.Test
@@ -33,11 +35,12 @@ import kotlin.test.assertTrue
 class HostMenuWidthTest {
 
     /**
-     * Item floor (140dp) plus the card's 4dp padding on both sides, less the 1dp border that paints
-     * over the fill on each edge — the run of background pixels the scan below can actually see, at
-     * density 1. Without a floor the same card measures ~92px (its two labels).
+     * The panel's own floor, less the 1dp border that paints over the fill on each edge — the run of
+     * background pixels the scan below can actually see, at density 1. Read from [MENU_FLOOR] rather
+     * than written down again: a floor recorded in two files is a floor that moves in one of them.
+     * Without it the same card measures ~92px (its two labels).
      */
-    private val minimumCardWidthPx = 146
+    private val minimumCardWidthPx = MENU_FLOOR.value.toInt() - 2
 
     private val sceneWidth = 400f
 
@@ -87,14 +90,7 @@ class HostMenuWidthTest {
             val pixels = scene.render(50_000_000L).toComposeImageBitmap().toPixelMap()
 
             // The menu card is the widest run of its background colour in the frame.
-            var widest = 0
-            for (y in 0 until pixels.height) {
-                var run = 0
-                for (x in 0 until pixels.width) {
-                    if (pixels[x, y] == cardColor) run++ else { widest = maxOf(widest, run); run = 0 }
-                }
-                widest = maxOf(widest, run)
-            }
+            val widest = (0 until pixels.height).maxOf { widestRun(pixels, it) { pixel -> pixel == cardColor } }
             assertTrue(widest > 0, "the menu didn't open — the click missed the row's \"⋮\" button")
             assertTrue(
                 widest >= minimumCardWidthPx,

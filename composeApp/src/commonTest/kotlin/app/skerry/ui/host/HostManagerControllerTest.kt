@@ -408,28 +408,6 @@ class HostManagerControllerTest {
     }
 }
 
-/** In-memory [HostStore] with upsert/remove-by-id semantics matching the file-backed implementation. */
-private class FakeHostStore(vararg initial: Host) : HostStore {
-    private val entries = initial.toMutableList()
-
-    override fun all(): List<Host> = entries.toList()
-
-    override fun put(host: Host) {
-        val index = entries.indexOfFirst { it.id == host.id }
-        if (index >= 0) entries[index] = host else entries += host
-    }
-
-    override fun remove(id: String) {
-        entries.removeAll { it.id == id }
-    }
-
-    override fun reorder(transform: (List<Host>) -> List<Host>) {
-        val updated = transform(entries.toList())
-        entries.clear()
-        entries += updated
-    }
-}
-
 /**
  * Reordering from a section sidebar: the user drags among the rows THAT SECTION shows, while the
  * catalog holds both kinds. The other section's profiles must keep their relative order.
