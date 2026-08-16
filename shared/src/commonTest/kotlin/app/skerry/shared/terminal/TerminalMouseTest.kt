@@ -214,6 +214,19 @@ class TerminalMouseTest {
         assertEquals("ESC[200~okrm -rf /ESC[201~", out)
     }
 
+    /**
+     * The strip has to hold for a marker built out of its own wreckage. A single replace pass leaves
+     * the two halves of an overlapped marker adjacent, and they re-form into the very sequence that
+     * was removed — the paste then ends early and everything after it is typed input the shell runs.
+     */
+    @Test
+    fun `bracketed paste strips a marker that reassembles from its own halves`() {
+        val esc = esc.toChar()
+        val overlapped = "$esc[20$esc[201~1~rm -rf /"
+        val out = bracketedPasteWrap(overlapped, bracketed = true).show()
+        assertEquals("ESC[200~rm -rf /ESC[201~", out)
+    }
+
     @Test
     fun `disabled paste strips CR and ESC (anti command injection)`() {
         // Without bracketed paste, the shell can't tell paste from typing: an injected CR would act

@@ -112,7 +112,10 @@ fun encodeMouseReport(
  *
  * The closing marker `ESC[201~` is stripped from the content: otherwise pasting text into which an
  * untrusted SSH server injected this marker (via output that landed in the selection) would end the
- * paste early and send the tail to the application as typed commands (paste injection).
+ * paste early and send the tail to the application as typed commands (paste injection). The strip
+ * runs as a scan that can never leave a marker behind, not a single replace pass — a pass leaves the
+ * halves of an overlapped marker (`ESC[20` + `ESC[201~` + `1~`) side by side, and they re-form into
+ * the sequence that was just removed.
  *
  * When the mode is disabled the application can't tell paste from input, so control bytes in the
  * buffer (e.g. `CR` = Enter) would execute as commands. Raw pastes therefore drop C0 controls
@@ -121,6 +124,20 @@ fun encodeMouseReport(
  */
 fun bracketedPasteWrap(text: String, bracketed: Boolean): String {
     if (!bracketed) return text.filterNot { it.code < 0x20 && it != '\t' && it != '\n' || it.code == 0x7f }
-    val sanitized = text.replace("$ESC[201~", "")
-    return "$ESC[200~$sanitized$ESC[201~"
+    return "$ESC[200~${stripPasteEnd(text)}$ESC[201~"
+}
+
+/**
+ * [text] with every occurrence of the paste-end marker removed, including the ones that only appear
+ * once an earlier removal joins what surrounded it. Each character is appended and the tail checked,
+ * so the result cannot end — or contain — the marker at any point of the scan.
+ */
+private fun stripPasteEnd(text: String): String {
+    val marker = "$ESC[201~"
+    val out = StringBuilder(text.length)
+    for (ch in text) {
+        out.append(ch)
+        if (out.length >= marker.length && out.endsWith(marker)) out.setLength(out.length - marker.length)
+    }
+    return out.toString()
 }
