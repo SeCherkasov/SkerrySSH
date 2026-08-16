@@ -25,7 +25,6 @@ import app.skerry.ui.theme.Skerry
 import app.skerry.ui.theme.SkerryTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.fail
 
 /**
  * Right-clicking selected text opens a menu Compose builds and, by default, paints as a white
@@ -141,25 +140,14 @@ class TextContextMenuTest {
 }
 
 /**
- * The colour the menu is mostly made of. Counted rather than sampled at a fixed point: the popup's
- * own bounds are larger than the panel it holds, so a corner or an edge reads as transparent, and
- * the rounded corners and the label glyphs are not the fill either. Whatever paints the most opaque
- * pixels is the panel — `surface2` for the app's menu, white for the one Compose draws by default.
+ * The colour the menu is mostly made of — `surface2` for the app's menu, white for the one Compose
+ * draws by default. Read through [chromeOf], which is the one place in this package that knows how
+ * to find a panel in a capture: the popup's own bounds are larger than the panel it holds, so a
+ * corner or an edge reads as transparent, and the rounded corners and the glyphs are not the fill
+ * either. It fails loudly on a popup that drew nothing rather than returning a sentinel.
  */
 @OptIn(ExperimentalTestApi::class)
-private fun ComposeUiTest.popupFill(): Color {
-    val pixels = onNode(isPopup()).captureToImage().toPixelMap()
-    val counts = mutableMapOf<Color, Int>()
-    for (y in 0 until pixels.height) {
-        for (x in 0 until pixels.width) {
-            val pixel = pixels[x, y]
-            if (pixel.alpha == 1f) counts[pixel] = (counts[pixel] ?: 0) + 1
-        }
-    }
-    // Fails loudly rather than returning a sentinel: `Color.Unspecified` is also what an untouched
-    // expectation holds, so a popup that rendered nothing at all would have matched it and the one
-    // regression this test exists for would pass.
-    return counts.maxByOrNull { it.value }?.key ?: fail("the menu popup drew no opaque pixel")
-}
+private fun ComposeUiTest.popupFill(): Color =
+    chromeOf(onNode(isPopup()).captureToImage().toPixelMap()).fill
 
 private const val TEXT = "reload the unit before restarting it"

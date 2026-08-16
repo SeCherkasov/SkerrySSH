@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
 import app.skerry.shared.host.Host
-import app.skerry.shared.host.HostStore
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
@@ -29,6 +28,7 @@ import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.desktop.DesktopDesignApp
 import app.skerry.ui.host.HostManagerController
+import app.skerry.ui.host.hostCatalogOf
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.theme.SkerryTheme
 import kotlin.test.Test
@@ -144,22 +144,8 @@ class FullAppThemeSwitchRenderTest {
         return false
     }
 
-    private fun seededHosts(): HostManagerController {
-        val store = object : HostStore {
-            private val items = LinkedHashMap<String, Host>()
-            override fun all(): List<Host> = items.values.toList()
-            override fun put(host: Host) { items[host.id] = host }
-            override fun remove(id: String) { items.remove(id) }
-            override fun reorder(transform: (List<Host>) -> List<Host>) {
-                val updated = transform(items.values.toList())
-                items.clear()
-                updated.forEach { items[it.id] = it }
-            }
-        }
-        store.put(Host("h1", "prod-web-01", "192.168.1.45", 22, "root", "Production"))
-        var seq = 0
-        return HostManagerController(store) { "gen-${seq++}" }
-    }
+    private fun seededHosts(): HostManagerController =
+        hostCatalogOf(Host("h1", "prod-web-01", "192.168.1.45", 22, "root", "Production"))
 
     private fun fakeTransport(): SshTransport = object : SshTransport {
         override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection = FakeConnection()

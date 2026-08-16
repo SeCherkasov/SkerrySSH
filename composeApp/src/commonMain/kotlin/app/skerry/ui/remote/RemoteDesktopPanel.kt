@@ -43,7 +43,7 @@ val REMOTE_PANEL_WIDTH: Dp = 44.dp
  * would leave the desktop a strip.
  *
  * The desktop shows the same actions as a floating bar over the picture ([RemoteDesktopBar]); both
- * drive the shared menus in [RemoteDesktopMenus].
+ * open the menus in `RemoteDesktopMenus` and `RemoteClipboardMenu`.
  */
 @Composable
 fun RemoteDesktopPanel(

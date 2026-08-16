@@ -163,9 +163,11 @@ private enum class ServerChar { Keep, Break, Space, Drop }
 
 private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = when {
     ch == '\n' && allowNewlines -> ServerChar.Break
-    // Where newlines survive, the carriage return of a CRLF must not become a space before every
-    // one of them; it carries nothing the newline does not already say.
-    ch == '\r' && allowNewlines -> ServerChar.Drop
+    // Where newlines survive, a carriage return is the line it ends, not a space before one: the
+    // run-collapse below folds the CR of a CRLF into the newline that follows it, and a CR on its
+    // own still draws as the break it is. Dropped, two commands a server put on one clipboard
+    // would draw as a single line while a paste of them submits both.
+    ch == '\r' && allowNewlines -> ServerChar.Break
     // Single-line sink: fold rather than drop, or the words either side are glued together
     // ("Accessdeniedby policy"), which reads worse than the wrapped original.
     ch == '\n' || ch == '\r' || ch == '\t' -> ServerChar.Space

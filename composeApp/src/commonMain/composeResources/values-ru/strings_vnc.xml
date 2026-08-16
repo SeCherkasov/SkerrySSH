@@ -34,6 +34,10 @@
     <string name="rd_clipboard">Буфер обмена</string>
     <string name="rd_clipboard_from_remote">С удалённой машины</string>
     <string name="rd_clipboard_empty">Пока ничего не копировали</string>
+    <!-- Preview of a remote clipboard holding nothing but spaces, tabs or line breaks -->
+    <string name="rd_clipboard_blank">Только пробелы</string>
+    <!-- Preview of a remote clipboard whose every character draws as nothing -->
+    <string name="rd_clipboard_unprintable">Непечатаемый текст</string>
     <string name="rd_clipboard_copy_here">Скопировать сюда</string>
     <string name="rd_clipboard_send">Отправить свой</string>
     <string name="rd_audio">Звук</string>

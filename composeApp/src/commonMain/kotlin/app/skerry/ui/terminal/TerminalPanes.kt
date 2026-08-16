@@ -1,7 +1,6 @@
 package app.skerry.ui.terminal
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.Orientation
@@ -70,6 +69,8 @@ import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.MenuActionRow
+import app.skerry.ui.design.MenuPanel
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -288,17 +289,9 @@ internal fun PaneHeader(
 
 /** What can be done to one pane of a split: point it at another host, or close it. */
 @Composable
-private fun PaneMenu(onDismiss: () -> Unit, onChangeHost: () -> Unit, onClose: () -> Unit) {
+internal fun PaneMenu(onDismiss: () -> Unit, onChangeHost: () -> Unit, onClose: () -> Unit) {
     Popup(alignment = Alignment.TopEnd, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
-        Column(
-            Modifier
-                .padding(top = PANE_HEADER_HEIGHT)
-                .width(180.dp)
-                .clip(RoundedCornerShape(7.dp))
-                .background(Skerry.colors.surface2)
-                .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                .padding(4.dp),
-        ) {
+        MenuPanel(Modifier.padding(top = PANE_HEADER_HEIGHT)) {
             MenuActionRow("dns", stringResource(Res.string.term_pane_change_host)) { onDismiss(); onChangeHost() }
             MenuActionRow("close", stringResource(Res.string.term_pane_close)) { onDismiss(); onClose() }
         }
@@ -316,35 +309,34 @@ internal fun PaneHostPicker(onPick: (Host) -> Unit) {
     // Terminal profiles only: a pane is a shell, and a remote desktop picked here would be dialled
     // as SSH on its RFB port.
     val hosts = LocalHosts.current?.hosts?.inSection(HostSection.Terminal) ?: emptyList()
-    Column(
-        Modifier
-            .width(240.dp)
-            .heightIn(max = 280.dp)
-            .clip(RoundedCornerShape(7.dp))
-            .background(Skerry.colors.surface2)
-            .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-            .verticalScroll(rememberScrollState())
-            .padding(4.dp),
-    ) {
-        if (hosts.isEmpty()) {
-            Txt(stringResource(Res.string.term_no_hosts_in_catalog), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
-        }
-        hosts.forEach { host ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(5.dp))
-                    .clickable { onPick(host) }
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Sym("dns", size = 14.sp, color = Skerry.colors.cyanBright)
-                Txt(host.rowLabel(), color = Skerry.colors.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
+    // Wider than a menu measures and taller than it fits: a catalog is a list, not a set of verbs.
+    // The scroll is inside the panel rather than around it, so the frame bounds the viewport instead
+    // of sliding away with the rows.
+    MenuPanel(width = PANE_PICKER_WIDTH) {
+        Column(Modifier.heightIn(max = PANE_PICKER_HEIGHT).verticalScroll(rememberScrollState())) {
+            if (hosts.isEmpty()) {
+                Txt(stringResource(Res.string.term_no_hosts_in_catalog), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp))
+            }
+            hosts.forEach { host ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(5.dp))
+                        .clickable { onPick(host) }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Sym("dns", size = 14.sp, color = Skerry.colors.cyanBright)
+                    Txt(host.rowLabel(), color = Skerry.colors.dim, size = 11.5.sp, font = mono, modifier = Modifier.weight(1f))
+                }
             }
         }
     }
 }
+
+internal val PANE_PICKER_WIDTH = 240.dp
+internal val PANE_PICKER_HEIGHT = 280.dp
 
 /**
  * Divider between two panes: a hairline drawn inside a wider grip, so it can be grabbed without
