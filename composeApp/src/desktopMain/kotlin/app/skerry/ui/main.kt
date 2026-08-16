@@ -515,6 +515,8 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
                 hardwareDecode = prefs.id("render_backend", RenderBackend.DEFAULT, RenderBackend::fromId) !=
                     RenderBackend.SOFTWARE,
             ),
+            // Desktop memory affords the spec's full EGFX cache; the small cache costs retransmission (F-07).
+            egfxSmallCache = false,
         ),
         workspaceLayout = workspaceLayout,
         ai = ai,

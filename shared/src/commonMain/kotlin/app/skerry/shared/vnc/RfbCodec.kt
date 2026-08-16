@@ -56,6 +56,9 @@ class RfbCodec(
     var continuousUpdates = false
         private set
 
+    // Decoder working buffers, reused across rectangles (V-04); serial read loop, so one set.
+    private val scratch = RfbScratch()
+
     // One persistent ZRLE zlib stream for the whole connection (created on first ZRLE rect).
     private var zrleInflater: Inflater? = null
     // Up to four independent persistent Tight zlib streams, created lazily as control bytes name them.
@@ -352,10 +355,10 @@ class RfbCodec(
             throw VncProtocolException("rectangle ${rect.width}x${rect.height} exceeds max $MAX_DIMENSION")
         }
         when (encoding) {
-            ENC_RAW -> decodeRaw(source, fb, rect)
+            ENC_RAW -> decodeRaw(source, fb, rect, scratch)
             ENC_COPY_RECT -> decodeCopyRect(source, fb, rect)
-            ENC_HEXTILE -> decodeHextile(source, fb, rect)
-            ENC_ZRLE -> decodeZrle(source, fb, rect, zrleStream())
+            ENC_HEXTILE -> decodeHextile(source, fb, rect, scratch)
+            ENC_ZRLE -> decodeZrle(source, fb, rect, zrleStream(), scratch)
             ENC_TIGHT -> decodeTight(source, fb, rect, ::tightStream, ::resetTight, imageDecoder)
             else -> throw VncProtocolException("unsupported encoding $encoding for rect $rect")
         }

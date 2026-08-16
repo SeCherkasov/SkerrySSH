@@ -107,7 +107,16 @@ data class RemoteKeyEvent(
     val scancode: Int = 0,
     val extended: Boolean = false,
     val codePoint: Int = 0,
+    /**
+     * The scancodes of a key that is more than one (F-18): PrintScreen's `E0 2A E0 37`, Pause's
+     * E1-prefixed pair. Empty for the ordinary single-scancode key, which stays in [scancode] —
+     * the sequence goes down in order and up in reverse, as the hardware sends it.
+     */
+    val sequence: List<RemoteScan> = emptyList(),
 )
+
+/** One scancode of a [RemoteKeyEvent.sequence]; [extended1] is the E1 prefix (Pause, and only it). */
+data class RemoteScan(val scancode: Int, val extended: Boolean = false, val extended1: Boolean = false)
 
 /**
  * A change to show. The union of what the two protocols report; a protocol that never produces one

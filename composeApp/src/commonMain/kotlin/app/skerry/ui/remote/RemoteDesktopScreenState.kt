@@ -50,6 +50,9 @@ class RemoteDesktopScreenState(
     private val onClipboard: (String) -> Unit = {},
     remoteResizeInitial: Boolean = false,
     private val onRemoteResizeChanged: (Boolean) -> Unit = {},
+    /** The profile's remembered quality (V-03); applied at connect, changes reported outward. */
+    private val qualityInitial: RemoteDesktopQuality = RemoteDesktopQuality.Auto,
+    private val onQualityChanged: (RemoteDesktopQuality) -> Unit = {},
 ) {
     private val image = FramebufferImage(
         session.framebuffer.width.coerceAtLeast(1),
@@ -113,8 +116,8 @@ class RemoteDesktopScreenState(
         userOffset = Offset.Zero
     }
 
-    /** Current image quality/compression preference (Graphics settings). */
-    var quality by mutableStateOf(RemoteDesktopQuality.Auto)
+    /** Current image quality/compression preference (Graphics settings), seeded from the profile. */
+    var quality by mutableStateOf(qualityInitial)
         private set
 
     /** The session's protocol-side counters, shown by the diagnostics overlay. */
@@ -211,6 +214,7 @@ class RemoteDesktopScreenState(
     /** Change the quality preference; the server applies it on the next update. */
     fun applyQuality(newQuality: RemoteDesktopQuality) {
         quality = newQuality
+        onQualityChanged(newQuality)
         send { session.setQuality(newQuality) }
     }
 
@@ -369,6 +373,11 @@ class RemoteDesktopScreenState(
     val imageBitmap: ImageBitmap get() = image.bitmap
 
     init {
+        // The profile's remembered quality (V-03). Auto is the wire default — announcing it would
+        // be noise — and seeding is not a change, so onQualityChanged stays silent here.
+        if (qualityInitial != RemoteDesktopQuality.Auto) {
+            send { session.setQuality(qualityInitial) }
+        }
         scope.launch {
             // The same belt-and-braces net as the updates collector below, for the same reason: on
             // a supervisor scope a dying actor cancels nothing else, so without this a bug in the
@@ -501,6 +510,9 @@ class RemoteDesktopScreenState(
 
     /** What makes a press and its release the same key, whichever field the protocol will use. */
     private fun keyIdentity(event: RemoteKeyEvent): Long = when {
+        // A multi-scancode key (F-18) has no flat scancode; its first scan is unique among the
+        // sequences, and collapsing them all to one identity dropped a release on focus loss.
+        event.sequence.isNotEmpty() -> event.sequence.first().scancode.toLong() or (1L shl 56)
         event.scancode != 0 -> event.scancode.toLong() or (if (event.extended) 1L shl 32 else 0L)
         event.keySym != 0L -> event.keySym or (1L shl 40)
         else -> event.codePoint.toLong() or (1L shl 48)

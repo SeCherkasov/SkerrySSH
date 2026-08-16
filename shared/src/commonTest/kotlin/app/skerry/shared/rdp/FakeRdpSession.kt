@@ -24,8 +24,8 @@ open class FakeRdpSession(
     override val audioAvailable = true
     override val clipboardAvailable = true
 
-    override suspend fun sendKey(scancode: Int, down: Boolean, extended: Boolean) {
-        calls += "key($scancode,$down,$extended)"
+    override suspend fun sendKey(scancode: Int, down: Boolean, extended: Boolean, extended1: Boolean) {
+        calls += "key($scancode,$down,$extended,$extended1)"
     }
 
     override suspend fun sendUnicode(code: Int, down: Boolean) {

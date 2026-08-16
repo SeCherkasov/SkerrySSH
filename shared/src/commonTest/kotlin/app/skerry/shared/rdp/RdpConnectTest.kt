@@ -44,25 +44,27 @@ class RdpConnectTest {
     }
 
     @Test
-    fun `remoteFx off keeps the codec set out of the confirm active a server offer cannot revive`() = runTest {
-        // The model server offers RemoteFX; the profile declined it. The Bitmap Codecs set must be
-        // absent — this is the escape hatch F-32 exists for, and only the wire proves it.
+    fun `remoteFx off keeps its codec out of the confirm active a server offer cannot revive`() = runTest {
+        // The model server offers RemoteFX; the profile declined it. The RemoteFX GUID must be
+        // absent — this is the escape hatch F-32 exists for, and only the wire proves it. NSCodec
+        // (F-33) stays: it is not what the switch turns off.
         val server = ModelServer()
 
         RdpConnectionSequence(
             server.source, server.sink, settings.copy(wantsRemoteFx = false), logon, FakeLicenseCrypto,
         ).run()
 
-        assertFalse(CapabilitySetType.BITMAP_CODECS in server.confirmedCapabilityTypes)
+        assertFalse(Capabilities.GUID_REMOTEFX.toList() in server.confirmedCodecGuids)
+        assertTrue(Capabilities.GUID_NSCODEC.toList() in server.confirmedCodecGuids)
     }
 
     @Test
-    fun `remoteFx on advertises the codec set when the server offers it`() = runTest {
+    fun `remoteFx on advertises its codec when the server offers it`() = runTest {
         val server = ModelServer()
 
         RdpConnectionSequence(server.source, server.sink, settings, logon, FakeLicenseCrypto).run()
 
-        assertTrue(CapabilitySetType.BITMAP_CODECS in server.confirmedCapabilityTypes)
+        assertTrue(Capabilities.GUID_REMOTEFX.toList() in server.confirmedCodecGuids)
     }
 
     @Test
@@ -182,6 +184,9 @@ class RdpConnectTest {
 
         /** Capability-set types the client's Confirm Active carried. */
         val confirmedCapabilityTypes = mutableSetOf<Int>()
+
+        /** Codec GUIDs of the Confirm Active's Bitmap Codecs set, as byte lists. */
+        val confirmedCodecGuids = mutableListOf<List<Byte>>()
         var sawFontList = false
             private set
         var confirmedShareId = 0
@@ -268,20 +273,7 @@ class RdpConnectTest {
                 RdpShare.PDUTYPE_CONFIRM_ACTIVE -> {
                     sawConfirmActive = true
                     confirmedShareId = body.u32le()
-                    // Walk the capability sets (MS-RDPBCGR 2.2.1.13.2): what the client actually
-                    // advertised is the only proof the profile's codec switches reached the wire.
-                    body.skip(2) // originatorId
-                    val sourceLength = body.u16le()
-                    body.skip(sourceLength)
-                    body.skip(2) // lengthCombinedCapabilities
-                    val setCount = body.u16le()
-                    body.skip(2) // padding
-                    repeat(setCount) {
-                        val type = body.u16le()
-                        val length = body.u16le()
-                        confirmedCapabilityTypes += type
-                        body.skip(length - 4)
-                    }
+                    recordConfirmedCapabilities(body)
                 }
 
                 RdpShare.PDUTYPE_DATA -> {
@@ -290,6 +282,34 @@ class RdpConnectTest {
                         sawFontList = true
                         reply(fontMap())
                     }
+                }
+            }
+        }
+
+        /**
+         * Walk the Confirm Active capability sets (MS-RDPBCGR 2.2.1.13.2): what the client actually
+         * advertised is the only proof the profile's codec switches reached the wire. The shareId
+         * is already consumed; lengthCombinedCapabilities (2) precedes the source descriptor on
+         * the wire — the two skips are merged since only their sum positions the set walk.
+         */
+        private fun recordConfirmedCapabilities(body: RdpReader) {
+            body.skip(2) // originatorId
+            val sourceLength = body.u16le()
+            body.skip(2 + sourceLength)
+            val setCount = body.u16le()
+            body.skip(2) // padding
+            repeat(setCount) {
+                val type = body.u16le()
+                val length = body.u16le()
+                confirmedCapabilityTypes += type
+                if (type == CapabilitySetType.BITMAP_CODECS) {
+                    repeat(body.u8()) {
+                        confirmedCodecGuids += body.bytes(16).toList()
+                        body.u8() // codecId
+                        body.skip(body.u16le())
+                    }
+                } else {
+                    body.skip(length - 4)
                 }
             }
         }

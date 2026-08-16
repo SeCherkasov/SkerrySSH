@@ -18,10 +18,14 @@ fun remoteKeyEvent(key: Key, codePoint: Int): RemoteKeyEvent? {
     val keySym = keySymFor(key, codePoint)
     val scancode = scancodeFor(key)
     if (keySym == 0L && scancode == null && codePoint == 0) return null
+    // The single-scancode common case stays in the flat fields; anything longer — or anything the
+    // flat fields cannot express, like the E1 prefix — travels as a sequence (F-18).
+    val single = scancode?.scans?.singleOrNull()?.takeIf { !it.extended1 }
     return RemoteKeyEvent(
         keySym = keySym,
-        scancode = scancode?.scancode ?: 0,
-        extended = scancode?.extended ?: false,
+        scancode = single?.scancode ?: 0,
+        extended = single?.extended ?: false,
         codePoint = codePoint,
+        sequence = if (scancode != null && single == null) scancode.scans else emptyList(),
     )
 }

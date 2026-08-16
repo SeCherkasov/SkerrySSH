@@ -23,6 +23,24 @@ class NsCodecTest {
     }
 
     @Test
+    fun `the legacy surface path routes NSCodec to the decoder`() {
+        // F-33's second half: advertising the codec is useless while RdpCodecs answers null — a
+        // server that picked NSCodec would then tear the session down as "not negotiated".
+        val stream = stream(
+            colorLossLevel = 1,
+            subsampled = false,
+            luma = byteArrayOf(0x40, 0x60),
+            orange = byteArrayOf(0, 0),
+            green = byteArrayOf(0, 0),
+        )
+
+        val pixels = RdpCodecs()
+            .decode(ClientCapabilities.CODEC_ID_NSCODEC, stream, width = 2, height = 1, bitsPerPixel = 32)
+
+        assertEquals(listOf(0xFF404040.toInt(), 0xFF606060.toInt()), pixels?.toList())
+    }
+
+    @Test
     fun `a plane that arrives at its full length is not run-length decoded`() {
         // 2x1, no subsampling: every plane is two bytes long, so none of them is encoded. A run
         // decoder let loose on these would read the pair as a run and paint one colour twice.

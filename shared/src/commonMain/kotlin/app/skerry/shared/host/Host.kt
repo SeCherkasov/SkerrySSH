@@ -85,6 +85,13 @@ data class Host(
     val jumpHostId: String? = null,
     val keepAliveSeconds: Int = 30,
     val vncResizeToWindow: Boolean = false,
+    /**
+     * The remote desktop's quality choice, remembered across sessions (V-03): picked from the live
+     * session's graphics menu, not the edit form, like [vncResizeToWindow]. Auto is the wire
+     * default and stores nothing worth acting on.
+     */
+    val vncQuality: app.skerry.shared.graphics.RemoteDesktopQuality =
+        app.skerry.shared.graphics.RemoteDesktopQuality.Auto,
     val notes: String? = null,
     val container: ContainerSpec? = null,
     val rdp: RdpSpec? = null,

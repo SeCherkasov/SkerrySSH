@@ -31,6 +31,11 @@ class GraphicsChannel(
     /** Which H.264 ladder to advertise (F-28); capped by whether [GraphicsCodecs.avc] exists. */
     private val h264Mode: RdpH264Mode = RdpH264Mode.Auto,
     /**
+     * Advertise CAPS_FLAG_SMALL_CACHE (F-07). Small cache trades memory for retransmission on a
+     * busy desktop; the default keeps it, desktop turns it off and budgets the spec's full cache.
+     */
+    private val smallCache: Boolean = true,
+    /**
      * Where a line about the capability exchange goes; silent by default. Which version the server
      * picked decides whether it may use H.264 at all, and nothing else on the wire says so.
      */
@@ -45,6 +50,9 @@ class GraphicsChannel(
      * every server accepts — so only this direction needs one.
      */
     private val bulk = Zgfx()
+
+    /** What the advertisement promised is what eviction honours — a server sizes its slots on it. */
+    private val cacheBudgetPixels = if (smallCache) MAX_CACHE_PIXELS else LARGE_CACHE_PIXELS
 
     private val surfaces = mutableMapOf<Int, GraphicsSurface>()
     private val cache = mutableMapOf<Int, CachedBitmap>()
@@ -405,7 +413,7 @@ class GraphicsChannel(
         cachedPixels += bitmap.pixels.size
         // The server keeps its own idea of the cache, so an entry dropped here is not an error —
         // the region it would have restored simply stays as it was until the server sends it again.
-        while (cachedPixels > MAX_CACHE_PIXELS && cacheOrder.isNotEmpty()) {
+        while (cachedPixels > cacheBudgetPixels && cacheOrder.isNotEmpty()) {
             evict(cacheOrder.first())
         }
     }
@@ -439,13 +447,14 @@ class GraphicsChannel(
         val avc420 = codecs.avc != null && h264Mode != RdpH264Mode.Off
         val avc444 = avc420 && h264Mode != RdpH264Mode.Avc420
         val sets = 1 + (if (avc420) 1 else 0) + (if (avc444) 1 else 0)
+        val cacheFlag = if (smallCache) CAPS_FLAG_SMALL_CACHE else 0
         val writer = RdpWriter(40).u16le(sets) // capsSetCount
-        writer.u32le(CAPVERSION_8).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE)
+        writer.u32le(CAPVERSION_8).u32le(4).u32le(cacheFlag)
         if (avc420) {
-            writer.u32le(CAPVERSION_8_1).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE or CAPS_FLAG_AVC420_ENABLED)
+            writer.u32le(CAPVERSION_8_1).u32le(4).u32le(cacheFlag or CAPS_FLAG_AVC420_ENABLED)
         }
         if (avc444) {
-            writer.u32le(CAPVERSION_10_4).u32le(4).u32le(CAPS_FLAG_SMALL_CACHE)
+            writer.u32le(CAPVERSION_10_4).u32le(4).u32le(cacheFlag)
         }
         return writer.toByteArray()
     }
@@ -526,5 +535,8 @@ class GraphicsChannel(
 
         /** 32 MB of cached pixels — well past what a server told to keep a small cache will use. */
         private const val MAX_CACHE_PIXELS = 8 * 1024 * 1024
+
+        /** The spec's full cache once the small-cache flag is dropped (F-07): 100 MB as pixels. */
+        private const val LARGE_CACHE_PIXELS = 25 * 1024 * 1024
     }
 }

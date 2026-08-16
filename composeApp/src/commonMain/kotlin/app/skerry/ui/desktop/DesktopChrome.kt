@@ -220,6 +220,8 @@ internal fun DesktopChrome(
             ),
             remoteResize = host.vncResizeToWindow,
             onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+            quality = host.vncQuality,
+            onQualityChanged = { q -> hostManager?.setVncQuality(host.id, q) },
         )
         state.showSection(HostSection.RemoteDesktops)
     }
@@ -261,6 +263,8 @@ internal fun DesktopChrome(
                             host.id, host.rowLabel(), host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
                             remoteResize = host.vncResizeToWindow,
                             onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                            quality = host.vncQuality,
+                            onQualityChanged = { q -> hostManager?.setVncQuality(host.id, q) },
                         )
                         state.showSection(HostSection.RemoteDesktops)
                     } else {
@@ -472,6 +476,8 @@ internal fun DesktopChrome(
                         host.id, host.rowLabel(), host.connectionSubtitle(), host.toTarget(), auth,
                         remoteResize = host.vncResizeToWindow,
                         onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                        quality = host.vncQuality,
+                        onQualityChanged = { q -> hostManager?.setVncQuality(host.id, q) },
                     )
                     state.showSection(HostSection.RemoteDesktops)
                 }

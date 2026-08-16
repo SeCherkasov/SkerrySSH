@@ -51,9 +51,8 @@ class RdpRemoteDesktop(
 
     override val updates: Flow<RemoteDesktopUpdate> = session.updates.map { update ->
         when (update) {
-            is RdpUpdate.Region -> RemoteDesktopUpdate.Region(
-                update.rects.map { RemoteRect(it.x, it.y, it.width, it.height) },
-            )
+            // RdpRect IS RemoteRect (see RdpUpdate.kt) — the list crosses as-is, no per-frame copy.
+            is RdpUpdate.Region -> RemoteDesktopUpdate.Region(update.rects)
 
             is RdpUpdate.Resize -> RemoteDesktopUpdate.Resize(update.width, update.height)
             is RdpUpdate.ResizeSupported -> RemoteDesktopUpdate.RemoteResizeSupported
@@ -121,6 +120,11 @@ class RdpRemoteDesktop(
         // apply. Only when the key has none — a character the local layout composes that no key on
         // the remote one carries — is the code point sent instead.
         when {
+            event.sequence.isNotEmpty() -> {
+                // Down in order, up in reverse, as the hardware sends a multi-scancode key (F-18).
+                val scans = if (down) event.sequence else event.sequence.asReversed()
+                for (scan in scans) session.sendKey(scan.scancode, down, scan.extended, scan.extended1)
+            }
             event.scancode != 0 -> session.sendKey(event.scancode, down, event.extended)
             event.codePoint != 0 -> session.sendUnicode(event.codePoint, down)
         }

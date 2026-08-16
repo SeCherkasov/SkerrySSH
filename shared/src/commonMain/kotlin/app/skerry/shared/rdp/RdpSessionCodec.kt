@@ -240,8 +240,8 @@ class RdpSessionCodec(
 
     // ---- client → server ----
 
-    suspend fun sendKey(scancode: Int, down: Boolean, extended: Boolean = false) =
-        sink.write(RdpInput.key(scancode, down, extended))
+    suspend fun sendKey(scancode: Int, down: Boolean, extended: Boolean = false, extended1: Boolean = false) =
+        sink.write(RdpInput.key(scancode, down, extended, extended1))
 
     suspend fun sendUnicode(code: Int, down: Boolean) = sink.write(RdpInput.unicode(code, down))
 

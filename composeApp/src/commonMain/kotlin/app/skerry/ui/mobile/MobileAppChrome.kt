@@ -165,6 +165,8 @@ internal fun MobileChrome(
                             host.id, host.rowLabel(), host.connectionSubtitle(), host.toTarget(), cred.toVncAuth(),
                             remoteResize = host.vncResizeToWindow,
                             onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
+                            quality = host.vncQuality,
+                            onQualityChanged = { q -> hostManager?.setVncQuality(host.id, q) },
                         )
                         if (sessions != null) state.push(MobileRoute.Vnc)
                     } else {

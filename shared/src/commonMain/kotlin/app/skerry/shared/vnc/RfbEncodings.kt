@@ -9,12 +9,40 @@ import app.skerry.shared.graphics.RemoteFramebuffer
  * (Hextile, ZRLE, Tight) are added in their own slices.
  */
 
+/**
+ * Working buffers the decoders reuse across rectangles (V-04, the RFB sibling of the RDP side's
+ * F-05/F-35): one instance per [RfbCodec], safe because rectangles decode serially on the session's
+ * read loop. Fixed-size buffers are plain fields; the row buffers grow to the widest rectangle seen
+ * and stay. Wire payloads (Tight/ZRLE compressed chunks) are content, not scratch, and stay
+ * allocated per message.
+ */
+internal class RfbScratch {
+    val one = ByteArray(1)
+    val px = ByteArray(CanonicalPixelFormat.PIXEL_BYTES)
+    val lenBuf = ByteArray(4)
+    val hextileRaw = ByteArray(16 * 16 * CanonicalPixelFormat.PIXEL_BYTES)
+    val hextileRow = IntArray(16)
+
+    private var rowBytes = ByteArray(0)
+    private var rowPixels = IntArray(0)
+
+    fun rowBytes(size: Int): ByteArray {
+        if (rowBytes.size < size) rowBytes = ByteArray(size)
+        return rowBytes
+    }
+
+    fun rowPixels(size: Int): IntArray {
+        if (rowPixels.size < size) rowPixels = IntArray(size)
+        return rowPixels
+    }
+}
+
 /** Raw: `width*height` pixels, row-major, 4 bytes each (our forced format). */
-internal suspend fun decodeRaw(source: VncSource, fb: RemoteFramebuffer, rect: VncRect) {
+internal suspend fun decodeRaw(source: VncSource, fb: RemoteFramebuffer, rect: VncRect, scratch: RfbScratch = RfbScratch()) {
     if (rect.width <= 0 || rect.height <= 0) return
     val rowBytes = rect.width * CanonicalPixelFormat.PIXEL_BYTES
-    val rowBuf = ByteArray(rowBytes)
-    val argbRow = IntArray(rect.width)
+    val rowBuf = scratch.rowBytes(rowBytes)
+    val argbRow = scratch.rowPixels(rect.width)
     var row = 0
     while (row < rect.height) {
         source.readFully(rowBuf, 0, rowBytes)
@@ -56,61 +84,73 @@ private const val HEXTILE_SUBRECTS_COLOURED = 16
  * foreground subrectangles. Background/foreground colours persist across tiles unless re-specified.
  * All pixels are full 4-byte pixels (our canonical format), not CPIXELs.
  */
-internal suspend fun decodeHextile(source: VncSource, fb: RemoteFramebuffer, rect: VncRect) {
-    val one = ByteArray(1)
-    val px = ByteArray(CanonicalPixelFormat.PIXEL_BYTES)
-    val rawBuf = ByteArray(16 * 16 * CanonicalPixelFormat.PIXEL_BYTES)
-    val argbRow = IntArray(16)
+internal suspend fun decodeHextile(source: VncSource, fb: RemoteFramebuffer, rect: VncRect, scratch: RfbScratch = RfbScratch()) {
+    HextileTiles(source, fb, scratch).decode(rect)
+}
 
-    suspend fun u8(): Int { source.readFully(one, 0, 1); return one[0].toInt() and 0xFF }
-    suspend fun pixel(): Int { source.readFully(px, 0, px.size); return CanonicalPixelFormat.argbFromPixel(px, 0) }
+/** One rectangle's Hextile pass; a class because bg/fg persist across its tiles. */
+private class HextileTiles(
+    private val source: VncSource,
+    private val fb: RemoteFramebuffer,
+    private val scratch: RfbScratch,
+) {
+    private var bg = 0xFF000000.toInt()
+    private var fg = 0xFFFFFFFF.toInt()
 
-    var bg = 0xFF000000.toInt()
-    var fg = 0xFFFFFFFF.toInt()
-
-    var tileY = rect.y
-    val endY = rect.y + rect.height
-    while (tileY < endY) {
-        val th = minOf(16, endY - tileY)
-        var tileX = rect.x
-        val endX = rect.x + rect.width
-        while (tileX < endX) {
-            val tw = minOf(16, endX - tileX)
-            val sub = u8()
-            if (sub and HEXTILE_RAW != 0) {
-                val n = tw * th * CanonicalPixelFormat.PIXEL_BYTES
-                source.readFully(rawBuf, 0, n)
-                var row = 0
-                while (row < th) {
-                    var col = 0
-                    while (col < tw) {
-                        argbRow[col] = CanonicalPixelFormat.argbFromPixel(rawBuf, (row * tw + col) * CanonicalPixelFormat.PIXEL_BYTES)
-                        col++
-                    }
-                    fb.blitRow(tileX, tileY + row, tw, argbRow, 0)
-                    row++
-                }
-            } else {
-                if (sub and HEXTILE_BG != 0) bg = pixel()
-                fb.fillRect(tileX, tileY, tw, th, bg)
-                if (sub and HEXTILE_FG != 0) fg = pixel()
-                if (sub and HEXTILE_ANY_SUBRECTS != 0) {
-                    val nSub = u8()
-                    repeat(nSub) {
-                        val colour = if (sub and HEXTILE_SUBRECTS_COLOURED != 0) pixel() else fg
-                        val xy = u8()
-                        val wh = u8()
-                        val sx = xy shr 4
-                        val sy = xy and 0x0F
-                        val sw = (wh shr 4) + 1
-                        val sh = (wh and 0x0F) + 1
-                        fb.fillRect(tileX + sx, tileY + sy, sw, sh, colour)
-                    }
-                }
+    suspend fun decode(rect: VncRect) {
+        var tileY = rect.y
+        val endY = rect.y + rect.height
+        while (tileY < endY) {
+            val th = minOf(16, endY - tileY)
+            var tileX = rect.x
+            val endX = rect.x + rect.width
+            while (tileX < endX) {
+                val tw = minOf(16, endX - tileX)
+                val sub = u8()
+                if (sub and HEXTILE_RAW != 0) rawTile(tileX, tileY, tw, th) else filledTile(sub, tileX, tileY, tw, th)
+                tileX += 16
             }
-            tileX += 16
+            tileY += 16
         }
-        tileY += 16
+    }
+
+    private suspend fun rawTile(tileX: Int, tileY: Int, tw: Int, th: Int) {
+        val rawBuf = scratch.hextileRaw
+        val argbRow = scratch.hextileRow
+        source.readFully(rawBuf, 0, tw * th * CanonicalPixelFormat.PIXEL_BYTES)
+        var row = 0
+        while (row < th) {
+            var col = 0
+            while (col < tw) {
+                argbRow[col] = CanonicalPixelFormat.argbFromPixel(rawBuf, (row * tw + col) * CanonicalPixelFormat.PIXEL_BYTES)
+                col++
+            }
+            fb.blitRow(tileX, tileY + row, tw, argbRow, 0)
+            row++
+        }
+    }
+
+    private suspend fun filledTile(sub: Int, tileX: Int, tileY: Int, tw: Int, th: Int) {
+        if (sub and HEXTILE_BG != 0) bg = pixel()
+        fb.fillRect(tileX, tileY, tw, th, bg)
+        if (sub and HEXTILE_FG != 0) fg = pixel()
+        if (sub and HEXTILE_ANY_SUBRECTS == 0) return
+        repeat(u8()) {
+            val colour = if (sub and HEXTILE_SUBRECTS_COLOURED != 0) pixel() else fg
+            val xy = u8()
+            val wh = u8()
+            fb.fillRect(tileX + (xy shr 4), tileY + (xy and 0x0F), (wh shr 4) + 1, (wh and 0x0F) + 1, colour)
+        }
+    }
+
+    private suspend fun u8(): Int {
+        source.readFully(scratch.one, 0, 1)
+        return scratch.one[0].toInt() and 0xFF
+    }
+
+    private suspend fun pixel(): Int {
+        source.readFully(scratch.px, 0, scratch.px.size)
+        return CanonicalPixelFormat.argbFromPixel(scratch.px, 0)
     }
 }
 
@@ -139,8 +179,14 @@ private class ByteCursor(private val d: ByteArray) {
  * subencoding: raw CPIXELs / solid colour / packed palette / plain RLE / palette RLE. Pixels are
  * CPIXELs (3 bytes for our format).
  */
-internal suspend fun decodeZrle(source: VncSource, fb: RemoteFramebuffer, rect: VncRect, inflater: Inflater) {
-    val lenBuf = ByteArray(4)
+internal suspend fun decodeZrle(
+    source: VncSource,
+    fb: RemoteFramebuffer,
+    rect: VncRect,
+    inflater: Inflater,
+    scratch: RfbScratch = RfbScratch(),
+) {
+    val lenBuf = scratch.lenBuf
     source.readFully(lenBuf, 0, 4)
     val length = ((lenBuf[0].toInt() and 0xFF) shl 24) or ((lenBuf[1].toInt() and 0xFF) shl 16) or
         ((lenBuf[2].toInt() and 0xFF) shl 8) or (lenBuf[3].toInt() and 0xFF)

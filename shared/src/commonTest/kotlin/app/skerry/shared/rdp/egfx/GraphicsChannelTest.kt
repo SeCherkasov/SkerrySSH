@@ -54,6 +54,23 @@ class GraphicsChannelTest {
     }
 
     @Test
+    fun `a large cache drops the small-cache flag from every advertised version`() = runTest {
+        // F-07: small cache means more retransmission on a busy desktop. Where memory allows the
+        // full 100 MB, the flag goes away — on every set, or the server takes the strictest one.
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(avc = RecordingAvc()), smallCache = false,
+        ) { data -> sent.add(data) }
+
+        channel.onOpen()
+
+        val advertise = sent.single()
+        assertEquals(0, advertise.u32(18) and 0x02, "version 8 must not ask for a small cache")
+        assertEquals(0, advertise.u32(30) and 0x02, "8.1 must not ask for a small cache")
+        assertEquals(0x10, advertise.u32(30) and 0x10, "8.1 keeps its AVC flag")
+        assertEquals(0, advertise.u32(42) and 0x02, "10.4 must not ask for a small cache")
+    }
+
+    @Test
     fun `h264 mode Off advertises version 8 only, even with a decoder on hand`() = runTest {
         // The profile's escape hatch (F-28): a host whose H.264 path misbehaves can be pinned to
         // the non-AVC codecs without uninstalling ffmpeg.
@@ -269,6 +286,41 @@ class GraphicsChannelTest {
         assertEquals(0xFF00AABB.toInt(), framebuffer.pixels[8 * 64 + 8])
         assertEquals(0xFF00AABB.toInt(), framebuffer.pixels[11 * 64 + 11])
         assertEquals(0, framebuffer.pixels[12 * 64 + 12], "the cached region spilled past its size")
+    }
+
+    @Test
+    fun `the large cache keeps entries the small budget would have evicted`() = runTest {
+        // F-07's two halves must agree: the advertisement promised the spec's full cache, so the
+        // eviction budget has to honour it — 10M pixels of entries stay, where 8M was the old cap.
+        val channel = GraphicsChannel(
+            framebuffer, GraphicsCodecs(progressive = progressive), smallCache = false,
+        ) { }
+        channel.onMessage(bulk(createSurface(id = 1, width = 2048, height = 1024)))
+        channel.onMessage(bulk(mapToOutput(surfaceId = 1, x = 0, y = 0)))
+        channel.onMessage(bulk(wireToSurface(surfaceId = 1, rect = RdpRect(0, 0, 4, 4), colour = 0x00AABB)))
+        for (slot in 1..5) {
+            channel.onMessage(bulk(surfaceToCache(surfaceId = 1, slot = slot, rect = RdpRect(0, 0, 2048, 1024))))
+        }
+
+        channel.onMessage(bulk(cacheToSurface(slot = 1, surfaceId = 1, x = 8, y = 8)))
+
+        assertEquals(0xFF00AABB.toInt(), framebuffer.pixels[8 * 64 + 8], "slot 1 must survive a 10M-pixel load")
+    }
+
+    @Test
+    fun `the small cache still evicts at its old budget`() = runTest {
+        // The same 10M-pixel load under the default small cache: slot 1 goes, and a restore of an
+        // evicted slot paints nothing — the client must not pretend to hold what it promised away.
+        deliver(createSurface(id = 1, width = 2048, height = 1024))
+        deliver(mapToOutput(surfaceId = 1, x = 0, y = 0))
+        deliver(wireToSurface(surfaceId = 1, rect = RdpRect(0, 0, 4, 4), colour = 0x00AABB))
+        for (slot in 1..5) {
+            deliver(surfaceToCache(surfaceId = 1, slot = slot, rect = RdpRect(0, 0, 2048, 1024)))
+        }
+
+        deliver(cacheToSurface(slot = 1, surfaceId = 1, x = 8, y = 8))
+
+        assertEquals(0, framebuffer.pixels[8 * 64 + 8], "an evicted slot must not paint")
     }
 
     @Test

@@ -122,7 +122,7 @@ interface RdpSession {
     /** Live counters for the diagnostics overlay; inert by default, a real session overrides it. */
     val diagnostics: RemoteDesktopDiagnostics get() = RemoteDesktopDiagnostics.NONE
 
-    suspend fun sendKey(scancode: Int, down: Boolean, extended: Boolean = false)
+    suspend fun sendKey(scancode: Int, down: Boolean, extended: Boolean = false, extended1: Boolean = false)
 
     suspend fun sendUnicode(code: Int, down: Boolean)
 

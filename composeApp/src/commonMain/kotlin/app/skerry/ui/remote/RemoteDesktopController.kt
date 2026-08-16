@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
 import app.skerry.ui.vnc.VncFailure
 import app.skerry.ui.vnc.vncFailureOf
@@ -78,6 +79,8 @@ class RemoteDesktopController(
     fun connect(
         remoteResize: Boolean = false,
         onRemoteResizeChanged: (Boolean) -> Unit = {},
+        quality: RemoteDesktopQuality = RemoteDesktopQuality.Auto,
+        onQualityChanged: (RemoteDesktopQuality) -> Unit = {},
         openSession: suspend () -> RemoteDesktopSession,
     ) {
         if (uiState is RemoteDesktopUiState.Connected) return
@@ -93,6 +96,8 @@ class RemoteDesktopController(
                     sScope,
                     remoteResizeInitial = remoteResize,
                     onRemoteResizeChanged = onRemoteResizeChanged,
+                    qualityInitial = quality,
+                    onQualityChanged = onQualityChanged,
                 )
                 uiState = RemoteDesktopUiState.Connected(screen)
                 watchForClose(screen, sScope)
