@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -89,6 +90,9 @@ internal fun MobileChrome(
     ai: AiAssistantController?,
     updates: app.skerry.ui.update.UpdateNoticeController?,
 ) {
+    // The screen size at the moment an RDP session is dialled: the desktop is requested at that
+    // size instead of a hardcoded 1280×720 (F-06).
+    val windowSize = LocalWindowInfo.current.containerSize
     // Keychain secrets live in the open vault — behind the master password gate, first fire
     // [onVaultUnlocked], then reload. [MobileChrome] composes only behind the gate and
     // re-enters composition on every unlock, so also reload AI settings here from the now-open vault
@@ -146,7 +150,7 @@ internal fun MobileChrome(
                     // arrives with its credential link stripped and has no other way in.
                     val password = credentials?.useForConnect(host.credentialId)?.toRdpPassword()
                     when {
-                        password != null -> openMobileRdp(sessions, state, hostManager, host, password)
+                        password != null -> openMobileRdp(sessions, state, hostManager, host, password, windowSize)
                         host.username.isBlank() -> state.openEditConn(host)
                         else -> pendingRdp = host
                     }
@@ -368,7 +372,7 @@ internal fun MobileChrome(
                     onDismiss = { pendingRdp = null },
                     onConnect = { pw ->
                         pendingRdp = null
-                        openMobileRdp(sessions, state, hostManager, host, pw)
+                        openMobileRdp(sessions, state, hostManager, host, pw, windowSize)
                     },
                     secrets = connectableSecrets(credentials?.credentials.orEmpty(), host, hostManager?.hosts.orEmpty()),
                     onUseSecret = { secret ->
@@ -377,7 +381,7 @@ internal fun MobileChrome(
                         val password = secret.toRdpPassword()
                         if (password != null) {
                             pendingRdp = null
-                            openMobileRdp(sessions, state, hostManager, host, password)
+                            openMobileRdp(sessions, state, hostManager, host, password, windowSize)
                         }
                     },
                 )

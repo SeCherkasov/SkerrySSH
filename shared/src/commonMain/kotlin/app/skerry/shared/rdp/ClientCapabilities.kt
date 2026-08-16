@@ -61,7 +61,14 @@ object ClientCapabilities {
      * not have is harmless, but claiming one *we* cannot decode is not, so this follows the
      * negotiation rather than an ambition.
      */
-    fun confirmActive(shareId: Int, userId: Int, width: Int, height: Int, remoteFx: Boolean): ByteArray {
+    fun confirmActive(
+        shareId: Int,
+        userId: Int,
+        width: Int,
+        height: Int,
+        remoteFx: Boolean,
+        keyboardLayout: Int = RdpClientSettings.KEYBOARD_LAYOUT_US,
+    ): ByteArray {
         val sets = RdpWriter(1024)
         var count = 0
         fun add(type: Int, body: ByteArray) {
@@ -75,7 +82,7 @@ object ClientCapabilities {
         add(CapabilitySetType.BITMAP_CACHE, noBitmapCache())
         add(CapabilitySetType.COLOR_CACHE, RdpWriter(4).u16le(6).u16le(0).toByteArray())
         add(CapabilitySetType.POINTER, pointerCapabilities())
-        add(CapabilitySetType.INPUT, inputCapabilities())
+        add(CapabilitySetType.INPUT, inputCapabilities(keyboardLayout))
         add(CapabilitySetType.BRUSH, RdpWriter(4).u32le(0).toByteArray()) // BRUSH_DEFAULT
         add(CapabilitySetType.GLYPH_CACHE, glyphCacheCapabilities())
         add(CapabilitySetType.OFFSCREEN_CACHE, RdpWriter(8).u32le(0).u16le(0).u16le(0).toByteArray())
@@ -185,13 +192,14 @@ object ClientCapabilities {
         u16le(PointerCache.CAPACITY) // pointerCacheSize
     }.toByteArray()
 
-    private fun inputCapabilities(): ByteArray = RdpWriter(84).apply {
+    private fun inputCapabilities(keyboardLayout: Int): ByteArray = RdpWriter(84).apply {
         u16le(
             INPUT_FLAG_SCANCODES or INPUT_FLAG_MOUSEX or INPUT_FLAG_UNICODE or
                 INPUT_FLAG_FASTPATH_INPUT or INPUT_FLAG_FASTPATH_INPUT2,
         )
         u16le(0) // pad2octetsA
-        u32le(RdpClientSettings.KEYBOARD_LAYOUT_US)
+        // The layout of the machine that is typing (F-16); the session comes up in this layout.
+        u32le(keyboardLayout)
         u32le(RdpClientSettings.KEYBOARD_TYPE_IBM_ENHANCED)
         u32le(0) // keyboardSubType
         u32le(12) // keyboardFunctionKey

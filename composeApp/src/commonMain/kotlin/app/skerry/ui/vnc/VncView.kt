@@ -56,7 +56,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
+import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isBackPressed
+import androidx.compose.ui.input.pointer.isForwardPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isTertiaryPressed
@@ -322,6 +325,10 @@ fun VncSurface(
                     // The button state last forwarded, so a release over the letterbox is
                     // recognisable as a state change worth clamping onto the image (F-37).
                     var lastMask = 0
+                    // Fractional wheel deltas accumulate per axis instead of rounding to one notch
+                    // or nothing (F-14).
+                    val wheelX = WheelCarry()
+                    val wheelY = WheelCarry()
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull() ?: continue
@@ -352,20 +359,23 @@ fun VncSurface(
                             pointerTick.trySend(Unit)
                             // Wheel goes to the server (scroll inside the remote desktop). No local
                             // zoom on desktop: without panning it only shows the center, and the fit
-                            // already fills the tab.
-                            val dy = change.scrollDelta.y
-                            if (dy != 0f) {
-                                val bit = if (dy < 0f) VncButton.WHEEL_UP else VncButton.WHEEL_DOWN
-                                screen.onPointer(fb.x, fb.y, bit)   // wheel = press+release
-                                screen.onPointer(fb.x, fb.y, 0)
-                            }
+                            // already fills the tab. Magnitude counts — a three-line step is three
+                            // notches, a trackpad's fractions accumulate (F-14) — and the buttons a
+                            // drag is holding ride on every mask (F-38).
+                            val held = buttonsOf(event.buttons)
+                            val vertical = wheelMasks(
+                                held, wheelY.add(change.scrollDelta.y),
+                                negative = VncButton.WHEEL_UP, positive = VncButton.WHEEL_DOWN,
+                            )
+                            val horizontal = wheelMasks(
+                                held, wheelX.add(change.scrollDelta.x),
+                                negative = VncButton.WHEEL_LEFT, positive = VncButton.WHEEL_RIGHT,
+                            )
+                            for (mask in vertical + horizontal) screen.onPointer(fb.x, fb.y, mask)
                             change.consume()
                             continue
                         }
-                        var mask = 0
-                        if (event.buttons.isPrimaryPressed) mask = mask or VncButton.LEFT
-                        if (event.buttons.isTertiaryPressed) mask = mask or VncButton.MIDDLE
-                        if (event.buttons.isSecondaryPressed) mask = mask or VncButton.RIGHT
+                        val mask = buttonsOf(event.buttons)
                         // A move on the letterbox is nothing to the server, but a button CHANGE
                         // there is a press or release that must not be dropped — the server would
                         // keep the button held for the rest of the session (F-37). Clamp it onto
@@ -558,6 +568,17 @@ internal fun RemoteDesktopQuality.label(): String = stringResource(
 /** Holder for the raw pointer position between frame ticks; deliberately not snapshot state. */
 private class LatestPointer {
     var value: Offset? = null
+}
+
+/** Every mouse button the shared mask carries — the navigation pair included (F-15). */
+private fun buttonsOf(buttons: PointerButtons): Int {
+    var mask = 0
+    if (buttons.isPrimaryPressed) mask = mask or VncButton.LEFT
+    if (buttons.isTertiaryPressed) mask = mask or VncButton.MIDDLE
+    if (buttons.isSecondaryPressed) mask = mask or VncButton.RIGHT
+    if (buttons.isBackPressed) mask = mask or VncButton.BACK
+    if (buttons.isForwardPressed) mask = mask or VncButton.FORWARD
+    return mask
 }
 
 @Composable

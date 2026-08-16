@@ -136,6 +136,7 @@ fun MobileDesignApp(
                             audioDeviceId = request.audioDeviceId,
                             clipboard = request.clipboard,
                             imageQuality = request.imageQuality,
+                            keyboardLayout = request.keyboardLayout,
                         ),
                         app.skerry.shared.rdp.RdpCredentials(
                             username = request.user,

@@ -53,7 +53,13 @@ internal fun openMobileRdp(
     hostManager: app.skerry.ui.host.HostManagerController?,
     host: Host,
     password: String,
+    /** The screen the session will live on; the desktop is requested at that size (F-06). */
+    viewport: androidx.compose.ui.unit.IntSize = androidx.compose.ui.unit.IntSize.Zero,
 ) {
+    val desktop = app.skerry.ui.remote.rdpDesktopSize(
+        viewport,
+        fallback = androidx.compose.ui.unit.IntSize(MOBILE_RDP_WIDTH, MOBILE_RDP_HEIGHT),
+    )
     sessions?.openRdp(
         host.id,
         host.rowLabel(),
@@ -63,8 +69,9 @@ internal fun openMobileRdp(
             port = host.port,
             username = host.username,
             password = password,
-            width = MOBILE_RDP_WIDTH,
-            height = MOBILE_RDP_HEIGHT,
+            width = desktop.width,
+            height = desktop.height,
+            keyboardLayout = app.skerry.ui.remote.currentKeyboardLayout(),
             clientName = "Skerry",
             loadBalanceInfo = host.rdp?.loadBalanceInfo.orEmpty(),
             audioOutput = host.rdp?.audioOutput == true,

@@ -1,5 +1,6 @@
 package app.skerry.ui.remote
 
+import app.skerry.shared.rdp.RdpClientSettings
 import app.skerry.shared.rdp.RdpImageQuality
 
 /**
@@ -28,6 +29,8 @@ data class RdpConnectRequest(
     val clipboard: Boolean = true,
     /** How much of the desktop to ask for; fixed for the session once the connection is made. */
     val imageQuality: RdpImageQuality = RdpImageQuality.DEFAULT,
+    /** The local machine's keyboard layout (LCID), so the session types what the keyboard types. */
+    val keyboardLayout: Int = RdpClientSettings.KEYBOARD_LAYOUT_US,
 ) {
     /** The domain half of `DOMAIN\user`, or empty when the name carries none. */
     val domain: String get() = username.substringBefore('\\', missingDelimiterValue = "")
