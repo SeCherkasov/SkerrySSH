@@ -115,8 +115,9 @@ sealed interface VncUpdate {
     data object SetDesktopSizeSupported : VncUpdate
 
     /**
-     * The remote cursor's shape (Cursor pseudo-encoding), sent instead of painting it into the
-     * framebuffer. [argb] is [width]×[height] row-major, with alpha taken from RFB's 1-bit mask;
+     * The remote cursor's shape (Cursor / Cursor With Alpha pseudo-encoding), sent instead of
+     * painting it into the framebuffer. [argb] is [width]×[height] row-major, straight
+     * (non-premultiplied) alpha: binary from -239's 1-bit mask, per-pixel from -314;
      * [hotspotX]/[hotspotY] is the pixel that sits under the pointer. A 0×0 shape means the server
      * is hiding the cursor.
      */

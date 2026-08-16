@@ -214,6 +214,7 @@ class RfbCodec(
                 }
                 ENC_EXTENDED_DESKTOP_SIZE -> readExtendedDesktopSize(reason = x, status = y, width = w, height = h, out = pseudo)
                 ENC_CURSOR -> pseudo += readCursor(hotspotX = x, hotspotY = y, width = w, height = h)
+                ENC_CURSOR_WITH_ALPHA -> pseudo += readAlphaCursor(hotspotX = x, hotspotY = y, width = w, height = h)
                 else -> {
                     diagnostics.noteCodec(encodingLabel(encoding))
                     decodeRectangle(encoding, VncRect(x, y, w, h))
@@ -294,14 +295,46 @@ class RfbCodec(
             var x = 0
             while (x < width) {
                 val opaque = (mask[y * maskStride + x / 8].toInt() shr (7 - (x % 8))) and 1 == 1
-                // Masked-out pixels are zeroed whole, not just their alpha: the desktop bitmap hands
-                // these bytes to Skia as premultiplied, where alpha 0 over non-zero RGB is invalid
-                // and renders as a halo around the sprite.
+                // Masked-out pixels are zeroed whole, not just their alpha: a transparent pixel
+                // must carry no stray colour for any consumer to blend or convert wrongly.
                 argb[i] = if (opaque) CanonicalPixelFormat.argbFromPixel(pixels, i * CanonicalPixelFormat.PIXEL_BYTES) else 0
                 i++
                 x++
             }
             y++
+        }
+        return VncUpdate.CursorShape(argb, width, height, hotspotX, hotspotY)
+    }
+
+    /**
+     * Cursor With Alpha pseudo-encoding (-314): an s32 naming the nested encoding, then the sprite
+     * in fixed 32-bit RGBA with **premultiplied** alpha, regardless of the session pixel format.
+     * Only Raw is accepted inside — every real server sends Raw and the reference client (TigerVNC)
+     * accepts nothing else. The premultiplied wire values are converted back to the straight ARGB
+     * the shared [VncUpdate.CursorShape] contract carries (what the RDP pointer path produces),
+     * clamping components that exceed their alpha — invalid premul from a hostile server must not
+     * overflow into a neighbouring channel.
+     */
+    private suspend fun readAlphaCursor(hotspotX: Int, hotspotY: Int, width: Int, height: Int): VncUpdate.CursorShape {
+        if (width > MAX_CURSOR_DIMENSION || height > MAX_CURSOR_DIMENSION) {
+            throw VncProtocolException("cursor ${width}x$height exceeds max $MAX_CURSOR_DIMENSION")
+        }
+        val nested = readS32()
+        if (nested != ENC_RAW) throw VncProtocolException("unsupported cursor-with-alpha encoding $nested")
+        if (width == 0 || height == 0) return VncUpdate.CursorShape(EMPTY_ARGB, 0, 0, 0, 0)
+        val rgba = readBytes(width * height * 4)
+        val argb = IntArray(width * height)
+        for (i in argb.indices) {
+            val off = i * 4
+            val alpha = rgba[off + 3].toInt() and 0xFF
+            // Fully transparent pixels are zeroed whole, not just their alpha — same rule as
+            // readCursor: no stray colour under alpha 0.
+            if (alpha == 0) continue
+            fun channel(o: Int): Int {
+                val premul = rgba[off + o].toInt() and 0xFF
+                return if (alpha == 0xFF) premul else minOf(0xFF, premul * 0xFF / alpha)
+            }
+            argb[i] = (alpha shl 24) or (channel(0) shl 16) or (channel(1) shl 8) or channel(2)
         }
         return VncUpdate.CursorShape(argb, width, height, hotspotX, hotspotY)
     }
@@ -390,9 +423,10 @@ class RfbCodec(
     }
 
     private suspend fun writeSetEncodings() {
-        // Base encodings + Cursor (while we draw it) + the streaming pseudo-encodings (always: they
-        // are protocol machinery, not a preference) + Tight quality/compression pseudo-encodings.
-        val cursor = if (localCursor) intArrayOf(ENC_CURSOR) else IntArray(0)
+        // Base encodings + Cursor (while we draw it; alpha variant first — order is preference) +
+        // the streaming pseudo-encodings (always: protocol machinery, not a preference) + Tight
+        // quality/compression pseudo-encodings.
+        val cursor = if (localCursor) intArrayOf(ENC_CURSOR_WITH_ALPHA, ENC_CURSOR) else IntArray(0)
         val streaming = intArrayOf(ENC_CONTINUOUS_UPDATES, ENC_FENCE)
         val all = requestedEncodings + cursor + streaming + qualityPseudoEncodings(quality)
         val n = all.size
@@ -575,6 +609,7 @@ class RfbCodec(
         const val ENC_TIGHT = 7
         const val ENC_ZRLE = 16
         const val ENC_CURSOR = -239
+        const val ENC_CURSOR_WITH_ALPHA = -314
         const val ENC_DESKTOP_SIZE = -223
         const val ENC_EXTENDED_DESKTOP_SIZE = -308
         const val ENC_FENCE = -312

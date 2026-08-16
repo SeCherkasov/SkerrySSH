@@ -23,7 +23,11 @@ import org.jetbrains.skia.impl.BufferUtil
  * `notifyPixelsChanged` bumps the Skia generation (dropping any cached texture of the old pixels),
  * and the fresh wrapper defeats any caching keyed on the [ImageBitmap] instance itself.
  */
-actual class FramebufferImage actual constructor(width: Int, height: Int) {
+actual class FramebufferImage actual constructor(
+    width: Int,
+    height: Int,
+    private val straightAlpha: Boolean,
+) {
 
     private class Surface(width: Int, height: Int) {
         val bitmap = Bitmap().apply {
@@ -84,12 +88,32 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
                 val inTarget = dstOff >= 0 && dstOff + r.width <= capacity
                 if (inSource && inTarget) {
                     pixels.position(dstOff)
-                    pixels.put(src, srcOff, r.width)
+                    writeRow(pixels, src, srcOff, r.width)
                 }
                 row++
             }
         }
         dirty = true
+    }
+
+    private fun writeRow(pixels: IntBuffer, src: IntArray, srcOff: Int, width: Int) {
+        if (straightAlpha) {
+            // Sprite path only (a per-shape cost, not per-frame): the surface is premultiplied,
+            // the contract's ints are straight — convert on write.
+            for (i in srcOff until srcOff + width) pixels.put(premultiply(src[i]))
+        } else {
+            pixels.put(src, srcOff, width)
+        }
+    }
+
+    private fun premultiply(argb: Int): Int {
+        val a = argb ushr 24
+        if (a == 0xFF) return argb
+        if (a == 0) return 0
+        val r = ((argb shr 16) and 0xFF) * a / 0xFF
+        val g = ((argb shr 8) and 0xFF) * a / 0xFF
+        val b = (argb and 0xFF) * a / 0xFF
+        return (a shl 24) or (r shl 16) or (g shl 8) or b
     }
 
     actual val bitmap: ImageBitmap

@@ -11,7 +11,13 @@ import app.skerry.shared.graphics.RemoteRect
  * codec's format), so each dirty rect uploads straight from the shared framebuffer with no
  * conversion.
  */
-actual class FramebufferImage actual constructor(width: Int, height: Int) {
+// straightAlpha needs no handling here: Bitmap.setPixels already takes straight ARGB and
+// premultiplies internally, so the contract's model is this platform's native one.
+actual class FramebufferImage actual constructor(
+    width: Int,
+    height: Int,
+    @Suppress("UNUSED_PARAMETER") straightAlpha: Boolean,
+) {
     // @Volatile: resize() swaps the Bitmap on the session's read loop (Dispatchers.Default) while the
     // Compose draw thread reads it — the new instance must publish safely. Same reasoning as
     // RemoteFramebuffer's fields.

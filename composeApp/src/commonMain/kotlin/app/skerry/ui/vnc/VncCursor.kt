@@ -31,11 +31,14 @@ class VncCursorImage private constructor(
         /** Build a sprite from a decoded [shape], or null for the server's "no cursor" (a 0×0 shape). */
         fun of(shape: RemoteDesktopUpdate.CursorShape): VncCursorImage? {
             if (shape.width <= 0 || shape.height <= 0) return null
-            val image = FramebufferImage(shape.width, shape.height)
+            // straightAlpha: sprite pixels carry straight (non-premultiplied) alpha per the
+            // CursorShape contract, unlike the always-opaque framebuffer.
+            val image = FramebufferImage(shape.width, shape.height, straightAlpha = true)
             val whole = listOf(RemoteRect(0, 0, shape.width, shape.height))
             image.writeRects(whole, shape.argb, shape.width)
             val invertImage = shape.invert?.let { plane ->
-                FramebufferImage(shape.width, shape.height).also { it.writeRects(whole, plane, shape.width) }
+                FramebufferImage(shape.width, shape.height, straightAlpha = true)
+                    .also { it.writeRects(whole, plane, shape.width) }
             }
             return VncCursorImage(image, invertImage, shape.width, shape.height, shape.hotspotX, shape.hotspotY)
         }

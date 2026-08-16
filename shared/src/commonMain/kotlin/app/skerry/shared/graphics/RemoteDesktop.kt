@@ -124,9 +124,11 @@ sealed interface RemoteDesktopUpdate {
     data object RemoteResizeSupported : RemoteDesktopUpdate
 
     /**
-     * A cursor sprite, ARGB row-major, with the pixel that sits under the pointer. [invert] is the
-     * shape's screen-inverting plane (RDP's text I-beam) — opaque white where the pixels underneath
-     * flip, null when the shape has none — drawn with a difference blend over the framebuffer.
+     * A cursor sprite, ARGB row-major with **straight (non-premultiplied) alpha** — both protocol
+     * codecs emit that model and the platform bridges convert where their bitmap wants premul —
+     * plus the pixel that sits under the pointer. [invert] is the shape's screen-inverting plane
+     * (RDP's text I-beam) — opaque white where the pixels underneath flip, null when the shape has
+     * none — drawn with a difference blend over the framebuffer.
      *
      * A re-announced cached shape (RDP's pointer cache) arrives as the *same instance*, which is
      * what lets the view reuse the sprite it already built instead of comparing whole pixel arrays.

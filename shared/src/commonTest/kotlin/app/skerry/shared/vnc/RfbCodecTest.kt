@@ -397,6 +397,111 @@ class RfbCodecTest {
         assertTrue(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR))
     }
 
+    // --- Cursor With Alpha pseudo-encoding (V-02) ---
+
+    @Test
+    fun set_encodings_offers_the_alpha_cursor_ahead_of_the_plain_one() = runTest {
+        // Order is preference: a server that can send -314 must pick it over the 1-bit-mask -239.
+        // Both ride the localCursor toggle — they are the same "we draw the cursor" claim.
+        val server = Wire()
+            .str("RFB 003.008\n").u8(1).u8(RfbCodec.SEC_NONE).s32(0).serverInit(2, 1, "x")
+            .build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(server), sink, RemoteFramebuffer(1, 1))
+        c.handshake(VncAuth.None)
+
+        val encodings = sink.lastEncodings()
+        assertTrue(encodings.indexOf(RfbCodec.ENC_CURSOR_WITH_ALPHA) in 0 until encodings.indexOf(RfbCodec.ENC_CURSOR))
+
+        c.setLocalCursor(false)
+        assertFalse(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR_WITH_ALPHA))
+        assertFalse(sink.lastEncodings().contains(RfbCodec.ENC_CURSOR))
+    }
+
+    @Test
+    fun cursor_with_alpha_decodes_premultiplied_rgba_to_straight_argb() = runTest {
+        // 3x1 sprite, hotspot (1,0), nested Raw. Wire pixels are premultiplied RGBA: opaque red;
+        // half-transparent white (0x80,0x80,0x80,0x80 → straight 0x80FFFFFF); and an invalid
+        // premul (component > alpha) that must clamp, not overflow. Framebuffer stays untouched.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(1).u16(0).u16(3).u16(1).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .s32(RfbCodec.ENC_RAW)
+            .bytes(byteArrayOf(0xFF.toByte(), 0, 0, 0xFF.toByte()))                            // opaque red
+            .bytes(byteArrayOf(0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0x80.toByte()))    // half white
+            .bytes(byteArrayOf(0xFF.toByte(), 0, 0, 0x80.toByte()))                            // hostile: R > A
+            .build()
+        val fb = RemoteFramebuffer(3, 1)
+        val updates = codec(FixtureSource(update), CapturingSink(), fb).readMessage()
+
+        val cursor = updates.filterIsInstance<VncUpdate.CursorShape>().single()
+        assertEquals(3, cursor.width)
+        assertEquals(1, cursor.height)
+        assertEquals(1, cursor.hotspotX)
+        assertEquals(0, cursor.hotspotY)
+        assertContentEquals(
+            intArrayOf(0xFFFF0000.toInt(), 0x80FFFFFF.toInt(), 0x80FF0000.toInt()),
+            cursor.argb,
+        )
+        assertEquals(0, fb.pixels[0]) // a cursor rect never touches the framebuffer
+    }
+
+    @Test
+    fun cursor_with_alpha_zero_alpha_pixel_is_zeroed_whole() = runTest {
+        // Same rule as the 1-bit mask: fully transparent pixels are zeroed whole, so no stray
+        // colour survives under alpha 0 for a consumer to blend or convert wrongly.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(1).u16(1).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .s32(RfbCodec.ENC_RAW)
+            .bytes(byteArrayOf(12, 34, 56, 0))
+            .build()
+        val cursor = codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1))
+            .readMessage().filterIsInstance<VncUpdate.CursorShape>().single()
+
+        assertContentEquals(intArrayOf(0), cursor.argb)
+    }
+
+    @Test
+    fun empty_cursor_with_alpha_means_no_cursor() = runTest {
+        // A 0x0 shape still carries the nested-encoding header, then no pixels.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(0).u16(0).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .s32(RfbCodec.ENC_RAW)
+            .build()
+        val cursor = codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1))
+            .readMessage().filterIsInstance<VncUpdate.CursorShape>().single()
+
+        assertEquals(0, cursor.width)
+        assertEquals(0, cursor.height)
+    }
+
+    @Test
+    fun cursor_with_alpha_rejects_a_nested_encoding_other_than_raw() = runTest {
+        // The spec allows any advertised encoding inside, but every real server sends Raw and the
+        // reference client accepts only Raw — a different value here is corruption, not a choice.
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(1).u16(1).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .s32(RfbCodec.ENC_TIGHT)
+            .build()
+        assertFailsWith<VncProtocolException> {
+            codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
+        }
+    }
+
+    @Test
+    fun oversized_cursor_with_alpha_throws_before_allocating() = runTest {
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(65535).u16(65535).s32(RfbCodec.ENC_CURSOR_WITH_ALPHA)
+            .build()
+        assertFailsWith<VncProtocolException> {
+            codec(FixtureSource(update), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
+        }
+    }
+
     // --- ExtendedDesktopSize / SetDesktopSize ---
 
     @Test
