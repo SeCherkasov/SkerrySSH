@@ -122,6 +122,9 @@ object RdpFileImport {
         username = entry.username,
         credentialId = null,
         connectionType = ConnectionType.RDP,
+        // The same default a profile created through the form gets (F-06): a new remote desktop
+        // follows the window, whichever door it came in through.
+        vncResizeToWindow = true,
         rdp = RdpSpec(loadBalanceInfo = entry.loadBalanceInfo, audioOutput = entry.audioOutput)
             .takeIf { !it.isEmpty },
     )

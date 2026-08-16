@@ -155,6 +155,31 @@ class GraphicsTest {
     }
 
     @Test
+    fun `the reused surface scratch never leaks one command's pixels into the next`() {
+        // The decode buffer is reused across commands (F-35); a later command with short wire data
+        // must read as unset, not as the previous command's colours.
+        val framebuffer = RemoteFramebuffer(8, 8)
+        val decoder = SurfaceDecoder()
+        decoder.decode(RdpReader(uncompressedSurfaceBits(y = 0, width = 4, pixelCount = 4)), framebuffer)
+
+        decoder.decode(RdpReader(uncompressedSurfaceBits(y = 2, width = 2, pixelCount = 1)), framebuffer)
+
+        assertEquals(WHITE, framebuffer.pixels[2 * 8], "the one provided pixel lands")
+        assertEquals(0, framebuffer.pixels[2 * 8 + 1], "the missing pixel is unset, not the last command's white")
+    }
+
+    /** One SET_SURFACE_BITS of [width]×1 white 32-bit pixels, of which only [pixelCount] are sent. */
+    private fun uncompressedSurfaceBits(y: Int, width: Int, pixelCount: Int): ByteArray =
+        RdpWriter(64).apply {
+            u16le(0x0001)
+            u16le(0).u16le(y).u16le(width).u16le(y + 1)
+            u8(32).u8(0).u8(0).u8(0)
+            u16le(width).u16le(1)
+            u32le(pixelCount * 4)
+            repeat(pixelCount) { u8(0xFF).u8(0xFF).u8(0xFF).u8(0) }
+        }.toByteArray()
+
+    @Test
     fun `surface bits of a size no screen has are refused`() {
         val body = RdpWriter(32).apply {
             u16le(0x0001) // SET_SURFACE_BITS

@@ -135,9 +135,11 @@ internal fun DesktopChrome(
     windowChrome: WindowChrome? = null,
 ) {
     val termHistory = LocalTerminalHistory.current
-    // The window size at the moment a session is dialled: RDP fixes its desktop at connect time,
-    // and asking for the viewport is what avoids a scaled picture (F-06).
-    val windowSize = LocalWindowInfo.current.containerSize
+    // The stable holder, not `.containerSize`: reading the size in the composable body would
+    // recompose this whole function on every resize tick. It is read at the moment a session is
+    // dialled — RDP fixes its desktop at connect time, and asking for the viewport is what avoids
+    // a scaled picture (F-06).
+    val windowInfo = LocalWindowInfo.current
     // Keychain secrets live in the open vault — behind the master-password gate we first fire
     // [onVaultUnlocked], then reload (secrets + synced empty folders).
     LaunchedEffect(credentials) {
@@ -191,7 +193,7 @@ internal fun DesktopChrome(
     fun openRdpWith(host: Host, password: String) {
         state.recordRecentHost(host.id)
         val desktop = app.skerry.ui.remote.rdpDesktopSize(
-            windowSize,
+            windowInfo.containerSize,
             fallback = androidx.compose.ui.unit.IntSize(RDP_DEFAULT_WIDTH, RDP_DEFAULT_HEIGHT),
         )
         sessions?.openRdp(

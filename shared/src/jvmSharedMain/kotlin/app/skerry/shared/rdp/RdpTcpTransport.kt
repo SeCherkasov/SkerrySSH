@@ -199,6 +199,12 @@ class RdpSocketSession(
 
     override val diagnostics = RemoteDesktopDiagnostics()
 
+    init {
+        // Counted inside the connection's write lock — the callers race, the counter's increment
+        // must not (see RdpConnection.onWrite). Reads are the read loop's alone, counted below.
+        connection.onWrite = { size -> diagnostics.wroteBytes(size) }
+    }
+
     private val codec = RdpSessionCodec(
         // Counted around the connection's own streams, so the overlay's bytes are the session's
         // wire traffic (TLS excluded — that is the socket's business, not the protocol's).
@@ -206,10 +212,7 @@ class RdpSocketSession(
             connection.source.readFully(dst, offset, len)
             diagnostics.readBytes(len)
         },
-        sink = RdpSink { bytes ->
-            connection.sink.write(bytes)
-            diagnostics.wroteBytes(bytes.size)
-        },
+        sink = connection.sink,
         framebuffer = framebuffer,
         state = state,
         settings = settings,

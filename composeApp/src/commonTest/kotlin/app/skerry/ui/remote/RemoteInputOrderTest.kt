@@ -86,6 +86,28 @@ class RemoteInputOrderTest {
     }
 
     @Test
+    fun cancelling_the_session_scope_stops_the_actor_mid_write() = runTest {
+        // The project's named bug class: a coroutine with its own pacing delay must die with the
+        // scope, and nothing queued may fire into a dead session afterwards.
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = SlowSession()
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        screen.onKey(RemoteKeyEvent(scancode = 30), down = true)
+        screen.onKey(RemoteKeyEvent(scancode = 30), down = false)
+        testScheduler.advanceTimeBy(1) // the first write begins and parks in its delay
+        testScheduler.runCurrent()
+        scope.cancel()
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("key:30:true:begin"),
+            session.trace,
+            "the write in flight stops at its suspension point and the queue dies with the scope",
+        )
+    }
+
+    @Test
     fun losing_focus_releases_every_held_key_in_reverse_order() = runTest {
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val session = FakeRemoteDesktop()

@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -302,6 +303,11 @@ fun VncSurface(
         canvasSize = it
         screen.onViewportSize(it)
     }
+    // Whether a sprite exists at all changes rarely (null ↔ non-null); WHICH shape it is changes
+    // constantly (arrow ↔ I-beam). derivedStateOf keeps the composition subscribed to the former
+    // only — the shape itself is read inside the cursor canvas's draw pass, so a shape switch
+    // invalidates one draw, not this whole function (the same argument as F-34's frame counter).
+    val hasSprite by remember(screen) { derivedStateOf { screen.cursor != null } }
     // Something remote already tracks the mouse — our sprite, or a cursor the server painted into the
     // framebuffer — so the OS pointer on top would be a second one. See [shouldHideLocalCursor].
     if (
@@ -310,7 +316,7 @@ fun VncSurface(
             viewOnly = screen.viewOnly,
             pointerOverImage = pointerOverImage,
             systemCursor = screen.systemCursor,
-            remoteTracksPointer = screen.cursor != null || screen.capabilities.cursorHandover,
+            remoteTracksPointer = hasSprite || screen.capabilities.cursorHandover,
         )
     ) {
         hiddenPointerIcon()?.let { mod = mod.pointerHoverIcon(it) }
@@ -376,12 +382,15 @@ fun VncSurface(
                             continue
                         }
                         val mask = buttonsOf(event.buttons)
-                        // A move on the letterbox is nothing to the server, but a button CHANGE
-                        // there is a press or release that must not be dropped — the server would
-                        // keep the button held for the rest of the session (F-37). Clamp it onto
-                        // the nearest edge of the image instead.
+                        // A move on the letterbox is nothing to the server, and a fresh press there
+                        // is the user clicking dead space — clamping it would deliver a real click
+                        // onto the desktop's edge (taskbar, a maximised app's close button). But a
+                        // button change while something was already held is the tail of a drag that
+                        // started on the image, and dropping it leaves the server holding the
+                        // button for the rest of the session (F-37) — that one is clamped onto the
+                        // nearest edge.
                         val target = fb
-                            ?: if (mask != lastMask) {
+                            ?: if (lastMask != 0 && mask != lastMask) {
                                 geom.toFramebufferClamped(change.position.x, change.position.y)
                             } else {
                                 null
@@ -428,8 +437,8 @@ fun VncSurface(
     // view-only on a protocol whose cursor is always client-side (RDP): there the sprite at the
     // server-reported position is the only remote pointer there is (F-27). On RFB view-only hands
     // the cursor back and the server paints it into the framebuffer instead.
-    val sprite =
-        if (interactive && (!screen.viewOnly || !screen.capabilities.cursorHandover)) screen.cursor else null
+    val spriteVisible =
+        interactive && hasSprite && (!screen.viewOnly || !screen.capabilities.cursorHandover)
 
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
@@ -445,14 +454,18 @@ fun VncSurface(
         // only this layer reads it (inside the draw block), so a move redraws just the small sprite.
         // In one canvas with the framebuffer, every mouse-pixel step re-filtered the whole frame at
         // canvas resolution — enough to pin a core at fullscreen on a software-Skia backend.
-        if (sprite != null) {
+        if (spriteVisible) {
             Canvas(Modifier.fillMaxSize()) {
-                // A server-side warp wins until the local mouse next speaks (F-21).
+                val sprite = screen.cursor ?: return@Canvas
+                // A server-side warp wins until the local mouse next speaks (F-21). In view-only
+                // the server position is the ONLY truth — no events are sent, so a sprite at the
+                // local mouse would lie about where the remote pointer is (same rule as the touch
+                // surface's drawTouchCursor).
                 val warped = screen.serverPointer
-                if (warped != null) {
-                    drawCursorAtCell(screen, sprite, warped)
-                } else {
-                    pointerPos?.let { drawCursor(screen, sprite, it) }
+                when {
+                    warped != null -> drawCursorAtCell(screen, sprite, warped)
+                    screen.viewOnly -> Unit
+                    else -> pointerPos?.let { drawCursor(screen, sprite, it) }
                 }
             }
         }

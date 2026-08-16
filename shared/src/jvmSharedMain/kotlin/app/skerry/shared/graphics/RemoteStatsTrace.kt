@@ -16,13 +16,16 @@ private const val TRACE_INTERVAL_NANOS = 5_000_000_000L
 
 fun remoteStatsTrace(label: String, diagnostics: RemoteDesktopDiagnostics) {
     if (!statsTraceEnabled) return
+    // The label can carry a server-chosen string (a VNC desktop name); control characters would be
+    // ANSI-escape injection into the terminal of exactly the person debugging a suspect session.
+    val safeLabel = label.filterNot { it.isISOControl() }
     val now = System.nanoTime()
-    val last = lastTraceNanos[label]
+    val last = lastTraceNanos[safeLabel]
     if (last != null && now - last < TRACE_INTERVAL_NANOS) return
-    lastTraceNanos[label] = now
+    lastTraceNanos[safeLabel] = now
     val s = diagnostics.snapshot()
     System.err.println(
-        "remote stats [$label]: paths=${s.paths.joinToString("+")} codec=${s.lastCodec} " +
+        "remote stats [$safeLabel]: paths=${s.paths.joinToString("+")} codec=${s.lastCodec} " +
             "negotiated=${s.negotiated} frames=${s.serverFrames} " +
             "dropped=${s.droppedOrders}/${s.droppedRects} repaints=${s.fullRepaints} " +
             "decode=${s.decodeNanos / 1_000_000}ms/${s.decodeCount} in=${s.bytesIn} out=${s.bytesOut}",

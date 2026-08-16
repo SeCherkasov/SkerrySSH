@@ -62,8 +62,9 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
     private var cached: ImageBitmap? = null
 
     actual fun resize(width: Int, height: Int) {
+        // Published through [dirty] alone: the getter re-reads [surface] after clearing the flag,
+        // so a resize racing a read is picked up on this read or the next — never lost.
         surface = Surface(width, height)
-        cached = null
         dirty = true
     }
 
@@ -72,6 +73,9 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
         val pixels = target.pixels
         val capacity = target.width * target.height
         for (r in rects) {
+            // A hostile server can declare right < left; a negative width passes the bounds sums
+            // below and only blows up inside IntBuffer.put. Skip it, as the Android bridge does.
+            if (r.width <= 0 || r.height <= 0) continue
             var row = 0
             while (row < r.height) {
                 val srcOff = (r.y + row) * srcWidth + r.x
@@ -92,11 +96,15 @@ actual class FramebufferImage actual constructor(width: Int, height: Int) {
         get() {
             val current = cached
             if (!dirty && current != null) return current
+            // Cleared BEFORE the rebuild: a write racing this getter re-raises the flag and merely
+            // costs one extra rewrap. Clearing after would swallow that write's invalidation and
+            // leave its pixels undrawn until the next unrelated update — forever, on an idle
+            // desktop whose last frame lost the race.
+            dirty = false
             val target = surface
             target.bitmap.notifyPixelsChanged()
             val image = target.bitmap.asComposeImageBitmap()
             cached = image
-            dirty = false
             return image
         }
 }

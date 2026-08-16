@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import app.skerry.shared.graphics.IdentityCache
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
 import app.skerry.shared.graphics.RemoteDesktopUpdate
@@ -26,8 +27,9 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 /**
@@ -76,7 +78,7 @@ class RemoteDesktopScreenState(
 
     // Declared above the init block on purpose: the actor launched there reads it, and on an
     // eager dispatcher it does so before any property declared below the block exists.
-    private val input = Channel<InputWrite>(Channel.UNLIMITED)
+    private val inputActor = RemoteInputActor(session)
 
     @Volatile
     private var lastLockKeys: LockKeys? = null
@@ -142,8 +144,17 @@ class RemoteDesktopScreenState(
         private set
 
     // Last known viewport (canvas) size in pixels — the resize target when [remoteResize] is on.
+    // @Volatile: written by the UI thread, read by [scheduleRemoteResize] when the session's read
+    // loop reacts to RemoteResizeSupported — without it that reader can see a stale Zero and skip
+    // the seeded resize.
+    @Volatile
     private var viewport = IntSize.Zero
+
+    // Guarded by [resizeLock]: the debounce job is cancelled-and-replaced from both the UI thread
+    // and the read loop, and an unguarded swap can leave two jobs alive with the stale size
+    // landing last.
     private var resizeJob: Job? = null
+    private val resizeLock = Mutex()
 
     /** Toggle following the viewport; turning it on resizes to the current viewport right away. */
     fun toggleRemoteResize() {
@@ -152,8 +163,12 @@ class RemoteDesktopScreenState(
         if (remoteResize) {
             scheduleRemoteResize()
         } else {
-            resizeJob?.cancel()
-            resizeJob = null
+            scope.launch {
+                resizeLock.withLock {
+                    resizeJob?.cancel()
+                    resizeJob = null
+                }
+            }
         }
     }
 
@@ -169,17 +184,26 @@ class RemoteDesktopScreenState(
      * swallow-the-write discipline as [send].
      */
     private fun scheduleRemoteResize() {
-        val target = viewport
-        if (!canResizeRemote || target.width <= 0 || target.height <= 0) return
-        resizeJob?.cancel()
-        resizeJob = scope.launch {
-            delay(RESIZE_DEBOUNCE_MS)
-            if (target == desktopSize) return@launch
-            try {
-                session.setDesktopSize(target.width, target.height)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
+        if (!canResizeRemote) return
+        scope.launch {
+            resizeLock.withLock {
+                resizeJob?.cancel()
+                resizeJob = scope.launch {
+                    delay(RESIZE_DEBOUNCE_MS)
+                    // Read at fire time, not capture time: the wrappers race across pool threads,
+                    // and a wrapper carrying a stale captured size could win the lock last. The
+                    // volatile [viewport] is always the freshest, and re-checking [remoteResize]
+                    // honours a toggle-off that landed while this debounce was pending.
+                    if (!remoteResize) return@launch
+                    val target = viewport
+                    if (target.width <= 0 || target.height <= 0 || target == desktopSize) return@launch
+                    try {
+                        session.setDesktopSize(target.width, target.height)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                    }
+                }
             }
         }
     }
@@ -208,8 +232,9 @@ class RemoteDesktopScreenState(
 
     // Sprites already built, keyed by the shape *instance*: a cached pointer re-announcement is
     // the same object end to end, so switching arrow ↔ I-beam costs a list scan, not a bitmap
-    // rebuild (F-26). Content-equal duplicates miss and rebuild, which is only a small waste.
-    private val spriteCache = ArrayDeque<Pair<RemoteDesktopUpdate.CursorShape, VncCursorImage?>>()
+    // rebuild (F-26).
+    private val spriteCache =
+        IdentityCache<RemoteDesktopUpdate.CursorShape, VncCursorImage?>(SPRITE_CACHE_SIZE)
 
     /**
      * The server asked for the ordinary system pointer instead of a shape of its own (RDP's
@@ -316,8 +341,8 @@ class RemoteDesktopScreenState(
         if (viewOnly) return
         // Through the actor like every other key, so the sequence cannot interleave with typing.
         val keys = CTRL_ALT_DEL.mapNotNull { remoteKeyEvent(it, 0) }
-        keys.forEach { input.trySend(KeyWrite(it, down = true)) }
-        keys.asReversed().forEach { input.trySend(KeyWrite(it, down = false)) }
+        keys.forEach { inputActor.submit(RemoteInputActor.KeyWrite(it, down = true)) }
+        keys.asReversed().forEach { inputActor.submit(RemoteInputActor.KeyWrite(it, down = false)) }
     }
 
     private val _close = MutableStateFlow<RemoteDesktopUpdate.Closed?>(null)
@@ -344,7 +369,18 @@ class RemoteDesktopScreenState(
     val imageBitmap: ImageBitmap get() = image.bitmap
 
     init {
-        scope.launch { runInputActor() }
+        scope.launch {
+            // The same belt-and-braces net as the updates collector below, for the same reason: on
+            // a supervisor scope a dying actor cancels nothing else, so without this a bug in the
+            // actor's own control flow would leave a live-looking picture with silently dead input.
+            try {
+                inputActor.run()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _close.compareAndSet(null, RemoteDesktopUpdate.Closed(cleanExit = false))
+            }
+        }
         scope.launch {
             // The transports already turn a decode failure into a Closed update; this is the
             // belt-and-braces net, so a throwing session surfaces as a dropped session (the UI shows
@@ -381,7 +417,7 @@ class RemoteDesktopScreenState(
                 frame++
                 // An RDP resize can be a reactivation, which resets the server's input state —
                 // resend the lock keys so Caps/Num survive it (F-13).
-                lastLockKeys?.let { input.trySend(LockWrite(it)) }
+                lastLockKeys?.let { inputActor.submit(RemoteInputActor.LockWrite(it)) }
             }
 
             is RemoteDesktopUpdate.RemoteResizeSupported -> {
@@ -408,15 +444,7 @@ class RemoteDesktopScreenState(
     private fun onPeripheralUpdate(update: RemoteDesktopUpdate) {
         when (update) {
             is RemoteDesktopUpdate.CursorShape -> {
-                val hit = spriteCache.firstOrNull { it.first === update }
-                cursor = if (hit != null) {
-                    hit.second
-                } else {
-                    VncCursorImage.of(update).also { sprite ->
-                        spriteCache.addFirst(update to sprite)
-                        if (spriteCache.size > SPRITE_CACHE_SIZE) spriteCache.removeLast()
-                    }
-                }
+                cursor = spriteCache.getOrPut(update) { VncCursorImage.of(update) }
                 systemCursor = false
             }
 
@@ -450,7 +478,7 @@ class RemoteDesktopScreenState(
         if (viewOnly) return
         // The local mouse speaking takes the cursor back from a server-side warp (F-21).
         serverPointer = null
-        input.trySend(PointerWrite(x, y, buttonMask))
+        inputActor.submit(RemoteInputActor.PointerWrite(x, y, buttonMask))
     }
 
     /** Forward a key event. No-op in view-only mode. */
@@ -458,7 +486,24 @@ class RemoteDesktopScreenState(
         if (viewOnly) return
         val id = keyIdentity(event)
         if (down) heldKeys[id] = event else heldKeys.remove(id)
-        input.trySend(KeyWrite(event, down))
+        inputActor.submit(RemoteInputActor.KeyWrite(event, down))
+    }
+
+    // Keys currently down on the server, in press order; written from the UI thread only.
+    private val heldKeys = LinkedHashMap<Long, RemoteKeyEvent>()
+
+    private fun releaseHeldKeys() {
+        for (event in heldKeys.values.toList().asReversed()) {
+            inputActor.submit(RemoteInputActor.KeyWrite(event, false))
+        }
+        heldKeys.clear()
+    }
+
+    /** What makes a press and its release the same key, whichever field the protocol will use. */
+    private fun keyIdentity(event: RemoteKeyEvent): Long = when {
+        event.scancode != 0 -> event.scancode.toLong() or (if (event.extended) 1L shl 32 else 0L)
+        event.keySym != 0L -> event.keySym or (1L shl 40)
+        else -> event.codePoint.toLong() or (1L shl 48)
     }
 
     /**
@@ -469,7 +514,7 @@ class RemoteDesktopScreenState(
      */
     fun notifyFocus(focused: Boolean) {
         if (focused) {
-            lastLockKeys?.let { input.trySend(LockWrite(it)) }
+            lastLockKeys?.let { inputActor.submit(RemoteInputActor.LockWrite(it)) }
         } else {
             releaseHeldKeys()
         }
@@ -483,108 +528,9 @@ class RemoteDesktopScreenState(
     fun onLockKeys(keys: LockKeys?) {
         if (keys == null || keys == lastLockKeys) return
         lastLockKeys = keys
-        input.trySend(LockWrite(keys))
+        inputActor.submit(RemoteInputActor.LockWrite(keys))
     }
 
-    // ---- the input actor (F-10) ----
-
-    private sealed interface InputWrite
-    private data class PointerWrite(val x: Int, val y: Int, val mask: Int) : InputWrite
-    private data class KeyWrite(val event: RemoteKeyEvent, val down: Boolean) : InputWrite
-    private data class LockWrite(val keys: LockKeys) : InputWrite
-
-    // Keys currently down on the server, in press order; written from the UI thread only.
-    private val heldKeys = LinkedHashMap<Long, RemoteKeyEvent>()
-
-    private fun releaseHeldKeys() {
-        for (event in heldKeys.values.toList().asReversed()) input.trySend(KeyWrite(event, false))
-        heldKeys.clear()
-    }
-
-    /** What makes a press and its release the same key, whichever field the protocol will use. */
-    private fun keyIdentity(event: RemoteKeyEvent): Long = when {
-        event.scancode != 0 -> event.scancode.toLong() or (if (event.extended) 1L shl 32 else 0L)
-        event.keySym != 0L -> event.keySym or (1L shl 40)
-        else -> event.codePoint.toLong() or (1L shl 48)
-    }
-
-    /**
-     * The one writer (F-10): draining a single channel is what gives input the order it was made
-     * in — the fire-and-forget launches this replaces raced each other across dispatcher threads,
-     * so a key-up could overtake its key-down and a click could run ahead of the move that aimed
-     * it. It is also the only place moves coalesce (F-11): a run of pure moves collapses to the
-     * freshest and is paced to [MOVE_INTERVAL], while a queued click, key or wheel is never made
-     * to wait behind that pacing — the pending move goes out first, so a click always lands at a
-     * fresh position.
-     */
-    private suspend fun runInputActor() {
-        var pending: InputWrite? = null
-        while (true) {
-            val event = pending ?: input.receive()
-            pending = when (event) {
-                is PointerWrite ->
-                    if (event.mask == actorLastMask) {
-                        sendCollapsedMove(event)
-                    } else {
-                        write { session.sendPointer(event.x, event.y, event.mask) }
-                        // Wheel bits are edges, not state: the mask a later move repeats has none.
-                        actorLastMask = event.mask and BUTTONS_ONLY
-                        null
-                    }
-
-                is KeyWrite -> {
-                    write { session.sendKey(event.event, event.down) }
-                    null
-                }
-
-                is LockWrite -> {
-                    write { session.syncLockKeys(event.keys.scroll, event.keys.num, event.keys.caps) }
-                    null
-                }
-            }
-        }
-    }
-
-    // The actor's own state; nothing outside [runInputActor]'s call tree touches these.
-    private var actorLastMask = 0
-    private var lastMoveAt: TimeSource.Monotonic.ValueTimeMark? = null
-
-    /**
-     * Send the freshest of the queued pure moves, pacing the stream to [MOVE_INTERVAL] — but only
-     * while nothing else waits. Returns the first non-move it ran into, which the caller handles
-     * next, so a click is delivered right after the move that positioned it and is never delayed.
-     */
-    private suspend fun sendCollapsedMove(first: PointerWrite): InputWrite? {
-        var move = first
-        var interrupt: InputWrite? = null
-        fun collapseQueuedMoves() {
-            while (interrupt == null) {
-                val queued = input.tryReceive().getOrNull() ?: return
-                if (queued is PointerWrite && queued.mask == actorLastMask) move = queued else interrupt = queued
-            }
-        }
-        collapseQueuedMoves()
-        if (interrupt == null) {
-            val since = lastMoveAt?.elapsedNow()
-            if (since != null && since < MOVE_INTERVAL) {
-                delay(MOVE_INTERVAL - since)
-                collapseQueuedMoves()
-            }
-        }
-        lastMoveAt = TimeSource.Monotonic.markNow()
-        write { session.sendPointer(move.x, move.y, move.mask) }
-        return interrupt
-    }
-
-    /** Same swallow-the-write discipline as [send], for the actor's own writes. */
-    private suspend fun write(block: suspend () -> Unit) {
-        try {
-            block()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-        }
-    }
 
     /** Send local clipboard text to the server. */
     fun onLocalClipboard(text: String) {
@@ -614,12 +560,6 @@ class RemoteDesktopScreenState(
 
     private companion object {
         const val RESIZE_DEBOUNCE_MS = 400L
-
-        /** Floor between two pure moves: ~120/s, about what a mature client sends (F-11). */
-        val MOVE_INTERVAL = 8.milliseconds
-
-        /** The state-carrying bits of the RFB mask; wheel bits (3..6) are edges and never repeat. */
-        const val BUTTONS_ONLY = 0b110000111
 
         /** Matches the RDP pointer cache (25 slots) with room for uncached shapes on top. */
         const val SPRITE_CACHE_SIZE = 32

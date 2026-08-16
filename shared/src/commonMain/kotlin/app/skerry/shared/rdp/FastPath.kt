@@ -167,14 +167,6 @@ class FastPathDecoder(
         }
 
     private companion object {
-        /** A malformed pointer shape is skipped; the cursor keeps its last shape (F-40). */
-        @Suppress("SwallowedException") // deliberate: a broken cursor is worth less than the session
-        fun pointerOrNothing(read: () -> RdpUpdate): List<RdpUpdate> = try {
-            listOf(read())
-        } catch (e: RdpProtocolException) {
-            emptyList()
-        }
-
         const val UPDATETYPE_ORDERS = 0x0
         const val UPDATETYPE_BITMAP = 0x1
         const val UPDATETYPE_PALETTE = 0x2
@@ -345,6 +337,17 @@ object BitmapUpdate {
             framebuffer.blitRow(x, y + row, width, pixels, row * width)
         }
     }
+}
+
+/**
+ * A malformed pointer shape is skipped and the cursor keeps its last shape (F-40) — the same
+ * containment either decode path applies, hence a shared function rather than two copies.
+ */
+@Suppress("SwallowedException") // deliberate: a broken cursor is worth less than the session
+internal fun pointerOrNothing(read: () -> RdpUpdate): List<RdpUpdate> = try {
+    listOf(read())
+} catch (e: RdpProtocolException) {
+    emptyList()
 }
 
 /**

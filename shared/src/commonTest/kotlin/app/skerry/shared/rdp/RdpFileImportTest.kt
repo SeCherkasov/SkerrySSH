@@ -115,6 +115,8 @@ class RdpFileImportTest {
         assertEquals("alice", host.username)
         assertNull(host.credentialId)
         assertEquals("tsv://x", checkNotNull(host.rdp).loadBalanceInfo)
+        // Parity with a form-created profile (F-06): a new remote desktop follows the window.
+        assertTrue(host.vncResizeToWindow)
     }
 
     @Test

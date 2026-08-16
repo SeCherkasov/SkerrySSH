@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp
 
+import app.skerry.shared.graphics.IdentityCache
 import app.skerry.shared.graphics.RemoteDesktopCapabilities
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
@@ -100,23 +101,20 @@ class RdpRemoteDesktop(
     // A cached pointer re-announcement is the same PointerShape instance; wrapping it into a fresh
     // CursorShape each time destroyed that identity before the UI could use it, so every arrow ↔
     // I-beam switch rebuilt a sprite (F-26). One wrapper per instance keeps identity end to end.
-    // Bounded by the protocol's own pointer-cache size; read-loop only, so a plain list is enough.
-    private val mappedShapes = ArrayDeque<Pair<RdpUpdate.PointerShape, RemoteDesktopUpdate.CursorShape>>()
+    private val mappedShapes =
+        IdentityCache<RdpUpdate.PointerShape, RemoteDesktopUpdate.CursorShape>(MAPPED_SHAPE_CACHE)
 
-    private fun mappedShape(update: RdpUpdate.PointerShape): RemoteDesktopUpdate.CursorShape {
-        mappedShapes.firstOrNull { it.first === update }?.let { return it.second }
-        val mapped = RemoteDesktopUpdate.CursorShape(
-            argb = update.argb,
-            width = update.width,
-            height = update.height,
-            hotspotX = update.hotspotX,
-            hotspotY = update.hotspotY,
-            invert = update.invert,
-        )
-        mappedShapes.addFirst(update to mapped)
-        if (mappedShapes.size > MAPPED_SHAPE_CACHE) mappedShapes.removeLast()
-        return mapped
-    }
+    private fun mappedShape(update: RdpUpdate.PointerShape): RemoteDesktopUpdate.CursorShape =
+        mappedShapes.getOrPut(update) {
+            RemoteDesktopUpdate.CursorShape(
+                argb = update.argb,
+                width = update.width,
+                height = update.height,
+                hotspotX = update.hotspotX,
+                hotspotY = update.hotspotY,
+                invert = update.invert,
+            )
+        }
 
     override suspend fun sendKey(event: RemoteKeyEvent, down: Boolean) {
         // A scancode replays into the remote keyboard driver, which is what makes the remote layout

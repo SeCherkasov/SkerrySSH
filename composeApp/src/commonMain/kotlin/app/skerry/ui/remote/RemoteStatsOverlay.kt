@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.graphics.RemoteDesktopDiagnostics
@@ -195,8 +196,14 @@ fun RemoteStatsOverlay(screen: RemoteDesktopScreenState, modifier: Modifier = Mo
 
 @Composable
 private fun StatRow(label: String, value: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Txt(label, color = Skerry.colors.faint, size = 10.5.sp, modifier = Modifier.width(STAT_LABEL_WIDTH))
+    // mergeDescendants: one accessibility stop per row ("Path: EGFX"), not two. The label uses
+    // `dim`, not `faint` — half the panel's text is labels, and faint on this backdrop sits below
+    // the AA contrast floor at this size.
+    Row(
+        Modifier.semantics(mergeDescendants = true) {},
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Txt(label, color = Skerry.colors.dim, size = 10.5.sp, modifier = Modifier.width(STAT_LABEL_WIDTH))
         Txt(value, color = Skerry.colors.text, size = 10.5.sp)
     }
 }

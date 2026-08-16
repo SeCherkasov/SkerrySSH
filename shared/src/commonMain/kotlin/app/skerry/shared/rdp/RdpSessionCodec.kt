@@ -47,14 +47,18 @@ class RdpSessionCodec(
      */
     suspend fun readMessage(): List<RdpUpdate> {
         val packet = Tpkt.readPacket(source)
-        // Timed from after the blocking read: waiting for a still desktop is not decode work.
-        val started = timeSource.markNow()
+        // Timed from after the blocking read: waiting for a still desktop is not decode work. Only
+        // the fast path is timed here — slow-path graphics time inside [slowPath], and channel
+        // data is not timed at this level at all: the EGFX pipeline times itself in
+        // GraphicsChannel (counting it here as well recorded every pipeline PDU twice), and the
+        // other channels' parsing (clipboard, audio framing) is below the overlay's noise floor.
         val updates = if (Tpkt.isFastPath(packet[0].toInt() and 0xFF)) {
+            val started = timeSource.markNow()
             fastPath.decode(packet, surfaces)
+                .also { diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds) }
         } else {
             slowPath(packet)
         }
-        diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds)
         // Acknowledge completed frames before returning: the server paces itself on these.
         for (update in updates) {
             if (update is RdpUpdate.Frame && !update.begin) {
@@ -96,7 +100,11 @@ class RdpSessionCodec(
         }
         val header = RdpShare.readControlHeader(pdu.payload)
         return when (header.pduType) {
-            RdpShare.PDUTYPE_DATA -> dataPdu(pdu.payload)
+            RdpShare.PDUTYPE_DATA -> {
+                val started = timeSource.markNow()
+                dataPdu(pdu.payload)
+                    .also { diagnostics.decodeTime(started.elapsedNow().inWholeNanoseconds) }
+            }
             RdpShare.PDUTYPE_DEACTIVATE_ALL -> reactivate()
             RdpShare.PDUTYPE_SERVER_REDIRECT ->
                 listOf(RdpUpdate.Closed(cleanExit = true, reason = "the server redirected the session"))
@@ -159,13 +167,6 @@ class RdpSessionCodec(
             PTR_MSGTYPE_LARGE_POINTER -> pointerOrNothing { PointerUpdate.largePointer(reader, pointerCache) }
             else -> emptyList()
         }
-    }
-
-    @Suppress("SwallowedException") // deliberate: a broken cursor is worth less than the session
-    private fun pointerOrNothing(read: () -> RdpUpdate): List<RdpUpdate> = try {
-        listOf(read())
-    } catch (e: RdpProtocolException) {
-        emptyList()
     }
 
     /**
