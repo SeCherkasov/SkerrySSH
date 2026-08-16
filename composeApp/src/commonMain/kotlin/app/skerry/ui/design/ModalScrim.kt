@@ -31,6 +31,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 
 /**
  * Modal overlay scrim: full-screen dimming with the card centered (or at [contentAlignment]). The
@@ -44,6 +46,12 @@ fun ModalScrim(
     onDismiss: () -> Unit,
     scrimColor: Color = Skerry.colors.modalScrim,
     contentAlignment: Alignment = Alignment.Center,
+    /**
+     * What the modal is, for a modal whose card has no field to autofocus. Focus then falls to the
+     * scrim itself, which is otherwise an unnamed box — the dialog would open in silence for anyone
+     * reading it aloud. Left null where a field inside takes the focus and names itself.
+     */
+    label: String? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val noop = remember { MutableInteractionSource() }
@@ -67,7 +75,8 @@ fun ModalScrim(
                     false
                 }
             }
-            .focusable(),
+            .focusable()
+            .then(if (label == null) Modifier else Modifier.semantics { contentDescription = label }),
         contentAlignment = contentAlignment,
         content = content,
     )

@@ -1,5 +1,7 @@
 package app.skerry.shared.tag
 
+import app.skerry.shared.text.stripInvisible
+
 /**
  * Max length of a single tag and max number of tags per record. Not a security boundary (tags only
  * flow into Compose text / JSON / string comparison — no injection), but a guard against
@@ -27,7 +29,20 @@ const val PROD_TAG = "prod"
  * snippets ([app.skerry.shared.snippet.Snippet.tags]).
  */
 fun normalizeTag(raw: String): String? =
-    raw.trim().trim('#').trim().lowercase().take(MAX_TAG_LENGTH).ifBlank { null }
+    // Filtered, not just trimmed: a tag arriving by sync could carry a zero-width character and draw
+    // as `prod` while comparing as something else. The guard normalizes what it compares too — this
+    // is the write side of the same rule, so a record written here needs no filtering to be read.
+    //
+    // The input is bounded before the scan (a tag padded with a million zero-width spaces is not a
+    // tag, and the walk would be the far side's to give), and the cut cannot leave half of an astral
+    // character behind: an orphan draws as nothing, so two tags would differ while drawing alike.
+    stripInvisible(raw.take(MAX_TAG_LENGTH * TAG_SCAN_FACTOR))
+        .trim().trim('#').trim().lowercase()
+        .take(MAX_TAG_LENGTH).dropLastWhile { it.isHighSurrogate() }
+        .ifBlank { null }
+
+/** How much input a tag of [MAX_TAG_LENGTH] characters is worth walking; past it, nothing is read. */
+private const val TAG_SCAN_FACTOR = 8
 
 /**
  * Canonicalize a whole tag list: normalize each entry, drop blanks, collapse duplicates that differ

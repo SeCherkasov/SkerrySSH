@@ -32,7 +32,8 @@ import app.skerry.ui.theme.Skerry
  */
 @Composable
 fun HelpDialog(title: String, closeLabel: String, onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
-    ModalScrim(onDismiss = onDismiss) {
+    // Named: nothing inside a help dialog autofocuses, so focus lands on the scrim.
+    ModalScrim(onDismiss = onDismiss, label = title) {
         Column(
             Modifier
                 .widthIn(max = 720.dp)

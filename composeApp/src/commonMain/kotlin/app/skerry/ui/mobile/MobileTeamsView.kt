@@ -36,6 +36,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.SHORT_ID_CHARS
+import app.skerry.ui.design.boundedVisibleText
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.rowSubtitle
 import app.skerry.ui.host.rowLabel
@@ -517,7 +518,7 @@ private fun MobileTeamDetail(
 
     MobileSharedSection(
         heading = stringResource(Res.string.lib_teams_shared_hosts_count, sharedHosts.size),
-        items = sharedHosts.map { SharedRecordUi(it.id, it.rowLabel(), it.rowSubtitle()) },
+        items = remember(sharedHosts) { sharedHosts.map { SharedRecordUi(it.id, it.rowLabel(), it.rowSubtitle()) } },
         shareLabel = stringResource(Res.string.lib_teams_share_host).takeIf { canWrite },
         onShare = { onShare(RecordType.HOST) },
         canUnshare = canWrite,
@@ -527,7 +528,9 @@ private fun MobileTeamDetail(
     )
     MobileSharedSection(
         heading = stringResource(Res.string.lib_teams_shared_snippets_count, sharedSnippets.size),
-        items = sharedSnippets.map { SharedRecordUi(it.id, untrustedLabel(it.label), untrustedLabel(it.command)) },
+        items = remember(sharedSnippets) {
+            sharedSnippets.map { SharedRecordUi(it.id, untrustedLabel(it.label), boundedVisibleText(it.command)) }
+        },
         shareLabel = stringResource(Res.string.lib_teams_share_snippet).takeIf { canWrite },
         onShare = { onShare(RecordType.SNIPPET) },
         canUnshare = canWrite,
@@ -537,6 +540,8 @@ private fun MobileTeamDetail(
     )
     MobileSharedSection(
         heading = stringResource(Res.string.lib_teams_shared_runbooks_count, sharedRunbooks.size),
+        // Not remembered, unlike its siblings: the second line is a localized string, so the row is
+        // rebuilt on recomposition either way — the same reason the desktop screen keeps it outside.
         items = sharedRunbooks.map { SharedRecordUi(it.id, untrustedLabel(it.label), runbookSummary(it.steps.size)) },
         shareLabel = stringResource(Res.string.lib_teams_share_runbook).takeIf { canWrite },
         onShare = { onShare(RecordType.RUNBOOK) },

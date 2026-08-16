@@ -70,7 +70,9 @@ class SftpPanelTest {
     fun `the columns menu takes a column out of both listings`() = runDesktopShell {
         openFiles()
         val header = uppercaseForLocale(string(Res.string.sftp_col_modified), LOCALE)
-        assertEquals(2, columnHeaders(header), "each pane heads its own listing")
+        // The local pane fills in on a hop of its own, after the remote one [openFiles] waits for:
+        // counted on the first frame that has the remote listing, the local half is still missing.
+        waitUntil("both panes head their listing", timeoutMillis = 10_000) { columnHeaders(header) == 2 }
 
         onNodeWithContentDescription(string(Res.string.sftp_columns)).performClick()
         waitForIdle()

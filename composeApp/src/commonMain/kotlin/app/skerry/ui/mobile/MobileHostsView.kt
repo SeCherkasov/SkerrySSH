@@ -298,7 +298,7 @@ private fun MobileHostRow(host: Host, onClick: () -> Unit) {
         dotColor = sessionDotColor(status),
         statusText = sessionStatusText(status),
         onClick = onClick,
-        badge = if (isProdHost(host)) ({ ProdBadge() }) else null,
+        badge = if (remember(host) { isProdHost(host) }) ({ ProdBadge() }) else null,
     )
 }
 

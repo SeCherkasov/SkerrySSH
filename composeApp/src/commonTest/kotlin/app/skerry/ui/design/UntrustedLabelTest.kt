@@ -3,6 +3,7 @@ package app.skerry.ui.design
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * The filter every label of foreign origin passes through — a remote file name, a shared profile, a
@@ -92,5 +93,56 @@ class UntrustedLabelTest {
     fun `the filter is idempotent`() {
         val once = untrustedLabel("web\u202E10-")
         assertEquals(once, untrustedLabel(once))
+    }
+
+    /**
+     * By code point: both halves of an astral formatting character classify as SURROGATE, so a
+     * per-char filter keeps the whole range and two names differing only by one draw as one.
+     */
+    @Test
+    fun `an astral formatting character is dropped like its basic-plane siblings`() {
+        assertEquals("deploy", untrustedLabel("deploy\uDB40\uDC41")) // tag latin capital letter A
+        assertEquals("deploy", untrustedLabel("dep\uD834\uDD73loy")) // musical symbol beam
+    }
+
+    @Test
+    fun `an astral character that draws as itself survives`() {
+        assertEquals("deploy \uD83D\uDE00", untrustedLabel("deploy \uD83D\uDE00"))
+    }
+
+    @Test
+    fun `a lone surrogate is dropped rather than drawn as a replacement glyph`() {
+        assertEquals("deploy", untrustedLabel("dep\uD834loy"))
+        assertEquals("deploy", untrustedLabel("dep\uD834\uDB40\uDC41\uDD73loy"))
+    }
+
+    /**
+     * Marks, not format characters: a category rule that asks only about FORMAT keeps them, and a
+     * name carrying one draws exactly like the name without it.
+     */
+    @Test
+    fun `a mark that draws as nothing is dropped`() {
+        assertEquals("deploy", untrustedLabel("dep\uFE0Floy"))
+        assertEquals("deploy", untrustedLabel("dep\u034Floy"))
+    }
+
+    /**
+     * A note is cut whether or not the cut is visible in what came back. The last character the
+     * budget bought can be a newline, and the trailing trim takes it away — so the drawn string ends
+     * one under the cap and a length comparison calls a shortened note whole.
+     */
+    @Test
+    fun `a cut that lands on a separator is still a cut`() {
+        val cap = 10
+        // Both sides of the boundary: the separator inside the cap, and the separator exactly at it.
+        // A budget with one character of slack answers the first and not the second — the walk knows
+        // whether it stopped on the text or on the budget, and that is what is asked.
+        listOf("A".repeat(cap - 1) + "\n" + "the rest", "A".repeat(cap) + "\n" + "the rest").forEach { note ->
+            assertTrue(sanitizeServerText(note, cap, allowNewlines = true).length <= cap)
+            assertFalse(sanitizedFits(note, cap, allowNewlines = true), "a note cut on its newline read as whole")
+        }
+        assertTrue(sanitizedFits("A".repeat(cap), cap, allowNewlines = true), "a note that fits read as cut")
+        // Filtering is not cutting: a note shortened only by what draws as nothing is shown whole.
+        assertTrue(sanitizedFits("A".repeat(cap - 1) + "\u200B".repeat(20), cap, allowNewlines = true))
     }
 }

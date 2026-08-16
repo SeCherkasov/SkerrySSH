@@ -29,7 +29,10 @@ fun isProdHost(host: Host?): Boolean = host != null && ProductionGuard.isProduct
 @Composable
 fun isProdHostId(hostId: String?): Boolean {
     val hosts = LocalHosts.current ?: return false
-    return isProdHost(hostId?.let { hosts.find(it) })
+    // Remembered: this is read per tab in the title bar and per frame in the terminal chrome, and
+    // behind it are a linear catalog lookup and a tag walk.
+    val host = remember(hosts.hosts, hostId) { hostId?.let { hosts.find(it) } }
+    return remember(host) { isProdHost(host) }
 }
 
 /**

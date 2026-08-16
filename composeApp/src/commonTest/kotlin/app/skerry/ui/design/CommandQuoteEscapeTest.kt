@@ -44,4 +44,44 @@ class CommandQuoteEscapeTest {
     fun `a bidi override in the basic plane is still spelled out`() {
         assertTrue("<U+202E>" in visibleText("echo safe\u202E; rm -rf /"))
     }
+
+    /**
+     * The bounded form is what a row draws where there is no space for the quote itself. Spelling a
+     * character out makes the string longer than what it came from, so text made of nothing else
+     * would draw as several times its own size — both ends are cut, and neither cut lands inside an
+     * escape.
+     */
+    @Test
+    fun `the bounded form keeps a short command exactly as the quote would`() {
+        assertEquals(visibleText("echo ok"), boundedVisibleText("echo ok"))
+        assertEquals("echo <U+202E>ok", boundedVisibleText("echo \u202Eok"))
+    }
+
+    @Test
+    fun `the bounded form caps what a row can be made to draw`() {
+        val flood = "\u202E".repeat(MAX_DRAWN_COMMAND_CHARS)
+        val drawn = boundedVisibleText(flood)
+        assertTrue(drawn.length <= MAX_DRAWN_COMMAND_CHARS, "drew ${drawn.length} characters")
+        // Cut between escapes, never inside one: half a token is neither the character nor its name.
+        assertTrue(drawn.endsWith(">"), "the cut landed inside an escape: ...${drawn.takeLast(12)}")
+    }
+
+    /**
+     * The supplement is not the same thing as the sixteen below: 240 invisible code points nothing
+     * in a shell line needs, and a known way to carry a payload through text a human approved.
+     */
+    @Test
+    fun `an astral variation selector is spelled out`() {
+        assertEquals("echo ok<U+E0100>", visibleText("echo ok\uDB40\uDD00"))
+    }
+
+    /**
+     * A variation selector is not a hidden character: it picks the emoji form of the glyph before
+     * it. Spelled out, every ordinary `⚠️` in a confirmed command would read as `⚠<U+FE0F>`.
+     */
+    @Test
+    fun `a variation selector attached to a glyph is left alone`() {
+        assertEquals("echo \"\u26A0\uFE0F disk full\"", visibleText("echo \"\u26A0\uFE0F disk full\""))
+        assertEquals("ok \uD83D\uDC68\uD83C\uDFFB", visibleText("ok \uD83D\uDC68\uD83C\uDFFB"))
+    }
 }

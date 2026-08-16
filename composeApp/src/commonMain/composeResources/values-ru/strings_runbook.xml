@@ -33,6 +33,7 @@
     <string name="runbook_delete_title">Удалить раннбук</string>
     <string name="runbook_delete_message">«%1$s» и история его прогонов будут удалены.</string>
     <string name="runbook_run">Запустить</string>
+    <string name="runbook_run_needs_save">Сохраните изменённый сценарий, чтобы запустить его</string>
     <string name="runbook_run_title">Запуск сценария</string>
     <string name="runbook_run_needs_session">Сначала подключитесь — сценарий выполняется в терминале.</string>
     <string name="runbook_run_busy">Другой сценарий уже выполняется.</string>

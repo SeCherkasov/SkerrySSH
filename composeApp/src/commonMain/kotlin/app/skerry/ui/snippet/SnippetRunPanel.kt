@@ -55,6 +55,7 @@ import app.skerry.ui.generated.resources.lib_snippets_copied
 import app.skerry.ui.generated.resources.lib_snippets_copy
 import app.skerry.ui.generated.resources.lib_snippets_delete
 import app.skerry.ui.generated.resources.lib_snippets_edit_action
+import app.skerry.ui.generated.resources.lib_snippets_field_command
 import app.skerry.ui.generated.resources.lib_snippets_no_session
 import app.skerry.ui.generated.resources.lib_snippets_preview_runs
 import app.skerry.ui.generated.resources.lib_snippets_run
@@ -69,6 +70,13 @@ import app.skerry.ui.generated.resources.lib_snippets_vault_ref
 import app.skerry.ui.theme.Skerry
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.ClippedNotice
+import app.skerry.ui.design.CommandQuote
+import app.skerry.ui.design.tagChipLabel
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 
 /** Width of the run panel — wide enough for a wrapped command line next to its labels. */
 internal val SNIPPET_PANEL_WIDTH = 400.dp
@@ -125,7 +133,7 @@ internal fun SnippetRunPanel(
         // The panel names itself as a heading, not as a field label: in small caps it read as an
         // echo of the list row it belongs to.
         Txt(
-            snippet.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) },
+            remember(snippet) { untrustedLabel(snippet.label) }.ifBlank { stringResource(Res.string.lib_snippets_untitled) },
             color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 10.dp),
         )
@@ -135,10 +143,10 @@ internal fun SnippetRunPanel(
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                snippet.tags.forEach { tag -> key(tag) { Chip(snippetTagLabel(tag)) } }
+                snippet.tags.forEach { tag -> key(tag) { Chip(remember(tag) { tagChipLabel(tag) }) } }
             }
         }
-        CommandBlock(snippet.command, mono)
+        CommandBlock(snippet.command, stringResource(Res.string.lib_snippets_field_command))
 
         if (variables.isNotEmpty()) {
             FieldLabel(labelUppercase(stringResource(Res.string.lib_snippets_variables)), top = 0.dp, bottom = 7.dp)
@@ -153,12 +161,18 @@ internal fun SnippetRunPanel(
                 }
             }
             FieldLabel(labelUppercase(stringResource(Res.string.lib_snippets_preview_runs)), top = 14.dp, bottom = 7.dp)
-            CommandBlock(preview, mono)
+            CommandBlock(preview, stringResource(Res.string.lib_snippets_preview_runs), announce = false)
         }
 
         FieldLabel(labelUppercase(stringResource(Res.string.lib_snippets_runs_on)), top = 14.dp, bottom = 7.dp)
+        val noSession = stringResource(Res.string.lib_snippets_no_session)
         if (targets.isEmpty()) {
-            Txt(stringResource(Res.string.lib_snippets_no_session), color = Skerry.colors.faint, size = 11.5.sp, modifier = Modifier.padding(bottom = 14.dp))
+            // Drawn for the eye only: the Run button below carries the same string as its state, and
+            // a second node would read it out again a swipe later.
+            Txt(
+                noSession, color = Skerry.colors.faint, size = 11.5.sp,
+                modifier = Modifier.padding(bottom = 14.dp).clearAndSetSemantics {},
+            )
         } else {
             FlowRow(
                 Modifier.fillMaxWidth().padding(bottom = 14.dp),
@@ -183,7 +197,9 @@ internal fun SnippetRunPanel(
                 onClick = { target?.let { runFailed = !onRun(it, params.toMap()) } },
                 icon = "play_arrow",
                 enabled = target != null,
-                modifier = Modifier.weight(1f),
+                // The reason it cannot fire rides on the button, not only on the line above it: a
+                // dimmed control with no word on it says nothing to a reader.
+                modifier = Modifier.weight(1f).semantics { if (target == null) stateDescription = noSession },
             )
             GhostButton(
                 if (copied) stringResource(Res.string.lib_snippets_copied) else stringResource(Res.string.lib_snippets_copy),
@@ -203,7 +219,10 @@ internal fun SnippetRunPanel(
         FieldLabel(labelUppercase(stringResource(Res.string.lib_snippets_field_shortcut)), top = 20.dp, bottom = 7.dp)
         KeyValueRow(
             stringResource(Res.string.lib_snippets_shortcut_insert),
-            snippet.shortcut ?: stringResource(Res.string.lib_snippets_shortcut_unset),
+            // The filter drops rather than escapes, so a chord of nothing but invisible characters
+            // comes back empty: an unnamed value reads as a broken field, not as an unset one.
+            remember(snippet) { snippet.shortcut?.let { untrustedLabel(it) }?.ifBlank { null } }
+                ?: stringResource(Res.string.lib_snippets_shortcut_unset),
         )
 
         Row(Modifier.fillMaxWidth().padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -220,15 +239,37 @@ internal fun SnippetRunPanel(
 }
 
 @Composable
-private fun CommandBlock(text: String, mono: FontFamily) {
-    Box(
-        Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.terminalBg)
-            .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        Txt(text, color = Skerry.colors.textBright, size = 11.5.sp, font = mono, lineHeight = 17.sp)
+private fun CommandBlock(text: String, label: String, announce: Boolean = true) {
+    // Quoted, not drawn: a snippet can arrive from a team member, and what runs is stripped of the
+    // characters that reorder a line — raw, this block would read in an order the shell will not
+    // use. The quote also bounds what it draws and says so, which a bare Txt cannot.
+    // Keyed on what the block is about, not on its text: the text is rebuilt on every keystroke in
+    // a parameter field, and a state reset per character makes the notice blink and the buttons
+    // under it jump. `onFit` is what changes it, and it fires on every layout.
+    var clipped by remember(label) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+        CommandQuote(
+            text,
+            visibleLines = COMMAND_QUOTE_LINES,
+            // The panel draws two of these: named, or a focus stop says nothing about which one it
+            // is — the saved command, or the line a run would send.
+            label = label,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.terminalBg)
+                .border(1.dp, Skerry.colors.cyan.copy(alpha = 0.1f), RoundedCornerShape(7.dp))
+                .padding(horizontal = 12.dp),
+            color = Skerry.colors.textBright,
+            size = 11.5.sp,
+            lineHeight = 17.sp,
+            padding = 10.dp,
+            onFit = { clipped = it == false },
+        )
+        ClippedNotice(clipped, text.length, announce = announce)
     }
 }
+
+/** Lines of a quoted command the panel shows before it scrolls its own box. The quote brings its
+ * own mono font, so the caller does not pass one. */
+private const val COMMAND_QUOTE_LINES = 6
 
 /**
  * One variable row: a prompted parameter gets a field, a vault or clipboard reference states where
@@ -281,7 +322,10 @@ private fun ParamInput(
     modifier: Modifier = Modifier,
 ) {
     val textColor = Skerry.colors.text
-    val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 11.5.sp, fontFamily = mono) }
+    // Pinned: the value goes into a shell line, and its seed is the template's own text.
+    val style = remember(mono, textColor) {
+        TextStyle(color = textColor, fontSize = 11.5.sp, fontFamily = mono, textDirection = TextDirection.Ltr)
+    }
     // The caller sanitizes what it stores, so the caret has to survive a value coming back
     // rewritten — see FieldDraft.
     val draft = rememberFieldDraft(value)

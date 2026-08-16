@@ -77,6 +77,7 @@
     <string name="lib_snippets_run_title">Run snippet</string>
     <string name="lib_snippets_run_empty">No snippets yet. Add some on the Snippets tab.</string>
     <string name="lib_snippets_run_in_terminal">Run in terminal</string>
+    <string name="lib_snippets_run_needs_save">Save the edited command to run it</string>
     <string name="lib_snippets_save_snippet">Save snippet</string>
     <string name="lib_snippets_facts_variables">%1$d with variables</string>
     <string name="lib_snippets_variables">Variables</string>

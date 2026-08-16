@@ -21,17 +21,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import app.skerry.shared.runbook.RunbookScript
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.snippet.captureSnippetRunEnvironment
-import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbookRunner
@@ -40,11 +39,13 @@ import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.GhostButton
-import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.labelUppercase
+import app.skerry.ui.design.CommandLine
+import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_runs_on
 import app.skerry.ui.generated.resources.lib_snippets_variables
@@ -67,8 +68,9 @@ import app.skerry.ui.generated.resources.runbook_steps
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.sftp.fileDateText
-import app.skerry.ui.snippet.snippetTagLabel
+import app.skerry.ui.design.tagChipLabel
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.terminal.MAX_NOTE_CHARS
 import org.jetbrains.compose.resources.stringResource
 
 /** Width of the runbook panel — wider than the snippet one: its rows are whole step lines. */
@@ -85,7 +87,6 @@ internal val RUNBOOK_PANEL_WIDTH = 460.dp
 internal fun RunbookRunCard(
     entry: RunbookEntry,
     state: DesktopDesignState,
-    mono: FontFamily,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -116,7 +117,7 @@ internal fun RunbookRunCard(
             .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp),
     ) {
         Txt(
-            stripUnsafeFormatChars(runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
+            remember(runbook) { untrustedLabel(runbook.label) }.ifBlank { stringResource(Res.string.runbook_untitled) },
             color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 10.dp),
         )
@@ -126,19 +127,19 @@ internal fun RunbookRunCard(
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                runbook.tags.forEach { tag -> key(tag) { Chip(snippetTagLabel(tag)) } }
+                runbook.tags.forEach { tag -> key(tag) { Chip(remember(tag) { tagChipLabel(tag) }) } }
             }
         }
         if (runbook.description.isNotBlank()) {
             Txt(
-                stripUnsafeFormatChars(runbook.description), color = Skerry.colors.dim, size = 12.sp,
+                remember(runbook) { sanitizeServerText(runbook.description, MAX_NOTE_CHARS, allowNewlines = true) }, color = Skerry.colors.dim, size = 12.sp,
                 lineHeight = 17.sp, modifier = Modifier.padding(bottom = 14.dp),
             )
         }
 
         FieldLabel(labelUppercase(stringResource(Res.string.runbook_steps)), top = 0.dp, bottom = 7.dp)
         runbook.steps.forEachIndexed { index, step ->
-            key(step.id) { StepPreviewRow(index, step, mono) }
+            key(step.id) { StepPreviewRow(index, step) }
         }
 
         if (variables.isNotEmpty()) {
@@ -209,9 +210,12 @@ internal fun RunbookRunCard(
     }
 }
 
+/** Lines of a step's command the card previews before it ellipsizes. */
+private const val STEP_PREVIEW_LINES = 3
+
 /** One step as the panel lists it: number, name, what it runs, and the flags that change the run. */
 @Composable
-private fun StepPreviewRow(index: Int, step: RunbookStep, mono: FontFamily) {
+private fun StepPreviewRow(index: Int, step: RunbookStep) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -224,7 +228,7 @@ private fun StepPreviewRow(index: Int, step: RunbookStep, mono: FontFamily) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             Txt(stringResource(Res.string.runbook_step_n, index + 1), color = Skerry.colors.faint, size = 10.5.sp)
             if (step.title.isNotBlank()) {
-                Txt(stripUnsafeFormatChars(step.title), color = Skerry.colors.text, size = 11.5.sp)
+                Txt(remember(step) { untrustedLabel(step.title) }, color = Skerry.colors.text, size = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Box(Modifier.weight(1f))
             // The two flags that change how the run behaves, in the same icons the progress list uses.
@@ -232,9 +236,13 @@ private fun StepPreviewRow(index: Int, step: RunbookStep, mono: FontFamily) {
             if (step.continueOnError) Sym("skip_next", size = 13.sp, color = Skerry.colors.dim)
         }
         // As written, never as resolved: a `${{vault}}` value has no business on screen.
-        Txt(
-            stripUnsafeFormatChars(step.summaryLine()), color = Skerry.colors.textBright, size = 11.5.sp,
-            font = mono, lineHeight = 17.sp, modifier = Modifier.padding(top = 4.dp),
+        CommandLine(
+            remember(step) { step.summaryLine() },
+            color = Skerry.colors.textBright,
+            size = 11.5.sp,
+            lineHeight = 17.sp,
+            maxLines = STEP_PREVIEW_LINES,
+            modifier = Modifier.padding(top = 4.dp),
         )
     }
 }

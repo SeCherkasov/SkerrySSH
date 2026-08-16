@@ -29,7 +29,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbooks
@@ -60,7 +59,9 @@ import app.skerry.ui.generated.resources.runbook_select_or_create
 import app.skerry.ui.generated.resources.runbook_step_count
 import app.skerry.ui.generated.resources.runbook_steps_total
 import app.skerry.ui.generated.resources.runbook_untitled
-import app.skerry.ui.snippet.snippetTagLabel
+import app.skerry.ui.design.tagChipLabel
+import app.skerry.ui.design.boundedVisibleText
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -181,7 +182,6 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
                         RunbookRunCard(
                             entry = selected,
                             state = state,
-                            mono = mono,
                             onEdit = { mode = RunbookPanelMode.Edit(selected.id) },
                             // Held for confirmation: deleting a whole procedure silently is one
                             // misclick away from losing it and its run history.
@@ -200,7 +200,7 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
                 Res.string.runbook_delete_message,
                 // Stripped like every other surface showing this label (a runbook can arrive over
                 // sync): this dialog is the last thing read before a delete.
-                stripUnsafeFormatChars(entry.runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
+                untrustedLabel(entry.runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
             ),
             confirmLabel = stringResource(Res.string.runbook_delete),
             onConfirm = {
@@ -261,13 +261,17 @@ private fun RunbookListRow(entry: RunbookEntry, selected: Boolean, mono: FontFam
             Txt(
                 // Stripped like everywhere a runbook names itself: it can arrive over sync, and a
                 // bidi override must not be able to make one procedure read as another.
-                stripUnsafeFormatChars(runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
+                remember(runbook) { untrustedLabel(runbook.label) }.ifBlank { stringResource(Res.string.runbook_untitled) },
                 color = if (selected) Skerry.colors.cyanBright else Skerry.colors.textBright,
                 size = 13.sp, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Txt(
                 stringResource(Res.string.runbook_step_count, runbook.steps.size) +
-                    runbook.steps.firstOrNull()?.let { " · " + stripUnsafeFormatChars(it.summaryLine()) }.orEmpty(),
+                    // Spelled out and bounded like every other row that draws a command: a step
+                    // written by whoever shared the runbook is not the app's own text.
+                    remember(runbook) {
+                        runbook.steps.firstOrNull()?.let { " · " + boundedVisibleText(it.summaryLine()) }.orEmpty()
+                    },
                 color = Skerry.colors.faint, size = 11.sp, font = mono,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp),
             )
@@ -278,7 +282,7 @@ private fun RunbookListRow(entry: RunbookEntry, selected: Boolean, mono: FontFam
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
-                runbook.tags.forEach { tag -> key(tag) { Chip(snippetTagLabel(tag)) } }
+                runbook.tags.forEach { tag -> key(tag) { Chip(remember(tag) { tagChipLabel(tag) }) } }
             }
         }
     }

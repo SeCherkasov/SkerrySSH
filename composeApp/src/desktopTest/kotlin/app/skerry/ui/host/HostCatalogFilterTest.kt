@@ -16,6 +16,7 @@ import app.skerry.ui.generated.resources.shtail_search_clear
 import app.skerry.ui.generated.resources.term_no_hosts_match
 import app.skerry.ui.generated.resources.term_search_hosts_placeholder
 import kotlin.test.Test
+import app.skerry.ui.design.tagChipLabel
 
 /**
  * The catalog's two filters — the search box and the tag chips — driven through the sidebar.
@@ -56,7 +57,7 @@ class HostCatalogFilterTest {
 
     @Test
     fun `a tag chip filters the catalog and All brings it back`() = runDesktopShell {
-        pickChip(hostTagChipLabel("docker"))
+        pickChip(tagChipLabel("docker"))
         onCatalog(PI_HOST).assertIsDisplayed()
         onCatalog(DB_HOST).assertDoesNotExist()
 
@@ -70,8 +71,8 @@ class HostCatalogFilterTest {
      */
     @Test
     fun `the chip row offers only this section's tags`() = runDesktopShell {
-        onCatalog(hostTagChipLabel("docker")).assertIsDisplayed()
-        onCatalog(hostTagChipLabel("lab")).assertDoesNotExist()
+        onCatalog(tagChipLabel("docker")).assertIsDisplayed()
+        onCatalog(tagChipLabel("lab")).assertDoesNotExist()
     }
 
     /**
@@ -81,7 +82,7 @@ class HostCatalogFilterTest {
      */
     @Test
     fun `a filter whose last host is deleted falls back to All`() = runDesktopShell { shell ->
-        pickChip(hostTagChipLabel("edge"))
+        pickChip(tagChipLabel("edge"))
         onCatalog(EDGE_HOST).assertIsDisplayed()
         onCatalog(DB_HOST).assertDoesNotExist()
 

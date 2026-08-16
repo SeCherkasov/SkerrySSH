@@ -136,7 +136,7 @@ private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibrarySta
                             key(entry.id) {
                                 // Keyed by id so selecting a row doesn't recreate every row's lambda.
                                 val onClick = remember(entry.id) { { selectedId = entry.id; mode = PanelMode.Run } }
-                                SnippetListRow(entry = entry, selected = entry.id == selected?.id, mono = mono, onClick = onClick)
+                                SnippetListRow(entry = entry, selected = entry.id == selected?.id, onClick = onClick)
                                 HLine()
                             }
                         }

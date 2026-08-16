@@ -58,6 +58,7 @@ import app.skerry.ui.terminal.fetchSystemClipboardText
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.FormField
+import androidx.compose.ui.text.style.TextDirection
 
 /** Mask shown wherever a vault secret would otherwise be printed. */
 internal const val SECRET_MASK = "••••••"
@@ -300,15 +301,23 @@ fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = 
  */
 internal fun paramSeed(variable: SnippetSegment.Variable, previous: String?): String {
     val choices = variable.paramChoices()
-    if (choices.isEmpty()) return previous ?: variable.paramDefault() ?: ""
-    return previous?.takeIf { it in choices } ?: variable.paramDefault() ?: choices.first()
+    // The default is the template's own text, and a template can be shared: sanitized here the way
+    // the option list already is, so the field draws the string that will be spliced rather than one
+    // the run then quietly rewrites.
+    val default = variable.paramDefault()?.let { sanitizeSnippetValue(it) }?.ifEmpty { null }
+    if (choices.isEmpty()) return previous ?: default ?: ""
+    return previous?.takeIf { it in choices } ?: default ?: choices.first()
 }
 
 @Composable
 private fun ParamField(value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, selectAllOnFocus: Boolean = false) {
     val mono = LocalFonts.current.mono
     val textColor = Skerry.colors.text
-    val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 12.5.sp, fontFamily = mono) }
+    // The value is spliced into a shell line, and its seed is the template's own text: pinned, so
+    // the field reads in the order the line will.
+    val style = remember(mono, textColor) {
+        TextStyle(color = textColor, fontSize = 12.5.sp, fontFamily = mono, textDirection = TextDirection.Ltr)
+    }
     val draft = rememberFieldDraft(value, selectAllOnFocus)
     Box(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg)

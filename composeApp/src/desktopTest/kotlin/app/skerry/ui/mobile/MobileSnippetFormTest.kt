@@ -18,6 +18,15 @@ import app.skerry.ui.generated.resources.lib_snippets_field_name
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.onNodeWithText
+import app.skerry.ui.desktop.string
+import app.skerry.ui.generated.resources.lib_snippets_run_in_terminal
+import app.skerry.ui.generated.resources.lib_snippets_run_needs_save
+import app.skerry.ui.snippet.SnippetDraft
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasStateDescription
+import kotlin.test.assertNotNull
 
 /**
  * The phone's snippet editor. Its form state is the same class the desktop editor uses, so the
@@ -58,6 +67,51 @@ class MobileSnippetFormTest {
         waitForIdle()
 
         assertNull(shell.snippets.snippets.firstOrNull { it.snippet.label == NAME })
+    }
+
+    /**
+     * The fourth one-tap surface: the Run button of the sheet the Snippets tab opens. Its card shows
+     * three lines, so it owes the gate the palette and the phone's run sheet owe.
+     */
+    @Test
+    fun `the snippets tab confirms a command its card cannot show whole`() = runMobileShell(withSessions = true) { shell ->
+        shell.snippets.save(SnippetDraft(label = NAME, command = "echo " + "x".repeat(300)))
+        shell.state.push(MobileRoute.Snippets)
+        waitForIdle()
+        onNodeWithText(NAME).performClick()
+        waitForIdle()
+
+        onNodeWithText(string(Res.string.lib_snippets_run_in_terminal)).performClick()
+        waitForIdle()
+
+        assertNotNull(shell.snippets.pendingRun, "the sheet sent a command it only showed part of")
+    }
+
+    /**
+     * Run starts the saved record while the field above it shows a draft. Edited and not saved, the
+     * two are different commands, and the button would run the one that is not on screen.
+     */
+    @Test
+    fun `an edited command cannot be run before it is saved`() = runMobileShell(withSessions = true) { shell ->
+        shell.snippets.save(SnippetDraft(label = NAME, command = COMMAND))
+        shell.state.push(MobileRoute.Snippets)
+        waitForIdle()
+        onNodeWithText(NAME).performClick()
+        waitForIdle()
+        onNodeWithText(string(Res.string.lib_snippets_run_in_terminal)).assertIsEnabled()
+
+        onField(Res.string.lib_snippets_field_command).performTextInput("x")
+        waitForIdle()
+
+        // The reason is on the button as its state — the line below it is drawn for the eye only
+        // (`clearAndSetSemantics`), so a reader hears it once, attached to the control it explains.
+        onNodeWithText(string(Res.string.lib_snippets_run_in_terminal))
+            .assertIsNotEnabled()
+            .assert(hasStateDescription(string(Res.string.lib_snippets_run_needs_save)))
+        onNodeWithText(string(Res.string.lib_snippets_run_in_terminal))
+            .performSemanticsAction(SemanticsActions.OnClick)
+        waitForIdle()
+        assertNull(shell.snippets.pendingRun, "the sheet ran a command it was not showing")
     }
 
     private fun ComposeUiTest.openEditor() {

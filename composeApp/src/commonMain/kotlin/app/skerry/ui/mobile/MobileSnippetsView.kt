@@ -27,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -42,6 +41,7 @@ import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.installStarterPack
 import app.skerry.ui.snippet.matches
 import app.skerry.ui.snippet.snippetTagSuggestions
+import app.skerry.ui.design.tagChipLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.lib_snippets_add_tag
@@ -80,6 +80,12 @@ import app.skerry.ui.design.modalBody
 import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
+import app.skerry.ui.design.CommandLine
+import app.skerry.ui.design.untrustedLabel
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import app.skerry.ui.generated.resources.lib_snippets_run_needs_save
+import androidx.compose.ui.semantics.clearAndSetSemantics
 
 private data class MockMobileSnippet(val icon: String, val title: String, val cmd: String)
 
@@ -108,7 +114,6 @@ fun MobileSnippetsScreen(state: MobileDesignState) {
 
 @Composable
 private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager) {
-    val mono = LocalFonts.current.mono
     val sessions = LocalSessions.current
     // Snippet run targets the active connected session; no live terminal means no Run button in the editor.
     val activeTerminal = (sessions?.activeSession?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
@@ -153,7 +158,6 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                 MobileSnippetLibrary(
                     all = snippets,
                     library = state.snippetLibrary,
-                    mono = mono,
                     onEdit = { entry -> editing = entry; adding = false },
                     onRenameCategory = { tag -> renamingTag = tag },
                 )
@@ -187,7 +191,6 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
             MobileSnippetEditSheet(
                 entry = target,
                 allSnippets = snippets.map { it.snippet },
-                mono = mono,
                 canRun = target != null && activeTerminal != null,
                 onDismiss = { adding = false; editing = null },
                 onSave = { draft ->
@@ -197,7 +200,12 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                 onDelete = target?.let { e -> { manager.delete(e.id); adding = false; editing = null } },
                 onRun = run@{
                     val e = target ?: return@run
-                    manager.run(e.id, recording = activeTerminal?.recording == true) { text, secrets -> activeTerminal?.sendUserInputGuarded(text, secrets) }
+                    // One tap from a sheet whose command field is an editor, not a quote: anything
+                    // it cannot show whole goes through the confirmation, like every other row that
+                    // runs on a tap.
+                    manager.run(e.id, recording = activeTerminal?.recording == true, oneTap = true) { text, secrets ->
+                        activeTerminal?.sendUserInputGuarded(text, secrets)
+                    }
                     adding = false; editing = null
                     sessions?.active?.let { state.push(MobileRoute.Terminal) }
                 },
@@ -208,8 +216,11 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
     }
 }
 
+/** Lines of a command the phone's card previews before it ellipsizes. */
+private const val CARD_PREVIEW_LINES = 3
+
 @Composable
-internal fun MobileSnippetCard(snippet: Snippet, mono: FontFamily, onClick: () -> Unit) {
+internal fun MobileSnippetCard(snippet: Snippet, onClick: () -> Unit) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -221,13 +232,13 @@ internal fun MobileSnippetCard(snippet: Snippet, mono: FontFamily, onClick: () -
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
             Sym("code_blocks", size = 18.sp, color = Skerry.colors.cyanBright)
-            Txt(snippet.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = Skerry.colors.text, size = 14.5.sp, weight = FontWeight.SemiBold)
+            Txt(remember(snippet) { untrustedLabel(snippet.label) }.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = Skerry.colors.text, size = 14.5.sp, weight = FontWeight.SemiBold)
         }
         if (snippet.command.isNotBlank()) {
             Box(
                 Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).padding(horizontal = 11.dp, vertical = 9.dp),
             ) {
-                Txt(snippet.command, color = Skerry.colors.dim, size = 11.5.sp, font = mono)
+                CommandLine(snippet.command, color = Skerry.colors.dim, size = 11.5.sp, maxLines = CARD_PREVIEW_LINES)
             }
         }
         if (snippet.tags.isNotEmpty()) {
@@ -243,7 +254,7 @@ private fun SnippetTagChip(tag: String) {
     Box(
         Modifier.clip(RoundedCornerShape(20.dp)).background(Skerry.colors.cyan.copy(alpha = 0.12f)).padding(horizontal = 9.dp, vertical = 2.dp),
     ) {
-        Txt("#$tag", color = Skerry.colors.cyanBright, size = 11.sp)
+        Txt(remember(tag) { tagChipLabel(tag) }, color = Skerry.colors.cyanBright, size = 11.sp)
     }
 }
 
@@ -253,7 +264,6 @@ private fun SnippetTagChip(tag: String) {
  */
 @Composable
 internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry) -> Unit, onDismiss: () -> Unit) {
-    val mono = LocalFonts.current.mono
     var query by remember { mutableStateOf("") }
     val all = manager.snippets
     val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
@@ -269,7 +279,7 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
                 filtered.forEach { entry ->
                     key(entry.id) {
                         val onClick = remember(entry.id) { { onRun(entry) } }
-                        MobileSnippetCard(entry.snippet, mono, onClick)
+                        MobileSnippetCard(entry.snippet, onClick)
                     }
                 }
             }
@@ -288,7 +298,6 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
 private fun MobileSnippetEditSheet(
     entry: SnippetEntry?,
     allSnippets: List<Snippet>,
-    mono: FontFamily,
     canRun: Boolean,
     onDismiss: () -> Unit,
     onSave: (SnippetDraft) -> Unit,
@@ -334,7 +343,25 @@ private fun MobileSnippetEditSheet(
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (canRun) {
-                MobileSheetButton(stringResource(Res.string.lib_snippets_run_in_terminal), onClick = onRun, icon = "bolt", filled = false, modifier = Modifier.fillMaxWidth())
+                // Run sends the saved record, and the field above it shows a draft: while the two
+                // differ, the button would run a command the sheet is not showing.
+                val editedHere = entry != null && form.command != entry.snippet.command
+                val needsSave = stringResource(Res.string.lib_snippets_run_needs_save)
+                MobileSheetButton(
+                    stringResource(Res.string.lib_snippets_run_in_terminal),
+                    onClick = { if (!editedHere) onRun() },
+                    icon = "bolt",
+                    filled = false,
+                    enabled = !editedHere,
+                    // The reason sits in its own line below, which a screen reader would read a
+                    // swipe later and unattached: the button carries it as its state.
+                    modifier = Modifier.fillMaxWidth()
+                        .semantics { if (editedHere) stateDescription = needsSave },
+                )
+                // Drawn for the eye only: the button announces the same string as its state.
+                if (editedHere) {
+                    Txt(needsSave, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.clearAndSetSemantics {})
+                }
             }
             MobileSheetButton(
                 stringResource(Res.string.lib_snippets_save_snippet),

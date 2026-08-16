@@ -27,12 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalSessions
@@ -64,6 +62,8 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.terminal.WorkBar
 import app.skerry.ui.terminal.WorkBarLabel
 import app.skerry.ui.terminal.WorkBarLeading
+import app.skerry.ui.design.CommandLine
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -105,7 +105,7 @@ fun RunbookRunView(state: DesktopDesignState) {
     RunbookRunFrame(
         state = state,
         label = WorkBarLabel.Solo(
-            title = stripUnsafeFormatChars(runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
+            title = remember(runbook) { untrustedLabel(runbook.label) }.ifBlank { stringResource(Res.string.runbook_untitled) },
             subtitle = stringResource(Res.string.runbook_run_kind) + " · " +
                 pluralStringResource(Res.plurals.runbook_steps_total, runbook.steps.size, runbook.steps.size) +
                 " · " + run.label,
@@ -119,7 +119,7 @@ fun RunbookRunView(state: DesktopDesignState) {
                 Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                RunbookStepList(run, mono, shownStep) { index -> shownStep = index }
+                RunbookStepList(run, shownStep) { index -> shownStep = index }
                 RunbookPolicyRow(runner)
                 RunbookHistoryRow(runner, mono)
             }
@@ -199,7 +199,7 @@ private fun RunbookRunActions(runner: RunbookRunner, run: RunbookSessionRun, onC
 
 /** The steps of [host], as the mockup lists them: state, name, line, and how long it took. */
 @Composable
-private fun RunbookStepList(run: RunbookSessionRun, mono: FontFamily, shown: Int?, onShow: (Int) -> Unit) {
+private fun RunbookStepList(run: RunbookSessionRun, shown: Int?, onShow: (Int) -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(Skerry.colors.card)
             .border(1.dp, Skerry.colors.line, RoundedCornerShape(11.dp)),
@@ -207,7 +207,7 @@ private fun RunbookStepList(run: RunbookSessionRun, mono: FontFamily, shown: Int
         run.steps.forEachIndexed { index, step ->
             key(step) {
                 if (index > 0) HLine()
-                RunbookStepRow(step, mono, shown == index || (shown == null && index == run.currentIndex)) {
+                RunbookStepRow(step, shown == index || (shown == null && index == run.currentIndex)) {
                     onShow(index)
                 }
             }
@@ -216,7 +216,7 @@ private fun RunbookStepList(run: RunbookSessionRun, mono: FontFamily, shown: Int
 }
 
 @Composable
-private fun RunbookStepRow(state: RunbookStepState, mono: FontFamily, shown: Boolean, onClick: () -> Unit) {
+private fun RunbookStepRow(state: RunbookStepState, shown: Boolean, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -228,22 +228,24 @@ private fun RunbookStepRow(state: RunbookStepState, mono: FontFamily, shown: Boo
     ) {
         StepMarker(state)
         Column(Modifier.weight(1f)) {
-            // Bidi/format characters are stripped: this row is the last thing read before a step is
-            // approved, and a runbook can arrive over sync — it must not be able to render one
-            // command and run another (Trojan Source).
-            Txt(
-                stripUnsafeFormatChars(state.step.title).ifBlank { stripUnsafeFormatChars(state.step.summaryLine()) },
-                color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium,
-                maxLines = 1, overflow = TextOverflow.Ellipsis,
-            )
-            // The step as written, never as resolved: a `${{vault}}` value has no business on screen.
-            if (state.step.title.isNotBlank()) {
+            // Filtered and spelled out: this row is the last thing read before a step is approved,
+            // and a runbook can arrive over sync — it must not be able to render one command and run
+            // another (Trojan Source), nor to hide a character it will send.
+            val title = remember(state.step) { untrustedLabel(state.step.title) }
+            if (title.isNotBlank()) {
                 Txt(
-                    stripUnsafeFormatChars(state.step.summaryLine()), color = Skerry.colors.faint, size = 11.sp,
-                    font = mono, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 3.dp),
+                    title, color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
+            // The step as written, never as resolved: a `${{vault}}` value has no business on screen.
+            CommandLine(
+                state.step.summaryLine(),
+                color = if (title.isNotBlank()) Skerry.colors.faint else Skerry.colors.textBright,
+                size = if (title.isNotBlank()) 11.sp else 12.5.sp,
+                maxLines = 2,
+                modifier = if (title.isNotBlank()) Modifier.padding(top = 3.dp) else Modifier,
+            )
             if (state.stalled) {
                 Txt(
                     stringResource(Res.string.runbook_panel_stalled), color = Skerry.colors.amber,

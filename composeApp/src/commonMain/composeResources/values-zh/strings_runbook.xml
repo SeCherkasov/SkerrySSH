@@ -33,6 +33,7 @@
     <string name="runbook_delete_title">删除运行手册</string>
     <string name="runbook_delete_message">“%1$s”及其运行历史将被删除。</string>
     <string name="runbook_run">运行</string>
+    <string name="runbook_run_needs_save">保存修改后的流程才能运行</string>
     <string name="runbook_run_title">运行运行手册</string>
     <string name="runbook_run_needs_session">请先建立会话 — 运行手册在终端中执行。</string>
     <string name="runbook_run_busy">已有一个运行手册在执行。</string>

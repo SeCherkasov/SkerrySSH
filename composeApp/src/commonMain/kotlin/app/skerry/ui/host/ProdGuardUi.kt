@@ -323,7 +323,9 @@ private fun ProdCommandSheet(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalScrim(onDismiss = onDismiss) {
+    // Nothing inside takes focus — the sheet is a quote and two buttons — so focus lands on the
+    // scrim. Named, it announces which confirmation opened; unnamed it is a box with no word on it.
+    ModalScrim(onDismiss = onDismiss, label = title) {
         Column(
             Modifier
                 .widthIn(max = 460.dp)

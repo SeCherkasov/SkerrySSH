@@ -64,6 +64,8 @@ internal fun runSnippetHotkey(event: KeyEvent, manager: SnippetManager?, session
     ) ?: return false
     val entry = manager.forShortcut(combo) ?: return false
     val terminal = (sessions?.active?.focusedPane?.controller?.uiState as? ConnectionUiState.Connected)?.terminal ?: return false
+    // Not gated on what a row shows: there is no row, the chord is one the user assigned to a record
+    // of their own, and a confirmation on a key the user pressed to skip one is the wrong trade.
     manager.run(entry.id, recording = terminal.recording) { text, secrets -> terminal.sendUserInputGuarded(text, secrets) }
     return true
 }

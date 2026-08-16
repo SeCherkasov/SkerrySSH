@@ -365,6 +365,47 @@ class HostManagerControllerTest {
         assertEquals(null, controller.find("1")?.group)
         assertEquals("Dev", controller.find("2")?.group)
     }
+
+    /**
+     * The vault starts locked, so the list the controller is built with is empty and every real host
+     * arrives later — through `reload()` after unlock, and again after each sync merge. Canonical on
+     * read has to hold there too, or a tag written by an older client files the host under a chip
+     * that draws like another one's while the canonical chip stops listing it.
+     */
+    @Test
+    fun `tags are canonical however the list was read`() {
+        val store = FakeHostStore()
+        val controller = HostManagerController(store) { "gen" }
+        store.put(Host("1", "web", "a.local", 22, "u", tags = listOf("pro\u200Bd", "#DB")))
+
+        controller.reload()
+
+        assertEquals(listOf(listOf("prod", "db")), controller.hosts.map { it.tags })
+    }
+
+    /** An imported profile is written the same way: an `ssh_config` tag is whatever the file said. */
+    @Test
+    fun `an imported host is stored with canonical tags`() {
+        val store = FakeHostStore()
+        val controller = HostManagerController(store) { "gen" }
+
+        controller.importHosts(listOf(Host("1", "web", "a.local", 22, "u", tags = listOf("#Pro\u200Bd"))))
+
+        assertEquals(listOf("prod"), controller.hosts.single().tags)
+        assertEquals(listOf("prod"), store.all().single().tags)
+    }
+
+    /** And on the write side, the way a snippet's are: what is stored is what is compared. */
+    @Test
+    fun `save stores the tags in the form every comparison uses`() {
+        val store = FakeHostStore()
+        val controller = HostManagerController(store) { "gen" }
+
+        controller.save(HostDraft(label = "web", address = "a.local", port = 22, username = "u", tags = listOf("#Pro\u200Bd")))
+
+        assertEquals(listOf("prod"), controller.hosts.single().tags)
+        assertEquals(listOf("prod"), store.all().single().tags)
+    }
 }
 
 /** In-memory [HostStore] with upsert/remove-by-id semantics matching the file-backed implementation. */

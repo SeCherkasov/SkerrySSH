@@ -4,6 +4,7 @@ import app.skerry.shared.host.Host
 import app.skerry.shared.tag.PROD_TAG
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import app.skerry.ui.design.tagChipLabel
 
 /**
  * Tag filter-chip and search logic shared by the desktop sidebar and the mobile list. Folders are
@@ -46,7 +47,13 @@ class HostChipsTest {
 
     @Test
     fun tag_chip_label_prefixes_with_hash() {
-        assertEquals("#prod", hostTagChipLabel("prod"))
+        assertEquals("#prod", tagChipLabel("prod"))
+    }
+
+    /** A record written before the tag was canonicalized still draws as the tag it looks like. */
+    @Test
+    fun tag_chip_label_drops_what_draws_as_nothing() {
+        assertEquals("#prod", tagChipLabel("pro\u200Bd"))
     }
 
     @Test

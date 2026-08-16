@@ -198,4 +198,17 @@ class ProductionGuardTest {
     fun overflow_is_off_without_production() {
         assertNull(ProductionGuard.overflow("x".repeat(MAX_GUARDED_COMMAND_LENGTH * 4), ProductionGuardPolicy.Off))
     }
+
+    /**
+     * A record written by an older client or synced from a peer keeps the bytes it was given. The
+     * guard is what decides, so it compares what the tag means: `prod` with a zero-width character
+     * in it draws as `prod`, and a host that reads as protected has to be.
+     */
+    @Test
+    fun `a tag that draws as prod is prod, however it was stored`() {
+        assertTrue(ProductionGuard.isProduction(listOf("pro\u200Bd")))
+        assertTrue(ProductionGuard.isProduction(listOf("web", "PROD")))
+        assertTrue(ProductionGuard.isProduction(listOf("#prod")))
+        assertFalse(ProductionGuard.isProduction(listOf("production")))
+    }
 }

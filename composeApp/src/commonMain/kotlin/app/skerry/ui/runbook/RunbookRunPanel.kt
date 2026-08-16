@@ -24,7 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
@@ -48,8 +47,11 @@ import app.skerry.ui.generated.resources.runbook_panel_stop
 import app.skerry.ui.generated.resources.runbook_panel_stopped
 import app.skerry.ui.generated.resources.runbook_panel_waiting
 import app.skerry.ui.generated.resources.runbook_untitled
+import app.skerry.ui.design.CommandLine
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import androidx.compose.runtime.remember
 
 /**
  * Live progress of the running runbook, docked over the terminal. Deliberately *not* modal: the
@@ -117,7 +119,7 @@ fun RunbookRunPanel(runner: RunbookRunner, run: RunbookSessionRun, modifier: Mod
                 Txt(
                     // Stripped like every other surface showing this label: a runbook can arrive
                     // over sync, and while collapsed this line is the whole panel.
-                    stripUnsafeFormatChars(runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
+                    remember(runbook) { untrustedLabel(runbook.label) }.ifBlank { stringResource(Res.string.runbook_untitled) },
                     color = Skerry.colors.textBright, size = 13.sp, weight = FontWeight.SemiBold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
@@ -194,18 +196,19 @@ private fun StepRow(state: RunbookStepState, mono: androidx.compose.ui.text.font
     ) {
         Sym(statusIcon(state.status), size = 14.sp, color = color)
         Column(Modifier.weight(1f)) {
-            // Bidi/format characters are stripped: this row is the last thing read before "Run this
-            // step" is clicked, and a runbook can arrive over sync — it must not be able to render
-            // one command and run another (Trojan Source).
-            val title = stripUnsafeFormatChars(state.step.title.ifBlank { state.step.summaryLine() })
-            Txt(title, color = Skerry.colors.text, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            // The step as written, not as resolved: a `${{vault}}` value has no business on screen.
-            if (state.step.title.isNotBlank()) {
-                Txt(
-                    stripUnsafeFormatChars(state.step.summaryLine()), color = Skerry.colors.faint, size = 10.5.sp,
-                    font = mono, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
+            // Filtered and spelled out: this row is the last thing read before "Run this step"
+            // is clicked, and a runbook can arrive over sync — it must not be able to render one
+            // command and run another (Trojan Source), nor to hide a character it will send.
+            val title = remember(state.step) { untrustedLabel(state.step.title) }
+            if (title.isNotBlank()) {
+                Txt(title, color = Skerry.colors.text, size = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            // The step as written, not as resolved: a `${{vault}}` value has no business on screen.
+            CommandLine(
+                state.step.summaryLine(),
+                color = if (title.isNotBlank()) Skerry.colors.faint else Skerry.colors.text,
+                size = if (title.isNotBlank()) 10.5.sp else 12.sp,
+            )
             // The step is not ended on this — it may be a legitimate `sleep` — but a run that will
             // never finish looks exactly like one still working, and only the terminal can tell.
             if (state.stalled) {

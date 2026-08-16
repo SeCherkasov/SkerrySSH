@@ -71,3 +71,38 @@ internal object CharMetrics {
         else -> "�"
     }
 }
+
+/**
+ * How many columns [text] occupies where it is drawn in a monospaced row — a CJK or emoji glyph is
+ * one `Char` (often two) and two columns wide, so a character count says a line fits a row twice as
+ * wide as the row it is going into. Public because the same question is asked outside the terminal
+ * grid: whether a row can show a whole command before it runs it.
+ *
+ * Rounded up rather than looked up past U+2000: [CharMetrics.charWidth] answers the grid, where a
+ * wrong guess draws a smeared cell, and its table names the blocks a terminal meets — it calls
+ * U+2B1B ⬛ and its neighbours narrow, and they draw wide. The caller here is a gate, where
+ * over-counting only asks for one confirmation more often, so everything symbolic counts as two.
+ */
+fun displayColumns(text: String): Int {
+    var columns = 0
+    var i = 0
+    while (i < text.length) {
+        val high = text[i]
+        val low = if (high.isHighSurrogate() && i + 1 < text.length) text[i + 1] else null
+        val code = if (low?.isLowSurrogate() == true) {
+            0x10000 + ((high.code - 0xD800) shl 10) + (low.code - 0xDC00)
+        } else {
+            high.code
+        }
+        columns += if (code >= WIDE_UNLESS_KNOWN) 2 else CharMetrics.charWidth(code)
+        i += if (low?.isLowSurrogate() == true) 2 else 1
+    }
+    return columns
+}
+
+/**
+ * Past this every code point is counted wide. Not a boundary between alphabets — Latin ligatures and
+ * the presentation forms live above it too — but the point past which counting a narrow glyph as
+ * wide costs one confirmation and missing a wide one costs a hidden tail.
+ */
+private const val WIDE_UNLESS_KNOWN = 0x2000

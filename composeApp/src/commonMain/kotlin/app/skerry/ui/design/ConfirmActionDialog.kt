@@ -48,7 +48,9 @@ fun ConfirmActionDialog(
     confirmColor: Color = Skerry.colors.sunset,
 ) {
     Popup(alignment = Alignment.Center, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
-        ModalScrim(onDismiss = onDismiss) {
+        // Named: two buttons and no field, so focus lands on the scrim — and this is the dialog
+        // that asks before something is destroyed.
+        ModalScrim(onDismiss = onDismiss, label = title) {
             Column(
                 Modifier
                     .widthIn(max = 420.dp)

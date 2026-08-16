@@ -21,6 +21,14 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasStateDescription
+import androidx.compose.ui.test.onNodeWithText
+import app.skerry.ui.desktop.string
+import app.skerry.ui.generated.resources.runbook_run
+import app.skerry.ui.generated.resources.runbook_run_needs_save
+import app.skerry.ui.runbook.RunbookDraft
 
 /**
  * The phone's runbook editor. It shares [app.skerry.ui.runbook.RunbookEditorFields] with the
@@ -60,6 +68,27 @@ class MobileRunbookFormTest {
         onNodeWithTag(UiTags.FORM_SAVE).performSemanticsAction(SemanticsActions.OnClick)
         waitForIdle()
         assertTrue(shell.runbooks.runbooks.none { it.runbook.label == NAME })
+    }
+
+    /**
+     * Run starts the saved procedure while the fields above show a draft — the same rule as the
+     * snippet sheet's, and the reason the two sheets now say so instead of running the other one.
+     */
+    @Test
+    fun `an edited step cannot be run before it is saved`() = runMobileShell(withSessions = true) { shell ->
+        shell.runbooks.save(RunbookDraft(label = NAME, steps = listOf(RunbookStep.Command(id = "s1", command = COMMAND))))
+        shell.state.push(MobileRoute.Runbooks)
+        waitForIdle()
+        onNodeWithText(NAME).performClick()
+        waitForIdle()
+        onNodeWithText(string(Res.string.runbook_run)).assertIsEnabled()
+
+        firstStepCommand().performTextInput("x")
+        waitForIdle()
+
+        onNodeWithText(string(Res.string.runbook_run))
+            .assertIsNotEnabled()
+            .assert(hasStateDescription(string(Res.string.runbook_run_needs_save)))
     }
 
     private fun ComposeUiTest.firstStepCommand() = onAllNodesWithTag(UiTags.RUNBOOK_STEP_COMMAND)[0]

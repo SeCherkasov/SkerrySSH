@@ -53,7 +53,7 @@ internal fun TeamSharedRecordsDialog(
     onDismiss: () -> Unit,
 ) {
     val mono = LocalFonts.current.mono
-    TeamsDialogCard(onDismiss) {
+    TeamsDialogCard(onDismiss, label = title) {
         DialogTitleRow(title, onDismiss)
         if (items.isEmpty()) {
             Txt(stringResource(Res.string.lib_teams_nothing_shared), color = Skerry.colors.dim, size = 12.5.sp)
@@ -102,7 +102,7 @@ internal fun TeamSharedRecordsDialog(
  */
 @Composable
 internal fun TeamLiveSessionsDialog(teamId: String, onDismiss: () -> Unit) {
-    TeamsDialogCard(onDismiss) {
+    TeamsDialogCard(onDismiss, label = stringResource(Res.string.share_live_sessions)) {
         DialogTitleRow(stringResource(Res.string.share_live_sessions), onDismiss)
         SharedSessionsList(teamId, LocalSharedSessions.current, onJoin = rememberJoinSharedSession())
     }

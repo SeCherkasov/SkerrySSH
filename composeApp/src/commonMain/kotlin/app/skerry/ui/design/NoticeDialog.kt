@@ -25,7 +25,8 @@ import app.skerry.ui.theme.Skerry
  */
 @Composable
 fun NoticeDialog(title: String, message: String, buttonLabel: String, onDismiss: () -> Unit) {
-    ModalScrim(onDismiss = onDismiss) {
+    // Named: the card has one button and no field, so focus lands on the scrim.
+    ModalScrim(onDismiss = onDismiss, label = title) {
         Column(
             Modifier
                 .widthIn(max = 420.dp)

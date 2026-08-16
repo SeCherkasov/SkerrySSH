@@ -18,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,7 +45,6 @@ import app.skerry.ui.theme.Skerry
 internal fun MobileSnippetLibrary(
     all: List<SnippetEntry>,
     library: SnippetLibraryState,
-    mono: FontFamily,
     onEdit: (SnippetEntry) -> Unit,
     onRenameCategory: (String) -> Unit,
 ) {
@@ -79,7 +77,7 @@ internal fun MobileSnippetLibrary(
         visible.forEach { entry ->
             key(entry.id) {
                 val onClick = remember(entry.id) { { onEdit(entry) } }
-                MobileSnippetCard(entry.snippet, mono, onClick)
+                MobileSnippetCard(entry.snippet, onClick)
             }
         }
     }

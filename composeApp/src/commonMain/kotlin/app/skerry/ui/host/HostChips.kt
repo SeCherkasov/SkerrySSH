@@ -6,6 +6,7 @@ import app.skerry.shared.tag.PROD_TAG
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shtail_chip_all
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.tagChipLabel
 
 /**
  * Technical key of the "all hosts" chip at the start of the Hosts list filter row (desktop sidebar
@@ -35,13 +36,10 @@ fun hostTagChips(hosts: List<Host>): List<String> = buildList {
     for (host in hosts) for (tag in host.tags) if (seen.add(tag)) add(tag)
 }
 
-/** Chip label for display: localized for [ALL_HOSTS_CHIP], tags via [hostTagChipLabel]. */
+/** Chip label for display: localized for [ALL_HOSTS_CHIP], tags via [tagChipLabel]. */
 @Composable
 fun hostChipLabel(chip: String): String =
-    if (chip == ALL_HOSTS_CHIP) allHostsChipLabel() else hostTagChipLabel(chip)
-
-/** Tag chip label: `#` prefix (the model value has none). Pure, no localization involved. */
-fun hostTagChipLabel(tag: String): String = "#$tag"
+    if (chip == ALL_HOSTS_CHIP) allHostsChipLabel() else tagChipLabel(chip)
 
 /**
  * Narrow [hosts] by the active chip ([activeChip] = tag, `All` = no filter) and [query] (AND).

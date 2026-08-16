@@ -50,6 +50,7 @@ import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.boundedVisibleText
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_accept
@@ -357,7 +358,7 @@ internal fun SharedRecordsView(
                 VaultHostStore(vault).all().map { SharedRecordUi(it.id, it.rowLabel(), it.rowSubtitle()) }
             }
             TeamSharedView.SNIPPETS -> spaceVault?.let { vault ->
-                VaultSnippetStore(vault).all().map { SharedRecordUi(it.id, untrustedLabel(it.label), untrustedLabel(it.command)) }
+                VaultSnippetStore(vault).all().map { SharedRecordUi(it.id, untrustedLabel(it.label), boundedVisibleText(it.command)) }
             }
             else -> null
         } ?: emptyList()

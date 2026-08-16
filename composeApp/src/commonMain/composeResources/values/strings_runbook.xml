@@ -33,6 +33,7 @@
     <string name="runbook_delete_title">Delete runbook</string>
     <string name="runbook_delete_message">“%1$s” and its run history will be deleted.</string>
     <string name="runbook_run">Run</string>
+    <string name="runbook_run_needs_save">Save the edited procedure to run it</string>
     <string name="runbook_run_title">Run runbook</string>
     <string name="runbook_run_needs_session">Connect a session first — a runbook runs in a terminal.</string>
     <string name="runbook_run_busy">Another runbook is already running.</string>

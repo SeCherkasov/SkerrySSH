@@ -1,5 +1,6 @@
 package app.skerry.shared.guard
 
+import app.skerry.shared.tag.normalizeTag
 import app.skerry.shared.ai.CommandAssessment
 import app.skerry.shared.ai.CommandRisk
 import app.skerry.shared.ai.CommandRiskClassifier
@@ -98,8 +99,19 @@ object ProductionGuard {
      */
     fun promptEnd(line: String): Int = PROMPT_TERMINATOR.find(line)?.let { it.range.last + 1 } ?: 0
 
-    /** Whether [tags] make a host production (carries [PROD_TAG]). */
-    fun isProduction(tags: List<String>): Boolean = PROD_TAG in tags
+    /**
+     * Whether [tags] make a host production (carries [PROD_TAG]).
+     *
+     * Normalized here, not trusted as stored: a record written by an older client or synced from a
+     * peer keeps whatever it was given, and a `prod` tag with a zero-width character in it draws as
+     * `prod` while failing a literal compare — the host would read as protected and never be. The
+     * write path canonicalizes too; this is the side that decides.
+     */
+    fun isProduction(tags: List<String>): Boolean =
+        // The canonical case first: this is read per host row per recomposition, and normalizing
+        // allocates a handful of strings per tag. The walk behind it is for the records that were
+        // never canonical — written by an older client, or synced from a peer.
+        PROD_TAG in tags || tags.any { normalizeTag(it) == PROD_TAG }
 
     /**
      * The riskiest of [candidates] that needs confirmation, or `null` if none does. Several

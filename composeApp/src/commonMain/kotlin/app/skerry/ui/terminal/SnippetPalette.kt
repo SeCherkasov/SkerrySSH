@@ -56,10 +56,12 @@ import app.skerry.ui.snippet.UNCATEGORIZED_KEY
 import app.skerry.ui.snippet.groupSnippetsByCategory
 import app.skerry.ui.snippet.hasCategories
 import app.skerry.ui.snippet.matches
-import app.skerry.ui.snippet.snippetTagLabel
+import app.skerry.ui.design.tagChipLabel
 import app.skerry.ui.snippet.uncategorizedSnippetsLabel
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.design.CommandLine
+import app.skerry.ui.design.untrustedLabel
 
 // Snippet palette: quickly run a saved command in the active terminal directly from the toolbar.
 
@@ -83,7 +85,7 @@ internal fun SnippetPaletteButton(active: Session?, requests: SharedFlow<Unit>? 
                 properties = PopupProperties(focusable = true),
             ) {
                 SnippetPalette(manager) { entry ->
-                    manager.run(entry.id, recording = terminal.recording) { text, secrets -> terminal.sendUserInputGuarded(text, secrets) }
+                    manager.run(entry.id, recording = terminal.recording, oneTap = true) { text, secrets -> terminal.sendUserInputGuarded(text, secrets) }
                     open = false
                 }
             }
@@ -141,11 +143,14 @@ internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> U
 @Composable
 private fun PaletteCategoryCaption(name: String) {
     Txt(
-        if (name == UNCATEGORIZED_KEY) uncategorizedSnippetsLabel() else snippetTagLabel(name),
+        if (name == UNCATEGORIZED_KEY) uncategorizedSnippetsLabel() else tagChipLabel(name),
         color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
         modifier = Modifier.padding(start = 9.dp, top = 7.dp, bottom = 2.dp),
     )
 }
+
+/** Lines of a command a palette row previews before it ellipsizes. */
+private const val ROW_PREVIEW_LINES = 2
 
 @Composable
 private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Unit) {
@@ -155,13 +160,16 @@ private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Uni
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             Sym("code_blocks", size = 14.sp, color = Skerry.colors.dim)
-            Txt(s.label.ifBlank { stringResource(Res.string.term_untitled) }, color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
-            if (!s.shortcut.isNullOrBlank()) {
+            Txt(remember(s) { untrustedLabel(s.label) }.ifBlank { stringResource(Res.string.term_untitled) }, color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+            // Gated on the filtered chord, not the raw one: a chip drawn around nothing is a stray
+            // pill next to the row.
+            val chord = remember(s) { s.shortcut?.let { untrustedLabel(it) }.orEmpty() }
+            if (chord.isNotBlank()) {
                 Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Skerry.colors.bg).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                    Txt(s.shortcut!!, color = Skerry.colors.faint, size = 10.sp, font = mono)
+                    Txt(chord, color = Skerry.colors.faint, size = 10.sp, font = mono)
                 }
             }
         }
-        Txt(s.command, color = Skerry.colors.faint, size = 10.5.sp, font = mono, modifier = Modifier.padding(top = 3.dp))
+        CommandLine(s.command, maxLines = ROW_PREVIEW_LINES, modifier = Modifier.padding(top = 3.dp))
     }
 }
