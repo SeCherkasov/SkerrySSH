@@ -64,6 +64,26 @@ class RemoteFxTest {
     }
 
     @Test
+    fun `RLGR decoding into a dirty buffer leaves no stale coefficients`() {
+        // F-05 reuses one buffer across tiles. A stream that ends early must leave zeroes behind
+        // it — the previous tile's coefficients bleeding through would paint ghosts of it.
+        val out = IntArray(3) { 99 }
+
+        Rlgr.decode(byteArrayOf(0x88.toByte()), out, Rlgr.Mode.Rlgr1)
+
+        assertContentEquals(intArrayOf(2, 0, 0), out)
+    }
+
+    @Test
+    fun `RLGR into a buffer decodes the same values as the allocating form`() {
+        val out = IntArray(3)
+
+        Rlgr.decode(byteArrayOf(0x44), out, Rlgr.Mode.Rlgr1)
+
+        assertContentEquals(Rlgr.decode(byteArrayOf(0x44), count = 3, mode = Rlgr.Mode.Rlgr1), out)
+    }
+
+    @Test
     fun `RLGR stops at the end of its input instead of inventing coefficients`() {
         val decoded = Rlgr.decode(ByteArray(0), count = RfxDwt.TILE_COEFFICIENTS, mode = Rlgr.Mode.Rlgr1)
 

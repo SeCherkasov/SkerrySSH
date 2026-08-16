@@ -25,6 +25,15 @@ class Progressive : ProgressiveDecoder {
 
     private val surfaces = mutableMapOf<Int, SurfaceTiles>()
 
+    // Scratch reused across tiles (F-05): decoding runs on the session's single read loop, so one
+    // set per codec instance is safe, and a 1080p pass otherwise allocates these ~500 times over.
+    // TileState's own arrays are NOT scratch — they are the codec's cross-frame state.
+    private val scratchComponents = Array(3) { IntArray(TILE_COEFFICIENTS) }
+    private val scratchPixels = IntArray(TILE_SIZE * TILE_SIZE)
+    private val scratchNumBits = IntArray(BAND_COUNT)
+    private val scratchShift = IntArray(BAND_COUNT)
+    private val scratchDwt = IntArray(TILE_COEFFICIENTS)
+
     override fun decode(data: ByteArray, surface: GraphicsSurface, destination: RdpRect): List<RdpRect> {
         // Keyed by id, but only as long as the geometry still matches: a server that rebuilds a
         // surface at a new size may reuse the id, and the tiles held under it then describe a grid
@@ -140,7 +149,8 @@ class Progressive : ProgressiveDecoder {
             val quant = region.quant(quantIndices[component])
             val progressiveQuant = region.progressiveQuant(quality, component)
             val bands = region.bands()
-            val samples = Rlgr.decode(planes[component], TILE_COEFFICIENTS, Rlgr.Mode.Rlgr1)
+            val samples = scratchComponents[component]
+            Rlgr.decode(planes[component], samples, Rlgr.Mode.Rlgr1)
             val sign = tile.sign[component]
             for (index in 0 until TILE_COEFFICIENTS) sign[index] = clampToShort(samples[index])
 
@@ -204,8 +214,8 @@ class Progressive : ProgressiveDecoder {
             val quant = region.quant(quantIndices[component])
             val progressiveQuant = region.progressiveQuant(quality, component)
             val bitPosition = tile.bitPosition[component]
-            val numBits = IntArray(BAND_COUNT)
-            val shift = IntArray(BAND_COUNT)
+            val numBits = scratchNumBits
+            val shift = scratchShift
             for (band in 0 until BAND_COUNT) {
                 val position = quant[band] + progressiveQuant[band]
                 numBits[band] = bitPosition[band] - position
@@ -217,7 +227,8 @@ class Progressive : ProgressiveDecoder {
             }
             val (srl, raw) = streams[component]
             upgradeComponent(tile, component, numBits, shift, srl, raw)
-            val samples = IntArray(TILE_COEFFICIENTS) { tile.current[component][it].toInt() }
+            val samples = scratchComponents[component]
+            for (index in 0 until TILE_COEFFICIENTS) samples[index] = tile.current[component][index].toInt()
             // An upgrade always speaks the extrapolated layout; it is the only one Windows encodes.
             transform(samples, extrapolate = true)
             samples
@@ -264,7 +275,7 @@ class Progressive : ProgressiveDecoder {
     }
 
     private fun transform(samples: IntArray, extrapolate: Boolean) {
-        if (extrapolate) ProgressiveDwt.inverse(samples) else RfxDwt.inverseTransform(samples)
+        if (extrapolate) ProgressiveDwt.inverse(samples, scratchDwt) else RfxDwt.inverseTransform(samples, scratchDwt)
     }
 
     /**
@@ -283,8 +294,9 @@ class Progressive : ProgressiveDecoder {
         damaged: MutableList<RdpRect>,
     ) {
         state.established = true
-        val pixels = IntArray(TILE_SIZE * TILE_SIZE) { index ->
-            RfxColor.ycbcrToArgb(components[0][index], components[1][index], components[2][index])
+        val pixels = scratchPixels
+        for (index in 0 until TILE_SIZE * TILE_SIZE) {
+            pixels[index] = RfxColor.ycbcrToArgb(components[0][index], components[1][index], components[2][index])
         }
         val tileX = destination.x + xIdx * TILE_SIZE
         val tileY = destination.y + yIdx * TILE_SIZE

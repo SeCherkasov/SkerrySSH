@@ -19,6 +19,12 @@ import app.skerry.shared.rdp.RemoteFxDecoder
  */
 class RemoteFx : RemoteFxDecoder {
 
+    // Scratch reused across tiles (F-05): three planes decode per tile, six 16 KB arrays a tile
+    // before this. Safe because decoding runs on the session's single read loop, and every plane
+    // is consumed into `out` before the next tile touches these.
+    private val scratchPlanes = Array(3) { IntArray(RfxDwt.TILE_COEFFICIENTS) }
+    private val scratchDwt = IntArray(RfxDwt.TILE_COEFFICIENTS)
+
     override fun decode(data: ByteArray, width: Int, height: Int): IntArray {
         val out = IntArray(width * height)
         val reader = RdpReader(data)
@@ -95,9 +101,9 @@ class RemoteFx : RemoteFxDecoder {
             throw RdpProtocolException("tile planes claim more bytes than the tile carries")
         }
 
-        val y = plane(reader.bytes(yLength), quants[quantY], mode)
-        val cb = plane(reader.bytes(cbLength), quants[quantCb], mode)
-        val cr = plane(reader.bytes(crLength), quants[quantCr], mode)
+        val y = plane(reader.bytes(yLength), quants[quantY], mode, scratchPlanes[0])
+        val cb = plane(reader.bytes(cbLength), quants[quantCb], mode, scratchPlanes[1])
+        val cr = plane(reader.bytes(crLength), quants[quantCr], mode, scratchPlanes[2])
 
         val originX = xIdx * RfxDwt.TILE_SIZE
         val originY = yIdx * RfxDwt.TILE_SIZE
@@ -118,12 +124,12 @@ class RemoteFx : RemoteFxDecoder {
      * inverse wavelet transform. The order is the encoder's, reversed — moving dequantization
      * before the differential sum scales differences instead of values.
      */
-    private fun plane(data: ByteArray, quants: ByteArray, mode: Rlgr.Mode): IntArray {
-        val coefficients = Rlgr.decode(data, RfxDwt.TILE_COEFFICIENTS, mode)
-        RfxDwt.differentialDecodeLowPass(coefficients)
-        RfxDwt.dequantize(coefficients, quants)
-        RfxDwt.inverseTransform(coefficients)
-        return coefficients
+    private fun plane(data: ByteArray, quants: ByteArray, mode: Rlgr.Mode, into: IntArray): IntArray {
+        Rlgr.decode(data, into, mode)
+        RfxDwt.differentialDecodeLowPass(into)
+        RfxDwt.dequantize(into, quants)
+        RfxDwt.inverseTransform(into, scratchDwt)
+        return into
     }
 
     private companion object {

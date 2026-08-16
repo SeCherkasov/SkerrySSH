@@ -75,5 +75,9 @@ sealed interface RdpUpdate {
     data class Closed(val cleanExit: Boolean, val reason: String = "") : RdpUpdate
 }
 
-/** A rectangle in framebuffer coordinates. */
-data class RdpRect(val x: Int, val y: Int, val width: Int, val height: Int)
+/**
+ * A rectangle in framebuffer coordinates. The same shape as the UI contract's rectangle on
+ * purpose (an alias, since PR 6's allocation pass): `RdpUpdate.Region`'s list previously got
+ * copied element by element into `RemoteRect`s on every frame just to cross the naming boundary.
+ */
+typealias RdpRect = app.skerry.shared.graphics.RemoteRect
