@@ -136,9 +136,13 @@ class TerminalAiController(
             temperature = COMMAND_TEMPERATURE,
             endpoint = route.endpoint,
             messages = messages,
-            onDelta = { streaming = it },
-            onComplete = { applyReply(it) },
-            onError = { notice = AiNotice.Error(it) },
+            // Every callback is generation-guarded, not just the last one: cancelling a job only
+            // *requests* cancellation, so a stream that already finished collecting runs its
+            // completion callback without ever crossing a suspension point. Unguarded, a request
+            // the user dismissed would still hand this bar a command — with a Run button on it.
+            onDelta = { if (gen == generation) streaming = it },
+            onComplete = { if (gen == generation) applyReply(it) },
+            onError = { if (gen == generation) notice = AiNotice.Error(it) },
             onFinally = {
                 if (gen == generation) {
                     streaming = null
@@ -184,21 +188,26 @@ class TerminalAiController(
             temperature = EXPLAIN_TEMPERATURE,
             endpoint = route.endpoint,
             messages = messages,
-            onDelta = { explanation = it },
+            // Generation-guarded throughout, for the reason spelled out in [ask].
+            onDelta = { if (gen == generation) explanation = it },
             onComplete = { reply ->
-                val trimmed = reply.trim()
-                // A model that returns nothing usable falls back to the same fixed notice as a command
-                // reply with no content, rather than leaving an empty panel open.
-                if (trimmed.isEmpty()) {
-                    explanation = null
-                    notice = AiNotice.Rejected
-                } else {
-                    explanation = trimmed
+                if (gen == generation) {
+                    val trimmed = reply.trim()
+                    // A model that returns nothing usable falls back to the same fixed notice as a
+                    // command reply with no content, rather than leaving an empty panel open.
+                    if (trimmed.isEmpty()) {
+                        explanation = null
+                        notice = AiNotice.Rejected
+                    } else {
+                        explanation = trimmed
+                    }
                 }
             },
             onError = {
-                explanation = null
-                notice = AiNotice.Error(it)
+                if (gen == generation) {
+                    explanation = null
+                    notice = AiNotice.Error(it)
+                }
             },
             onFinally = {
                 if (gen == generation) busy = false

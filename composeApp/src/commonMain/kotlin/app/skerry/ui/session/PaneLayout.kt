@@ -92,6 +92,12 @@ data class PaneLayout(val rows: List<PaneRow>) {
         val from = positionOf(paneId) ?: return this
         // A pane alone in its row takes the row with it, which shifts every row below up by one.
         val rowCollapses = rows[from.first].cells.size == 1
+        // ...and if the drop was aimed INTO that row, there is no row left to drop into: the pane
+        // is being put back where it already is. Without this the index survives the collapse and
+        // now names the row below, so dropping a pane on its own left half moves it in beside its
+        // neighbours — a top/bottom split turning into a side-by-side one on a gesture that means
+        // "leave it where it is".
+        if (rowCollapses && slot is PaneSlot.InRow && slot.row == from.first) return this
         val shifted = when (slot) {
             is PaneSlot.NewRow -> PaneSlot.NewRow(if (rowCollapses && slot.row > from.first) slot.row - 1 else slot.row)
             is PaneSlot.InRow -> PaneSlot.InRow(

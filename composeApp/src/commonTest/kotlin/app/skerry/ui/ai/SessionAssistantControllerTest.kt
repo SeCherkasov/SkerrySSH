@@ -106,6 +106,32 @@ class SessionAssistantControllerTest {
         assertFalse(p.built)
     }
 
+    /**
+     * The conversation is replayed in full on every question, and only the attached terminal output
+     * was ever bounded. A long session therefore grows past what the endpoint accepts: the local
+     * model (4096 tokens on desktop, 2048 on a phone) silently drops the front of the prompt and
+     * the answers quietly degrade, and a cloud endpoint answers 400 for every further question.
+     */
+    @Test
+    fun `a long conversation is replayed within a bounded budget`() = runTest {
+        val provider = RecordingProvider(deltas = listOf("ok"))
+        val c = controller(AiPolicy.Permissive, AiSettings(apiKey = "sk-x"), provider, this)
+        val long = "x".repeat(2_000)
+
+        repeat(20) {
+            c.ask("$long question $it", outputs = emptyList())
+            advanceUntilIdle()
+        }
+
+        val replayed = provider.lastMessages.filter { it.role != AiRole.SYSTEM }.sumOf { it.content.length }
+        assertTrue(
+            replayed <= AI_HISTORY_LIMIT + long.length,
+            "the whole conversation was replayed: $replayed characters",
+        )
+        // The newest exchange is what survives the trim — the question just asked is in there.
+        assertTrue(provider.lastMessages.last().content.contains("question 19"))
+    }
+
     @Test
     fun `a full round trip appends the user turn and the reply`() = runTest {
         val p = RecordingProvider(deltas = listOf("The journal", " is the largest."))

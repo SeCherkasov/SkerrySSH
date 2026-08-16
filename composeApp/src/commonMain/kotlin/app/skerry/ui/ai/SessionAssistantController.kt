@@ -115,7 +115,8 @@ class SessionAssistantController(
         busy = true
         streaming = ""
         val gen = ++generation
-        val history = turns.dropLast(1).map { AiMessage(it.role, it.text) }
+        // Bounded: the whole conversation is replayed on every question (see clampAiHistory).
+        val history = clampAiHistory(turns.dropLast(1).map { AiMessage(it.role, it.text) })
         val messages = listOf(AiMessage(AiRole.SYSTEM, sessionPrompt(responseLanguage()))) +
             history +
             AiMessage(AiRole.USER, withContext(question, context))
