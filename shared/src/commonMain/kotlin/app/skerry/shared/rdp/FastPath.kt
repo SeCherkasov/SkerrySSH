@@ -146,9 +146,11 @@ class FastPathDecoder(
             UPDATETYPE_PTR_NULL -> listOf(RdpUpdate.PointerVisible(false))
             UPDATETYPE_PTR_DEFAULT -> listOf(RdpUpdate.PointerVisible(true))
             UPDATETYPE_PTR_POSITION -> listOf(RdpUpdate.PointerPosition(reader.u16le(), reader.u16le()))
-            UPDATETYPE_COLOR_POINTER -> listOf(PointerUpdate.colorPointer(reader, pointerCache))
-            UPDATETYPE_POINTER -> listOf(PointerUpdate.newPointer(reader, pointerCache))
-            UPDATETYPE_LARGE_POINTER -> listOf(PointerUpdate.largePointer(reader, pointerCache))
+            // Contained like a bitmap rectangle: a shape this client cannot read costs the cursor
+            // staying as it is, which is strictly less than the session (F-40).
+            UPDATETYPE_COLOR_POINTER -> pointerOrNothing { PointerUpdate.colorPointer(reader, pointerCache) }
+            UPDATETYPE_POINTER -> pointerOrNothing { PointerUpdate.newPointer(reader, pointerCache) }
+            UPDATETYPE_LARGE_POINTER -> pointerOrNothing { PointerUpdate.largePointer(reader, pointerCache) }
             UPDATETYPE_CACHED_POINTER -> PointerUpdate.cachedPointer(reader, pointerCache)
             UPDATETYPE_SYNCHRONIZE -> emptyList()
             // Orders were never claimed in the capability exchange (MS-RDPEGDI), so a server sending
@@ -165,6 +167,14 @@ class FastPathDecoder(
         }
 
     private companion object {
+        /** A malformed pointer shape is skipped; the cursor keeps its last shape (F-40). */
+        @Suppress("SwallowedException") // deliberate: a broken cursor is worth less than the session
+        fun pointerOrNothing(read: () -> RdpUpdate): List<RdpUpdate> = try {
+            listOf(read())
+        } catch (e: RdpProtocolException) {
+            emptyList()
+        }
+
         const val UPDATETYPE_ORDERS = 0x0
         const val UPDATETYPE_BITMAP = 0x1
         const val UPDATETYPE_PALETTE = 0x2

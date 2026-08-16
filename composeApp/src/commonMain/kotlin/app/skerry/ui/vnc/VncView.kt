@@ -48,6 +48,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.key.KeyEventType
@@ -306,6 +307,7 @@ fun VncSurface(
             viewOnly = screen.viewOnly,
             pointerOverImage = pointerOverImage,
             systemCursor = screen.systemCursor,
+            remoteTracksPointer = screen.cursor != null || screen.capabilities.cursorHandover,
         )
     ) {
         hiddenPointerIcon()?.let { mod = mod.pointerHoverIcon(it) }
@@ -412,9 +414,12 @@ fun VncSurface(
             .focusable()
     }
 
-    // The sprite is ours to draw only while we're the ones moving the remote cursor; in view-only the
-    // server paints it into the framebuffer instead. See [RemoteDesktopScreenState.toggleViewOnly].
-    val sprite = if (interactive && !screen.viewOnly) screen.cursor else null
+    // The sprite is ours to draw while we're the ones moving the remote cursor — and also in
+    // view-only on a protocol whose cursor is always client-side (RDP): there the sprite at the
+    // server-reported position is the only remote pointer there is (F-27). On RFB view-only hands
+    // the cursor back and the server paints it into the framebuffer instead.
+    val sprite =
+        if (interactive && (!screen.viewOnly || !screen.capabilities.cursorHandover)) screen.cursor else null
 
     Box(mod) {
         Canvas(Modifier.fillMaxSize()) {
@@ -432,7 +437,13 @@ fun VncSurface(
         // canvas resolution — enough to pin a core at fullscreen on a software-Skia backend.
         if (sprite != null) {
             Canvas(Modifier.fillMaxSize()) {
-                pointerPos?.let { drawCursor(screen, sprite, it) }
+                // A server-side warp wins until the local mouse next speaks (F-21).
+                val warped = screen.serverPointer
+                if (warped != null) {
+                    drawCursorAtCell(screen, sprite, warped)
+                } else {
+                    pointerPos?.let { drawCursor(screen, sprite, it) }
+                }
             }
         }
         if (screen.showStats) RemoteStatsOverlay(screen, Modifier.align(Alignment.TopStart))
@@ -487,19 +498,49 @@ internal fun DrawScope.drawFramebuffer(screen: RemoteDesktopScreenState) {
  * on — the framebuffer image itself.
  */
 internal fun DrawScope.drawCursor(screen: RemoteDesktopScreenState, sprite: VncCursorImage, pointerPos: Offset) {
+    val geom = cursorGeometry(screen) ?: return
+    val at = cursorTopLeft(geom, pointerPos.x, pointerPos.y, sprite.hotspotX, sprite.hotspotY) ?: return
+    drawCursorSprite(sprite, at, geom.scale)
+}
+
+/** The sprite at a framebuffer cell the server named (a warp, or view-only's only source; F-21). */
+internal fun DrawScope.drawCursorAtCell(screen: RemoteDesktopScreenState, sprite: VncCursorImage, cell: IntOffset) {
+    val geom = cursorGeometry(screen) ?: return
+    val at = Offset(
+        geom.offsetX + (cell.x - sprite.hotspotX) * geom.scale,
+        geom.offsetY + (cell.y - sprite.hotspotY) * geom.scale,
+    )
+    drawCursorSprite(sprite, at, geom.scale)
+}
+
+private fun DrawScope.cursorGeometry(screen: RemoteDesktopScreenState): FitGeometry? {
     val geom = fitGeometry(
         size.width, size.height, screen.desktopSize.width, screen.desktopSize.height,
         screen.userScale, screen.userOffset.x, screen.userOffset.y,
     )
-    if (geom.scale <= 0f) return
-    val at = cursorTopLeft(geom, pointerPos.x, pointerPos.y, sprite.hotspotX, sprite.hotspotY) ?: return
+    return geom.takeIf { it.scale > 0f }
+}
+
+internal fun DrawScope.drawCursorSprite(sprite: VncCursorImage, at: Offset, scale: Float) {
+    val dstOffset = IntOffset(at.x.roundToInt(), at.y.roundToInt())
+    val dstSize = IntSize((sprite.width * scale).roundToInt(), (sprite.height * scale).roundToInt())
     // Scaled and filtered like the framebuffer it sits on: a cursor is remote pixels too, so under
     // zoom it grows with them rather than staying a lone sharp sprite on a blown-up screen.
     drawImage(
         image = sprite.bitmap,
-        dstOffset = IntOffset(at.x.roundToInt(), at.y.roundToInt()),
-        dstSize = IntSize((sprite.width * geom.scale).roundToInt(), (sprite.height * geom.scale).roundToInt()),
-        filterQuality = framebufferFilterQuality(geom.scale),
+        dstOffset = dstOffset,
+        dstSize = dstSize,
+        filterQuality = framebufferFilterQuality(scale),
+    )
+    // The inverting pixels (the I-beam) flip what is underneath: difference against white is an
+    // inversion, which keeps the caret visible on any background (F-20).
+    val invert = sprite.invertBitmap ?: return
+    drawImage(
+        image = invert,
+        dstOffset = dstOffset,
+        dstSize = dstSize,
+        filterQuality = framebufferFilterQuality(scale),
+        blendMode = BlendMode.Difference,
     )
 }
 

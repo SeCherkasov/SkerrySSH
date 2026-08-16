@@ -56,13 +56,7 @@ class RdpRemoteDesktop(
 
             is RdpUpdate.Resize -> RemoteDesktopUpdate.Resize(update.width, update.height)
             is RdpUpdate.ResizeSupported -> RemoteDesktopUpdate.RemoteResizeSupported
-            is RdpUpdate.PointerShape -> RemoteDesktopUpdate.CursorShape(
-                argb = update.argb,
-                width = update.width,
-                height = update.height,
-                hotspotX = update.hotspotX,
-                hotspotY = update.hotspotY,
-            )
+            is RdpUpdate.PointerShape -> mappedShape(update)
 
             is RdpUpdate.PointerPosition -> RemoteDesktopUpdate.CursorPosition(update.x, update.y)
             is RdpUpdate.PointerVisible -> RemoteDesktopUpdate.CursorVisible(update.visible)
@@ -101,6 +95,27 @@ class RdpRemoteDesktop(
             if (wasDown != isDown) session.sendPointerButton(button, isDown, x, y)
         }
         lastButtons = buttons
+    }
+
+    // A cached pointer re-announcement is the same PointerShape instance; wrapping it into a fresh
+    // CursorShape each time destroyed that identity before the UI could use it, so every arrow ↔
+    // I-beam switch rebuilt a sprite (F-26). One wrapper per instance keeps identity end to end.
+    // Bounded by the protocol's own pointer-cache size; read-loop only, so a plain list is enough.
+    private val mappedShapes = ArrayDeque<Pair<RdpUpdate.PointerShape, RemoteDesktopUpdate.CursorShape>>()
+
+    private fun mappedShape(update: RdpUpdate.PointerShape): RemoteDesktopUpdate.CursorShape {
+        mappedShapes.firstOrNull { it.first === update }?.let { return it.second }
+        val mapped = RemoteDesktopUpdate.CursorShape(
+            argb = update.argb,
+            width = update.width,
+            height = update.height,
+            hotspotX = update.hotspotX,
+            hotspotY = update.hotspotY,
+            invert = update.invert,
+        )
+        mappedShapes.addFirst(update to mapped)
+        if (mappedShapes.size > MAPPED_SHAPE_CACHE) mappedShapes.removeLast()
+        return mapped
     }
 
     override suspend fun sendKey(event: RemoteKeyEvent, down: Boolean) {
@@ -162,6 +177,9 @@ class RdpRemoteDesktop(
         const val WHEEL_RIGHT = 1 shl 6
         const val BUTTON_BACK = 1 shl 7
         const val BUTTON_FORWARD = 1 shl 8
+
+        /** The protocol's pointer cache holds 25 slots; a few extra cover uncached shapes. */
+        const val MAPPED_SHAPE_CACHE = 32
 
         const val WHEEL_MASK = WHEEL_UP or WHEEL_DOWN or WHEEL_LEFT or WHEEL_RIGHT
         const val BUTTON_MASK = BUTTON_LEFT or BUTTON_MIDDLE or BUTTON_RIGHT or BUTTON_BACK or BUTTON_FORWARD

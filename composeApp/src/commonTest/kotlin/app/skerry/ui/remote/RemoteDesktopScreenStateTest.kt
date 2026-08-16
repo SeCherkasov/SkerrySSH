@@ -15,10 +15,13 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import androidx.compose.ui.unit.IntOffset
+import app.skerry.shared.graphics.RemoteDesktopCapabilities
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class RemoteDesktopScreenStateTest {
@@ -94,6 +97,67 @@ class RemoteDesktopScreenStateTest {
         updates.emit(RemoteDesktopUpdate.Resize(800, 600))
         assertEquals(800, screen.desktopSize.width)
         assertEquals(600, screen.desktopSize.height)
+        scope.cancel()
+    }
+
+    @Test
+    fun the_same_cursor_shape_instance_is_not_rebuilt_into_a_new_sprite() = runTest {
+        // An RDP server switches arrow and I-beam constantly through its pointer cache; the cached
+        // slot re-emits the same shape instance, and rebuilding a bitmap for it every time is what
+        // F-26 is about.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val screen = RemoteDesktopScreenState(FakeRemoteDesktop(updates = updates), scope)
+        val arrow = RemoteDesktopUpdate.CursorShape(IntArray(4), 2, 2, 0, 0)
+        val beam = RemoteDesktopUpdate.CursorShape(IntArray(1) { -1 }, 1, 1, 0, 0)
+
+        updates.emit(arrow)
+        val sprite = screen.cursor
+        updates.emit(beam)
+        updates.emit(arrow) // the cache slot named again: same instance end to end
+
+        assertSame(sprite, screen.cursor, "a shape already turned into a sprite is reused")
+        scope.cancel()
+    }
+
+    @Test
+    fun a_server_moved_pointer_is_shown_until_the_local_mouse_speaks() = runTest {
+        // SetCursorPos: installers and remote apps move the pointer themselves; ignoring it left
+        // the sprite where the local mouse was, so the user aims at one place and clicks in
+        // another (F-21).
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val screen = RemoteDesktopScreenState(FakeRemoteDesktop(updates = updates), scope)
+
+        updates.emit(RemoteDesktopUpdate.CursorPosition(17, 23))
+        assertEquals(IntOffset(17, 23), screen.serverPointer)
+
+        screen.onPointer(1, 1, 0)
+        assertNull(screen.serverPointer, "the local mouse moving takes the cursor back")
+        scope.cancel()
+    }
+
+    @Test
+    fun view_only_without_cursor_handover_skips_the_wasted_handover_and_repaint() = runTest {
+        // On RDP setLocalCursor is a documented no-op — the full repaint that followed it was pure
+        // waste, and the sprite is the only cursor the protocol has (F-27).
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop(
+            capabilities = RemoteDesktopCapabilities(
+                adjustableQuality = false,
+                remoteResize = true,
+                cursorHandover = false,
+                audio = false,
+                clipboard = true,
+            ),
+        )
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        screen.toggleViewOnly()
+
+        assertTrue(screen.viewOnly)
+        assertEquals(emptyList(), session.localCursor)
+        assertEquals(emptyList(), session.fullUpdates)
         scope.cancel()
     }
 

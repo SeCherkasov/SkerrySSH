@@ -151,12 +151,21 @@ class RdpSessionCodec(
         return when (messageType) {
             PTR_MSGTYPE_SYSTEM -> listOf(RdpUpdate.PointerVisible(reader.u32le() != SYSPTR_NULL))
             PTR_MSGTYPE_POSITION -> listOf(RdpUpdate.PointerPosition(reader.u16le(), reader.u16le()))
-            PTR_MSGTYPE_COLOR -> listOf(PointerUpdate.colorPointer(reader, pointerCache))
+            // Contained like a bitmap rectangle: a broken shape costs the cursor, not the session
+            // (F-40) — same containment as the fast-path dispatcher.
+            PTR_MSGTYPE_COLOR -> pointerOrNothing { PointerUpdate.colorPointer(reader, pointerCache) }
             PTR_MSGTYPE_CACHED -> PointerUpdate.cachedPointer(reader, pointerCache)
-            PTR_MSGTYPE_POINTER -> listOf(PointerUpdate.newPointer(reader, pointerCache))
-            PTR_MSGTYPE_LARGE_POINTER -> listOf(PointerUpdate.largePointer(reader, pointerCache))
+            PTR_MSGTYPE_POINTER -> pointerOrNothing { PointerUpdate.newPointer(reader, pointerCache) }
+            PTR_MSGTYPE_LARGE_POINTER -> pointerOrNothing { PointerUpdate.largePointer(reader, pointerCache) }
             else -> emptyList()
         }
+    }
+
+    @Suppress("SwallowedException") // deliberate: a broken cursor is worth less than the session
+    private fun pointerOrNothing(read: () -> RdpUpdate): List<RdpUpdate> = try {
+        listOf(read())
+    } catch (e: RdpProtocolException) {
+        emptyList()
     }
 
     /**

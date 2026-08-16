@@ -91,28 +91,31 @@ fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modif
 
 /** The remote cursor at the trackpad's position: the server's sprite, or our own arrow if it sent none. */
 internal fun DrawScope.drawTouchCursor(screen: RemoteDesktopScreenState, pad: VncTrackpad) {
-    // View-only sends no pointer events, so nothing follows our cursor — the server paints the real
-    // one into the framebuffer instead, and a second one here would only lie about where it is.
-    if (screen.viewOnly) return
+    // View-only sends no pointer events, so nothing follows our cursor. Where the server can paint
+    // the real one into the framebuffer (RFB) a sprite here would only lie about where it is; on a
+    // protocol whose cursor is always client-side (RDP) the server-reported position is the only
+    // pointer there is, and it still deserves drawing (F-27).
+    if (screen.viewOnly && screen.capabilities.cursorHandover) return
     val geom = fitGeometry(
         size.width, size.height, screen.desktopSize.width, screen.desktopSize.height,
         screen.userScale, screen.userOffset.x, screen.userOffset.y,
     )
     if (geom.scale <= 0f) return
-    val at = pad.canvasPosition(geom)
     val sprite = screen.cursor
+    if (screen.viewOnly) {
+        val cell = screen.serverPointer ?: return
+        if (sprite != null) drawCursorAtCell(screen, sprite, cell)
+        return
+    }
+    val at = pad.canvasPosition(geom)
     if (sprite == null) {
         drawFallbackCursor(at)
         return
     }
-    drawImage(
-        image = sprite.bitmap,
-        dstOffset = IntOffset(
-            (at.x - sprite.hotspotX * geom.scale).roundToInt(),
-            (at.y - sprite.hotspotY * geom.scale).roundToInt(),
-        ),
-        dstSize = IntSize((sprite.width * geom.scale).roundToInt(), (sprite.height * geom.scale).roundToInt()),
-        filterQuality = framebufferFilterQuality(geom.scale),
+    drawCursorSprite(
+        sprite,
+        Offset(at.x - sprite.hotspotX * geom.scale, at.y - sprite.hotspotY * geom.scale),
+        geom.scale,
     )
 }
 

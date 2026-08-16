@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import app.skerry.shared.graphics.RemoteDesktopQuality
 import app.skerry.shared.graphics.RemoteDesktopSession
@@ -197,6 +198,20 @@ class RemoteDesktopScreenState(
         private set
 
     /**
+     * Where the server last put the pointer itself (SetCursorPos — installers, remote apps that
+     * recentre the mouse). Drawn instead of the local position until the local mouse next speaks,
+     * so the user is not aiming at one place while clicking in another (F-21). In view-only it is
+     * the only pointer source there is, since no local events are sent.
+     */
+    var serverPointer: IntOffset? by mutableStateOf(null)
+        private set
+
+    // Sprites already built, keyed by the shape *instance*: a cached pointer re-announcement is
+    // the same object end to end, so switching arrow ↔ I-beam costs a list scan, not a bitmap
+    // rebuild (F-26). Content-equal duplicates miss and rebuild, which is only a small waste.
+    private val spriteCache = ArrayDeque<Pair<RemoteDesktopUpdate.CursorShape, VncCursorImage?>>()
+
+    /**
      * The server asked for the ordinary system pointer instead of a shape of its own (RDP's
      * SYSPTR_DEFAULT). There is nothing to draw, so the local pointer is shown rather than hidden —
      * distinct from a hidden cursor, where neither is drawn.
@@ -217,6 +232,10 @@ class RemoteDesktopScreenState(
      */
     fun toggleViewOnly() {
         viewOnly = !viewOnly
+        // No handover, nothing to hand: on RDP setLocalCursor is a documented no-op and the
+        // cursor stays the client's to draw — the sprite keeps showing at the server-reported
+        // position — so the full repaint bought nothing (F-27).
+        if (!capabilities.cursorHandover) return
         val localCursor = !viewOnly
         send {
             session.setLocalCursor(localCursor)
@@ -389,14 +408,19 @@ class RemoteDesktopScreenState(
     private fun onPeripheralUpdate(update: RemoteDesktopUpdate) {
         when (update) {
             is RemoteDesktopUpdate.CursorShape -> {
-                cursor = VncCursorImage.of(update)
+                val hit = spriteCache.firstOrNull { it.first === update }
+                cursor = if (hit != null) {
+                    hit.second
+                } else {
+                    VncCursorImage.of(update).also { sprite ->
+                        spriteCache.addFirst(update to sprite)
+                        if (spriteCache.size > SPRITE_CACHE_SIZE) spriteCache.removeLast()
+                    }
+                }
                 systemCursor = false
             }
 
-            // The pointer the server warps is not ours to move: the sprite tracks the local pointer,
-            // and jumping it would desynchronise the two. The position is still applied by the
-            // server to its own screen, which is what the user sees.
-            is RemoteDesktopUpdate.CursorPosition -> Unit
+            is RemoteDesktopUpdate.CursorPosition -> serverPointer = IntOffset(update.x, update.y)
             // "Visible" here is the server asking for its default pointer, not for the shape it sent
             // last: the sprite goes, and the local pointer takes over. Hidden drops both.
             is RemoteDesktopUpdate.CursorVisible -> {
@@ -424,6 +448,8 @@ class RemoteDesktopScreenState(
     /** Forward a pointer event (framebuffer coordinates + button mask). No-op in view-only mode. */
     fun onPointer(x: Int, y: Int, buttonMask: Int) {
         if (viewOnly) return
+        // The local mouse speaking takes the cursor back from a server-side warp (F-21).
+        serverPointer = null
         input.trySend(PointerWrite(x, y, buttonMask))
     }
 
@@ -594,6 +620,9 @@ class RemoteDesktopScreenState(
 
         /** The state-carrying bits of the RFB mask; wheel bits (3..6) are edges and never repeat. */
         const val BUTTONS_ONLY = 0b110000111
+
+        /** Matches the RDP pointer cache (25 slots) with room for uncached shapes on top. */
+        const val SPRITE_CACHE_SIZE = 32
 
         val CTRL_ALT_DEL = listOf(Key.CtrlLeft, Key.AltLeft, Key.Delete)
     }

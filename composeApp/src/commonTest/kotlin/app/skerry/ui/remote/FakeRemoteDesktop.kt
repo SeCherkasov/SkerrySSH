@@ -15,6 +15,13 @@ open class FakeRemoteDesktop(
     override val title: String = "fake-desktop",
     override val framebuffer: RemoteFramebuffer = RemoteFramebuffer(2, 1),
     override val updates: Flow<RemoteDesktopUpdate> = MutableSharedFlow(),
+    override val capabilities: RemoteDesktopCapabilities = RemoteDesktopCapabilities(
+        adjustableQuality = true,
+        remoteResize = true,
+        cursorHandover = true,
+        audio = true,
+        clipboard = true,
+    ),
 ) : RemoteDesktopSession {
     override val diagnostics = RemoteDesktopDiagnostics()
 
@@ -28,14 +35,6 @@ open class FakeRemoteDesktop(
     var closed = false
 
     val audioMutes = mutableListOf<Boolean>()
-
-    override val capabilities = RemoteDesktopCapabilities(
-        adjustableQuality = true,
-        remoteResize = true,
-        cursorHandover = true,
-        audio = true,
-        clipboard = true,
-    )
 
     override suspend fun setAudioMuted(muted: Boolean) {
         audioMutes += muted
