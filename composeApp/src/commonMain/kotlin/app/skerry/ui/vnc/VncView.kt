@@ -360,7 +360,14 @@ fun VncSurface(
                         // exactly when the local pointer has to come back.
                         pointerOverImage = fb != null
                         if (event.type == PointerEventType.Scroll) {
-                            if (fb == null) { continue }
+                            if (fb == null) {
+                                // Hypothesis 3 of issue #265: near the edge these drops can read
+                                // as "scrolling sometimes works" — the trace makes them visible.
+                                wheelTrace {
+                                    formatWheelDrop(WheelSample(change.type, change.scrollDelta.x, change.scrollDelta.y))
+                                }
+                                continue
+                            }
                             latestPointer.value = change.position
                             pointerTick.trySend(Unit)
                             // Wheel goes to the server (scroll inside the remote desktop). No local
@@ -369,14 +376,22 @@ fun VncSurface(
                             // notches, a trackpad's fractions accumulate (F-14) — and the buttons a
                             // drag is holding ride on every mask (F-38).
                             val held = buttonsOf(event.buttons)
+                            val notchesY = wheelY.add(change.scrollDelta.y)
+                            val notchesX = wheelX.add(change.scrollDelta.x)
                             val vertical = wheelMasks(
-                                held, wheelY.add(change.scrollDelta.y),
+                                held, notchesY,
                                 negative = VncButton.WHEEL_UP, positive = VncButton.WHEEL_DOWN,
                             )
                             val horizontal = wheelMasks(
-                                held, wheelX.add(change.scrollDelta.x),
+                                held, notchesX,
                                 negative = VncButton.WHEEL_LEFT, positive = VncButton.WHEEL_RIGHT,
                             )
+                            wheelTrace {
+                                formatWheelTrace(
+                                    WheelSample(change.type, change.scrollDelta.x, change.scrollDelta.y),
+                                    notchesX, notchesY, vertical.size + horizontal.size, held,
+                                )
+                            }
                             for (mask in vertical + horizontal) screen.onPointer(fb.x, fb.y, mask)
                             change.consume()
                             continue
