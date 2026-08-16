@@ -6,6 +6,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_chip_all
 import app.skerry.ui.generated.resources.lib_snippets_uncategorized
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.tagChipLabel
 
 /** A snippet library section: category name plus its snippets (in source list order). */
 @Immutable
@@ -30,11 +31,8 @@ fun uncategorizedSnippetsLabel(): String = stringResource(Res.string.lib_snippet
 fun snippetChipLabel(chip: String): String = when (chip) {
     ALL_SNIPPETS_CHIP -> stringResource(Res.string.lib_snippets_chip_all)
     UNCATEGORIZED_KEY -> uncategorizedSnippetsLabel()
-    else -> snippetTagLabel(chip)
+    else -> tagChipLabel(chip)
 }
-
-/** Tag label: `#` prefix (the model value has none). Pure, no localization involved. */
-fun snippetTagLabel(tag: String): String = "#$tag"
 
 /**
  * Group snippets into library sections by tag. Unlike host folders ([app.skerry.ui.host.HostFolder]),

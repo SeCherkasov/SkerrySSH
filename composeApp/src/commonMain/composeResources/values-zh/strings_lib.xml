@@ -77,6 +77,7 @@
     <string name="lib_snippets_run_title">运行片段</string>
     <string name="lib_snippets_run_empty">暂无片段。在\"片段\"标签页中添加。</string>
     <string name="lib_snippets_run_in_terminal">在终端中运行</string>
+    <string name="lib_snippets_run_needs_save">保存修改后的命令才能运行</string>
     <string name="lib_snippets_save_snippet">保存片段</string>
     <string name="lib_snippets_facts_variables">%1$d 个含变量</string>
     <string name="lib_snippets_variables">变量</string>

@@ -30,7 +30,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,6 +57,9 @@ import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_save
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.CommandLine
+import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.design.tagChipLabel
 
 /**
  * Tag filter strip above the snippet list, plus the rename pencil for whichever real tag is active.
@@ -114,7 +116,6 @@ internal fun SnippetTagFilterRow(
 internal fun SnippetListRow(
     entry: SnippetEntry,
     selected: Boolean,
-    mono: FontFamily,
     onClick: () -> Unit,
 ) {
     val s = entry.snippet
@@ -136,27 +137,19 @@ internal fun SnippetListRow(
         }
         Column(Modifier.weight(1f)) {
             Txt(
-                s.label.ifBlank { stringResource(Res.string.lib_snippets_untitled) },
+                remember(s) { untrustedLabel(s.label) }.ifBlank { stringResource(Res.string.lib_snippets_untitled) },
                 color = if (selected) Skerry.colors.cyanBright else Skerry.colors.textBright,
                 size = 12.5.sp,
                 weight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Txt(
-                s.command,
-                color = Skerry.colors.faint,
-                size = 10.5.sp,
-                font = mono,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 3.dp),
-            )
+            CommandLine(s.command, modifier = Modifier.padding(top = 3.dp))
         }
         // Tags are metadata, not the row's subject: they get whatever width is left after the command.
         if (s.tags.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                s.tags.take(MAX_ROW_TAGS).forEach { tag -> key(tag) { Chip(snippetTagLabel(tag)) } }
+                s.tags.take(MAX_ROW_TAGS).forEach { tag -> key(tag) { Chip(remember(tag) { tagChipLabel(tag) }) } }
             }
         }
     }

@@ -17,7 +17,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_search_hosts
 import app.skerry.ui.generated.resources.shtail_chip_all
 import app.skerry.ui.generated.resources.shtail_group_collapse
-import app.skerry.ui.host.hostTagChipLabel
+import app.skerry.ui.design.tagChipLabel
 import kotlin.test.Test
 
 /**
@@ -41,7 +41,7 @@ class MobileHostCatalogTest {
 
     @Test
     fun `a tag chip filters the catalog and All brings it back`() = runMobileShell {
-        pickChip(hostTagChipLabel("docker"))
+        pickChip(tagChipLabel("docker"))
         onNodeWithText(PI_HOST).assertIsDisplayed()
         onNodeWithText(DB_HOST).assertDoesNotExist()
 

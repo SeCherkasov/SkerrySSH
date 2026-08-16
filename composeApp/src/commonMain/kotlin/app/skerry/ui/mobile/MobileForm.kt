@@ -33,6 +33,7 @@ import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
+import androidx.compose.ui.text.style.TextDirection
 
 /**
  * Shared mobile form primitives (sheets/dialogs/settings): a field label and a text field. Single
@@ -82,8 +83,17 @@ internal fun MobileFormInput(
     val family = if (mono) fonts.mono else fonts.ui
     val fontSize = if (mono) 12.5.sp else 15.sp
     val textColor = Skerry.colors.text
-    val textStyle = remember(family, fontSize, textColor) {
-        TextStyle(color = textColor, fontSize = fontSize, fontFamily = family, lineHeight = if (mono) 17.sp else 20.sp)
+    val textStyle = remember(family, fontSize, textColor, mono) {
+        TextStyle(
+            color = textColor,
+            fontSize = fontSize,
+            fontFamily = family,
+            lineHeight = if (mono) 17.sp else 20.sp,
+            // A monospaced field holds a command, and a command's order is its meaning: left to the
+            // layout direction, a first-strong RTL character in text someone else wrote draws the
+            // line in an order the shell will not use.
+            textDirection = if (mono) TextDirection.Ltr else TextDirection.Unspecified,
+        )
     }
     val draft = rememberFieldDraft(value, selectAllOnFocus, masked, singleLine)
     // Border/padding live in decorationBox so a click anywhere in the field places the caret.

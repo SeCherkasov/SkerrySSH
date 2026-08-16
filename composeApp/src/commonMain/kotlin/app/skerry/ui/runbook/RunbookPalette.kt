@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
-import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSessions
@@ -58,6 +57,7 @@ import app.skerry.ui.generated.resources.runbook_toolbar_tip
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -132,7 +132,7 @@ private fun RunbookPalette(manager: RunbookManager, onPick: (RunbookEntry) -> Un
     // The palette exists to start a run: a runbook with no steps would close the popup and start
     // nothing, so it is not offered here (the section's card explains it instead).
     val saved = manager.runbooks
-    val all = saved.filter { it.runbook.steps.isNotEmpty() }
+    val all = remember(saved) { saved.filter { it.runbook.steps.isNotEmpty() } }
     val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
     val searchFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { searchFocus.requestFocus() }
@@ -190,7 +190,7 @@ private fun PaletteRow(entry: RunbookEntry, mono: FontFamily, onClick: () -> Uni
             Txt(
                 // Stripped like the run panel's rows: a runbook can arrive over sync, and this is
                 // one of the places its name is read before starting it.
-                stripUnsafeFormatChars(runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
+                remember(runbook) { untrustedLabel(runbook.label) }.ifBlank { stringResource(Res.string.runbook_untitled) },
                 color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )

@@ -79,9 +79,12 @@ import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.FormField
+import app.skerry.ui.design.untrustedLabel
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.generated.resources.shell_tip_remove
+import app.skerry.ui.design.tagChipLabel
+import androidx.compose.ui.text.style.TextDirection
 
 /**
  * Snippet form: name, command, tags and hotkey. Reached from "New snippet" and from Edit in the run
@@ -102,7 +105,7 @@ internal fun SnippetEditor(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Sym("code_blocks", size = 20.sp, color = Skerry.colors.cyanBright)
-            Txt(form.label.ifBlank { stringResource(Res.string.lib_snippets_new) }, color = Skerry.colors.text, size = 17.sp, weight = FontWeight.SemiBold)
+            Txt(untrustedLabel(form.label).ifBlank { stringResource(Res.string.lib_snippets_new) }, color = Skerry.colors.text, size = 17.sp, weight = FontWeight.SemiBold)
         }
         Column(Modifier.padding(top = 20.dp)) {
             // The name is human-readable text — UI font, like every other name field (command below stays mono).
@@ -146,7 +149,7 @@ internal fun SnippetEditor(
             }
             val conflictText = when {
                 reserved -> stringResource(Res.string.lib_snippets_shortcut_reserved)
-                conflict != null -> stringResource(Res.string.lib_snippets_shortcut_conflict, conflict.snippet.label)
+                conflict != null -> stringResource(Res.string.lib_snippets_shortcut_conflict, untrustedLabel(conflict.snippet.label))
                 else -> null
             }
             ShortcutField(form.shortcut, mono, conflictText = conflictText) { form.shortcut = it }
@@ -234,7 +237,7 @@ private fun TagsField(
                         Box(
                             Modifier.fillMaxWidth().clickable { onPick(tag) }.padding(horizontal = 12.dp, vertical = 9.dp),
                         ) {
-                            Txt(snippetTagLabel(tag), color = Skerry.colors.cyanBright, size = 12.5.sp, font = mono)
+                            Txt(remember(tag) { tagChipLabel(tag) }, color = Skerry.colors.cyanBright, size = 12.5.sp, font = mono)
                         }
                     }
                 }
@@ -250,7 +253,7 @@ private fun TagPill(tag: String, onRemove: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Txt(snippetTagLabel(tag), color = Skerry.colors.cyanBright, size = 11.sp)
+        Txt(remember(tag) { tagChipLabel(tag) }, color = Skerry.colors.cyanBright, size = 11.sp)
         Box(Modifier.clip(CircleShape).clickable(onClick = onRemove).padding(2.dp), contentAlignment = Alignment.Center) {
             Sym("close", contentDescription = stringResource(Res.string.shell_tip_remove), size = 12.sp, color = Skerry.colors.cyanBright)
         }
@@ -332,7 +335,11 @@ private fun EditField(value: String, onValueChange: (String) -> Unit, placeholde
 @Composable
 private fun CommandField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
     val textColor = Skerry.colors.textBright
-    val textStyle = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
+    // Direction pinned: the field holds a command, and a snippet can arrive from a peer — a
+    // first-strong RTL character would draw the line in an order the shell will not use.
+    val textStyle = remember(mono, textColor) {
+        TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono, textDirection = TextDirection.Ltr)
+    }
     val draft = rememberFieldDraft(value, singleLine = false)
     BasicTextField(
         value = draft.textFieldValue(value),

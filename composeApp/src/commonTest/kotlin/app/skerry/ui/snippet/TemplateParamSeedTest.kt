@@ -35,4 +35,14 @@ class TemplateParamSeedTest {
     fun `choice parameter without a default starts on the first option`() {
         assertEquals("dev", paramSeed(param("\${{env:|dev|prod}}"), previous = null))
     }
+
+    /**
+     * The inline default is the template's own text, and a template can be shared: the field is
+     * seeded with what will be spliced, not with something the run then quietly rewrites.
+     */
+    @Test
+    fun `an inline default is filtered like the option list is`() {
+        assertEquals("etc", paramSeed(param("\${{path:\u202Eetc}}"), previous = null))
+        assertEquals("", paramSeed(param("\${{path:\u200B}}"), previous = null))
+    }
 }

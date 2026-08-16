@@ -133,6 +133,10 @@ class RunbookFormState private constructor(private val editingId: String?) {
         tags = tags - tag
     }
 
+    /** The policy as the form has it — asked per keystroke by the phone sheet, so it builds no draft. */
+    fun policy(): RunbookPolicy =
+        RunbookPolicy(stopOnFirstFailure = stopOnFirstFailure, watchdogMinutes = watchdogMinutes)
+
     /**
      * Draft for [RunbookManager.save]. Flushes an uncommitted [tagDraft] (typed but no Enter/comma
      * before Save), otherwise the tag would be lost.
@@ -143,7 +147,7 @@ class RunbookFormState private constructor(private val editingId: String?) {
         description = description.trim(),
         steps = steps.map { it.toStep() },
         tags = (tags + parseSnippetTags(tagDraft)).distinct(),
-        policy = RunbookPolicy(stopOnFirstFailure = stopOnFirstFailure, watchdogMinutes = watchdogMinutes),
+        policy = policy(),
     )
 
     companion object {

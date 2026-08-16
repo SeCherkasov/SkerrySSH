@@ -61,14 +61,20 @@ import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.design.fieldName
+import app.skerry.ui.design.CommandLine
+import app.skerry.ui.design.untrustedLabel
 
 /** Share-picker item (a host or snippet from the own vault): [detail] is the second line (address/command). */
 data class ShareItem(val id: String, val label: String, val detail: String)
 
-/** Teams dialog card — same visual language as [app.skerry.ui.design.ConfirmActionDialog]. */
+/**
+ * Teams dialog card — same visual language as [app.skerry.ui.design.ConfirmActionDialog]. [label]
+ * names the dialog for a reader: none of these cards autofocuses a field, so focus lands on the
+ * scrim, which is otherwise an unnamed box.
+ */
 @Composable
-internal fun TeamsDialogCard(onDismiss: () -> Unit, content: @Composable () -> Unit) {
-    ModalScrim(onDismiss = onDismiss) {
+internal fun TeamsDialogCard(onDismiss: () -> Unit, label: String? = null, content: @Composable () -> Unit) {
+    ModalScrim(onDismiss = onDismiss, label = label) {
         Column(
             Modifier
                 .widthIn(max = 420.dp)
@@ -133,7 +139,7 @@ fun CreateTeamDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     fun save() {
         if (name.trim().isNotEmpty()) onCreate(name.trim())
     }
-    TeamsDialogCard(onDismiss) {
+    TeamsDialogCard(onDismiss, label = stringResource(Res.string.lib_teams_create_title)) {
         Txt(stringResource(Res.string.lib_teams_create_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
         Txt(stringResource(Res.string.lib_teams_create_subtitle), color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
         TeamsTextField(name, { name = it }, stringResource(Res.string.lib_teams_name_placeholder), ::save, focus)
@@ -181,7 +187,7 @@ fun InviteMemberDialog(
         if (id.isEmpty() || busy) return
         if (ready) onSend(id, role) else onLookup(id)
     }
-    TeamsDialogCard(onDismiss) {
+    TeamsDialogCard(onDismiss, label = stringResource(Res.string.lib_teams_invite_title)) {
         Txt(stringResource(Res.string.lib_teams_invite_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
         Txt(stringResource(Res.string.lib_teams_invite_subtitle), color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
         TeamsTextField(accountId, { accountId = it; onEdited() }, stringResource(Res.string.lib_teams_invite_account_placeholder), ::submit, focus)
@@ -232,8 +238,7 @@ fun SharePickerDialog(
     onPick: (ShareItem) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val mono = LocalFonts.current.mono
-    TeamsDialogCard(onDismiss) {
+    TeamsDialogCard(onDismiss, label = title) {
         Txt(title, color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp, modifier = Modifier.padding(bottom = 14.dp))
         if (items.isEmpty()) {
             Txt(emptyText, color = Skerry.colors.dim, size = 12.5.sp)
@@ -253,8 +258,10 @@ fun SharePickerDialog(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Txt(item.label, color = Skerry.colors.textBright, size = 12.5.sp, modifier = Modifier.weight(1f))
-                        Txt(item.detail, color = Skerry.colors.faint, size = 11.sp, font = mono)
+                        // The rows name records the local library holds, and a shared one was
+                        // written by whoever shared it.
+                        Txt(remember(item) { untrustedLabel(item.label) }, color = Skerry.colors.textBright, size = 12.5.sp, modifier = Modifier.weight(1f))
+                        CommandLine(item.detail, size = 11.sp)
                     }
                 }
             }

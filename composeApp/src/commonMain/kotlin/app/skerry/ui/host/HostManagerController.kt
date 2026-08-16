@@ -15,6 +15,7 @@ import app.skerry.shared.ssh.isRdp
 import app.skerry.shared.ssh.SshConfigHost
 import app.skerry.shared.ssh.SshConfigImport
 import app.skerry.shared.vault.Credential
+import app.skerry.shared.tag.normalizeTags
 
 /**
  * Editable profile fields without [Host.id]: the create/edit form operates on a draft, and
@@ -60,8 +61,19 @@ class HostManagerController(
     private val store: HostStore,
     private val newId: () -> String,
 ) {
-    var hosts by mutableStateOf(store.all())
+    var hosts by mutableStateOf(canonicalHosts())
         private set
+
+    /**
+     * The list as every comparison reads it, the way a snippet's is: a record written by an older
+     * client or synced from a peer keeps the tag it was given, and a tag carrying a character that
+     * draws as nothing would file the host under a chip that reads like another one's.
+     *
+     * Every read goes through here, not only the first: the vault starts locked, so the list this
+     * controller is built with is empty and the real one arrives through [reload] after unlock —
+     * and again after every sync merge.
+     */
+    private fun canonicalHosts(): List<Host> = store.all().map { it.withCanonicalTags() }
 
     fun find(id: String): Host? = hosts.firstOrNull { it.id == id }
 
@@ -70,7 +82,7 @@ class HostManagerController(
      * migration writes remapped [Host.credentialId] straight into [HostStore] on unlock).
      */
     fun reload() {
-        hosts = store.all()
+        hosts = canonicalHosts()
     }
 
     /**
@@ -90,7 +102,7 @@ class HostManagerController(
                 group = draft.group,
                 credentialId = draft.credentialId,
                 interactiveAuth = draft.interactiveAuth,
-                tags = draft.tags,
+                tags = normalizeTags(draft.tags),
                 aiPolicy = draft.aiPolicy,
                 connectionType = draft.connectionType,
                 jumpHostId = draft.jumpHostId,
@@ -105,7 +117,7 @@ class HostManagerController(
                 rdp = if (draft.connectionType.isRdp) draft.rdp else find(id)?.rdp,
             ),
         )
-        hosts = store.all()
+        hosts = canonicalHosts()
         return id
     }
 
@@ -115,8 +127,9 @@ class HostManagerController(
      * are already resolved; existing hosts are left untouched.
      */
     fun importHosts(imported: List<Host>) {
-        for (host in imported) store.put(host)
-        hosts = store.all()
+        // Canonical on write like [save]: an `ssh_config` tag is whatever the file said.
+        for (host in imported) store.put(host.copy(tags = normalizeTags(host.tags)))
+        hosts = canonicalHosts()
     }
 
     /**
@@ -125,8 +138,9 @@ class HostManagerController(
      */
     fun importRdpFile(entry: RdpFileHost): String {
         val id = newId()
-        store.put(RdpFileImport.toHost(entry, id))
-        hosts = store.all()
+        val imported = RdpFileImport.toHost(entry, id)
+        store.put(imported.copy(tags = normalizeTags(imported.tags)))
+        hosts = canonicalHosts()
         return id
     }
 
@@ -154,12 +168,12 @@ class HostManagerController(
     fun setVncResizeToWindow(id: String, enabled: Boolean) {
         val host = find(id) ?: return
         store.put(host.copy(vncResizeToWindow = enabled))
-        hosts = store.all()
+        hosts = canonicalHosts()
     }
 
     fun delete(id: String) {
         store.remove(id)
-        hosts = store.all()
+        hosts = canonicalHosts()
     }
 
     /**
@@ -172,7 +186,7 @@ class HostManagerController(
         // Computed inside store.reorder, over the store's current snapshot under its lock, not
         // over the (possibly stale) Compose-state hosts; otherwise races a concurrent write (migration).
         store.reorder { moveHostToGroup(it, hostId, targetGroup, targetIndexInGroup) }
-        hosts = store.all()
+        hosts = canonicalHosts()
     }
 
     /**
@@ -189,13 +203,13 @@ class HostManagerController(
             val visible = siblings.withIndex().filter { it.value.section == section }.map { it.index }
             moveHostToGroup(all, hostId, targetGroup, filteredIndexToFull(siblings.size, visible, targetIndexInGroup))
         }
-        hosts = store.all()
+        hosts = canonicalHosts()
     }
 
     /** Manual reorder: move folder [group] as a whole to [targetGroupIndex] among folders. */
     fun moveFolder(group: String?, targetGroupIndex: Int) {
         store.reorder { moveGroup(it, group, targetGroupIndex) }
-        hosts = store.all()
+        hosts = canonicalHosts()
     }
 
     /**
@@ -212,7 +226,7 @@ class HostManagerController(
                 .map { it.index }
             moveGroup(all, group, filteredIndexToFull(folders.size, visible, targetGroupIndex))
         }
-        hosts = store.all()
+        hosts = canonicalHosts()
     }
 
     /**
@@ -222,7 +236,7 @@ class HostManagerController(
      */
     fun renameGroup(oldName: String, newName: String) {
         store.reorder { renameHostGroup(it, oldName, newName) }
-        hosts = store.all()
+        hosts = canonicalHosts()
     }
 
     /**
@@ -231,6 +245,12 @@ class HostManagerController(
      */
     fun deleteGroup(name: String) {
         store.reorder { renameHostGroup(it, name, null) }
-        hosts = store.all()
+        hosts = canonicalHosts()
     }
+}
+
+/** [Host] with its tags in the form every comparison uses ([normalizeTags]). */
+private fun Host.withCanonicalTags(): Host {
+    val canonical = normalizeTags(tags)
+    return if (canonical == tags) this else copy(tags = canonical)
 }

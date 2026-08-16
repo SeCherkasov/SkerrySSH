@@ -170,7 +170,12 @@ internal fun MobileSharedRow(
         horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
         Txt(label, color = Skerry.colors.textBright, size = 12.5.sp, font = mono)
-        Txt(detail, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.weight(1f))
+        // One line, like the desktop dialog's: a shared snippet's command reaches here escaped
+        // and with its newlines, and an unbounded row would push the section below it off screen.
+        Txt(
+            detail, color = Skerry.colors.faint, size = 11.sp, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
         // "What happened to this one" — only for readers who may see the audit log at all.
         if (onHistory != null) {
             Box(Modifier.clip(CircleShape).clickable(onClick = onHistory).padding(3.dp)) {

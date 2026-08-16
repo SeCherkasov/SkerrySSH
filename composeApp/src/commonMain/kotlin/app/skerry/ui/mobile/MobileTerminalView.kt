@@ -295,7 +295,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
         if (paletteOpen && snippets != null && activeTerminal != null) {
             MobileSnippetRunSheet(
                 manager = snippets,
-                onRun = { entry -> snippets.run(entry.id, recording = activeTerminal.recording) { text, secrets -> activeTerminal.sendUserInputGuarded(text, secrets) }; paletteOpen = false },
+                onRun = { entry -> snippets.run(entry.id, recording = activeTerminal.recording, oneTap = true) { text, secrets -> activeTerminal.sendUserInputGuarded(text, secrets) }; paletteOpen = false },
                 onDismiss = { paletteOpen = false },
             )
         }

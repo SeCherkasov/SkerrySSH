@@ -51,6 +51,7 @@ import app.skerry.ui.generated.resources.runbook_status_stopped
 import app.skerry.ui.generated.resources.runbook_status_waiting
 import app.skerry.ui.generated.resources.runbook_transfer_of
 import app.skerry.ui.sftp.humanSize
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -75,7 +76,9 @@ internal fun RunbookOutputPanel(run: RunbookSessionRun, mono: FontFamily, shownS
     ) {
         // Stripped like every other rendering of a step's title: a runbook can arrive over sync, and
         // a bidi override in this header would reorder what the operator reads mid-run.
-        val title = stripUnsafeFormatChars(step?.step?.title?.takeIf { it.isNotBlank() } ?: run.label)
+        val title = remember(step, run.label) {
+            untrustedLabel(step?.step?.title?.takeIf { it.isNotBlank() } ?: run.label)
+        }
         Txt(
             labelUppercase(stringResource(Res.string.runbook_run_output)) + " · " + title.uppercase(),
             color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp,

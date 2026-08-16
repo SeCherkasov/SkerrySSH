@@ -1,6 +1,6 @@
 package app.skerry.shared.io
 
-import app.skerry.shared.snippet.INVISIBLE_LETTERS
+import app.skerry.shared.text.INVISIBLE_LETTERS
 
 /**
  * Turns user data — a host label, a secret's name — into the stem of a file name a Save-As dialog

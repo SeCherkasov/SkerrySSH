@@ -268,7 +268,9 @@ internal fun HostEntryRow(
 ) {
     // Production marker: shown before the row is ever clicked, so "wrong window" is visible in the
     // list itself and not only once a session is open.
-    val prod = isProdHost(host)
+    // Remembered like the row's other filtered values: the tag walk is per tag, and this row
+    // recomposes on hover.
+    val prod = remember(host) { isProdHost(host) }
     val snippets = LocalSnippets.current
     val runSnippetOnHost = LocalRunSnippetOnHost.current
     val canRunSnippet = host != null && snippets != null
@@ -374,7 +376,7 @@ internal fun HostEntryRow(
                             SnippetPalette(snippets) { entry ->
                                 // Through the manager: a snippet with ${{…}} variables opens the confirm
                                 // dialog first; the resolved line (newline included) lands here after.
-                                snippets.run(entry.id) { line, secrets -> runSnippetOnHost(host, line, secrets) }
+                                snippets.run(entry.id, oneTap = true) { line, secrets -> runSnippetOnHost(host, line, secrets) }
                                 snippetPickerOpen = false
                             }
                         }

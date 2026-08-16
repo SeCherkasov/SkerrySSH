@@ -34,7 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.ui.app.LocalRunbookHistory
 import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
@@ -69,10 +68,15 @@ import app.skerry.ui.runbook.RunbookHelpDialog
 import app.skerry.ui.runbook.RunbookFormState
 import app.skerry.ui.runbook.RunbookManager
 import app.skerry.ui.runbook.runbookTarget
+import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.design.sanitizeServerText
+import app.skerry.ui.terminal.MAX_NOTE_CHARS
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
+import app.skerry.ui.generated.resources.runbook_run_needs_save
+import androidx.compose.runtime.derivedStateOf
 
 /**
  * Runbooks screen (More → Runbooks): the saved procedures plus an add FAB. Tapping a card opens the
@@ -205,7 +209,7 @@ private fun RunbookCard(entry: RunbookEntry, mono: FontFamily, onClick: () -> Un
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Sym("checklist", size = 17.sp, color = Skerry.colors.cyanBright)
             Txt(
-                stripUnsafeFormatChars(runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
+                remember(runbook) { untrustedLabel(runbook.label) }.ifBlank { stringResource(Res.string.runbook_untitled) },
                 color = Skerry.colors.textBright, size = 14.sp, weight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
@@ -217,7 +221,8 @@ private fun RunbookCard(entry: RunbookEntry, mono: FontFamily, onClick: () -> Un
         )
         if (runbook.description.isNotBlank()) {
             Txt(
-                stripUnsafeFormatChars(runbook.description), color = Skerry.colors.dim, size = 12.sp, maxLines = 2,
+                remember(runbook) { sanitizeServerText(runbook.description, MAX_NOTE_CHARS, allowNewlines = true) },
+                color = Skerry.colors.dim, size = 12.sp, maxLines = 2,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
             )
         }
@@ -238,6 +243,20 @@ private fun MobileRunbookEditSheet(
 ) {
     // Shared form state (desktop <-> mobile): same fields, same validation, same draft assembly.
     val form = remember(entry) { RunbookFormState.fromEntry(entry) }
+    // Run starts the saved procedure while the fields above show a draft: edited here, the button
+    // would run steps — or a failure policy — the sheet is not showing. Derived rather than read in
+    // this scope: the sheet holds every field of the form, and reading them here would recompose
+    // the whole editor on each keystroke to answer one boolean.
+    val editedHere by remember(entry) {
+        derivedStateOf {
+            entry != null &&
+                (form.steps.map { it.toStep() } != entry.runbook.steps || form.policy() != entry.runbook.policy)
+        }
+    }
+    // The caller's reasons come first — they are the more specific ones (nothing to run, a run
+    // already going); this one only covers a procedure that is not the saved one.
+    val needsSave = stringResource(Res.string.runbook_run_needs_save)
+    val runReason = runHint ?: needsSave.takeIf { editedHere }
     val history = LocalRunbookHistory.current
     var confirmDelete by remember { mutableStateOf(false) }
 
@@ -246,7 +265,7 @@ private fun MobileRunbookEditSheet(
             title = stringResource(Res.string.runbook_delete_title),
             message = stringResource(
                 Res.string.runbook_delete_message,
-                stripUnsafeFormatChars(entry.runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
+                untrustedLabel(entry.runbook.label).ifBlank { stringResource(Res.string.runbook_untitled) },
             ),
             confirmLabel = stringResource(Res.string.runbook_delete),
             onConfirm = {
@@ -276,16 +295,19 @@ private fun MobileRunbookEditSheet(
             Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (entry != null) {
                     MobileSheetButton(
-                        stringResource(Res.string.runbook_run), onClick = onRun,
-                        icon = "play_arrow", filled = false, enabled = runHint == null,
+                        stringResource(Res.string.runbook_run),
+                        // Guarded twice: `enabled` stops the finger, an accessibility click action
+                        // fires on a disabled control regardless.
+                        onClick = { if (runReason == null) onRun() },
+                        icon = "play_arrow", filled = false, enabled = runReason == null,
                         // The reason sits in its own line below, which a screen reader would read a
                         // swipe later and unattached: the button carries it as its state.
-                        modifier = Modifier.fillMaxWidth().semantics { runHint?.let { stateDescription = it } },
+                        modifier = Modifier.fillMaxWidth().semantics { runReason?.let { stateDescription = it } },
                     )
                     // Drawn for the eye only: the button announces the same string as its state, and
                     // a second node would read it out again a swipe later.
-                    if (runHint != null) {
-                        Txt(runHint, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.clearAndSetSemantics {})
+                    if (runReason != null) {
+                        Txt(runReason, color = Skerry.colors.faint, size = 11.sp, modifier = Modifier.clearAndSetSemantics {})
                     }
                 }
                 MobileSheetButton(

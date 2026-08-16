@@ -1,4 +1,7 @@
 package app.skerry.ui.design
+import app.skerry.shared.text.INVISIBLE_ASTRAL
+import app.skerry.shared.text.drawsAsSomething
+import app.skerry.shared.text.stripInvisible
 
 /**
  * One line of text this client did not write, made fit to draw: a remote host's file name, a
@@ -16,6 +19,11 @@ package app.skerry.ui.design
  * is the opposite case: it is what tells one host, one file, one space from another, so a
  * character that renders as nothing is exactly the one that must not survive. Same choice the
  * keyboard-interactive prompt already makes, and this is that same filter.
+ *
+ * What it costs: a variation selector goes with the rest, so `report❤️.txt` draws as `report❤` —
+ * the text presentation of the same character. Deliberate. This filter answers "are these two names
+ * the same name", and two names that draw alike have to be one; the command quote answers the other
+ * question and keeps them (see `drawsAsItself`).
  */
 internal fun untrustedLabel(raw: String, maxChars: Int = MAX_UNTRUSTED_LABEL_CHARS): String =
     sanitizeServerText(raw, maxChars, allowNewlines = false)
@@ -54,48 +62,104 @@ internal const val MAX_UNTRUSTED_LABEL_CHARS = 120
  * [SCAN_FACTOR] times the cap is never looked at, so a flood of characters this drops costs no more
  * than a flood of characters it keeps.
  */
-internal fun sanitizeServerText(text: String, maxChars: Int, allowNewlines: Boolean): String {
+internal fun sanitizeServerText(text: String, maxChars: Int, allowNewlines: Boolean): String =
+    sanitized(text, maxChars, allowNewlines).text
+
+/**
+ * Whether [sanitizeServerText] draws [text] whole at [maxChars] — for the surfaces that say when a
+ * note was shortened.
+ *
+ * The drawn string's own length cannot answer, with or without a character of slack: the walk stops
+ * on the budget, and the trailing trim then takes the separator it stopped on away, so a note that
+ * really was cut comes back under the cap and reads as whole. The walk knows; this asks it.
+ */
+internal fun sanitizedFits(text: String, maxChars: Int, allowNewlines: Boolean = false): Boolean =
+    sanitized(text, maxChars, allowNewlines).whole
+
+/** The filtered text and whether the walk reached the end of what it was given. */
+private class Sanitized(val text: String, val whole: Boolean)
+
+private fun sanitized(text: String, maxChars: Int, allowNewlines: Boolean): Sanitized {
     // The loop below stops on what it has *kept*, so a text made of nothing but the characters it
     // drops would be scanned in full however long it is — the cap has to bound the input too, or
     // padding a name with a million zero-width spaces is a scan the far side gets for free. The
     // factor leaves room for ordinary text carrying formatting and still bounds a flood.
     val bounded = if (text.length > maxChars * SCAN_FACTOR) text.take(maxChars * SCAN_FACTOR) else text
+    var read = false
     val cleaned = buildString(minOf(bounded.length, maxChars)) {
-        for (ch in bounded) {
-            if (length >= maxChars) break
-            when (classifyServerChar(ch, allowNewlines)) {
-                ServerChar.Keep -> append(ch)
-                // Runs collapse: a server padding with blank lines or tabs gets one separator.
-                ServerChar.Break -> if (isNotEmpty() && last() != '\n') append('\n')
-                ServerChar.Space -> if (isNotEmpty() && last() != ' ') append(' ')
-                ServerChar.Drop -> Unit
-            }
-        }
+        read = appendSanitized(bounded, maxChars, allowNewlines)
     }
     // The cap counts UTF-16 units, so it can fall between the halves of an astral character and
     // leave an orphan that draws as U+FFFD — in the caption and in the field's name alike. Same
     // cut, same treatment as the terminal title's and the team label's.
-    return cleaned.dropLastWhile { it.isHighSurrogate() }.trim()
+    return Sanitized(cleaned.dropLastWhile { it.isHighSurrogate() }.trim(), read && bounded.length == text.length)
 }
+
+/**
+ * The scan itself, kept apart from the caps around it. `false` when it stopped on the budget
+ * rather than on the end of the text — which is the only honest answer to "was this cut".
+ *
+ * By code point, not by char: an astral formatting character is a surrogate pair, and both halves
+ * classify as SURROGATE — walked per char, the whole astral format range would be kept, and two
+ * names differing only by one of them would draw as one.
+ */
+private fun StringBuilder.appendSanitized(text: String, maxChars: Int, allowNewlines: Boolean): Boolean {
+    var i = 0
+    while (i < text.length) {
+        if (length >= maxChars) return false
+        val ch = text[i]
+        val pair = text.astralPairAt(i)
+        if (pair != null) {
+            if (!appendPair(text, i, pair, maxChars)) return false
+            i += 2
+            continue
+        }
+        appendClassified(ch, allowNewlines)
+        i++
+    }
+    return true
+}
+
+/**
+ * One astral character. Appended whole or not at all — half of a pair draws as the replacement
+ * glyph, which is neither the character nor a cut anyone can read. A pair that draws nothing spends
+ * none of the budget, so the text after it still fits. `false` when the budget is spent.
+ */
+private fun StringBuilder.appendPair(text: String, index: Int, code: Int, maxChars: Int): Boolean {
+    if (!astralDrawsAsSomething(code)) return true
+    if (length + 2 > maxChars) return false
+    append(text, index, index + 2)
+    return true
+}
+
+/** One basic-plane character, as the classifier decided to draw it. */
+private fun StringBuilder.appendClassified(ch: Char, allowNewlines: Boolean) {
+    when (classifyServerChar(ch, allowNewlines)) {
+        ServerChar.Keep -> append(ch)
+        // Runs collapse: a server padding with blank lines or tabs gets one separator.
+        ServerChar.Break -> if (isNotEmpty() && last() != '\n') append('\n')
+        ServerChar.Space -> if (isNotEmpty() && last() != ' ') append(' ')
+        ServerChar.Drop -> Unit
+    }
+}
+
+/** The code point at [index] when a surrogate pair starts there, `null` otherwise. */
+private fun String.astralPairAt(index: Int): Int? {
+    val high = this[index]
+    if (!high.isHighSurrogate() || index + 1 >= length) return null
+    val low = this[index + 1]
+    if (!low.isLowSurrogate()) return null
+    return 0x10000 + ((high.code - 0xD800) shl 10) + (low.code - 0xDC00)
+}
+
+/** Whether an astral code point draws at all — the format ranges draw as nothing. */
+private fun astralDrawsAsSomething(code: Int): Boolean = INVISIBLE_ASTRAL.none { code in it }
 
 /** How much input [sanitizeServerText] is willing to walk for each character it may keep. */
 private const val SCAN_FACTOR = 8
 
 /** What [sanitizeServerText] does with one character of server text. */
-private const val LINE_SEPARATOR = '\u2028'
-private const val PARAGRAPH_SEPARATOR = '\u2029'
-
 private enum class ServerChar { Keep, Break, Space, Drop }
-
-/**
- * Letters and a symbol that draw nothing at all: the Hangul fillers (choseong, jungseong, the
- * compatibility one and its halfwidth form) and the blank braille pattern. They are `Lo`/`So`, not
- * format characters, so nothing else drops them — a name made of them passes `isBlank()`, and a
- * quoted `curl\u2800evil.sh` reads as two words and runs as one.
- */
-// One definition for the whole app: the shared sanitizers drop exactly this set, and two
-// hand-synced copies would drift invisibly (the characters render as nothing).
-internal val INVISIBLE_LETTERS: Set<Char> = app.skerry.shared.snippet.INVISIBLE_LETTERS
 
 private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = when {
     ch == '\n' && allowNewlines -> ServerChar.Break
@@ -105,19 +169,14 @@ private fun classifyServerChar(ch: Char, allowNewlines: Boolean): ServerChar = w
     // Single-line sink: fold rather than drop, or the words either side are glued together
     // ("Accessdeniedby policy"), which reads worse than the wrapped original.
     ch == '\n' || ch == '\r' || ch == '\t' -> ServerChar.Space
-    ch.isISOControl() -> ServerChar.Drop
-    // The whole format category rather than the bidi overrides alone: the marks (LRM/RLM/ALM) reorder
-    // the neutral runs of a prompt the user reads before typing a secret, and the zero-width set lets
-    // one carry content nothing renders. Naming ranges left both classes in, and would leave whatever
-    // Unicode adds next. Covers the BOM too, which used to have a branch of its own.
-    ch.category == CharCategory.FORMAT -> ServerChar.Drop
-    // Not in that category, but they end a line wherever the text is laid out — a single-line
-    // caption is exactly what a server would use them to turn into several.
-    ch == LINE_SEPARATOR || ch == PARAGRAPH_SEPARATOR -> ServerChar.Drop
-    // Letters and a symbol by category, nothing at all on screen: a name made only of these is not
-    // blank to `isBlank()`, so it would slip past the stand-in a row falls back to and draw as an
-    // empty line. Five code points, not a confusables table — homoglyphs are a different problem
-    // and not one a client can close.
-    ch in INVISIBLE_LETTERS -> ServerChar.Drop
+    !drawsAsSomething(ch) -> ServerChar.Drop
     else -> ServerChar.Keep
 }
+
+/**
+ * A tag as a chip draws it: the `#` the model value does not carry, and nothing that draws as
+ * nothing. Filtered because a tag arrives with the record it belongs to and a record written by an
+ * older client was never canonicalized — a chip could read `#prod` while the tag it filters by is
+ * something else. One definition: the host chips and the snippet chips are the same chip.
+ */
+fun tagChipLabel(tag: String): String = "#" + stripInvisible(tag)

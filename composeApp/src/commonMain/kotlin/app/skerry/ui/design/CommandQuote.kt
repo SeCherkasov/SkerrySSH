@@ -1,5 +1,7 @@
 package app.skerry.ui.design
 
+import app.skerry.shared.text.INVISIBLE_ASTRAL
+import app.skerry.shared.text.drawsAsSomething
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -20,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -87,10 +90,7 @@ internal fun CommandQuote(
     // block whole.
     val escaped = remember(text) { visibleText(text.cutTo(MAX_DRAWN_COMMAND_CHARS)) }
     val cut = text.length > MAX_DRAWN_COMMAND_CHARS || escaped.length > MAX_DRAWN_COMMAND_CHARS
-    val drawn = remember(escaped) {
-        if (escaped.length <= MAX_DRAWN_COMMAND_CHARS) escaped
-        else cutWholeTokens(escaped.cutTo(MAX_DRAWN_COMMAND_CHARS))
-    }
+    val drawn = remember(escaped) { boundEscaped(escaped) }
     var fits by remember(text) { mutableStateOf<Boolean?>(null) }
     val clipped = fits == false || cut
     // Focusability is latched even where the clipped state is not (a desktop dialog is resizable, so
@@ -143,6 +143,38 @@ internal fun CommandQuote(
             },
         )
     }
+}
+
+/**
+ * A command as a *row* shows it: one line or a few, ellipsized, never scrolled. [CommandQuote] is
+ * the confirmation surface; this is the list surface, and it was written by hand at five call sites
+ * that agreed on the contract by accident. The contract is: escaped and bounded exactly like the
+ * quote ([boundedVisibleText]), monospaced, and pinned to LTR — a command's order is its meaning,
+ * and left unpinned a first-strong RTL character flips the row into an order the shell will not use.
+ *
+ * A row has no live region and no scroll of its own on purpose: these are drawn per item of a list
+ * that composes whole, and the surface that has to show the line entire is the confirmation.
+ */
+@Composable
+fun CommandLine(
+    command: String,
+    modifier: Modifier = Modifier,
+    color: Color = Skerry.colors.faint,
+    size: TextUnit = 10.5.sp,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    maxLines: Int = 1,
+) {
+    Txt(
+        remember(command) { boundedVisibleText(command) },
+        color = color,
+        size = size,
+        font = LocalFonts.current.mono,
+        lineHeight = lineHeight,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        textDirection = TextDirection.Ltr,
+        modifier = modifier,
+    )
 }
 
 /**
@@ -237,6 +269,19 @@ internal fun visibleText(raw: String): String {
 private fun String.cutTo(max: Int): String =
     if (length <= max) this else take(max).dropLastWhile { it.isHighSurrogate() }
 
+/**
+ * A command drawn outside [CommandQuote]'s own box — a library row, a palette entry, the line a
+ * runbook step will send. Escaped like the quote's, and bounded like it too: spelling a character
+ * out makes the string longer than what it came from, so text made of nothing else would draw as
+ * several times its own size. Where the caller has room for the quote itself, use that instead —
+ * it also says out loud that what is drawn was cut.
+ */
+internal fun boundedVisibleText(raw: String): String = boundEscaped(visibleText(raw.cutTo(MAX_DRAWN_COMMAND_CHARS)))
+
+private fun boundEscaped(escaped: String): String =
+    if (escaped.length <= MAX_DRAWN_COMMAND_CHARS) escaped
+    else cutWholeTokens(escaped.cutTo(MAX_DRAWN_COMMAND_CHARS))
+
 private fun codePoint(high: Char, low: Char): Int =
     0x10000 + ((high.code - 0xD800) shl 10) + (low.code - 0xDC00)
 
@@ -247,34 +292,33 @@ private fun StringBuilder.appendEscaped(code: Int) {
 /**
  * Whether the character at [code] draws as what it is. Decided by category, not by a list: the
  * whole of CONTROL and FORMAT, the separators, and the letters that draw as nothing at all
- * ([INVISIBLE_LETTERS], which no category names — `curl\u2800evil.sh` reads as two words and
- * runs as one). A blocklist is one Unicode release behind by construction, and this is the block
+ * (`INVISIBLE_LETTERS` in the shared filters, which no category names — `curl\u2800evil.sh` reads
+ * as two words and runs as one). A blocklist is one Unicode release behind by construction, and this is the block
  * that promises the drawn text is the text that runs — the categories cover everything the
  * hand-written `isSafeTerminalInputChar` pass here used to, and whatever the next Unicode revision
  * adds to them, by default. A tab is left alone: a shell separates words on it too, so a gap there
  * is what it means.
  */
 private fun drawsAsItself(code: Int): Boolean {
+    // A variation selector draws nothing of its own but changes the glyph before it — `⚠\uFE0F` is
+    // the emoji form of `⚠`, not a hidden character, and spelling `<U+FE0F>` into every emoji would
+    // be noise rather than a warning. Only the basic-plane sixteen: emoji presentation needs no
+    // more, while the supplement (U+E0100..U+E01EF) is a run of invisible code points with no use
+    // in a shell line and a known one as a payload, so it stays spelled out.
+    if (code in VARIATION_SELECTORS) return true
     if (code > Char.MAX_VALUE.code) return INVISIBLE_ASTRAL.none { code in it }
     val c = code.toChar()
     if (c == '\n' || c == '\t' || c == ' ') return true
-    if (c in INVISIBLE_LETTERS) return false
-    return when (c.category) {
-        // A blank of space width that no shell splits a word on: `curl\u00A0evil.sh` is one argument
-        // and reads as two. Ordinary space and tab are answered above — a shell does split on those.
-        CharCategory.SPACE_SEPARATOR,
-        CharCategory.LINE_SEPARATOR,
-        CharCategory.PARAGRAPH_SEPARATOR,
-        // Invisible operators, bidi controls, the Arabic number marks, the interlinear annotations.
-        CharCategory.FORMAT,
-        // C0, C1 and DEL — a control byte draws as less than nothing.
-        CharCategory.CONTROL,
-        // Half of a pair with no other half: it draws as the replacement glyph.
-        CharCategory.SURROGATE,
-        -> false
-        else -> true
-    }
+    // Everything that draws as nothing at all — the format category, the separators, the control
+    // bytes, a lone surrogate, the invisible letters and the default-ignorable marks. One rule,
+    // shared with the filters that drop those characters instead of spelling them out.
+    if (!drawsAsSomething(c)) return false
+    // A blank of space width that no shell splits a word on: `curl\u00A0evil.sh` is one argument and
+    // reads as two. Ordinary space and tab are answered above — a shell does split on those.
+    return c.category != CharCategory.SPACE_SEPARATOR
 }
+
+private val VARIATION_SELECTORS = 0xFE00..0xFE0F
 
 /**
  * A string the cap already cut, without a spelled-out character the cut caught halfway: the cap
@@ -294,23 +338,6 @@ private fun cutWholeTokens(cutOff: String): String {
 }
 
 private const val ESCAPE_OPEN = "<U+"
-
-/**
- * Astral characters that draw nothing. Format characters past the basic plane cannot be asked
- * about the way the BMP is — `Char.category` sees one UTF-16 unit and `commonMain` has no
- * `Character.getType(Int)` — so they are matched by block: every FORMAT (Cf) block above U+FFFF as
- * of Unicode 15 plus the variation selectors supplement, which is equally invisible. Without the
- * full list `curl\u{1D173}evil.sh` drew as two words and ran as one, the same lie the tag block
- * told before it was closed.
- */
-private val INVISIBLE_ASTRAL = listOf(
-    0x110BD..0x110BD, // Kaithi number sign
-    0x110CD..0x110CD, // Kaithi number sign above
-    0x13430..0x1343F, // Egyptian hieroglyph format controls
-    0x1BCA0..0x1BCA3, // shorthand format controls
-    0x1D173..0x1D17A, // musical symbol beams and streams
-    0xE0000..0xE01EF, // tags + variation selectors supplement
-)
 
 /**
  * How much of a command a confirmation lays out. A few hundred kilobytes in one paragraph costs the

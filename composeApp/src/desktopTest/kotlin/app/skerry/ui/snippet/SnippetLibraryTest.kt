@@ -26,6 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import app.skerry.ui.design.tagChipLabel
 
 /**
  * The snippet library as a list you act on: filling it, narrowing it, running a line into a session
@@ -71,7 +72,7 @@ class SnippetLibraryTest {
         installStarterPack()
 
         // The chip says only its tag; a row that carries the tag says its command too.
-        onNode(hasTextExactly(snippetTagLabel(DB_TAG))).performClick()
+        onNode(hasTextExactly(tagChipLabel(DB_TAG))).performClick()
         waitForIdle()
         onSnippetRow(PSQL_SNIPPET, PSQL_COMMAND).assertIsDisplayed()
         onSnippetRow(DISK_SNIPPET, DISK_COMMAND).assertDoesNotExist()

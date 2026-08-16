@@ -25,6 +25,7 @@ import app.skerry.ui.generated.resources.guard_prod_sending
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import androidx.compose.ui.test.onNodeWithContentDescription
 
 /**
  * What the production guard's confirmation quotes. It is the last thing read before a command runs
@@ -157,6 +158,17 @@ class ProdCommandSheetTest {
         onNodeWithText(string(Res.string.guard_prod_further_in), ignoreCase = true).assertDoesNotExist()
         // The counted form belongs to the block that is cut, not to the one that is a guess.
         onNodeWithText(string(Res.string.command_clipped, RISKY.length)).assertDoesNotExist()
+    }
+
+    /**
+     * Nothing in the sheet takes focus, so the scrim holds it: unnamed, the confirmation that gates
+     * a risky command on a production host opens in silence for anyone reading the screen aloud.
+     */
+    @Test
+    fun `the confirmation names itself`() = runForm({
+        ProdCommandDialog(hostLabel = HOST, guarded = guarded(), quote = RISKY, onConfirm = {}, onDismiss = {})
+    }) {
+        onNodeWithContentDescription(string(Res.string.guard_prod_command_title)).assertExists()
     }
 
     private fun guarded() = GuardedCommand(

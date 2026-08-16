@@ -25,6 +25,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.onRoot
+import kotlin.test.assertTrue
 
 /**
  * The docked panel's interactive-step wiring. The panel is the phone's only run surface and its
@@ -53,6 +58,54 @@ class RunbookRunPanelTest {
         takeMark = { null },
         outputVersion = { 0L },
     )
+
+    /**
+     * The panel is what is on screen while a shared procedure runs, and its rows carry the author's
+     * own title and line. Filtered and spelled out like every other surface that draws them — the
+     * one place this had to be tested through a live run rather than a form.
+     */
+    @Test
+    fun `the running panel draws neither the step title nor its line raw`() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val runner = panelRunner(scope)
+        val runbook = Runbook(
+            id = "rb",
+            label = "Rollout\u202Etuollor",
+            steps = listOf(
+                RunbookStep.Command(
+                    id = "s1",
+                    title = "Deploy\u202Eyolped",
+                    command = "echo ok \u202E# rm -rf /",
+                    confirm = false,
+                    interactive = true,
+                ),
+            ),
+        )
+        try {
+            runner.requestStart(runbook, target())
+            runner.confirmStart { "" }
+            runForm({ runner.run?.let { RunbookRunPanel(runner, it) } }) {
+                val drawn = onRoot(useUnmergedTree = true).fetchSemanticsNode().allText()
+                assertTrue(drawn.isNotEmpty(), "the panel drew nothing")
+                assertTrue(
+                    drawn.none { text -> text.codePoints().anyMatch { Character.getType(it) == Character.FORMAT.toInt() } },
+                    "a reordering character reached the running panel, was $drawn",
+                )
+                // And the positive half: the filter that merely dropped the character passes the
+                // check above too. What separates the two is that this one spells it out.
+                assertTrue(
+                    drawn.any { it.contains("<U+202E>") },
+                    "the panel dropped the override instead of spelling it out, was $drawn",
+                )
+            }
+        } finally {
+            runner.close()
+            scope.cancel()
+        }
+    }
+
+    private fun SemanticsNode.allText(): List<String> =
+        config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } + children.flatMap { it.allText() }
 
     @Test
     fun `the panel completes and skips an interactive step`() {

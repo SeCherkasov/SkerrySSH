@@ -12,6 +12,8 @@ import app.skerry.shared.snippet.SnippetTemplate
 import app.skerry.shared.snippet.captureSnippetRunEnvironment
 import app.skerry.shared.snippet.stripUnsafeFormatChars
 import app.skerry.shared.tag.normalizeTags
+import app.skerry.ui.design.boundedVisibleText
+import app.skerry.shared.terminal.displayColumns
 
 /**
  * Editable snippet fields without [Snippet.id]: the create/edit form works on a draft, and
@@ -183,6 +185,12 @@ class SnippetManager(
         id: String,
         recording: Boolean = false,
         params: Map<String, String> = emptyMap(),
+        /**
+         * Whether the caller is a row that runs on one tap and shows a line or two of the command.
+         * A command it cannot show whole goes through the confirmation instead — a shared snippet
+         * can pad its line until the tail, the part worth hiding, is past what the row draws.
+         */
+        oneTap: Boolean = false,
         send: (line: String, secrets: List<String>) -> Unit,
     ) {
         // A run initiated while the variable dialog is up would silently replace (or race) the
@@ -190,7 +198,7 @@ class SnippetManager(
         if (pendingRun != null) return
         val snippet = find(id)?.snippet ?: return
         val segments = SnippetTemplate.parse(snippet.command)
-        if (segments.none { it is SnippetSegment.Variable }) {
+        if (segments.none { it is SnippetSegment.Variable } && (!oneTap || showsWholeCommand(snippet.command))) {
             // Strip bidi/format tricks from the literal text too (Teams-shared snippets are not
             // "user-saved text"); an intentional multi-line script passes through unchanged.
             send(stripUnsafeFormatChars(snippet.command) + "\n", emptyList())
@@ -204,6 +212,16 @@ class SnippetManager(
             initialParams = params.ifEmpty { lastParams[snippet.id].orEmpty() },
             sendLine = send,
         )
+    }
+
+    /** Whether a row that offers this command in one tap can show all of it. */
+    private fun showsWholeCommand(command: String): Boolean {
+        // Measured on what the row draws, not on what the record holds: the row spells a character
+        // that draws as nothing as `<U+202E>`, eight characters for one, so a raw count says a line
+        // fits while the drawn one runs off the row and takes its tail with it. Either break counts
+        // — the escape reads a lone CR as a line of its own.
+        val drawn = boundedVisibleText(command)
+        return '\n' !in drawn && displayColumns(drawn) <= MAX_ONE_TAP_COMMAND_COLUMNS
     }
 
     /**
@@ -224,3 +242,15 @@ class SnippetManager(
         pendingRun = null
     }
 }
+
+/**
+ * How wide a drawn command may be, in columns, and still run from a row that shows it in one tap.
+ * The budget belongs to the narrowest of the one-tap surfaces — two lines of a 320.dp palette row at
+ * 10.5.sp mono — and sits below its estimated capacity rather than at it: what a mono advance ratio
+ * actually buys is a font's business, and a row that ellipsizes says nothing when it does.
+ *
+ * This is a readability rule, not a provenance one: a Teams-shared snippet never enters the personal
+ * library the palette lists, so the record is always the user's own. What the gate promises is only
+ * that a line sent on one tap is a line the row could show whole.
+ */
+private const val MAX_ONE_TAP_COMMAND_COLUMNS = 80

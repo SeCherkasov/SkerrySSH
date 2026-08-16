@@ -78,6 +78,7 @@ import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
 import androidx.compose.runtime.CompositionLocalProvider
 import app.skerry.ui.design.LocalFieldLabel
+import androidx.compose.ui.text.style.TextDirection
 
 /** Watchdog values the editor offers, in minutes; `0` turns the warning off. */
 private val WATCHDOG_CHOICES = listOf(0, 2, 5, 15)
@@ -302,7 +303,11 @@ private fun RunbookLineField(
     singleLine: Boolean = true,
 ) {
     val textColor = Skerry.colors.text
-    val style = remember(font, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = font) }
+    // A step's line — a command or a transfer path — is read in the order it will run, whatever
+    // the first strong character says, and a runbook can arrive with someone else's text in it.
+    val style = remember(font, textColor) {
+        TextStyle(color = textColor, fontSize = 13.sp, fontFamily = font, textDirection = TextDirection.Ltr)
+    }
     val draft = rememberFieldDraft(value, singleLine = singleLine)
     BasicTextField(
         value = draft.textFieldValue(value),
@@ -327,7 +332,12 @@ private fun RunbookLineField(
 @Composable
 private fun RunbookCommandField(value: String, onValueChange: (String) -> Unit, placeholder: String, mono: FontFamily) {
     val textColor = Skerry.colors.textBright
-    val style = remember(mono, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono) }
+    // Direction pinned like the snippet editor's command field: a step can arrive with a shared
+    // runbook, and a first-strong RTL character would draw the line in an order the runner will not
+    // use.
+    val style = remember(mono, textColor) {
+        TextStyle(color = textColor, fontSize = 13.sp, fontFamily = mono, textDirection = TextDirection.Ltr)
+    }
     val draft = rememberFieldDraft(value, singleLine = false)
     BasicTextField(
         value = draft.textFieldValue(value),

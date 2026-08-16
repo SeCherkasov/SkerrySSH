@@ -1,6 +1,7 @@
 package app.skerry.shared.snippet
 
 import app.skerry.shared.terminal.isSafeTerminalInputChar
+import app.skerry.shared.text.INVISIBLE_LETTERS
 
 /**
  * Kind of a dynamic `${{…}}` variable in a snippet command (issue #58, XTerminal-compatible
@@ -302,16 +303,6 @@ object SnippetTemplate {
         "ss" to { m -> pad2(m.second) },
     )
 }
-
-/**
- * Characters that draw as nothing but count as letters (Hangul fillers U+115F/U+1160/U+3164/U+FFA0,
- * Braille blank U+2800), so the format-category filters keep them: two strings differing only by
- * one of these render identically while executing differently. Never legitimate in a command or a
- * spliced value, so both filters below drop them. Public because the UI's untrusted-label filter
- * rejects exactly this set — one definition, not two hand-synced copies. Escapes, not the raw
- * glyphs: an invisible character in source is unreviewable.
- */
-val INVISIBLE_LETTERS: Set<Char> = setOf('\u115F', '\u1160', '\u3164', '\uFFA0', '\u2800')
 
 /**
  * Removes bidi/format (and DEL/C1) characters from literal template text while keeping its

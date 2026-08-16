@@ -77,6 +77,7 @@
     <string name="lib_snippets_run_title">Запустить сниппет</string>
     <string name="lib_snippets_run_empty">Пока нет сниппетов. Добавьте их на вкладке «Сниппеты».</string>
     <string name="lib_snippets_run_in_terminal">Запустить в терминале</string>
+    <string name="lib_snippets_run_needs_save">Сохраните изменённую команду, чтобы запустить её</string>
     <string name="lib_snippets_save_snippet">Сохранить сниппет</string>
     <string name="lib_snippets_facts_variables">%1$d с переменными</string>
     <string name="lib_snippets_variables">Переменные</string>
