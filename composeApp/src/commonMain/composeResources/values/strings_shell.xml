@@ -118,6 +118,7 @@
     <string name="shell_tip_close">Close</string>
     <string name="shell_tip_show_options">Show options</string>
     <string name="shell_tip_show_hosts">Show hosts</string>
+    <string name="shell_tip_hide_hosts">Hide hosts</string>
     <string name="shell_tip_back">Back</string>
     <string name="shell_tip_remove">Remove</string>
     <string name="shell_tip_pause">Pause</string>

@@ -5,7 +5,6 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.shrinkHorizontally
 import app.skerry.ui.design.EmptyState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,7 +44,6 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.connection.connectionErrorText
-import app.skerry.ui.design.Sym
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_connecting
 import app.skerry.ui.generated.resources.term_connection_failed
@@ -71,7 +68,6 @@ import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
-import app.skerry.ui.generated.resources.shell_tip_show_hosts
 
 /** Height of a pane's own header on a split grid; a single-pane tab is named by the [WorkBar]. */
 internal val PANE_HEADER_HEIGHT = 26.dp
@@ -202,29 +198,6 @@ private fun soloHostPicker(state: DesktopDesignState, tab: Tab?): ((Host) -> Uni
         // A pane that already holds a session is re-pointed only after a confirmation: the old
         // connection goes down with it. An empty pane has nothing to lose and connects straight away.
         if (pane.isBlank) connectPane(host, pane.id) else state.requestPaneConnect(tab.id, pane.id, host)
-    }
-}
-
-/**
- * Slim reopen strip shown at a view's left edge while the hosts sidebar is collapsed. Painted in
- * the sidebar's own surface so it reads as the panel peeking out; clicking it restores the panel.
- * The terminal reopens from the work bar's chevron instead; this is what the remote-desktop view
- * still uses, which has no bar of its own yet.
- */
-@Composable
-internal fun SidebarReopenHandle(onClick: () -> Unit) {
-    Box(
-        Modifier.width(16.dp).fillMaxHeight().background(Skerry.colors.surface2).clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        // The strip is the only way back to the sidebar on a remote-desktop view, and it draws
-        // nothing but a chevron — without a name it is a focusable element that says nothing.
-        Sym(
-            "chevron_right",
-            contentDescription = stringResource(Res.string.shell_tip_show_hosts),
-            size = 16.sp,
-            color = Skerry.colors.faint,
-        )
     }
 }
 
