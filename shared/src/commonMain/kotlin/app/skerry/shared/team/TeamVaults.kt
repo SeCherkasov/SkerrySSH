@@ -3,6 +3,7 @@ package app.skerry.shared.team
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.UnlockResult
+import app.skerry.shared.vault.constantTimeEquals
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
 import okio.FileSystem
@@ -25,7 +26,16 @@ class TeamVaults(
     private val now: () -> String,
 ) {
 
-    private val open = mutableMapOf<String, Vault>()
+    /**
+     * The vault open for a space, together with the key it was opened under. The key is part of the
+     * entry and not just of the lookup: a space is re-keyed while its vault is still open (a screen
+     * holding it), and answering the next request from the cache would hand back a vault that
+     * cannot read a single record written since — while the stale-key probe below, the only thing
+     * that detects a superseded key, is skipped because the cache answered first.
+     */
+    private class OpenVault(val vault: Vault, val key: ByteArray)
+
+    private val open = mutableMapOf<String, OpenVault>()
 
     /**
      * Outcome of [openOrClassify]. [StaleKey] and [Unreadable] both mean "no usable vault", but the
@@ -53,7 +63,14 @@ class TeamVaults(
     fun openOrClassify(ref: TeamScopeRef, key: DataKey): OpenResult {
         requireSafe(ref)
         open[ref.key]?.let { cached ->
-            if (cached.isUnlocked) return OpenResult.Opened(cached)
+            if (cached.vault.isUnlocked && constantTimeEquals(cached.key, key.bytes)) {
+                return OpenResult.Opened(cached.vault)
+            }
+            // Opened under a key that is no longer the one being asked for (or already locked):
+            // drop it and take the normal path, which classifies the file against THIS key.
+            cached.vault.lock()
+            cached.key.fill(0)
+            open.remove(ref.key)
         }
         // FileVault takes ownership of the passed key (and wipes it on lock), so hand it a copy
         // to keep the caller's instance valid across repeated open/lock cycles.
@@ -82,20 +99,20 @@ class TeamVaults(
                 return OpenResult.StaleKey
             }
         }
-        open[ref.key] = vault
+        open[ref.key] = OpenVault(vault, key.bytes.copyOf())
         return OpenResult.Opened(vault)
     }
 
     /** Lock and forget all open vaults (e.g. when the account vault locks). */
     fun lockAll() {
-        open.values.forEach { it.lock() }
+        open.values.forEach { it.vault.lock(); it.key.fill(0) }
         open.clear()
     }
 
     /** Delete one space's file (left/deleted/access revoked): the local copy is no longer needed. */
     fun reset(ref: TeamScopeRef) {
         requireSafe(ref)
-        open.remove(ref.key)?.lock()
+        open.remove(ref.key)?.let { it.vault.lock(); it.key.fill(0) }
         fileSystem.delete(dir / ref.fileName, mustExist = false)
     }
 

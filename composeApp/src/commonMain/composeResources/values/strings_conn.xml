@@ -100,6 +100,7 @@
 
     <string name="conn_tunnel_error_host_missing">Host not found</string>
     <string name="conn_tunnel_error_no_credential">No saved credential</string>
+    <string name="conn_tunnel_error_link_lost">Connection lost</string>
 
     <string name="conn_serial_err_unsupported">Serial ports are not available on this device.</string>
     <string name="conn_serial_err_not_found">Port %1$s not found. Reconnect the device or pick another port.</string>

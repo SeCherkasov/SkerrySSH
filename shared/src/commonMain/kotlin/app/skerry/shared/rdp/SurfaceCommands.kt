@@ -64,6 +64,9 @@ class SurfaceDecoder(
             when (codecId) {
                 0 -> "Raw"
                 ClientCapabilities.CODEC_ID_REMOTEFX -> "RemoteFX"
+                // Always advertised and always decodable, so it is the fallback a host with
+                // RemoteFX off actually lands on — the overlay has to name it, not print its id.
+                ClientCapabilities.CODEC_ID_NSCODEC -> "NSCodec"
                 else -> "0x${codecId.toString(16)}"
             },
         )

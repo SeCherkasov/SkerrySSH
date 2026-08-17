@@ -2,7 +2,7 @@ package app.skerry.ui.session
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +35,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -200,7 +201,9 @@ private fun TargetRow(label: String, selected: Boolean, production: Boolean, mon
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
             .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-            .clickable(onClick = onToggle)
+            // toggleable, not clickable: the tick is a Sym glyph, which clears its own semantics, so
+            // the row is the only node that can carry the checked state (issue #228).
+            .toggleable(value = selected, role = Role.Checkbox, onValueChange = { onToggle() })
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),

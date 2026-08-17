@@ -125,6 +125,25 @@ class TelnetCodecTest {
         assertEquals("ok", d.data.decodeToString())
     }
 
+    /**
+     * The drop scanner has to read an escaped `IAC IAC` the same way the buffering path does: as
+     * one literal 0xFF in the body, not as the start of the closing sequence. Reading it the other
+     * way ends the subnegotiation at the next byte, and the rest of a body the server chose —
+     * escape sequences included — is emitted into the terminal as data.
+     */
+    @Test
+    fun `an escaped IAC inside an oversized subnegotiation does not end it`() {
+        val codec = TelnetCodec()
+        codec.consume(bytes(IAC, SB, NAWS))
+        codec.consume(ByteArray(16_384) { 0x20 }) // past the 8 KiB buffering cap
+        // An escaped 0xFF followed by a literal SE byte, then the rest of the body.
+        val d = codec.consume(bytes(IAC, IAC, SE) + "smuggled".encodeToByteArray())
+
+        assertEquals("", d.data.decodeToString(), "subnegotiation body reached the terminal as data")
+        // The real end of the subnegotiation still works, and data after it is passed through.
+        assertEquals("ok", codec.consume(bytes(IAC, SE) + "ok".encodeToByteArray()).data.decodeToString())
+    }
+
     @Test
     fun `windowSize builds a NAWS subnegotiation with escaped 0xFF`() {
         // A 255 in the window size must be escaped by doubling inside the SB body.

@@ -25,6 +25,8 @@ import app.skerry.shared.tunnel.TunnelDirection
 import app.skerry.shared.tunnel.TunnelStore
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -257,6 +259,152 @@ class TunnelManagerTest {
 
         assertEquals(TunnelStatus.Inactive, manager.tunnels.single().status)
         assertTrue(conn.disconnected) // the opened connection was closed, not left as an orphan
+    }
+
+    /**
+     * A tunnel deleted on another device reaches this one as a store write plus a reload — no
+     * `delete()` call is ever made here. Dropping the row without deactivating it leaves the local
+     * port bound and the SSH connection open, forwarding traffic with no row left to stop it.
+     */
+    @Test
+    fun `reload tears down a tunnel that has gone from the store`() = runTest {
+        val store = FakeTunnelStore()
+        val transport = FakeTunnelTransport(FakeTunnelConnection(localPort = 50060))
+        val manager = managerWith(transport, store)
+        val id = manager.save(localDraft())
+        manager.activate(id)
+        assertIs<TunnelStatus.Active>(manager.find(id)!!.status)
+
+        store.remove(id) // the deletion synced in from another device
+        manager.reload()
+
+        assertTrue(manager.tunnels.isEmpty())
+        val forward = transport.connection.lastForward!!
+        assertEquals(1, forward.closeCount, "the forward kept its port bound after the row was gone")
+        assertTrue(transport.connection.disconnected, "the SSH connection outlived its row")
+    }
+
+    /**
+     * The other half of the same rule: a record that is still there but cannot be read — what
+     * adopting an account dataKey leaves behind for everything not yet pushed — is NOT a deletion.
+     * Tearing down on it would stop a live tunnel the moment this desktop joins an existing sync
+     * account, and dropping its row would leave the forward running with nothing to stop it.
+     */
+    @Test
+    fun `reload keeps a tunnel whose record is present but unreadable`() = runTest {
+        val store = FakeTunnelStore()
+        val transport = FakeTunnelTransport(FakeTunnelConnection(localPort = 50062))
+        val manager = managerWith(transport, store)
+        val id = manager.save(localDraft())
+        manager.activate(id)
+
+        store.unreadable += id // sealed under a superseded key: absent from all(), present in liveIds()
+        manager.reload()
+
+        assertIs<TunnelStatus.Active>(manager.find(id)?.status, "a live tunnel was torn down")
+        assertEquals(0, transport.connection.lastForward!!.closeCount)
+        assertTrue(manager.tunnels.any { it.id == id }, "the row vanished while its forward kept running")
+    }
+
+    /**
+     * Stop-then-Start while the first attempt is still inside a blocking connect: the cancelled
+     * attempt must not clear the *new* attempt's job on its way out, or nothing can cancel the new
+     * one afterwards — neither the user's next Stop nor the vault lock, which is the same call.
+     */
+    @Test
+    fun `a stop after a restart still cancels the attempt that is in flight`() = runTest {
+        val first = CompletableDeferred<Unit>()
+        val second = CompletableDeferred<Unit>()
+        // Uncancellable, like the real blocking connect: cancelling the first attempt does not stop
+        // it, it only makes it throw once the dial finally returns.
+        val conn = FakeTunnelConnection(localPort = 50061, raiseGate = second)
+        val transport = FakeTunnelTransport(conn, connectGates = listOf(first, CompletableDeferred(Unit)))
+        val manager = managerWith(transport)
+        val id = manager.save(localDraft())
+
+        manager.activate(id) // attempt A, stuck in connect
+        manager.deactivate(id) // Stop: A is cancelled but cannot notice yet
+        manager.activate(id) // Start again: attempt B is now the one in flight
+        first.complete(Unit) // A's dial returns, A unwinds as cancelled
+
+        manager.deactivate(id) // Stop again (or the vault locking, which calls the same thing)
+        second.complete(Unit) // whatever B was waiting on comes back
+
+        assertEquals(TunnelStatus.Inactive, manager.find(id)!!.status, "a tunnel came up after it was stopped")
+    }
+
+    /**
+     * Nothing ever looked at a running tunnel. The server rebooting, or the laptop changing
+     * network, drops the SSH connection while the local listener stays bound: the row keeps saying
+     * Active, every application connecting through the port is closed immediately, and the failure
+     * never reaches the journal. The telemetry poll is the one thing that visits a live tunnel.
+     */
+    @Test
+    fun `the poll catches a tunnel whose connection died and says so`() = runTest {
+        val conn = FakeTunnelConnection(localPort = 50070)
+        val transport = FakeTunnelTransport(conn)
+        val manager = managerWith(transport)
+        val id = manager.save(localDraft())
+        manager.activate(id)
+        assertIs<TunnelStatus.Active>(manager.find(id)!!.status)
+
+        conn.disconnect() // the link drops underneath the forward
+        manager.pollTelemetry()
+
+        assertIs<TunnelStatus.Failed>(manager.find(id)!!.status)
+        assertEquals(1, transport.connection.lastForward!!.closeCount, "the dead forward kept its port bound")
+        assertTrue(
+            manager.telemetry.events.any { it.tunnelId == id },
+            "a tunnel that died on its own left nothing in the journal",
+        )
+    }
+
+    /**
+     * The poll is the only thing that visits a running tunnel, and it now does more than arithmetic
+     * — it asks the connection whether it is still alive. A row that throws must not take the loop
+     * with it (every other tunnel's rates and the dead-tunnel detection would go too, silently),
+     * and must not be left Active either: it would throw again every second, adding an event a
+     * second while its port stays bound.
+     */
+    @Test
+    fun `a row that throws is torn down, and the rest of the poll survives`() = runTest {
+        val conn = FakeTunnelConnection(localPort = 50080)
+        val transport = FakeTunnelTransport(conn)
+        val manager = managerWith(transport)
+        val id = manager.save(localDraft())
+        manager.activate(id)
+
+        conn.failLiveness = true
+        manager.pollTick() // must not throw out of the loop
+
+        assertIs<TunnelStatus.Failed>(manager.find(id)!!.status, "the row was left Active to throw again")
+        assertEquals(1, transport.connection.lastForward!!.closeCount, "the forward kept its port bound")
+        assertEquals(1, manager.telemetry.events.count { it.tunnelId == id }, "one failure, not one per tick")
+
+        manager.pollTick() // the next tick still works, and adds nothing new
+        assertEquals(1, manager.telemetry.events.count { it.tunnelId == id })
+    }
+
+    /**
+     * A link that dropped and a user who pressed Stop are the same end state, and the poll must not
+     * turn the second into the first: a tunnel stopped by hand stays stopped, and the journal keeps
+     * no failure for something the user did on purpose.
+     */
+    @Test
+    fun `a tunnel stopped by hand is not marked failed by the next tick`() = runTest {
+        val conn = FakeTunnelConnection(localPort = 50090)
+        val manager = managerWith(FakeTunnelTransport(conn))
+        val id = manager.save(localDraft())
+        manager.activate(id)
+        conn.disconnect() // the link drops
+        manager.deactivate(id) // ...and the user presses Stop before the poll gets there
+        manager.pollTick()
+
+        assertEquals(TunnelStatus.Inactive, manager.find(id)!!.status, "a stopped tunnel was marked failed")
+        assertTrue(
+            manager.telemetry.events.none { it.tunnelId == id },
+            "a tunnel the user stopped was journalled as a failure",
+        )
     }
 
     @Test
@@ -515,7 +663,12 @@ class TunnelManagerTest {
 
 private class FakeTunnelStore : TunnelStore {
     private val entries = mutableListOf<Tunnel>()
-    override fun all(): List<Tunnel> = entries.toList()
+
+    /** Records whose payload no longer decrypts: present in [liveIds], missing from [all]. */
+    val unreadable: MutableSet<String> = mutableSetOf()
+
+    override fun all(): List<Tunnel> = entries.filterNot { it.id in unreadable }
+    override fun liveIds(): Set<String> = entries.map { it.id }.toSet()
     override fun put(tunnel: Tunnel) {
         val i = entries.indexOfFirst { it.id == tunnel.id }
         if (i >= 0) entries[i] = tunnel else entries += tunnel
@@ -528,15 +681,24 @@ private class FakeTunnelStore : TunnelStore {
 private class FakeTunnelTransport(
     val connection: FakeTunnelConnection = FakeTunnelConnection(),
     private val connectError: Throwable? = null,
+    /**
+     * One gate per `connect` call, held under [NonCancellable] — the real dial is blocking, so a
+     * cancelled attempt keeps running to the end and only then finds out it was cancelled. Empty
+     * (the default) means every connect returns at once.
+     */
+    private val connectGates: List<CompletableDeferred<Unit>> = emptyList(),
 ) : SshTransport {
     var lastTarget: SshTarget? = null
         private set
     var lastAuth: SshAuth? = null
         private set
 
+    private var dials = 0
+
     override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection {
         lastTarget = target
         lastAuth = auth
+        connectGates.getOrNull(dials++)?.let { withContext(NonCancellable) { it.await() } }
         connectError?.let { throw it }
         return connection
     }
@@ -560,7 +722,13 @@ private class FakeTunnelConnection(
     var disconnected = false
         private set
 
-    override val isConnected: Boolean get() = !disconnected
+    /** Makes the liveness probe throw, standing in for anything a tick can fail on. */
+    var failLiveness: Boolean = false
+
+    override val isConnected: Boolean get() {
+        if (failLiveness) error("liveness probe failed")
+        return !disconnected
+    }
     override suspend fun exec(command: String): ExecResult = throw UnsupportedOperationException()
     override suspend fun openShell(size: PtySize, term: String): ShellChannel = throw UnsupportedOperationException()
     override suspend fun openSftp(): SftpClient = throw UnsupportedOperationException()

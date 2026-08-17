@@ -106,7 +106,10 @@ class SyncEngineFilterTest {
         // the rest of the cycle down with them.
         val client = object : FakeSyncClient() {
             override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage {
-                if (records.any { it.type == RecordType.TRASH.name }) error("unknown record type: TRASH")
+                if (records.any { it.type == RecordType.TRASH.name }) {
+                    // How a server without the type actually answers: the type fails validation.
+                    throw SyncException(SyncException.Kind.PROTOCOL, "unknown record type: TRASH")
+                }
                 return super.push(session, records)
             }
         }

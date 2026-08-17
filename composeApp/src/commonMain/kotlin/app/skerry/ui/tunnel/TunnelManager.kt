@@ -22,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 
@@ -54,6 +55,13 @@ sealed interface TunnelUnavailable {
 
     /** The host's ProxyJump chain didn't resolve. */
     data class Jump(val problem: JumpChainProblem) : TunnelUnavailable
+
+    /**
+     * It was up and stopped working: the listener died, or the SSH connection under it dropped.
+     * Typed like the rest — the telemetry poll that detects this runs outside the composition, and
+     * a poll that had to resolve a string would be a suspension (and a failure point) per tick.
+     */
+    data object LinkLost : TunnelUnavailable
 }
 
 /** Resolution of a saved tunnel to connection parameters: either the host and secret are available, or not. */
@@ -107,11 +115,20 @@ class TunnelEntry internal constructor(tunnel: Tunnel) {
     var downRate: Long by mutableStateOf(0)
         internal set
 
+    // Written by the telemetry poll (Dispatchers.Default) and by deactivate (the UI thread), so
+    // both sides have to see each other's writes.
+    @Volatile
     internal var handle: PortForward? = null
+
+    @Volatile
     internal var connection: SshConnection? = null
 
     // Coroutine bringing the tunnel up (status Connecting); [TunnelManager.deactivate] cancels it
-    // so a connection opening right now doesn't leak after deactivation.
+    // so a connection opening right now doesn't leak after deactivation. Volatile for the same
+    // reason as the two above, and it is the field the Stop-then-Start guard reads: a stale read in
+    // the cancelled attempt's `finally` would clear the newer attempt's job, leaving nothing able
+    // to cancel it — not the next Stop, and not the vault lock.
+    @Volatile
     internal var connectingJob: Job? = null
 
     internal var prevUp: Long = 0
@@ -185,7 +202,7 @@ class TunnelManager(
         scope.launch {
             while (isActive) {
                 delay(pollIntervalMillis)
-                pollTelemetry()
+                pollTick()
             }
         }
     }
@@ -197,8 +214,27 @@ class TunnelManager(
      * dropped, new ones added.
      */
     fun reload() {
+        val incoming = store.all()
+        // liveIds, not the ids of `incoming`: a record whose payload cannot be decrypted is missing
+        // from `all()` but is very much still there — adopting an account dataKey leaves every
+        // not-yet-pushed record sealed under the previous key. Tearing down on that would stop a
+        // live tunnel the moment this desktop joins an existing sync account.
+        val kept = store.liveIds()
+        // A row that has really left the store takes its forward with it. Deleting a tunnel on
+        // another device arrives here as a store write plus a reload — `delete()` is never called —
+        // so dropping the entry alone would leave the port bound and the SSH connection open with
+        // no row left to stop them.
+        tunnels.filter { it.id !in kept }.forEach {
+            deactivate(it.id)
+            telemetry.forget(it.id)
+        }
+        val readable = incoming.map { it.id }.toHashSet()
         val byId = tunnels.associateBy { it.id }
-        tunnels = store.all().map { tunnel -> byId[tunnel.id]?.also { it.tunnel = tunnel } ?: TunnelEntry(tunnel) }
+        val refreshed = incoming.map { tunnel -> byId[tunnel.id]?.also { it.tunnel = tunnel } ?: TunnelEntry(tunnel) }
+        // A row whose record is there but unreadable keeps the config it was loaded with, at the
+        // end of the list: the tunnel exists and may well be up, and dropping the row would leave
+        // its forward running with nothing on screen to stop it.
+        tunnels = refreshed + tunnels.filter { it.id in kept && it.id !in readable }
     }
 
     fun find(id: String): TunnelEntry? = tunnels.firstOrNull { it.id == id }
@@ -266,7 +302,12 @@ class TunnelManager(
                     is TunnelResolution.Ready -> openForward(entry, resolution)
                 }
             } finally {
-                entry.connectingJob = null
+                // Only when the field still points at THIS attempt. A dial is blocking, so a
+                // cancelled attempt unwinds long after the user pressed Stop — by then a fresh
+                // Start may own the field, and clearing it blindly would leave that attempt with
+                // nothing to cancel it: neither the next Stop nor the vault lock, which is the
+                // same call, and the tunnel would come up after being stopped.
+                if (entry.connectingJob === coroutineContext[Job]) entry.connectingJob = null
             }
         }
     }
@@ -354,23 +395,94 @@ class TunnelManager(
         autostartIds = emptySet()
     }
 
+    /**
+     * One turn of the telemetry loop. One bad tick costs one tick: unguarded, a throw here ends the
+     * loop for the rest of the session, and with it every traffic rate and the dead-tunnel
+     * detection — silently, since nothing else visits a running tunnel.
+     */
+    internal fun pollTick() {
+        // Last resort around a tick that is otherwise all arithmetic: one bad tick must cost one
+        // tick, not the loop — with it goes every traffic rate and the dead-tunnel detection, and
+        // nothing restarts it. A row that throws is handled where it throws (see [pollTelemetry]).
+        try {
+            pollTelemetry()
+        } catch (e: CancellationException) {
+            // Kept in step with the per-row guard below, which rethrows it for the same reason:
+            // cancelling the scope has to end the loop, not be mistaken for a bad tick.
+            throw e
+        } catch (_: Exception) {
+        }
+    }
+
     internal fun pollTelemetry() {
         var up = 0L
         var down = 0L
         tunnels.forEach { entry ->
             val handle = entry.handle ?: return@forEach
-            val entryUp = handle.bytesUp
-            val entryDown = handle.bytesDown
-            entry.upRate = ((entryUp - entry.prevUp) * 1000 / pollIntervalMillis).coerceAtLeast(0)
-            entry.downRate = ((entryDown - entry.prevDown) * 1000 / pollIntervalMillis).coerceAtLeast(0)
-            entry.prevUp = entryUp
-            entry.prevDown = entryDown
-            entry.bytesUp = entryUp
-            entry.bytesDown = entryDown
-            up += entry.upRate
-            down += entry.downRate
+            // One failing row is one failing row: without this the rest of the pass — every other
+            // tunnel's counters and the throughput sample below — goes with it, and the section's
+            // graph freezes with nothing said. The journal is what says it.
+            try {
+                pollEntry(entry, handle)?.let { (entryUp, entryDown) ->
+                    up += entryUp
+                    down += entryDown
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Torn down like any other dead tunnel, not merely journalled: a row left Active
+                // with its port still bound would throw again on the very next tick, adding an
+                // event a second while the forward it describes keeps accepting connections.
+                dropDead(entry, handle)
+            }
         }
         telemetry.sample(up, down)
+    }
+
+    /** One row's counters, or null when the tunnel turned out to be dead and was torn down. */
+    private fun pollEntry(entry: TunnelEntry, handle: PortForward): Pair<Long, Long>? {
+        // A forward whose listener died, or whose SSH connection dropped underneath it, was
+        // never noticed: the row kept saying Active with the port still bound, every
+        // application connecting through it got an immediate close, and nothing was ever
+        // journalled. The poll is the only thing that looks at a running tunnel, so it is
+        // where a dead one is caught.
+        if (!handle.isActive || entry.connection?.isConnected == false) {
+            dropDead(entry, handle)
+            return null
+        }
+        val entryUp = handle.bytesUp
+        val entryDown = handle.bytesDown
+        entry.upRate = ((entryUp - entry.prevUp) * 1000 / pollIntervalMillis).coerceAtLeast(0)
+        entry.downRate = ((entryDown - entry.prevDown) * 1000 / pollIntervalMillis).coerceAtLeast(0)
+        entry.prevUp = entryUp
+        entry.prevDown = entryDown
+        entry.bytesUp = entryUp
+        entry.bytesDown = entryDown
+        return entry.upRate to entry.downRate
+    }
+
+    /**
+     * Tears down a tunnel that stopped working on its own, and says so on the row and in the
+     * journal.
+     *
+     * Non-suspending, like the whole tick — the reason is typed, so nothing here has to resolve a
+     * string. It rechecks the handle it was called about, which narrows (it cannot close: the poll
+     * and the UI run on different threads) the window where a Stop lands mid-teardown and the row
+     * it already set to Inactive is overwritten with a failure the user caused on purpose.
+     */
+    private fun dropDead(entry: TunnelEntry, seenHandle: PortForward) {
+        if (entry.handle !== seenHandle) return
+        val handle = entry.handle
+        val conn = entry.connection
+        entry.handle = null
+        entry.connection = null
+        entry.resetCounters()
+        entry.status = TunnelStatus.Failed(reason = TunnelUnavailable.LinkLost)
+        noteFailure(entry, TunnelFailureKind.Connection)
+        scope.launch {
+            runCatching { handle?.close() }
+            runCatching { conn?.disconnect() }
+        }
     }
 
     private fun closeQuietly(conn: SshConnection?) {

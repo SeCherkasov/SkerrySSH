@@ -27,6 +27,34 @@ class VaultTunnelStoreTest {
         assertEquals("host-t1", store.all().single().hostId)
     }
 
+    /**
+     * A record whose payload no longer decrypts — what adopting an account dataKey leaves behind
+     * for everything not yet pushed — is missing from [all] but is not gone. Anything that acts on
+     * a disappearance keys off [liveIds] instead, or it tears down a tunnel nobody deleted.
+     */
+    @Test
+    fun `liveIds keeps a record all cannot decode`() {
+        val vault = FakeVault()
+        val store = VaultTunnelStore(vault)
+        store.put(tunnel("t1"))
+        store.put(tunnel("t2"))
+
+        vault.unreadable += "t2"
+
+        assertEquals(listOf("t1"), store.all().map { it.id })
+        assertEquals(setOf("t1", "t2"), store.liveIds(), "an unreadable record read as deleted")
+    }
+
+    /** A record that really went away leaves both. */
+    @Test
+    fun `liveIds drops a removed record`() {
+        val store = VaultTunnelStore(FakeVault())
+        store.put(tunnel("t1"))
+        store.remove("t1")
+
+        assertEquals(emptySet(), store.liveIds())
+    }
+
     @Test
     fun `put upserts and remove tombstones`() {
         val store = VaultTunnelStore(FakeVault())

@@ -81,6 +81,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.sync.PairingJoinScreen
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.Txt
@@ -377,6 +378,10 @@ private fun LockScaffold(
         Box(Modifier.height(32.dp))
         Column(Modifier.width(320.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             fields()
+            // Composed even with no error, so the announcer outlives the change: a node inserted
+            // together with its text announces nothing. Without it a wrong password, a corrupt
+            // file or a vault that cannot be written is silent to a screen reader.
+            StatusAnnouncer(error?.let { vaultGateErrorMessage(it) } ?: "")
             if (error != null) {
                 Txt(vaultGateErrorMessage(error), color = Skerry.colors.storm, size = 12.sp)
             }

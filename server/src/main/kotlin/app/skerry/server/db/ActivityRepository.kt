@@ -28,9 +28,13 @@ data class ActivityEvent(
  * and bounded, so it can't grow without limit on a long-lived self-hosted instance. Contains no
  * record content — only the event, the device, ids, and a human-readable summary ([ActivityEvent.detail]).
  *
- * Retention is **per bucket**, not global: account-level rows keep the newest [maxRows], and every
- * team keeps the newest [teamMaxRows] of its own. That partition is what stops one team's traffic
- * from evicting another team's history — or the admin console's — which matters here because any
+ * Retention is **per bucket**: account-level rows keep the newest [maxRows] per account, and every
+ * team keeps the newest [teamMaxRows] of its own. Above [accountRowsTotal] rows across all accounts
+ * a global ceiling takes the oldest first regardless of account — the partition is what an instance
+ * gets until the table itself has to be bounded, which on open registration it eventually does.
+ *
+ * The partition is what stops one team's traffic from evicting another team's history — or the
+ * admin console's — which matters here because any
  * active member (a viewer included) can append to their team's bucket by reporting sessions. Within
  * one team's own bucket the window is still finite, as any bounded log's is; the endpoint that feeds
  * it is rate-limited per account so filling it takes sustained and plainly visible effort.
@@ -39,6 +43,12 @@ class ActivityRepository(
     private val db: Database,
     private val maxRows: Int = 2_000,
     private val teamMaxRows: Int = 500,
+    /**
+     * Ceiling over every account's rows together. Retention is per account, so without it the
+     * table grows with the number of accounts — and on an instance with open registration that is
+     * whatever anyone cares to register.
+     */
+    private val accountRowsTotal: Int = 100_000,
 ) {
 
     suspend fun record(
@@ -69,8 +79,9 @@ class ActivityRepository(
         dbTransaction(db) {
             if (events.isEmpty()) return@dbTransaction
             events.forEach { insert(it, now) }
-            // Each bucket the batch touched, pruned once.
-            events.map { it.teamId }.distinct().forEach { prune(it) }
+            // Each bucket the batch touched, pruned once. An account-level bucket is per account:
+            // the rows of one account must not evict another's (see [prune]).
+            events.map { it.teamId to it.accountId }.distinct().forEach { (team, account) -> prune(team, account) }
         }
 
     /**
@@ -118,7 +129,7 @@ class ActivityRepository(
             ),
             now,
         )
-        prune(teamId)
+        prune(teamId, accountId)
         true
     }
 
@@ -187,15 +198,27 @@ class ActivityRepository(
     }
 
     /**
-     * Trims one bucket — a single team's rows, or the account-level ones ([teamId] null) — to its
-     * cap, deleting the oldest beyond it. Gap-safe: the boundary is an actual `seq`, not arithmetic
-     * on a row count.
+     * Trims one bucket — a single team's rows, or one account's own ([teamId] null) — to its cap,
+     * deleting the oldest beyond it. Gap-safe: the boundary is an actual `seq`, not arithmetic on a
+     * row count.
+     *
+     * The account-level bucket is partitioned by [accountId] for the same reason team rows are
+     * partitioned by team: unpartitioned, one account syncing all day evicts every other account's
+     * logins, device revocations and password changes from the audit trail — and the "N of M" total
+     * shrinks with them.
      */
-    private fun prune(teamId: String?) {
+    private fun prune(teamId: String?, accountId: String) {
+        // Before the per-account gate below, not after it: the ceiling exists for an instance with
+        // many small accounts, and every one of those returns early from that gate — so reached
+        // only from inside it, the bound would never fire in the case it was added for.
+        if (teamId == null) pruneAccountsTotal()
         val cap = if (teamId == null) maxRows else teamMaxRows
         fun bucket() =
-            if (teamId == null) ActivityLog.selectAll().where { ActivityLog.teamId.isNull() }
-            else ActivityLog.selectAll().where { ActivityLog.teamId eq teamId }
+            if (teamId == null) {
+                ActivityLog.selectAll().where { ActivityLog.teamId.isNull() and (ActivityLog.accountId eq accountId) }
+            } else {
+                ActivityLog.selectAll().where { ActivityLog.teamId eq teamId }
+            }
         // Cheap count-gate: only run the expensive OFFSET scan once the cap is actually exceeded,
         // not on every recorded event.
         if (bucket().count() <= cap) return
@@ -204,10 +227,28 @@ class ActivityRepository(
             .limit(1).offset((cap - 1).toLong())
             .firstOrNull()?.get(ActivityLog.seq) ?: return
         if (teamId == null) {
-            ActivityLog.deleteWhere { ActivityLog.teamId.isNull() and (seq lessEq keepFrom - 1) }
+            ActivityLog.deleteWhere {
+                ActivityLog.teamId.isNull() and (ActivityLog.accountId eq accountId) and (seq lessEq keepFrom - 1)
+            }
         } else {
             ActivityLog.deleteWhere { (ActivityLog.teamId eq teamId) and (seq lessEq keepFrom - 1) }
         }
+    }
+
+    /**
+     * The ceiling over all account-level rows ([accountRowsTotal]). The per-account partition is
+     * what stops one account evicting another's history; this is what stops the table from growing
+     * with the number of accounts. Same count-gate as [prune], so it costs an indexed count until
+     * the instance is actually that large.
+     */
+    private fun pruneAccountsTotal() {
+        fun bucket() = ActivityLog.selectAll().where { ActivityLog.teamId.isNull() }
+        if (bucket().count() <= accountRowsTotal) return
+        val keepFrom = bucket()
+            .orderBy(ActivityLog.seq to SortOrder.DESC)
+            .limit(1).offset((accountRowsTotal - 1).toLong())
+            .firstOrNull()?.get(ActivityLog.seq) ?: return
+        ActivityLog.deleteWhere { ActivityLog.teamId.isNull() and (seq lessEq keepFrom - 1) }
     }
 
     private fun org.jetbrains.exposed.v1.core.ResultRow.toRow() = ActivityRow(

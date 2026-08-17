@@ -2,6 +2,9 @@ package app.skerry.ui.host
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsToggleable
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -15,6 +18,9 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.desktop.runForm
 import app.skerry.ui.desktop.seededHosts
+import app.skerry.ui.desktop.string
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.conn_import_select_all
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -69,6 +75,42 @@ class ImportFormTest {
         }
         assertTrue(hosts.hosts.none { it.label == "bastion" }, "an unticked host was imported anyway")
         assertNotNull(hosts.hosts.firstOrNull { it.label == "db" }, "the ticked host was not imported")
+    }
+
+    /**
+     * Issue #228: the tick is a Material Symbol ligature, and [Sym] clears its own semantics — so a
+     * row that only carries a click tells a screen reader nothing about being on or off. The row is
+     * the checkbox; its state has to live there.
+     */
+    @Test
+    fun `an import row reads as a checkbox with a state`() {
+        val hosts = seededHosts()
+        val state = DesktopDesignState()
+        runForm({
+            CompositionLocalProvider(LocalHosts provides hosts) {
+                SshConfigImportModal(state, PARSED)
+            }
+        }) {
+            onNodeWithText("bastion").assertIsToggleable().assertIsOn().performClick()
+            waitForIdle()
+            onNodeWithText("bastion").assertIsOff()
+        }
+    }
+
+    /** The select-all row is the same control for every row at once, and answers the same way. */
+    @Test
+    fun `the select-all row reads as a checkbox with a state`() {
+        val hosts = seededHosts()
+        val state = DesktopDesignState()
+        runForm({
+            CompositionLocalProvider(LocalHosts provides hosts) {
+                SshConfigImportModal(state, PARSED)
+            }
+        }) {
+            onNodeWithText(string(Res.string.conn_import_select_all)).assertIsToggleable().assertIsOn().performClick()
+            waitForIdle()
+            onNodeWithText(string(Res.string.conn_import_select_all)).assertIsOff()
+        }
     }
 
     @Test

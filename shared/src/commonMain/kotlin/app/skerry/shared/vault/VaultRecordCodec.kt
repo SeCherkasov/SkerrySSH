@@ -27,6 +27,15 @@ internal class VaultRecordCodec<T>(
             .filter { it.type == type && !it.deleted }
             .mapNotNull { decode(vault.openPayload(it.id)) }
 
+    /**
+     * Ids of every live record of the type, whether or not its payload can be read. [list] drops
+     * the unreadable ones (one bad record must not fail a listing), which makes them
+     * indistinguishable from records that were deleted — a difference that matters to any caller
+     * acting on a disappearance.
+     */
+    fun liveIds(): Set<String> =
+        vault.records().filter { it.type == type && !it.deleted }.map { it.id }.toSet()
+
     /** Value for [id], or `null` if the record is absent, deleted, or its payload can't be read. */
     fun get(id: String): T? {
         val record = vault.records()
@@ -79,13 +88,22 @@ internal class VaultSingletonStore<T>(
 
     private val codec = VaultRecordCodec(vault, type, serializer)
 
-    fun load(): T {
+    fun load(): T = loadOrNull() ?: default()
+
+    /**
+     * The stored value, or null when a record **is** there and cannot be read — an unreadable blob
+     * (adopting an account dataKey leaves the old ones behind) or a payload that no longer parses.
+     * A locked vault and a missing record both answer with [default] through [load]: those mean
+     * "nothing stored", which is not the same as "stored, and we cannot see it". A caller that
+     * read-modify-writes the record has to tell them apart, or it replaces what it could not read.
+     */
+    fun loadOrNull(): T? {
         if (!vault.isUnlocked) return default()
         val record = vault.records().firstOrNull { it.id == id && it.type == type && !it.deleted }
             ?: return default()
         // Wrap openPayload: even if the impl throws on I/O/AEAD (rather than returning null), the
-        // caller must get the default, not a crash (it would abort the sync drainPull).
-        return codec.decode(runCatching { vault.openPayload(record.id) }.getOrNull()) ?: default()
+        // caller must not crash (it would abort the sync drainPull).
+        return codec.decode(runCatching { vault.openPayload(record.id) }.getOrNull())
     }
 
     fun save(value: T) {

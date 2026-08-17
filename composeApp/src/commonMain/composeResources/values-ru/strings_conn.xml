@@ -100,6 +100,7 @@
 
     <string name="conn_tunnel_error_host_missing">Хост не найден</string>
     <string name="conn_tunnel_error_no_credential">Нет сохранённых учётных данных</string>
+    <string name="conn_tunnel_error_link_lost">Соединение потеряно</string>
 
     <string name="conn_serial_err_unsupported">На этом устройстве последовательные порты недоступны.</string>
     <string name="conn_serial_err_not_found">Порт %1$s не найден. Переподключите устройство или выберите другой порт.</string>

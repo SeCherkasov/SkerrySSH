@@ -47,7 +47,10 @@ class VaultHostStore(
         // otherwise a concurrent mergeRemote from background sync landing between read() and write()
         // would be clobbered.
         codec.put(host.id, host)
-        val current = layout.read()
+        // readOrNull, not read: a layout record that exists but cannot be decrypted reads as an
+        // empty layout, and writing over it would replace the whole account's host order with this
+        // one host. The profile is saved either way; only the order is left as it is.
+        val current = layout.readOrNull() ?: return@transaction
         if (host.id !in current.hostOrder) {
             layout.write(current.copy(hostOrder = current.hostOrder + host.id))
         }
@@ -56,7 +59,7 @@ class VaultHostStore(
     override fun remove(id: String) = vault.transaction {
         // See [put]: layout update is atomic with the record removal.
         codec.remove(id)
-        val current = layout.read()
+        val current = layout.readOrNull() ?: return@transaction // see [put]
         if (id in current.hostOrder) {
             layout.write(current.copy(hostOrder = current.hostOrder - id))
         }
@@ -79,6 +82,10 @@ class VaultHostStore(
         for (host in updated) {
             if (byId[host.id] != host) codec.put(host.id, host)
         }
-        layout.write(layout.read().copy(hostOrder = updated.map { it.id }))
+        // Skipped like the writes above when the layout cannot be read: the record also holds the
+        // group list, and writing the new host order over a record we could not read would replace
+        // that list with an empty one. The profile changes above are already committed.
+        val existing = layout.readOrNull() ?: return@transaction
+        layout.write(existing.copy(hostOrder = updated.map { it.id }))
     }
 }

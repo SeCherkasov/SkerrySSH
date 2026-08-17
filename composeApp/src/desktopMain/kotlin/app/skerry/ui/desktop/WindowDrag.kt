@@ -7,22 +7,26 @@ import java.awt.Point
  * manager can't do it for (see [NativeWindowMove]). Fed absolute pointer positions, it answers with
  * the window origin to apply, or `null` while the window has to stay put.
  *
- * Two cases deliberately stay put: a press that hasn't left [deadZone] yet, so a plain click and the
- * double-click-to-maximize gesture never nudge the window, and a window that stopped floating
- * mid-gesture — the double-click maximizes it while the button is still down, and following the
- * pointer from the pre-maximize origin would then park a screen-sized window at the old top-left,
- * pushing its right/bottom edges off-screen.
+ * It is handed a gesture that already is a drag — telling a drag from a click (and from the
+ * double-click-to-maximize gesture) is the touch-slop gate in `awaitDragStart`, upstream of this
+ * class. So the first event after [press] only captures the grab (window origin minus pointer) and
+ * moves nothing; every event after it follows the pointer.
+ *
+ * One case deliberately stays put: a window that stopped floating mid-gesture — the double-click
+ * maximizes it while the button is still down, and following the pointer from the pre-maximize
+ * origin would then park a screen-sized window at the old top-left, pushing its right/bottom edges
+ * off-screen.
  */
-class WindowDragGesture(private val deadZone: Int) {
+class WindowDragGesture {
 
-    private var pressedAt: Point? = null
+    private var pressed = false
 
-    /** Window origin minus pointer, captured once the drag leaves the dead zone; `null` until then. */
+    /** Window origin minus pointer, captured on the first event of the drag; `null` until then. */
     private var grab: Point? = null
 
-    /** Button pressed at absolute [pointer]; arms the gesture. */
-    fun press(pointer: Point) {
-        pressedAt = Point(pointer)
+    /** Button pressed; arms the gesture. */
+    fun press() {
+        pressed = true
         grab = null
     }
 
@@ -38,10 +42,9 @@ class WindowDragGesture(private val deadZone: Int) {
             release()
             return null
         }
-        val pressedAt = this.pressedAt ?: return null
+        if (!pressed) return null
         val grab = this.grab
         if (grab == null) {
-            if (!leftDeadZone(pressedAt, pointer)) return null
             this.grab = Point(windowOrigin.x - pointer.x, windowOrigin.y - pointer.y)
             return null
         }
@@ -50,13 +53,7 @@ class WindowDragGesture(private val deadZone: Int) {
 
     /** Button released: [drag] does nothing until the next [press]. */
     fun release() {
-        pressedAt = null
+        pressed = false
         grab = null
-    }
-
-    private fun leftDeadZone(from: Point, to: Point): Boolean {
-        val dx = to.x - from.x
-        val dy = to.y - from.y
-        return dx * dx + dy * dy >= deadZone * deadZone
     }
 }

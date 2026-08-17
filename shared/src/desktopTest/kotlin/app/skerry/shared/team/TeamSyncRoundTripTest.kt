@@ -151,6 +151,31 @@ class TeamSyncRoundTripTest {
         assertEquals(true, vaults.open(TeamScopeRef(teamId), rightKey)?.isUnlocked)
     }
 
+    /**
+     * The stale-key probe only runs when a vault is actually opened. The cache is keyed on the
+     * space, not on the key, so a vault left unlocked from before a rotation is handed back for a
+     * request made with the *new* key — and every one of the tests above hides that by locking
+     * first, which the app never does: a hosts sidebar holds the vault open for as long as it is on
+     * screen.
+     *
+     * What follows a cache hit is worse than a stale read: records arriving under the new key fail
+     * to authenticate and are counted as rejected, while anything this device shares is sealed
+     * under the old one and pushed at a version nobody else can decrypt.
+     */
+    @Test
+    fun `a key rotation is not served from the cache of the superseded key`() = runBlocking {
+        initializeVaultCrypto()
+        val vaults = vaultsFor("dave")
+        val supersededKey = crypto.newDataKey()
+        val vault = vaults.open(TeamScopeRef(teamId), supersededKey)!!
+        vault.put("h1", RecordType.HOST, "x".encodeToByteArray())
+        // No lockAll(): the vault stays open, exactly as a screen holding it keeps it open.
+
+        val rotated = vaults.openOrClassify(TeamScopeRef(teamId), crypto.newDataKey())
+
+        assertEquals(TeamVaults.OpenResult.StaleKey, rotated)
+    }
+
     @Test
     fun `openOrClassify distinguishes a superseded key from a corrupt file and never deletes`() = runBlocking {
         initializeVaultCrypto()
@@ -288,7 +313,7 @@ class TeamSyncRoundTripTest {
     }
 
     @Test
-    fun `an unsafe scope id cannot escape the vault directory`() = runBlocking {
+    fun `an unsafe scope id cannot escape the vault directory`() = runBlocking<Unit> {
         initializeVaultCrypto()
         val vaults = vaultsFor("heidi")
 

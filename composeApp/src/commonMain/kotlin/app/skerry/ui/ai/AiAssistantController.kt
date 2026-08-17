@@ -227,7 +227,8 @@ class AiAssistantController(
         error = null
         streaming = ""
         val gen = ++generation
-        val history = turns.map { AiMessage(it.role, it.text) }
+        // Bounded: the whole conversation is replayed on every question (see clampAiHistory).
+        val history = clampAiHistory(turns.map { AiMessage(it.role, it.text) })
         val messages = listOf(AiMessage(AiRole.SYSTEM, SYSTEM_PROMPT)) + history
         job = runner.launch(
             endpoint = route.endpoint,

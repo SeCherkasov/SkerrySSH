@@ -25,6 +25,7 @@
     <string name="vtail_error_password_mismatch">密码不匹配。</string>
     <string name="vtail_error_wrong_password">主密码错误。</string>
     <string name="vtail_error_corrupted">保险库文件损坏或无法读取。</string>
+    <string name="vtail_error_not_writable">无法写入保险库文件 — 请检查文件夹权限和可用空间。</string>
     <string name="vtail_error_biometric_reset">生物识别已重置 — 请使用主密码登录。</string>
     <string name="vtail_error_biometric_failed">生物识别失败 — 请输入主密码。</string>
     <string name="vtail_error_biometric_locked_out">生物识别已锁定 — 请输入主密码。</string>

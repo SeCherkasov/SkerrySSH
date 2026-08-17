@@ -2,6 +2,7 @@ package app.skerry.shared.rdp.egfx
 
 import app.skerry.shared.graphics.RemoteDesktopDiagnostics
 import app.skerry.shared.graphics.RemoteFramebuffer
+import app.skerry.shared.rdp.RdpClientSettings
 import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpProtocolException
 import app.skerry.shared.rdp.RdpRect
@@ -10,6 +11,7 @@ import app.skerry.shared.rdp.RdpWriter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.runTest
 
@@ -127,6 +129,43 @@ class GraphicsChannelTest {
 
         assertTrue(failure.message.orEmpty().contains("not advertised"), failure.message.orEmpty())
         assertTrue(avc.decoded444.isEmpty(), "the refused bitmap still reached the decoder")
+    }
+
+    /**
+     * The profile's RemoteFX switch has to reach the pipeline, not just the legacy surface path.
+     * The pipeline is on by default, so a host whose RemoteFX stream this client mis-decodes is
+     * sending it over EGFX — and turning RemoteFX off in the profile has to be what stops it.
+     */
+    @Test
+    fun `a profile with RemoteFX off refuses it on the graphics pipeline too`() = runTest {
+        val codecs = GraphicsCodecs.forSettings(settings(remoteFx = false))
+        val channel = GraphicsChannel(framebuffer, codecs) { }
+        channel.onMessage(bulk(createSurface(id = 1, width = 8, height = 8)))
+
+        val failure = assertFailsWith<RdpProtocolException> {
+            channel.onMessage(
+                bulk(wireToSurfaceRaw(1, codecId = GraphicsCodecs.CODEC_REMOTEFX, payload = byteArrayOf(1))),
+            )
+        }
+        assertTrue(failure.message.orEmpty().contains("0x3"), failure.message.orEmpty())
+    }
+
+    /** The other side of the same switch: left on, the codec is there to decode with. */
+    @Test
+    fun `a profile with RemoteFX on plugs the codec into the pipeline`() = runTest {
+        val codecs = GraphicsCodecs.forSettings(settings(remoteFx = true))
+        val channel = GraphicsChannel(framebuffer, codecs) { }
+        channel.onMessage(bulk(createSurface(id = 1, width = 8, height = 8)))
+
+        val failure = runCatching {
+            channel.onMessage(
+                bulk(wireToSurfaceRaw(1, codecId = GraphicsCodecs.CODEC_REMOTEFX, payload = byteArrayOf(1))),
+            )
+        }.exceptionOrNull()
+
+        // Whatever a one-byte RemoteFX stream decodes to, the session must not be told the codec
+        // was never advertised — that answer belongs to the switch being off.
+        assertFalse(failure?.message.orEmpty().contains("0x3"), failure?.message.orEmpty())
     }
 
     @Test
@@ -473,6 +512,15 @@ class GraphicsChannelTest {
 
         budgeted.onMessage(bulk(createSurface(id = 2, width = 8, height = 8)))
     }
+
+    /** A client-settings fixture whose only interesting field is the codec switch under test. */
+    private fun settings(remoteFx: Boolean) = RdpClientSettings(
+        desktopWidth = 800,
+        desktopHeight = 600,
+        clientName = "SKERRY",
+        selectedProtocol = 0,
+        wantsRemoteFx = remoteFx,
+    )
 
     private fun pdu(commandId: Int, body: ByteArray): ByteArray =
         RdpWriter(body.size + 8).u16le(commandId).u16le(0).u32le(body.size + 8).bytes(body).toByteArray()

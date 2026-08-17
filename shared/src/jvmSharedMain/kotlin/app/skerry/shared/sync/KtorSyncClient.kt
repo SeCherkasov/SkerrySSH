@@ -246,7 +246,12 @@ class KtorSyncClient(
     }
 
     override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean {
-        val resp = http.delete("$serverUrl/devices/$deviceId") { bearerAuth(session.accessToken) }
+        // Through `request` and with the id encoded, like every other call here: a raw IOException
+        // escapes the SyncException contract this interface documents, and an unencoded id carrying
+        // a `/`, `?` or `#` rewrites the path the delete lands on.
+        val resp = request {
+            http.delete("$serverUrl/devices/${deviceId.encodeURLPathPart()}") { bearerAuth(session.accessToken) }
+        }
         return when (resp.status) {
             HttpStatusCode.NoContent -> true
             HttpStatusCode.NotFound -> false

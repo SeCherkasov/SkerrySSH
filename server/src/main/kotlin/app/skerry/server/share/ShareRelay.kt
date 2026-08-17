@@ -30,25 +30,32 @@ class ShareRelay(
 
     /** Opens a share, or refuses: the id is already live, or the team is at its cap. */
     fun open(teamId: String, shareId: String, hostAccountId: String, meta: String): ShareOpen {
-        val teamShares = shares.computeIfAbsent(teamId) { ConcurrentHashMap() }
-        val session = HostShareSession(
-            relay = this,
-            teamId = teamId,
-            shareId = shareId,
-            hostAccountId = hostAccountId,
-            meta = meta,
-            startedAt = now(),
-            replayBytes = replayBytes,
-            maxGuests = maxGuestsPerShare,
-            guestQueueFrames = guestQueueFrames,
-        )
-        // putIfAbsent first: two hosts racing on the same id must not both believe they own it.
-        if (teamShares.putIfAbsent(shareId, session) != null) return ShareOpen.Taken
-        if (teamShares.size > maxSharesPerTeam) {
+        while (true) {
+            val teamShares = shares.computeIfAbsent(teamId) { ConcurrentHashMap() }
+            val session = HostShareSession(
+                relay = this,
+                teamId = teamId,
+                shareId = shareId,
+                hostAccountId = hostAccountId,
+                meta = meta,
+                startedAt = now(),
+                replayBytes = replayBytes,
+                maxGuests = maxGuestsPerShare,
+                guestQueueFrames = guestQueueFrames,
+            )
+            // putIfAbsent first: two hosts racing on the same id must not both believe they own it.
+            if (teamShares.putIfAbsent(shareId, session) != null) return ShareOpen.Taken
+            if (teamShares.size > maxSharesPerTeam) {
+                teamShares.remove(shareId, session)
+                return ShareOpen.TooMany
+            }
+            // The bucket may have been dropped meanwhile: [forget] removes an empty one, and the
+            // last share of this team closing between the lookup above and the insert leaves this
+            // session in a map no longer reachable from `shares` — so the host believes it is
+            // sharing while `list` and `join` can never see it. Take the bucket again.
+            if (shares[teamId] === teamShares) return ShareOpen.Started(session)
             teamShares.remove(shareId, session)
-            return ShareOpen.TooMany
         }
-        return ShareOpen.Started(session)
     }
 
     /** Live shares of [teamId] — what the team's members see offered to join. */
@@ -67,8 +74,10 @@ class ShareRelay(
         val teamShares = shares[session.teamId] ?: return
         teamShares.remove(session.shareId, session)
         // Drop the team's empty bucket so a long-lived server doesn't accumulate one map per team
-        // that ever shared anything. `remove(key, value)` only removes it while still empty.
-        if (teamShares.isEmpty()) shares.remove(session.teamId, teamShares)
+        // that ever shared anything. Emptiness and removal have to be ONE step: tested and then
+        // removed, a share opened in between is evicted with the bucket and becomes invisible to
+        // `list` and `join` for its whole life.
+        shares.computeIfPresent(session.teamId) { _, bucket -> bucket.takeIf { it.isNotEmpty() } }
     }
 }
 

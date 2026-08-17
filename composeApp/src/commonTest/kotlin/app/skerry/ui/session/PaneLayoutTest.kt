@@ -157,6 +157,28 @@ class PaneLayoutTest {
         assertEquals(shapeOf(layout), shapeOf(layout.move("b", PaneSlot.InRow(row = 0, column = 2))))
     }
 
+    /**
+     * The same drop for a pane that is alone in its row. Its row goes away with it, so the target
+     * index no longer names the row the drop was aimed at — it names the one below, and a
+     * top/bottom split silently becomes a side-by-side one on a gesture that should do nothing.
+     */
+    @Test
+    fun `dropping the only pane of a row onto itself changes nothing`() {
+        val layout = PaneLayout.of("a").add("b", PaneSlot.NewRow(1))
+        assertEquals("a|b", shapeOf(layout.move("a", PaneSlot.InRow(row = 0, column = 0))))
+        assertEquals("a|b", shapeOf(layout.move("a", PaneSlot.InRow(row = 0, column = 1))))
+        assertEquals("a|b", shapeOf(layout.move("b", PaneSlot.InRow(row = 1, column = 0))))
+    }
+
+    /** Three panes, so the row below has an order of its own to be disturbed. */
+    @Test
+    fun `dropping the only pane of a row onto itself leaves the row below alone`() {
+        val layout = PaneLayout.of("a")
+            .add("b", PaneSlot.NewRow(1))
+            .add("c", PaneSlot.InRow(row = 1, column = 1))
+        assertEquals("a|b,c", shapeOf(layout.move("a", PaneSlot.InRow(row = 0, column = 1))))
+    }
+
     @Test
     fun `moving into a new row below works after the source row collapses`() {
         // "a,b" -> drag b into a new row under it: the row index survives the collapse of nothing.

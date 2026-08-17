@@ -16,9 +16,16 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 private const val USER = "skerry"
 private const val PASSWORD = "correct horse battery staple"
+
+/** What [CloseAfterReplyServer] answers before hanging up. */
+private const val CLOSING_REPLY = "bye"
+
+/** Long enough for a real EOF to arrive over the loopback tunnel, short enough to fail fast. */
+private const val EOF_TIMEOUT_MILLIS = 5_000
 
 private val acceptAllKeys = HostKeyVerifier { null }
 
@@ -181,6 +188,41 @@ class SshjPortForwardTest {
         }
     }
 
+    /**
+     * The destination closing first has to reach the local peer as EOF. A tunnel that only
+     * half-closes the near→far direction leaves the local connection waiting for bytes that will
+     * never come: the classic shape is a close-delimited HTTP/1.0 response, where the body ends at
+     * the close and the client reads until EOF. It also strands the tunnel's own thread and socket,
+     * which stay in the forward's live set for as long as the session lasts.
+     */
+    @Test
+    fun `a destination that closes first ends the local connection too`() = runTest {
+        CloseAfterReplyServer().use { destination ->
+            val connection = connect()
+            try {
+                val forward = connection.forwardLocal(
+                    LocalForwardSpec(bindPort = 0, destHost = "127.0.0.1", destPort = destination.port),
+                )
+                try {
+                    Socket("127.0.0.1", forward.boundPort).use { socket ->
+                        socket.soTimeout = EOF_TIMEOUT_MILLIS
+                        socket.getOutputStream().apply { write("get".encodeToByteArray()); flush() }
+                        val body = try {
+                            readToEof(socket.getInputStream())
+                        } catch (e: java.net.SocketTimeoutException) {
+                            fail("the local connection never saw EOF after the destination closed: $e")
+                        }
+                        assertEquals(CLOSING_REPLY, body)
+                    }
+                } finally {
+                    forward.close()
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+    }
+
     @Test
     fun `paused local forward refuses new connections and resumes`() = runTest {
         EchoServer().use { echo ->
@@ -286,6 +328,49 @@ private fun readFully(input: java.io.InputStream, n: Int): ByteArray {
         off += r
     }
     return buf
+}
+
+/** Reads until the stream ends, as a client of a close-delimited response does. */
+private fun readToEof(input: java.io.InputStream): String {
+    val out = StringBuilder()
+    val buffer = ByteArray(256)
+    while (true) {
+        val n = input.read(buffer)
+        if (n < 0) return out.toString()
+        out.append(buffer.copyOf(n).decodeToString())
+    }
+}
+
+/**
+ * A destination that answers once and hangs up — the HTTP/1.0 shape, where the response body is
+ * delimited by the close rather than by a length the client is told in advance.
+ */
+private class CloseAfterReplyServer : Closeable {
+    private val socket = ServerSocket().apply { bind(InetSocketAddress("127.0.0.1", 0)) }
+    val port: Int get() = socket.localPort
+
+    private val acceptor = thread(isDaemon = true, name = "close-after-reply") {
+        while (!socket.isClosed) {
+            val client = try {
+                socket.accept()
+            } catch (_: Exception) {
+                break
+            }
+            thread(isDaemon = true, name = "close-after-reply-conn") {
+                client.use {
+                    runCatching {
+                        it.getInputStream().read(ByteArray(256))
+                        it.getOutputStream().apply { write(CLOSING_REPLY.encodeToByteArray()); flush() }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun close() {
+        socket.close()
+        acceptor.join(1000)
+    }
 }
 
 /** Single-threaded echo server on a free loopback port; reads a request and writes it back. */

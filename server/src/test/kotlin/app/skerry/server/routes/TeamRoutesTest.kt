@@ -72,6 +72,37 @@ class TeamRoutesTest {
             setBody(TeamRekeyRequest(newEpoch, envelopes.map { (id, env) -> RekeyEnvelopeDto(id, env.b64()) }))
         }
 
+    /**
+     * A team id is client-chosen and ends up as a vault file name on every member's device, which
+     * is why the client refuses anything outside `[a-z0-9-]{1,64}` (`TeamScopeRef.isSafeId`). The
+     * server accepted 128 characters of anything, so an id could be stored that no member can
+     * adopt — and one longer than the column takes fails the insert, answering 500 instead of 400.
+     * The scope route already validates exactly this; the team route did not.
+     */
+    @Test
+    fun `a team id the clients could never use is refused`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val tokens = client.registerAccount(alice, password)
+
+        listOf(
+            "../../escape", // a path traversal in a name that becomes a file
+            "Team-One", // uppercase: the client's own check refuses it
+            "team one", // whitespace
+            "a".repeat(65), // longer than Teams.id (varchar(64))
+        ).forEach { id ->
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                client.createTeam(tokens.accessToken, id).status,
+                "team id \"$id\" was accepted",
+            )
+        }
+
+        // The shape every client can actually use is still accepted.
+        assertEquals(HttpStatusCode.Created, client.createTeam(tokens.accessToken, "team-42").status)
+    }
+
     @Test
     fun `rekey bumps the epoch, distributes key envelopes, and enforces monotonicity and role`() = testApplication {
         val services = testServices()

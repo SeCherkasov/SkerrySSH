@@ -4,6 +4,7 @@ import app.skerry.shared.vault.MergeResult
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecord
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Record types introduced after servers were already deployed in the field. They are pushed in a
@@ -13,6 +14,13 @@ import app.skerry.shared.vault.VaultRecord
  */
 private val TYPES_NEWER_THAN_SOME_SERVERS =
     setOf(RecordType.TRASH, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN, RecordType.TRUSTED_CA)
+
+/**
+ * How a server that predates one of [TYPES_NEWER_THAN_SOME_SERVERS] answers a push carrying it:
+ * the type fails validation (400) or the route is absent (404). Every other failure of that batch
+ * is a real one and belongs to the caller — not swallowed as "the server is just old".
+ */
+private val OLD_SERVER_REFUSALS = setOf(SyncException.Kind.PROTOCOL, SyncException.Kind.NOT_FOUND)
 
 /**
  * Where the delta sync cursor (`lastSyncVersion`) is stored, one per [key].
@@ -119,8 +127,21 @@ class SyncEngine(
             client.push(session, records.map { it.toRemote() })
             pushed += records.size
         }
-        if (recentTypes.isNotEmpty() && runCatching { client.push(session, recentTypes.map { it.toRemote() }) }.isSuccess) {
-            pushed += recentTypes.size
+        if (recentTypes.isNotEmpty()) {
+            try {
+                client.push(session, recentTypes.map { it.toRemote() })
+                pushed += recentTypes.size
+            } catch (e: CancellationException) {
+                // A `runCatching` here caught this too, so a vault auto-lock or a disconnect landing
+                // inside the push left the engine running on a cancelled job through the second pull.
+                throw e
+            } catch (e: SyncException) {
+                // Only the two answers an older server gives to a type it does not know are
+                // swallowed. A 401, a 429, a 5xx or a dropped network say nothing about the record
+                // type, and hiding them made a batch that will never be accepted look exactly like
+                // one the server is merely too old for — so nothing was ever diagnosable.
+                if (e.kind !in OLD_SERVER_REFUSALS) throw e
+            }
         }
 
         // Pull again: picks up our own just-pushed records (merge is idempotent) and any remote

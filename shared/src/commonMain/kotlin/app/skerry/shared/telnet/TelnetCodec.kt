@@ -120,7 +120,11 @@ class TelnetCodec(
                 Phase.SUBNEG_DROP ->
                     if (b == IAC) phase = Phase.SUBNEG_DROP_IAC
 
-                Phase.SUBNEG_DROP_IAC -> if (b == SE) phase = Phase.DATA else if (b != IAC) phase = Phase.SUBNEG_DROP
+                // Same reading of an escaped IAC as the buffering path above: `IAC IAC` is one
+                // literal 0xFF of body, so the scan goes back to looking for the real closing
+                // sequence. Staying here instead would end the subnegotiation at the next SE byte
+                // and spill the rest of a server-chosen body into the terminal as data.
+                Phase.SUBNEG_DROP_IAC -> phase = if (b == SE) Phase.DATA else Phase.SUBNEG_DROP
             }
         }
         return Decoded(data.toByteArray(), reply.toByteArray())

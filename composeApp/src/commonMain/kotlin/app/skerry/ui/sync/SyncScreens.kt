@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -34,6 +35,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -325,24 +327,10 @@ internal fun SyncSetupBody(
         SyncTextField(password, stringResource(Res.string.sync_placeholder_master_password), KeyboardType.Password, masked = true, icon = "key") { password = it }
     }
 
-    Row(
-        Modifier.fillMaxWidth().padding(top = 16.dp).clickable { keepConnected = !keepConnected },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(
-            Modifier.size(20.dp).clip(RoundedCornerShape(6.dp))
-                .background(if (keepConnected) Skerry.colors.cyan else Color.Transparent)
-                .border(1.dp, if (keepConnected) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(6.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (keepConnected) Sym("check", size = 14.sp, color = Skerry.colors.ink)
-        }
-        Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.sync_keep_connected), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.sync_keep_connected_sub), color = Skerry.colors.faint, size = 11.5.sp)
-        }
-    }
+    KeepConnectedRow(
+        checked = keepConnected,
+        subtitle = stringResource(Res.string.sync_keep_connected_sub),
+    ) { keepConnected = it }
 
     // http:// is allowed (local test/LAN without a TLS proxy) but defenseless against MITM — warn explicitly.
     if (form.isInsecureUrl) {
@@ -485,24 +473,10 @@ private fun SyncJoinBody(sync: SyncCoordinator, errorMessage: String?) {
     // the button below stays disabled, and nothing else says so.
     SyncFormError(stringResource(Res.string.sync_passwords_mismatch).takeIf { confirm.isNotEmpty() && !passwordsMatch })
 
-    Row(
-        Modifier.fillMaxWidth().padding(top = 16.dp).clickable { keepConnected = !keepConnected },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Box(
-            Modifier.size(20.dp).clip(RoundedCornerShape(6.dp))
-                .background(if (keepConnected) Skerry.colors.cyan else Color.Transparent)
-                .border(1.dp, if (keepConnected) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(6.dp)),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (keepConnected) Sym("check", size = 14.sp, color = Skerry.colors.ink)
-        }
-        Column(Modifier.weight(1f)) {
-            Txt(stringResource(Res.string.sync_keep_connected), color = Skerry.colors.text, size = 13.sp, weight = FontWeight.Medium)
-            Txt(stringResource(Res.string.sync_keep_connected_sub), color = Skerry.colors.faint, size = 11.5.sp)
-        }
-    }
+    KeepConnectedRow(
+        checked = keepConnected,
+        subtitle = stringResource(Res.string.sync_keep_connected_sub),
+    ) { keepConnected = it }
 
     SyncFormError(errorMessage)
 
@@ -591,4 +565,49 @@ internal fun SyncTextField(
             }
         },
     )
+}
+
+/**
+ * "Keep me connected": remember the link and restore the session without re-entering the password.
+ *
+ * One row for the two sync screens and the setup dialog — it was written out three times, and every
+ * copy carried the same defect: the tick is a [Sym] glyph, which clears its own semantics, so a row
+ * that only had a click announced a button named "Keep me connected" with no on/off state behind
+ * it. A screen reader user could not tell whether the session would be persisted (issue #228).
+ */
+@Composable
+internal fun KeepConnectedRow(
+    checked: Boolean,
+    subtitle: String,
+    /** The dialog's slightly tighter scale; the screens use the roomier one. */
+    compact: Boolean = false,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth()
+            .padding(top = if (compact) 14.dp else 16.dp)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        val box = if (compact) 18.dp else 20.dp
+        val corner = if (compact) 5.dp else 6.dp
+        Box(
+            Modifier.size(box).clip(RoundedCornerShape(corner))
+                .background(if (checked) Skerry.colors.cyan else Color.Transparent)
+                .border(1.dp, if (checked) Skerry.colors.cyan else Skerry.colors.cyan14, RoundedCornerShape(corner)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (checked) Sym("check", size = if (compact) 13.sp else 14.sp, color = Skerry.colors.ink)
+        }
+        Column(Modifier.weight(1f)) {
+            Txt(
+                stringResource(Res.string.sync_keep_connected),
+                color = Skerry.colors.text,
+                size = if (compact) 12.5.sp else 13.sp,
+                weight = FontWeight.Medium,
+            )
+            Txt(subtitle, color = Skerry.colors.faint, size = if (compact) 11.sp else 11.5.sp)
+        }
+    }
 }

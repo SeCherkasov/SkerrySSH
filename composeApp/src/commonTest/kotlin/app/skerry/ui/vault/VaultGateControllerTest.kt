@@ -146,6 +146,54 @@ class VaultGateControllerTest {
         assertTrue(confirm.all { it == ' ' })
     }
 
+    /**
+     * A config directory that cannot be written (read-only, or full) makes the very first screen a
+     * dead end: `create` has a `finally` but no `catch`, so the failure escapes into the scope —
+     * taking the app down, or leaving a button that does nothing — and the user is told nothing at
+     * all. It is a form error like any other: say so and stay on the form.
+     */
+    @Test
+    fun `create that cannot write the vault says so and stays on the form`() {
+        val scopeExceptions = mutableListOf<Throwable>()
+        val controller = gate(
+            FakeVault(exists = false, createThrows = true),
+            onException = { scopeExceptions.add(it) },
+        )
+        val password = "long enough password".toCharArray()
+        val confirm = "long enough password".toCharArray()
+
+        controller.create(password, confirm)
+
+        assertEquals(VaultGateState.NeedsCreate, controller.state)
+        assertEquals(VaultGateError.NotWritable, controller.error)
+        assertFalse(controller.verifying, "the create button would stay dead")
+        assertTrue(scopeExceptions.isEmpty(), "the failure must be reported, not thrown at the scope")
+        assertTrue(password.all { it == ' ' } && confirm.all { it == ' ' }, "buffers must still be wiped")
+    }
+
+    /**
+     * The other half of that rule: the guard covers the write and nothing after it. A security-log
+     * write or a biometrics probe failing once the vault exists must not be reported as "could not
+     * write the vault" — the vault is there, open, and the user would be stranded on the create
+     * form pressing a button that re-creates it.
+     */
+    @Test
+    fun `a failure after the vault is created is not reported as an unwritable vault`() {
+        val scopeExceptions = mutableListOf<Throwable>()
+        val controller = gate(
+            FakeVault(exists = false),
+            securityLog = ThrowingSecurityLog,
+            onException = { scopeExceptions.add(it) },
+        )
+
+        controller.create("long enough password".toCharArray(), "long enough password".toCharArray())
+
+        assertTrue(
+            controller.error != VaultGateError.NotWritable,
+            "a post-create failure was reported as a vault that could not be written",
+        )
+    }
+
     @Test
     fun `unlock with the right password unlocks`() {
         val vault = FakeVault(exists = true, unlockResult = UnlockResult.Success)
@@ -721,10 +769,20 @@ private fun biometricsForUnlock(
  * In-memory [Vault] for gate tests: models the create/unlock/lock lifecycle and wipes the passed
  * password (like the file-backed implementation). CRUD is not exercised by the gate controller.
  */
+/** A security log whose write fails — the step that runs once the vault already exists. */
+private object ThrowingSecurityLog : SecurityLog {
+    override fun record(type: SecurityEventType, detail: String?) = error("security log unavailable")
+    override fun recent(limit: Int): List<SecurityEvent> = emptyList()
+    override fun lastPasswordChangeAt(): String? = null
+    override fun clear() = Unit
+}
+
 private class FakeVault(
     exists: Boolean,
     var unlockResult: UnlockResult = UnlockResult.Success,
     private val unlockThrows: Boolean = false,
+    /** A vault directory that cannot be written — a read-only or full config dir. */
+    private val createThrows: Boolean = false,
     private val changePasswordResult: Boolean = true,
 ) : Vault {
     private var fileExists = exists
@@ -739,6 +797,7 @@ private class FakeVault(
 
     override fun create(password: CharArray) {
         createCalls++
+        if (createThrows) error("could not write the vault")
         fileExists = true
         isUnlocked = true
         password.fill(' ')

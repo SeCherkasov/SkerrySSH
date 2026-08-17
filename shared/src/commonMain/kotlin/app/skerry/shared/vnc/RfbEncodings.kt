@@ -378,7 +378,10 @@ internal suspend fun decodeTight(
                             var x = 0
                             while (x < w) {
                                 val byte = data[y * rowSize + x / 8].toInt() and 0xFF
-                                val bit = (byte ushr (7 - (x % 8))) and 1
+                                // Clamped like the byte-indexed palette below: a one-colour palette
+                                // (which a conforming server sends as Fill, not as this) leaves the
+                                // set bits of a peer-chosen plane pointing past its single entry.
+                                val bit = ((byte ushr (7 - (x % 8))) and 1).coerceAtMost(numColors - 1)
                                 fb.setPixel(rect.x + x, rect.y + y, palette[bit]); x++
                             }
                             y++

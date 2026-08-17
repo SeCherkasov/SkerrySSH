@@ -429,6 +429,55 @@ class FileVaultTest {
         assertContentEquals("from-b".encodeToByteArray(), a.openPayload("r1"))
     }
 
+    /**
+     * A deletion is a write, and every write says which device made it — the tie-break of the
+     * last-writer-wins rule is the deviceId, on the client and on the server alike. A tombstone
+     * carrying the *original author's* id instead makes an exact tie with that author's own next
+     * write, and a tie neither side can break is a pair of devices that never converge.
+     */
+    @Test
+    fun `a deletion is stamped with the deleting device, not the record's author`() = vaultTest {
+        val a = vault().apply { create("master".toCharArray()) }
+        val b = FileVault("/vault-b.json".toPath(), crypto, deviceId = "device-2", fileSystem = fs, now = { TS })
+        b.createWithDataKey(a.exportDataKey()!!)
+        b.put("r1", RecordType.HOST, "from-b".encodeToByteArray())
+        a.mergeRemote(listOf(b.records().single()))
+
+        a.remove("r1")
+
+        assertEquals("device-1", a.records().single { it.id == "r1" }.deviceId)
+    }
+
+    /**
+     * The same defect end to end: B edits the record it wrote while A deletes it, both landing on
+     * version 2. Whichever wins, both devices have to reach the *same* answer — with the tombstone
+     * wearing B's id neither record outranks the other and each device keeps its own.
+     */
+    @Test
+    fun `a delete racing an edit of the same version converges on both devices`() = vaultTest {
+        val a = vault().apply { create("master".toCharArray()) }
+        val b = FileVault("/vault-b.json".toPath(), crypto, deviceId = "device-2", fileSystem = fs, now = { TS })
+        b.createWithDataKey(a.exportDataKey()!!)
+        b.put("r1", RecordType.HOST, "v1".encodeToByteArray())
+        a.mergeRemote(listOf(b.records().single()))
+
+        a.remove("r1") // tombstone, version 2
+        b.put("r1", RecordType.HOST, "v2".encodeToByteArray()) // live record, version 2
+
+        val tombstone = a.records().single { it.id == "r1" }
+        val edited = b.records().single { it.id == "r1" }
+        assertEquals(tombstone.version, edited.version, "the race only bites when the versions tie")
+
+        a.mergeRemote(listOf(edited))
+        b.mergeRemote(listOf(tombstone))
+
+        assertEquals(
+            a.records().single { it.id == "r1" }.deleted,
+            b.records().single { it.id == "r1" }.deleted,
+            "the two devices disagree about whether the record exists",
+        )
+    }
+
     @Test
     fun `mergeRemote rejects legacy blobs sealed with the id-type AAD`() = vaultTest {
         val v = vault().apply { create("master".toCharArray()) }

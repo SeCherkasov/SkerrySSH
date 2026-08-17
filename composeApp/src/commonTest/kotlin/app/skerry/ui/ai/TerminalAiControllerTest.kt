@@ -266,6 +266,94 @@ class TerminalAiControllerTest {
         assertNull(c.confirm())
     }
 
+    /**
+     * Cancelling a job only *requests* cancellation. A stream that has already finished collecting
+     * runs its completion callback without crossing another suspension point ([AiStreamRunner]
+     * says so, and leaves the guard to the caller), so the answer to a question the user dismissed
+     * can still arrive — and in this bar an answer is a command with a Run button next to it.
+     */
+    @Test
+    fun `a dismissed request never offers its command afterwards`() = runTest {
+        val finishFirst = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val gateSecond = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var call = 0
+        val provider = object : AiProvider {
+            override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
+                if (call++ == 0) {
+                    emit(AiDelta("rm -rf /var/log"))
+                    // NonCancellable: the stream finishes collecting despite the cancel, which is
+                    // the race — the cancellation is only noticed at the next suspension point.
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { finishFirst.await() }
+                } else {
+                    emit(AiDelta("uptime"))
+                    gateSecond.await()
+                }
+            }
+            override suspend fun close() {}
+        }
+        val c = TerminalAiController(
+            AiPolicy.Balanced, settings = { AiSettings(apiKey = "sk-x") },
+            providerFactory = { provider }, scope = this,
+        )
+
+        c.ask("delete the logs")
+        runCurrent()
+        c.dismiss() // the user taps Dismiss while it is thinking
+        c.ask("how long has it been up")
+        runCurrent()
+
+        finishFirst.complete(Unit) // the dismissed stream finishes and runs its completion
+        runCurrent()
+
+        assertNull(c.pending, "a request the user dismissed offered its command anyway")
+        assertNull(c.confirm())
+        assertEquals("uptime", c.streaming, "the live request's stream was overwritten")
+
+        gateSecond.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("uptime", c.pending)
+    }
+
+    /** The same race on the other surface: an explanation the user dismissed must not come back. */
+    @Test
+    fun `a dismissed explanation never overwrites the next one`() = runTest {
+        val finishFirst = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val gateSecond = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var call = 0
+        val provider = object : AiProvider {
+            override fun chat(request: AiChatRequest): Flow<AiDelta> = flow {
+                if (call++ == 0) {
+                    emit(AiDelta("the first explanation"))
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { finishFirst.await() }
+                } else {
+                    emit(AiDelta("the second explanation"))
+                    gateSecond.await()
+                }
+            }
+            override suspend fun close() {}
+        }
+        val c = TerminalAiController(
+            AiPolicy.Balanced, settings = { AiSettings(apiKey = "sk-x") },
+            providerFactory = { provider }, scope = this,
+        )
+
+        c.explain("df -h output")
+        runCurrent()
+        c.dismiss()
+        c.explain("uptime output")
+        runCurrent()
+
+        finishFirst.complete(Unit)
+        runCurrent()
+
+        assertEquals("the second explanation", c.explanation, "a dismissed explanation came back")
+        assertNull(c.notice)
+
+        gateSecond.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("the second explanation", c.explanation)
+    }
+
     @Test
     fun `a cancelled request does not clobber the state of the next one`() = runTest {
         // Regression (job reassignment): cancel() resets busy synchronously so ask() can start a

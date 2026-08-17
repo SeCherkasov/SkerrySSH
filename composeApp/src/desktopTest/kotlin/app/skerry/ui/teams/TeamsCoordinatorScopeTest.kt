@@ -67,6 +67,8 @@ class TeamsCoordinatorScopeTest {
         val removed = mutableListOf<String>()
         /** Set to make listScopes fail — a server without scope routes (404) or a transient error. */
         var listScopesFailure: SyncException? = null
+        /** Set to make the team-key rotation fail — a 5xx, or the network dropping mid-removal. */
+        var teamRekeyFailure: SyncException? = null
 
         private val store = linkedMapOf<String, Triple<RemoteRecord, Long, String>>() // id -> (rec, seq, scope)
         private var seq = 0L
@@ -147,6 +149,7 @@ class TeamsCoordinatorScopeTest {
         override suspend fun changeRole(session: SyncSession, teamId: String, accountId: String, role: TeamRole) = error("unused")
         override suspend fun rekey(session: SyncSession, teamId: String, newEpoch: Long, envelopes: Map<String, ByteArray>) {
             teamRekeyCalls += newEpoch
+            teamRekeyFailure?.let { throw it }
         }
         override suspend fun teamActivity(session: SyncSession, teamId: String): List<TeamActivityEntry> = error("unused")
         override suspend fun reportSessionEvent(
@@ -420,6 +423,34 @@ class TeamsCoordinatorScopeTest {
         assertEquals(untouchedKey, ks.scope(teamId, "sandbox")!!.key)
         // The team key rotates too, as it did before scopes existed.
         assertEquals(listOf(1L), client.teamRekeyCalls)
+    }
+
+    /**
+     * The scope loop is guarded precisely because every skipped scope is a key the removed member
+     * still holds. The team rotation above it was not, so one failed rekey — a 5xx, a dropped
+     * network — unwound past the loop and left them holding every scope key they had, with nothing
+     * to retry it: the removal has already happened server-side and cannot be repeated.
+     */
+    @Test
+    fun `a failed team rotation still rotates the scopes the removed member held`() = runBlocking<Unit> {
+        initializeVaultCrypto()
+        val f = newFixture()
+        val ks = seedTeam(f)
+        val client = FakeTeamClient(self, teamId, AccountKeys(crypto.newSharingKeyPair().publicKey, crypto.newSigningKeyPair().publicKey))
+        val coord = coordinator(f, client, listOf("prod", "staging").iterator())
+        coord.createScope(teamId, "Production")
+        coord.createScope(teamId, "Staging")
+        coord.grantScope(teamId, "prod", bob)
+        coord.grantScope(teamId, "staging", bob)
+        client.teamRekeyFailure = SyncException(SyncException.Kind.NETWORK, "offline")
+
+        coord.removeMember(teamId, bob)
+
+        assertEquals(listOf(bob), client.removed)
+        assertEquals(listOf("prod" to 1L, "staging" to 1L), client.rekeyCalls.sortedBy { it.first })
+        assertEquals(1, ks.scope(teamId, "prod")!!.epoch)
+        assertEquals(1, ks.scope(teamId, "staging")!!.epoch)
+        assertNotNull(coord.lastError.value, "the failed team rotation must still be reported")
     }
 
     @Test
