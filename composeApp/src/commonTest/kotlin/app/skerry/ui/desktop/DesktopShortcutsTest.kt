@@ -4,7 +4,9 @@ import androidx.compose.ui.input.key.Key
 import app.skerry.ui.session.PaneDirection
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class DesktopShortcutsTest {
 
@@ -165,5 +167,28 @@ class DesktopShortcutsTest {
         assertNull(matchDesktopShortcut("Ctrl+Shift+X"))
         assertNull(matchDesktopShortcut("Ctrl+G"))
         assertNull(matchDesktopShortcut("nonsense"))
+    }
+
+    /**
+     * A modal owns the keyboard, and this handler runs above the focus its field takes — so a chord
+     * typed into a connect password must not act on the session waiting underneath. Locking is the
+     * exception: it tears that session down, so nothing is left to type into.
+     */
+    @Test
+    fun only_the_vault_lock_survives_an_open_modal() {
+        assertTrue(survivesModal(DesktopShortcut.Lock))
+        for (other in listOf(
+            DesktopShortcut.NewConnection,
+            DesktopShortcut.CommandPalette,
+            DesktopShortcut.SnippetPalette,
+            DesktopShortcut.Broadcast,
+            DesktopShortcut.OpenSftp,
+            DesktopShortcut.FindInTerminal,
+            DesktopShortcut.NextTab,
+            DesktopShortcut.SelectTab(0),
+        )) {
+            assertFalse(survivesModal(other), "$other must not act on the session under a modal")
+        }
+        assertFalse(survivesModal(null), "an unmatched chord runs nothing")
     }
 }

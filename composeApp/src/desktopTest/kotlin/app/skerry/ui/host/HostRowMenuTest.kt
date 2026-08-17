@@ -18,10 +18,13 @@ import app.skerry.ui.desktop.runDesktopShell
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.conn_field_name
+import app.skerry.ui.host.HostSection
+import app.skerry.ui.desktop.onScreen
 import app.skerry.ui.generated.resources.shell_delete
 import app.skerry.ui.generated.resources.shell_tip_more_actions
 import app.skerry.ui.generated.resources.term_menu_delete
 import app.skerry.ui.generated.resources.term_menu_duplicate
+import app.skerry.ui.generated.resources.term_menu_run_snippet
 import app.skerry.ui.generated.resources.term_menu_edit
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -85,15 +88,39 @@ class HostRowMenuTest {
     }
 
     /**
+     * A snippet is a line typed into a shell, and a remote desktop has none: offering to run one on
+     * a framebuffer profile is a dead end — the row would open the desktop and the command would
+     * have nowhere to go. The rest of the menu is a profile's, not a session's, so it stays.
+     */
+    @Test
+    fun `a remote desktop row does not offer to run a snippet`() = runDesktopShell {
+        onScreen(UiTags.railSection(HostSection.RemoteDesktops)).performClick()
+        waitForIdle()
+        openMenu(DESKTOP_HOST)
+
+        onNodeWithText(string(Res.string.term_menu_run_snippet)).assertDoesNotExist()
+        onNodeWithText(string(Res.string.term_menu_edit)).assertIsDisplayed()
+        onNodeWithText(string(Res.string.term_menu_duplicate)).assertIsDisplayed()
+        onNodeWithText(string(Res.string.term_menu_delete)).assertIsDisplayed()
+    }
+
+    /** The terminal side still offers it: that is where a snippet has somewhere to go. */
+    @Test
+    fun `a terminal host offers to run a snippet`() = runDesktopShell {
+        openMenu()
+        onNodeWithText(string(Res.string.term_menu_run_snippet)).assertIsDisplayed()
+    }
+
+    /**
      * Scoped twice over: to the sidebar, because the work bar draws the same host name, and to the
      * row itself, because every catalog row carries a button with this name.
      */
-    private fun ComposeUiTest.openMenu() {
-        onCatalog(FIRST_HOST).assertIsDisplayed()
+    private fun ComposeUiTest.openMenu(host: String = FIRST_HOST) {
+        onCatalog(host).assertIsDisplayed()
         onNode(
             hasContentDescription(string(Res.string.shell_tip_more_actions)) and
                 hasAnyAncestor(hasTestTag(UiTags.HOST_SIDEBAR)) and
-                hasAnyAncestor(hasText(FIRST_HOST)),
+                hasAnyAncestor(hasText(host)),
         ).performClick()
         waitForIdle()
     }
@@ -102,5 +129,8 @@ class HostRowMenuTest {
 
 // The seeded catalog's first terminal host.
 private const val FIRST_HOST = "prod-web-01"
+
+/** A remote-desktop profile of the seeded catalog — see `seededHosts`. */
+private const val DESKTOP_HOST = "win-bench"
 private const val RENAMED = "prod-web-01-renamed"
 private const val COPY = "prod-web-02"

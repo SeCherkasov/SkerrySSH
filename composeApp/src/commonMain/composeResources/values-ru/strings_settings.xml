@@ -260,4 +260,6 @@
     <string name="settings_trash_locked">Разблокируйте хранилище, чтобы увидеть корзину</string>
     <string name="settings_terminal_prod_warnings">Подтверждать предупреждения на проде</string>
     <string name="settings_terminal_prod_warnings_desc">На хостах с тегом #prod спрашивать не только на опасных командах, но и на предупреждениях (kill, остановка сервиса, удаление пакета). В сессии под root правило про sudo не действует — там оно ничего не значит, — а разрушительные предупреждения подтверждаются в любом случае.</string>
+    <string name="settings_kb_remote_group">УДАЛЁННЫЙ РАБОЧИЙ СТОЛ</string>
+    <string name="settings_kb_release_keyboard">Отпустить клавиатуру (вернуть приложению)</string>
 </resources>

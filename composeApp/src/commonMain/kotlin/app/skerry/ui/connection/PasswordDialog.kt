@@ -23,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -49,6 +51,7 @@ import app.skerry.ui.generated.resources.shell_use_saved_secret
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_connect
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.rememberPromptFocus
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
@@ -79,11 +82,18 @@ fun DesktopPasswordDialog(
     onUseSecret: (Credential) -> Unit = {},
 ) {
     val noop = remember { MutableInteractionSource() }
-    var password by remember { mutableStateOf("") }
+    // Keyed like the focus effect below: were the dialog ever re-pointed at another host in place,
+    // an unkeyed buffer would submit the first host's password to the second.
+    var password by remember(host.id) { mutableStateOf("") }
     val submit = { if (password.isNotEmpty()) onConnect(password) }
+    // And the field takes the caret itself. Without it the keyboard stays where it was — on the
+    // live session this dialog opened over — and the password is typed into that shell instead,
+    // which is also why the keyboard-interactive dialog focuses its first answer.
+    val focus = remember(host.id) { FocusRequester() }
+    val prompt = rememberPromptFocus(focus, host.id)
 
     Box(
-        Modifier.fillMaxSize().background(Skerry.colors.modalScrim).clickable(interactionSource = noop, indication = null, onClick = onDismiss),
+        prompt.fillMaxSize().background(Skerry.colors.modalScrim).clickable(interactionSource = noop, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Column(
@@ -118,6 +128,7 @@ fun DesktopPasswordDialog(
                 // drawn in caps and a screen reader should not be handed shouted text, and "connection
                 // password" also tells it apart from the vault's master password.
                 modifier = Modifier.fillMaxWidth()
+                    .focusRequester(focus)
                     .fieldName(fallback = stringResource(Res.string.shell_password_host_placeholder))
                     .testTag(UiTags.FORM_FIELD),
                 decorationBox = { inner ->

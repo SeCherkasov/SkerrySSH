@@ -482,41 +482,49 @@ class RemoteDesktopScreenState(
         }
     }
 
-    /** Forward a pointer event (framebuffer coordinates + button mask). No-op in view-only mode. */
-    fun onPointer(x: Int, y: Int, buttonMask: Int) {
+    /**
+     * Forward a pointer event (framebuffer coordinates + button mask). No-op in view-only mode.
+     * [wheel] marks the two masks of a wheel notch, which the actor must not pace or collapse the
+     * way it does a move — see [RemoteInputActor].
+     */
+    fun onPointer(x: Int, y: Int, buttonMask: Int, wheel: Boolean = false) {
         if (viewOnly) return
         // The local mouse speaking takes the cursor back from a server-side warp (F-21).
         serverPointer = null
-        inputActor.submit(RemoteInputActor.PointerWrite(x, y, buttonMask))
+        inputActor.submit(RemoteInputActor.PointerWrite(x, y, buttonMask, wheel))
     }
 
-    /** Forward a key event. No-op in view-only mode. */
-    fun onKey(event: RemoteKeyEvent, down: Boolean) {
+    /**
+     * Forward a key event. No-op in view-only mode. [modifier] names the modifier this key is, so
+     * [syncModifiers] can lift it again if the local machine lets go of it without telling us.
+     */
+    fun onKey(event: RemoteKeyEvent, down: Boolean, modifier: RemoteModifier? = null) {
         if (viewOnly) return
-        val id = keyIdentity(event)
-        if (down) heldKeys[id] = event else heldKeys.remove(id)
+        held.record(event, down, modifier)
         inputActor.submit(RemoteInputActor.KeyWrite(event, down))
     }
 
-    // Keys currently down on the server, in press order; written from the UI thread only.
-    private val heldKeys = LinkedHashMap<Long, RemoteKeyEvent>()
+    /**
+     * Reconcile the modifiers the server is holding with the ones the local machine actually has
+     * down. Every input event carries that state, and it is the only way to notice a key-up that
+     * never arrived — the window manager takes Alt+Tab and the Super key for itself, keeps the
+     * release, and the server is left with the modifier stuck down. From there every click reads as
+     * Alt+click or Win+click and the desktop stops answering the mouse.
+     */
+    fun syncModifiers(local: RemoteModifiers, except: RemoteModifier? = null) {
+        if (viewOnly) return
+        for (event in held.outOfStep(local, except)) {
+            inputActor.submit(RemoteInputActor.KeyWrite(event, down = false))
+        }
+    }
+
+    // What the server is holding; written from the UI thread only.
+    private val held = HeldKeys()
 
     private fun releaseHeldKeys() {
-        for (event in heldKeys.values.toList().asReversed()) {
-            inputActor.submit(RemoteInputActor.KeyWrite(event, false))
-        }
-        heldKeys.clear()
+        for (event in held.releaseAll()) inputActor.submit(RemoteInputActor.KeyWrite(event, false))
     }
 
-    /** What makes a press and its release the same key, whichever field the protocol will use. */
-    private fun keyIdentity(event: RemoteKeyEvent): Long = when {
-        // A multi-scancode key (F-18) has no flat scancode; its first scan is unique among the
-        // sequences, and collapsing them all to one identity dropped a release on focus loss.
-        event.sequence.isNotEmpty() -> event.sequence.first().scancode.toLong() or (1L shl 56)
-        event.scancode != 0 -> event.scancode.toLong() or (if (event.extended) 1L shl 32 else 0L)
-        event.keySym != 0L -> event.keySym or (1L shl 40)
-        else -> event.codePoint.toLong() or (1L shl 48)
-    }
 
     /**
      * The surface gained or lost keyboard focus. Losing it releases everything held (F-12): the

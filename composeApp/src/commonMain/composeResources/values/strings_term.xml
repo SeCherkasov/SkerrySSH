@@ -112,7 +112,6 @@
         <item quantity="other">%1$d panes</item>
     </plurals>
     <string name="term_wbar_sync">synchronized input</string>
-    <string name="term_tip_sidebar">Hosts</string>
     <string name="term_pane_menu">Pane actions</string>
     <string name="term_pane_change_host">Change host</string>
     <string name="term_pane_close">Close pane</string>

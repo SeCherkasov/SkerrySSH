@@ -67,4 +67,6 @@
     <string name="rd_bar_hide">Скрыть панель</string>
     <string name="rd_ctrl_alt_del_view_only">Только просмотр — ввод не отправляется</string>
     <string name="rd_clipboard_failed">Системный буфер обмена недоступен</string>
+    <string name="rd_surface">Удалённый рабочий стол: %1$s. %2$s</string>
+    <string name="rd_surface_release">%1$s отпускает клавиатуру</string>
 </resources>

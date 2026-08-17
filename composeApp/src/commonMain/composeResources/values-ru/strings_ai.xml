@@ -18,4 +18,5 @@
     <string name="assistant_copy">Копировать</string>
     <string name="assistant_edit">Править</string>
     <string name="shell_tip_assistant">Ассистент</string>
+    <string name="assistant_explain_action">Объяснить вывод</string>
 </resources>

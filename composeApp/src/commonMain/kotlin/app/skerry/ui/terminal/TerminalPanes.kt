@@ -31,6 +31,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +67,9 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.app.LocalConnectPane
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.design.rememberModalPresence
+import app.skerry.ui.design.ModalPresence
+import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
@@ -192,7 +197,15 @@ internal fun PaneCell(
     // grid holds focus after a drop, and the arrow chord goes dead until the user clicks a pane.
     val paneFocus = remember { FocusRequester() }
     val takesKeyboard = pane.controller.uiState is ConnectionUiState.Connected
-    LaunchedEffect(focused, takesKeyboard) { if (focused && !takesKeyboard) paneFocus.requestFocus() }
+    // Not while something modal is up: a session dropping under the connect-password dialog would
+    // otherwise take the caret out of its field (the same rule [ClaimKeyboard] follows). Watched
+    // through a snapshot flow rather than read in composition, so a modal opening does not
+    // invalidate every pane of the grid.
+    LaunchedEffect(focused, takesKeyboard) {
+        if (!focused || takesKeyboard) return@LaunchedEffect
+        snapshotFlow { ModalPresence.openCount }.first { it == 0 }
+        paneFocus.requestFocus()
+    }
     Column(
         modifier
             .paneBoundsAnchor(drag, pane.id, row, column)
@@ -254,7 +267,10 @@ internal fun PaneHeader(
             // four the borders met in the middle and it took a second look to see which one was lit.
             Box(Modifier.width(2.dp).fillMaxHeight().background(if (focused) Skerry.colors.teal else Color.Transparent))
             Row(
-                Modifier.weight(1f).fillMaxHeight().clickable { pickerOpen = !pickerOpen }.padding(start = 8.dp, end = 4.dp),
+                // The split tab's own host picker, same as the work bar's on a solo tab: the press
+                // takes the keyboard and the popup claims nothing back.
+                Modifier.weight(1f).fillMaxHeight().handsKeyboardBack()
+                    .clickable { pickerOpen = !pickerOpen }.padding(start = 8.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -291,6 +307,9 @@ internal fun PaneHeader(
 @Composable
 internal fun PaneMenu(onDismiss: () -> Unit, onChangeHost: () -> Unit, onClose: () -> Unit) {
     Popup(alignment = Alignment.TopEnd, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
+        // A focusable popup owns the keyboard while it is up: registered so the session it opened
+        // over does not claim it back and close the menu from under the pointer.
+        rememberModalPresence()
         MenuPanel(Modifier.padding(top = PANE_HEADER_HEIGHT)) {
             MenuActionRow("dns", stringResource(Res.string.term_pane_change_host)) { onDismiss(); onChangeHost() }
             MenuActionRow("close", stringResource(Res.string.term_pane_close)) { onDismiss(); onClose() }
@@ -322,7 +341,7 @@ internal fun PaneHostPicker(onPick: (Host) -> Unit) {
                     Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(5.dp))
-                        .clickable { onPick(host) }
+                        .handsKeyboardBack().clickable { onPick(host) }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),

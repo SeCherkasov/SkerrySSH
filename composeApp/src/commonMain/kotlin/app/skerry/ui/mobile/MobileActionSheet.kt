@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import app.skerry.ui.design.rememberModalPresence
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
@@ -77,6 +78,8 @@ fun MobileActionSheet(
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true),
     ) {
+        // Focusable, so it owns the keyboard while it is up — see [PaneMenu].
+        rememberModalPresence()
         MobileBottomSheet(onDismiss = onDismiss, panelModifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
             Txt(title, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold)
             if (subtitle != null) {

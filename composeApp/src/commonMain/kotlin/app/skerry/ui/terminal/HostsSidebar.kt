@@ -48,6 +48,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.app.LocalHostClickConnectMode
+import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
@@ -126,8 +127,14 @@ internal fun Modifier.hostConnectClick(
     onClick: () -> Unit,
     onSingleClick: (() -> Unit)? = null,
 ): Modifier =
+    // The hand-back rides on the receiver in each branch, never wrapped around them: both the
+    // wrapper and the branches would chain onto the same receiver, and the row's padding, clip and
+    // selection tint would be applied twice.
+    //
+    // The press takes the keyboard before the click opens anything, and what it opens — a password
+    // dialog, an edit modal, or nothing at all when a click only selects — may hand nothing back.
     when (LocalHostClickConnectMode.current) {
-        HostClickConnectMode.SingleClick -> clickable(onClick = onClick)
+        HostClickConnectMode.SingleClick -> handsKeyboardBack().clickable(onClick = onClick)
         HostClickConnectMode.DoubleClick -> {
             // Selection fires on the press *Release*, not on clickable's onClick, keeping the
             // highlight immediate while a press that turns into a drag-reorder or a drag-scroll
@@ -146,7 +153,7 @@ internal fun Modifier.hostConnectClick(
             // onKeyEvent never fires. The preview handler intercepts first, making Enter/Space
             // connect while the mouse still requires a double click (same pattern as
             // TerminalScreen/CommandPalette).
-            this
+            handsKeyboardBack()
                 .onPreviewKeyEvent { event ->
                     if (event.type == KeyEventType.KeyDown &&
                         (event.key == Key.Enter || event.key == Key.Spacebar)

@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.local.LocalModelCatalog
+import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
@@ -64,6 +65,7 @@ import app.skerry.ui.generated.resources.assistant_context_chip
 import app.skerry.ui.generated.resources.assistant_context_off
 import app.skerry.ui.generated.resources.assistant_context_title
 import app.skerry.ui.generated.resources.assistant_empty
+import app.skerry.ui.generated.resources.assistant_explain_action
 import app.skerry.ui.generated.resources.assistant_explain_request
 import app.skerry.ui.generated.resources.assistant_thinking
 import app.skerry.ui.generated.resources.assistant_title
@@ -304,12 +306,21 @@ private fun AssistantAskRow(
             Box(
                 Modifier.size(26.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.overlaySoft)
                     .border(1.dp, Skerry.colors.line, RoundedCornerShape(8.dp))
-                    .clickable(enabled = !controller.busy) {
+                    // The hand-back follows the click: a press while the assistant is busy does
+                    // nothing, and moving the caret for it would be a jump the user did not ask for.
+                    .handsKeyboardBack(!controller.busy).clickable(enabled = !controller.busy) {
                         controller.explain(request, terminal.selectedText() ?: terminal.lastOutput() ?: terminal.output)
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                Sym("summarize", size = 15.sp, color = if (controller.busy) Skerry.colors.faint else Skerry.colors.amber)
+                // The glyph is the button's only label — [Sym] clears its own semantics, so without
+                // this the control is an unnamed box to a screen reader.
+                Sym(
+                    "summarize",
+                    size = 15.sp,
+                    color = if (controller.busy) Skerry.colors.faint else Skerry.colors.amber,
+                    contentDescription = stringResource(Res.string.assistant_explain_action),
+                )
             }
         }
         Box(Modifier.weight(1f).padding(bottom = 4.dp)) {
@@ -398,7 +409,7 @@ private fun ContextChip(controller: SessionAssistantController) {
                         Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(5.dp))
-                            .clickable {
+                            .handsKeyboardBack().clickable {
                                 controller.selectContextOutputs(count)
                                 open = false
                             }

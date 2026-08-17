@@ -22,6 +22,7 @@ import app.skerry.ui.app.DesktopView
 import app.skerry.ui.app.LocalSessionShare
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalTeams
+import app.skerry.ui.design.rememberModalPresence
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.MenuActionRow
 import app.skerry.ui.design.MenuPanel
@@ -393,6 +394,8 @@ internal fun OverflowActionsButton(
         IconBtn("more_horiz", onClick = { open = !open }, tooltip = stringResource(Res.string.shell_tip_more_actions))
         if (open) {
             Popup(alignment = Alignment.TopEnd, onDismissRequest = { open = false }, properties = PopupProperties(focusable = true)) {
+                // Same as [PaneMenu]: a focusable popup holds the keyboard, so it counts as a modal.
+                rememberModalPresence()
                 MenuPanel(Modifier.padding(top = WORK_BAR_HEIGHT), width = OVERFLOW_MENU_WIDTH) {
                     // Listed the way they sit in the row, so the menu reads as its continuation.
                     hidden.sortedBy { TOOLBAR_ROW_ORDER.indexOf(it) }.forEach { action ->

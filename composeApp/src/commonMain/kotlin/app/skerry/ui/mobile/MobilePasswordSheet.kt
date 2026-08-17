@@ -22,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -36,6 +38,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_password_label
 import app.skerry.ui.generated.resources.term_connect
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.rememberPromptFocus
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
@@ -58,10 +61,17 @@ fun MobilePasswordSheet(
 ) {
     var password by remember { mutableStateOf("") }
     val submit = { if (password.isNotEmpty()) onConnect(password) }
+    // The desktop dialog's rules, on the phone as well — see [rememberPromptFocus]: registered as a
+    // modal so the session underneath does not claim the keyboard back, holding the caret (a
+    // hardware keyboard on a tablet or DeX would otherwise type the password into that session's
+    // shell), and drawn on the layer that says so.
+    val focus = remember(host.id) { FocusRequester() }
+    val prompt = rememberPromptFocus(focus, host.id)
     // Protect SSH password entry on connect from screenshots/Recent Apps previews (Android; desktop no-op).
     SecureScreen()
     MobileBottomSheet(
         onDismiss = onDismiss,
+        modifier = prompt,
         panelModifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
     ) {
         Txt(host.rowLabel(), color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
@@ -73,6 +83,7 @@ fun MobilePasswordSheet(
             MobileFormInput(
                 value = password,
                 onValueChange = { password = it },
+                modifier = Modifier.focusRequester(focus),
                 placeholder = "••••••••",
                 masked = true,
                 imeAction = ImeAction.Go,

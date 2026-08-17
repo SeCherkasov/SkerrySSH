@@ -111,7 +111,6 @@
         <item quantity="other">%1$d 个面板</item>
     </plurals>
     <string name="term_wbar_sync">同步输入</string>
-    <string name="term_tip_sidebar">主机</string>
     <string name="term_pane_menu">面板操作</string>
     <string name="term_pane_change_host">更换主机</string>
     <string name="term_pane_close">关闭面板</string>

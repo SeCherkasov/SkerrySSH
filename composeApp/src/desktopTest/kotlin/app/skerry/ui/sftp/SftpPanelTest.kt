@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performMouseInput
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.desktop.onScreen
 import app.skerry.ui.desktop.runDesktopShell
+import app.skerry.ui.generated.resources.sftp_tip_back
 import app.skerry.ui.desktop.string
 import app.skerry.ui.design.uppercaseForLocale
 import app.skerry.ui.generated.resources.Res
@@ -39,6 +40,17 @@ import kotlin.test.assertEquals
  */
 @OptIn(ExperimentalTestApi::class)
 class SftpPanelTest {
+
+    /**
+     * The work bar's leading slot is optional now — the terminal collapses its hosts panel from the
+     * strip beside it instead. A sub-view still puts its way back there, and nothing else in the
+     * shell offers one.
+     */
+    @Test
+    fun `the file panel keeps its way back to the terminal`() = runDesktopShell {
+        openFiles()
+        onNodeWithContentDescription(string(Res.string.sftp_tip_back)).assertIsDisplayed()
+    }
 
     @Test
     fun `the files button opens the remote listing of the active session`() = runDesktopShell {

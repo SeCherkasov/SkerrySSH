@@ -5,17 +5,32 @@ import kotlin.math.abs
 /**
  * Accumulates fractional wheel deltas into whole notches (F-14): a trackpad reports fractions that
  * used to round to one-notch-or-nothing, and a three-line wheel step used to scroll one. The
- * remainder is carried, never dropped.
+ * fraction left over is carried into the next sample; whole notches over the per-event bound are
+ * dropped rather than carried — see [add].
  */
 internal class WheelCarry {
     private var carry = 0f
 
-    /** Add a raw delta; returns the whole notches now due (sign = direction), keeping the rest. */
+    /**
+     * Add a raw delta; returns the whole notches now due (sign = direction), keeping the fraction.
+     *
+     * Bounded per event: one fling on a high-resolution trackpad can accumulate a large delta, and
+     * every notch is two writes the input actor sends without pacing — an unbounded burst would sit
+     * in front of the click or keystroke that follows it. What is over the bound is dropped, not
+     * banked: a remainder outlives the gesture that made it, and the next scroll — in the opposite
+     * direction as easily as the same one — would spend it first and go the wrong way.
+     */
     fun add(delta: Float): Int {
         carry += delta
-        val steps = carry.toInt()
-        carry -= steps
-        return steps
+        val whole = carry.toInt()
+        // Only the fraction is kept, whether or not the bound bit.
+        carry -= whole.toFloat()
+        return whole.coerceIn(-MAX_STEPS_PER_EVENT, MAX_STEPS_PER_EVENT)
+    }
+
+    private companion object {
+        /** More than any real wheel reports in one event, less than a burst that blocks the queue. */
+        const val MAX_STEPS_PER_EVENT = 8
     }
 }
 

@@ -186,6 +186,22 @@ internal class FakeSftpClient : SftpClient {
 }
 
 /**
+ * How many keys the fake desktop was handed. A count, not the keys themselves: the shell tests only
+ * need to know whether typing reached the session, and what is typed into one is not a thing to
+ * keep — see [FakeShellInput] on why this lives in the shipped jar at all.
+ */
+internal object FakeRemoteInput {
+    private var keys = 0
+
+    /** Called from the input actor's coroutine, read from the test thread — hence the lock. */
+    fun record() = synchronized(this) { keys++; Unit }
+
+    fun keys(): Int = synchronized(this) { keys }
+
+    fun clear() = synchronized(this) { keys = 0 }
+}
+
+/**
  * Fake remote desktop: a still 1440×900 picture (gradient wallpaper with two "windows" on it) and
  * an update flow that hands it over once and then hangs. Lets the Desktops section render a live
  * session — its floating bar, its menus — without a VNC/RDP server.
@@ -206,7 +222,7 @@ internal fun fakeRemoteDesktop(title: String): RemoteDesktopSession = object : R
     }
 
     override suspend fun sendPointer(x: Int, y: Int, buttonMask: Int) = Unit
-    override suspend fun sendKey(event: RemoteKeyEvent, down: Boolean) = Unit
+    override suspend fun sendKey(event: RemoteKeyEvent, down: Boolean) = FakeRemoteInput.record()
     override suspend fun sendClipboardText(text: String) = Unit
     override suspend fun requestFullUpdate() = Unit
     override suspend fun setQuality(quality: RemoteDesktopQuality) = Unit

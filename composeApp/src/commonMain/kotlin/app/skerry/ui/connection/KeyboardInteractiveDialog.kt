@@ -19,7 +19,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -39,6 +38,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ssh.KeyboardInteractiveChallenge
+import app.skerry.ui.design.rememberPromptFocus
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
@@ -86,13 +86,14 @@ fun KeyboardInteractiveDialog(
     val focus = remember(requestId) { FocusRequester() }
     val submit = { onSubmit(answers.toList()) }
 
-    // requestFocus throws if the node is gone (the dialog left composition in the same frame); the
-    // field stays usable by click, so failing to focus is not worth propagating.
-    LaunchedEffect(requestId) { runCatching { focus.requestFocus() } }
+    // Registered as a modal, holding the caret and drawn where the caret is — see
+    // [rememberPromptFocus]: a 2FA answer must not be typed into the session waiting underneath, nor
+    // into a prompt for another host that opened over this one.
+    val prompt = rememberPromptFocus(focus, requestId)
     PlatformBackHandler(onBack = onDismiss)
 
     Box(
-        Modifier.fillMaxSize().background(Skerry.colors.modalScrim)
+        prompt.fillMaxSize().background(Skerry.colors.modalScrim)
             .clickable(interactionSource = noop, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {

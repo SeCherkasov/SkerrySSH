@@ -80,6 +80,7 @@ import app.skerry.ui.generated.resources.shell_connect
 import app.skerry.ui.generated.resources.shell_replace_pane_title
 import app.skerry.ui.generated.resources.shell_close_panel
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.ModalPresence
 import app.skerry.ui.design.ConfirmActionDialog
 import app.skerry.ui.host.DesktopDeleteHostDialog
 import app.skerry.ui.app.DesktopDesignState
@@ -359,6 +360,20 @@ internal fun DesktopChrome(
         val onRootKey = remember(snippets, sessions, state) {
             { event: KeyEvent ->
                 if (event.type != KeyEventType.KeyDown) false
+                // Anything that registered as a modal owns the keyboard, the connect password and
+                // the 2FA answer included: this handler runs above the focus their fields take, so
+                // a capital letter or an AltGr character in a password would otherwise fire a
+                // snippet on the session waiting underneath. The named flags below stay for the
+                // overlays that never registered.
+                // Locking the vault is the one thing that must work from anywhere: it tears the
+                // session subtree down, so whatever modal is up goes with it.
+                else if (ModalPresence.openCount > 0) {
+                    val shortcut = matchDesktopShortcut(
+                        event.isCtrlPressed, event.isShiftPressed, event.isAltPressed, event.isMetaPressed, event.key,
+                    )
+                    shortcut != null && survivesModal(shortcut) &&
+                        runDesktopShortcut(shortcut, state, sessions, lockAction.value)
+                }
                 else if (
                     state.appOverlay != null || state.modalOpen || state.settingsOpen ||
                     state.sshImportOpen ||

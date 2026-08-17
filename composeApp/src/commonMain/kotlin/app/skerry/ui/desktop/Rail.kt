@@ -3,6 +3,7 @@ package app.skerry.ui.desktop
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.host.HostSection
+import app.skerry.ui.session.SessionView
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rail_desktops
 import app.skerry.ui.generated.resources.rail_hosts
@@ -58,8 +59,24 @@ fun railItemActive(item: RailItem, state: DesktopDesignState): Boolean = when (v
  * catalog that just opened is how the next session starts. Only with no tab open does the section
  * take over the whole work area.
  */
-fun openRailSection(state: DesktopDesignState, section: HostSection) {
+fun openRailSection(state: DesktopDesignState, section: HostSection, terminalView: SessionView? = null) {
     state.showSection(section)
+    // And with it the catalog: pressing a section is asking to see its hosts, so a collapsed panel
+    // comes back rather than leaving the press with nothing to show for it — but only where the
+    // panel is actually drawn, or the press would quietly change a preference the user cannot see
+    // and would meet an open panel on their way back to the terminal.
+    if (showsCatalog(section, terminalView)) state.showSidebar()
+}
+
+/**
+ * Whether the work area draws the hosts panel for [section] with [terminalView] open in it. The
+ * desktops section always does; on the terminal side the file panel, a runbook run and the player
+ * fill the whole area instead, and only the terminal and the monitor keep the catalog beside them.
+ */
+fun showsCatalog(section: HostSection, terminalView: SessionView?): Boolean = when {
+    section == HostSection.RemoteDesktops -> true
+    terminalView == null -> true
+    else -> terminalView == SessionView.Terminal || terminalView == SessionView.Monitor
 }
 
 // Selecting, cycling or closing a tab deliberately has no rail counterpart: the work area follows

@@ -667,4 +667,145 @@ class RemoteDesktopScreenStateTest {
     private companion object {
         const val DELETE_SCANCODE = 0x53
     }
+
+    /**
+     * The window manager takes Alt+Tab and the Super key for itself: the press reaches us, the
+     * release never does, and the server is left holding a modifier for the rest of the session.
+     * Every click then arrives as Alt+click and the remote desktop stops answering the mouse —
+     * until the user happens to press that modifier again, which is what made this look like
+     * "the mouse works after I switch the keyboard layout".
+     *
+     * Every input event carries what the local machine really has down, so the state lifts what the
+     * server should not be holding.
+     */
+    @Test
+    fun a_modifier_the_local_machine_no_longer_holds_is_lifted_on_the_server() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+        val alt = RemoteKeyEvent(keySym = 0xFFE9, scancode = 0x38)
+
+        screen.onKey(alt, down = true, modifier = RemoteModifier.Alt)
+        advanceUntilIdle()
+        assertEquals(listOf(alt to true), session.keys.toList())
+
+        // The next event says nothing is held: the release we never saw has to go out now.
+        screen.syncModifiers(RemoteModifiers(ctrl = false, alt = false, shift = false))
+        advanceUntilIdle()
+        assertEquals(listOf(alt to true, alt to false), session.keys.toList())
+
+        // And only once — a second event with the same state has nothing left to lift.
+        screen.syncModifiers(RemoteModifiers(ctrl = false, alt = false, shift = false))
+        advanceUntilIdle()
+        assertEquals(2, session.keys.size)
+        scope.cancel()
+    }
+
+    /** A modifier the user really is holding stays down: the sync lifts only what drifted. */
+    @Test
+    fun a_modifier_still_held_locally_is_left_alone() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+        val ctrl = RemoteKeyEvent(keySym = 0xFFE3, scancode = 0x1D)
+
+        screen.onKey(ctrl, down = true, modifier = RemoteModifier.Ctrl)
+        screen.syncModifiers(RemoteModifiers(ctrl = true, alt = false, shift = false))
+        advanceUntilIdle()
+        assertEquals(listOf(ctrl to true), session.keys.toList())
+        scope.cancel()
+    }
+
+    /**
+     * The release of a modifier already says the modifier is up, so the reconciliation must leave
+     * that one key alone — otherwise every ordinary Shift release goes down the wire twice.
+     */
+    @Test
+    fun the_modifier_of_the_event_being_handled_is_not_reconciled() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+        val shift = RemoteKeyEvent(keySym = 0xFFE1, scancode = 0x2A)
+
+        screen.onKey(shift, down = true, modifier = RemoteModifier.Shift)
+        // What a key-up of Shift looks like: the event no longer reports Shift as held.
+        screen.syncModifiers(RemoteModifiers(ctrl = false, alt = false, shift = false), except = RemoteModifier.Shift)
+        screen.onKey(shift, down = false, modifier = RemoteModifier.Shift)
+        advanceUntilIdle()
+
+        assertEquals(listOf(shift to true, shift to false), session.keys.toList())
+        scope.cancel()
+    }
+
+    /**
+     * Left and right of one modifier are two keys the server holds separately. Releasing one must
+     * not lose the record of the other, or a swallowed release for it can no longer be put right —
+     * and pressing both is exactly what a layout switcher (Alt+Shift) does.
+     */
+    @Test
+    fun both_sides_of_a_modifier_are_tracked_separately() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+        val left = RemoteKeyEvent(keySym = 0xFFE9, scancode = 0x38)
+        val right = RemoteKeyEvent(keySym = 0xFFEA, scancode = 0x38, extended = true)
+
+        screen.onKey(left, down = true, modifier = RemoteModifier.Alt)
+        screen.onKey(right, down = true, modifier = RemoteModifier.Alt)
+        screen.onKey(right, down = false, modifier = RemoteModifier.Alt)
+        advanceUntilIdle()
+        session.keys.clear()
+
+        // The local machine holds neither now — the left one, still down on the server, has to go.
+        screen.syncModifiers(RemoteModifiers(ctrl = false, alt = false, shift = false))
+        advanceUntilIdle()
+        assertEquals(listOf(left to false), session.keys.toList())
+        scope.cancel()
+    }
+
+    /** View-only sends nothing at all, the reconciliation included: look, don't touch. */
+    @Test
+    fun view_only_reconciles_nothing() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+        val alt = RemoteKeyEvent(keySym = 0xFFE9, scancode = 0x38)
+
+        screen.onKey(alt, down = true, modifier = RemoteModifier.Alt)
+        advanceUntilIdle()
+        session.keys.clear()
+
+        screen.toggleViewOnly()
+        screen.syncModifiers(RemoteModifiers(ctrl = false, alt = false, shift = false))
+        advanceUntilIdle()
+        assertTrue(session.keys.isEmpty(), "a view-only session wrote to the server: ${session.keys}")
+        scope.cancel()
+    }
+
+    /**
+     * One event, two modifiers: the one it reports releasing is left to [RemoteDesktopScreenState.onKey],
+     * the one that drifted is lifted here — a layout switcher (Alt+Shift) makes exactly this shape.
+     */
+    @Test
+    fun the_exempt_modifier_and_a_stale_one_are_told_apart() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+        val ctrl = RemoteKeyEvent(keySym = 0xFFE3, scancode = 0x1D)
+        val shift = RemoteKeyEvent(keySym = 0xFFE1, scancode = 0x2A)
+
+        screen.onKey(ctrl, down = true, modifier = RemoteModifier.Ctrl)
+        screen.onKey(shift, down = true, modifier = RemoteModifier.Shift)
+        advanceUntilIdle()
+        session.keys.clear()
+
+        // The Shift key-up: it reports both as released, but Shift's own transition is onKey's.
+        screen.syncModifiers(
+            RemoteModifiers(ctrl = false, alt = false, shift = false),
+            except = RemoteModifier.Shift,
+        )
+        advanceUntilIdle()
+        assertEquals(listOf(ctrl to false), session.keys.toList())
+        scope.cancel()
+    }
 }
