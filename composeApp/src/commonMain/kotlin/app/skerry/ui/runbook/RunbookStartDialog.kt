@@ -35,7 +35,6 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippet_vars_recording_note
-import app.skerry.ui.generated.resources.lib_snippet_vars_secret_note
 import app.skerry.ui.generated.resources.runbook_panel_shell_note
 import app.skerry.ui.generated.resources.runbook_run
 import app.skerry.ui.generated.resources.runbook_run_title
@@ -44,6 +43,7 @@ import app.skerry.ui.generated.resources.runbook_steps
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.snippet.TemplateVariableFields
+import app.skerry.ui.snippet.SecretPlaintextNotice
 import app.skerry.ui.snippet.rememberTemplateVariableValues
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
@@ -89,10 +89,14 @@ private fun RunbookStartDialogContent(
     val values = rememberTemplateVariableValues(request, variables)
 
     val canRun = values.canRun
+    // Computed when the resolution changes, not on every keystroke: each call sanitizes the resolved
+    // passwords afresh, and a dialog whose job is to contain a secret should not leave a copy of it
+    // on the heap per character typed.
+    val secrets = remember(values.vaultResolutions) { values.vaultSecrets() }
     val confirm = {
         // The values are read once, here, and handed over as a snapshot. The vault secrets ride
         // along so the production guard can mask them in its own confirmation.
-        if (canRun) onConfirm(runbookValueSnapshot(variables) { values.value(it, masked = false) }, values.vaultSecrets())
+        if (canRun) onConfirm(runbookValueSnapshot(variables) { values.value(it, masked = false) }, secrets)
     }
 
     // A runbook with no free-text parameter — the ordinary one — leaves nothing inside to claim
@@ -206,12 +210,7 @@ private fun RunbookStartDialogContent(
                     stringResource(Res.string.runbook_panel_shell_note), color = Skerry.colors.faint,
                     size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 4.dp),
                 )
-                if (values.vaultRefs.isNotEmpty()) {
-                    Txt(
-                        stringResource(Res.string.lib_snippet_vars_secret_note), color = Skerry.colors.faint,
-                        size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
+                SecretPlaintextNotice(secrets, topPadding = 8.dp)
                 if (request.recording) {
                     Txt(
                         stringResource(Res.string.lib_snippet_vars_recording_note), color = Skerry.colors.sunset,

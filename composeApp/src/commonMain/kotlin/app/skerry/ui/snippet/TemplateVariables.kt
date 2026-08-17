@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.snippet.SnippetSegment
@@ -35,11 +37,12 @@ import app.skerry.shared.snippet.SnippetVariableKind
 import app.skerry.shared.snippet.paramChoices
 import app.skerry.shared.snippet.paramDefault
 import app.skerry.shared.snippet.sanitizeSnippetValue
-import app.skerry.shared.vault.CredentialSecret
 import app.skerry.ui.app.LocalCredentials
+import app.skerry.ui.app.LocalSshKeyGenerator
 import app.skerry.ui.design.DropdownField
 import app.skerry.ui.design.FieldLabel
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.fieldFocus
 import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
@@ -48,14 +51,21 @@ import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippet_vars_clipboard
+import app.skerry.ui.generated.resources.lib_snippet_vars_secret_note
 import app.skerry.ui.generated.resources.lib_snippet_vars_clipboard_empty
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault
+import app.skerry.ui.generated.resources.lib_snippet_vars_vault_ambiguous
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault_missing
-import app.skerry.ui.generated.resources.lib_snippet_vars_vault_not_password
+import app.skerry.ui.generated.resources.lib_snippet_vars_vault_more
+import app.skerry.ui.generated.resources.lib_snippet_vars_vault_ready
+import app.skerry.ui.generated.resources.lib_snippet_vars_vault_reading
+import app.skerry.ui.generated.resources.lib_snippet_vars_vault_unusable
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault_unnamed
-import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.terminal.fetchSystemClipboardText
 import app.skerry.ui.theme.Skerry
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.FormField
 import androidx.compose.ui.text.style.TextDirection
@@ -105,19 +115,6 @@ internal fun maskSecrets(text: String, secrets: List<String>): String {
 internal fun vaultEntryLabel(name: String): String =
     spaceLabel(name, fallback = stringResource(Res.string.lib_snippet_vars_vault_unnamed))
 
-/** Vault reference resolution, done once when the confirmation opens. */
-internal sealed interface VaultRef {
-    data class Ok(val secret: String) : VaultRef
-    data object Missing : VaultRef
-    data object NotAPassword : VaultRef
-}
-
-private fun resolveVaultRef(name: String, credentials: CredentialManagerController?): VaultRef {
-    val entry = credentials?.credentials?.firstOrNull { it.label == name } ?: return VaultRef.Missing
-    val password = entry.secret as? CredentialSecret.Password ?: return VaultRef.NotAPassword
-    return VaultRef.Ok(password.password)
-}
-
 /**
  * The context side of `${{…}}` resolution — everything the machine can't produce on its own:
  * prompted parameters, the system clipboard and vault look-ups. Shared by the snippet confirmation
@@ -135,7 +132,6 @@ class TemplateVariableValues internal constructor(
     val vaultRefs: List<String>,
     /** Whether anything references `${{clipboard}}` (it is only read if so). */
     val needsClipboard: Boolean,
-    internal val vaultResolutions: Map<String, VaultRef>,
     internal val params: SnapshotStateMap<String, String>,
 ) {
     /** What each parameter was seeded with — the template's default, or the previous run's value. */
@@ -143,6 +139,13 @@ class TemplateVariableValues internal constructor(
 
     /** True while [name] still holds what the form put there, so its field may select on focus. */
     internal fun isSeeded(name: String): Boolean = params[name] == seeded[name]
+
+    /**
+     * Resolved vault references; a name still missing from the map is one the look-up hasn't answered
+     * for yet. Deriving a key's public half parses a PEM, which is too slow for the composition
+     * thread, so this fills in off it — like [clipboard] — and [canRun] holds the dialog until it has.
+     */
+    internal var vaultResolutions: Map<String, VaultRef> by mutableStateOf(emptyMap())
 
     /** Clipboard contents; `null` while still being read. */
     internal var clipboard: String? by mutableStateOf(null)
@@ -152,23 +155,34 @@ class TemplateVariableValues internal constructor(
 
     /**
      * The resolved vault secrets of this run — the spans a later confirmation (the production
-     * guard's) must mask rather than print, exactly as this dialog's own preview masked them.
+     * guard's) must mask rather than print, exactly as this dialog's own preview masked them. Public
+     * material is left out: it is printed here, and masking it downstream would hide from the guard's
+     * quote the one thing that says which key the command carries.
      */
     fun vaultSecrets(): List<String> =
-        vaultResolutions.values.filterIsInstance<VaultRef.Ok>().map { it.secret }
+        vaultResolutions.values.filterIsInstance<VaultRef.Ok>().filter { it.secret }
+            // The span to hide is the one that ends up in the line, and [SnippetTemplate.assemble]
+            // flattens every context value on the way in: a password holding a tab or a zero-width
+            // character reaches the guard's quote in a form an exact replace of the raw string would
+            // walk straight past, printing it in clear.
+            .map { sanitizeSnippetValue(it.value) }
 
-    /** Whether every reference resolved: a missing vault entry has no value to send. */
+    /**
+     * Whether every reference resolved: a missing or unusable vault entry has no value to send, and
+     * one still being looked up has none *yet*.
+     */
     val canRun: Boolean
-        get() = vaultResolutions.values.all { it is VaultRef.Ok } && (!needsClipboard || clipboard != null)
+        get() = vaultRefs.all { vaultResolutions[it] is VaultRef.Ok } && (!needsClipboard || clipboard != null)
 
     /**
      * Value for [variable]. [masked] replaces vault secrets with [SECRET_MASK] — the preview path;
-     * the unmasked path is only ever called to build the line actually sent.
+     * the unmasked path is only ever called to build the line actually sent. Public material reads
+     * the same either way.
      */
     fun value(variable: SnippetSegment.Variable, masked: Boolean): String = when (variable.kind) {
         SnippetVariableKind.CLIPBOARD -> clipboard.orEmpty()
         SnippetVariableKind.VAULT -> when (val ref = vaultResolutions[variable.format.orEmpty()]) {
-            is VaultRef.Ok -> if (masked) SECRET_MASK else ref.secret
+            is VaultRef.Ok -> if (masked && ref.secret) SECRET_MASK else ref.value
             else -> ""
         }
         SnippetVariableKind.PARAM -> params[variable.name].orEmpty()
@@ -188,7 +202,13 @@ fun rememberTemplateVariableValues(
     initialParams: Map<String, String> = emptyMap(),
 ): TemplateVariableValues {
     val credentials = LocalCredentials.current
+    val generator = LocalSshKeyGenerator.current
     val clipboard = LocalClipboard.current
+    // The keychain as it stands when the confirmation opens. What freezes it is the `remember(request)`
+    // around the resolution below — this list, the seeded map and the effect all live in slots keyed on
+    // the request — so a background sync landing a secret mid-dialog cannot change what the previewed
+    // line means.
+    val entries = remember(request) { credentials?.credentials.orEmpty() }
     val values = remember(request) {
         val params = variables.filter { it.kind == SnippetVariableKind.PARAM }
         val paramNames = params.map { it.name }.distinct()
@@ -199,11 +219,25 @@ fun rememberTemplateVariableValues(
             paramChoices = firstByName.mapValues { (_, v) -> v.paramChoices() }.filterValues { it.isNotEmpty() },
             vaultRefs = vaultRefs,
             needsClipboard = variables.any { it.kind == SnippetVariableKind.CLIPBOARD },
-            vaultResolutions = vaultRefs.associateWith { resolveVaultRef(it, credentials) },
             params = mutableStateMapOf<String, String>().apply {
                 paramNames.forEach { name -> put(name, paramSeed(firstByName.getValue(name), initialParams[name])) }
             },
-        )
+        ).apply {
+            // Everything that needs no key parse is resolved here, on the spot: a password reference
+            // would otherwise spend the first frame drawing its span empty, and the dialog's whole
+            // claim is that the preview is the line that runs.
+            vaultResolutions = vaultRefs.filterNot { vaultRefNeedsKeyParse(it, entries) }
+                .associateWith { resolveVaultRef(it, entries, generator = null) }
+        }
+    }
+    val parsedRefs = remember(request) { values.vaultRefs.filter { vaultRefNeedsKeyParse(it, entries) } }
+    if (parsedRefs.isNotEmpty()) {
+        LaunchedEffect(request) {
+            val derived = withContext(Dispatchers.Default) {
+                parsedRefs.associateWith { resolveVaultRef(it, entries, generator) }
+            }
+            values.vaultResolutions = values.vaultResolutions + derived
+        }
     }
     if (values.needsClipboard) {
         LaunchedEffect(request) { values.clipboard = fetchSystemClipboardText(clipboard).orEmpty() }
@@ -271,25 +305,100 @@ fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = 
     }
     if (values.vaultRefs.isNotEmpty()) {
         FieldLabel(stringResource(Res.string.lib_snippet_vars_vault))
-        values.vaultRefs.forEach { name ->
-            key(name) {
-                val shown = vaultEntryLabel(name)
-                when (values.vaultResolutions[name]) {
-                    is VaultRef.Ok -> Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Txt(shown, color = Skerry.colors.text, size = 11.5.sp, font = mono)
-                        Txt(SECRET_MASK, color = Skerry.colors.faint, size = 11.5.sp, font = mono)
+        // A key reference lands after the dialog is already open and focus has moved on to the first
+        // parameter field, so the outcome has to be spoken rather than waited on to be visited. The
+        // announcer carries the text itself and outlives the change — a live region on the block
+        // whose children hold the text announces nothing (see StatusAnnouncer).
+        StatusAnnouncer(vaultRefsAnnouncement(values))
+        Column {
+            values.vaultRefs.forEach { name ->
+                key(name) {
+                    val shown = vaultEntryLabel(name)
+                    when (val ref = values.vaultResolutions[name]) {
+                        is VaultRef.Ok -> Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Txt(shown, color = Skerry.colors.text, size = 11.5.sp, font = mono)
+                            // A password is masked; a public key or certificate is spelled out — the
+                            // row exists to say which material the command will carry, so it draws
+                            // the value in the form the line will hold, not the stored one (a
+                            // certificate's trailing comment is its author's text).
+                            Txt(
+                                if (ref.secret) SECRET_MASK else sanitizeSnippetValue(ref.value),
+                                color = Skerry.colors.faint, size = 11.5.sp, font = mono,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        VaultRef.Unusable ->
+                            Txt(stringResource(Res.string.lib_snippet_vars_vault_unusable, shown), color = Skerry.colors.sunset, size = 11.5.sp)
+                        VaultRef.Ambiguous ->
+                            Txt(stringResource(Res.string.lib_snippet_vars_vault_ambiguous, shown), color = Skerry.colors.sunset, size = 11.5.sp)
+                        VaultRef.Missing ->
+                            Txt(stringResource(Res.string.lib_snippet_vars_vault_missing, shown), color = Skerry.colors.sunset, size = 11.5.sp)
+                        // Still being looked up: named, not an ellipsis, so the dialog doesn't claim
+                        // the entry is missing while the answer is on its way — and so a screen
+                        // reader has something to say when it reaches the row.
+                        null -> Txt(stringResource(Res.string.lib_snippet_vars_vault_reading, shown), color = Skerry.colors.dim, size = 11.5.sp)
                     }
-                    VaultRef.NotAPassword ->
-                        Txt(stringResource(Res.string.lib_snippet_vars_vault_not_password, shown), color = Skerry.colors.sunset, size = 11.5.sp)
-                    else ->
-                        Txt(stringResource(Res.string.lib_snippet_vars_vault_missing, shown), color = Skerry.colors.sunset, size = 11.5.sp)
                 }
             }
         }
     }
+}
+
+/**
+ * The line a confirmation adds when the run really does put a secret on the wire — and only then: a
+ * run whose only vault reference is a public key carries nothing to warn about, and a warning that
+ * cries wolf is the one nobody reads before the run that does carry a password.
+ *
+ * [secrets] is what the caller will hand to the production guard, so the notice and the masking can
+ * never disagree about what the line holds. Shared by the snippet confirmation and the runbook one;
+ * [topPadding] is the only thing that differs between them.
+ */
+@Composable
+fun SecretPlaintextNotice(secrets: List<String>, topPadding: Dp) {
+    if (secrets.isEmpty()) return
+    Txt(
+        stringResource(Res.string.lib_snippet_vars_secret_note),
+        color = Skerry.colors.faint, size = 11.sp, lineHeight = 15.sp,
+        modifier = Modifier.padding(top = topPadding),
+    )
+}
+
+/** How many references the announcement spells out before it starts counting the rest. */
+private const val MAX_ANNOUNCED_REFS = 5
+
+/**
+ * The one line the vault block is worth saying out loud, or the empty string while it has nothing to
+ * report yet — an outcome per reference, in the order they are drawn.
+ *
+ * Silent until every reference has answered: a partial state would announce twice for one dialog,
+ * and the string is the state, so an unchanged one stays silent anyway ([StatusAnnouncer]). The
+ * resolved case is named, not read out — a resolved password is a mask on screen, and a resolved key
+ * is several hundred characters nobody wants spoken.
+ */
+@Composable
+private fun vaultRefsAnnouncement(values: TemplateVariableValues): String {
+    if (values.vaultRefs.any { values.vaultResolutions[it] == null }) return ""
+    // Bounded: the reference count comes from a template that may have been shared, and a live
+    // region cannot be interrupted the way a list can be scrolled past. The tail is counted, not
+    // dropped in silence — the same shape a row of host names uses when it runs out of room.
+    val spoken = values.vaultRefs.take(MAX_ANNOUNCED_REFS).map { name ->
+        val shown = vaultEntryLabel(name)
+        when (values.vaultResolutions[name]) {
+            is VaultRef.Ok -> stringResource(Res.string.lib_snippet_vars_vault_ready, shown)
+            VaultRef.Unusable -> stringResource(Res.string.lib_snippet_vars_vault_unusable, shown)
+            VaultRef.Ambiguous -> stringResource(Res.string.lib_snippet_vars_vault_ambiguous, shown)
+            VaultRef.Missing -> stringResource(Res.string.lib_snippet_vars_vault_missing, shown)
+            null -> ""
+        }
+    }.joinToString(". ")
+    val rest = values.vaultRefs.size - MAX_ANNOUNCED_REFS
+    if (rest <= 0) return spoken
+    // Worded, not the "+N" the rows would draw: this string is only ever heard, and a screen reader
+    // set to skip punctuation reads a bare "+3" as a number with nothing to attach it to.
+    return spoken + ". " + pluralStringResource(Res.plurals.lib_snippet_vars_vault_more, rest, rest)
 }
 
 /**

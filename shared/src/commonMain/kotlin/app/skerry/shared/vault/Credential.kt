@@ -83,14 +83,22 @@ sealed interface CredentialSecret {
  * ([app.skerry.shared.host.Host.credentialId]): one secret can serve multiple hosts. The whole
  * thing — including [label] — lives in the encrypted payload of a [RecordType.CREDENTIAL] record:
  * [VaultRecord]'s plaintext metadata must not reveal key names or types (zero-knowledge). For the
- * same reason `toString` redacts [label] and [secret], leaving only [id] (already plaintext in
- * the metadata).
+ * same reason `toString` redacts [label], [note] and [secret], leaving only [id] (already plaintext
+ * in the metadata).
+ *
+ * [note] is an optional free-form remark ("temp access for the audit, delete in May"), the keychain's
+ * counterpart of [app.skerry.shared.host.Host.notes] and normalized the same way
+ * ([app.skerry.shared.text.normalizeNotes]). A record written before the field existed reads back
+ * with `null` — unknown keys are ignored and the default fills in, so no migration is needed. It is
+ * a remark about a secret, not a second secret, but it sits in the same encrypted payload as the
+ * material it describes and is redacted from logs with it.
  */
 @Serializable
 data class Credential(
     val id: String,
     val label: String,
     val secret: CredentialSecret,
+    val note: String? = null,
 ) {
-    override fun toString(): String = "Credential(id=$id, label=redacted, secret=redacted)"
+    override fun toString(): String = "Credential(id=$id, label=redacted, note=redacted, secret=redacted)"
 }

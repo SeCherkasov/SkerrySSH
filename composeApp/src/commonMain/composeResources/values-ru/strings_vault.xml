@@ -35,7 +35,7 @@
     <string name="vault_export_failed_message">Файл не записан.</string>
     <string name="vault_export_dismiss">Закрыть</string>
     <string name="vault_delete">Удалить</string>
-    <string name="vault_rename">Переименовать</string>
+    <string name="vault_edit">Изменить</string>
     <string name="vault_cancel">Отмена</string>
     <string name="vault_used_by_one">Используется · 1 хостом</string>
     <string name="vault_used_by">Используется · %1$d хостами</string>
@@ -49,6 +49,7 @@
     <string name="vault_label_valid">Срок действия</string>
     <string name="vault_badge_expired">ИСТЁК</string>
     <string name="vault_label_serial">Серийный номер</string>
+    <string name="vault_label_note">Заметка</string>
     <string name="vault_label_signing_ca">Подписавший CA</string>
 
     <!-- Диалог создания SSH-ключа. -->
@@ -86,8 +87,11 @@
     <string name="vault_password_mismatch_retry">Пароль не подошёл — попробуйте ещё раз.</string>
     <string name="vault_copy">Скопировать</string>
 
-    <!-- Диалог переименования секрета. -->
-    <string name="vault_rename_title">Переименовать «%1$s»</string>
+    <!-- Диалог правки секрета: имя и заметка. -->
+    <string name="vault_edit_title">Изменить «%1$s»</string>
+    <string name="vault_field_note">ЗАМЕТКА</string>
+    <string name="vault_placeholder_note">напр. временный доступ для аудита, удалить в мае</string>
+    <string name="vault_save">Сохранить</string>
 
     <!-- Диалог удаления секрета. -->
     <string name="vault_delete_title">Удалить «%1$s»?</string>

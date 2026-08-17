@@ -1,10 +1,13 @@
-package app.skerry.shared.host
+package app.skerry.shared.text
 
+import app.skerry.shared.host.Host
+import app.skerry.shared.vault.Credential
+import app.skerry.shared.vault.CredentialSecret
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-class HostNotesTest {
+class NotesTest {
 
     @Test
     fun trims_and_maps_blank_to_null() {
@@ -48,5 +51,10 @@ class HostNotesTest {
     @Test
     fun host_notes_default_to_null_for_profiles_saved_before_the_field_existed() {
         assertNull(Host(id = "1", label = "web", address = "10.0.0.1", username = "root").notes)
+    }
+
+    @Test
+    fun credential_notes_default_to_null_for_secrets_saved_before_the_field_existed() {
+        assertNull(Credential(id = "c-1", label = "prod root", secret = CredentialSecret.Password("x")).note)
     }
 }

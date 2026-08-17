@@ -35,7 +35,7 @@
     <string name="vault_export_failed_message">文件未写入。</string>
     <string name="vault_export_dismiss">关闭</string>
     <string name="vault_delete">删除</string>
-    <string name="vault_rename">重命名</string>
+    <string name="vault_edit">编辑</string>
     <string name="vault_cancel">取消</string>
     <string name="vault_used_by_one">被 1 台主机使用</string>
     <string name="vault_used_by">被 %1$d 台主机使用</string>
@@ -49,6 +49,7 @@
     <string name="vault_label_valid">有效期</string>
     <string name="vault_badge_expired">已过期</string>
     <string name="vault_label_serial">序列号</string>
+    <string name="vault_label_note">备注</string>
     <string name="vault_label_signing_ca">签发 CA</string>
 
     <!-- 生成 SSH 密钥对话框 -->
@@ -86,8 +87,11 @@
     <string name="vault_password_mismatch_retry">密码不匹配——请重试。</string>
     <string name="vault_copy">复制</string>
 
-    <!-- 重命名密钥对话框 -->
-    <string name="vault_rename_title">重命名「%1$s」</string>
+    <!-- 编辑密钥对话框：名称与备注 -->
+    <string name="vault_edit_title">编辑「%1$s」</string>
+    <string name="vault_field_note">备注</string>
+    <string name="vault_placeholder_note">例如：审计临时访问，五月删除</string>
+    <string name="vault_save">保存</string>
 
     <!-- 删除密钥对话框 -->
     <string name="vault_delete_title">删除「%1$s」？</string>

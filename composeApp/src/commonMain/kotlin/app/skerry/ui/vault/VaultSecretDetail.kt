@@ -25,6 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,18 +51,19 @@ import app.skerry.ui.generated.resources.vault_copy_certificate
 import app.skerry.ui.generated.resources.vault_copy_password
 import app.skerry.ui.generated.resources.vault_copy_public_key
 import app.skerry.ui.generated.resources.vault_delete
+import app.skerry.ui.generated.resources.vault_edit
 import app.skerry.ui.generated.resources.vault_export_key
 import app.skerry.ui.generated.resources.vault_export_certificate
 import app.skerry.ui.generated.resources.vault_key_unreadable
 import app.skerry.ui.generated.resources.vault_label_cert_path
 import app.skerry.ui.generated.resources.vault_label_key_path
+import app.skerry.ui.generated.resources.vault_label_note
 import app.skerry.ui.generated.resources.vault_label_principals
 import app.skerry.ui.generated.resources.vault_label_public_key
 import app.skerry.ui.generated.resources.vault_label_serial
 import app.skerry.ui.generated.resources.vault_label_signing_ca
 import app.skerry.ui.generated.resources.vault_label_valid
 import app.skerry.ui.generated.resources.vault_not_attached
-import app.skerry.ui.generated.resources.vault_rename
 import app.skerry.ui.generated.resources.vault_subtitle_certificate
 import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
 import app.skerry.ui.generated.resources.vault_subtitle_key_file
@@ -71,7 +74,9 @@ import app.skerry.ui.generated.resources.vault_used_by
 import app.skerry.ui.generated.resources.vault_used_by_one
 import app.skerry.ui.generated.resources.vault_used_by_snippets
 import app.skerry.ui.generated.resources.vault_used_by_snippets_one
+import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.host.rowLabel
+import app.skerry.ui.terminal.MAX_NOTE_CHARS
 import app.skerry.ui.known.shortFingerprint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -140,7 +145,7 @@ internal fun LiveSecretDetail(
     onCopyPassword: (String) -> Unit,
     onExportKey: (SecretExport.PrivateKey) -> Unit,
     onExportPublic: (SecretExport.Public) -> Unit,
-    onRename: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val secret = credential.secret
@@ -159,6 +164,7 @@ internal fun LiveSecretDetail(
     }
     Column(Modifier.width(DETAIL_PANEL_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
         DetailLabel(credential.label)
+        SecretNote(credential.note)
         SecretFactRows(
             typeLabel = subtitle,
             // A password has no fingerprint, and a key still being parsed has none yet — the row is
@@ -184,8 +190,8 @@ internal fun LiveSecretDetail(
         }
         UsedByHosts(hosts, snippetLabels, mono)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            // Copy is type-specific (what's copyable differs); rename is universal and edits only the
-            // label (see onRename); delete/export are type-specific again.
+            // Copy is type-specific (what's copyable differs); edit is universal and touches only the
+            // name and the note (see onEdit); delete/export are type-specific again.
             when (secret) {
                 is CredentialSecret.Certificate ->
                     PrimaryButton(stringResource(Res.string.vault_copy_certificate), onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
@@ -199,7 +205,7 @@ internal fun LiveSecretDetail(
                 // Nothing to copy: the material is on disk, and the refs are already spelled out above.
                 is CredentialSecret.KeyFile -> Unit
             }
-            GhostButton(stringResource(Res.string.vault_rename), onClick = onRename, modifier = Modifier.fillMaxWidth())
+            GhostButton(stringResource(Res.string.vault_edit), onClick = onEdit, modifier = Modifier.fillMaxWidth())
             // Export writes the private key — the half of a key or a certificate that is otherwise
             // trapped in the vault; it is labelled for what it hands out, and the host
             // re-authenticates first. A certificate's public half gets its own button rather than a
@@ -341,6 +347,33 @@ internal fun KeyFileDetailBody(secret: CredentialSecret.KeyFile, state: KeyFileS
         Txt(stringResource(Res.string.vault_cert_from_file_unreadable), color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
     }
     state?.certificate?.let { CertificateDetailBody(it, mono) }
+}
+
+/**
+ * The free-form remark under a secret's name, on desktop and in the mobile sheet. Absent for a
+ * secret without one — an empty block under every name would push the facts down for nothing.
+ *
+ * The note is free-form text that arrives from wherever the vault was last written — this device or
+ * another one over sync — so it keeps its lines (it is prose), but not the characters that would let
+ * it draw as something it is not, and not more of them than the panel will show
+ * ([sanitizeServerText]). The keychain is personal, so this is defence in depth rather than an
+ * untrusted-input boundary; it costs one filter and removes the question.
+ *
+ * Sighted readers know this line is the note from where it sits and how dim it is; a screen reader
+ * gets neither, so the block names itself and would otherwise read as an unlabelled sentence between
+ * the secret's name and its facts.
+ */
+@Composable
+internal fun SecretNote(note: String?) {
+    val shown = remember(note) { note?.let { sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true) } }
+    if (shown.isNullOrBlank()) return
+    val label = stringResource(Res.string.vault_label_note)
+    Txt(
+        shown,
+        color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 17.sp,
+        // Comma-joined, the way Compose joins the texts it merges (see design/fieldValueName).
+        modifier = Modifier.padding(bottom = 14.dp).semantics { contentDescription = "$label, $shown" },
+    )
 }
 
 @Composable

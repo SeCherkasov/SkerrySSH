@@ -20,7 +20,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsEnabled
@@ -60,7 +64,9 @@ import kotlinx.coroutines.cancel
 import app.skerry.ui.theme.SkerryTheme
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import kotlinx.coroutines.runBlocking
+import org.jetbrains.compose.resources.PluralStringResource
 import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.getPluralString
 import org.jetbrains.compose.resources.getString
 
 /**
@@ -432,6 +438,29 @@ internal fun string(resource: StringResource): String = runBlocking { getString(
 
 /** Same, for a string with placeholders — a control named after the thing it acts on. */
 internal fun string(resource: StringResource, vararg args: Any): String = runBlocking { getString(resource, *args) }
+
+/**
+ * How long a wait on work that left the composition may take. `waitUntil`'s own default is a second,
+ * and a hop through [kotlinx.coroutines.Dispatchers.Default] can miss that on a CI runner whose cores
+ * are already carrying other Gradle workers — a timeout there fails a correct build.
+ */
+internal const val CROSS_THREAD_TIMEOUT_MS = 5_000L
+
+/**
+ * Every string the tree draws, in order. Unmerged: a text node absorbed into a clickable ancestor's
+ * merged description is still text on the screen, and a filter test has to see it as drawn.
+ */
+@OptIn(ExperimentalTestApi::class)
+internal fun ComposeUiTest.drawnText(): List<String> =
+    onRoot(useUnmergedTree = true).fetchSemanticsNode().allText()
+
+/** [drawnText] for a subtree — the shape a test needs when there is more than one root. */
+internal fun SemanticsNode.allText(): List<String> =
+    config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } + children.flatMap { it.allText() }
+
+/** Same, for a counted string: the test asserts the wording the reader gets, not the plural rule. */
+internal fun string(resource: PluralStringResource, quantity: Int, vararg args: Any): String =
+    runBlocking { getPluralString(resource, quantity, *args) }
 
 private val PHONE_WIDTH = 390.dp
 private val PHONE_HEIGHT = 844.dp

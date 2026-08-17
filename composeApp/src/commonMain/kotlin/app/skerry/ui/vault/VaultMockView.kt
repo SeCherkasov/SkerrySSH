@@ -123,6 +123,7 @@ internal fun MockVaultView() {
 private fun MockSecretDetail(credential: Credential, mono: FontFamily) {
     Column(Modifier.width(DETAIL_PANEL_WIDTH).fillMaxHeight().background(Skerry.colors.surface2).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 18.dp)) {
         DetailLabel(credential.label)
+        SecretNote(credential.note)
         SecretFactRows(
             typeLabel = "ED25519",
             fingerprint = "SHA256:9pQk…dR2f",

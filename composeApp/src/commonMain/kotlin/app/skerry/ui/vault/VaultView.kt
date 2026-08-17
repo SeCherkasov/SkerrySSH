@@ -155,7 +155,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
     val secretFiles = LocalSecretFileReader.current
     var showImportCert by remember { mutableStateOf(false) }
     var showLinkKeyFile by remember { mutableStateOf(false) }
-    var pendingRenameCred by remember { mutableStateOf<Credential?>(null) }
+    var pendingEditCred by remember { mutableStateOf<Credential?>(null) }
     var pendingDeleteCred by remember { mutableStateOf<Credential?>(null) }
 
     val credItems = VaultPresentation.credentialsIn(category, allCreds)
@@ -232,7 +232,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                             onExportPublic = { export ->
                                 exportPublic(export, scope) { exportFailed = it.worthReporting }
                             },
-                            onRename = { pendingRenameCred = credential },
+                            onEdit = { pendingEditCred = credential },
                             onDelete = { pendingDeleteCred = credential },
                         )
                     }
@@ -306,17 +306,18 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                 },
             )
         }
-        pendingRenameCred?.let { target ->
-            // Rename edits only the label; the id (which hosts reference) and the secret stay put, and
-            // the change propagates to sync on its own (see CredentialManagerController.rename).
-            RenameSecretDialog(
+        pendingEditCred?.let { target ->
+            // Editing touches only the name and the note; the id (which hosts reference) and the secret
+            // stay put, and the change propagates to sync on its own (see CredentialManagerController.edit).
+            EditSecretDialog(
                 currentLabel = target.label,
-                onDismiss = { pendingRenameCred = null },
-                onConfirm = { newLabel ->
+                currentNote = target.note,
+                onDismiss = { pendingEditCred = null },
+                onConfirm = { newLabel, newNote ->
                     // Abort on a lock race: idle auto-lock can fire while the dialog is open, and vault
                     // CRUD throws once locked. Mirrors the delete guard just below.
-                    if (vault?.isUnlocked == true) credentials.rename(target.id, newLabel)
-                    pendingRenameCred = null
+                    if (vault?.isUnlocked == true) credentials.edit(target.id, newLabel, newNote)
+                    pendingEditCred = null
                 },
             )
         }

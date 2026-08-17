@@ -8,7 +8,7 @@ import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
-import app.skerry.shared.host.normalizeNotes
+import app.skerry.shared.text.normalizeNotes
 import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpImageQuality
 import app.skerry.shared.rdp.RdpSpec
@@ -64,7 +64,7 @@ class NewConnectionFormState {
 
     /**
      * Free-form remark about the profile, raw as typed; normalized on the way into the draft
-     * ([app.skerry.shared.host.normalizeNotes]) so the cap and trimming apply once, at the store's edge.
+     * ([app.skerry.shared.text.normalizeNotes]) so the cap and trimming apply once, at the store's edge.
      */
     var notes: String by mutableStateOf("")
 

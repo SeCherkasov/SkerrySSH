@@ -2,7 +2,7 @@ package app.skerry.ui.host
 
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
-import app.skerry.shared.host.MAX_NOTES_LENGTH
+import app.skerry.shared.text.MAX_NOTES_LENGTH
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
 import kotlin.test.Test

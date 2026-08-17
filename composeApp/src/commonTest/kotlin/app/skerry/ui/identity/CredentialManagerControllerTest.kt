@@ -5,13 +5,6 @@ import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.CredentialUsage
 import app.skerry.shared.vault.CredentialUsageLog
-import app.skerry.shared.vault.DataKey
-import app.skerry.shared.vault.MergeResult
-import app.skerry.shared.vault.RecordType
-import app.skerry.shared.vault.SyncMeta
-import app.skerry.shared.vault.UnlockResult
-import app.skerry.shared.vault.Vault
-import app.skerry.shared.vault.VaultRecord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -89,11 +82,11 @@ class CredentialManagerControllerTest {
     }
 
     @Test
-    fun `rename changes the label in the reactive list and keeps id and secret`() {
+    fun `edit changes the label in the reactive list and keeps id and secret`() {
         val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
         controller.save(CredentialDraft(label = "old", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = "pem", passphrase = "pp"))
 
-        controller.rename("gen", "new")
+        controller.edit("gen", "new", note = null)
 
         val c = controller.credentials.single()
         assertEquals("gen", c.id)
@@ -102,12 +95,27 @@ class CredentialManagerControllerTest {
     }
 
     @Test
-    fun `rename of a missing id is a no-op`() {
+    fun `edit of a missing id is a no-op`() {
         val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
 
-        controller.rename("missing", "x")
+        controller.edit("missing", "x", note = null)
 
         assertEquals(emptyList(), controller.credentials)
+    }
+
+    @Test
+    fun `edit writes the note, and re-saving the secret keeps it`() {
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
+        controller.save(CredentialDraft(label = "temp key", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = "pem"))
+        controller.edit("gen", "temp key", note = "drop after the audit")
+
+        // Rotating the material goes through the form, which has no note field: the remark on the
+        // secret must survive that write rather than be silently dropped.
+        controller.save(CredentialDraft(id = "gen", label = "temp key", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = "pem2"))
+
+        val c = controller.credentials.single()
+        assertEquals("drop after the audit", c.note)
+        assertEquals(CredentialSecret.PrivateKey("pem2"), c.secret)
     }
 
     @Test
@@ -293,40 +301,4 @@ private class FakeUsageLog : CredentialUsageLog {
 
     private fun store(id: String, edit: (CredentialUsage) -> CredentialUsage): CredentialUsage =
         edit(entries[id] ?: CredentialUsage(id)).also { entries[id] = it }
-}
-
-/** In-memory [Vault] storing records (put/openPayload/records/remove, tombstone) for tests. */
-private class FakeCredVault : Vault {
-    private val payloads = mutableMapOf<String, ByteArray>()
-    private val records = mutableMapOf<String, VaultRecord>()
-
-    override fun exists(): Boolean = true
-    override val isUnlocked: Boolean = true
-    override fun create(password: CharArray) = Unit
-    override fun unlock(password: CharArray): UnlockResult = UnlockResult.Success
-    override fun lock() = Unit
-    override fun reset() { payloads.clear(); records.clear() }
-
-    override fun records(): List<VaultRecord> = records.values.toList()
-    override fun syncMeta(): SyncMeta? = null
-    override fun mergeRemote(remote: List<VaultRecord>): MergeResult = MergeResult.EMPTY
-    override fun openPayload(id: String): ByteArray? =
-        records[id]?.takeIf { !it.deleted }?.let { payloads[id] }
-
-    override fun put(id: String, type: RecordType, payload: ByteArray) {
-        val version = (records[id]?.version ?: 0L) + 1
-        records[id] = VaultRecord(id, type, version, "2026-06-12T00:00:00Z", "dev", deleted = false, blob = ByteArray(0))
-        payloads[id] = payload
-    }
-
-    override fun remove(id: String) {
-        records[id] = (records[id] ?: return).copy(version = records[id]!!.version + 1, deleted = true)
-    }
-
-    override fun changePassword(oldPassword: CharArray, newPassword: CharArray): Boolean = true
-    override fun verifyPassword(password: CharArray): Boolean = true
-
-    override fun unlockWithDataKey(dataKey: DataKey): UnlockResult = UnlockResult.Corrupted
-    override fun exportDataKey(): DataKey? = null
-    override fun adoptDataKey(newDataKey: DataKey, password: CharArray): Boolean = false
 }

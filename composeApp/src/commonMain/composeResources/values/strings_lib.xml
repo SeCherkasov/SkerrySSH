@@ -103,10 +103,17 @@
     <string name="lib_snippet_vars_preview">Command preview</string>
     <string name="lib_snippet_vars_clipboard">Clipboard</string>
     <string name="lib_snippet_vars_clipboard_empty">(empty)</string>
-    <string name="lib_snippet_vars_vault">Vault secrets</string>
+    <string name="lib_snippet_vars_vault">Vault entries</string>
     <string name="lib_snippet_vars_vault_unnamed">(unprintable name)</string>
-    <string name="lib_snippet_vars_vault_missing">No password named “%1$s” in the vault</string>
-    <string name="lib_snippet_vars_vault_not_password">Vault entry “%1$s” is not a password</string>
+    <string name="lib_snippet_vars_vault_ambiguous">More than one vault entry is named “%1$s”</string>
+    <plurals name="lib_snippet_vars_vault_more">
+        <item quantity="one">and %1$d more</item>
+        <item quantity="other">and %1$d more</item>
+    </plurals>
+    <string name="lib_snippet_vars_vault_ready">“%1$s” ready</string>
+    <string name="lib_snippet_vars_vault_reading">Reading “%1$s”…</string>
+    <string name="lib_snippet_vars_vault_missing">No vault entry named “%1$s”</string>
+    <string name="lib_snippet_vars_vault_unusable">Vault entry “%1$s” has nothing to insert</string>
     <string name="lib_snippet_vars_secret_note">Secrets are inserted as plain text — visible on screen, in scrollback and in shell history.</string>
     <string name="lib_snippet_vars_recording_note">Recording is on: the resolved command will be saved into the cast.</string>
     <string name="lib_snippet_vars_run">Run</string>
@@ -294,7 +301,7 @@
     <string name="lib_snippets_help_var_uuid">random UUID</string>
     <string name="lib_snippets_help_var_random">random characters; length (64 at most) and charset after the colon — alnum, hex or special; an unknown name falls back to the default set</string>
     <string name="lib_snippets_help_var_clipboard">system clipboard, read once at the confirmation</string>
-    <string name="lib_snippets_help_var_vault">password from the vault, by entry name</string>
+    <string name="lib_snippets_help_var_vault">password or public key from the vault, by entry name</string>
     <string name="lib_snippets_help_var_param">any other name asks for a value before the run; the part after the colon is the prefilled default</string>
     <string name="lib_snippets_help_var_choices">options separated by | become a list to pick from; the first is the default</string>
     <string name="lib_snippets_help_examples">Examples</string>
