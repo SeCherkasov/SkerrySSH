@@ -164,7 +164,10 @@ fun Chip(text: String, active: Boolean = false, modifier: Modifier = Modifier, o
             .background(if (active) Skerry.colors.cyan.copy(alpha = 0.12f) else Skerry.colors.overlaySoft)
             .then(
                 if (onClick != null) {
-                    Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+                    // Hands the keyboard back (see [handsKeyboardBack]): a chip beside a live
+                    // session takes focus on a mouse press and opens nothing that would return it.
+                    Modifier.handsKeyboardBack()
+                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
                 } else {
                     Modifier
                 },
@@ -308,6 +311,9 @@ fun IconBtn(
             .size(box.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(if (hovered && enabled) hoverBg else Color.Transparent)
+            // Same rule as [Chip]: the press takes the keyboard, and whatever the button opens
+            // (a menu, a dialog, a panel) may claim nothing back.
+            .handsKeyboardBack(enabled)
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -447,7 +453,7 @@ fun PrimaryButton(
         modifier
             .clip(RoundedCornerShape(7.dp))
             .background(if (enabled) bg else bg.copy(alpha = 0.35f))
-            .clickable(enabled = enabled, onClick = onClick)
+            .handsKeyboardBack(enabled).clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
@@ -476,7 +482,7 @@ fun GhostButton(
         modifier
             .clip(RoundedCornerShape(7.dp))
             .border(1.dp, if (enabled) border else border.copy(alpha = 0.4f), RoundedCornerShape(7.dp))
-            .clickable(enabled = enabled, onClick = onClick)
+            .handsKeyboardBack(enabled).clickable(enabled = enabled, onClick = onClick)
             // Match PrimaryButton's padding and icon size so a Ghost + Primary pair is the same height.
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
@@ -497,7 +503,7 @@ fun CancelButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifi
     Box(
         modifier
             .clip(RoundedCornerShape(7.dp))
-            .clickable(onClick = onClick)
+            .handsKeyboardBack().clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {

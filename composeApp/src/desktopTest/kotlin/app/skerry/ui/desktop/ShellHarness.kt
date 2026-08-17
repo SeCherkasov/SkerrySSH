@@ -13,7 +13,12 @@ import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.design.LocalFonts
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -91,6 +96,11 @@ internal class DesktopShell(
     val runner: RunbookRunner,
     /** The shell's own state, for opening what only a menu deep in the UI would otherwise reach. */
     val state: DesktopDesignState,
+    /**
+     * The composition's focus manager, for the tests that have to do to focus what the scene does
+     * on a window focus loss (`clearFocus(force = true)`). Null until the first frame.
+     */
+    val focus: () -> FocusManager?,
 ) {
     val tunnels: TunnelManager get() = libraries.tunnels
     val snippets: SnippetManager get() = libraries.snippets
@@ -136,6 +146,9 @@ internal fun runDesktopShell(
     // Custom window chrome, for the tests that drive the titlebar's window gestures. null (the
     // default) renders the decorated-window titlebar, like the offscreen previews.
     windowChrome: WindowChrome? = null,
+    // The window's own focus, for the tests about who owns the keyboard when it comes and goes. The
+    // test scene's own [WindowInfo] is hardcoded focused, so there is no other way to drive it.
+    windowInfo: WindowInfo? = null,
     body: ComposeUiTest.(DesktopShell) -> Unit,
 ) = runComposeUiTest {
     val keyGenerator = BouncyCastleSshKeyGenerator()
@@ -154,9 +167,12 @@ internal fun runDesktopShell(
     var runSeq = 0
     val runner = RunbookRunner(scope = scope, newId = { "run-exec-${runSeq++}" })
     val state = DesktopDesignState()
+    var focusManager: FocusManager? = null
     FakeShellInput.clear()
     try {
         setContent {
+            CaptureFocusManager { focusManager = it }
+            WithWindowInfo(windowInfo) {
             SkerryTheme {
                 // A live AI controller only so the settings panel offers its AI tab: without one the
                 // tab is hidden, and a walk over SETTINGS_NAV would silently skip an entry.
@@ -176,6 +192,7 @@ internal fun runDesktopShell(
                     )
                 }
             }
+            }
         }
         waitForIdle()
         // The seeded session connects on the background scope, which waitForIdle does NOT wait
@@ -193,7 +210,7 @@ internal fun runDesktopShell(
             }
         }
         val libraries = ShellLibraries(tunnels, snippets, runbooks, credentials, ai)
-        body(DesktopShell(hosts, sessions, libraries, runner, state))
+        body(DesktopShell(hosts, sessions, libraries, runner, state) { focusManager })
     } finally {
         // Detaches the fake session's output collectors.
         sessions?.disconnectAll()
@@ -203,6 +220,19 @@ internal fun runDesktopShell(
         // A write already dispatched must not land in the next test's log.
         FakeShellInput.clear()
     }
+}
+
+/** Hands the composition's focus manager out to the test, once it exists. */
+@Composable
+private fun CaptureFocusManager(onManager: (FocusManager) -> Unit) {
+    val manager = LocalFocusManager.current
+    LaunchedEffect(manager) { onManager(manager) }
+}
+
+/** Runs [content] under [info], or under the scene's own window info when none is given. */
+@Composable
+internal fun WithWindowInfo(info: WindowInfo?, content: @Composable () -> Unit) {
+    if (info == null) content() else CompositionLocalProvider(LocalWindowInfo provides info, content = content)
 }
 
 /**

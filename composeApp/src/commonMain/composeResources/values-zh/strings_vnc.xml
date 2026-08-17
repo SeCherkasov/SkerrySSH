@@ -67,4 +67,5 @@
     <string name="rd_bar_hide">隐藏操作栏</string>
     <string name="rd_ctrl_alt_del_view_only">仅查看 — 不发送输入</string>
     <string name="rd_clipboard_failed">系统剪贴板拒绝访问</string>
+    <string name="rd_surface">远程桌面：%1$s</string>
 </resources>

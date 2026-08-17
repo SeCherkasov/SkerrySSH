@@ -38,6 +38,7 @@ import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamScopeRef
 import androidx.compose.runtime.collectAsState
+import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.SHORT_ID_CHARS
 import app.skerry.ui.teams.AutoPullTeamsOnOnline
 import app.skerry.ui.generated.resources.lib_teams_sidebar
@@ -117,7 +118,7 @@ private fun FolderCollapseToggle(name: String, collapsed: Boolean, onToggle: () 
         name,
     )
     Box(
-        Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).clickable(onClick = onToggle),
+        Modifier.size(22.dp).clip(RoundedCornerShape(4.dp)).handsKeyboardBack().clickable(onClick = onToggle),
         contentAlignment = Alignment.Center,
     ) {
         Sym(

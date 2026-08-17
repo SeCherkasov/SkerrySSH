@@ -111,6 +111,14 @@ fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Bool
 }
 
 /**
+ * Whether [shortcut] may still run while something modal owns the keyboard. Only the vault lock:
+ * every other shell hotkey acts on the session under the modal, which is what a chord typed into a
+ * connect password must never reach — while locking tears that session down anyway, so a user who
+ * has to leave the machine is never held back by an open dialog.
+ */
+fun survivesModal(shortcut: DesktopShortcut?): Boolean = shortcut == DesktopShortcut.Lock
+
+/**
  * The direction the pane grid moves focus in for [shortcut], or `null` when the grid must leave the
  * key alone.
  *

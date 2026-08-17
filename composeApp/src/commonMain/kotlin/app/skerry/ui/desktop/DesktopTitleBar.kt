@@ -47,6 +47,7 @@ import app.skerry.ui.generated.resources.shell_tip_close_tab
 import app.skerry.ui.generated.resources.shell_tip_new_tab
 import app.skerry.ui.generated.resources.shtail_new_tab
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.BrandMark
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.SessionDot
@@ -238,6 +239,9 @@ internal fun SessionTabChip(
                 },
             )
             .border(1.dp, if (active) accentBorder else Skerry.colors.line, shape)
+            // Clicking the chip of the tab already open changes nothing but the focus, and the
+            // session it names would be left typing nowhere.
+            .handsKeyboardBack()
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             // Middle-click closes the tab (browser-tab convention), active or not: armed on the
             // tertiary press, committed on its release while still over the chip — moving off

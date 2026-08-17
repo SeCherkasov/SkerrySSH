@@ -37,6 +37,7 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.graphics.RemoteDesktopQuality
+import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.MenuPanel
@@ -275,7 +276,7 @@ internal fun SmallButton(label: String, onClick: () -> Unit) {
     Box(
         Modifier.clip(RoundedCornerShape(6.dp)).background(Skerry.colors.surfaceDeep)
             .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 5.dp),
+            .handsKeyboardBack().clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
         Txt(label, color = Skerry.colors.cyanBright, size = 11.sp)
     }
@@ -288,7 +289,7 @@ internal fun MenuRow(label: String, selected: Boolean, onClick: () -> Unit) {
         // otherwise draw a square-cornered bar inside a rounded panel.
         Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp))
             .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-            .clickable(onClick = onClick).padding(horizontal = ROW_PADDING, vertical = 8.dp),
+            .handsKeyboardBack().clickable(onClick = onClick).padding(horizontal = ROW_PADDING, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Txt(
@@ -307,6 +308,9 @@ internal fun CheckRow(label: String, checked: Boolean, onClick: () -> Unit) {
         // toggleable, not clickable: the glyph swap that shows the on/off state never reaches the
         // accessibility tree (Sym clears its semantics), so the row itself must carry the value.
         Modifier.fillMaxWidth().clip(RoundedCornerShape(5.dp))
+            // toggleable claims focus on a mouse press exactly as clickable does, so this row owes
+            // the same hand-back as the ones above it.
+            .handsKeyboardBack()
             .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onClick() })
             .padding(horizontal = ROW_PADDING, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

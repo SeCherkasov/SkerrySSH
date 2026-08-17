@@ -59,6 +59,7 @@ import app.skerry.ui.generated.resources.shell_status_encoding
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.UiTags
+import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
@@ -142,6 +143,8 @@ private fun RailButton(icon: String, label: String, active: Boolean, tag: String
                 // Which section is open is otherwise only a colour and a 2dp accent bar, so a screen
                 // reader would announce every rail button alike whichever one is current.
                 .semantics { selected = active }
+                // Same for the button of the section already showing.
+                .handsKeyboardBack()
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {

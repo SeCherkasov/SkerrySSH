@@ -65,6 +65,8 @@ fun MenuItem(label: String, color: Color = Skerry.colors.text, onClick: () -> Un
             .fillMaxWidth()
             .widthIn(min = MENU_MIN_WIDTH)
             .clip(RoundedCornerShape(5.dp))
+            // The row that opens a dialog took the keyboard on its press; see [handsKeyboardBack].
+            .handsKeyboardBack()
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp),
     ) {
@@ -80,6 +82,7 @@ fun MenuActionRow(icon: String, label: String, onClick: () -> Unit) {
             .fillMaxWidth()
             .widthIn(min = MENU_MIN_WIDTH)
             .clip(RoundedCornerShape(5.dp))
+            .handsKeyboardBack()
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,

@@ -56,6 +56,8 @@ import app.skerry.ui.generated.resources.settings_kb_open_sftp
 import app.skerry.ui.generated.resources.settings_kb_paste
 import app.skerry.ui.generated.resources.settings_kb_play_recording
 import app.skerry.ui.generated.resources.settings_kb_record_session
+import app.skerry.ui.generated.resources.settings_kb_release_keyboard
+import app.skerry.ui.generated.resources.settings_kb_remote_group
 import app.skerry.ui.generated.resources.settings_kb_search_history
 import app.skerry.ui.generated.resources.settings_kb_search_output
 import app.skerry.ui.generated.resources.settings_kb_open_link_or_path
@@ -149,6 +151,17 @@ internal fun KeyboardSection() {
         KeyboardBinding(stringResource(Res.string.ftail_fkey_quit), "F10 / Esc", live = true),
     )
 
+    // The one key a remote desktop does NOT forward: everything else goes to the guest, which is
+    // what makes the framebuffer a keyboard trap without this way out (Ctrl+Alt+Shift is a chord no
+    // desktop OS claims, so nothing on the remote side loses a binding to it).
+    val remote = listOf(
+        KeyboardBinding(
+            stringResource(Res.string.settings_kb_release_keyboard),
+            if (mac) "⌃⌥⇧K" else "Ctrl+Alt+Shift+K",
+            live = true,
+        ),
+    )
+
     val mono = LocalFonts.current.mono
     KeyboardGroupLabel(stringResource(Res.string.settings_kb_global), top = 0.dp)
     global.forEach { KeyboardRow(it, mono) }
@@ -158,6 +171,8 @@ internal fun KeyboardSection() {
     files.forEach { KeyboardRow(it, mono) }
     KeyboardGroupLabel(stringResource(Res.string.settings_kb_editor_group), top = 18.dp)
     editor.forEach { KeyboardRow(it, mono) }
+    KeyboardGroupLabel(stringResource(Res.string.settings_kb_remote_group), top = 18.dp)
+    remote.forEach { KeyboardRow(it, mono) }
 }
 
 @Composable

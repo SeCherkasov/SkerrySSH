@@ -67,4 +67,5 @@
     <string name="rd_bar_hide">Hide the bar</string>
     <string name="rd_ctrl_alt_del_view_only">View only — input is not sent</string>
     <string name="rd_clipboard_failed">The system clipboard refused</string>
+    <string name="rd_surface">Remote desktop: %1$s</string>
 </resources>

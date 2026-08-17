@@ -97,7 +97,7 @@ import app.skerry.shared.terminal.highlight.applyTo
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.searchTerminal
 import app.skerry.shared.terminal.TerminalState
-import app.skerry.ui.design.ModalPresence
+import app.skerry.ui.design.ClaimKeyboard
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -296,23 +296,21 @@ fun TerminalScreen(
     val handleRadiusPx = with(density) { HANDLE_RADIUS_DP.dp.toPx() }
     val handleTouchRadiusPx = with(density) { HANDLE_TOUCH_RADIUS_DP.dp.toPx() }
 
-    // An active desktop session grabs focus immediately (physical keyboard, no click needed to type).
-    // On touch ([imeInput]) focus is not requested automatically: the hidden IME field would raise the
-    // soft keyboard right on connect, pushing the layout/terminal up. The keyboard appears on user tap
-    // (gesture handler below, the usual mobile SSH client behavior); the special-key panel works without it (sends to
-    // the PTY directly).
-    // Also re-keyed on the open-modal count: a modal scrim takes keyboard focus for Esc handling and
-    // its disposal clears focus to no one, so the terminal re-claims it once every modal is closed —
-    // otherwise typing goes dead until the user clicks the terminal.
-    // Also re-keyed on the search panel: while it is open its field owns the keyboard, and the
-    // terminal takes focus back when it closes (otherwise typing would go dead until a click).
-    // Also re-keyed on [focused]: that is how the keyboard follows a pane focused from the keyboard
-    // (⌘/Ctrl+Shift + arrow), where there is no click on the terminal to hand it over.
-    val modalsOpen = ModalPresence.openCount
+    // Who may type here, for [ClaimKeyboard] — which owns the rest of the rules (modals, the
+    // window, chrome handing the keyboard back). Touch is excluded on purpose: on [imeInput] the
+    // hidden field would raise the soft keyboard on connect and push the layout up, so the phone
+    // waits for a tap. The find bar owns the keyboard while it is open, and only the focused pane
+    // of a split may hold it — that is how the keyboard follows the ⌘/Ctrl+Shift+arrow chord.
     val searchOpen = state.search.query != null
-    LaunchedEffect(state, modalsOpen, searchOpen, focused) {
-        if (focused && !closed && !imeInput && modalsOpen == 0 && !searchOpen) focusRequester.requestFocus()
-    }
+    // [hasFocus] is what keeps the claim from taking the keyboard off a sibling that owns it — the
+    // assistant's ask field and the sidebar's filter are no one's modal.
+    val hasFocus = remember(state) { mutableStateOf(false) }
+    ClaimKeyboard(
+        focusRequester,
+        state,
+        focused = hasFocus,
+        enabled = focused && !closed && !imeInput && !searchOpen,
+    )
 
     // Autoscroll to bottom on new output — but only when the user was already at the bottom
     // (sticky bottom, like a real terminal): scrolling up to read history must survive streaming
@@ -873,7 +871,10 @@ fun TerminalScreen(
               .fillMaxSize()
               .focusRequester(focusRequester)
               // Focus reporting (DEC 1004): vim/tmux get ESC[I/ESC[O on terminal window focus.
-              .onFocusChanged { state.notifyFocus(it.isFocused) }
+              .onFocusChanged {
+                  hasFocus.value = it.isFocused
+                  state.notifyFocus(it.isFocused)
+              }
               .onPreviewKeyEvent { event ->
                 // Toggle the link (hand) cursor as Ctrl is pressed/released without moving the mouse.
                 // Runs before the KeyDown guard so a Ctrl KeyUp also clears it. Never consumes the event.

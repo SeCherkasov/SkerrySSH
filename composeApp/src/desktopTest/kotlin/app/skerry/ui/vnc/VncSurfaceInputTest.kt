@@ -1,46 +1,28 @@
 package app.skerry.ui.vnc
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.ScrollWheel
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performMouseInput
-import androidx.compose.ui.test.runComposeUiTest
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
-import app.skerry.shared.graphics.RemoteFramebuffer
-import app.skerry.ui.design.DesignFonts
-import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.remote.FakeRemoteDesktop
-import app.skerry.ui.remote.RemoteDesktopScreenState
-import app.skerry.ui.theme.SkerryTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.cancel
 
 /**
  * The pointer loop of [VncSurface], through real mouse input: what reaches the session when the
  * mouse leaves the picture mid-drag (F-37), when a click starts on the letterbox, and what a wheel
- * step sends while a button is held (F-14/F-38).
- *
- * Geometry used throughout: a 100×100 desktop in a 300×200 surface (density 1) → scale 2, the
- * image spans x = 50..250, letterbox bars on both sides.
+ * step sends while a button is held (F-14/F-38). The surface and its geometry come from
+ * [withVncSurface].
  */
 @OptIn(ExperimentalTestApi::class)
 class VncSurfaceInputTest {
 
     @Test
     fun `a drag that ends on the letterbox still releases the button, clamped onto the image`() =
-        withSurface { session ->
+        withVncSurface { session, _ ->
             onRoot().performMouseInput {
                 moveTo(Offset(150f, 100f)) // fb (50,50)
                 press()
@@ -54,7 +36,7 @@ class VncSurfaceInputTest {
 
     @Test
     fun `a fresh click on the letterbox is dead space, not a click on the desktop's edge`() =
-        withSurface { session ->
+        withVncSurface { session, _ ->
             onRoot().performMouseInput {
                 moveTo(Offset(10f, 100f))
                 press()
@@ -71,7 +53,7 @@ class VncSurfaceInputTest {
 
     @Test
     fun `a wheel step keeps the button a drag is holding`() =
-        withSurface { session ->
+        withVncSurface { session, _ ->
             onRoot().performMouseInput {
                 moveTo(Offset(150f, 100f))
                 press()
@@ -115,32 +97,4 @@ private fun FakeRemoteDesktop.awaitPointer(condition: (Triple<Int, Int, Int>) ->
         Thread.sleep(10)
     }
     throw AssertionError("no pointer event matched within 2s: ${pointerSnapshot()}")
-}
-
-@OptIn(ExperimentalTestApi::class)
-private fun withSurface(body: ComposeUiTest.(FakeRemoteDesktop) -> Unit) {
-    // A real dispatcher, not a test one: the actor's pacing delay must actually elapse while the
-    // test polls for the writes it produced.
-    val scope = CoroutineScope(Dispatchers.Unconfined)
-    val session = FakeRemoteDesktop(framebuffer = RemoteFramebuffer(100, 100))
-    val screen = RemoteDesktopScreenState(session, scope)
-    try {
-        runComposeUiTest {
-            setContent {
-                SkerryTheme {
-                    CompositionLocalProvider(
-                        LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
-                    ) {
-                        Box(Modifier.size(DpSize(300.dp, 200.dp))) {
-                            VncSurface(screen)
-                        }
-                    }
-                }
-            }
-            waitForIdle()
-            body(session)
-        }
-    } finally {
-        scope.cancel()
-    }
 }

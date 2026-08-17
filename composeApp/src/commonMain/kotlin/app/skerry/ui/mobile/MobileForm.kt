@@ -68,6 +68,7 @@ internal fun MobileFormInput(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
+    modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
     masked: Boolean = false,
     singleLine: Boolean = true,
@@ -110,7 +111,7 @@ internal fun MobileFormInput(
         } else {
             KeyboardActions.Default
         },
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
+        modifier = modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
             Box(
                 Modifier

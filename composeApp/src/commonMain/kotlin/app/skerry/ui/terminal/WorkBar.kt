@@ -26,6 +26,7 @@ import app.skerry.shared.host.Host
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -119,7 +120,13 @@ private fun WorkBarTitle(
     Box(modifier) {
         Row(
             Modifier.fillMaxWidth().then(
-                if (onPickHost != null) Modifier.clickable { pickerOpen = !pickerOpen } else Modifier,
+                // Wide chrome beside the session: clicking it opens a popup that claims nothing, so
+                // without the hand-back the terminal underneath would type nowhere.
+                if (onPickHost != null) {
+                    Modifier.handsKeyboardBack().clickable { pickerOpen = !pickerOpen }
+                } else {
+                    Modifier
+                },
             ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
