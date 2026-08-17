@@ -227,7 +227,10 @@ class DesktopDesignState(
     var pairingOpen: Boolean by mutableStateOf(false); private set
     var settingsTab: SettingsTab by mutableStateOf(SETTINGS_NAV.first().tab); private set
     var split: Boolean by mutableStateOf(false); private set
-    /** Whether the terminal's left host sidebar is hidden (toggled from the icon rail). */
+    /**
+     * Whether the hosts panel is hidden. Toggled from the strip on the panel's own edge; the rail
+     * only ever brings it back, since pressing a section is asking to see that section's catalog.
+     */
     var sidebarHidden: Boolean by mutableStateOf(false); private set
 
     /**

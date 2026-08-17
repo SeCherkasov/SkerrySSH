@@ -8,14 +8,12 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -34,12 +32,9 @@ import app.skerry.ui.app.remoteChromeHidden
 import app.skerry.ui.design.EmptyState
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
-import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_no_session
 import app.skerry.ui.generated.resources.rd_pick_to_connect
-import app.skerry.ui.generated.resources.shell_tip_hide_hosts
-import app.skerry.ui.generated.resources.shell_tip_show_hosts
 import app.skerry.ui.generated.resources.vnc_connecting
 import app.skerry.ui.generated.resources.vnc_connection_lost
 import app.skerry.ui.generated.resources.vnc_quality_auto

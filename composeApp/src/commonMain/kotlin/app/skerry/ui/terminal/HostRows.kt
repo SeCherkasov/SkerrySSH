@@ -40,7 +40,7 @@ import app.skerry.ui.host.rowSubtitle
 import app.skerry.shared.host.Host
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalConnectHost
-import app.skerry.shared.ssh.isRemoteDesktop
+import app.skerry.shared.ssh.hasShell
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.design.Badge
@@ -277,7 +277,7 @@ internal fun HostEntryRow(
     val runSnippetOnHost = LocalRunSnippetOnHost.current
     // Not on a remote desktop: a snippet is a line typed into a shell, and a framebuffer has none —
     // the row would open the desktop and the command would have nowhere to go.
-    val canRunSnippet = host != null && snippets != null && !host.connectionType.isRemoteDesktop
+    val canRunSnippet = host != null && snippets != null && host.connectionType.hasShell
     val hasMenu = onEdit != null || onDuplicate != null || onDelete != null || canRunSnippet
     var menuOpen by remember { mutableStateOf(false) }
     var snippetPickerOpen by remember { mutableStateOf(false) }
@@ -371,7 +371,11 @@ internal fun HostEntryRow(
                     }
                     // Snippet picker: runs on this host (opens/reuses a session and runs the command after
                     // connecting). An empty library shows "No snippets yet".
-                    if (snippetPickerOpen && host != null && snippets != null) {
+                    // Gated on the same condition as the item that opens it: a profile switched to
+                    // a remote desktop while the picker is up (a team change landing over sync)
+                    // would otherwise still run the line it has nowhere to send. [canRunSnippet]
+                    // already carries the two null checks the picker needs.
+                    if (snippetPickerOpen && canRunSnippet && host != null) {
                         Popup(
                             alignment = Alignment.TopEnd,
                             onDismissRequest = { snippetPickerOpen = false },

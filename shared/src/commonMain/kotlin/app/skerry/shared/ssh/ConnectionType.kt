@@ -76,12 +76,20 @@ val ConnectionType.isRemoteDesktop: Boolean
     }
 
 /**
+ * Whether the connection carries a shell — a byte stream a command can be typed into. The remote
+ * desktops do not: they carry a picture and its input events, so anything that means "type this
+ * somewhere" (a snippet, the assistant's answer) has nowhere to put it.
+ */
+val ConnectionType.hasShell: Boolean
+    get() = !isRemoteDesktop
+
+/**
  * Whether a per-profile AI policy applies. The assistant reads a terminal and writes commands into
- * it; a remote desktop has neither, so both connection forms leave the policy picker out rather than
- * store a choice that decides nothing.
+ * it, so it needs [hasShell]: both connection forms leave the policy picker out rather than store a
+ * choice that decides nothing.
  */
 val ConnectionType.hasAiPolicy: Boolean
-    get() = !isRemoteDesktop
+    get() = hasShell
 
 /**
  * Whether the connection form offers "Test connection". The test is an SSH probe — it dials the

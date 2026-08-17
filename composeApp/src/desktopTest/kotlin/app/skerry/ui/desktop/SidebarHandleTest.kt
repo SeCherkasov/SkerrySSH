@@ -8,6 +8,7 @@ import app.skerry.ui.app.UiTags
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_tip_hide_hosts
+import app.skerry.ui.generated.resources.shell_tip_monitor
 import app.skerry.ui.generated.resources.shell_tip_show_hosts
 import kotlin.test.Test
 
@@ -60,5 +61,21 @@ class SidebarHandleTest {
         onScreen(UiTags.railSection(HostSection.Terminal)).performClick()
         waitForIdle()
         onScreen(UiTags.HOST_SIDEBAR).assertIsDisplayed()
+    }
+
+    /**
+     * The monitor keeps the catalog beside its charts, so it owes the same control: without the
+     * strip it was the one screen that could show the panel and offer no way to collapse it — and
+     * the rail can put the panel there.
+     */
+    @Test
+    fun `the monitor keeps the strip beside the panel it shows`() = runDesktopShell {
+        onNodeWithContentDescription(string(Res.string.shell_tip_monitor)).performClick()
+        waitForIdle()
+        onScreen(UiTags.HOST_SIDEBAR).assertIsDisplayed()
+
+        onNodeWithContentDescription(string(Res.string.shell_tip_hide_hosts)).performClick()
+        waitForIdle()
+        onScreen(UiTags.HOST_SIDEBAR).assertDoesNotExist()
     }
 }

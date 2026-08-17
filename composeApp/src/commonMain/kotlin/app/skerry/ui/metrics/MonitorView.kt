@@ -71,6 +71,7 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.sftp.humanSize
 import app.skerry.ui.sync.nowMillis
 import app.skerry.ui.terminal.HostsSidebar
+import app.skerry.ui.terminal.SidebarToggleHandle
 import app.skerry.ui.terminal.WorkBar
 import app.skerry.ui.terminal.WorkBarLabel
 import app.skerry.ui.terminal.WorkBarLeading
@@ -203,8 +204,8 @@ private fun EmptyMonitorScreen(state: DesktopDesignState, onBack: () -> Unit) {
  * The chrome this screen shares with the terminal: the hosts catalog on the left and the work bar
  * over the content. The catalog belongs to the rail, not to what is on screen, so it stays where it
  * is while the monitor is up — walking the list here is how another host is reached without going
- * back first. The bar's chevron leaves for the terminal, the way the SFTP screen's does: this view
- * fills the work area, and the sidebar has the rail's own toggle.
+ * back first. The bar's chevron leaves for the terminal, the way the SFTP screen's does, and the
+ * panel is collapsed from the strip beside it ([app.skerry.ui.terminal.SidebarToggleHandle]).
  */
 @Composable
 private fun MonitorFrame(
@@ -216,6 +217,9 @@ private fun MonitorFrame(
 ) {
     Row(Modifier.fillMaxSize()) {
         if (!state.sidebarHidden) HostsSidebar(state, state.section)
+        // The panel is here, so its control is too: every screen that shows the catalog collapses it
+        // from the strip on the panel's own edge, and this one used to show it with no way back.
+        SidebarToggleHandle(hidden = state.sidebarHidden, onClick = state::toggleSidebar)
         Column(Modifier.weight(1f).fillMaxHeight().background(Skerry.colors.bg)) {
             WorkBar(
                 label = label(),

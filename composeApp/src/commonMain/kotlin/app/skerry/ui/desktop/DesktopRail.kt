@@ -71,6 +71,9 @@ import app.skerry.ui.theme.Skerry
 
 @Composable
 internal fun IconRail(state: DesktopDesignState) {
+    // What the work area is showing decides whether a section press can also bring the hosts panel
+    // back: the file panel and a runbook run fill the area and draw no catalog (see [showsCatalog]).
+    val terminalView = LocalSessions.current?.activeTerminal?.view
     Column(
         Modifier
             .width(52.dp)
@@ -80,8 +83,8 @@ internal fun IconRail(state: DesktopDesignState) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        // No sidebar toggle here: both work-area sections carry their collapse chevron in the
-        // sidebar header itself (next to search).
+        // No sidebar toggle here: the panel is collapsed from the strip on its own edge
+        // ([app.skerry.ui.terminal.SidebarToggleHandle]); pressing a section only ever opens it.
         RAIL.forEach { item ->
             RailButton(
                 icon = item.icon,
@@ -97,7 +100,8 @@ internal fun IconRail(state: DesktopDesignState) {
                         is RailTarget.View -> state.showView(target.view)
                         // Work-area section: swaps the sidebar catalog; a running session stays on
                         // screen (openRailSection).
-                        is RailTarget.Section -> openRailSection(state, target.section)
+                        is RailTarget.Section ->
+                            openRailSection(state, target.section, terminalView)
                     }
                 },
             )
