@@ -29,3 +29,30 @@ fun remoteKeyEvent(key: Key, codePoint: Int): RemoteKeyEvent? {
         sequence = if (scancode != null && single == null) scancode.scans else emptyList(),
     )
 }
+
+/**
+ * The modifier a key stands for, for the state that has to keep the server's idea of them in step.
+ *
+ * Super (`Key.MetaLeft`/`MetaRight`, forwarded as the Windows key) is deliberately not one of them:
+ * the reconciliation needs a truth to compare against, and `isMetaPressed` carries Super on macOS
+ * only — AWT never sets it for the Super key on X11 or Windows. Reconciling against a flag that is
+ * always false there would lift the key mid-chord and turn Win+R into a bare "r".
+ */
+enum class RemoteModifier { Ctrl, Alt, Shift }
+
+/** Which modifier [key] is, if it is one the local machine can be asked about. */
+fun remoteModifier(key: Key): RemoteModifier? = when (key) {
+    Key.CtrlLeft, Key.CtrlRight -> RemoteModifier.Ctrl
+    Key.AltLeft, Key.AltRight -> RemoteModifier.Alt
+    Key.ShiftLeft, Key.ShiftRight -> RemoteModifier.Shift
+    else -> null
+}
+
+/** What the local machine says is held down right now — every input event carries it. */
+data class RemoteModifiers(val ctrl: Boolean, val alt: Boolean, val shift: Boolean) {
+    fun holds(modifier: RemoteModifier): Boolean = when (modifier) {
+        RemoteModifier.Ctrl -> ctrl
+        RemoteModifier.Alt -> alt
+        RemoteModifier.Shift -> shift
+    }
+}

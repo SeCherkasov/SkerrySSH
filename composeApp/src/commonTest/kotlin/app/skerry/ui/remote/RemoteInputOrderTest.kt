@@ -197,4 +197,38 @@ class RemoteInputOrderTest {
         assertEquals(listOf(56 to true, 56 to false), session.keys.map { it.first.scancode to it.second })
         scope.cancel()
     }
+
+    /**
+     * A wheel notch is a press mask and the release that follows it. The release repeats the mask
+     * the actor last saw, so it used to take the pure-move path and wait out [MOVE_INTERVAL] — a
+     * fast scroll then arrived paced at 8 ms a pair, which is what "scrolling sometimes does
+     * nothing" looks like from the far side (issue #265). A wheel write is an edge, not a move:
+     * it goes out as made.
+     */
+    @Test
+    fun wheel_notches_are_not_paced_like_moves() = runTest {
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val session = FakeRemoteDesktop()
+        val screen = RemoteDesktopScreenState(session, scope)
+
+        // Where the pointer already is, so the actor has a mask to repeat.
+        screen.onPointer(10, 10, 0)
+        advanceUntilIdle()
+        val started = testScheduler.currentTime
+
+        repeat(3) {
+            screen.onPointer(10, 10, WHEEL_UP, wheel = true)
+            screen.onPointer(10, 10, 0, wheel = true)
+        }
+        advanceUntilIdle()
+
+        assertEquals(7, session.pointers.size, "every notch and its release reached the transport")
+        assertEquals(0L, testScheduler.currentTime - started, "the notches were paced like moves")
+        scope.cancel()
+    }
+
+    private companion object {
+        /** RFB button 4 — the bit [app.skerry.ui.vnc.wheelMasks] sets for a scroll up. */
+        const val WHEEL_UP = 1 shl 3
+    }
 }

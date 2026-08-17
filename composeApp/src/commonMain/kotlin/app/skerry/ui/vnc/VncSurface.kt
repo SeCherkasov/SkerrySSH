@@ -36,6 +36,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.isShiftPressed
+import androidx.compose.ui.input.pointer.isAltPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isBackPressed
 import androidx.compose.ui.input.pointer.isForwardPressed
 import androidx.compose.ui.input.pointer.isPrimaryPressed
@@ -57,7 +61,9 @@ import app.skerry.ui.generated.resources.rd_surface
 import app.skerry.ui.remote.RemoteDesktopScreenState
 import app.skerry.ui.remote.RemoteStatsOverlay
 import app.skerry.ui.remote.readLockKeys
+import app.skerry.ui.remote.RemoteModifiers
 import app.skerry.ui.remote.remoteKeyEvent
+import app.skerry.ui.remote.remoteModifier
 import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.terminal.readPlainText
 import kotlin.coroutines.cancellation.CancellationException
@@ -175,6 +181,10 @@ fun VncSurface(
                         // does): the graphics menu / other chrome may have taken focus, and the
                         // one-shot requestFocus at session start never runs again.
                         if (event.type == PointerEventType.Press) focus.requestFocus()
+                        // A stuck modifier shows up on the mouse first — the user is clicking or
+                        // scrolling, not typing — and a held Ctrl turns every notch into a zoom on
+                        // the remote machine. Above the scroll branch, so the wheel reconciles too.
+                        screen.syncModifiers(localModifiers(event.keyboardModifiers))
                         val geom = fitGeometry(
                             canvasSize.width.toFloat(), canvasSize.height.toFloat(),
                             screen.desktopSize.width, screen.desktopSize.height,
@@ -185,16 +195,30 @@ fun VncSurface(
                         // exactly when the local pointer has to come back.
                         pointerOverImage = fb != null
                         if (event.type == PointerEventType.Scroll) {
-                            if (fb == null) {
-                                // Hypothesis 3 of issue #265: near the edge these drops can read
-                                // as "scrolling sometimes works" — the trace makes them visible.
+                            // A notch made just off the picture — on the letterbox beside it — is
+                            // still a notch the user made, so it is clamped onto the nearest edge
+                            // rather than dropped; that drop read as "scrolling near the edge
+                            // sometimes does nothing" (hypothesis 3 of issue #265).
+                            //
+                            // A fresh press on the letterbox is dropped instead (below), and the
+                            // difference is deliberate: a click activates whatever it lands on — the
+                            // taskbar, a maximised window's close button — while a notch only
+                            // scrolls what is already under it, and at the edge that is the window
+                            // the user is looking at.
+                            val at = fb ?: geom.toFramebufferClamped(change.position.x, change.position.y)
+                            if (at == null) {
                                 wheelTrace {
                                     formatWheelDrop(WheelSample(change.type, change.scrollDelta.x, change.scrollDelta.y))
                                 }
                                 continue
                             }
-                            latestPointer.value = change.position
-                            pointerTick.trySend(Unit)
+                            // Only a notch actually over the picture moves the sprite: a clamped one
+                            // is drawn nowhere (its position is off the image), and the remote
+                            // cursor has not moved anyway.
+                            if (fb != null) {
+                                latestPointer.value = change.position
+                                pointerTick.trySend(Unit)
+                            }
                             // Wheel goes to the server (scroll inside the remote desktop). No local
                             // zoom on desktop: without panning it only shows the center, and the fit
                             // already fills the tab. Magnitude counts — a three-line step is three
@@ -217,7 +241,16 @@ fun VncSurface(
                                     notchesX, notchesY, vertical.size + horizontal.size, held,
                                 )
                             }
-                            for (mask in vertical + horizontal) screen.onPointer(fb.x, fb.y, mask)
+                            if (fb == null) {
+                                wheelTrace {
+                                    formatWheelClamp(
+                                        WheelSample(change.type, change.scrollDelta.x, change.scrollDelta.y),
+                                        at.x,
+                                        at.y,
+                                    )
+                                }
+                            }
+                            for (mask in vertical + horizontal) screen.onPointer(at.x, at.y, mask, wheel = true)
                             change.consume()
                             continue
                         }
@@ -277,11 +310,15 @@ fun VncSurface(
                     }
                     return@onPreviewKeyEvent true
                 }
+                // What the local machine really holds rides on every event: a key-up the window
+                // manager kept (Alt+Tab) would otherwise leave Ctrl, Alt or Shift down on the server
+                // for the rest of the session. Super is not among them — see [RemoteModifier].
+                screen.syncModifiers(localModifiers(ev), except = remoteModifier(ev.key))
                 // The lock keys ride on every event, so a Caps toggled mid-session syncs too.
                 screen.onLockKeys(readLockKeys(ev))
                 val event = remoteKeyEvent(ev.key, ev.utf16CodePoint)
                 if (event == null) return@onPreviewKeyEvent false
-                screen.onKey(event, down)
+                screen.onKey(event, down, remoteModifier(ev.key))
                 true
             }
             .focusable()
@@ -457,3 +494,17 @@ private fun buttonsOf(buttons: PointerButtons): Int {
  */
 internal fun isKeyboardRelease(event: KeyEvent): Boolean =
     event.isCtrlPressed && event.isAltPressed && event.isShiftPressed && event.key == Key.K
+
+/** What the local machine holds, as a key event reports it. */
+private fun localModifiers(event: KeyEvent) = RemoteModifiers(
+    ctrl = event.isCtrlPressed,
+    alt = event.isAltPressed,
+    shift = event.isShiftPressed,
+)
+
+/** The same, as a pointer event reports it — every mouse event carries the keyboard's state too. */
+private fun localModifiers(modifiers: PointerKeyboardModifiers) = RemoteModifiers(
+    ctrl = modifiers.isCtrlPressed,
+    alt = modifiers.isAltPressed,
+    shift = modifiers.isShiftPressed,
+)

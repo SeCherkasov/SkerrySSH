@@ -10,12 +10,24 @@ import kotlin.math.abs
 internal class WheelCarry {
     private var carry = 0f
 
-    /** Add a raw delta; returns the whole notches now due (sign = direction), keeping the rest. */
+    /**
+     * Add a raw delta; returns the whole notches now due (sign = direction), keeping the rest.
+     *
+     * Bounded per event: one fling on a high-resolution trackpad can accumulate a large delta, and
+     * every notch is two writes the input actor sends without pacing — an unbounded burst would sit
+     * in front of the click or keystroke that follows it. What is over the bound stays in the carry
+     * and goes out with the next sample of the same gesture.
+     */
     fun add(delta: Float): Int {
         carry += delta
-        val steps = carry.toInt()
+        val steps = carry.toInt().coerceIn(-MAX_STEPS_PER_EVENT, MAX_STEPS_PER_EVENT)
         carry -= steps
         return steps
+    }
+
+    private companion object {
+        /** More than any real wheel reports in one event, less than a burst that blocks the queue. */
+        const val MAX_STEPS_PER_EVENT = 8
     }
 }
 

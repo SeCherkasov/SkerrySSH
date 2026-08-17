@@ -226,9 +226,9 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.vncTouch
 }
 
 /** Press and release [button] where the cursor is. */
-private fun click(screen: RemoteDesktopScreenState, pad: VncTrackpad, button: Int) {
-    screen.onPointer(pad.pixel.x, pad.pixel.y, button)
-    screen.onPointer(pad.pixel.x, pad.pixel.y, 0)
+private fun click(screen: RemoteDesktopScreenState, pad: VncTrackpad, button: Int, wheel: Boolean = false) {
+    screen.onPointer(pad.pixel.x, pad.pixel.y, button, wheel)
+    screen.onPointer(pad.pixel.x, pad.pixel.y, 0, wheel)
 }
 
 /**
@@ -240,7 +240,9 @@ private fun sendWheel(screen: RemoteDesktopScreenState, pad: VncTrackpad, carry:
     while (abs(left) >= WHEEL_STEP_PX) {
         // Finger down = content down = wheel up, matching the direction of a touch scroll.
         val bit = if (left > 0f) VncButton.WHEEL_UP else VncButton.WHEEL_DOWN
-        click(screen, pad, bit)
+        // Marked as a wheel like the desktop's notches: the release repeats the mask the actor
+        // last saw, and pacing it like a move put up to 8 ms between the pairs of one flick.
+        click(screen, pad, bit, wheel = true)
         left -= if (left > 0f) WHEEL_STEP_PX else -WHEEL_STEP_PX
     }
     return left

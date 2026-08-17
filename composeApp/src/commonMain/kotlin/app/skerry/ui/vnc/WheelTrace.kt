@@ -21,3 +21,7 @@ internal fun formatWheelTrace(sample: WheelSample, notchesX: Int, notchesY: Int,
 /** A scroll that never reached the server because the pointer sat outside the fitted image. */
 internal fun formatWheelDrop(sample: WheelSample): String =
     "${sample.type} delta=${sample.deltaX},${sample.deltaY} dropped over letterbox"
+
+/** A scroll made beside the image, delivered to the framebuffer cell it was clamped onto. */
+internal fun formatWheelClamp(sample: WheelSample, x: Int, y: Int): String =
+    "${sample.type} delta=${sample.deltaX},${sample.deltaY} clamped to $x,$y"

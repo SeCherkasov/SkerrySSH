@@ -23,7 +23,7 @@ import kotlinx.coroutines.delay
 internal class RemoteInputActor(private val session: RemoteDesktopSession) {
 
     sealed interface Write
-    data class PointerWrite(val x: Int, val y: Int, val mask: Int) : Write
+    data class PointerWrite(val x: Int, val y: Int, val mask: Int, val wheel: Boolean = false) : Write
     data class KeyWrite(val event: RemoteKeyEvent, val down: Boolean) : Write
     data class LockWrite(val keys: LockKeys) : Write
 
@@ -41,7 +41,15 @@ internal class RemoteInputActor(private val session: RemoteDesktopSession) {
             val event = pending ?: input.receive()
             pending = when (event) {
                 is PointerWrite ->
-                    if (event.mask == actorLastMask) {
+                    if (event.wheel) {
+                        // A notch and its release are edges the user made: pacing them like moves
+                        // put up to [MOVE_INTERVAL] between the pairs of one gesture, which reads
+                        // as a scroll that sometimes does nothing (issue #265). The mask the
+                        // release repeats is not a new button state either, so the actor's own
+                        // record of the held buttons is left alone.
+                        write { session.sendPointer(event.x, event.y, event.mask) }
+                        null
+                    } else if (event.mask == actorLastMask) {
                         sendCollapsedMove(event)
                     } else {
                         write { session.sendPointer(event.x, event.y, event.mask) }

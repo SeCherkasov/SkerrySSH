@@ -46,4 +46,22 @@ class WheelCarryTest {
             wheelMasks(buttons = 0, steps = 1, negative = VncButton.WHEEL_UP, positive = VncButton.WHEEL_DOWN),
         )
     }
+
+    /**
+     * A fling on a high-resolution trackpad can accumulate a large delta in one event, and every
+     * notch is two writes the actor sends unpaced — the burst would sit in front of the click that
+     * follows it. Bounded per event, with the rest carried into the next sample.
+     */
+    @Test
+    fun one_event_emits_at_most_a_bounded_burst() {
+        val carry = WheelCarry()
+        assertEquals(8, carry.add(100f), "one event emitted an unbounded burst")
+        assertEquals(8, carry.add(0f), "what was over the bound was dropped instead of carried")
+    }
+
+    @Test
+    fun the_bound_holds_in_both_directions() {
+        val carry = WheelCarry()
+        assertEquals(-8, carry.add(-100f))
+    }
 }

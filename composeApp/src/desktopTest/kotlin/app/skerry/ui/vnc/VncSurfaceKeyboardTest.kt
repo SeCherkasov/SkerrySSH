@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalFocusManager
@@ -19,6 +20,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.ScrollWheel
 import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -30,6 +32,10 @@ import app.skerry.ui.design.KeyboardClaim
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.remote.FakeRemoteDesktop
+import app.skerry.ui.remote.RemoteDesktopScreenState
+import app.skerry.ui.remote.RemoteModifier
+import app.skerry.ui.remote.RemoteModifiers
+import app.skerry.ui.remote.remoteKeyEvent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -129,6 +135,106 @@ class VncSurfaceKeyboardTest {
         assertTypesNowhere(harness, "a click on chrome took it back to a desktop the user let go of")
     }
 
+    /**
+     * The bug this reads as: the window manager keeps the release of Alt (Alt+Tab) or of the Super
+     * key, the server goes on holding it, and every click on the remote machine arrives as
+     * Alt+click — the desktop stops answering the mouse until the user presses that modifier again,
+     * which is why it looked like "the mouse works once I switch the keyboard layout".
+     *
+     * The click itself carries what the local machine really holds, so it is the click that lifts it.
+     */
+    @Test
+    fun `a modifier the window manager swallowed is lifted by the next click`() = withKeyboard { harness ->
+        val alt = remoteKeyEvent(Key.AltLeft, 0) ?: error("no key event for Alt")
+        harness.screen.onKey(alt, down = true, modifier = RemoteModifier.Alt)
+        waitForIdle()
+
+        onRoot().performMouseInput { moveTo(Offset(150f, 100f)); click(Offset(150f, 100f)) }
+        waitForIdle()
+        assertTrue(
+            harness.session.keys.toList().any { it.first == alt && !it.second },
+            "the click left Alt down on the server: ${harness.session.keys.toList()}",
+        )
+    }
+
+    /** The same reconciliation from the keyboard side: typing lifts it as surely as clicking does. */
+    @Test
+    fun `a swallowed modifier is lifted by the next keystroke`() = withKeyboard { harness ->
+        val alt = remoteKeyEvent(Key.AltLeft, 0) ?: error("no key event for Alt")
+        harness.screen.onKey(alt, down = true, modifier = RemoteModifier.Alt)
+        waitForIdle()
+
+        onRoot().performKeyInput { pressKey(Key.A) }
+        waitForIdle()
+        assertTrue(
+            harness.session.keys.toList().any { it.first == alt && !it.second },
+            "the keystroke left Alt down on the server: ${harness.session.keys.toList()}",
+        )
+    }
+
+    /**
+     * The wiring, not the rule: a modifier pressed through the surface's own key handler has to be
+     * recorded as one, or nothing is left for the reconciliation to lift. Drives the real key path
+     * and then asks the state to reconcile against a machine that holds nothing.
+     */
+    @Test
+    fun `a modifier pressed through the surface is recorded as one`() = withKeyboard { harness ->
+        onRoot().performKeyInput { keyDown(Key.AltLeft) }
+        waitForIdle()
+        harness.session.keys.clear()
+
+        harness.screen.syncModifiers(RemoteModifiers(ctrl = false, alt = false, shift = false))
+        waitForIdle()
+        assertTrue(
+            harness.session.keys.toList().any { !it.second },
+            "the surface did not record Alt as a modifier: ${harness.session.keys.toList()}",
+        )
+        onRoot().performKeyInput { keyUp(Key.AltLeft) }
+    }
+
+    /**
+     * A stuck Ctrl turns every notch into a zoom on the remote machine, and scrolling is the one
+     * gesture that used to reconcile nothing — the wheel branch returned before the sync ran.
+     */
+    @Test
+    fun `scrolling lifts a modifier the window manager swallowed`() = withKeyboard { harness ->
+        // Positioned first: a move would reconcile on its own, and then this would pass with the
+        // reconcile back below the scroll branch — the very thing it exists to catch.
+        onRoot().performMouseInput { moveTo(Offset(150f, 100f)) }
+        waitForIdle()
+
+        val ctrl = remoteKeyEvent(Key.CtrlLeft, 0) ?: error("no key event for Ctrl")
+        harness.screen.onKey(ctrl, down = true, modifier = RemoteModifier.Ctrl)
+        waitForIdle()
+
+        onRoot().performMouseInput { scroll(-1f, ScrollWheel.Vertical) }
+        waitForIdle()
+        assertTrue(
+            harness.session.keys.toList().any { it.first == ctrl && !it.second },
+            "the notch went out with Ctrl still down: ${harness.session.keys.toList()}",
+        )
+    }
+
+    /**
+     * The other direction: a modifier the user is really holding must survive the click it
+     * modifies. Shift+click on the remote machine extends a selection — releasing Shift first
+     * would turn every one of them into a plain click.
+     */
+    @Test
+    fun `a modifier still held is not lifted by a click`() = withKeyboard { harness ->
+        onRoot().performKeyInput { keyDown(Key.ShiftLeft) }
+        waitForIdle()
+        harness.session.keys.clear()
+
+        onRoot().performMouseInput { moveTo(Offset(150f, 100f)); click(Offset(150f, 100f)) }
+        waitForIdle()
+        assertTrue(
+            harness.session.keys.toList().none { !it.second },
+            "the click released a modifier the user was holding: ${harness.session.keys.toList()}",
+        )
+        onRoot().performKeyInput { keyUp(Key.ShiftLeft) }
+    }
+
     /** A key press reaches the session, or [why] explains what should have carried it there. */
     private fun ComposeUiTest.assertTypes(harness: KeyboardHarness, why: String) {
         val before = harness.session.keyCount()
@@ -147,6 +253,8 @@ class VncSurfaceKeyboardTest {
 
 /** The pieces a test drives: a modal above the picture, the window's focus, and the session. */
 private class KeyboardHarness {
+    /** The session state behind the surface, for the rules a test has to set up by hand. */
+    lateinit var screen: RemoteDesktopScreenState
     var modalOpen by mutableStateOf(false)
     var windowFocused by mutableStateOf(true)
     var fieldText by mutableStateOf("")
@@ -191,8 +299,9 @@ private fun withKeyboard(body: ComposeUiTest.(KeyboardHarness) -> Unit) {
     val windowInfo = object : WindowInfo {
         override val isWindowFocused: Boolean get() = harness.windowFocused
     }
-    withVncSurface(windowInfo = windowInfo, beside = { Chrome(harness) }) { session, _ ->
+    withVncSurface(windowInfo = windowInfo, beside = { Chrome(harness) }) { session, screen ->
         harness.session = session
+        harness.screen = screen
         body(harness)
     }
 }

@@ -69,6 +69,23 @@ class VncSurfaceInputTest {
             )
         }
 
+    /**
+     * The letterbox is beside the picture, not another window: a notch made there belongs to the
+     * edge of the desktop, and dropping it read as "scrolling near the edge sometimes does nothing"
+     * (issue #265). Clamped like the tail of a drag (F-37).
+     */
+    @Test
+    fun `a wheel notch over the letterbox lands on the picture's edge`() =
+        withVncSurface { session, _ ->
+            onRoot().performMouseInput {
+                moveTo(Offset(10f, 100f)) // the black bar left of the image
+                scroll(-1f, ScrollWheel.Vertical)
+            }
+            session.awaitPointer { it.third and WHEEL_BITS != 0 }
+            val notch = session.pointerSnapshot().first { it.third and WHEEL_BITS != 0 }
+            assertEquals(0, notch.first, "the notch landed on the nearest column of the image")
+        }
+
     private companion object {
         const val WHEEL_BITS =
             VncButton.WHEEL_UP or VncButton.WHEEL_DOWN or VncButton.WHEEL_LEFT or VncButton.WHEEL_RIGHT
