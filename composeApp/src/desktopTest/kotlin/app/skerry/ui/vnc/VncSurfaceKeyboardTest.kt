@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import app.skerry.ui.design.KeyboardClaim
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.handsKeyboardBack
+import app.skerry.ui.design.rememberModalPresence
 import app.skerry.ui.remote.FakeRemoteDesktop
 import app.skerry.ui.remote.RemoteDesktopScreenState
 import app.skerry.ui.remote.RemoteModifier
@@ -235,6 +236,22 @@ class VncSurfaceKeyboardTest {
         onRoot().performKeyInput { keyUp(Key.ShiftLeft) }
     }
 
+    /**
+     * The picture takes the caret on any click into it — that is how a session is returned to after
+     * the chrome has been used. It must stand down while a modal is up: a prompt that leaves the
+     * framebuffer clickable beside it would otherwise send the secret being typed to the guest.
+     */
+    @Test
+    fun `a click on the picture while a modal is up does not take the keyboard`() = withKeyboard { harness ->
+        onNodeWithTag(FIELD).performMouseInput { click() }
+        harness.menuOpen = true
+        waitForIdle()
+
+        onRoot().performMouseInput { click(Offset(150f, 100f)) }
+        waitForIdle()
+        assertTypesNowhere(harness, "a click on the picture took the keyboard from a modal's field")
+    }
+
     /** A key press reaches the session, or [why] explains what should have carried it there. */
     private fun ComposeUiTest.assertTypes(harness: KeyboardHarness, why: String) {
         val before = harness.session.keyCount()
@@ -256,6 +273,8 @@ private class KeyboardHarness {
     /** The session state behind the surface, for the rules a test has to set up by hand. */
     lateinit var screen: RemoteDesktopScreenState
     var modalOpen by mutableStateOf(false)
+    /** A modal that draws no scrim over the picture — a focusable popup menu, as [app.skerry.ui.terminal.PaneMenu] is. */
+    var menuOpen by mutableStateOf(false)
     var windowFocused by mutableStateOf(true)
     var fieldText by mutableStateOf("")
     /** Set from the body, before anything reads it. */
@@ -320,6 +339,8 @@ private fun Chrome(harness: KeyboardHarness) {
         )
     }
     if (harness.modalOpen) ModalScrim(onDismiss = {}, label = "modal") { }
+    // Registered but scrim-less, so the picture stays clickable underneath it.
+    if (harness.menuOpen) rememberModalPresence()
 }
 
 /**
@@ -328,10 +349,14 @@ private fun Chrome(harness: KeyboardHarness) {
  * describe.
  */
 private fun FakeRemoteDesktop.keyCount(): Int {
-    while (true) {
+    repeat(RETRIES) {
         try {
             return keys.toList().size
         } catch (_: ConcurrentModificationException) {
         }
     }
+    error("the input actor kept writing keys for $RETRIES reads running")
 }
+
+/** Enough for a writer mid-append; a bound so a wedged one fails the test instead of hanging CI. */
+private const val RETRIES = 1000

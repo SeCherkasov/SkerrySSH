@@ -41,6 +41,8 @@ import app.skerry.ui.theme.Skerry
 @Composable
 fun MobileBottomSheet(
     onDismiss: () -> Unit,
+    /** The sheet's own root: what a prompt puts its layer on ([app.skerry.ui.design.rememberPromptFocus]). */
+    modifier: Modifier = Modifier,
     panelModifier: Modifier = Modifier,
     maxHeightFraction: Float? = null,
     content: @Composable ColumnScope.() -> Unit,
@@ -50,7 +52,7 @@ fun MobileBottomSheet(
     // keeping back from navigating away from the screen underneath the sheet.
     PlatformBackHandler(onBack = onDismiss)
     BoxWithConstraints(
-        Modifier
+        modifier
             .fillMaxSize()
             .background(Skerry.colors.scrim)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onDismiss),

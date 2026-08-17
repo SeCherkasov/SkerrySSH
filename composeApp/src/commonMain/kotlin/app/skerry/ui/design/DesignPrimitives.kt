@@ -214,6 +214,10 @@ fun AnchoredDropdown(
                 onDismissRequest = onDismiss,
                 properties = PopupProperties(focusable = focusable),
             ) {
+                // A focusable popup holds the keyboard while it is up, so it counts as a modal: the
+                // session underneath must not claim focus back and leave the menu open but dead to
+                // Esc. A type-ahead picker (focusable = false) claims nothing and registers nothing.
+                if (focusable) rememberModalPresence()
                 menu(with(density) { anchor.width.toDp() })
             }
         }

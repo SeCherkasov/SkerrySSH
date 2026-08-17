@@ -56,7 +56,19 @@ class WheelCarryTest {
     fun one_event_emits_at_most_a_bounded_burst() {
         val carry = WheelCarry()
         assertEquals(8, carry.add(100f), "one event emitted an unbounded burst")
-        assertEquals(8, carry.add(0f), "what was over the bound was dropped instead of carried")
+        assertEquals(0, carry.add(0f), "the notches over the bound were banked and replayed later")
+    }
+
+    /**
+     * What is over the bound is dropped rather than kept: a banked remainder outlives the gesture
+     * that made it, and the next scroll — in any direction — would spend it first. Scrolling up
+     * would scroll down, which is the very class of bug the wheel work was for (#265).
+     */
+    @Test
+    fun a_clamped_burst_does_not_reverse_the_next_scroll() {
+        val carry = WheelCarry()
+        carry.add(100f)
+        assertEquals(-1, carry.add(-1f), "the next scroll went the way the previous fling did")
     }
 
     @Test

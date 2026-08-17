@@ -19,8 +19,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -28,8 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
@@ -42,7 +38,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.ssh.KeyboardInteractiveChallenge
-import app.skerry.ui.design.rememberModalPresence
+import app.skerry.ui.design.rememberPromptFocus
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
@@ -90,24 +86,14 @@ fun KeyboardInteractiveDialog(
     val focus = remember(requestId) { FocusRequester() }
     val submit = { onSubmit(answers.toList()) }
 
-    // A frame first: the field is not placed when this effect runs, and a request made then is
-    // lost — leaving the caret on the live session underneath, which is where the secret would go.
-    val focusManager = LocalFocusManager.current
-    LaunchedEffect(requestId) {
-        // Cleared first: if the request below does not land (the field not placed yet), the caret
-        // must not stay on the live session underneath — keys going nowhere beats a secret going
-        // into someone's shell.
-        focusManager.clearFocus(force = true)
-        withFrameNanos {}
-        focus.requestFocus(FocusDirection.Enter)
-    }
-    // Registered as a modal though the scrim is hand-rolled — see [DesktopPasswordDialog]: a 2FA
-    // answer must not be typed into the session waiting underneath.
-    rememberModalPresence()
+    // Registered as a modal, holding the caret and drawn where the caret is — see
+    // [rememberPromptFocus]: a 2FA answer must not be typed into the session waiting underneath, nor
+    // into a prompt for another host that opened over this one.
+    val prompt = rememberPromptFocus(focus, requestId)
     PlatformBackHandler(onBack = onDismiss)
 
     Box(
-        Modifier.fillMaxSize().background(Skerry.colors.modalScrim)
+        prompt.fillMaxSize().background(Skerry.colors.modalScrim)
             .clickable(interactionSource = noop, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {

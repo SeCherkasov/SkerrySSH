@@ -157,7 +157,7 @@ internal fun KeyboardSection() {
     val remote = listOf(
         KeyboardBinding(
             stringResource(Res.string.settings_kb_release_keyboard),
-            if (mac) "⌃⌥⇧K" else "Ctrl+Alt+Shift+K",
+            releaseKeyboardChord(),
             live = true,
         ),
     )

@@ -55,9 +55,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import app.skerry.ui.design.ClaimKeyboard
+import app.skerry.ui.design.ModalPresence
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.rd_surface
+import app.skerry.ui.generated.resources.rd_surface_release
+import app.skerry.ui.settings.releaseKeyboardChord
 import app.skerry.ui.remote.RemoteDesktopScreenState
 import app.skerry.ui.remote.RemoteStatsOverlay
 import app.skerry.ui.remote.readLockKeys
@@ -126,7 +129,14 @@ fun VncSurface(
     // to read out: name it, so a screen reader says where focus went.
     // The server picked this name (RFB ServerInit carries it verbatim, control bytes and all), so
     // it is drawn — read out, here — like any other text a peer wrote.
-    val surfaceName = stringResource(Res.string.rd_surface, untrustedLabel(screen.serverName))
+    // The way out is named where the user is trapped: every key but the chord goes to the guest, and
+    // a keyboard-only user who lands here has no way to learn it from Settings they cannot reach.
+    val surfaceName = stringResource(
+        Res.string.rd_surface,
+        untrustedLabel(screen.serverName),
+        // Spelled as Settings → Keyboard spells it, from the one source both read.
+        stringResource(Res.string.rd_surface_release, releaseKeyboardChord()),
+    )
     // clipToBounds: a zoomed framebuffer must never draw outside its own area onto the app chrome.
     var mod = Modifier.fillMaxSize().clipToBounds().background(Color.Black).semantics {
         contentDescription = surfaceName
@@ -179,8 +189,12 @@ fun VncSurface(
                         }
                         // Reclaim the keyboard on any click into the surface (as TerminalScreen
                         // does): the graphics menu / other chrome may have taken focus, and the
-                        // one-shot requestFocus at session start never runs again.
-                        if (event.type == PointerEventType.Press) focus.requestFocus()
+                        // one-shot requestFocus at session start never runs again. Never while a
+                        // modal is up — the same predicate ClaimKeyboard uses: a prompt that leaves
+                        // the picture clickable beside it would send the secret to the guest.
+                        if (event.type == PointerEventType.Press && ModalPresence.openCount == 0) {
+                            focus.requestFocus()
+                        }
                         // A stuck modifier shows up on the mouse first — the user is clicking or
                         // scrolling, not typing — and a held Ctrl turns every notch into a zoom on
                         // the remote machine. Above the scroll branch, so the wheel reconciles too.

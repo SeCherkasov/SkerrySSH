@@ -44,13 +44,16 @@ internal class HeldKeys {
         if (modifiers.none { (_, held) -> held.first != except && !local.holds(held.first) }) {
             return emptyList()
         }
+        // Materialised before the map is touched: a Map.Entry read after its removal is not
+        // specified to still carry a value.
         val stale = modifiers.entries
             .filter { (_, held) -> held.first != except && !local.holds(held.first) }
+            .map { (id, held) -> id to held.second }
         for ((id, _) in stale) {
             modifiers.remove(id)
             keys.remove(id)
         }
-        return stale.map { (_, held) -> held.second }.asReversed()
+        return stale.map { (_, event) -> event }.asReversed()
     }
 
     /** Everything still down, in reverse press order — what a lost focus owes the server (F-12). */

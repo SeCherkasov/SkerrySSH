@@ -24,9 +24,11 @@ import org.jetbrains.compose.resources.stringResource
  * peeking out. The chevron points the way the panel will travel, and the strip is all chevron, so it
  * carries the action's name itself.
  *
- * 16dp wide, deliberately: the strip runs the full height of the panel, so the only axis a click
- * can miss on is the one the pointer is already travelling along when it reaches the panel's edge.
- * That is under WCAG 2.5.8's 24dp, and accepted as such rather than padded out with dead space.
+ * 16dp wide: under WCAG 2.5.8's 24dp minimum, and not covered by its spacing exception either,
+ * since the work area begins where the strip ends. Kept at 16dp as a product decision — the strip
+ * runs the full height of the panel, so the only axis a click can miss on is the one the pointer
+ * already travels to reach the panel's edge, and widening it would put dead space between the panel
+ * and the session.
  *
  * The one control for the panel in both sections: the terminal used to collapse it from a chevron in
  * its work bar instead, which put the control over the session rather than beside the thing it

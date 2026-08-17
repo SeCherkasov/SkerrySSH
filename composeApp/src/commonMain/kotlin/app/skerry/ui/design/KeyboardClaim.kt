@@ -13,10 +13,12 @@ import androidx.compose.runtime.State
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WindowInfo
 
@@ -39,6 +41,57 @@ object KeyboardClaim {
         handBacks++
     }
 }
+
+/**
+ * Everything a prompt that opens over a live session owes: it counts as a modal, it holds the
+ * caret, and it is drawn where the caret is. Returns the modifier its own root must carry.
+ *
+ * The order is the point: the keyboard is cleared off whatever had it *first*, and only then
+ * claimed — a request that does not land leaves the keys going nowhere, never into the shell or the
+ * remote host the prompt opened over. That is what keeps a connect password out of a live session.
+ *
+ * Retried across a few frames rather than asked once: a field inside a sheet or a subcomposition is
+ * not placed on the frame this effect first runs, and a request made then is simply lost (the
+ * requester returns false), leaving a prompt nobody can type into. Claimed again when the window
+ * comes back, since Compose releases focus app-wide on the way out and restores nothing.
+ *
+ * The z-order is the same rule seen from the user's side. Two prompts can be up at once — a connect
+ * password for one host, a second factor another host asks for while it is up — and they are
+ * composed in a fixed order that has nothing to do with which opened last. Laid out by modal token,
+ * the one holding the caret is the one on top, so the field being typed into is the field on
+ * screen: a password typed into another host's prompt is sent to that host in the clear.
+ *
+ * [key] is what the prompt is for — a host, a challenge — so a second prompt takes the caret again.
+ */
+@Composable
+fun rememberPromptFocus(focus: FocusRequester, key: Any?): Modifier {
+    val token = rememberModalPresence()
+    val focusManager = LocalFocusManager.current
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(focus, key) {
+        focusManager.clearFocus(force = true)
+        claimCaret(focus)
+    }
+    LaunchedEffect(focus, key, windowFocused) {
+        // Not cleared again: whatever the window came back to is this prompt's own field or nothing.
+        if (windowFocused) claimCaret(focus)
+    }
+    return Modifier.zIndex(token.toFloat())
+}
+
+private suspend fun claimCaret(focus: FocusRequester) {
+    repeat(CARET_FRAMES) {
+        withFrameNanos {}
+        if (focus.requestFocus(FocusDirection.Enter)) return
+    }
+}
+
+/**
+ * Frames a prompt is given to place its field; beyond this nothing is going to place it. A field
+ * inside a sheet needs the second one — and the directional request is what says so honestly: the
+ * plain `requestFocus()` answers the first frame with success and leaves the caret where it was.
+ */
+private const val CARET_FRAMES = 8
 
 /**
  * Marks a control that steals the keyboard on a mouse press without wanting it. Watches the initial

@@ -17,8 +17,6 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,8 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -55,7 +51,7 @@ import app.skerry.ui.generated.resources.shell_use_saved_secret
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_connect
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.rememberModalPresence
+import app.skerry.ui.design.rememberPromptFocus
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
@@ -90,28 +86,14 @@ fun DesktopPasswordDialog(
     // an unkeyed buffer would submit the first host's password to the second.
     var password by remember(host.id) { mutableStateOf("") }
     val submit = { if (password.isNotEmpty()) onConnect(password) }
-    // Registered as a modal though the scrim is hand-rolled: whoever owns the keyboard underneath
-    // (a live terminal, a remote desktop) reads this count before claiming focus back, and an
-    // unregistered password field is one the session below can take the typing away from.
-    rememberModalPresence()
     // And the field takes the caret itself. Without it the keyboard stays where it was — on the
     // live session this dialog opened over — and the password is typed into that shell instead,
     // which is also why the keyboard-interactive dialog focuses its first answer.
     val focus = remember(host.id) { FocusRequester() }
-    // A frame first: the field is not placed when this effect runs, and a request made then is
-    // lost — leaving the caret on the live session underneath, which is where the secret would go.
-    val focusManager = LocalFocusManager.current
-    LaunchedEffect(host.id) {
-        // Cleared first: if the request below does not land (the field not placed yet), the caret
-        // must not stay on the live session underneath — keys going nowhere beats a secret going
-        // into someone's shell.
-        focusManager.clearFocus(force = true)
-        withFrameNanos {}
-        focus.requestFocus(FocusDirection.Enter)
-    }
+    val prompt = rememberPromptFocus(focus, host.id)
 
     Box(
-        Modifier.fillMaxSize().background(Skerry.colors.modalScrim).clickable(interactionSource = noop, indication = null, onClick = onDismiss),
+        prompt.fillMaxSize().background(Skerry.colors.modalScrim).clickable(interactionSource = noop, indication = null, onClick = onDismiss),
         contentAlignment = Alignment.Center,
     ) {
         Column(

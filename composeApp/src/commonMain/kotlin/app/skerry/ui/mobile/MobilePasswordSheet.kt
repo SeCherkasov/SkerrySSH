@@ -13,21 +13,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -42,7 +38,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_password_label
 import app.skerry.ui.generated.resources.term_connect
 import org.jetbrains.compose.resources.stringResource
-import app.skerry.ui.design.rememberModalPresence
+import app.skerry.ui.design.rememberPromptFocus
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
@@ -65,23 +61,17 @@ fun MobilePasswordSheet(
 ) {
     var password by remember { mutableStateOf("") }
     val submit = { if (password.isNotEmpty()) onConnect(password) }
-    // The desktop dialog's two rules, on the phone as well: registered as a modal so the session
-    // underneath does not claim the keyboard back, and the caret taken off it — a hardware keyboard
-    // (a tablet, DeX, a paired one) would otherwise type the password into that session's shell.
-    rememberModalPresence()
-    val focusManager = LocalFocusManager.current
+    // The desktop dialog's rules, on the phone as well — see [rememberPromptFocus]: registered as a
+    // modal so the session underneath does not claim the keyboard back, holding the caret (a
+    // hardware keyboard on a tablet or DeX would otherwise type the password into that session's
+    // shell), and drawn on the layer that says so.
     val focus = remember(host.id) { FocusRequester() }
-    LaunchedEffect(host.id) {
-        // Cleared first, then claimed — the desktop dialog's order: if the field cannot take the
-        // caret, the keys go nowhere rather than into the session this sheet opened over.
-        focusManager.clearFocus(force = true)
-        withFrameNanos {}
-        focus.requestFocus(FocusDirection.Enter)
-    }
+    val prompt = rememberPromptFocus(focus, host.id)
     // Protect SSH password entry on connect from screenshots/Recent Apps previews (Android; desktop no-op).
     SecureScreen()
     MobileBottomSheet(
         onDismiss = onDismiss,
+        modifier = prompt,
         panelModifier = Modifier.padding(start = 22.dp, end = 22.dp, bottom = 30.dp),
     ) {
         Txt(host.rowLabel(), color = Skerry.colors.text, size = 20.sp, weight = FontWeight.Bold)
