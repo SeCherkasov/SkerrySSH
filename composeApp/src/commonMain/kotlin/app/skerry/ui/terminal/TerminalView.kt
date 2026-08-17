@@ -102,8 +102,9 @@ fun TerminalView(state: DesktopDesignState) {
     // an overflow menu rather than squeezing the title out of the bar.
     var workAreaWidth by remember { mutableStateOf<Dp?>(null) }
     Row(Modifier.fillMaxSize()) {
-        // Slides in/out when toggled from the bar's chevron (or the icon rail); expandFrom = End
-        // keeps the right edge leading, so the panel emerges from under the rail instead of popping.
+        // Slides in/out when toggled from the strip on its own edge (or brought back by the icon
+        // rail); expandFrom = End keeps the right edge leading, so the panel emerges from under the
+        // rail instead of popping.
         AnimatedVisibility(
             visible = !state.sidebarHidden,
             enter = expandHorizontally(expandFrom = Alignment.End),
@@ -113,6 +114,9 @@ fun TerminalView(state: DesktopDesignState) {
             // the user browses the desktops list beside it (see workAreaSection).
             HostsSidebar(state, state.section)
         }
+        // The panel's own edge carries the collapse, in both sections — see [SidebarToggleHandle].
+        // Present whether the panel is open or shut, one click either way.
+        SidebarToggleHandle(hidden = state.sidebarHidden, onClick = state::toggleSidebar)
         Column(
             Modifier.weight(1f).fillMaxHeight().onGloballyPositioned {
                 workAreaWidth = with(density) { it.size.width.toDp() }
@@ -121,7 +125,9 @@ fun TerminalView(state: DesktopDesignState) {
             WorkBar(
                 label = activeWorkBarLabel(state, tab, soloPlaceholder = stringResource(Res.string.term_select_host_placeholder)),
                 tabKey = tab?.id,
-                leading = WorkBarLeading.sidebarToggle(state.sidebarHidden, state::toggleSidebar),
+                // The hosts panel is collapsed from the strip beside it, so this bar carries no
+                // leading control — only a sub-view's way back uses that slot.
+                leading = null,
                 onPickHost = soloHostPicker(state, tab),
                 actions = {
                     SessionActions(state, available = workAreaWidth, assistantShown = assistantController != null)

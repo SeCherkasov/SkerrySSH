@@ -28,7 +28,6 @@ import app.skerry.ui.generated.resources.term_search_hosts_placeholder
 import app.skerry.ui.generated.resources.shell_password_host_placeholder
 import app.skerry.ui.generated.resources.shell_tip_disconnect
 import app.skerry.ui.generated.resources.shtail_group_collapse
-import app.skerry.ui.generated.resources.term_tip_sidebar
 import app.skerry.ui.remote.RemoteDesktopUiState
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -85,18 +84,15 @@ class KeyboardClaimShellTest {
     }
 
     /**
-     * The work bar sits right above the session and its chevron is the most-clicked control in the
-     * section — the terminal's own half of the sidebar-handle case above.
+     * The terminal's own half of the sidebar-handle case above: one strip, both sections.
      */
     @Test
-    fun `collapsing the terminal sidebar from the work bar leaves the keyboard on the shell`() = runDesktopShell {
-        // "Hosts" names both the rail's section button and the work bar's chevron; the second one
-        // in composition order is the bar's.
-        onFieldAt(Res.string.term_tip_sidebar, index = 1).performMouseInput { click() }
+    fun `collapsing the terminal sidebar leaves the keyboard on the shell`() = runDesktopShell {
+        onNodeWithContentDescription(string(Res.string.shell_tip_hide_hosts)).performMouseInput { click() }
         waitForIdle()
         FakeShellInput.clear()
         onRoot().performKeyInput { pressKey(Key.L) }
-        waitUntil("the work bar's chevron kept the keyboard") { FakeShellInput.all().contains("l") }
+        waitUntil("the sidebar strip kept the keyboard") { FakeShellInput.all().contains("l") }
     }
 
     /**

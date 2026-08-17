@@ -30,7 +30,6 @@ import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.term_tip_sidebar
 import app.skerry.ui.generated.resources.term_wbar_panes
 import app.skerry.ui.generated.resources.term_wbar_sync
 import app.skerry.ui.session.sessionDotColor
@@ -46,17 +45,14 @@ import org.jetbrains.compose.resources.stringResource
 val WORK_BAR_HEIGHT = 38.dp
 
 /**
- * The bar's leftmost button. What it does depends on what the work area holds: the terminal
- * collapses the hosts sidebar there ([sidebarToggle] — the chevron points the way the panel will
- * travel, and it is the terminal's only sidebar handle), a view that fills the whole work area and
- * shows no sidebar leaves the terminal instead ([back]). Whatever the button does, it stays in the
- * same place across views.
+ * The bar's leftmost button: the way out of a view that fills the whole work area (the file panel,
+ * the monitor, a runbook run). The sections that keep their hosts panel have no button here — the
+ * panel is collapsed from the strip on its own edge
+ * ([app.skerry.ui.terminal.SidebarToggleHandle]), which is beside the thing it moves rather than
+ * over the session.
  */
 data class WorkBarLeading(val icon: String, val tooltip: StringResource, val onClick: () -> Unit) {
     companion object {
-        fun sidebarToggle(hidden: Boolean, onToggle: () -> Unit) =
-            WorkBarLeading(if (hidden) "chevron_right" else "chevron_left", Res.string.term_tip_sidebar, onToggle)
-
         fun back(tooltip: StringResource, onBack: () -> Unit) = WorkBarLeading("chevron_left", tooltip, onBack)
     }
 }
@@ -79,7 +75,7 @@ data class WorkBarLeading(val icon: String, val tooltip: StringResource, val onC
 fun WorkBar(
     label: WorkBarLabel?,
     tabKey: Any?,
-    leading: WorkBarLeading,
+    leading: WorkBarLeading?,
     onPickHost: ((Host) -> Unit)?,
     actions: @Composable RowScope.() -> Unit,
 ) {
@@ -89,12 +85,18 @@ fun WorkBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconBtn(
-                leading.icon,
-                onClick = leading.onClick,
-                box = 26,
-                tooltip = stringResource(leading.tooltip),
-            )
+            // Null in the terminal section: its panel is collapsed from the strip on the panel's
+            // own edge ([SidebarToggleHandle]), and a bar over the session is the wrong place for
+            // a control that moves something beside it. The back arrow of a sub-view still lives
+            // here — that one acts on the work area itself.
+            leading?.let {
+                IconBtn(
+                    it.icon,
+                    onClick = it.onClick,
+                    box = 26,
+                    tooltip = stringResource(it.tooltip),
+                )
+            }
             WorkBarTitle(label, tabKey, onPickHost, Modifier.weight(1f))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp), content = actions)
         }

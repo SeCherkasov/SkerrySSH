@@ -57,6 +57,7 @@ import app.skerry.ui.remote.ReportOutputVisibility
 import app.skerry.ui.remote.rememberClipboardActions
 import app.skerry.ui.remote.rememberScreenshotAction
 import app.skerry.ui.terminal.HostsSidebar
+import app.skerry.ui.terminal.SidebarToggleHandle
 import app.skerry.ui.theme.Skerry
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
@@ -112,29 +113,6 @@ fun RemoteDesktopsView(state: DesktopDesignState) {
                 )
             }
         }
-    }
-}
-
-/**
- * Slim strip on the hosts panel's edge, painted in the panel's own surface so it reads as the panel
- * peeking out. The chevron points the way the panel will travel, like the work bar's toggle does in
- * the terminal section — and the strip is all chevron, so it carries the action's name itself.
- */
-@Composable
-private fun SidebarToggleHandle(hidden: Boolean, onClick: () -> Unit) {
-    Box(
-        Modifier.width(16.dp).fillMaxHeight().background(Skerry.colors.surface2)
-            .handsKeyboardBack().clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Sym(
-            if (hidden) "chevron_right" else "chevron_left",
-            contentDescription = stringResource(
-                if (hidden) Res.string.shell_tip_show_hosts else Res.string.shell_tip_hide_hosts,
-            ),
-            size = 16.sp,
-            color = Skerry.colors.faint,
-        )
     }
 }
 

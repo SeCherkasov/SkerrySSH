@@ -40,6 +40,7 @@ import app.skerry.ui.host.rowSubtitle
 import app.skerry.shared.host.Host
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalConnectHost
+import app.skerry.shared.ssh.isRemoteDesktop
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.design.Badge
@@ -245,7 +246,8 @@ private const val NOTE_TOOLTIP_DELAY_MS = 450L
  * markers read as separate axes, colour for session status and shape for protocol. Clicking the row
  * connects ([onClick]). When
  * [onEdit]/[onDuplicate]/[onDelete] are provided (live catalog) or a snippet can be run on the host
- * ([host] != null and [LocalSnippets] is present), a trailing "⋮" button opens a menu (Run
+ * ([host] != null, [LocalSnippets] is present, and the host is not a remote desktop — a framebuffer
+ * has no shell to run one in), a trailing "⋮" button opens a menu (Run
  * snippet.../Edit/Duplicate/Delete); its click is intercepted before [onClick], so opening the menu
  * doesn't trigger a connection. [label] is drawn as given: a caller holding a profile passes
  * [app.skerry.ui.host.rowLabel], never [app.skerry.shared.host.Host.label] itself. "Run snippet..." opens the snippet picker and runs it on [host] via
@@ -273,7 +275,9 @@ internal fun HostEntryRow(
     val prod = remember(host) { isProdHost(host) }
     val snippets = LocalSnippets.current
     val runSnippetOnHost = LocalRunSnippetOnHost.current
-    val canRunSnippet = host != null && snippets != null
+    // Not on a remote desktop: a snippet is a line typed into a shell, and a framebuffer has none —
+    // the row would open the desktop and the command would have nowhere to go.
+    val canRunSnippet = host != null && snippets != null && !host.connectionType.isRemoteDesktop
     val hasMenu = onEdit != null || onDuplicate != null || onDelete != null || canRunSnippet
     var menuOpen by remember { mutableStateOf(false) }
     var snippetPickerOpen by remember { mutableStateOf(false) }

@@ -60,6 +60,9 @@ fun railItemActive(item: RailItem, state: DesktopDesignState): Boolean = when (v
  */
 fun openRailSection(state: DesktopDesignState, section: HostSection) {
     state.showSection(section)
+    // And with it the catalog: pressing a section is asking to see its hosts, so a collapsed panel
+    // comes back rather than leaving the press with nothing to show for it.
+    state.showSidebar()
 }
 
 // Selecting, cycling or closing a tab deliberately has no rail counterpart: the work area follows

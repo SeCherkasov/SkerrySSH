@@ -445,6 +445,9 @@ class DesktopDesignState(
     fun toggleSplit() { split = !split }
     fun toggleSidebar() { sidebarHidden = !sidebarHidden }
 
+    /** Bring the hosts panel back — what asking for a section from the rail means. */
+    fun showSidebar() { sidebarHidden = false }
+
     fun toggleRemoteImmersive() { remoteImmersive = !remoteImmersive }
 
     /**
