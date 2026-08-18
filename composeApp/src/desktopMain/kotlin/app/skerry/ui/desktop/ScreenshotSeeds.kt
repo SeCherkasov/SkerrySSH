@@ -74,7 +74,8 @@ internal fun seedFakeHome() {
 
 /**
  * In-memory host catalog with demo profiles, for the offscreen render of a live sidebar only.
- * [boundCredentialId] (if given) is attached to a pair of hosts so Vault shows "Used by hosts".
+ * [boundCredentialId] (if given) is attached to a pair of shell hosts and one remote desktop, so Vault
+ * shows "Used by hosts" and the unbind cascade crosses connection types.
  */
 internal fun seededHosts(boundCredentialId: String? = null): HostManagerController {
     val store = object : HostStore {
@@ -94,7 +95,12 @@ internal fun seededHosts(boundCredentialId: String? = null): HostManagerControll
         Host("h3", "homelab-pi", "10.0.0.12", 22, "pi", "Homelab", tags = listOf("docker")),
         Host("h4", "vps-edge", "vps.example.com", 2222, "deploy", null, tags = listOf("edge")),
         // Remote desktops: their own section in the shell, so the demo catalog seeds both kinds.
-        Host("h5", "lab-desktop", "10.0.0.30", 5900, "", "Homelab", connectionType = ConnectionType.VNC),
+        // Bound like the pair above: a secret shared by a shell host and a remote desktop is what
+        // makes the vault's unbind cascade cross connection types (issue #280).
+        Host(
+            "h5", "lab-desktop", "10.0.0.30", 5900, "", "Homelab",
+            credentialId = boundCredentialId, connectionType = ConnectionType.VNC,
+        ),
         Host("h6", "win-bench", "10.0.0.31", 5901, "", null, connectionType = ConnectionType.VNC, tags = listOf("lab")),
     ).forEach(store::put)
     var seq = 0

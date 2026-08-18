@@ -1,5 +1,7 @@
 package app.skerry.ui.host
 
+import app.skerry.shared.container.ContainerRuntime
+import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.host.HostStore
@@ -203,6 +205,71 @@ class HostManagerControllerTest {
         )
 
         assertEquals(listOf("prod", "db"), controller.hosts.single().tags)
+    }
+
+    @Test
+    fun `unbinding a deleted secret changes nothing but the credential reference`() {
+        // Issue #280: deleting the password of an RDP host used to rewrite the profile as a plain
+        // SSH one, so it vanished from Remote Desktops along with its tags and notes.
+        val jump = Host("j", "bastion", "b.local", 22, "u")
+        val rdp = Host(
+            id = "1",
+            label = "win",
+            address = "w.local",
+            port = 3389,
+            username = "admin",
+            group = "Prod",
+            credentialId = "key-1",
+            interactiveAuth = false,
+            tags = listOf("prod", "win"),
+            aiPolicy = app.skerry.shared.ai.AiPolicy.Balanced,
+            connectionType = ConnectionType.RDP,
+            jumpHostId = "j",
+            keepAliveSeconds = 0,
+            vncResizeToWindow = true,
+            vncQuality = app.skerry.shared.graphics.RemoteDesktopQuality.High,
+            notes = "ask ops before reboot",
+            container = ContainerSpec(runtime = ContainerRuntime.DOCKER, target = "api"),
+            rdp = RdpSpec(loadBalanceInfo = "tsv://farm", audioOutput = true),
+        )
+        val store = FakeHostStore(jump, rdp)
+        val controller = HostManagerController(store) { error("must not be called") }
+
+        controller.unbindCredential("key-1")
+
+        assertEquals(rdp.copy(credentialId = null), controller.find("1"))
+        assertEquals(rdp.copy(credentialId = null), store.all().first { it.id == "1" })
+    }
+
+    @Test
+    fun `unbinding a secret reads the store, not the list the dialog was drawn from`() {
+        // The dialog is drawn from the controller's snapshot, but a sync merge writes HOST records
+        // straight into the vault and the reload lands afterwards. Matching on the snapshot would
+        // miss a host the merge bound to the victim, and would clear one it rebound to a live secret.
+        val store = FakeHostStore(
+            Host("1", "a", "a.local", 22, "u", credentialId = "key-1"),
+            Host("2", "b", "b.local", 22, "u", credentialId = "key-1"),
+        )
+        val controller = HostManagerController(store) { error("must not be called") }
+        // What the merge did behind the controller's back — no reload() before the click.
+        store.put(Host("1", "a", "a.local", 22, "u", credentialId = "key-2"))
+        store.reorder { all -> all.map { if (it.id == "2") it.copy(credentialId = "key-1") else it } }
+
+        controller.unbindCredential("key-1")
+
+        val stored = store.all().associateBy { it.id }
+        assertEquals("key-2", stored.getValue("1").credentialId, "a host rebound to a live secret keeps it")
+        assertNull(stored.getValue("2").credentialId, "a host the merge left on the victim is unbound")
+    }
+
+    @Test
+    fun `unbinding a secret nothing references is a no-op`() {
+        val store = FakeHostStore(Host("1", "a", "a.local", 22, "u", credentialId = "key-1"))
+        val controller = HostManagerController(store) { error("must not be called") }
+
+        controller.unbindCredential("gone")
+
+        assertEquals("key-1", controller.find("1")?.credentialId)
     }
 
     @Test

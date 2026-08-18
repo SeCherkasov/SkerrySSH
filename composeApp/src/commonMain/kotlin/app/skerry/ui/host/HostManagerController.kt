@@ -183,6 +183,24 @@ class HostManagerController(
         hosts = canonicalHosts()
     }
 
+    /**
+     * Drop every profile's reference to the vault secret [credentialId], which is about to be
+     * deleted. Written straight onto the stored hosts, not through a [HostDraft]: a draft carries
+     * the form's fields, so rebuilding one here would rewrite everything it does not name — the
+     * profile's type first of all — back to its default.
+     *
+     * One [HostStore.reorder] pass rather than a write per host: read-compute-write happens under
+     * the store's lock over the store's own snapshot, so a sync merge landing between the dialog's
+     * last recomposition and this call is not clobbered by a stale record, and a host the merge
+     * rebound to another secret keeps it — only the id being deleted is cleared.
+     */
+    fun unbindCredential(credentialId: String) {
+        store.reorder { all ->
+            all.map { if (it.credentialId == credentialId) it.copy(credentialId = null) else it }
+        }
+        hosts = canonicalHosts()
+    }
+
     fun delete(id: String) {
         store.remove(id)
         hosts = canonicalHosts()

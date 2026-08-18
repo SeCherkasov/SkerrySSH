@@ -149,7 +149,6 @@ import app.skerry.ui.vault.mockSecrets
 import app.skerry.ui.vault.rememberCertInfo
 import app.skerry.ui.vault.rememberKeyInfo
 import app.skerry.ui.vault.secretMetaLine
-import app.skerry.ui.vault.unbindCredential
 import app.skerry.ui.theme.Skerry
 
 /**
@@ -348,9 +347,11 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 onConfirm = {
                     // The cascade is consistent only with a live hostsController (always present behind the
                     // gate): first unbind hosts so they don't reference the deleted secret, then delete it.
+                    // A vault known to be locked abandons the delete — see the desktop cascade for why the
+                    // check is `!= false`.
                     val hc = hostsController
-                    if (hc != null) {
-                        bound.forEach { host -> hc.save(host.unbindCredential()) }
+                    if (hc != null && vault?.isUnlocked != false) {
+                        hc.unbindCredential(victim.id)
                         credentials.delete(victim.id)
                         if (selectedId == victim.id) selectedId = null
                     }

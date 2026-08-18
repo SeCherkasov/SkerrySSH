@@ -143,6 +143,20 @@ class VaultHostStoreTest {
     }
 
     @Test
+    fun `a content-only reorder does not bump the layout record`() {
+        // The layout record is the whole account's host order under LWW: bumping it on a transform
+        // that only rewrote a field (renameGroup, unbinding a deleted secret) would let a device
+        // holding an older order push it back over a reorder made elsewhere.
+        val vault = FakeVault()
+        val store = VaultHostStore(vault)
+        store.put(host("a")); store.put(host("b"))
+        val before = vault.records().single { it.id == WorkspaceLayoutStore.LAYOUT_ID }.version
+        store.reorder { list -> list.map { if (it.id == "a") it.copy(group = "prod") else it } }
+        val after = vault.records().single { it.id == WorkspaceLayoutStore.LAYOUT_ID }.version
+        assertEquals(before, after)
+    }
+
+    @Test
     fun `jump host reference survives persist and reload`() {
         val vault = FakeVault()
         VaultHostStore(vault).put(host("web").copy(jumpHostId = "bastion"))

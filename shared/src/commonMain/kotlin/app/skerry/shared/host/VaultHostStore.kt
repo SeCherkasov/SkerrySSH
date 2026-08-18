@@ -86,6 +86,11 @@ class VaultHostStore(
         // group list, and writing the new host order over a record we could not read would replace
         // that list with an empty one. The profile changes above are already committed.
         val existing = layout.readOrNull() ?: return@transaction
-        layout.write(existing.copy(hostOrder = updated.map { it.id }))
+        // Only when the order actually moved: a content-only transform (renameGroup, unbinding a
+        // deleted secret) would otherwise bump the layout record on every call, and that record is
+        // the whole account's host order under LWW — a device still holding an older order would
+        // push it back over a reorder made elsewhere.
+        val order = updated.map { it.id }
+        if (order != existing.hostOrder) layout.write(existing.copy(hostOrder = order))
     }
 }
