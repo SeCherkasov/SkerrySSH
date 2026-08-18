@@ -11,8 +11,12 @@ import app.skerry.shared.vault.CredentialUsage
  * separate mock layout would drift the moment a column changes.
  */
 internal fun mockSecrets(): List<Pair<Credential, String>> = listOf(
-    Credential("m1", "id_ed25519 — deploy", CredentialSecret.PrivateKey("mock-pem", passphrase = "mock")) to
-        "ED25519 · SHA256:9pQk…dR2f · prod-web-01, prod-web-02",
+    Credential(
+        "m1",
+        "id_ed25519 — deploy",
+        CredentialSecret.PrivateKey("mock-pem", passphrase = "mock"),
+        note = "Deploy key for the web tier. Rotate with the quarterly key sweep.",
+    ) to "ED25519 · SHA256:9pQk…dR2f · prod-web-01, prod-web-02",
     Credential("m2", "id_rsa — legacy jump", CredentialSecret.PrivateKey("mock-pem")) to
         "RSA-4096 · SHA256:1cTz…88Aa · jump.corp",
     Credential("m3", "db-master · postgres", CredentialSecret.Password("mock")) to

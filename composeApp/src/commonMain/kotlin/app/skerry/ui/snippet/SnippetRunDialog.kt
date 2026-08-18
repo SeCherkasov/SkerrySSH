@@ -36,7 +36,6 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippet_vars_preview
 import app.skerry.ui.generated.resources.lib_snippet_vars_recording_note
 import app.skerry.ui.generated.resources.lib_snippet_vars_run
-import app.skerry.ui.generated.resources.lib_snippet_vars_secret_note
 import app.skerry.ui.generated.resources.lib_snippets_run_title
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import app.skerry.ui.generated.resources.shell_cancel
@@ -90,6 +89,10 @@ private fun SnippetRunDialogContent(
 
     val preview = SnippetTemplate.assemble(request.segments, machine) { contextValue(it, masked = true) }
     val canRun = values.canRun
+    // Computed when the resolution changes, not on every keystroke: each call sanitizes the resolved
+    // passwords afresh, and a dialog whose job is to contain a secret should not leave a copy of it
+    // on the heap per character typed.
+    val secrets = remember(values.vaultResolutions) { values.vaultSecrets() }
     val confirm = {
         // The vault secrets ride along so the production guard's confirmation — one dialog later on
         // a #prod host — can mask the same spans this dialog's preview masked.
@@ -97,7 +100,7 @@ private fun SnippetRunDialogContent(
             onConfirm(
                 SnippetTemplate.assemble(request.segments, machine) { contextValue(it, masked = false) },
                 values.paramValues(),
-                values.vaultSecrets(),
+                secrets,
             )
         }
     }
@@ -152,9 +155,7 @@ private fun SnippetRunDialogContent(
                 // the notice counts characters that change on every keystroke, and a live region
                 // would read a new line out per character typed.
                 ClippedNotice(clipped, preview.length, announce = !takesFocus)
-                if (values.vaultRefs.isNotEmpty()) {
-                    Txt(stringResource(Res.string.lib_snippet_vars_secret_note), color = Skerry.colors.faint, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 10.dp))
-                }
+                SecretPlaintextNotice(secrets, topPadding = 10.dp)
                 if (request.recording) {
                     Txt(stringResource(Res.string.lib_snippet_vars_recording_note), color = Skerry.colors.sunset, size = 11.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
                 }

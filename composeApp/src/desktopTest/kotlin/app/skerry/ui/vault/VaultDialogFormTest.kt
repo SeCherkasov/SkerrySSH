@@ -16,6 +16,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vault_field_certificate
 import app.skerry.ui.generated.resources.vault_field_key_path
 import app.skerry.ui.generated.resources.vault_field_name
+import app.skerry.ui.generated.resources.vault_field_note
 import app.skerry.ui.generated.resources.vault_field_password
 import app.skerry.ui.generated.resources.vault_field_private_key_pem
 import kotlin.test.Test
@@ -124,11 +125,11 @@ class VaultDialogFormTest {
         assertEquals(KEY_PATH, created?.second)
     }
 
-    /** Renaming to the same label is a sync push with nothing in it, so the button stays shut. */
+    /** Saving the same name and note is a sync push with nothing in it, so the button stays shut. */
     @Test
-    fun `renaming to the same label changes nothing`() {
+    fun `re-saving an unchanged secret changes nothing`() {
         var renamed: String? = null
-        runForm({ RenameSecretDialog(currentLabel = NAME, onDismiss = {}, onConfirm = { renamed = it }) }) {
+        runForm({ EditSecretDialog(currentLabel = NAME, currentNote = null, onDismiss = {}, onConfirm = { label, _ -> renamed = label }) }) {
             onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
 
             onField(Res.string.vault_field_name).performTextReplacement(RENAMED)
@@ -136,6 +137,58 @@ class VaultDialogFormTest {
             waitForIdle()
         }
         assertEquals(RENAMED, renamed)
+    }
+
+    /** Renaming must not cost the note: the field opens prefilled and is handed back untouched. */
+    @Test
+    fun `an existing note survives a rename that never touches it`() {
+        var saved: Pair<String, String?>? = null
+        runForm({
+            EditSecretDialog(
+                currentLabel = NAME,
+                currentNote = "drop after the audit",
+                onDismiss = {},
+                onConfirm = { label, note -> saved = label to note },
+            )
+        }) {
+            onField(Res.string.vault_field_name).performTextReplacement(RENAMED)
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsEnabled().performClick()
+            waitForIdle()
+        }
+        assertEquals(RENAMED to "drop after the audit", saved)
+    }
+
+    /** Emptying the field means "no note", not "a note that is empty" — the store keys off null. */
+    @Test
+    fun `clearing the note hands back null`() {
+        var saved: Pair<String, String?>? = null
+        runForm({
+            EditSecretDialog(
+                currentLabel = NAME,
+                currentNote = "drop after the audit",
+                onDismiss = {},
+                onConfirm = { label, note -> saved = label to note },
+            )
+        }) {
+            onField(Res.string.vault_field_note).performTextReplacement("   ")
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsEnabled().performClick()
+            waitForIdle()
+        }
+        assertEquals(NAME to null, saved)
+    }
+
+    /** The note alone is enough of a change: a secret can be re-annotated without being renamed. */
+    @Test
+    fun `editing only the note enables save and normalizes it`() {
+        var saved: Pair<String, String?>? = null
+        runForm({ EditSecretDialog(currentLabel = NAME, currentNote = null, onDismiss = {}, onConfirm = { label, note -> saved = label to note }) }) {
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+
+            onField(Res.string.vault_field_note).performTextReplacement("  temp access for the audit  ")
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsEnabled().performClick()
+            waitForIdle()
+        }
+        assertEquals(NAME to "temp access for the audit", saved)
     }
 }
 

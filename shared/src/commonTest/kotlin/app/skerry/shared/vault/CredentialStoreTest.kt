@@ -105,60 +105,61 @@ class CredentialStoreTest {
     }
 
     @Test
-    fun `rename changes the label and keeps the id and secret`() {
+    fun `edit changes the label and keeps the id and secret`() {
         val store = CredentialStore(FakeVault())
         val secret = CredentialSecret.PrivateKey(privateKeyPem = "pem", passphrase = "pp")
         store.put(Credential("c-1", "old name", secret))
 
-        store.rename("c-1", "new name")
+        store.edit("c-1", "new name", note = null)
 
         assertEquals(Credential("c-1", "new name", secret), store.get("c-1"))
     }
 
     @Test
-    fun `rename bumps the record version so the change propagates to sync`() {
+    fun `edit bumps the record version so the change propagates to sync`() {
         val vault = FakeVault()
         val store = CredentialStore(vault)
         store.put(Credential("c-1", "old", CredentialSecret.Password("s")))
 
-        store.rename("c-1", "new")
+        store.edit("c-1", "new", note = null)
 
-        // A rename is a re-put of the same id: the version must advance so LWW/live-sync push it.
+        // An edit is a re-put of the same id: the version must advance so LWW/live-sync push it.
         assertEquals(2L, vault.records().single { it.id == "c-1" }.version)
     }
 
     @Test
-    fun `rename of a missing id is a no-op`() {
+    fun `edit of a missing id is a no-op`() {
         val store = CredentialStore(FakeVault())
 
-        store.rename("ghost", "whatever")
+        store.edit("ghost", "whatever", note = null)
 
         assertNull(store.get("ghost"))
         assertEquals(emptyList(), store.all())
     }
 
     @Test
-    fun `rename runs its read-modify-write inside a single transaction`() {
+    fun `edit runs its read-modify-write inside a single transaction`() {
         val vault = FakeVault()
         val store = CredentialStore(vault)
         store.put(Credential("c-1", "old", CredentialSecret.Password("s")))
         // A plain put is a single call and holds no transaction — the control for the assertion below.
         assertFalse(vault.lastPutInTransaction)
 
-        store.rename("c-1", "new")
+        store.edit("c-1", "new", note = null)
 
-        // rename's put must run under a held transaction so a concurrent mergeRemote can't slip a
-        // tombstone between the get and the put (TOCTOU resurrection across all synced devices).
+        // edit's read AND its put must run under a held transaction, or a concurrent mergeRemote can
+        // slip a tombstone between them (TOCTOU resurrection across all synced devices).
+        assertTrue(vault.lastReadInTransaction)
         assertTrue(vault.lastPutInTransaction)
     }
 
     @Test
-    fun `rename does not resurrect a deleted credential`() {
+    fun `edit does not resurrect a deleted credential`() {
         val store = CredentialStore(FakeVault())
         store.put(Credential("c-1", "old", CredentialSecret.Password("s")))
         store.remove("c-1")
 
-        store.rename("c-1", "back from the dead")
+        store.edit("c-1", "back from the dead", note = null)
 
         assertNull(store.get("c-1"))
     }
@@ -171,6 +172,96 @@ class CredentialStoreTest {
         store.put(Credential("c-1", "Key", CredentialSecret.Password("x")))
 
         assertEquals(listOf("c-1"), store.all().map { it.id })
+    }
+
+    @Test
+    fun `edit writes the note and can clear it again`() {
+        val store = CredentialStore(FakeVault())
+        val secret = CredentialSecret.PrivateKey(privateKeyPem = "pem", passphrase = null)
+        store.put(Credential("c-1", "temp key", secret))
+
+        store.edit("c-1", "temp key", note = "audit access, drop after 2026-09-01")
+        assertEquals("audit access, drop after 2026-09-01", store.get("c-1")?.note)
+
+        store.edit("c-1", "temp key", note = null)
+        assertNull(store.get("c-1")?.note)
+    }
+
+    @Test
+    fun `putKeepingNote keeps the stored note under new material`() {
+        val store = CredentialStore(FakeVault())
+        store.put(Credential("c-1", "temp key", CredentialSecret.PrivateKey("pem")))
+        store.edit("c-1", "temp key", note = "audit access")
+
+        // What a form re-saving a secret does: it builds the whole record from its fields, and it
+        // has no note field to build one from.
+        store.putKeepingNote(Credential("c-1", "temp key", CredentialSecret.PrivateKey("pem2")))
+
+        assertEquals("audit access", store.get("c-1")?.note)
+        assertEquals(CredentialSecret.PrivateKey("pem2"), store.get("c-1")?.secret)
+    }
+
+    @Test
+    fun `putKeepingNote keeps the caller's note when there is no record yet`() {
+        val store = CredentialStore(FakeVault())
+
+        store.putKeepingNote(Credential("c-1", "fresh", CredentialSecret.Password("x"), note = "born with one"))
+
+        assertEquals("born with one", store.get("c-1")?.note)
+    }
+
+    @Test
+    fun `a credential does not print its own note`() {
+        val cred = Credential("c-1", "prod root", CredentialSecret.Password("s3cret"), note = "root password is in 1Password")
+
+        // The note lives in the same encrypted payload as the material it describes, and says as much
+        // about it: it is redacted from logs and crash reports with the rest.
+        assertEquals("Credential(id=c-1, label=redacted, note=redacted, secret=redacted)", cred.toString())
+    }
+
+    @Test
+    fun `putKeepingNote runs its read-modify-write inside a single transaction`() {
+        val vault = FakeVault()
+        val store = CredentialStore(vault)
+        store.put(Credential("c-1", "temp key", CredentialSecret.Password("x")))
+        // A plain put holds no transaction — the control, as in the `edit` case above.
+        assertFalse(vault.lastPutInTransaction)
+
+        store.putKeepingNote(Credential("c-1", "temp key", CredentialSecret.Password("y")))
+
+        // Both halves: a merge landing a tombstone between a read taken outside the transaction and
+        // the write inside it would still raise the deleted secret on every device.
+        assertTrue(vault.lastReadInTransaction)
+        assertTrue(vault.lastPutInTransaction)
+    }
+
+    @Test
+    fun `putKeepingNote does not raise a deleted credential from the dead`() {
+        val store = CredentialStore(FakeVault())
+        store.put(Credential("c-1", "temp key", CredentialSecret.Password("x")))
+        store.remove("c-1")
+
+        // get() answers null for a tombstone exactly as it does for an id that never existed, so a
+        // write through that would resurrect the secret on every synced device — the same trap
+        // `edit` guards against.
+        store.putKeepingNote(Credential("c-1", "temp key", CredentialSecret.Password("y")))
+
+        assertNull(store.get("c-1"))
+        assertEquals(emptyList(), store.all())
+    }
+
+    @Test
+    fun `a credential written before notes existed reads back without one`() {
+        val vault = FakeVault()
+        // Exactly the payload a client predating the field wrote: no "note" key at all.
+        vault.put(
+            "c-1",
+            RecordType.CREDENTIAL,
+            """{"id":"c-1","label":"Prod root","secret":{"type":"password","password":"s3cret"}}""".encodeToByteArray(),
+        )
+        val store = CredentialStore(vault)
+
+        assertEquals(Credential("c-1", "Prod root", CredentialSecret.Password("s3cret"), note = null), store.get("c-1"))
     }
 
     @Test

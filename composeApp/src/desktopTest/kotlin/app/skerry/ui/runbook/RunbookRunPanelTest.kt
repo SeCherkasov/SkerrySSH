@@ -9,6 +9,7 @@ import app.skerry.shared.runbook.Runbook
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.snippet.SnippetMoment
 import app.skerry.shared.snippet.SnippetRunEnvironment
+import app.skerry.ui.desktop.drawnText
 import app.skerry.ui.desktop.runForm
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
@@ -25,10 +26,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.onRoot
 import kotlin.test.assertTrue
 
 /**
@@ -85,7 +82,7 @@ class RunbookRunPanelTest {
             runner.requestStart(runbook, target())
             runner.confirmStart { "" }
             runForm({ runner.run?.let { RunbookRunPanel(runner, it) } }) {
-                val drawn = onRoot(useUnmergedTree = true).fetchSemanticsNode().allText()
+                val drawn = drawnText()
                 assertTrue(drawn.isNotEmpty(), "the panel drew nothing")
                 assertTrue(
                     drawn.none { text -> text.codePoints().anyMatch { Character.getType(it) == Character.FORMAT.toInt() } },
@@ -103,9 +100,6 @@ class RunbookRunPanelTest {
             scope.cancel()
         }
     }
-
-    private fun SemanticsNode.allText(): List<String> =
-        config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } + children.flatMap { it.allText() }
 
     @Test
     fun `the panel completes and skips an interactive step`() {

@@ -29,6 +29,14 @@ internal class FakeVault : Vault {
     var lastPutInTransaction: Boolean = false
         private set
 
+    /**
+     * Whether the most recent record read happened while a [transaction] was held. A store that reads
+     * outside the transaction and writes inside it still passes [lastPutInTransaction] while leaving
+     * the check-then-write race wide open, which is the whole point of holding one.
+     */
+    var lastReadInTransaction: Boolean = false
+        private set
+
     override fun <T> transaction(block: () -> T): T {
         transactionDepth++
         try {
@@ -45,13 +53,18 @@ internal class FakeVault : Vault {
     override fun lock() = Unit
     override fun reset() { entries.clear() }
 
-    override fun records(): List<VaultRecord> = entries.values.map { it.record }
+    override fun records(): List<VaultRecord> {
+        lastReadInTransaction = transactionDepth > 0
+        return entries.values.map { it.record }
+    }
 
     override fun syncMeta(): SyncMeta? = null
     override fun mergeRemote(remote: List<VaultRecord>): MergeResult = MergeResult.EMPTY
 
-    override fun openPayload(id: String): ByteArray? =
-        if (id in unreadable) null else entries[id]?.takeIf { !it.record.deleted }?.payload
+    override fun openPayload(id: String): ByteArray? {
+        lastReadInTransaction = transactionDepth > 0
+        return if (id in unreadable) null else entries[id]?.takeIf { !it.record.deleted }?.payload
+    }
 
     override fun put(id: String, type: RecordType, payload: ByteArray) = putAtLeast(id, type, payload, minVersion = 0L)
 

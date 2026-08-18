@@ -102,10 +102,16 @@
     <string name="lib_snippet_vars_preview">命令预览</string>
     <string name="lib_snippet_vars_clipboard">剪贴板</string>
     <string name="lib_snippet_vars_clipboard_empty">（空）</string>
-    <string name="lib_snippet_vars_vault">保险库密钥</string>
+    <string name="lib_snippet_vars_vault">保险库条目</string>
     <string name="lib_snippet_vars_vault_unnamed">（无法显示的名称）</string>
-    <string name="lib_snippet_vars_vault_missing">保险库中没有名为“%1$s”的密码</string>
-    <string name="lib_snippet_vars_vault_not_password">保险库条目“%1$s”不是密码</string>
+    <string name="lib_snippet_vars_vault_ambiguous">保险库中有多个名为“%1$s”的条目</string>
+    <plurals name="lib_snippet_vars_vault_more">
+        <item quantity="other">另有 %1$d 项</item>
+    </plurals>
+    <string name="lib_snippet_vars_vault_ready">“%1$s”已就绪</string>
+    <string name="lib_snippet_vars_vault_reading">正在读取“%1$s”…</string>
+    <string name="lib_snippet_vars_vault_missing">保险库中没有名为“%1$s”的条目</string>
+    <string name="lib_snippet_vars_vault_unusable">保险库条目“%1$s”没有可插入的内容</string>
     <string name="lib_snippet_vars_secret_note">密钥以明文形式插入命令——会显示在屏幕、回滚缓冲区和 shell 历史中。</string>
     <string name="lib_snippet_vars_recording_note">正在录制：解析后的命令将保存到录制文件中。</string>
     <string name="lib_snippet_vars_run">运行</string>
@@ -292,7 +298,7 @@
     <string name="lib_snippets_help_var_uuid">随机 UUID</string>
     <string name="lib_snippets_help_var_random">随机字符；冒号后为长度（最多 64）和字符集 — alnum、hex 或 special；未知名称回退到默认字符集</string>
     <string name="lib_snippets_help_var_clipboard">系统剪贴板，确认时读取一次</string>
-    <string name="lib_snippets_help_var_vault">按条目名称取保险库中的密码</string>
+    <string name="lib_snippets_help_var_vault">按条目名称取保险库中的密码或公钥</string>
     <string name="lib_snippets_help_var_param">其他任意名称会在运行前询问取值；冒号后的部分为预填默认值</string>
     <string name="lib_snippets_help_var_choices">用 | 分隔的选项会变成选择列表；第一项为默认值</string>
     <string name="lib_snippets_help_examples">示例</string>

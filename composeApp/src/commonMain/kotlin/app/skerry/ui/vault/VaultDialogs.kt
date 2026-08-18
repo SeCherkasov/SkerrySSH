@@ -50,6 +50,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.text.capNotes
+import app.skerry.shared.text.normalizeNotes
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyType
 import app.skerry.ui.generated.resources.Res
@@ -99,8 +101,10 @@ import app.skerry.ui.generated.resources.vault_placeholder_name_key_file
 import app.skerry.ui.generated.resources.vault_placeholder_name_password
 import app.skerry.ui.generated.resources.vault_placeholder_optional
 import app.skerry.ui.generated.resources.vault_placeholder_password
-import app.skerry.ui.generated.resources.vault_rename
-import app.skerry.ui.generated.resources.vault_rename_title
+import app.skerry.ui.generated.resources.vault_edit_title
+import app.skerry.ui.generated.resources.vault_field_note
+import app.skerry.ui.generated.resources.vault_placeholder_note
+import app.skerry.ui.generated.resources.vault_save
 import app.skerry.ui.nav.PlatformBackHandler
 import app.skerry.ui.vault.title
 import kotlinx.coroutines.launch
@@ -296,20 +300,38 @@ internal fun PasswordConfirmDialog(
 }
 
 /**
- * Renames a keychain secret: a single prefilled NAME field. The secret material and id are untouched
- * (only the label changes). Confirm is enabled only for a non-blank label that actually differs — a
- * rename to the same name is a pointless sync push. Shared by desktop and mobile. [onConfirm] gets the
- * trimmed label.
+ * Edits what a keychain secret is called: its NAME and its free-form NOTE. The secret material and
+ * id are untouched. Confirm is enabled only for a non-blank name once something actually changed —
+ * re-saving identical text is a pointless sync push. Shared by desktop and mobile. [onConfirm] gets
+ * the trimmed label and the normalized note (`null` when it is blank).
  */
 @Composable
-internal fun RenameSecretDialog(currentLabel: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+internal fun EditSecretDialog(
+    currentLabel: String,
+    currentNote: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (label: String, note: String?) -> Unit,
+) {
     var name by remember { mutableStateOf(currentLabel) }
+    var note by remember { mutableStateOf(currentNote.orEmpty()) }
     val trimmed = name.trim()
-    val valid = trimmed.isNotEmpty() && trimmed != currentLabel
-    VaultDialogScaffold(stringResource(Res.string.vault_rename_title, currentLabel), null, onDismiss) {
+    val normalizedNote = normalizeNotes(note)
+    val valid = trimmed.isNotEmpty() && (trimmed != currentLabel || normalizedNote != currentNote)
+    VaultDialogScaffold(stringResource(Res.string.vault_edit_title, currentLabel), null, onDismiss) {
         // The old label arrives prefilled: select it so typing replaces the name outright.
         DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = currentLabel, selectAllOnFocus = name == currentLabel)
-        DialogButtons(confirmLabel = stringResource(Res.string.vault_rename), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onConfirm(trimmed) })
+        // Capped per keystroke, so the field can never hold more than the store would keep.
+        Box(Modifier.padding(top = 16.dp)) {
+            DialogField(
+                stringResource(Res.string.vault_field_note),
+                note,
+                { note = capNotes(it) },
+                placeholder = stringResource(Res.string.vault_placeholder_note),
+                singleLine = false,
+                mono = false,
+            )
+        }
+        DialogButtons(confirmLabel = stringResource(Res.string.vault_save), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onConfirm(trimmed, normalizedNote) })
     }
 }
 
@@ -373,6 +395,12 @@ internal fun DialogField(
     placeholder: String,
     password: Boolean = false,
     singleLine: Boolean = true,
+    /**
+     * Monospace, at the smaller size a blob needs. Default for a multi-line field, which in this
+     * dialog set means a PEM or a certificate; a note is prose and reads in the UI font, the same
+     * way it is written in the connection form and drawn back in the panel.
+     */
+    mono: Boolean = !singleLine,
     // Explicit keyboard type override: for visible but sensitive fields (PEM key) set
     // KeyboardType.Password — disables IME autocorrect/dictionary without visually masking input.
     keyboardType: KeyboardType? = null,
@@ -380,11 +408,10 @@ internal fun DialogField(
     selectAllOnFocus: Boolean = false,
 ) {
     val ui = LocalFonts.current.ui
-    val mono = LocalFonts.current.mono
-    // Multi-line fields (PEM/certificate) use monospace so long blobs read like a file.
+    val monoFont = LocalFonts.current.mono
     val textColor = Skerry.colors.text
-    val style = remember(ui, mono, singleLine, textColor) {
-        TextStyle(color = textColor, fontSize = if (singleLine) 13.sp else 11.sp, fontFamily = if (singleLine) ui else mono)
+    val style = remember(ui, monoFont, mono, textColor) {
+        TextStyle(color = textColor, fontSize = if (mono) 11.sp else 13.sp, fontFamily = if (mono) monoFont else ui)
     }
     // Auto-scroll to focus above the keyboard. The window in adjustResize mode (see AndroidManifest)
     // shrinks itself when the keyboard appears, so WindowInsets.ime is always 0 here — observing the inset
@@ -434,7 +461,7 @@ internal fun DialogField(
                         .padding(horizontal = 11.dp, vertical = 10.dp)
                         .then(if (singleLine) Modifier else Modifier.verticalScroll(rememberScrollState())),
                 ) {
-                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = if (singleLine) 13.sp else 11.sp, font = if (singleLine) ui else mono)
+                    if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = if (mono) 11.sp else 13.sp, font = if (mono) monoFont else ui)
                     inner()
                 }
             },

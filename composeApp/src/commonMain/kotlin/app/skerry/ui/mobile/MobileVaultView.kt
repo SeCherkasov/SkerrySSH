@@ -67,7 +67,7 @@ import app.skerry.ui.generated.resources.vault_import_certificate
 import app.skerry.ui.generated.resources.vault_key_unreadable
 import app.skerry.ui.generated.resources.vault_label_public_key
 import app.skerry.ui.generated.resources.vault_link_key_file
-import app.skerry.ui.generated.resources.vault_rename
+import app.skerry.ui.generated.resources.vault_edit
 import app.skerry.ui.generated.resources.vault_subtitle_certificate
 import app.skerry.ui.generated.resources.vault_subtitle_certificate_typed
 import app.skerry.ui.generated.resources.vault_subtitle_key_file
@@ -129,9 +129,10 @@ import app.skerry.ui.app.LocalVault
 import app.skerry.ui.app.LocalVaultBiometrics
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.vault.PasswordConfirmDialog
-import app.skerry.ui.vault.RenameSecretDialog
+import app.skerry.ui.vault.EditSecretDialog
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.vault.SecretIcon
+import app.skerry.ui.vault.SecretNote
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.modalBody
@@ -196,7 +197,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     val secretFiles = LocalSecretFileReader.current
     var showImportCert by remember { mutableStateOf(false) }
     var showLinkKeyFile by remember { mutableStateOf(false) }
-    var pendingRename by remember { mutableStateOf<Credential?>(null) }
+    var pendingEdit by remember { mutableStateOf<Credential?>(null) }
     var pendingDelete by remember { mutableStateOf<Credential?>(null) }
 
     val credItems = VaultPresentation.credentialsIn(category, allCreds)
@@ -208,7 +209,7 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
     // over the centered dialog and covers the bottom input fields above the keyboard. LaunchedEffect
     // writes the flag only on value change (not every list recomposition); DisposableEffect clears it
     // on leaving the tab so the tab bar isn't left hidden.
-    val modalOpen = showGenerate || showAddPassword || showImportCert || showLinkKeyFile || pendingRename != null || pendingDelete != null ||
+    val modalOpen = showGenerate || showAddPassword || showImportCert || showLinkKeyFile || pendingEdit != null || pendingDelete != null ||
         selectedCred != null || copyAuth.passwordPromptVisible || exportFailed || showHelp
     LaunchedEffect(modalOpen) { state.modalOverlay(modalOpen) }
     DisposableEffect(Unit) { onDispose { state.modalOverlay(false) } }
@@ -323,17 +324,18 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 },
             )
         }
-        pendingRename?.let { target ->
-            // Rename edits only the label; the id (hosts reference it) and the secret stay put, and the
-            // change propagates to sync on its own (see CredentialManagerController.rename).
-            RenameSecretDialog(
+        pendingEdit?.let { target ->
+            // Editing touches only the name and the note; the id (hosts reference it) and the secret stay
+            // put, and the change propagates to sync on its own (see CredentialManagerController.edit).
+            EditSecretDialog(
                 currentLabel = target.label,
-                onDismiss = { pendingRename = null },
-                onConfirm = { newLabel ->
+                currentNote = target.note,
+                onDismiss = { pendingEdit = null },
+                onConfirm = { newLabel, newNote ->
                     // Abort on a lock race: idle auto-lock can fire while the dialog is open, and vault
                     // CRUD throws once locked. Mirrors the delete guard.
-                    if (vault?.isUnlocked == true) credentials.rename(target.id, newLabel)
-                    pendingRename = null
+                    if (vault?.isUnlocked == true) credentials.edit(target.id, newLabel, newNote)
+                    pendingEdit = null
                 },
             )
         }
@@ -378,9 +380,9 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 onExportPublic = { export -> exportPublic(export, scope) { exportFailed = it.worthReporting } },
                 // Close the detail sheet before showing a centered dialog (rename/delete): otherwise the
                 // sheet, drawn on top, would cover it and leave only its edge visible.
-                onRename = {
+                onEdit = {
                     selectedId = null
-                    pendingRename = credential
+                    pendingEdit = credential
                 },
                 onDelete = {
                     selectedId = null
@@ -578,7 +580,7 @@ private fun MobileSecretDetailSheet(
     onCopyPassword: (String) -> Unit,
     onExportKey: (SecretExport.PrivateKey) -> Unit,
     onExportPublic: (SecretExport.Public) -> Unit,
-    onRename: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -610,6 +612,7 @@ private fun MobileSecretDetailSheet(
                     // 14dp apart is the noise this redesign removed from the rows.
                     Txt(credential.label, color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold)
                 }
+                SecretNote(credential.note)
                 SecretFactRows(
                     typeLabel = subtitle,
                     fingerprint = keyInfo?.fingerprintSha256?.let { shortFingerprint(it) }
@@ -632,8 +635,8 @@ private fun MobileSecretDetailSheet(
                 }
                 UsedByHosts(hosts, snippetLabels, mono)
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    // Copy is type-specific (what's copyable differs); rename is universal and edits only
-                    // the label; export/delete are type-specific again.
+                    // Copy is type-specific (what's copyable differs); edit is universal and touches only
+                    // the name and the note; export/delete are type-specific again.
                     when (secret) {
                         is CredentialSecret.Certificate ->
                             MobileSheetButton(stringResource(Res.string.vault_copy_certificate), onClick = { onCopy(secret.certificate) }, icon = "content_copy", modifier = Modifier.fillMaxWidth())
@@ -647,7 +650,7 @@ private fun MobileSecretDetailSheet(
                         // Nothing to copy: the material is on disk, and the refs are already spelled out above.
                         is CredentialSecret.KeyFile -> Unit
                     }
-                    MobileSheetButton(stringResource(Res.string.vault_rename), onClick = onRename, filled = false, modifier = Modifier.fillMaxWidth())
+                    MobileSheetButton(stringResource(Res.string.vault_edit), onClick = onEdit, filled = false, modifier = Modifier.fillMaxWidth())
                     // Export hands out the private key; see the desktop panel.
                     val deleteButton: @Composable (Modifier) -> Unit = { modifier ->
                         MobileSheetButton(stringResource(Res.string.vault_delete), onClick = onDelete, filled = false, danger = true, modifier = modifier)

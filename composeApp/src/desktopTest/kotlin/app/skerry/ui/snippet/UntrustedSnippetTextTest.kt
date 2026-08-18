@@ -17,6 +17,8 @@ import app.skerry.shared.snippet.SnippetMoment
 import app.skerry.shared.snippet.SnippetRunEnvironment
 import app.skerry.ui.design.boundedVisibleText
 import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.desktop.drawnText
+import app.skerry.ui.desktop.allText
 import app.skerry.ui.desktop.runForm
 import app.skerry.ui.desktop.seededSnippets
 import app.skerry.ui.mobile.MobileSnippetCard
@@ -139,7 +141,7 @@ class UntrustedSnippetTextTest {
         manager.save(SnippetDraft(label = "Beep", command = "echo ok\u0007 \${{host}}"))
         manager.run(manager.snippets.first().id) { _, _ -> }
         runForm({ SnippetRunDialog(manager) }) {
-            val drawn = onRoot(useUnmergedTree = true).fetchSemanticsNode().allText()
+            val drawn = drawnText()
             assertTrue(
                 drawn.any { it.contains("<U+0007>") },
                 "the control byte is spelled out in the previewed line, was $drawn",
@@ -191,7 +193,7 @@ class UntrustedSnippetTextTest {
         try {
             runner.requestStart(runbook, silentTarget())
             runForm({ RunbookStartDialog(runner) }) {
-                val drawn = onRoot(useUnmergedTree = true).fetchSemanticsNode().allText()
+                val drawn = drawnText()
                 assertTrue(
                     drawn.any { it.contains("<U+0007>") },
                     "the control byte is spelled out where the user reads the line, was $drawn",
@@ -396,6 +398,4 @@ class UntrustedSnippetTextTest {
         return own + children.flatMap { it.liveRegionText() }
     }
 
-    private fun SemanticsNode.allText(): List<String> =
-        config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } + children.flatMap { it.allText() }
 }

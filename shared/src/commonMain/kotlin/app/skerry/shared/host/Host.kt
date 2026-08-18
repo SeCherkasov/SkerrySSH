@@ -4,6 +4,8 @@ import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.rdp.RdpSpec
 import app.skerry.shared.ssh.ConnectionType
+import app.skerry.shared.text.MAX_NOTES_LENGTH
+import app.skerry.shared.text.normalizeNotes
 import kotlinx.serialization.Serializable
 
 /**
