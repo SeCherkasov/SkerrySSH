@@ -13,8 +13,10 @@ import android.os.Message
 import android.os.Messenger
 import android.os.ParcelFileDescriptor
 import app.skerry.shared.ai.AiException
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -30,7 +32,20 @@ class ServiceLlmHostLauncher(
 
     private val appContext = context.applicationContext
 
-    override suspend fun launch(): LlmHostLink = withContext(Dispatchers.IO) {
+    override suspend fun launch(): LlmHostLink {
+        // The desktop launcher's window, and here it costs more: `withContext` discards what it
+        // produced when a cancellation lands as it completes, and an unbound service keeps the
+        // `:llm` process alive with the model still mapped for the rest of the app's life.
+        val built = AtomicReference<LlmHostLink?>()
+        try {
+            return bind(built)
+        } catch (e: Throwable) {
+            runCatching { built.getAndSet(null)?.let { withContext(NonCancellable) { it.close() } } }
+            throw e
+        }
+    }
+
+    private suspend fun bind(built: AtomicReference<LlmHostLink?>): LlmHostLink = withContext(Dispatchers.IO) {
         val binder = CompletableDeferred<IBinder?>()
         val connection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -49,10 +64,13 @@ class ServiceLlmHostLauncher(
             runCatching { appContext.unbindService(connection) }
             fail("could not start the inference service")
         }
+        // Owns the descriptor from the moment it exists until the link takes it: `dup()` below can
+        // fail on a full fd table, and the reply can arrive as this call is giving up.
+        val opened = AtomicReference<ParcelFileDescriptor?>()
         try {
             val service = withTimeoutOrNull(BIND_TIMEOUT_MILLIS) { binder.await() }
                 ?: fail("the inference service did not start")
-            val channel = openChannel(Messenger(service)) ?: fail("the inference service gave no channel")
+            val channel = openChannel(Messenger(service), opened) ?: fail("the inference service gave no channel")
             StreamLlmHostLink(
                 // One descriptor per stream (see LlmHostService): the socket is full duplex, but a
                 // ParcelFileDescriptor must not be closed twice.
@@ -60,21 +78,29 @@ class ServiceLlmHostLauncher(
                 output = ParcelFileDescriptor.AutoCloseOutputStream(channel.dup()),
             ) {
                 runCatching { appContext.unbindService(connection) }
-            }
+            }.also(built::set)
         } catch (e: Throwable) {
+            opened.getAndSet(null)?.let { runCatching { it.close() } }
             runCatching { appContext.unbindService(connection) }
             throw e
         }
     }
 
-    /** Asks the service for a socket pair and waits for the descriptor to come back. */
-    private suspend fun openChannel(service: Messenger): ParcelFileDescriptor? {
+    /**
+     * Asks the service for a socket pair and waits for the descriptor to come back. What comes back
+     * is published into [held] before it is handed over, so that a reply and a caller that stopped
+     * waiting cannot each assume the other owns it — see [deliverOrClose].
+     */
+    private suspend fun openChannel(
+        service: Messenger,
+        held: AtomicReference<ParcelFileDescriptor?>,
+    ): ParcelFileDescriptor? {
         val answer = CompletableDeferred<ParcelFileDescriptor?>()
         val thread = HandlerThread("llm-host-reply").also { it.start() }
         try {
             val replyTo = Messenger(
                 Handler(thread.looper) { message ->
-                    answer.complete(message.data?.channel())
+                    deliverOrClose(answer, held, message.data?.channel()) { it.close() }
                     true
                 },
             )
@@ -85,6 +111,9 @@ class ServiceLlmHostLauncher(
             service.send(request)
             return withTimeoutOrNull(BIND_TIMEOUT_MILLIS) { answer.await() }
         } finally {
+            // Shut on every exit, a cancellation included: past this point a reply reaches nobody,
+            // and the handler closes it rather than leaving it in a deferred no one reads.
+            answer.complete(null)
             thread.quitSafely()
         }
     }

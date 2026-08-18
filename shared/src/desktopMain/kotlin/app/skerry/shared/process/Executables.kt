@@ -21,8 +21,13 @@ fun resolveExecutableOnPath(name: String): String? {
         ?.absolutePath
 }
 
-private val isWindows: Boolean =
-    System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
+private val osName: String = System.getProperty("os.name").orEmpty()
+
+/** Desktop host is Windows. One definition: three copies of this expression drifted apart once. */
+internal val isWindows: Boolean = osName.startsWith("Windows", ignoreCase = true)
+
+/** Desktop host is Linux. Same reason as [isWindows]. */
+internal val isLinux: Boolean = osName.startsWith("Linux", ignoreCase = true)
 
 private val windowsExtensions: List<String> =
     (System.getenv("PATHEXT") ?: ".EXE;.BAT;.CMD").split(';').filter { it.startsWith('.') }

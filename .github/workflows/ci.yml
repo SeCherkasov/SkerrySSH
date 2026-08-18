@@ -45,11 +45,13 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
-      - name: Install ffmpeg
-        # The desktop H.264 decoder is an ffmpeg process, and the flags it drives one with were
-        # arrived at empirically (see FfmpegH264DecoderTest). Its test skips itself where there is no
-        # ffmpeg, so without this step a regression in those flags would go green here.
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install test tools
+        # ffmpeg: the desktop H.264 decoder is an ffmpeg process, and the flags it drives one with
+        # were arrived at empirically (see FfmpegH264DecoderTest). binutils: LlamatikNativeIsaTest
+        # disassembles the shipped natives to prove they do not run AVX-512 before any CPU dispatch
+        # (see the llamatik pin in gradle/libs.versions.toml). Both tests skip themselves where the
+        # tool is missing, so without this step a regression in either would go green here.
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg binutils
 
       - name: Test
         # `allTests` as well as `test`: :shared and :composeApp are Kotlin Multiplatform modules
@@ -59,7 +61,11 @@ jobs:
         # Under xvfb-run because compose-resources asks AWT for the screen resolution when it loads
         # a string, which throws HeadlessException on a runner with no display — the failure lands
         # inside a coroutine and surfaces as a test that never reaches its final state.
-        run: xvfb-run --auto-servernum ./gradlew test allTests --stacktrace
+        #
+        # -PskerryCi: binutils are installed above, so LlamatikNativeIsaTest treats a guard it
+        # cannot run as a failure rather than a skip. A property, not an environment variable — see
+        # the comment on it in shared/build.gradle.kts.
+        run: xvfb-run --auto-servernum ./gradlew test allTests --stacktrace -PskerryCi=1
 
       # Static analysis. Runs after the tests so a red suite is reported first — detekt findings are
       # cheaper to read once the behaviour is known good. Existing findings sit in
