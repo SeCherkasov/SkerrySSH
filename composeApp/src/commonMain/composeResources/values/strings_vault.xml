@@ -88,13 +88,13 @@
     <string name="vault_copy">Copy</string>
 
     <!-- Edit secret dialog: name and note. -->
-    <string name="vault_edit_title">Edit \"%1$s\"</string>
+    <string name="vault_edit_title">Edit “%1$s”</string>
     <string name="vault_field_note">NOTE</string>
     <string name="vault_placeholder_note">e.g. temporary access for the audit, remove in May</string>
     <string name="vault_save">Save</string>
 
     <!-- Delete secret dialog. -->
-    <string name="vault_delete_title">Delete \"%1$s\"?</string>
+    <string name="vault_delete_title">Delete “%1$s”?</string>
     <string name="vault_delete_detail_none">This is removed from your vault. This can't be undone.</string>
     <string name="vault_delete_detail_bound">%1$d hosts will lose this credential and ask for a password on next connect. Can't be undone.</string>
 

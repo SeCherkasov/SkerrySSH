@@ -117,7 +117,7 @@
 
     <string name="conn_import_action">Import from ssh_config</string>
     <string name="conn_import_title">Import from ssh_config</string>
-    <string name="conn_import_subtitle">Pick the hosts to add. Keys aren\'t imported — you set authentication when you connect.</string>
+    <string name="conn_import_subtitle">Pick the hosts to add. Keys aren't imported — you set authentication when you connect.</string>
     <string name="conn_import_select_all">Select all</string>
     <string name="conn_import_empty">No hosts found in this file.</string>
     <string name="conn_import_button">Import (%1$d)</string>
@@ -156,7 +156,7 @@
 
     <!-- RDP audio redirection -->
     <string name="conn_field_audio">Audio</string>
-    <string name="conn_audio_redirect">Play the session\'s sound here</string>
+    <string name="conn_audio_redirect">Play the session's sound here</string>
     <string name="conn_audio_redirect_desc">The remote desktop plays through this device instead of staying on the server.</string>
     <string name="conn_field_clipboard">Clipboard</string>
     <string name="conn_rdp_import_no_address">The file names no address to connect to.</string>
@@ -184,7 +184,7 @@
     <!-- Host key refusals (HostKeyRefusal) — one line each, ending in what to do -->
     <string name="conn_err_hostkey_changed">Host key changed. Resolve it in Known hosts.</string>
     <string name="conn_err_hostkey_untrusted">Host key not trusted yet. Connect once from a terminal, or add its CA in Known hosts.</string>
-    <string name="conn_err_hostkey_locked">Vault locked: host key trust can\'t be read. Unlock and retry.</string>
+    <string name="conn_err_hostkey_locked">Vault locked: host key trust can't be read. Unlock and retry.</string>
     <string name="conn_err_hostkey_cert">This host must present a certificate from a trusted CA; what it offered was refused.</string>
     <string name="conn_err_hostkey_jump">Jump host — %1$s</string>
 </resources>

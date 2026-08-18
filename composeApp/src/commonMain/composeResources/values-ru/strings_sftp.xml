@@ -113,6 +113,6 @@
     <string name="sftp_edit_conflict_body">«%1$s» изменился после того, как вы его открыли. Сохранение перезапишет его вашей версией.</string>
 
     <!-- Transfer queue under the panes -->
-    <string name="sftp_queue_progress">%1$d%% · %2$s / %3$s</string>
+    <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
     <string name="sftp_queue_done">готово</string>
 </resources>

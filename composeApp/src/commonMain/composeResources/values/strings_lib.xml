@@ -24,7 +24,7 @@
     <string name="lib_ca_field_hosts_hint">*.prod.example.com</string>
     <string name="lib_ca_field_label">LABEL</string>
     <string name="lib_ca_field_label_hint">Production CA</string>
-    <string name="lib_ca_error_key">Not a CA public key. Paste the CA\'s .pub file contents or a whole @cert-authority line.</string>
+    <string name="lib_ca_error_key">Not a CA public key. Paste the CA's .pub file contents or a whole @cert-authority line.</string>
     <string name="lib_ca_error_hosts_missing">Enter which hosts this CA covers.</string>
     <string name="lib_ca_error_hosts_invalid">This pattern matches no host.</string>
     <string name="lib_ca_error_duplicate">This CA already covers these hosts.</string>
@@ -66,7 +66,7 @@
     <string name="lib_snippets_ph_name">Disk usage report</string>
     <string name="lib_snippets_add_tag">add tag…</string>
     <string name="lib_snippets_press_keys">Press keys…</string>
-    <string name="lib_snippets_shortcut_conflict">Already used by \"%1$s\"</string>
+    <string name="lib_snippets_shortcut_conflict">Already used by “%1$s”</string>
     <string name="lib_snippets_shortcut_reserved">Reserved by a Skerry shortcut (Settings → Keyboard)</string>
     <string name="lib_snippets_select_or_create">Select a snippet or create a new one.</string>
     <string name="lib_snippets_save">Save</string>

@@ -27,7 +27,7 @@
     <string name="ports_no_saved_hosts">No saved hosts</string>
     <string name="ports_via">via %1$s</string>
     <string name="ports_col_type">TYPE</string>
-    <string name="ports_remove_confirm_title">Remove \"%1$s\"?</string>
+    <string name="ports_remove_confirm_title">Remove “%1$s”?</string>
     <string name="ports_remove_active_message">Active tunnel. It will be disconnected and deleted — can't be undone.</string>
     <string name="ports_remove_inactive_message">This saved tunnel is deleted. This can't be undone.</string>
     <string name="ports_type_local">local</string>
@@ -84,9 +84,11 @@
     </plurals>
     <string name="ports_autostart_hint_one">This tunnel comes up on its own once the vault is unlocked.</string>
     <plurals name="ports_count_active">
+        <item quantity="one">%1$d active</item>
         <item quantity="other">%1$d active</item>
     </plurals>
     <plurals name="ports_count_stopped">
+        <item quantity="one">%1$d stopped</item>
         <item quantity="other">%1$d stopped</item>
     </plurals>
     <string name="ports_bind_beyond_loopback">Listens beyond loopback — reachable from the network.</string>

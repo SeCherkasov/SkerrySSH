@@ -12,10 +12,15 @@ from __future__ import annotations
 
 import glob
 import os
+import hashlib
+import re
+import time
 
 from . import state
 
 KINDS = ("bug", "feature", "refactor", "docs")
+# How much each kind owes, so a declaration can be compared against what the branch already proves.
+STRICTNESS = {"docs": 0, "refactor": 1, "feature": 2, "bug": 3}
 
 # Branch prefixes are the cheapest honest signal: they are chosen before the work starts.
 BRANCH_KINDS = {
@@ -37,10 +42,18 @@ AREA_RULES = (
                                                     "/sync/", "crypto", "Crypto"))),
     ("terminal", lambda p: "/terminal/" in p or "/graphics/" in p),
     ("build", lambda p: p.endswith((".gradle.kts", ".versions.toml")) or p.startswith("gradle/")),
+    # The harness gates every other change, and Gradle cannot see a line of it: its own suite is
+    # the only thing that can, so a change here owes that suite the way Kotlin owes `tests`.
+    # Everything that decides what a change owes, or who reads it: the runner, the hook that
+    # records reviews, the settings that register the hook, and the reviewers' own definitions.
+    ("harness", lambda p: p.startswith(("tools/harness/", ".claude/hooks/", ".claude/agents/",
+                                       ".claude/commands/"))
+        or p == ".claude/settings.json"),
 )
 
 # Stage -> the command the runner uses. "checks" is internal (tools/harness/checks.py).
 STAGE_COMMANDS = {
+    "selftest": ["python3", "tools/harness/selftest.py"],
     "tests": ["./gradlew", "test", "allTests"],
     "build": ["./gradlew", "build"],
     "detekt": ["./gradlew", "detektAll"],
@@ -84,7 +97,8 @@ def _kotlin(path: str) -> bool:
 
 
 def _security_scope(path: str) -> bool:
-    return _area_matcher("security")(path) or any(seg in path for seg in PROTOCOL_SEGMENTS)
+    return (_area_matcher("security")(path)
+            or any(seg in path for seg in PROTOCOL_SEGMENTS))
 
 
 # What each reviewer actually reads. A reviewer is owed again only when the files inside its own
@@ -125,8 +139,10 @@ def reviewer_delta(st: dict, reviewer: str, cwd: str | None = None) -> list[str]
 
     Empty when the reviewer never ran here: there is no delta to review, only the whole diff.
     """
-    seen = ((st.get("reviews") or {}).get(reviewer) or {}).get("files")
-    if not isinstance(seen, dict):
+    entry = (st.get("reviews") or {}).get(reviewer) or {}
+    seen = entry.get("files")
+    # A pass made on another branch is not a delta to re-read here — it is no pass at all.
+    if not isinstance(seen, dict) or entry.get("branch") != state.current_branch(cwd):
         return []
     now = reviewer_entries(reviewer, cwd)
     changed = {path for path, cid in now.items() if seen.get(path) != cid}
@@ -175,6 +191,21 @@ def areas(paths: list[str]) -> list[str]:
     return sorted(found)
 
 
+def _floor(branch: str, has_code: bool) -> str:
+    """The least strict kind the diff itself can justify, whatever the branch is named.
+
+    Both the branch and the declaration are floored by this one function. They used to be floored
+    by two pieces of code that agreed on `wip/` and disagreed on `docs/`: a branch called `docs/…`
+    with Kotlin in it became a feature, while declaring `docs` on that same branch was compared
+    against `docs` and accepted itself — the whole gate off, and quieter than the override.
+    """
+    if not has_code:
+        return "docs"
+    named = kind_from_branch(branch)
+    # The strictest kind that does not demand a reproduction test.
+    return named if named and named != "docs" else "feature"
+
+
 def classify(cwd: str | None = None) -> dict:
     """The task at hand: kind, where it came from, and which areas it touches.
 
@@ -188,10 +219,14 @@ def classify(cwd: str | None = None) -> dict:
 
     declared = (state.load(cwd).get("task") or {})
     # A declaration can make the gate stricter (this "chore" is really a bug fix) but never looser
-    # than the diff itself proves: calling a change with Kotlin in it "docs" would disarm the gate
-    # with one command, which is the whole thing this harness exists to prevent.
+    # than the diff itself proves. Refusing "docs" over a Kotlin diff was not enough: on a `fix/`
+    # branch, declaring `refactor` dropped the RED phase — a silent bypass, where the override at
+    # least has to be typed out loud.
     if declared.get("kind") in KINDS and declared.get("branch") == branch:
-        if not (declared["kind"] == "docs" and code_paths):
+        # The same default the branch itself would fall back to: the strictest kind that does
+        # not demand a reproduction test.
+        from_branch = _floor(branch, bool(code_paths))
+        if STRICTNESS[declared["kind"]] >= STRICTNESS[from_branch]:
             return {
                 "kind": declared["kind"], "source": "declared", "ref": declared.get("ref", ""),
                 "areas": task_areas, "paths": paths, "code_paths": code_paths, "branch": branch,
@@ -201,10 +236,9 @@ def classify(cwd: str | None = None) -> dict:
     if not code_paths:
         kind, source = "docs", "no code in diff"
     else:
-        kind = kind_from_branch(branch)
-        source = f"branch `{branch}`" if kind else "default"
-        if not kind:
-            kind = "feature"  # the strictest kind that does not demand a reproduction test
+        named = kind_from_branch(branch)
+        kind = _floor(branch, True)
+        source = f"branch `{branch}`" if named else "default"
     return {
         "kind": kind, "source": source, "ref": "", "areas": task_areas,
         "paths": paths, "code_paths": code_paths, "branch": branch,
@@ -214,9 +248,16 @@ def classify(cwd: str | None = None) -> dict:
 def required_stages(task: dict) -> list[str]:
     if task["kind"] == "docs":
         return []
-    stages = ["checks", "tests", "build", "detekt"]
-    if {"ui", "android"} & set(task["areas"]):
-        stages.append("android")
+    areas = set(task["areas"])
+    stages = ["checks"]
+    if "harness" in areas:
+        stages.append("selftest")
+    # Gradle cannot see a line of Python. Charging a hook fix ten minutes of `test allTests` and
+    # `build` teaches the operator to reach for SKERRY_GATE_OVERRIDE, which costs more than it saves.
+    if areas != {"harness"}:
+        stages += ["tests", "build", "detekt"]
+        if {"ui", "android"} & areas:
+            stages.append("android")
     if task["kind"] == "bug":
         stages.append("red")
     stages.append("review")
@@ -233,6 +274,203 @@ def relevant_reviewers(task: dict) -> list[str]:
             if extra not in reviewers:
                 reviewers.append(extra)
     return reviewers
+
+
+# What a backgrounded fan-out returns the moment it is launched. The agent has not read a line
+# yet, so recording it would make "reviewed" mean "started" — the one thing the review gate exists
+# to rule out. Length is part of the test: a real report that happens to quote `agentId` or the
+# phrase "in the background" is a report, not an acknowledgement.
+LAUNCH_STUB = re.compile(r"async agent launched|agentid:|is working in the background", re.I)
+STUB_CHARS = 400
+# A positive floor as well as the denylist: acceptance must not be what happens by default. A
+# reviewer that read this diff has more to say than a word, whatever shape the reply arrives in.
+MIN_REPORT_CHARS = 200
+# Deep enough for any real tool response, shallow enough that the hook cannot blow its stack.
+FLATTEN_DEPTH = 50
+
+
+def review_findings(response) -> str:
+    """A reviewer's findings out of whatever shape the harness handed the response back in.
+
+    Empty when the response carries none — an async launch acknowledgement, a one-word "ok", or a
+    reviewer that said nothing at all. Either way there is nothing to pin a tree to.
+    """
+    text = _flatten(response).strip()
+    if len(text) < MIN_REPORT_CHARS:
+        return ""
+    if len(text) < STUB_CHARS and LAUNCH_STUB.search(text):
+        return ""
+    return text
+
+
+def _flatten(response, depth: int = 0) -> str:
+    """The text inside whatever shape the harness handed a response back in.
+
+    Bounded: this runs inside a PostToolUse hook, where a RecursionError would surface as a
+    traceback on every Agent call. A response nested past the bound carries no findings anyone
+    could act on anyway.
+    """
+    if depth > FLATTEN_DEPTH:
+        return ""
+    if isinstance(response, str):
+        return response
+    if isinstance(response, dict):
+        for key in ("content", "text", "output", "result"):
+            if key in response:
+                return _flatten(response[key], depth + 1)
+        return ""
+    if isinstance(response, list):
+        return "\n".join(part for part in (_flatten(item, depth + 1) for item in response) if part)
+    return ""
+
+
+def _already_recorded(reviewer: str, cwd: str | None = None) -> bool:
+    """Whether this reviewer's pass for *this* tree is already recorded.
+
+    Both halves matter. Without the branch, a pass follows the worktree onto the next piece of
+    work; without the digest, a reviewer whose second round reads the same as its first ("checked
+    and clean" over changed code) can never be recorded, because the text is on disk already.
+    """
+    entry = (state.load(cwd).get("reviews") or {}).get(reviewer) or {}
+    return (entry.get("branch") == state.current_branch(cwd)
+            and entry.get("digest") == reviewer_digest(reviewer, cwd))
+
+
+def _wears_another_name(reviewer: str, findings: str) -> bool:
+    """A report whose header names a different reviewer records nobody. Always refused: no state
+    of the gate makes one reviewer's pass count as another's."""
+    first = findings.lstrip().splitlines()[0].strip()
+    return first.startswith("# ") and first[2:].strip() in known_reviewers() - {reviewer}
+
+
+def _stored_rounds(reviewer: str, cwd: str | None = None) -> list[tuple[str, str]]:
+    """Each round on disk as (branch it was recorded on, its text)."""
+    rounds: list[tuple[str, str]] = []
+    for block in stored_report(reviewer, cwd).split(f"\n# {reviewer}\n"):
+        if not block.strip():
+            continue
+        match = re.search(r"^branch: (.*)$", block, re.M)
+        rounds.append((match.group(1).strip() if match else "", block))
+    return rounds
+
+
+def _is_replay(reviewer: str, findings: str, cwd: str | None = None) -> bool:
+    """Whether this text is a round already on disk, replayed rather than reviewed.
+
+    `gate.py reviewers` prints the path of the previous findings, so re-feeding that file is the
+    easiest keystroke there is. A round made on another branch is always a replay; one made on
+    this branch is a replay only while the pass it belongs to is still recorded — otherwise the
+    retry after a failed state write, and a second round that reads the same as the first, would
+    both be refused with no way through.
+    """
+    body = findings.strip()
+    for round_branch, text in _stored_rounds(reviewer, cwd):
+        # Both directions: a round re-fed on its own, and the whole findings file re-fed at once —
+        # `gate.py reviewers` prints that path, so it is the likelier keystroke of the two.
+        if body in text or text.strip() in body:
+            if round_branch != state.current_branch(cwd):
+                return True
+            return _already_recorded(reviewer, cwd)
+    return False
+
+
+def note_review_launch(reviewer: str, cwd: str | None = None) -> None:
+    """Remember what the reviewer's scope looked like when it started reading.
+
+    A backgrounded reviewer reports minutes later, and the tree can move underneath it in that
+    window. Build stages already discard a run whose tree changed while it ran; without this
+    snapshot the review gate had no way to notice the same thing.
+    """
+    entries = reviewer_entries(reviewer, cwd)
+    st = state.load(cwd)
+    st.setdefault("pending_reviews", {})[reviewer] = {
+        "digest": state.digest_of(entries),
+        "files": entries,
+        "branch": state.current_branch(cwd),
+        "at": time.time(),
+    }
+    state.save(st, cwd)
+
+
+def moved_under_the_reviewer(reviewer: str, findings: str, cwd: str | None = None) -> bool:
+    """Whether this report was written against a tree that has since moved — and is still the
+    report that was refused for it.
+
+    The snapshot is taken when a pass is launched, and a reviewer re-run inline produces no launch,
+    so a first refusal used to wedge that reviewer for good: nothing could ever refresh the
+    snapshot again. Pinning the refusal to the text it refused keeps the property that matters —
+    retrying the same stale report changes nothing — while a report the reviewer actually wrote
+    afterwards gets through.
+    """
+    if not review_drift(reviewer, cwd):
+        return False
+    st = state.load(cwd)
+    pending = (st.get("pending_reviews") or {}).get(reviewer)
+    if pending is None:
+        return False
+    digest = hashlib.sha256(findings.encode("utf-8")).hexdigest()[:16]
+    if pending.get("refused") in (None, digest):
+        pending["refused"] = digest
+        state.save(st, cwd)
+        return True
+    # A different report after the refusal: the reviewer ran again, and the snapshot is spent.
+    # Re-aimed at the tree as it is now rather than dropped — dropping it left every later move
+    # for that reviewer unmeasured, so a stale report after this one met no drift check at all.
+    pending["files"] = reviewer_entries(reviewer, cwd)
+    pending.pop("refused", None)
+    state.save(st, cwd)
+    return False
+
+
+def review_drift(reviewer: str, cwd: str | None = None) -> list[str]:
+    """Files in the reviewer's scope that moved while it was reading. Empty when it never ran
+    backgrounded — there is no snapshot to compare against, and nothing to claim."""
+    pending = (state.load(cwd).get("pending_reviews") or {}).get(reviewer)
+    # A snapshot taken on another branch cannot judge this one: every file differs across a switch,
+    # so it would refuse the first honest report here as a tree that "moved".
+    if not pending or pending.get("branch") != state.current_branch(cwd):
+        return []
+    before, now = pending.get("files") or {}, reviewer_entries(reviewer, cwd)
+    return sorted({path for path in set(before) | set(now) if before.get(path) != now.get(path)})
+
+
+def record_review(reviewer: str, text: str, cwd: str | None = None) -> str:
+    """Pin a reviewer to the tree its findings were written against.
+
+    Returns the reason it was *not* recorded, empty when it was. A bool told the caller only that
+    something went wrong, and the hook reacted to all four reasons the same way — including by
+    re-snapshotting the drift evidence it had just refused on.
+    """
+    findings = review_findings(text)
+    if not findings:
+        return "no findings"
+    if moved_under_the_reviewer(reviewer, findings, cwd):
+        return "moved"
+    if _wears_another_name(reviewer, findings):
+        return "recycled"
+    if _is_replay(reviewer, findings, cwd):
+        return "recycled"
+    # The report goes first. The other order left the entry behind when the write failed, and the
+    # structural check in `missing_reviewers` then read the *previous* round's file and called the
+    # reviewer done — against code it never saw.
+    if not state.save_review_report(reviewer, findings, cwd):
+        return "not saved"
+    entries = reviewer_entries(reviewer, cwd)
+    st = state.load(cwd)
+    st.setdefault("reviews", {})[reviewer] = {
+        # Scoped to what this reviewer reads, so an unrelated fix does not owe it again.
+        "digest": state.digest_of(entries),
+        "files": entries,
+        "branch": state.current_branch(cwd),
+        "rounds": review_rounds(st, reviewer, cwd) + 1,
+        "at": time.time(),
+    }
+    (st.get("pending_reviews") or {}).pop(reviewer, None)
+    return "" if state.save(st, cwd) else "not saved"
+
+
+def known_reviewers() -> set[str]:
+    return set(BASE_REVIEWERS) | {name for names in AREA_REVIEWERS.values() for name in names}
 
 
 def required_reviewers(task: dict, cwd: str | None = None) -> list[str]:
@@ -287,16 +525,68 @@ def gate_debt(cwd: str | None = None) -> tuple[dict, list[str]]:
     return task, debt
 
 
+# Two passes per branch, and the third is the operator's decision. A reviewer is owed again when
+# the files it read move — but fixing what it found is exactly what moves them, and its next round
+# is then about the fix. Inside a reviewer's own scope that loop does not converge; it ran eleven
+# times on one branch before this cap existed. What the cap lets through is printed, not hidden.
+REVIEW_ROUNDS = 2
+
+
+def review_rounds(st: dict, reviewer: str, cwd: str | None = None) -> int:
+    entry = (st.get("reviews") or {}).get(reviewer) or {}
+    return entry.get("rounds", 0) if entry.get("branch") == state.current_branch(cwd) else 0
+
+
+def unreviewed(st: dict, task: dict, cwd: str | None = None) -> list[tuple[str, list[str]]]:
+    """Reviewers the gate has stopped demanding while their scope has moved since they last read.
+
+    The gate stops asking; it does not claim the code was read. Saying nothing here would be the
+    same defect as recording a reviewer on its launch.
+    """
+    out = []
+    for name in required_reviewers(task, cwd):
+        if review_rounds(st, name, cwd) < REVIEW_ROUNDS:
+            continue
+        delta = reviewer_delta(st, name, cwd)
+        if delta:
+            out.append((name, delta))
+    return out
+
+
 def missing_reviewers(st: dict, task: dict, cwd: str | None = None) -> list[str]:
-    """Reviewers whose own scope has moved since they last ran.
+    """Reviewers whose own scope has moved since they last ran, or who left no findings behind.
 
     Previously this compared one whole-tree digest, so a one-line Compose fix owed the vault, the
     server and the terminal reviewer all over again — the fan-out ran ten to twenty times per
     branch and each pass re-read the entire diff. Scoping the comparison is what stops that.
+
+    The report has to exist too. Entries written from an intent rather than a result left no file
+    on disk, and comparing digests alone counted them as reviewed — the check has to be structural,
+    not a matter of which code path wrote the entry.
     """
     seen = (st.get("reviews") or {})
-    return [name for name in required_reviewers(task, cwd)
-            if (seen.get(name) or {}).get("digest") != reviewer_digest(name, cwd)]
+    branch = state.current_branch(cwd)
+    missing = []
+    for name in required_reviewers(task, cwd):
+        entry = seen.get(name) or {}
+        if not reviewer_entries(name, cwd):
+            continue  # nothing of this reviewer's in the change: there is nothing for it to read
+        if review_rounds(st, name, cwd) >= REVIEW_ROUNDS:
+            continue
+        if (entry.get("digest") != reviewer_digest(name, cwd) or entry.get("branch") != branch
+                or not stored_report(name, cwd)):
+            missing.append(name)
+    return missing
+
+
+def stored_report(reviewer: str, cwd: str | None = None) -> str:
+    """The findings on disk for this reviewer, or empty when there are none."""
+    path = state.review_report_path(reviewer, cwd)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except (OSError, UnicodeDecodeError):
+        return ""
 
 
 def skipped_reviewers(task: dict, cwd: str | None = None) -> list[str]:

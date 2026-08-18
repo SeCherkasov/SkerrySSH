@@ -45,17 +45,28 @@ def added_lines(base: str = "", cwd: str | None = None) -> list[tuple[str, int, 
     root = state.repo_root(cwd)
     out: list[tuple[str, int, str]] = []
 
-    code, diff = state.git(["diff", "-U0", "--no-color", base], cwd)
-    if code == 0:
-        path, lineno = "", 0
-        for raw in diff.splitlines():
-            if raw.startswith("+++ b/"):
-                path, lineno = raw[6:], 0
-            elif raw.startswith("@@"):
+    # One diff per file, rather than one diff parsed for its `+++ b/` headers. An added line whose
+    # own text starts with `++ b/…` — legal inside a raw string or a fixture — renders as a header
+    # and used to retarget every rule after it onto a path where none of them apply.
+    code, names = state.git(["diff", "--name-only", "-z", base], cwd)
+    for path in (p for p in names.split("\0") if p) if code == 0 else ():
+        # --text: a committed `.gitattributes` with `*.kt -diff` makes git print "Binary files
+        # differ" instead of the content, and every rule then sees an empty diff.
+        code, diff = state.git(["diff", "-U0", "--no-color", "--text", base, "--", path], cwd)
+        if code != 0:
+            continue
+        lineno, in_hunk = 0, False
+        # split("\n"), not splitlines(): Python breaks lines on U+000C, U+001C-1E, U+0085 and
+        # U+2028/9, which git does not, and it consumes the byte — truncating the line and hiding
+        # the very character the control-chars rule is looking for.
+        for raw in diff.split("\n"):
+            if raw.startswith("@@"):
                 match = HUNK.match(raw)
                 if match:
                     lineno = int(match.group(1))
-            elif raw.startswith("+") and path and not raw.startswith("+++"):
+                in_hunk = True
+            elif in_hunk and raw.startswith("+"):
+                # Inside a hunk every `+` line is content: the file headers are all above it.
                 out.append((path, lineno, raw[1:]))
                 lineno += 1
 
@@ -94,14 +105,10 @@ RAW_COORD = re.compile(
     r"androidTestImplementation|ksp|kapt)\s*\(\s*\"[^\"]+:[^\"]+:[^\"]*\"")
 SECRET_WRITE = re.compile(r"\.writeText\s*\(")
 SUSPICIOUS_CATCH = re.compile(r"catch\s*\(\s*\w+\s*:\s*(?:Exception|Throwable)\s*\)")
-# Built from code points rather than written out: the pattern's own subject matter is invisible
-# characters, and a literal one here would be unreviewable — and would trip this very rule.
-CONTROL_RANGES = (
-    (0x00, 0x08), (0x0B, 0x0C), (0x0E, 0x1F),   # C0 minus tab, LF, CR
-    (0x200B, 0x200F), (0x202A, 0x202E), (0x2066, 0x2069),  # zero-width and bidi overrides
-)
-CONTROL_CHARS = re.compile(
-    "[" + "".join(f"\\U{lo:08X}-\\U{hi:08X}" for lo, hi in CONTROL_RANGES) + "]")
+# One definition, in `state`: this rule keeps the byte out of the source, and `save_review_report`
+# strips it out of a stored report before the operator cats it. Two lists would drift apart.
+CONTROL_RANGES = state.CONTROL_RANGES
+CONTROL_CHARS = state.CONTROL_CHARS
 TODO_MARK = re.compile(r"(?://|/\*|\*)\s*(TODO|FIXME|XXX)\b")
 
 UI_MAIN = re.compile(r"^composeApp/src/\w+Main/")
@@ -122,6 +129,16 @@ def _line_rules(added: list[tuple[str, int, str]]) -> list[Finding]:
         if path.endswith(".kt") and TODO_MARK.search(text) and not _allowed(text, "todo"):
             found.append(Finding("todo", WARN, path, line,
                                  "TODO/FIXME added — either do it or drop it before the PR."))
+        # Trojan source belongs in a comment by construction: the payload has to sit where the
+        # reviewer reads prose and the compiler reads nothing. So this one is judged before
+        # comments are skipped, like the TODO rule above it.
+        if CONTROL_CHARS.search(text) and not _allowed(text, "control-chars"):
+            # In a test these bytes are the fixture — the input a sanitiser is supposed to strip.
+            # In shipping code they are a spoof waiting to happen, and unreadable in review.
+            found.append(Finding("control-chars", WARN if state.is_test(path) else BLOCK,
+                                 path, line,
+                                 "raw control or bidi byte — write it as an escape "
+                                 "(`\\u202E`) so review can see it."))
         if _is_comment(text):
             continue
         kt = path.endswith(".kt")
@@ -162,13 +179,6 @@ def _line_rules(added: list[tuple[str, int, str]]) -> list[Finding]:
             found.append(Finding("secret-write", BLOCK, path, line,
                                  "`writeText` on a secret-bearing path — use `atomicWriteUtf8` "
                                  "(atomic + 0600)."))
-        if CONTROL_CHARS.search(text) and not _allowed(text, "control-chars"):
-            # In a test these bytes are the fixture — the input a sanitiser is supposed to strip.
-            # In shipping code they are a spoof waiting to happen, and unreadable in review.
-            found.append(Finding("control-chars", WARN if state.is_test(path) else BLOCK,
-                                 path, line,
-                                 "raw control or bidi byte in a literal — write it as an escape "
-                                 "(`\\u202E`), it is invisible in review otherwise."))
     return found
 
 
@@ -205,36 +215,107 @@ def _i18n_parity(cwd: str | None) -> list[Finding]:
     if not os.path.isdir(base):
         return []
 
-    def keys(locale: str) -> dict[str, str]:
+    unreadable: dict[str, list[str]] = {"locale": [], "source": []}
+    cached: dict[str, str] = {}
+
+    def read(file: str) -> str:
+        """A locale file's text, read once per run, or empty.
+
+        A file the check cannot open is recorded rather than passed over: an unreadable locale
+        looks exactly like an untranslated one in the findings below. The cache is what keeps that
+        count honest — the name scan and the plural scan both walk every locale, and an uncached
+        read reported one broken file as two.
+        """
+        if file not in cached:
+            try:
+                with open(file, encoding="utf-8") as fh:
+                    cached[file] = fh.read()
+            except (OSError, UnicodeDecodeError):
+                # A locale file saved in cp1251 is the likeliest way this fails, and that raises
+                # ValueError, not OSError — uncaught it took the whole `checks` stage down.
+                unreadable["locale"].append(os.path.relpath(file, root))
+                cached[file] = ""
+        return cached[file]
+
+    def read_source(file: str) -> str:
+        """A Kotlin source, read once each — an unreadable one hides a usage, not a translation."""
+        try:
+            with open(file, encoding="utf-8") as fh:
+                return fh.read()
+        except (OSError, UnicodeDecodeError):
+            unreadable["source"].append(os.path.relpath(file, root))
+            return ""
+
+    def keys(locale: str) -> dict[tuple[str, str], str]:
+        """Every translatable name, by kind — a plural and an array need a translation as much as
+        a string does, and each kind lives in its own namespace.
+
+        The attribute is matched loosely: `<string translatable="false" name="x">` is the form
+        Android tooling emits, and a name the pattern misses is silently exempt from parity.
+        """
         out = {}
         for file in sorted(glob.glob(os.path.join(base, locale, "*.xml"))):
-            try:
-                body = open(file, encoding="utf-8").read()
-            except OSError:
-                continue
-            for key in re.findall(r'<string name="([^"]+)"', body):
-                out[key] = os.path.relpath(file, root)
+            body = read(file)
+            for kind, key in re.findall(r'<(string|string-array|plurals)\s+[^>]*?name="([^"]+)"', body):
+                out[(kind, key)] = os.path.relpath(file, root)
         return out
+
+    def label(entry: tuple[str, str]) -> str:
+        kind, key = entry
+        return key if kind == "string" else f"{kind} {key}"
 
     en, found = keys("values"), []
     for locale in ("values-ru", "values-zh"):
         other = keys(locale)
         for key in sorted(set(en) - set(other)):
             found.append(Finding("i18n-parity", BLOCK, en[key], 0,
-                                 f"`{key}` has no {locale} translation — strings ship en + ru + zh."))
+                                 f"`{label(key)}` has no {locale} translation — strings ship en + ru + zh."))
         for key in sorted(set(other) - set(en)):
             found.append(Finding("i18n-parity", BLOCK, other[key], 0,
-                                 f"`{key}` exists only in {locale} — a stale or misspelt key."))
+                                 f"`{label(key)}` exists only in {locale} — a stale or misspelt key."))
 
-    used: set[str] = set()
+    # The plural categories each language actually needs (CLDR). A name that exists in a locale but
+    # carries only `other` is not a translation: the reader falls back to `other` silently, so
+    # Russian renders "1 файлов" with every gate green.
+    required = {"values": ("one", "other"),
+                "values-ru": ("one", "few", "many", "other"),
+                "values-zh": ("other",)}
+    for locale, categories in required.items():
+        for file in sorted(glob.glob(os.path.join(base, locale, "*.xml"))):
+            rel = os.path.relpath(file, root)
+            for key, block in re.findall(r'<plurals\s+[^>]*?name="([^"]+)"(.*?)</plurals>', read(file), re.S):
+                # An empty item is not a form: it draws a blank where the number belongs, and the
+                # reader is as silent about it as it is about a category that was never declared.
+                written = {category for category, text
+                           in re.findall(r'<item quantity="([a-z]+)"[^>]*>(.*?)</item>', block, re.S)
+                           if text.strip()}
+                missing = [c for c in categories if c not in written]
+                if missing:
+                    found.append(Finding("i18n-parity", BLOCK, rel, 0,
+                                         f"`plurals {key}` has no {', '.join(missing)} form — "
+                                         f"{locale} needs {'/'.join(categories)}; a missing or "
+                                         "empty item falls back to `other` and reads wrong."))
+
+    # `Res.array` is the accessor of a `<string-array>`; the other two are named after their tag.
+    accessor = {"string": "string", "plurals": "plurals", "string-array": "array"}
+    tag_of = {value: key for key, value in accessor.items()}
+    used: set[tuple[str, str]] = set()
     for file in glob.glob(os.path.join(root, "composeApp/src/**/*.kt"), recursive=True):
-        try:
-            used |= set(re.findall(r"Res\.string\.([A-Za-z0-9_]+)", open(file, encoding="utf-8").read()))
-        except OSError:
-            continue
-    for key in sorted(used - set(en)):
+        for kind, key in re.findall(r"Res\.(string|plurals|array)\.([A-Za-z0-9_]+)", read_source(file)):
+            used.add((tag_of[kind], key))
+    for kind, key in sorted(used - set(en)):
         found.append(Finding("i18n-parity", BLOCK, "composeApp", 0,
-                             f"`Res.string.{key}` is used but defined nowhere."))
+                             f"`Res.{accessor[kind]}.{key}` is used but defined nowhere."))
+
+    # Which way the sweep is wrong depends on what could not be read, so the two are counted apart.
+    if unreadable["locale"]:
+        found.append(Finding("i18n-parity", WARN, unreadable["locale"][0], 0,
+                             f"{len(unreadable['locale'])} resource file(s) could not be read — a "
+                             "translation reported missing above may be that read failure."))
+    if unreadable["source"]:
+        found.append(Finding("i18n-parity", WARN, unreadable["source"][0], 0,
+                             f"{len(unreadable['source'])} source file(s) could not be read — a "
+                             "stale `Res.` reference in them goes unreported."))
     return found
 
 
@@ -253,11 +334,14 @@ def _shortcut_rule(added: list[tuple[str, int, str]]) -> list[Finding]:
 def _tests_present(added: list[tuple[str, int, str]], task: dict) -> list[Finding]:
     if task["kind"] not in ("bug", "feature"):
         return []
-    src = {p for p, _, _ in added if state.is_code(p) and not state.is_test(p) and p.endswith(".kt")}
+    # `.py` under the harness counts as source for the same reason `.kt` does — it is behaviour
+    # someone has to be able to break. Its test is `selftest.py`, which `state.is_test` knows.
+    src = {p for p, _, _ in added if state.is_code(p) and not state.is_test(p)
+           and (p.endswith(".kt") or p.startswith(("tools/harness/", ".claude/hooks/")))}
     tests = {p for p, _, _ in added if state.is_test(p)}
     if src and not tests:
         return [Finding("tests-present", BLOCK, sorted(src)[0], 0,
-                        f"a {task['kind']} changed Kotlin sources without touching a single test "
+                        f"a {task['kind']} changed sources without touching a single test "
                         "— step 1 of the loop is the failing test.")]
     return []
 

@@ -40,19 +40,19 @@
     <string name="sftp_rename">重命名</string>
 
     <!-- Диалог имени (New folder / Rename) -->
-    <string name="sftp_already_exists">「%1$s」已存在</string>
+    <string name="sftp_already_exists">“%1$s”已存在</string>
 
     <!-- Диалоги удаления -->
     <string name="sftp_delete_folder_q">删除文件夹？</string>
     <string name="sftp_delete_file_q">删除文件？</string>
     <string name="sftp_delete_items_q">删除 %1$d 个项目？</string>
-    <string name="sftp_delete_folder_body">「%1$s」及其内部所有内容将被永久删除。</string>
-    <string name="sftp_delete_file_body">「%1$s」将被永久删除。</string>
+    <string name="sftp_delete_folder_body">“%1$s”及其内部所有内容将被永久删除。</string>
+    <string name="sftp_delete_file_body">“%1$s”将被永久删除。</string>
     <string name="sftp_delete_items_dirs_body">%1$d 个项目（含文件夹及其内容）将被永久删除。</string>
     <string name="sftp_delete_items_body">%1$d 个项目将被永久删除。</string>
 
     <!-- Диалоги копирования / перемещения -->
-    <string name="sftp_what_single">「%1$s」</string>
+    <string name="sftp_what_single">“%1$s”</string>
     <string name="sftp_items_count">%1$d 个项目</string>
     <string name="sftp_copy_to_q">复制到 %1$s？</string>
     <string name="sftp_move_to_q">移动到 %1$s？</string>
@@ -107,12 +107,12 @@
     <string name="sftp_edit_find">查找：</string>
     <string name="sftp_edit_not_found">未找到</string>
     <string name="sftp_edit_discard_q">放弃更改？</string>
-    <string name="sftp_edit_discard_body">「%1$s」有未保存的更改，现在关闭将会丢失。</string>
+    <string name="sftp_edit_discard_body">“%1$s”有未保存的更改，现在关闭将会丢失。</string>
     <string name="sftp_edit_discard">放弃</string>
     <string name="sftp_edit_conflict_q">文件在源端已被修改？</string>
-    <string name="sftp_edit_conflict_body">「%1$s」在你打开后已更改。保存将用你的版本覆盖它。</string>
+    <string name="sftp_edit_conflict_body">“%1$s”在你打开后已更改。保存将用你的版本覆盖它。</string>
 
     <!-- Transfer queue under the panes -->
-    <string name="sftp_queue_progress">%1$d%% · %2$s / %3$s</string>
+    <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
     <string name="sftp_queue_done">完成</string>
 </resources>

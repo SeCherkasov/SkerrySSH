@@ -64,7 +64,7 @@
     <string name="shell_use_saved_secret">OR USE A SAVED SECRET</string>
 
     <!-- Delete host dialog (DeleteHostDialog.kt) -->
-    <string name="shell_delete_host_title">Delete \"%1$s\"?</string>
+    <string name="shell_delete_host_title">Delete “%1$s”?</string>
     <string name="shell_delete_host_body">Removed from your hosts. Any stored credential stays in your vault. This can't be undone.</string>
 
     <!-- Mobile host detail (MobileHostDetailView.kt) -->
@@ -87,14 +87,14 @@
 
     <!-- Desktop chrome: confirm dialogs, title bar, status bar (DesktopDesignApp.kt) -->
     <string name="shell_this_session">this session</string>
-    <string name="shell_disconnect_title">Disconnect \"%1$s\"?</string>
+    <string name="shell_disconnect_title">Disconnect “%1$s”?</string>
     <string name="shell_disconnect_message">The session and its terminal will be closed.</string>
     <string name="shell_disconnect">Disconnect</string>
     <string name="shell_disconnect_all_title">Disconnect all sessions in this tab?</string>
     <string name="shell_disconnect_all_message">These sessions will be closed: %1$s</string>
     <string name="shell_close_pane_title">Close pane?</string>
     <string name="shell_close_pane_message">This session will be closed: %1$s</string>
-    <string name="shell_replace_pane_title">Replace this pane's session with \"%1$s\"?</string>
+    <string name="shell_replace_pane_title">Replace this pane's session with “%1$s”?</string>
     <string name="shell_close_panel">Close pane</string>
     <string name="shell_lock">Lock</string>
     <string name="shell_settings">Settings</string>

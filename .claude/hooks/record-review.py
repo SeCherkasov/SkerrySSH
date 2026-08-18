@@ -25,6 +25,11 @@ try:
 except ImportError:
     policy = state = None
 
+REFUSALS = {
+    "moved": "the code moved while it was reading, so it reviewed a tree that no longer exists",
+    "recycled": "that is the findings file already on disk, not a new pass",
+    "not saved": "the record could not be written",
+}
 GATE_TASKS = re.compile(r"gradlew\b.*\b(allTests|detektAll|\btest\b|build|compileDebugKotlin)")
 RUNNER = re.compile(r"harness/gate\.py")
 
@@ -36,48 +41,39 @@ def note(text: str) -> None:
     sys.exit(0)
 
 
-def report_text(response) -> str:
-    """The reviewer's findings as text, whatever shape the harness handed them back in."""
-    if isinstance(response, str):
-        return response
-    if isinstance(response, dict):
-        for key in ("content", "text", "output", "result"):
-            if key in response:
-                return report_text(response[key])
-        return ""
-    if isinstance(response, list):
-        return "\n".join(part for part in (report_text(item) for item in response) if part)
-    return ""
-
-
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
         sys.exit(0)
+    if not isinstance(payload, dict):
+        sys.exit(0)
     if state is None:
         sys.exit(0)
 
     tool = payload.get("tool_name") or ""
-    tool_input = payload.get("tool_input") or {}
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict):
+        tool_input = {}
 
     if tool in ("Agent", "Task"):
         subagent = (tool_input.get("subagent_type") or "").split(":")[-1]
-        known = set(policy.BASE_REVIEWERS) | {
-            name for names in policy.AREA_REVIEWERS.values() for name in names
-        }
-        if subagent in known:
-            st = state.load()
-            entries = policy.reviewer_entries(subagent)
-            st.setdefault("reviews", {})[subagent] = {
-                # Scoped to what this reviewer reads, so an unrelated fix does not owe it again.
-                "digest": state.digest_of(entries),
-                "files": entries,
-                "branch": state.current_branch(),
-                "at": __import__("time").time(),
-            }
-            state.save(st)
-            state.save_review_report(subagent, report_text(payload.get("tool_response")))
+        if subagent in policy.known_reviewers():
+            reason = policy.record_review(subagent, payload.get("tool_response"))
+            if reason == "no findings":
+                # A backgrounded reviewer answers with a launch acknowledgement: it has not read a
+                # line yet. Recording that would close the review gate on the fan-out being
+                # started, which is the one thing the gate exists to rule out. Snapshot the scope
+                # it is about to read instead, so an edit made while it reads is visible when the
+                # report finally arrives.
+                policy.note_review_launch(subagent)
+                note(f"{subagent} was launched, not recorded — this reply carries no findings. "
+                     f"When its report arrives, record it with `tools/harness/gate.py review "
+                     f"{subagent} --file <report>`.")
+            elif reason:
+                # Anything else is a report that was refused, and the snapshot is the evidence it
+                # was refused on: re-taking it here would let the retry launder the refusal.
+                note(f"{subagent}: {REFUSALS.get(reason, reason)} — not recorded.")
         sys.exit(0)
 
     if tool == "Bash":
@@ -92,4 +88,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception:  # noqa: BLE001 - a hook that raises breaks every Agent call in the session
+        sys.exit(0)

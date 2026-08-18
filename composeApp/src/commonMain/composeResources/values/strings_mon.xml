@@ -45,9 +45,9 @@
 
     <string name="mon_alert_disk">Disk %1$s above the limit</string>
     <string name="mon_alert_disk_ok">Disk %1$s back under the limit</string>
-    <string name="mon_alert_memory">Memory at %1$s%%</string>
+    <string name="mon_alert_memory">Memory at %1$s%</string>
     <string name="mon_alert_memory_ok">Memory back to normal</string>
-    <string name="mon_alert_swap">Swap at %1$s%%</string>
+    <string name="mon_alert_swap">Swap at %1$s%</string>
     <string name="mon_alert_swap_ok">Swap back to normal</string>
     <string name="mon_alert_load">Load %1$s above the core count</string>
     <string name="mon_alert_load_ok">Load back under the core count</string>

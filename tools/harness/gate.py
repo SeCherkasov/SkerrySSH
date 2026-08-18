@@ -16,12 +16,14 @@ rather than recorded against the wrong code.
     tools/harness/gate.py task bug [ref]      override the auto-detected kind
     tools/harness/gate.py checks              the deterministic rules alone
     tools/harness/gate.py reviewers           which reviewers this change needs
+    tools/harness/gate.py review NAME         record a reviewer's findings once its report arrives
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 import time
@@ -45,16 +47,32 @@ TEST_TASKS = (
 )
 
 
+# The harness's own suite is not a Gradle task, and a `fix/` branch that touches only the gate
+# still owes a RED record.
+HARNESS_SUITE = "selftest"
+# A test name or a glob of one. Anything else — an option, a shell fragment — is handed to the
+# suite as an argument, and its own usage error would exit non-zero and read as a failing test.
+TEST_PATTERN = re.compile(r"^[A-Za-z0-9_.*]+$")
+# What a run that actually reached a test looks like: unittest prints both lines, in this order.
+HARNESS_RED_EVIDENCE = re.compile(r"^Ran [1-9]\d* tests?\b.*^FAILED \(", re.S | re.M)
+# Gradle prints this only from a test task that ran and had failures. A compile error, a
+# missing dependency or a bad task name fails the build without it.
+GRADLE_RED_EVIDENCE = re.compile(r"There were failing tests|tests? completed, \d+ failed")
+
+
 def _env() -> dict:
     env = dict(os.environ)
     env.setdefault("ANDROID_HOME", os.path.expanduser("~/Android/Sdk"))
     return env
 
 
-def _gradle(args: list[str], stage: str, root: str) -> tuple[int, str]:
-    """Run Gradle, tee the output to .git/skerry-gate/<stage>.log, return (code, log path)."""
+def _run_logged(args: list[str], stage: str, root: str) -> tuple[int, str]:
+    """Run a stage command, tee its output to .git/skerry-gate/<stage>.log, return (code, log)."""
     log = state.log_path(stage) or os.path.join(root, f".gradle-{stage}.log")
     os.makedirs(os.path.dirname(log), exist_ok=True)
+    # Whatever a failing test printed is nobody else's business on a shared machine, and the logs
+    # sit beside a 0600 state file and 0600 findings.
+    os.chmod(os.path.dirname(log), 0o700)
     with open(log, "w", encoding="utf-8") as fh:
         try:
             proc = subprocess.run(args, cwd=root, env=_env(), stdout=fh,
@@ -93,7 +111,7 @@ def run_stage(stage: str, root: str) -> bool:
         if stage == "tests" and state.load().get("test_cache_dirty"):
             command.append("--rerun")
         print(f"harness: {' '.join(command)}")
-        code, log = _gradle(command, stage, root)
+        code, log = _run_logged(command, stage, root)
         ok = code == 0
         detail = f"exit {code}, log {log}"
         if not ok:
@@ -140,7 +158,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     _, debt = policy.gate_debt()
     print()
-    print(_status_text(task, debt))
+    print(_status_text(task, debt, policy.unreviewed(state.load(), task)))
     return 1 if failed else 0
 
 
@@ -151,30 +169,57 @@ def _stop_daemons(root: str) -> None:
     subprocess.run(["pkill", "-f", "KotlinCompileDaemon"], capture_output=True, check=False)
 
 
+def proves_a_failing_test(task_name: str, body: str) -> bool:
+    """Whether the run actually reached a test and that test failed.
+
+    A non-zero exit is not a failing test: an import error, a syntax error, a usage error in the
+    runner or a compile error in the module all exit non-zero, and each of those would record a
+    RED phase no test ever ran. Fixing the typo then moves the sources and the gate reports the
+    bug as reproduced.
+    """
+    pattern = HARNESS_RED_EVIDENCE if task_name == HARNESS_SUITE else GRADLE_RED_EVIDENCE
+    return bool(pattern.search(body))
+
+
 def cmd_red(args: argparse.Namespace) -> int:
     root = state.repo_root()
     task_name = args.task or _task_for_file(args.file or "")
     if not task_name:
-        print("harness: which Gradle task runs this test? Pass --task (e.g. :shared:desktopTest) "
-              "or --file with the test's path.")
+        print("harness: which task runs this test? Pass --task (e.g. :shared:desktopTest, or "
+              f"{HARNESS_SUITE} for the harness's own suite) or --file with the test's path.")
         return 2
 
-    command = ["./gradlew", task_name, "--tests", args.tests, "--rerun"]
+    if task_name == HARNESS_SUITE:
+        # Gradle cannot run a Python test. Without this branch a bug fix to the gate itself could
+        # not record the failure it fixes — the one change where that matters most.
+        if not TEST_PATTERN.match(args.tests):
+            print("harness: --tests takes a test name or a glob of one, not an option — "
+                  f"`{args.tests}` would be handed to the suite as an argument.")
+            return 2
+        command = [sys.executable, "tools/harness/selftest.py", "-k", args.tests.strip("*")]
+        empty = "Ran 0 tests"
+    else:
+        command = ["./gradlew", task_name, "--tests", args.tests, "--rerun"]
+        empty = "No tests found for given includes"
+        st = state.load()
+        st["test_cache_dirty"] = True  # a filtered run leaves the aggregate task looking up to date
+        state.save(st)
+
     print(f"harness: {' '.join(command)}")
-    code, log = _gradle(command, "red", root)
+    code, log = _run_logged(command, "red", root)
     body = tail(log, 200)
 
-    st = state.load()
-    st["test_cache_dirty"] = True  # a filtered run poisons the aggregate task's up-to-date check
-    state.save(st)
-
-    if "No tests found for given includes" in body:
+    if empty in body:
         print(f"harness: the pattern matched no test — nothing was proven.\n{tail(log, 15)}")
         return 2
     if code == 0:
         print("harness: the test PASSED. A test that is green before the fix proves nothing about "
               "the bug — make it reproduce the failure first.")
         return 1
+    if not proves_a_failing_test(task_name, body):
+        print(f"harness: the run did not report a failing test — nothing was proven.\n"
+              f"{tail(log, 15)}")
+        return 2
 
     record = {
         "task": task_name, "pattern": args.tests, "at": time.time(),
@@ -190,6 +235,8 @@ def cmd_red(args: argparse.Namespace) -> int:
 
 def _task_for_file(path: str) -> str:
     normalised = path.replace(os.sep, "/")
+    if normalised.startswith(("tools/harness/", ".claude/hooks/")):
+        return HARNESS_SUITE
     for prefix, task_name in TEST_TASKS:
         if prefix in normalised:
             return task_name
@@ -205,6 +252,60 @@ def cmd_task(args: argparse.Namespace) -> int:
                   "branch": state.current_branch(), "at": time.time()}
     state.save(st)
     return cmd_status(args)
+
+
+# Why a report was turned away, in the words the operator needs to act on it.
+REVIEW_REFUSALS = {
+    "no findings": "that text carries no findings — it reads as a launch acknowledgement",
+    "recycled": "that is the report already on disk, not a new pass",
+    "not saved": "the record could not be written",
+}
+
+
+def cmd_review(args: argparse.Namespace) -> int:
+    """Record a reviewer's findings once its report is actually in hand.
+
+    The PostToolUse hook can only record a fan-out that hands its findings back inline. A
+    backgrounded reviewer returns a launch acknowledgement instead and reports minutes later — so
+    without this command the gate would close on the launch, and "reviewed" would mean "started".
+    """
+    reviewer = args.agent.split(":")[-1]
+    if reviewer not in policy.known_reviewers():
+        print(f"harness: {args.agent} is not one of this repository's reviewers")
+        return 2
+    try:
+        if args.file in (None, "-"):
+            text = sys.stdin.read()
+        else:
+            with open(args.file, encoding="utf-8") as fh:
+                text = fh.read()
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"harness: cannot read the report — {exc}")
+        return 2
+    stored = state.review_report_path(reviewer)
+    if args.file not in (None, "-") and stored and os.path.exists(stored) \
+            and os.path.realpath(args.file) == os.path.realpath(stored):
+        # `gate.py reviewers` prints this path right under MISSING. Once the reviewer's scope moves
+        # it is owed again and its own stored round is no longer a replay — nothing in the text can
+        # tell that file apart from a report the reviewer just wrote, but where it came from can.
+        print("harness: that is the file the previous round was written to, not a new pass — "
+              f"re-run {policy.agent_id(reviewer)} and record what it says.")
+        return 2
+    drift = policy.review_drift(reviewer)
+    # The verdict itself comes from `record_review`, the same one the hook gets: the CLI used to
+    # refuse on drift before the report was ever looked at, so the retry a refusal advertises was
+    # refused too and the reviewer could not be recorded at all without a fresh launch.
+    reason = policy.record_review(reviewer, text)
+    if reason == "moved":
+        print(f"harness: {reviewer} read a tree that has since moved — not recorded. Re-run it on:")
+        for path in drift:
+            print(f"  {path}")
+        return 2
+    if reason:
+        print(f"harness: nothing recorded — {REVIEW_REFUSALS.get(reason, reason)}")
+        return 2
+    print(f"harness: {reviewer} recorded against the current tree")
+    return 0
 
 
 def cmd_checks(_: argparse.Namespace) -> int:
@@ -244,7 +345,8 @@ def cmd_reviewers(_: argparse.Namespace) -> int:
     return 0
 
 
-def _status_text(task: dict, debt: list[str]) -> str:
+def _status_text(task: dict, debt: list[str], missed: list[tuple[str, list[str]]] | None = None
+                 ) -> str:
     lines = [
         f"task:    {task['kind']}  ({task['source']})",
         f"branch:  {task['branch']}",
@@ -257,12 +359,19 @@ def _status_text(task: dict, debt: list[str]) -> str:
         lines.append("gate:    owed —")
         lines += [f"           - {item}" for item in debt]
         lines.append("run:     tools/harness/gate.py run")
+    for reviewer, delta in missed or []:
+        lines.append(f"unreviewed: {policy.agent_id(reviewer)} — {len(delta)} file(s) moved after "
+                     f"its {policy.REVIEW_ROUNDS} passes; the gate stopped asking, nobody read "
+                     "this:")
+        lines += [f"             {path}" for path in delta[:12]]
+        if len(delta) > 12:
+            lines.append(f"             ... and {len(delta) - 12} more")
     return "\n".join(lines)
 
 
 def cmd_status(_: argparse.Namespace) -> int:
     task, debt = policy.gate_debt()
-    print(_status_text(task, debt))
+    print(_status_text(task, debt, policy.unreviewed(state.load(), task)))
     return 1 if debt else 0
 
 
@@ -286,6 +395,11 @@ def main(argv: list[str]) -> int:
     task.add_argument("kind", help=" | ".join(policy.KINDS))
     task.add_argument("ref", nargs="?", help="issue or PR reference")
     task.set_defaults(func=cmd_task)
+
+    review = sub.add_parser("review", help="record a reviewer's findings once its report arrives")
+    review.add_argument("agent", help="reviewer name, with or without its plugin prefix")
+    review.add_argument("--file", help="path to the report; omitted or '-' reads stdin")
+    review.set_defaults(func=cmd_review)
 
     sub.add_parser("checks", help="deterministic project rules").set_defaults(func=cmd_checks)
     sub.add_parser("reviewers", help="reviewers this change needs").set_defaults(func=cmd_reviewers)

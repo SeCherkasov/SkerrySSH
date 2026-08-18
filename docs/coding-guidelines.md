@@ -152,6 +152,12 @@ The most expensive defect class of the refactor. No exceptions to these:
 - **No hex colours in screens** — `D.*` tokens only (the refactor replaced ~70 hardcoded colours).
   Need a new shade? Add a token, checked against the prototype's `:root` block.
 - **No string literals in the UI** — everything through resources, en + ru + zh at once.
+- A locale quotes with its own marks: `“ ”` in en and zh, `« »` in ru, never the straight `"`,
+  and corner brackets nowhere. In `composeResources` (not `androidApp/src/main/res`, which is
+  AAPT and behaves the Android way) the plugin decodes `\n`, `\t`, `\uXXXX` and `\\` and nothing
+  else, so an Android-style `\"` or `\'` is drawn with the backslash on it — and substitution is
+  a regex over `%N$s`/`%N$d`, not `String.format`, so `%%` stays doubled and a bare `%s` is never
+  filled. `StringEscapeTest` sweeps every string in every locale for all four.
 - **No raw Compose Material components** where a design primitive exists (§1, UI table). `Txt` and
   `Sym` are used by 100+ and 70+ files respectively; a raw `Text()` or a stray icon is a bug.
 - Desktop and mobile **share form state and logic** (`*FormState`); only the layout differs. A new

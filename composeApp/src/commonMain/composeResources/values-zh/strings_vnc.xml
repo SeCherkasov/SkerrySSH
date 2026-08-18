@@ -42,7 +42,7 @@
     <string name="rd_panel_hide">隐藏面板</string>
     <string name="rd_panel_show">显示面板</string>
     <string name="rd_screenshot">屏幕截图</string>
-    <string name="rd_screenshot_saved">已保存到 %s</string>
+    <string name="rd_screenshot_saved">已保存到 %1$s</string>
     <string name="rd_screenshot_failed">无法写入文件</string>
     <string name="rd_settings">设置</string>
     <string name="rd_ctrl_alt_del">发送 Ctrl+Alt+Del</string>
