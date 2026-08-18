@@ -25,6 +25,11 @@ internal class FakeHostStore(initial: List<Host> = emptyList()) : HostStore {
 
     override fun reorder(transform: (List<Host>) -> List<Host>) {
         val updated = transform(entries.toList())
+        // The precondition VaultHostStore enforces: a fake that accepts anything lets a transform
+        // that drops or duplicates a profile pass every test and throw in production.
+        require(updated.size == entries.size && updated.map { it.id }.toSet() == entries.map { it.id }.toSet()) {
+            "reorder must preserve the id set (had ${entries.size}, got ${updated.size})"
+        }
         entries.clear()
         entries += updated
     }

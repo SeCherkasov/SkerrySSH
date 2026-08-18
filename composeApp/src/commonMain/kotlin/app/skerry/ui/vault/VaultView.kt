@@ -63,7 +63,6 @@ import app.skerry.ui.generated.resources.vault_generate_key
 import app.skerry.ui.generated.resources.vault_import_certificate
 import app.skerry.ui.generated.resources.vault_link_key_file
 import app.skerry.ui.generated.resources.vault_sidebar_header
-import app.skerry.ui.host.HostDraft
 import app.skerry.ui.host.rowLabel
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
@@ -315,7 +314,7 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                 onDismiss = { pendingEditCred = null },
                 onConfirm = { newLabel, newNote ->
                     // Abort on a lock race: idle auto-lock can fire while the dialog is open, and vault
-                    // CRUD throws once locked. Mirrors the delete guard just below.
+                    // CRUD throws once locked.
                     if (vault?.isUnlocked == true) credentials.edit(target.id, newLabel, newNote)
                     pendingEditCred = null
                 },
@@ -331,11 +330,13 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                 onDismiss = { pendingDeleteCred = null },
                 onConfirm = {
                     // The cascade is only consistent with a live hostsController; otherwise hosts would keep
-                    // referencing a deleted secret. Always present past the gate; the guard protects against
-                    // a lock race while the dialog is open (in which case the whole delete is aborted).
+                    // referencing a deleted secret. Always present past the gate. Idle auto-lock can fire in
+                    // the same frame as this click and vault CRUD throws once locked, so a vault known to be
+                    // locked abandons the delete instead of throwing out of the click handler. `!= false`,
+                    // not `== true`: no vault at all is the design/preview wiring, which must still run.
                     val hc = hostsController
-                    if (hc != null) {
-                        bound.forEach { host -> hc.save(host.unbindCredential()) }
+                    if (hc != null && vault?.isUnlocked != false) {
+                        hc.unbindCredential(victim.id)
                         credentials.delete(victim.id)
                         if (selectedId == victim.id) selectedId = null
                     }
@@ -362,9 +363,6 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
         }
     }
 }
-
-internal fun Host.unbindCredential(): HostDraft =
-    HostDraft(id = id, label = label, address = address, port = port, username = username, group = group, credentialId = null)
 
 // Left category sidebar (live counters) + header with the category action.
 

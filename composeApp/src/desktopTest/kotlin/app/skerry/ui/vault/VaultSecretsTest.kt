@@ -49,7 +49,8 @@ class VaultSecretsTest {
     fun `deleting a secret unbinds the hosts that used it`() = runDesktopShell { shell ->
         openVault()
         val credential = shell.credentialId(KEY_SECRET)
-        assertTrue(shell.hosts.hosts.any { it.credentialId == credential })
+        val boundBefore = shell.hosts.hosts.filter { it.credentialId == credential }
+        assertTrue(boundBefore.isNotEmpty())
 
         onNodeWithText(KEY_SECRET).performClick()
         waitForIdle()
@@ -64,6 +65,13 @@ class VaultSecretsTest {
             emptyList(),
             shell.hosts.hosts.filter { it.credentialId == credential }.map { it.label },
             "a host left pointing at a deleted secret fails at connect time, not here",
+        )
+        // Issue #280: the cascade used to rebuild each bound host from a partial draft, so the
+        // profile came back as a plain SSH one without its tags. Only the binding may change.
+        assertEquals(
+            boundBefore.map { it.copy(credentialId = null) },
+            boundBefore.map { before -> shell.hosts.find(before.id) },
+            "unbinding must not rewrite anything else on the profile",
         )
         onNodeWithText(KEY_SECRET).assertDoesNotExist()
     }
