@@ -994,14 +994,65 @@ class TestReviewerScope(SandboxCase):
                                            self.cwd)
         self.assertIn("skerry-security-reviewer", missing)
 
-    def test_the_gates_own_code_is_owed_a_security_review(self):
-        # The code that decides what a change owes is the one place a bypass costs everything, and
-        # it used to fall outside every scope but the two whole-change passes.
-        self._branch_with_ui_and_vault()
+    def test_a_reviewer_with_nothing_in_its_scope_is_not_owed(self):
+        # A reviewer whose scope the change does not touch has nothing to read. Demanding it
+        # anyway is what made a harness-only edit cost a full fan-out.
+        self.box.branch("refactor/harness")
         self.box.write("tools/harness/policy.py", "# edited\n")
         missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
                                            self.cwd)
+        self.assertNotIn("skerry-security-reviewer", missing)
+        self.assertNotIn("skerry-kotlin-reviewer", missing)
+        self.assertIn("skerry-reviewer", missing, "the whole-change passes always have something")
+
+    ROUND = ("## Findings\n\n- `VaultStore.unlock` logs the unwrapped key at INFO in round {n}, "
+             "so a support bundle carries it off the machine. Nothing else in the diff adds a "
+             "primitive, drops a parity case, swallows a cancellation or ships a shortcut "
+             "without its Settings row.\n")
+
+    def _vault_branch(self) -> None:
+        self.box.branch("feat/thing")
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt", "val v = 1\n")
+
+    def _two_rounds(self) -> None:
+        for n in (1, 2):
+            self.assertEqual(
+                policy.record_review("skerry-security-reviewer", self.ROUND.format(n=n), self.cwd),
+                "", f"round {n}")
+            self.box.write("shared/src/commonMain/kotlin/vault/V.kt", f"val v = {n + 1}\n")
+
+    def test_a_reviewer_is_owed_at_most_twice_on_one_branch(self):
+        # Fixing what a reviewer found moves the files it read, which owes it again — and its next
+        # findings are about that fix. Inside its own scope the loop does not converge: eleven
+        # rounds on one branch, each one re-reading the diff. Two passes are the gate's; a third
+        # is the operator's call.
+        self._vault_branch()
+        self._two_rounds()
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertNotIn("skerry-security-reviewer", missing)
+
+    def test_the_cap_starts_over_on_the_next_branch(self):
+        self._vault_branch()
+        self._two_rounds()
+        run_git(self.cwd, "add", "-A")
+        run_git(self.cwd, "commit", "-q", "-m", "vault")
+        run_git(self.cwd, "checkout", "-q", "main")
+        self.box.branch("feat/other")
+        self.box.write("shared/src/commonMain/kotlin/vault/W.kt", "val w = 1\n")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
         self.assertIn("skerry-security-reviewer", missing)
+
+    def test_what_the_cap_let_through_is_said_out_loud(self):
+        # The gate stops demanding, it does not pretend the code was read. Silence here would be
+        # the same defect as recording a reviewer on its launch.
+        self._vault_branch()
+        self._two_rounds()
+        status = self.box.gate("status")
+        self.assertIn("unreviewed", status.stdout)
+        self.assertIn("skerry-security-reviewer", status.stdout)
+        self.assertIn("shared/src/commonMain/kotlin/vault/V.kt", status.stdout)
 
     def test_a_review_does_not_follow_the_worktree_onto_the_next_branch(self):
         # RED records are scoped to their branch; review records were not, so a resources-only

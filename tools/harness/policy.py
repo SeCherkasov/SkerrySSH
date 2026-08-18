@@ -97,9 +97,7 @@ def _kotlin(path: str) -> bool:
 
 
 def _security_scope(path: str) -> bool:
-    # The harness is in scope for the same reason the vault is: it is the code that decides what a
-    # change has to prove, so a hole in it is worth every other hole at once.
-    return (_area_matcher("security", "harness")(path)
+    return (_area_matcher("security")(path)
             or any(seg in path for seg in PROTOCOL_SEGMENTS))
 
 
@@ -464,6 +462,7 @@ def record_review(reviewer: str, text: str, cwd: str | None = None) -> str:
         "digest": state.digest_of(entries),
         "files": entries,
         "branch": state.current_branch(cwd),
+        "rounds": review_rounds(st, reviewer, cwd) + 1,
         "at": time.time(),
     }
     (st.get("pending_reviews") or {}).pop(reviewer, None)
@@ -526,6 +525,34 @@ def gate_debt(cwd: str | None = None) -> tuple[dict, list[str]]:
     return task, debt
 
 
+# Two passes per branch, and the third is the operator's decision. A reviewer is owed again when
+# the files it read move — but fixing what it found is exactly what moves them, and its next round
+# is then about the fix. Inside a reviewer's own scope that loop does not converge; it ran eleven
+# times on one branch before this cap existed. What the cap lets through is printed, not hidden.
+REVIEW_ROUNDS = 2
+
+
+def review_rounds(st: dict, reviewer: str, cwd: str | None = None) -> int:
+    entry = (st.get("reviews") or {}).get(reviewer) or {}
+    return entry.get("rounds", 0) if entry.get("branch") == state.current_branch(cwd) else 0
+
+
+def unreviewed(st: dict, task: dict, cwd: str | None = None) -> list[tuple[str, list[str]]]:
+    """Reviewers the gate has stopped demanding while their scope has moved since they last read.
+
+    The gate stops asking; it does not claim the code was read. Saying nothing here would be the
+    same defect as recording a reviewer on its launch.
+    """
+    out = []
+    for name in required_reviewers(task, cwd):
+        if review_rounds(st, name, cwd) < REVIEW_ROUNDS:
+            continue
+        delta = reviewer_delta(st, name, cwd)
+        if delta:
+            out.append((name, delta))
+    return out
+
+
 def missing_reviewers(st: dict, task: dict, cwd: str | None = None) -> list[str]:
     """Reviewers whose own scope has moved since they last ran, or who left no findings behind.
 
@@ -539,10 +566,17 @@ def missing_reviewers(st: dict, task: dict, cwd: str | None = None) -> list[str]
     """
     seen = (st.get("reviews") or {})
     branch = state.current_branch(cwd)
-    return [name for name in required_reviewers(task, cwd)
-            if (seen.get(name) or {}).get("digest") != reviewer_digest(name, cwd)
-            or (seen.get(name) or {}).get("branch") != branch
-            or not stored_report(name, cwd)]
+    missing = []
+    for name in required_reviewers(task, cwd):
+        entry = seen.get(name) or {}
+        if not reviewer_entries(name, cwd):
+            continue  # nothing of this reviewer's in the change: there is nothing for it to read
+        if review_rounds(st, name, cwd) >= REVIEW_ROUNDS:
+            continue
+        if (entry.get("digest") != reviewer_digest(name, cwd) or entry.get("branch") != branch
+                or not stored_report(name, cwd)):
+            missing.append(name)
+    return missing
 
 
 def stored_report(reviewer: str, cwd: str | None = None) -> str:

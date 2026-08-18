@@ -158,7 +158,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     _, debt = policy.gate_debt()
     print()
-    print(_status_text(task, debt))
+    print(_status_text(task, debt, policy.unreviewed(state.load(), task)))
     return 1 if failed else 0
 
 
@@ -345,7 +345,8 @@ def cmd_reviewers(_: argparse.Namespace) -> int:
     return 0
 
 
-def _status_text(task: dict, debt: list[str]) -> str:
+def _status_text(task: dict, debt: list[str], missed: list[tuple[str, list[str]]] | None = None
+                 ) -> str:
     lines = [
         f"task:    {task['kind']}  ({task['source']})",
         f"branch:  {task['branch']}",
@@ -358,12 +359,19 @@ def _status_text(task: dict, debt: list[str]) -> str:
         lines.append("gate:    owed —")
         lines += [f"           - {item}" for item in debt]
         lines.append("run:     tools/harness/gate.py run")
+    for reviewer, delta in missed or []:
+        lines.append(f"unreviewed: {policy.agent_id(reviewer)} — {len(delta)} file(s) moved after "
+                     f"its {policy.REVIEW_ROUNDS} passes; the gate stopped asking, nobody read "
+                     "this:")
+        lines += [f"             {path}" for path in delta[:12]]
+        if len(delta) > 12:
+            lines.append(f"             ... and {len(delta) - 12} more")
     return "\n".join(lines)
 
 
 def cmd_status(_: argparse.Namespace) -> int:
     task, debt = policy.gate_debt()
-    print(_status_text(task, debt))
+    print(_status_text(task, debt, policy.unreviewed(state.load(), task)))
     return 1 if debt else 0
 
 
