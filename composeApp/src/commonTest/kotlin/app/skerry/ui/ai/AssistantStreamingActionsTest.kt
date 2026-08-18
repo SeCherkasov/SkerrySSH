@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
  */
 class AssistantStreamingActionsTest {
 
-    private val live = AssistantCommandActions(run = {}, copy = {}, edit = {}, runnable = true)
+    private val live = AssistantCommandActions(run = {}, copy = { _, _ -> }, edit = {}, runnable = true)
 
     @Test
     fun `a finished reply keeps its actions`() {

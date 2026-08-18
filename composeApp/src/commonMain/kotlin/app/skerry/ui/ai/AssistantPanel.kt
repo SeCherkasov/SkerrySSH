@@ -27,7 +27,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +40,6 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -72,10 +70,8 @@ import app.skerry.ui.generated.resources.assistant_title
 import app.skerry.ui.terminal.WORK_BAR_HEIGHT
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.terminal.lastCommandBlocks
-import app.skerry.ui.terminal.plainTextClipEntry
 import app.skerry.ui.theme.Skerry
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -117,18 +113,7 @@ internal fun AssistantPanel(
     focusPending: Boolean = false,
     onFocusConsumed: () -> Unit = {},
 ) {
-    val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboard.current
-    val actions = remember(terminal) {
-        AssistantCommandActions(
-            // A confirmed command is single-line ([AssistantAnswer]), so one CR runs exactly it.
-            run = { command -> terminal?.sendUserInputGuarded(command + "\r") },
-            copy = { text -> scope.launch { clipboard.setClipEntry(plainTextClipEntry(text)) } },
-            // Same input path without the CR: the command lands on the shell line to be edited.
-            edit = { command -> terminal?.sendUserInputGuarded(command) },
-            runnable = terminal != null,
-        )
-    }
+    val actions = rememberAssistantCommandActions(terminal)
     Column(Modifier.width(ASSISTANT_PANEL_WIDTH).fillMaxHeight().background(Skerry.colors.surface)) {
         AssistantHeader(controller, modelLabel)
         HLine()

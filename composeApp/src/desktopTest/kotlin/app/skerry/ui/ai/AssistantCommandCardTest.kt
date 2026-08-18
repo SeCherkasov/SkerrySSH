@@ -358,7 +358,7 @@ class AssistantCommandCardTest {
             .fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
 
     private fun runnable(onRun: (String) -> Unit) =
-        AssistantCommandActions(run = onRun, copy = {}, edit = {}, runnable = true)
+        AssistantCommandActions(run = onRun, copy = { _, _ -> }, edit = {}, runnable = true)
 }
 
 /** Fits the card whole, so it keeps the one-click Run. */

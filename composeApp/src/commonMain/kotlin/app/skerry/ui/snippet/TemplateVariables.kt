@@ -26,7 +26,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -53,6 +52,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippet_vars_clipboard
 import app.skerry.ui.generated.resources.lib_snippet_vars_secret_note
 import app.skerry.ui.generated.resources.lib_snippet_vars_clipboard_empty
+import app.skerry.ui.generated.resources.lib_snippet_vars_clipboard_unavailable
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault_ambiguous
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault_missing
@@ -61,8 +61,9 @@ import app.skerry.ui.generated.resources.lib_snippet_vars_vault_ready
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault_reading
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault_unusable
 import app.skerry.ui.generated.resources.lib_snippet_vars_vault_unnamed
-import app.skerry.ui.terminal.fetchSystemClipboardText
+import app.skerry.ui.terminal.rememberSystemClipboard
 import app.skerry.ui.theme.Skerry
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.pluralStringResource
@@ -150,6 +151,13 @@ class TemplateVariableValues internal constructor(
     /** Clipboard contents; `null` while still being read. */
     internal var clipboard: String? by mutableStateOf(null)
 
+    /**
+     * Whether the clipboard could not be read at all, which is not the same fact as an empty one:
+     * both splice nothing into the command, but only one of them is something the user can fix by
+     * copying again.
+     */
+    internal var clipboardUnavailable: Boolean by mutableStateOf(false)
+
     /** Current parameter values, to remember for this template's next run. */
     fun paramValues(): Map<String, String> = params.toMap()
 
@@ -203,7 +211,7 @@ fun rememberTemplateVariableValues(
 ): TemplateVariableValues {
     val credentials = LocalCredentials.current
     val generator = LocalSshKeyGenerator.current
-    val clipboard = LocalClipboard.current
+    val clipboard = rememberSystemClipboard()
     // The keychain as it stands when the confirmation opens. What freezes it is the `remember(request)`
     // around the resolution below — this list, the seeded map and the effect all live in slots keyed on
     // the request — so a background sync landing a secret mid-dialog cannot change what the previewed
@@ -240,7 +248,18 @@ fun rememberTemplateVariableValues(
         }
     }
     if (values.needsClipboard) {
-        LaunchedEffect(request) { values.clipboard = fetchSystemClipboardText(clipboard).orEmpty() }
+        // A clipboard that refuses to answer resolves to empty rather than staying null: `canRun`
+        // waits on this value, so a swallowed failure that left it null would hang the dialog shut.
+        LaunchedEffect(request, clipboard) {
+            values.clipboard = try {
+                clipboard.read().orEmpty()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                values.clipboardUnavailable = true
+                ""
+            }
+        }
     }
     return values
 }
@@ -297,6 +316,7 @@ fun TemplateVariableFields(values: TemplateVariableValues, autoFocus: Boolean = 
         Txt(
             when {
                 shown == null -> "…"
+                values.clipboardUnavailable -> stringResource(Res.string.lib_snippet_vars_clipboard_unavailable)
                 shown.isEmpty() -> stringResource(Res.string.lib_snippet_vars_clipboard_empty)
                 else -> shown
             },

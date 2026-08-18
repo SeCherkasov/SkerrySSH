@@ -1,5 +1,7 @@
 package app.skerry.ui.vault
 
+import app.skerry.ui.terminal.DirectClipboard
+import app.skerry.ui.terminal.PlatformDirectClipboard
 import java.awt.Toolkit
 import java.awt.datatransfer.Clipboard
 import java.awt.datatransfer.DataFlavor
@@ -26,10 +28,44 @@ actual fun copyPasswordToClipboard(password: String) {
     )
 }
 
-/** Non-secret text uses the same clipboard path as the password (no sensitivity hint, no clear). */
+/**
+ * Non-secret text (public key, fingerprint, snippet) — no sensitivity hint and no clear.
+ *
+ * Off the calling thread: under Wayland this forks `wl-copy` and waits for it, and the first call
+ * also scans PATH for the utilities, none of which belongs on the frame the click arrived in. The
+ * clear timer's single thread carries it, so two copies keep the order they were pressed in.
+ */
 actual fun copyTextToClipboard(text: String) {
-    // setContents can throw IllegalStateException when the clipboard is momentarily unavailable
-    // (X11 selection contention); a failed copy must not blow up the click handler.
+    clipboardClearScheduler.execute { writePlainTextToClipboard(text) }
+}
+
+/**
+ * Puts [text] on whichever clipboard the desktop actually pastes from: the platform's own path where
+ * it owns CLIPBOARD (Wayland's `wl-copy`), AWT everywhere else. An AWT write under Wayland reaches
+ * the XWayland buffer only, where no native application can paste it (#282) — and where the direct
+ * path owns the clipboard, a refused write is not a reason to fall back to that buffer.
+ *
+ * The password path stays on AWT: its sensitivity hint and its clear timer have no `wl-copy`
+ * equivalent, and a copy that skipped both would be a worse trade than an XWayland-only one.
+ *
+ * The outcome is dropped on purpose. Its callers — the vault's public key, a snippet, the account id
+ * — copy from a click handler that cannot suspend, so reporting a refusal would mean turning four
+ * call sites into suspending ones for a case the AWT path has always been silent about. The surfaces
+ * where a refusal is actually visible (the terminal, the assistant, the remote clipboard menu) go
+ * through [app.skerry.ui.terminal.SystemClipboard] instead, which throws.
+ *
+ * [direct] and [awt] are parameters so a test can see which of the two took the text.
+ */
+internal fun writePlainTextToClipboard(
+    text: String,
+    direct: DirectClipboard = PlatformDirectClipboard,
+    awt: (String) -> Unit = ::awtCopy,
+) {
+    if (direct.owns()) direct.write(text) else awt(text)
+}
+
+/** setContents throws IllegalStateException while the clipboard is busy (X11 selection contention). */
+private fun awtCopy(text: String) {
     runCatching { Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null) }
 }
 
