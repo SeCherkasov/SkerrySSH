@@ -20,7 +20,7 @@ material3 = "1.9.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
 ktor = "3.5.2"
-logback = "1.6.2"
+logback = "1.6.3"
 # slf4j-nop: a no-op SLF4J provider for the app. sshj logs via slf4j-api (the version pinned on the
 # classpath, see below); without any binding SLF4J prints "No SLF4J providers were found" and goes NOP.
 # An explicit nop removes the warning while keeping current behavior (sshj logs are not needed in the client anyway).
