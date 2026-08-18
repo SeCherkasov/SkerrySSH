@@ -156,6 +156,19 @@ Rules for the fan-out:
   Silent dismissal is not an option.
 - A fix that changes behaviour goes back through step 1 (test first).
 - Reviewers are fallible: verify each finding against the actual code before acting on it.
+- **Fix the whole round before re-reviewing.** Collect every finding, apply every fix, then run one
+  more pass — not a pass per finding. A fan-out per fix is how a branch ends up reviewed fifteen
+  times over the same code, and each of those passes re-reads the entire diff.
+- A reviewer that has already seen this branch gets **only what moved since** its last pass.
+  `gate.py reviewers` prints that delta per reviewer; hand it those files, not `main...HEAD` again.
+- Findings are kept in `.git/skerry-gate/reviews/<agent>.md` as each reviewer finishes, so what is
+  still owed survives a context compaction. Read them back rather than re-running the fan-out to
+  rediscover what a reviewer already said.
+
+Each reviewer is now owed again only when **its own scope** moves — the vault reviewer is not
+reopened by a Compose layout fix, and the server reviewer is not reopened by either. `skerry-reviewer`
+and `ecc:pr-test-analyzer` stay whole-change on purpose: parity, i18n and coverage are properties of
+the change, not of one directory. The scopes live in `REVIEWER_SCOPES` in `tools/harness/policy.py`.
 
 `/ecc:kotlin-review`, `/ecc:code-review` and `/ecc:review-pr` are the command shortcuts for the same
 agents when a single-angle pass is enough.

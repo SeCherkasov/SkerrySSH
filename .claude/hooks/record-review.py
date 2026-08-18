@@ -36,6 +36,20 @@ def note(text: str) -> None:
     sys.exit(0)
 
 
+def report_text(response) -> str:
+    """The reviewer's findings as text, whatever shape the harness handed them back in."""
+    if isinstance(response, str):
+        return response
+    if isinstance(response, dict):
+        for key in ("content", "text", "output", "result"):
+            if key in response:
+                return report_text(response[key])
+        return ""
+    if isinstance(response, list):
+        return "\n".join(part for part in (report_text(item) for item in response) if part)
+    return ""
+
+
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
@@ -54,12 +68,16 @@ def main() -> None:
         }
         if subagent in known:
             st = state.load()
+            entries = policy.reviewer_entries(subagent)
             st.setdefault("reviews", {})[subagent] = {
-                "digest": state.tree_digest("all"),
+                # Scoped to what this reviewer reads, so an unrelated fix does not owe it again.
+                "digest": state.digest_of(entries),
+                "files": entries,
                 "branch": state.current_branch(),
                 "at": __import__("time").time(),
             }
             state.save(st)
+            state.save_review_report(subagent, report_text(payload.get("tool_response")))
         sys.exit(0)
 
     if tool == "Bash":

@@ -213,13 +213,28 @@ def cmd_checks(_: argparse.Namespace) -> int:
 
 def cmd_reviewers(_: argparse.Namespace) -> int:
     task = policy.classify()
-    digest = state.tree_digest("all")
-    missing = policy.missing_reviewers(state.load(), digest, task)
+    st = state.load()
+    missing = policy.missing_reviewers(st, task)
     base = state.merge_base()
     print(f"range: {base[:12]}...HEAD (worktree included)")
     for reviewer in policy.required_reviewers(task):
         mark = "MISSING" if reviewer in missing else "ok"
         print(f"  {mark:>11}  {policy.agent_id(reviewer)}")
+        if reviewer not in missing:
+            continue
+        delta = policy.reviewer_delta(st, reviewer)
+        if delta:
+            # A reviewer that has already seen this branch only needs what moved since. Handing it
+            # the whole diff again is what made a second round cost as much as the first.
+            print(f"{'':>13}re-run on the delta only — {len(delta)} file(s) changed since its "
+                  "last pass:")
+            for path in delta[:12]:
+                print(f"{'':>15}{path}")
+            if len(delta) > 12:
+                print(f"{'':>15}... and {len(delta) - 12} more")
+            report = state.review_report_path(reviewer)
+            if report and os.path.exists(report):
+                print(f"{'':>13}its previous findings: {os.path.relpath(report)}")
     for reviewer in policy.skipped_reviewers(task):
         print(f"  {'not installed':>11}  {policy.agent_id(reviewer)}")
     skipped = policy.skipped_reviewers(task)

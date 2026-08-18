@@ -300,7 +300,8 @@ class TestGateDebt(SandboxCase):
         st["stages"] = {stage: {"ok": True, "digest": digest}
                         for stage in policy.required_stages(task)
                         if stage not in ("red", "review")}
-        st["reviews"] = {name: {"digest": digest} for name in policy.required_reviewers(task)}
+        st["reviews"] = {name: {"digest": policy.reviewer_digest(name, self.cwd)}
+                         for name in policy.required_reviewers(task, self.cwd)}
         state.save(st, self.cwd)
 
     def test_untouched_branch_owes_every_stage(self):
@@ -344,9 +345,9 @@ class TestGateDebt(SandboxCase):
     def test_one_reviewer_does_not_close_the_fan_out(self):
         self.box.branch("feat/thing")
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
-        digest = state.tree_digest("all", self.cwd)
         st = state.load(self.cwd)
-        st["reviews"] = {"skerry-reviewer": {"digest": digest}}
+        st["reviews"] = {"skerry-reviewer": {
+            "digest": policy.reviewer_digest("skerry-reviewer", self.cwd)}}
         state.save(st, self.cwd)
         _, debt = policy.gate_debt(self.cwd)
         review = [item for item in debt if item.startswith("review")][0]
@@ -615,6 +616,107 @@ class TestChecks(SandboxCase):
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 1)
         self.assertIn("missing_key", found[0].message)
+
+
+class TestReviewerScope(SandboxCase):
+    """A reviewer is owed again only when its own scope moved.
+
+    The whole-tree comparison this replaces made every fix owe every reviewer, so a branch with
+    ten review findings ran the full fan-out ten times over the same unchanged code.
+    """
+
+    def _reviewed(self, task: dict) -> None:
+        st = state.load(self.cwd)
+        reviews = st.setdefault("reviews", {})
+        for name in policy.required_reviewers(task, self.cwd):
+            entries = policy.reviewer_entries(name, self.cwd)
+            reviews[name] = {"digest": state.digest_of(entries), "files": entries}
+        state.save(st, self.cwd)
+
+    def _branch_with_ui_and_vault(self) -> dict:
+        self.box.branch("feat/thing")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 1\n")
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt", "val v = 1\n")
+        task = policy.classify(self.cwd)
+        self._reviewed(task)
+        return task
+
+    def test_a_reviewed_branch_owes_nobody(self):
+        task = self._branch_with_ui_and_vault()
+        self.assertEqual(policy.missing_reviewers(state.load(self.cwd), task, self.cwd), [])
+
+    def test_a_ui_fix_does_not_reopen_the_security_review(self):
+        self._branch_with_ui_and_vault()
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertNotIn("skerry-security-reviewer", missing)
+        self.assertIn("skerry-reviewer", missing)
+
+    def test_a_vault_fix_does_reopen_it(self):
+        self._branch_with_ui_and_vault()
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt", "val v = 2\n")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertIn("skerry-security-reviewer", missing)
+
+    def test_a_ui_fix_does_not_reopen_the_server_review(self):
+        self.box.branch("feat/thing")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 1\n")
+        self.box.write("server/src/main/kotlin/S.kt", "val s = 1\n")
+        task = policy.classify(self.cwd)
+        self._reviewed(task)
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertNotIn("java-reviewer", missing)
+
+    def test_the_whole_change_reviewers_see_every_edit(self):
+        # Parity, i18n and coverage are properties of the change, not of one directory: those two
+        # passes stay global on purpose, and scoping must not quietly narrow them.
+        self._branch_with_ui_and_vault()
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertIn("skerry-reviewer", missing)
+        self.assertIn("pr-test-analyzer", missing)
+
+    def test_the_delta_names_only_what_moved(self):
+        self._branch_with_ui_and_vault()
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        delta = policy.reviewer_delta(state.load(self.cwd), "skerry-reviewer", self.cwd)
+        self.assertEqual(delta, ["composeApp/src/commonMain/kotlin/S.kt"])
+
+    def test_a_reviewer_that_never_ran_has_no_delta(self):
+        self.box.branch("feat/thing")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 1\n")
+        self.assertEqual(policy.reviewer_delta(state.load(self.cwd), "skerry-reviewer", self.cwd),
+                         [])
+
+    def test_a_deleted_file_is_part_of_the_delta(self):
+        self._branch_with_ui_and_vault()
+        os.remove(os.path.join(self.cwd, "composeApp/src/commonMain/kotlin/S.kt"))
+        delta = policy.reviewer_delta(state.load(self.cwd), "skerry-reviewer", self.cwd)
+        self.assertIn("composeApp/src/commonMain/kotlin/S.kt", delta)
+
+
+class TestReviewReports(SandboxCase):
+    """Findings on disk — the one thing a context compaction must not be able to lose."""
+
+    def test_findings_are_written_where_the_next_round_can_read_them(self):
+        path = state.save_review_report("skerry-reviewer", "FINDING: vault key logged", self.cwd)
+        self.assertTrue(path and os.path.exists(path))
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+        self.assertIn("FINDING: vault key logged", body)
+        self.assertIn("skerry-reviewer", body)
+
+    def test_an_empty_report_is_not_written(self):
+        self.assertEqual(state.save_review_report("skerry-reviewer", "   ", self.cwd), "")
+
+    def test_a_reviewer_name_cannot_escape_the_state_directory(self):
+        path = state.review_report_path("../../etc/passwd", self.cwd)
+        self.assertNotIn("..", path)
 
 
 class TestStageRecording(SandboxCase):
