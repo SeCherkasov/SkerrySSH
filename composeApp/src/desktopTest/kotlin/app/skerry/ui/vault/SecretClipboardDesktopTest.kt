@@ -1,5 +1,6 @@
 package app.skerry.ui.vault
 
+import app.skerry.ui.design.FakeDirectClipboard
 import java.awt.datatransfer.Clipboard
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
@@ -13,6 +14,29 @@ import kotlin.test.assertTrue
 class SecretClipboardDesktopTest {
 
     private fun clipboard() = Clipboard("test")
+
+    /**
+     * A non-secret copy (public key, fingerprint, snippet) has to land on the clipboard the desktop
+     * pastes from: under Wayland an AWT write reaches the XWayland buffer only, where no native
+     * application can see it (#282).
+     */
+    @Test
+    fun plainTextGoesToThePlatformPathWhereItOwnsTheClipboard() {
+        val direct = FakeDirectClipboard(owns = true)
+        var awt: String? = null
+        writePlainTextToClipboard("ssh-ed25519 AAAA", direct) { awt = it }
+        assertEquals(listOf("ssh-ed25519 AAAA"), direct.writes)
+        assertNull(awt, "the text was pushed into the AWT clipboard the direct path replaces")
+    }
+
+    @Test
+    fun plainTextGoesToAwtWhereThereIsNoPlatformPath() {
+        val direct = FakeDirectClipboard(owns = false)
+        var awt: String? = null
+        writePlainTextToClipboard("ssh-ed25519 AAAA", direct) { awt = it }
+        assertEquals("ssh-ed25519 AAAA", awt, "the write never reached the only clipboard this platform has")
+        assertTrue(direct.writes.isEmpty(), "a platform without a direct path was asked to write through one")
+    }
 
     private fun contents(cb: Clipboard): String? =
         runCatching { cb.getData(DataFlavor.stringFlavor) as? String }.getOrNull()

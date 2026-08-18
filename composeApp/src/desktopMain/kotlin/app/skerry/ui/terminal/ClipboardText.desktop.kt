@@ -32,5 +32,5 @@ internal actual fun readSystemClipboardDirect(): String? =
 internal actual fun writeSystemClipboardDirect(text: String): Boolean =
     WaylandClipboard.available && WaylandClipboard.copy(text, primary = false)
 
-/** On Wayland, the direct path reads the whole clipboard (no AWT fallback, no JDK trace). */
-internal actual fun systemClipboardDirectHandlesReads(): Boolean = WaylandClipboard.available
+/** On Wayland, the direct path owns the whole clipboard, reads and writes alike (no AWT fallback). */
+internal actual fun systemClipboardDirectOwnsClipboard(): Boolean = WaylandClipboard.available

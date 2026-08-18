@@ -17,5 +17,5 @@ internal actual fun readSystemClipboardDirect(): String? = null
 /** No direct (non-Compose) clipboard write path on Android; writes go through the Compose clipboard. */
 internal actual fun writeSystemClipboardDirect(text: String): Boolean = false
 
-/** No direct clipboard path on Android; reads go through the Compose clipboard. */
-internal actual fun systemClipboardDirectHandlesReads(): Boolean = false
+/** No direct clipboard path on Android; everything goes through the Compose clipboard. */
+internal actual fun systemClipboardDirectOwnsClipboard(): Boolean = false

@@ -16,6 +16,7 @@
     <string name="assistant_no_answer">The model returned nothing. Ask again or add more context.</string>
     <string name="assistant_attached">outputs sent: %1$d</string>
     <string name="assistant_copy">Copy</string>
+    <string name="assistant_copy_failed">The system clipboard refused</string>
     <string name="assistant_edit">Edit</string>
     <string name="shell_tip_assistant">Assistant</string>
     <string name="assistant_explain_action">Explain the output</string>

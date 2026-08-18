@@ -103,6 +103,7 @@
     <string name="lib_snippet_vars_preview">Command preview</string>
     <string name="lib_snippet_vars_clipboard">Clipboard</string>
     <string name="lib_snippet_vars_clipboard_empty">(empty)</string>
+    <string name="lib_snippet_vars_clipboard_unavailable">(clipboard did not answer)</string>
     <string name="lib_snippet_vars_vault">Vault entries</string>
     <string name="lib_snippet_vars_vault_unnamed">(unprintable name)</string>
     <string name="lib_snippet_vars_vault_ambiguous">More than one vault entry is named “%1$s”</string>

@@ -16,9 +16,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,21 +48,78 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.assistant_attached
 import app.skerry.ui.generated.resources.assistant_confirm_run
 import app.skerry.ui.generated.resources.assistant_copy
+import app.skerry.ui.generated.resources.assistant_copy_failed
 import app.skerry.ui.generated.resources.assistant_edit
 import app.skerry.ui.generated.resources.assistant_run
 import app.skerry.ui.generated.resources.assistant_run_anyway
+import app.skerry.ui.terminal.SystemClipboard
+import app.skerry.ui.terminal.TerminalScreenState
+import app.skerry.ui.terminal.rememberSystemClipboard
 import app.skerry.ui.theme.Skerry
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 /** What a code block's buttons can do; the panel owns the session, the message only reports intent. */
 internal data class AssistantCommandActions(
     val run: (String) -> Unit,
-    val copy: (String) -> Unit,
+    /**
+     * Puts the command on the system clipboard and calls [onRefused] if the platform would not take
+     * it. Where the platform's own clipboard owns CLIPBOARD there is no second buffer to fall back
+     * to, so a refused copy leaves nothing behind and a Copy button that looked the same either way
+     * would claim one (#282). The card that was pressed owns the note: a reply can hold the same
+     * command twice, and a note under the other one reports a refusal that did not happen there.
+     */
+    val copy: (String, onRefused: () -> Unit) -> Unit,
     /** Put the command on the shell's input line without executing it. */
     val edit: (String) -> Unit,
     /** False while nothing is connected, or while the reply is still streaming: Run/Edit dim, Copy stays. */
     val runnable: Boolean,
 )
+
+/**
+ * What the code blocks of a reply can do with their command, over [terminal] and [clipboard].
+ *
+ * Its own composable because the copy has an outcome: [SystemClipboard.write] throws where the
+ * platform's own clipboard owns CLIPBOARD and refuses (#282), and a Copy button that showed nothing
+ * either way would claim a copy that never landed. The clipboard is a parameter so a test can be the
+ * one refusing.
+ */
+@Composable
+internal fun rememberAssistantCommandActions(
+    terminal: TerminalScreenState?,
+    clipboard: SystemClipboard = rememberSystemClipboard(),
+): AssistantCommandActions {
+    val scope = rememberCoroutineScope()
+    return remember(terminal, clipboard) {
+        AssistantCommandActions(
+            // A confirmed command is single-line ([AssistantAnswer]), so one CR runs exactly it.
+            run = { command -> terminal?.sendUserInputGuarded(command + "\r") },
+            // Through [SystemClipboard]: a bare Compose write reaches XWayland only, where no native
+            // Wayland app can paste it from (#282). Caught here because the scope carries a regular
+            // Job — a refusing clipboard would otherwise cancel it and kill Copy for the session.
+            copy = { text, onRefused ->
+                scope.launch {
+                    try {
+                        clipboard.write(text)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        onRefused()
+                    }
+                }
+                Unit
+            },
+            // Same input path without the CR: the command lands on the shell line to be edited.
+            edit = { command -> terminal?.sendUserInputGuarded(command) },
+            runnable = terminal != null,
+        )
+    }
+}
+
+/** How long the refused-copy note stays up. */
+private const val COPY_NOTE_MS = 2_000L
 
 /**
  * One turn in the feed. A user turn is a right-aligned bubble; an assistant turn is a left-aligned
@@ -225,6 +284,17 @@ private fun CommandCard(
     // push the runnable line out of what is laid out, and the arming was granted against the block as
     // it was drawn then.
     var armed by remember(display, command) { mutableStateOf(false) }
+    // The refusal note belongs to this card, not to the command text: another card can hold the same
+    // command, and it was not the one pressed. Counted rather than flagged so a second refusal
+    // restarts the timer instead of inheriting the first one's — the same reason
+    // [app.skerry.ui.remote.rememberClipboardActions] counts its failures.
+    var copyRefusals by remember(display, command) { mutableStateOf(0) }
+    LaunchedEffect(copyRefusals) {
+        if (copyRefusals > 0) {
+            delay(COPY_NOTE_MS)
+            copyRefusals = 0
+        }
+    }
     // Two readings of the same fact, and the difference is one frame: the click gate closes until the
     // layout says the command was read, while the label waits for it to say the opposite. Sharing
     // one of them would flash an amber "Run anyway" over every card as it scrolls into the feed.
@@ -302,12 +372,15 @@ private fun CommandCard(
                 // every language but English, and the primary action is the one that needs naming.
                 IconBtn(
                     "content_copy",
-                    onClick = { actions.copy(command) },
+                    onClick = { actions.copy(command) { copyRefusals++ } },
                     box = 24,
                     icon = 13.sp,
                     tint = Skerry.colors.textMid,
                     tooltip = stringResource(Res.string.assistant_copy),
                 )
+                if (copyRefusals > 0) {
+                    Txt(stringResource(Res.string.assistant_copy_failed), color = Skerry.colors.sunset, size = 10.5.sp)
+                }
                 IconBtn(
                     "edit",
                     onClick = { actions.edit(command) },

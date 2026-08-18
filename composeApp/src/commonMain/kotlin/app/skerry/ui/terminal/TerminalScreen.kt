@@ -66,7 +66,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
@@ -256,9 +255,9 @@ fun TerminalScreen(
     val imeFocusRequester = remember { FocusRequester() }
     val imeBaseline = remember { TextFieldValue(ANCHOR, selection = TextRange(ANCHOR.length)) }
     var imeValue by remember { mutableStateOf(imeBaseline) }
-    // System clipboard via the suspend API ([androidx.compose.ui.platform.Clipboard]); reads/writes
+    // System clipboard, the platform's own path where it has one ([SystemClipboard]); reads/writes
     // go through clipboardScope (called fire-and-forget from non-suspend key/mouse handlers).
-    val clipboard = LocalClipboard.current
+    val clipboard = rememberSystemClipboard()
     val clipboardScope = rememberCoroutineScope()
     val textToolbar = LocalTextToolbar.current
     val uriHandler = LocalUriHandler.current
@@ -367,10 +366,7 @@ fun TerminalScreen(
         // 52 would stop working for the rest of the session. Coroutine cancellation is rethrown.
         state.clipboardCopies.collect {
             try {
-                // On Wayland, write via wl-copy (same buffer read on paste); otherwise via Compose.
-                if (!withContext(Dispatchers.Default) { writeSystemClipboardDirect(it) }) {
-                    clipboard.setClipEntry(plainTextClipEntry(it))
-                }
+                clipboard.write(it)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -581,13 +577,13 @@ fun TerminalScreen(
     // copy/paste for the rest of the session. Rethrow cancellation, swallow the rest (clipboard unavailable).
     fun copySelection() {
         val text = state.selectedText() ?: return
-        copiedNonce++ // show the transient "Copied" banner (only when something was actually copied)
         clipboardScope.launch {
             try {
-                // Wayland: wl-copy (paired with paste via wl-paste); otherwise the standard Compose clipboard.
-                if (!withContext(Dispatchers.Default) { writeSystemClipboardDirect(text) }) {
-                    clipboard.setClipEntry(plainTextClipEntry(text))
-                }
+                clipboard.write(text)
+                // The banner comes after the write, not before it: where the platform's own clipboard
+                // owns the buffer there is no second one to fall back to, so a refused copy leaves
+                // nothing behind and "Copied" over an unchanged clipboard would be a lie (#282).
+                copiedNonce++
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -595,9 +591,9 @@ fun TerminalScreen(
         }
     }
 
-    // System CLIPBOARD text; the Wayland-direct vs Compose logic is shared with the snippet
-    // variable dialog (see ClipboardText.kt).
-    suspend fun fetchClipboardText(): String? = fetchSystemClipboardText(clipboard)
+    // System CLIPBOARD text; which clipboard that is belongs to [SystemClipboard], shared with the
+    // snippet variable dialog (see ClipboardText.kt).
+    suspend fun fetchClipboardText(): String? = clipboard.read()
 
     // Paste from the system clipboard: read asynchronously and send text to the PTY (paste wraps
     // bracketed-paste itself if the app enabled it). Empty/non-text clipboard — no-op.

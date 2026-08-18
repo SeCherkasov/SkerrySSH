@@ -116,7 +116,7 @@ internal val COPY_MODIFIER: Key =
     if (System.getProperty("os.name").orEmpty().startsWith("Mac")) Key.MetaLeft else Key.CtrlLeft
 
 /** Run/Copy/Edit are not what the selection tests exercise. */
-internal val INERT = AssistantCommandActions(run = {}, copy = {}, edit = {}, runnable = false)
+internal val INERT = AssistantCommandActions(run = {}, copy = { _, _ -> }, edit = {}, runnable = false)
 
 /** The panel's width in the tests: the desktop panel, wide enough for the bubble's own cap. */
 internal val PANEL_WIDTH = 380.dp

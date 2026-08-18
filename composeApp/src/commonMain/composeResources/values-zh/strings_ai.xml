@@ -16,6 +16,7 @@
     <string name="assistant_no_answer">模型未返回内容。请重新提问或补充上下文。</string>
     <string name="assistant_attached">已发送 %1$d 条输出</string>
     <string name="assistant_copy">复制</string>
+    <string name="assistant_copy_failed">系统剪贴板拒绝访问</string>
     <string name="assistant_edit">编辑</string>
     <string name="shell_tip_assistant">助手</string>
     <string name="assistant_explain_action">解释输出</string>

@@ -48,7 +48,6 @@ import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -67,8 +66,8 @@ import app.skerry.ui.remote.readLockKeys
 import app.skerry.ui.remote.RemoteModifiers
 import app.skerry.ui.remote.remoteKeyEvent
 import app.skerry.ui.remote.remoteModifier
-import app.skerry.ui.terminal.plainTextClipEntry
-import app.skerry.ui.terminal.readPlainText
+import app.skerry.ui.terminal.SystemClipboard
+import app.skerry.ui.terminal.rememberSystemClipboard
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.roundToInt
 import kotlin.time.TimeSource
@@ -387,15 +386,21 @@ fun VncSurface(
  * Keeps the system clipboard and the remote one in step for a live session: our text is pushed once
  * when the session opens (RFB has no clipboard-request, only cut-text, so a paste on the remote host
  * needs it up front), and every ServerCutText is mirrored back.
+ *
+ * Both directions go through [SystemClipboard], never through Compose/AWT directly: under Wayland the
+ * AWT clipboard is XWayland's, which reads back nothing and writes where no native app can paste
+ * from, so the bridge was silently dead on those sessions (#282).
  */
 @Composable
-internal fun VncClipboardBridge(screen: RemoteDesktopScreenState) {
-    val clipboard = LocalClipboard.current
-    LaunchedEffect(screen) {
+internal fun VncClipboardBridge(
+    screen: RemoteDesktopScreenState,
+    clipboard: SystemClipboard = rememberSystemClipboard(),
+) {
+    LaunchedEffect(screen, clipboard) {
         // Not runCatching: these are suspending calls, and swallowing the cancellation of a torn
         // down session would break structured concurrency (guidelines §3).
         val local = try {
-            clipboard.getClipEntry()?.readPlainText()
+            clipboard.read()
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -403,10 +408,10 @@ internal fun VncClipboardBridge(screen: RemoteDesktopScreenState) {
         }
         local?.let { screen.onLocalClipboard(it) }
     }
-    LaunchedEffect(screen.serverClipboard) {
+    LaunchedEffect(screen.serverClipboard, clipboard) {
         val text = screen.serverClipboard ?: return@LaunchedEffect
         try {
-            clipboard.setClipEntry(plainTextClipEntry(text))
+            clipboard.write(text)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {

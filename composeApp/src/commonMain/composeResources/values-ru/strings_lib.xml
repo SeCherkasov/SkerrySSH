@@ -105,6 +105,7 @@
     <string name="lib_snippet_vars_preview">Предпросмотр команды</string>
     <string name="lib_snippet_vars_clipboard">Буфер обмена</string>
     <string name="lib_snippet_vars_clipboard_empty">(пусто)</string>
+    <string name="lib_snippet_vars_clipboard_unavailable">(буфер обмена не ответил)</string>
     <string name="lib_snippet_vars_vault">Записи хранилища</string>
     <string name="lib_snippet_vars_vault_unnamed">(непечатаемое имя)</string>
     <string name="lib_snippet_vars_vault_ambiguous">В хранилище несколько записей с именем «%1$s»</string>

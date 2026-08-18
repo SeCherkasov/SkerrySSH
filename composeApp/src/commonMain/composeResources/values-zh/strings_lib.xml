@@ -102,6 +102,7 @@
     <string name="lib_snippet_vars_preview">命令预览</string>
     <string name="lib_snippet_vars_clipboard">剪贴板</string>
     <string name="lib_snippet_vars_clipboard_empty">（空）</string>
+    <string name="lib_snippet_vars_clipboard_unavailable">（剪贴板无响应）</string>
     <string name="lib_snippet_vars_vault">保险库条目</string>
     <string name="lib_snippet_vars_vault_unnamed">（无法显示的名称）</string>
     <string name="lib_snippet_vars_vault_ambiguous">保险库中有多个名为“%1$s”的条目</string>

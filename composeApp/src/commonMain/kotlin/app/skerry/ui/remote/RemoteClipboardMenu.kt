@@ -14,7 +14,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,15 +32,12 @@ import app.skerry.ui.generated.resources.rd_clipboard_from_remote
 import app.skerry.ui.generated.resources.rd_clipboard_send
 import app.skerry.ui.generated.resources.rd_clipboard_share
 import app.skerry.ui.generated.resources.rd_clipboard_unprintable
-import app.skerry.ui.terminal.fetchSystemClipboardText
-import app.skerry.ui.terminal.plainTextClipEntry
-import app.skerry.ui.terminal.writeSystemClipboardDirect
+import app.skerry.ui.terminal.SystemClipboard
+import app.skerry.ui.terminal.rememberSystemClipboard
 import app.skerry.ui.theme.Skerry
 import kotlin.coroutines.cancellation.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -146,9 +142,11 @@ internal fun ClipboardMenu(screen: RemoteDesktopScreenState, actions: ClipboardA
 class ClipboardActions(val failed: Boolean, val copyHere: (String) -> Unit, val sendMine: () -> Unit)
 
 @Composable
-fun rememberClipboardActions(screen: RemoteDesktopScreenState?): ClipboardActions {
+internal fun rememberClipboardActions(
+    screen: RemoteDesktopScreenState?,
+    clipboard: SystemClipboard = rememberSystemClipboard(),
+): ClipboardActions {
     val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboard.current
     // The system clipboard refuses often enough to be worth saying so: a busy X11 owner, a sandboxed
     // Android app. Both directions are user-initiated presses, so silence would read as "nothing to
     // send" rather than "this did not work".
@@ -169,19 +167,17 @@ fun rememberClipboardActions(screen: RemoteDesktopScreenState?): ClipboardAction
             failures++
         }
     }
-    return remember(screen, scope, failed) {
+    return remember(screen, scope, clipboard, failed) {
         ClipboardActions(
             failed = failed,
             copyHere = { text ->
                 scope.launch {
                     report(
                         try {
-                            // Wayland reads go through wl-paste ([fetchSystemClipboardText]), so the
-                            // write takes wl-copy first — otherwise the two ends of this menu would
-                            // be on different buffers and "Send mine" would return older text.
-                            if (!withContext(Dispatchers.Default) { writeSystemClipboardDirect(text) }) {
-                                clipboard.setClipEntry(plainTextClipEntry(text))
-                            }
+                            // Both ends of this menu go through the same system clipboard; on
+                            // Wayland that is wl-clipboard for reads and writes alike, and mixing it
+                            // with XWayland-AWT would make "Send mine" return older text.
+                            clipboard.write(text)
                             true
                         } catch (e: CancellationException) {
                             throw e
@@ -197,7 +193,7 @@ fun rememberClipboardActions(screen: RemoteDesktopScreenState?): ClipboardAction
                     scope.launch {
                         report(
                             try {
-                                fetchSystemClipboardText(clipboard)?.let(screen::onLocalClipboard)
+                                clipboard.read()?.let(screen::onLocalClipboard)
                                 true
                             } catch (e: CancellationException) {
                                 throw e
