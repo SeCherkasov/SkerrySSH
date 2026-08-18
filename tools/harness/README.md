@@ -14,6 +14,7 @@ tools/harness/gate.py status     # what this change is, and what it still owes
 tools/harness/gate.py run        # run the stages it owes
 tools/harness/gate.py red --tests '*Foo*' --file path/to/FooTest.kt
 tools/harness/gate.py reviewers  # which reviewers this change needs
+                                 # and, for each, what moved since its last pass
 tools/harness/gate.py checks     # the deterministic rules on their own
 tools/harness/gate.py task bug 133
 python3 tools/harness/selftest.py

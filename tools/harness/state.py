@@ -36,6 +36,7 @@ TEST_MARKERS = ("/commonTest/", "/desktopTest/", "/androidTest/", "/jvmTest/", "
 
 STATE_DIR = "skerry-gate"
 STATE_FILE = "state.json"
+REVIEWS_DIR = "reviews"
 
 
 def git(args: list[str], cwd: str | None = None) -> tuple[int, str]:
@@ -93,6 +94,32 @@ def save(state: dict, cwd: str | None = None) -> None:
 def log_path(stage: str, cwd: str | None = None) -> str:
     gd = git_dir(cwd)
     return os.path.join(gd, STATE_DIR, f"{stage}.log") if gd else ""
+
+
+def review_report_path(reviewer: str, cwd: str | None = None) -> str:
+    gd = git_dir(cwd)
+    safe = "".join(ch for ch in reviewer if ch.isalnum() or ch in "-_")
+    return os.path.join(gd, STATE_DIR, REVIEWS_DIR, f"{safe}.md") if gd and safe else ""
+
+
+def save_review_report(reviewer: str, text: str, cwd: str | None = None) -> str:
+    """Keep a reviewer's findings on disk.
+
+    Findings used to live only in the session context, so a compaction silently dropped the list
+    of what still had to be fixed. On disk they survive it, and the next round can be scoped to
+    what is actually left instead of running the whole fan-out again to rediscover it.
+    """
+    path = review_report_path(reviewer, cwd)
+    if not path or not text.strip():
+        return ""
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        header = f"# {reviewer}\n\nbranch: {current_branch(cwd)}\nat: {_now():.0f}\n\n"
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(header + text.strip() + "\n")
+        return path
+    except OSError:
+        return ""  # the harness must never break the session it guards
 
 
 def is_code(path: str) -> bool:
@@ -169,22 +196,38 @@ def worktree_entries(cwd: str | None = None) -> dict[str, str]:
     return entries
 
 
+def scoped_entries(keep=None, scope: str = "all", cwd: str | None = None) -> dict[str, str]:
+    """The build-relevant files a predicate keeps, as path -> content id.
+
+    `keep` narrows the set to what one consumer actually looks at, so a reviewer of the vault is
+    not invalidated by a Compose layout edit. None means every build-relevant file.
+    """
+    selected = {}
+    for path, content_id in worktree_entries(cwd).items():
+        if not is_code(path):
+            continue
+        if scope == "src" and is_test(path):
+            continue
+        if keep is not None and not keep(path):
+            continue
+        selected[path] = content_id
+    return selected
+
+
+def digest_of(entries: dict[str, str]) -> str:
+    """The digest of an already-selected set — the one place the hash is defined."""
+    if not entries:
+        return "empty"
+    joined = "\n".join(f"{path}\0{content_id}" for path, content_id in sorted(entries.items()))
+    return hashlib.sha256(joined.encode()).hexdigest()[:16]
+
+
 def tree_digest(scope: str = "all", cwd: str | None = None) -> str:
     """Digest of the build-relevant content of the worktree.
 
     scope="src" excludes test sources, so a bug fix can be told apart from the test that proves it.
     """
-    entries = worktree_entries(cwd)
-    selected = []
-    for path, content_id in sorted(entries.items()):
-        if not is_code(path):
-            continue
-        if scope == "src" and is_test(path):
-            continue
-        selected.append(f"{path}\0{content_id}")
-    if not selected:
-        return "empty"
-    return hashlib.sha256("\n".join(selected).encode()).hexdigest()[:16]
+    return digest_of(scoped_entries(None, scope, cwd))
 
 
 def current_branch(cwd: str | None = None) -> str:

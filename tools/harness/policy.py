@@ -65,6 +65,75 @@ AREA_REVIEWERS = {
     "terminal": ("performance-optimizer",),
 }
 
+# Untrusted input reaches the client through more than the areas named above: every wire protocol
+# parses bytes a server chose. The security reviewer's scope is the vault and the sync boundary
+# plus those parsers, which is wider than the "security" area used for build stages.
+PROTOCOL_SEGMENTS = (
+    "/ssh/", "/sftp/", "/telnet/", "/serial/", "/mosh/", "/rdp/", "/vnc/", "/terminal/",
+    "/graphics/", "/audio/", "/tunnel/", "/container/",
+)
+
+
+def _area_matcher(*names: str):
+    rules = [predicate for area, predicate in AREA_RULES if area in names]
+    return lambda path: any(rule(path) for rule in rules)
+
+
+def _kotlin(path: str) -> bool:
+    return path.endswith((".kt", ".kts"))
+
+
+def _security_scope(path: str) -> bool:
+    return _area_matcher("security")(path) or any(seg in path for seg in PROTOCOL_SEGMENTS)
+
+
+# What each reviewer actually reads. A reviewer is owed again only when the files inside its own
+# scope have moved — fixing a Compose layout does not un-review the vault. None means everything,
+# and is the honest answer for the two passes that are about the change as a whole.
+REVIEWER_SCOPES = {
+    "skerry-reviewer": None,               # parity, i18n, the abstraction catalogue: the whole diff
+    "skerry-kotlin-reviewer": _kotlin,
+    "skerry-security-reviewer": _security_scope,
+    "silent-failure-hunter": _kotlin,
+    "pr-test-analyzer": None,              # coverage is a property of the change, not of a file
+    "a11y-architect": _area_matcher("ui", "android"),
+    "java-reviewer": _area_matcher("server"),
+    "performance-optimizer": _area_matcher("terminal"),
+}
+
+
+def reviewer_entries(reviewer: str, cwd: str | None = None) -> dict[str, str]:
+    """The files this reviewer's verdict depends on, as path -> content id.
+
+    A reviewer reads the diff, not the repository, so the set is the change itself narrowed to the
+    reviewer's own scope. Recording the whole tree instead would put thousands of untouched files
+    into the state file and make every reviewer depend on every other reviewer's fix.
+    """
+    keep = REVIEWER_SCOPES.get(reviewer, None)
+    changed = set(state.changed_paths(cwd=cwd))
+    if keep is None:
+        return state.scoped_entries(lambda path: path in changed, "all", cwd)
+    return state.scoped_entries(lambda path: path in changed and keep(path), "all", cwd)
+
+
+def reviewer_digest(reviewer: str, cwd: str | None = None) -> str:
+    return state.digest_of(reviewer_entries(reviewer, cwd))
+
+
+def reviewer_delta(st: dict, reviewer: str, cwd: str | None = None) -> list[str]:
+    """Which files inside a reviewer's scope moved since it last ran.
+
+    Empty when the reviewer never ran here: there is no delta to review, only the whole diff.
+    """
+    seen = ((st.get("reviews") or {}).get(reviewer) or {}).get("files")
+    if not isinstance(seen, dict):
+        return []
+    now = reviewer_entries(reviewer, cwd)
+    changed = {path for path, cid in now.items() if seen.get(path) != cid}
+    changed |= {path for path in seen if path not in now}
+    return sorted(changed)
+
+
 PLUGIN_GLOBS = (
     "~/.claude/plugins/cache/*/*/*/agents/{name}.md",
     "~/.claude/plugins/marketplaces/*/agents/{name}.md",
@@ -206,7 +275,7 @@ def gate_debt(cwd: str | None = None) -> tuple[dict, list[str]]:
                 debt.append(f"red — {why}")
             continue
         if stage == "review":
-            missing = missing_reviewers(st, digest, task, cwd)
+            missing = missing_reviewers(st, task, cwd)
             if missing:
                 debt.append("review — missing: " + ", ".join(missing))
             continue
@@ -218,10 +287,16 @@ def gate_debt(cwd: str | None = None) -> tuple[dict, list[str]]:
     return task, debt
 
 
-def missing_reviewers(st: dict, digest: str, task: dict, cwd: str | None = None) -> list[str]:
+def missing_reviewers(st: dict, task: dict, cwd: str | None = None) -> list[str]:
+    """Reviewers whose own scope has moved since they last ran.
+
+    Previously this compared one whole-tree digest, so a one-line Compose fix owed the vault, the
+    server and the terminal reviewer all over again — the fan-out ran ten to twenty times per
+    branch and each pass re-read the entire diff. Scoping the comparison is what stops that.
+    """
     seen = (st.get("reviews") or {})
     return [name for name in required_reviewers(task, cwd)
-            if (seen.get(name) or {}).get("digest") != digest]
+            if (seen.get(name) or {}).get("digest") != reviewer_digest(name, cwd)]
 
 
 def skipped_reviewers(task: dict, cwd: str | None = None) -> list[str]:
