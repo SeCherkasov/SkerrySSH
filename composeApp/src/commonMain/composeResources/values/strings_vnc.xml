@@ -42,7 +42,7 @@
     <string name="rd_panel_hide">Hide the panel</string>
     <string name="rd_panel_show">Show the panel</string>
     <string name="rd_screenshot">Screenshot</string>
-    <string name="rd_screenshot_saved">Saved to %s</string>
+    <string name="rd_screenshot_saved">Saved to %1$s</string>
     <string name="rd_screenshot_failed">Could not write the file</string>
     <string name="rd_settings">Settings</string>
     <string name="rd_ctrl_alt_del">Send Ctrl+Alt+Del</string>

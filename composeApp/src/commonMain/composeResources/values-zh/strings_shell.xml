@@ -64,7 +64,7 @@
     <string name="shell_use_saved_secret">或使用已保存的凭据</string>
 
     <!-- 删除主机对话框 (DeleteHostDialog.kt) -->
-    <string name="shell_delete_host_title">删除 \"%1$s\"？</string>
+    <string name="shell_delete_host_title">删除“%1$s”？</string>
     <string name="shell_delete_host_body">已从主机列表中移除。已存储的凭据仍保留在保险库中。此操作不可撤销。</string>
 
     <!-- 移动端主机详情 (MobileHostDetailView.kt) -->
@@ -87,14 +87,14 @@
 
     <!-- 桌面端边框：确认对话框、标题栏、状态栏 (DesktopDesignApp.kt) -->
     <string name="shell_this_session">本次会话</string>
-    <string name="shell_disconnect_title">断开 \"%1$s\"？</string>
+    <string name="shell_disconnect_title">断开“%1$s”？</string>
     <string name="shell_disconnect_message">将关闭会话及其终端。</string>
     <string name="shell_disconnect">断开连接</string>
     <string name="shell_disconnect_all_title">断开此标签页中的所有会话？</string>
     <string name="shell_disconnect_all_message">将关闭以下会话：%1$s</string>
     <string name="shell_close_pane_title">关闭窗格？</string>
     <string name="shell_close_pane_message">将关闭会话：%1$s</string>
-    <string name="shell_replace_pane_title">将此窗格的会话替换为 \"%1$s\"？</string>
+    <string name="shell_replace_pane_title">将此窗格的会话替换为“%1$s”？</string>
     <string name="shell_close_panel">关闭窗格</string>
     <string name="shell_lock">锁定</string>
     <string name="shell_settings">设置</string>

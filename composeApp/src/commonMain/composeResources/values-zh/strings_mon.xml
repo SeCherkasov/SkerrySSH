@@ -45,9 +45,9 @@
 
     <string name="mon_alert_disk">磁盘 %1$s 超过阈值</string>
     <string name="mon_alert_disk_ok">磁盘 %1$s 回到阈值以下</string>
-    <string name="mon_alert_memory">内存占用 %1$s%%</string>
+    <string name="mon_alert_memory">内存占用 %1$s%</string>
     <string name="mon_alert_memory_ok">内存恢复正常</string>
-    <string name="mon_alert_swap">交换占用 %1$s%%</string>
+    <string name="mon_alert_swap">交换占用 %1$s%</string>
     <string name="mon_alert_swap_ok">交换恢复正常</string>
     <string name="mon_alert_load">负载 %1$s 高于核心数</string>
     <string name="mon_alert_load_ok">负载回到核心数以下</string>

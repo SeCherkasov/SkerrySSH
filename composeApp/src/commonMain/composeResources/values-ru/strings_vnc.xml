@@ -42,7 +42,7 @@
     <string name="rd_panel_hide">Скрыть панель</string>
     <string name="rd_panel_show">Показать панель</string>
     <string name="rd_screenshot">Снимок экрана</string>
-    <string name="rd_screenshot_saved">Сохранено в %s</string>
+    <string name="rd_screenshot_saved">Сохранено в %1$s</string>
     <string name="rd_screenshot_failed">Не удалось записать файл</string>
     <string name="rd_settings">Настройки</string>
     <string name="rd_ctrl_alt_del">Отправить Ctrl+Alt+Del</string>

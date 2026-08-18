@@ -104,7 +104,7 @@
     <string name="settings_hide_system_bars_desc">The terminal and the remote desktop take the whole display. The bars come back on a swipe from the edge.</string>
     <string name="settings_terminal_open_paths">Open file paths in SFTP</string>
     <string name="settings_terminal_open_paths_desc">Ctrl+click a file path in the output to reveal it in the file panel.</string>
-    <string name="settings_terminal_open_paths_desc_mobile">Long-press a file path in the output, then tap "Open in Files".</string>
+    <string name="settings_terminal_open_paths_desc_mobile">Long-press a file path in the output, then tap “Open in Files”.</string>
     <string name="settings_terminal_highlight_input">Highlight the command line</string>
     <string name="settings_terminal_highlight_input_desc">Colors commands, flags, quoted strings, paths and operators as you type.</string>
     <string name="settings_terminal_highlight_output">Highlight log levels in output</string>
@@ -251,7 +251,7 @@
     <string name="settings_trash_empty_all">Empty trash</string>
     <string name="settings_trash_days_left">%1$d d left</string>
     <string name="settings_trash_gone">This item is no longer in the trash</string>
-    <string name="settings_trash_confirm_forget">Delete “%1$s” for good? This can’t be undone.</string>
+    <string name="settings_trash_confirm_forget">Delete “%1$s” for good? This can't be undone.</string>
     <string name="settings_trash_confirm_empty">Empty the trash? Everything in it is deleted for good.</string>
     <string name="settings_trash_kind_host">Host</string>
     <string name="settings_trash_kind_credential">Key</string>

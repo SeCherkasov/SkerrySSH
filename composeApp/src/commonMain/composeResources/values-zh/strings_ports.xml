@@ -27,7 +27,7 @@
     <string name="ports_no_saved_hosts">无已保存主机</string>
     <string name="ports_via">经由 %1$s</string>
     <string name="ports_col_type">类型</string>
-    <string name="ports_remove_confirm_title">移除 \"%1$s\"?</string>
+    <string name="ports_remove_confirm_title">移除“%1$s”？</string>
     <string name="ports_remove_active_message">隧道处于活动状态，将断开并删除，无法撤销。</string>
     <string name="ports_remove_inactive_message">此已保存隧道将被删除。无法撤销。</string>
     <string name="ports_type_local">本地</string>

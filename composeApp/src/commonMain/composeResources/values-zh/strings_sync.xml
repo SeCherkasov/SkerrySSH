@@ -77,7 +77,7 @@
     <!-- 已关联设备 -->
     <string name="sync_linked_devices">已关联设备</string>
     <string name="sync_loading_devices">加载设备中…</string>
-    <string name="sync_load_devices_failed">无法加载设备。请尝试\"立即同步\"。</string>
+    <string name="sync_load_devices_failed">无法加载设备。请尝试“立即同步”。</string>
     <string name="sync_only_this_device">目前只有此设备。</string>
     <string name="sync_this_device_badge">● 此设备</string>
     <string name="sync_confirm">确认</string>
@@ -87,7 +87,7 @@
 
     <!-- 桌面端对话框 -->
     <string name="sync_setup_dialog_desc">端到端加密。Skerry 永远不会看到你的明文数据 — 主密码只留在你的设备上。</string>
-    <string name="sync_pairing_dialog_desc">在新设备上选择\"我有配对码\"，然后扫描此二维码或粘贴下方代码。仅可使用一次。</string>
+    <string name="sync_pairing_dialog_desc">在新设备上选择“我有配对码”，然后扫描此二维码或粘贴下方代码。仅可使用一次。</string>
     <string name="sync_done">完成</string>
     <string name="sync_pairing_gen_failed">无法创建配对码。</string>
     <string name="sync_generating_code">正在生成代码…</string>
@@ -121,7 +121,7 @@
 
     <!-- issue #28: 连接到使用其他密码的现有账户会将本设备改用该密码 -->
     <string name="sync_password_replace_title">使用账户密码？</string>
-    <string name="sync_password_replace_body">账户「%1$s」使用其他密码。若要同步，此设备将改用账户密码解锁。</string>
+    <string name="sync_password_replace_body">账户“%1$s”使用其他密码。若要同步，此设备将改用账户密码解锁。</string>
     <string name="sync_password_replace_confirm">使用账户密码</string>
     <string name="sync_password_replace_cancel">取消</string>
 

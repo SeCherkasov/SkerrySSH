@@ -56,7 +56,7 @@
     <string name="term_ai_blocked_device_not_ready">请先在 AI 设置中下载设备端模型。</string>
     <string name="term_ai_blocked_disabled">AI 已在 AI 设置中关闭。</string>
     <string name="term_mobile_title_fallback">终端</string>
-    <string name="term_mobile_open_host_connect">打开一个主机并点击\"连接\"。</string>
+    <string name="term_mobile_open_host_connect">打开一个主机并点击“连接”。</string>
     <!-- 主机名下方的会话状态行（移动端终端标题栏）。 -->
     <string name="term_status_connected">已连接</string>
     <string name="term_status_connecting">连接中…</string>

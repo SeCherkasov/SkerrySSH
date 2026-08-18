@@ -45,9 +45,9 @@
 
     <string name="mon_alert_disk">Диск %1$s выше порога</string>
     <string name="mon_alert_disk_ok">Диск %1$s вернулся под порог</string>
-    <string name="mon_alert_memory">Память на %1$s%%</string>
+    <string name="mon_alert_memory">Память на %1$s%</string>
     <string name="mon_alert_memory_ok">Память вернулась в норму</string>
-    <string name="mon_alert_swap">Подкачка на %1$s%%</string>
+    <string name="mon_alert_swap">Подкачка на %1$s%</string>
     <string name="mon_alert_swap_ok">Подкачка вернулась в норму</string>
     <string name="mon_alert_load">Загрузка %1$s выше числа ядер</string>
     <string name="mon_alert_load_ok">Загрузка вернулась под число ядер</string>

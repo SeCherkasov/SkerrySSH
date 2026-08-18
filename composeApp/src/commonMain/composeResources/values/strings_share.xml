@@ -17,7 +17,7 @@
     <string name="share_unnamed">Shared session</string>
     <string name="share_watching">Watching %1$s</string>
     <string name="share_fail_not_connected">Sync account not connected.</string>
-    <string name="share_fail_no_key">The team key hasn\'t arrived on this device yet.</string>
+    <string name="share_fail_no_key">The team key hasn't arrived on this device yet.</string>
     <string name="share_fail_network">The relay is unreachable.</string>
     <string name="share_fail_rejected">The server refused the share.</string>
     <string name="share_fail_server">The server failed to relay the session.</string>

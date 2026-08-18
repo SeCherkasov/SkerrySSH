@@ -25,7 +25,7 @@ TOOLS_DIR = os.path.dirname(HARNESS_DIR)
 REPO_ROOT = os.path.dirname(TOOLS_DIR)
 sys.path.insert(0, TOOLS_DIR)
 
-from harness import checks, policy, state  # noqa: E402
+from harness import checks, gate, policy, state  # noqa: E402
 
 
 def run_git(cwd: str, *args: str) -> str:
@@ -43,8 +43,9 @@ class Sandbox:
         run_git(self.path, "config", "user.name", "Harness")
         shutil.copytree(HARNESS_DIR, os.path.join(self.path, "tools", "harness"))
         os.makedirs(os.path.join(self.path, ".claude", "hooks"), exist_ok=True)
-        shutil.copy2(os.path.join(REPO_ROOT, ".claude", "hooks", "guard-git.py"),
-                     os.path.join(self.path, ".claude", "hooks", "guard-git.py"))
+        for hook in ("guard-git.py", "record-review.py"):
+            shutil.copy2(os.path.join(REPO_ROOT, ".claude", "hooks", hook),
+                         os.path.join(self.path, ".claude", "hooks", hook))
         # The repo-local reviewers are part of the clone, so the sandbox has to have them too:
         # without them the gate degrades to the plugin agents and tests silently check less.
         shutil.copytree(os.path.join(REPO_ROOT, ".claude", "agents"),
@@ -77,6 +78,24 @@ class Sandbox:
             env=environment, check=False,
         )
 
+    def recorder(self, subagent: str, response) -> subprocess.CompletedProcess:
+        """Drive the PostToolUse recorder exactly as the session does — the layer the review gate
+        was recorded from intent in, and the one no test used to reach."""
+        return self.raw_hook({"tool_name": "Agent", "tool_input": {"subagent_type": subagent},
+                              "tool_response": response})
+
+    def raw_hook(self, payload: dict) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, os.path.join(self.path, ".claude", "hooks", "record-review.py")],
+            input=json.dumps(payload), capture_output=True, text=True, cwd=self.path, check=False,
+        )
+
+    def gate(self, *args: str, stdin: str = "") -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, os.path.join(self.path, "tools", "harness", "gate.py"), *args],
+            input=stdin, capture_output=True, text=True, cwd=self.path, check=False,
+        )
+
     def cleanup(self) -> None:
         shutil.rmtree(self.path, ignore_errors=True)
 
@@ -95,11 +114,38 @@ class TestRelevance(unittest.TestCase):
                      "gradle/libs.versions.toml"):
             self.assertTrue(state.is_code(path), path)
 
-    def test_prose_and_harness_do_not(self):
-        for path in ("README.md", "docs/coding-guidelines.md", ".claude/hooks/guard-git.py",
-                     "tools/harness/gate.py", ".github/workflows/ci.yml",
+    def test_prose_and_generated_files_do_not(self):
+        for path in ("README.md", "docs/coding-guidelines.md", ".github/workflows/ci.yml",
                      "composeApp/build/generated/Thing.kt", "docs/img/x.png"):
             self.assertFalse(state.is_code(path), path)
+
+    def test_the_harness_counts_as_code_it_gates(self):
+        # It used to be ignored, so deleting a rule moved no digest and the stage that had already
+        # run against the old rule set stayed green.
+        for path in ("tools/harness/checks.py", ".claude/hooks/guard-git.py"):
+            self.assertTrue(state.is_code(path), path)
+
+    def test_a_reviewer_definition_is_code_the_gate_watches(self):
+        # The agent files are the executable content of the review gate: prose everywhere else,
+        # but editing one changes what a reviewer looks for.
+        self.assertTrue(state.is_code(".claude/agents/skerry-security-reviewer.md"))
+        self.assertFalse(state.is_code("docs/design/notes.md"))
+        self.assertEqual(policy.areas([".claude/agents/skerry-reviewer.md"]), ["harness"])
+
+    def test_a_slash_command_is_code_the_gate_watches(self):
+        # `/gate` and `/task` drive the fan-out and the kind declaration: the same argument that
+        # made agent definitions code.
+        self.assertTrue(state.is_code(".claude/commands/gate.md"))
+        self.assertEqual(policy.areas([".claude/commands/gate.md"]), ["harness"])
+
+    def test_the_invisible_byte_list_covers_the_bidi_and_c1_families(self):
+        # ALM is a bidi control like LRM; C1 opens CSI/OSC in a UTF-8 xterm; the word-joiner block
+        # and the BOM are invisible in review the same way the zero-width space is.
+        for point in (0x061C, 0x2060, 0xFEFF, 0x007F, 0x009B, 0x202E, 0x200B,
+                      0x2028, 0x2029, 0x000C, 0x0085):
+            self.assertIsNotNone(state.CONTROL_CHARS.search(chr(point)), hex(point))
+        for point in (0x0009, 0x000A, 0x0041, 0x0410, 0x4E2D, 0x00A0):
+            self.assertIsNone(state.CONTROL_CHARS.search(chr(point)), hex(point))
 
     def test_test_sources_are_marked(self):
         self.assertTrue(state.is_test("shared/src/commonTest/kotlin/AT.kt"))
@@ -190,6 +236,15 @@ class TestClassification(SandboxCase):
         self.box.write("README.md", "prose\n")
         self.assertEqual(policy.classify(self.cwd)["kind"], "docs")
 
+    def test_a_docs_branch_does_not_disarm_a_code_change(self):
+        # The declaration is floored by the branch; the branch has to be floored by the diff, or
+        # `git checkout -b docs/tidy` is a quieter override than SKERRY_GATE_OVERRIDE.
+        self.box.branch("docs/tidy")
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt", "val a = 1\n")
+        task = policy.classify(self.cwd)
+        self.assertEqual(task["kind"], "feature")
+        self.assertTrue(policy.required_stages(task))
+
     def test_unknown_prefix_defaults_to_feature(self):
         self.box.branch("wip")
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
@@ -221,6 +276,27 @@ class TestClassification(SandboxCase):
         self.assertEqual(task["kind"], "feature")
         self.assertNotEqual(policy.gate_debt(self.cwd)[1], [])
 
+    def test_a_docs_branch_cannot_declare_itself_docs_over_code(self):
+        # The undeclared path floors `docs/` to feature. The declared path compared against the
+        # unfloored branch kind, so `docs/tidy` + `gate.py task docs` accepted itself and the
+        # whole gate went quiet — without the override having to be typed out loud.
+        self.box.branch("docs/tidy")
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt", "val a = 1\n")
+        self.box.gate("task", "docs")
+        task = policy.classify(self.cwd)
+        self.assertEqual(task["kind"], "feature")
+        self.assertNotEqual(policy.gate_debt(self.cwd)[1], [])
+
+    def test_a_declaration_cannot_drop_the_red_phase(self):
+        # The module says a declaration can only tighten the gate. `task refactor` on a `fix/`
+        # branch dropped `red`, and it does not announce itself the way the override does.
+        self.box.branch("fix/thing")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.box.gate("task", "refactor")
+        task = policy.classify(self.cwd)
+        self.assertEqual(task["kind"], "bug")
+        self.assertIn("red", policy.required_stages(task))
+
     def test_declaring_a_stricter_kind_is_honoured(self):
         self.box.branch("chore/actually-a-bug")
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
@@ -237,6 +313,10 @@ class TestClassification(SandboxCase):
         self.assertIn("android", policy.areas(["androidApp/src/main/AndroidManifest.xml"]))
         self.assertIn("i18n", policy.areas(
             ["composeApp/src/commonMain/composeResources/values-ru/strings.xml"]))
+        # Without this the `harness` rule could be deleted and every case above still passed: the
+        # stage it pulls in was pinned, the classification that pulls it in was not.
+        self.assertIn("harness", policy.areas(["tools/harness/policy.py"]))
+        self.assertIn("harness", policy.areas([".claude/hooks/record-review.py"]))
 
 
 class TestRequirements(unittest.TestCase):
@@ -248,6 +328,25 @@ class TestRequirements(unittest.TestCase):
         stages = policy.required_stages({"kind": "bug", "areas": ["shared"]})
         self.assertIn("red", stages)
         self.assertNotIn("red", policy.required_stages({"kind": "feature", "areas": ["shared"]}))
+
+    def test_a_harness_change_owes_its_own_suite(self):
+        # Gradle cannot see a line of Python, so this suite is the only stage that gates the gate.
+        self.assertIn("selftest", policy.required_stages({"kind": "refactor", "areas": ["harness"]}))
+        self.assertNotIn("selftest", policy.required_stages({"kind": "refactor", "areas": ["ui"]}))
+
+    def test_the_hook_wiring_is_part_of_the_harness(self):
+        # `.claude/settings.json` is where the recorder is registered: Gradle cannot see it, and
+        # the suite is the only thing that can.
+        self.assertEqual(policy.areas([".claude/settings.json"]), ["harness"])
+
+    def test_a_harness_only_change_does_not_owe_gradle(self):
+        # No Gradle stage can see a line of Python. Charging a five-line hook fix ten minutes of
+        # `test allTests` and `build` is how a harness ends up routinely overridden.
+        self.assertEqual(policy.required_stages({"kind": "refactor", "areas": ["harness"]}),
+                         ["checks", "selftest", "review"])
+        both = policy.required_stages({"kind": "refactor", "areas": ["harness", "ui"]})
+        self.assertIn("tests", both)
+        self.assertIn("selftest", both)
 
     def test_ui_pulls_in_the_android_compile_and_a11y(self):
         task = {"kind": "feature", "areas": ["ui"]}
@@ -300,9 +399,13 @@ class TestGateDebt(SandboxCase):
         st["stages"] = {stage: {"ok": True, "digest": digest}
                         for stage in policy.required_stages(task)
                         if stage not in ("red", "review")}
-        st["reviews"] = {name: {"digest": policy.reviewer_digest(name, self.cwd)}
+        st["reviews"] = {name: {"digest": policy.reviewer_digest(name, self.cwd),
+                                "branch": state.current_branch(self.cwd)}
                          for name in policy.required_reviewers(task, self.cwd)}
         state.save(st, self.cwd)
+        for name in policy.required_reviewers(task, self.cwd):
+            state.save_review_report(name, f"# {name}\n\nfindings from a pass that really ran",
+                                     self.cwd)
 
     def test_untouched_branch_owes_every_stage(self):
         self.box.branch("feat/thing")
@@ -347,8 +450,10 @@ class TestGateDebt(SandboxCase):
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
         st = state.load(self.cwd)
         st["reviews"] = {"skerry-reviewer": {
-            "digest": policy.reviewer_digest("skerry-reviewer", self.cwd)}}
+            "digest": policy.reviewer_digest("skerry-reviewer", self.cwd),
+            "branch": state.current_branch(self.cwd)}}
         state.save(st, self.cwd)
+        state.save_review_report("skerry-reviewer", "# skerry-reviewer\n\nno findings", self.cwd)
         _, debt = policy.gate_debt(self.cwd)
         review = [item for item in debt if item.startswith("review")][0]
         missing = review.split("missing: ")[1]
@@ -534,6 +639,73 @@ class TestChecks(SandboxCase):
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0].severity, checks.WARN)
 
+    def test_invisible_characters_are_blocked_in_a_comment_too(self):
+        # Trojan source lives in comments by design: the payload has to sit where the reviewer
+        # reads prose and the compiler reads nothing.
+        bidi = chr(0x202E)
+        self.box.write("shared/src/commonMain/kotlin/A.kt", f"// drop{bidi} the table\n")
+        found = self._findings("control-chars")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].severity, checks.BLOCK)
+
+    def test_a_line_that_looks_like_a_diff_header_does_not_retarget_the_rules(self):
+        # `git diff -U0` renders an added line `++ b/x` as `+++ b/x`, which the parser read as a
+        # new file header: every rule after it was applied to the attacker's path instead.
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt",
+                       'val sample = """\n'
+                       "++ b/docs/notes.md\n"
+                       '"""\n'
+                       "fun leak() { file.writeText(secret) }\n")
+        self.box.commit("vault")
+        self.assertEqual(len(self._findings("secret-write")), 1,
+                         "content cannot decide which path the rules are applied to")
+
+    def test_the_line_that_does_the_spoofing_is_judged_like_any_other(self):
+        # Skipping a `+++` line inside a hunk would let the same trick hide one line — its own.
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt",
+                       'val sample = """\n'
+                       '++ b/notes.md" + file.writeText(secret)\n'
+                       '"""\n')
+        self.box.commit("vault")
+        self.assertEqual(len(self._findings("secret-write")), 1)
+
+    def test_a_separator_python_invents_does_not_truncate_a_line(self):
+        # `splitlines()` breaks on U+000C, U+001C-1E, U+0085, U+2028/9 — none of which git or
+        # Kotlin treat as line ends — and eats the byte, so the rest of the line was never judged
+        # and the invisible byte itself became invisible to the rule that looks for it.
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt",
+                       "fun b(f: Path, s: String) { f\u000c.writeText(s) }\n")
+        self.box.commit("vault")
+        self.assertEqual(len(self._findings("secret-write")), 1)
+        self.assertEqual(len(self._findings("control-chars")), 1)
+
+    def test_a_gitattribute_cannot_hide_a_file_from_the_rules(self):
+        # `*.kt -diff` makes git print "Binary files differ" instead of the content.
+        self.box.write(".gitattributes", "*.kt -diff\n")
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt",
+                       "fun b(f: Path, s: String) { f.writeText(s) }\n")
+        self.box.commit("vault")
+        self.assertEqual(len(self._findings("secret-write")), 1)
+
+    def test_a_name_that_reads_as_a_pathspec_is_still_diffed(self):
+        # git parses `:(icase)x.kt` as pathspec magic, not as a file name, so the per-file diff
+        # came back empty and every line-based rule was applied to nothing.
+        self.box.write(":(icase)Payload.kt", f"// drop{chr(0x202E)} the table\n")
+        self.box.commit("payload")
+        self.assertEqual(len(self._findings("control-chars")), 1)
+
+    def test_a_file_name_that_is_not_utf8_does_not_disarm_the_gate(self):
+        # git hands the name back as raw bytes; a strict decode raised out of `gate_debt`, and the
+        # commit guard catches everything and allows — the whole gate off for one bad file name.
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        broken = os.path.join(self.cwd.encode(), b"shared/src/commonMain/kotlin/\xff.kt")
+        with open(broken, "wb") as fh:
+            fh.write(b"val b = 2\n")
+        self.addCleanup(os.remove, broken)
+        _, debt = policy.gate_debt(self.cwd)
+        self.assertTrue(debt, "a file the harness cannot name is not a gate it can skip")
+        self.assertNotEqual(state.tree_digest("all", self.cwd), "empty")
+
     def test_escaped_control_characters_are_fine(self):
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = \"x\\u001Fy\"\n")
         self.assertEqual(self._findings("control-chars"), [])
@@ -567,6 +739,21 @@ class TestChecks(SandboxCase):
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
         self.box.write("shared/src/commonTest/kotlin/ATest.kt", "// covers it\n")
         task = {"kind": "feature", "areas": ["shared"], "paths": [], "code_paths": []}
+        self.assertEqual([f for f in checks.run(self.cwd, task) if f.rule == "tests-present"], [])
+
+    def test_a_harness_feature_owes_a_test_too(self):
+        # The rule that gates every other change is the one place an untested rule costs most.
+        self.box.branch("feat/gate-tweak")
+        self.box.write("tools/harness/policy.py", "# a new rule\n")
+        task = {"kind": "feature", "areas": ["harness"], "paths": [], "code_paths": []}
+        found = [f for f in checks.run(self.cwd, task) if f.rule == "tests-present"]
+        self.assertEqual(len(found), 1)
+
+    def test_a_harness_feature_with_its_suite_touched_is_fine(self):
+        self.box.branch("feat/gate-tweak")
+        self.box.write("tools/harness/policy.py", "# a new rule\n")
+        self.box.write("tools/harness/selftest.py", "# and the case that proves it\n")
+        task = {"kind": "feature", "areas": ["harness"], "paths": [], "code_paths": []}
         self.assertEqual([f for f in checks.run(self.cwd, task) if f.rule == "tests-present"], [])
 
     def test_a_refactor_may_leave_tests_alone(self):
@@ -606,6 +793,33 @@ class TestChecks(SandboxCase):
                            '<resources><string name="a">A</string></resources>')
         self.assertEqual(self._findings("i18n-parity"), [])
 
+    def test_i18n_gap_in_plurals_and_arrays_is_blocked(self):
+        base = "composeApp/src/commonMain/composeResources"
+        def both(*categories: str) -> str:
+            items = "".join(f'<item quantity="{c}">%1$d files</item>' for c in categories)
+            return (f'<resources><plurals name="p">{items}</plurals>'
+                    '<string-array name="a"><item>Jan</item></string-array></resources>')
+        self.box.write(f"{base}/values/strings.xml", both("one", "other"))
+        self.box.write(f"{base}/values-ru/strings.xml", both("one", "few", "many", "other"))
+        self.box.write(f"{base}/values-zh/strings.xml", "<resources></resources>")
+        found = self._findings("i18n-parity")
+        self.assertEqual(len(found), 2, "a plural and an array ship in three languages like a string")
+        self.assertTrue(all("values-zh" in f.message for f in found))
+
+    def test_a_plural_does_not_define_a_string_of_the_same_name(self):
+        base = "composeApp/src/commonMain/composeResources"
+        def body(*categories: str) -> str:
+            items = "".join(f'<item quantity="{c}">%1$d</item>' for c in categories)
+            return f'<resources><plurals name="count">{items}</plurals></resources>'
+        self.box.write(f"{base}/values/strings.xml", body("one", "other"))
+        self.box.write(f"{base}/values-ru/strings.xml", body("one", "few", "many", "other"))
+        self.box.write(f"{base}/values-zh/strings.xml", body("other"))
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt",
+                       "val t = stringResource(Res.string.count)\n")
+        found = self._findings("i18n-parity")
+        self.assertEqual(len(found), 1, "the namespaces are separate — a plural is not a string")
+        self.assertIn("Res.string.count", found[0].message)
+
     def test_undefined_string_key_is_blocked(self):
         base = "composeApp/src/commonMain/composeResources"
         for locale in ("values", "values-ru", "values-zh"):
@@ -616,6 +830,123 @@ class TestChecks(SandboxCase):
         found = self._findings("i18n-parity")
         self.assertEqual(len(found), 1)
         self.assertIn("missing_key", found[0].message)
+
+
+    def test_a_string_and_a_plural_of_one_name_are_two_keys(self):
+        base = "composeApp/src/commonMain/composeResources"
+        self.box.write(f"{base}/values/strings.xml",
+                       '<resources><string name="a">A</string></resources>')
+        self.box.write(f"{base}/values-ru/strings.xml",
+                       '<resources><plurals name="a">'
+                       '<item quantity="one">А</item><item quantity="few">А</item>'
+                       '<item quantity="many">А</item><item quantity="other">А</item>'
+                       '</plurals></resources>')
+        self.box.write(f"{base}/values-zh/strings.xml",
+                       '<resources><string name="a">A</string></resources>')
+        messages = [f.message for f in self._findings("i18n-parity")]
+        self.assertEqual(len(messages), 2, "a plural does not translate a string of the same name")
+        self.assertTrue(any(m.startswith("`a` has no values-ru") for m in messages), messages)
+        self.assertTrue(any(m.startswith("`plurals a` exists only in values-ru") for m in messages), messages)
+
+    def test_a_plural_missing_a_category_is_blocked(self):
+        base = "composeApp/src/commonMain/composeResources"
+        full = ('<item quantity="one">A</item><item quantity="few">A</item>'
+                '<item quantity="many">A</item><item quantity="other">A</item>')
+        self.box.write(f"{base}/values/strings.xml",
+                       f'<resources><plurals name="n">{full}</plurals></resources>')
+        self.box.write(f"{base}/values-ru/strings.xml",
+                       '<resources><plurals name="n"><item quantity="other">A</item></plurals></resources>')
+        self.box.write(f"{base}/values-zh/strings.xml",
+                       '<resources><plurals name="n"><item quantity="other">A</item></plurals></resources>')
+        found = self._findings("i18n-parity")
+        self.assertEqual(len(found), 1, "Chinese needs `other` alone; Russian needs one/few/many too")
+        self.assertIn("one, few, many", found[0].message)
+
+    def test_undefined_plural_and_array_keys_are_blocked(self):
+        base = "composeApp/src/commonMain/composeResources"
+        def body(*categories: str) -> str:
+            items = "".join(f'<item quantity="{c}">%1$d</item>' for c in categories)
+            return (f'<resources><plurals name="here">{items}</plurals>'
+                    '<string-array name="also"><item>Jan</item></string-array></resources>')
+        self.box.write(f"{base}/values/strings.xml", body("one", "other"))
+        self.box.write(f"{base}/values-ru/strings.xml", body("one", "few", "many", "other"))
+        self.box.write(f"{base}/values-zh/strings.xml", body("other"))
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt",
+                       "val a = pluralStringResource(Res.plurals.here, 1)\n"
+                       "val b = stringArrayResource(Res.array.also)\n"
+                       "val c = pluralStringResource(Res.plurals.gone, 1)\n"
+                       "val d = stringArrayResource(Res.array.vanished)\n")
+        messages = [f.message for f in self._findings("i18n-parity")]
+        self.assertEqual(len(messages), 2, "the two defined accessors resolve, the two stale ones do not")
+        self.assertIn("`Res.plurals.gone` is used but defined nowhere.", messages)
+        self.assertIn("`Res.array.vanished` is used but defined nowhere.", messages)
+
+    def test_an_attribute_before_the_name_does_not_exempt_a_string(self):
+        base = "composeApp/src/commonMain/composeResources"
+        self.box.write(f"{base}/values/strings.xml",
+                       '<resources><string translatable="false" name="a">A</string></resources>')
+        for locale in ("values-ru", "values-zh"):
+            self.box.write(f"{base}/{locale}/strings.xml", "<resources></resources>")
+        found = self._findings("i18n-parity")
+        self.assertEqual(len(found), 2, "a key the pattern misses is silently exempt from parity")
+
+    def test_an_unreadable_resource_file_says_so(self):
+        base = "composeApp/src/commonMain/composeResources"
+        for locale in ("values", "values-ru"):
+            self.box.write(f"{base}/{locale}/strings.xml",
+                           '<resources><string name="a">A</string></resources>')
+        os.makedirs(os.path.join(self.cwd, base, "values-zh/strings.xml"))
+        found = self._findings("i18n-parity")
+        warnings = [f for f in found if f.severity == checks.WARN]
+        self.assertEqual(len(warnings), 1, "an incomplete sweep has to say it was incomplete")
+        # Every locale is walked twice — once for names, once for plural categories. An uncached
+        # read counted the same broken file once per walk and sent the reader hunting a second one.
+        self.assertIn("1 resource file(s) could not be read", warnings[0].message)
+
+    def test_a_resource_file_that_is_not_utf8_says_so(self):
+        # The likeliest way a locale file becomes unreadable is an editor saving it in cp1251, and
+        # that raises UnicodeDecodeError, not OSError — the warning built for it has to fire.
+        base = "composeApp/src/commonMain/composeResources"
+        for locale in ("values", "values-ru"):
+            self.box.write(f"{base}/{locale}/strings.xml",
+                           '<resources><string name="a">A</string></resources>')
+        path = os.path.join(self.cwd, base, "values-zh", "strings.xml")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write('<resources><string name="a">Файл</string></resources>'.encode("cp1251"))
+        warnings = [f for f in self._findings("i18n-parity") if f.severity == checks.WARN]
+        self.assertEqual(len(warnings), 1, "a file the sweep cannot decode is not a clean sweep")
+
+    def test_a_source_file_that_cannot_be_read_says_so(self):
+        # An unreadable source hides a `Res.` usage, not a translation — a different warning from
+        # the locale one, and the two counters must not be folded together.
+        base = "composeApp/src/commonMain/composeResources"
+        for locale in ("values", "values-ru", "values-zh"):
+            self.box.write(f"{base}/{locale}/strings.xml",
+                           '<resources><string name="a">A</string></resources>')
+        path = os.path.join(self.cwd, "composeApp/src/commonMain/kotlin/S.kt")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write("val a = Res.string.a // файл\n".encode("cp1251"))
+        warnings = [f for f in self._findings("i18n-parity") if f.severity == checks.WARN]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("source file(s) could not be read", warnings[0].message)
+
+    def test_an_empty_plural_form_is_not_a_form(self):
+        base = "composeApp/src/commonMain/composeResources"
+        def body(*categories: str) -> str:
+            items = "".join(f'<item quantity="{c}">%1$d</item>' for c in categories)
+            return f'<resources><plurals name="n">{items}</plurals></resources>'
+        self.box.write(f"{base}/values/strings.xml", body("one", "other"))
+        self.box.write(f"{base}/values-ru/strings.xml",
+                       '<resources><plurals name="n">'
+                       '<item quantity="one">%1$d файл</item><item quantity="few"></item>'
+                       '<item quantity="many">%1$d файлов</item>'
+                       '<item quantity="other">%1$d файла</item></plurals></resources>')
+        self.box.write(f"{base}/values-zh/strings.xml", body("other"))
+        found = self._findings("i18n-parity")
+        self.assertEqual(len(found), 1, "an item with no text draws a blank where the number goes")
+        self.assertIn("few", found[0].message)
 
 
 class TestReviewerScope(SandboxCase):
@@ -630,7 +961,10 @@ class TestReviewerScope(SandboxCase):
         reviews = st.setdefault("reviews", {})
         for name in policy.required_reviewers(task, self.cwd):
             entries = policy.reviewer_entries(name, self.cwd)
-            reviews[name] = {"digest": state.digest_of(entries), "files": entries}
+            reviews[name] = {"digest": state.digest_of(entries), "files": entries,
+                             "branch": state.current_branch(self.cwd)}
+            state.save_review_report(name, f"# {name}\n\nfindings from a pass that really ran",
+                                     self.cwd)
         state.save(st, self.cwd)
 
     def _branch_with_ui_and_vault(self) -> dict:
@@ -659,6 +993,28 @@ class TestReviewerScope(SandboxCase):
         missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
                                            self.cwd)
         self.assertIn("skerry-security-reviewer", missing)
+
+    def test_the_gates_own_code_is_owed_a_security_review(self):
+        # The code that decides what a change owes is the one place a bypass costs everything, and
+        # it used to fall outside every scope but the two whole-change passes.
+        self._branch_with_ui_and_vault()
+        self.box.write("tools/harness/policy.py", "# edited\n")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertIn("skerry-security-reviewer", missing)
+
+    def test_a_review_does_not_follow_the_worktree_onto_the_next_branch(self):
+        # RED records are scoped to their branch; review records were not, so a resources-only
+        # branch inherited the pass made on the previous one — the files had not moved.
+        self._branch_with_ui_and_vault()
+        self.assertEqual(policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                                  self.cwd), [])
+        run_git(self.cwd, "checkout", "-q", "-b", "feat/next")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertIn("skerry-reviewer", missing)
+        self.assertEqual(policy.reviewer_delta(state.load(self.cwd), "skerry-reviewer", self.cwd),
+                         [], "a pass made elsewhere is not a delta to re-read")
 
     def test_a_ui_fix_does_not_reopen_the_server_review(self):
         self.box.branch("feat/thing")
@@ -711,12 +1067,486 @@ class TestReviewReports(SandboxCase):
         self.assertIn("FINDING: vault key logged", body)
         self.assertIn("skerry-reviewer", body)
 
+    REPORT = ("## Findings\n\n- `VaultStore.unlock` logs the unwrapped key at INFO, so a support "
+              "bundle carries it off the machine. The rest of the diff is clean: no new "
+              "primitive, no parity gap, no swallowed cancellation, no shortcut without its "
+              "Settings row.\n")
+
+    def _branch_with_ui(self) -> None:
+        self.box.branch("feat/thing")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 1\n")
+
+    def test_the_recorder_refuses_a_launch_that_reviewed_nothing(self):
+        # The bug this whole path exists for lived in the hook, not in policy: it recorded on the
+        # Agent tool returning, and a backgrounded fan-out returns before reading anything.
+        self._branch_with_ui()
+        done = self.box.recorder("skerry-reviewer",
+                                 "Async agent launched successfully.\nagentId: abc123\n"
+                                 "The agent is working in the background.")
+        st = state.load(self.cwd)
+        self.assertNotIn("skerry-reviewer", st.get("reviews") or {})
+        self.assertIn("skerry-reviewer", st.get("pending_reviews") or {})
+        self.assertIn("not recorded", done.stdout)
+
+    def test_a_report_arriving_after_the_code_moved_is_refused(self):
+        self._branch_with_ui()
+        self.box.recorder("skerry-reviewer", "Async agent launched successfully. agentId: abc")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        self.assertEqual(policy.review_drift("skerry-reviewer", self.cwd),
+                         ["composeApp/src/commonMain/kotlin/S.kt"])
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "moved",
+                         "a reviewer cannot vouch for code it never read")
+
+    def test_a_refused_report_leaves_the_drift_snapshot_where_it_was(self):
+        # The refusal used to re-snapshot the scope on its way out, so the retry it recommends
+        # found no drift and recorded the stale report green — the guard cancelled itself.
+        self._branch_with_ui()
+        self.box.recorder("skerry-reviewer", "Async agent launched successfully. agentId: abc")
+        before = (state.load(self.cwd)["pending_reviews"]["skerry-reviewer"])["files"]
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        refused = self.box.recorder("skerry-reviewer", self.REPORT)
+        self.assertIn("moved", refused.stdout)
+        after = (state.load(self.cwd)["pending_reviews"]["skerry-reviewer"])["files"]
+        self.assertEqual(before, after, "the snapshot is the evidence — a refusal must not reset it")
+        self.assertEqual(self.box.gate("review", "skerry-reviewer", stdin=self.REPORT).returncode,
+                         2, "the retry the refusal advertises cannot be the way around it")
+
+    def test_a_stored_report_cannot_be_recorded_twice(self):
+        self._branch_with_ui()
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "")
+        stored = policy.stored_report("skerry-reviewer", self.cwd)
+        self.assertEqual(policy.record_review("skerry-reviewer", stored, self.cwd), "recycled",
+                         "re-feeding the file `gate.py reviewers` prints re-dates a stale pass")
+
+    def test_the_file_the_gate_prints_cannot_be_handed_back_as_a_pass(self):
+        # `gate.py reviewers` prints the previous findings' path right under MISSING. Once the
+        # scope moves, the stored round is no longer a replay — `_already_recorded` is false — so
+        # only where the text came from can tell an honest repeat verdict from a recycled file.
+        self._branch_with_ui()
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        report = state.review_report_path("skerry-reviewer", self.cwd)
+        done = self.box.gate("review", "skerry-reviewer", "--file", report)
+        self.assertEqual(done.returncode, 2, done.stdout)
+        self.assertIn("skerry-reviewer",
+                      policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd)))
+
+    def test_the_cli_lets_the_next_report_through_like_the_hook_does(self):
+        # The CLI refused on drift before `record_review` could see the report, so the retry the
+        # refusal advertises was refused too — the two paths disagreed about the same tree.
+        self._branch_with_ui()
+        self.box.recorder("skerry-reviewer", "Async agent launched successfully. agentId: abc")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        stale = self.box.gate("review", "skerry-reviewer", stdin=self.REPORT)
+        self.assertEqual(stale.returncode, 2, stale.stdout)
+        self.assertIn("moved", stale.stdout)
+        fresh = self.box.gate("review", "skerry-reviewer",
+                              stdin=self.REPORT.replace("INFO", "DEBUG"))
+        self.assertEqual(fresh.returncode, 0, fresh.stdout)
+
+    def test_a_spent_refusal_re_arms_the_snapshot_instead_of_dropping_it(self):
+        # Dropping it left every later move for that reviewer unmeasured: a report refused for
+        # some other reason after the discharge, then a stale one, and nothing checks the tree.
+        self._branch_with_ui()
+        self.box.recorder("skerry-reviewer", "Async agent launched successfully. agentId: abc")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        self.assertTrue(policy.moved_under_the_reviewer("skerry-reviewer", self.REPORT, self.cwd))
+        second = self.REPORT.replace("INFO", "DEBUG")
+        self.assertFalse(policy.moved_under_the_reviewer("skerry-reviewer", second, self.cwd))
+        pending = (state.load(self.cwd).get("pending_reviews") or {}).get("skerry-reviewer")
+        self.assertIsNotNone(pending, "the snapshot is what measures the next report")
+        self.assertNotIn("refused", pending)
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 3\n")
+        self.assertEqual(policy.review_drift("skerry-reviewer", self.cwd),
+                         ["composeApp/src/commonMain/kotlin/S.kt"])
+
+    def test_one_reviewers_report_does_not_record_another(self):
+        self._branch_with_ui()
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "")
+        stored = policy.stored_report("skerry-reviewer", self.cwd)
+        self.assertEqual(policy.record_review("skerry-security-reviewer", stored, self.cwd),
+                         "recycled")
+
+    def test_a_record_that_never_reached_the_disk_is_not_success(self):
+        self._branch_with_ui()
+        original = state.save
+        state.save = lambda *args, **kwargs: False
+        self.addCleanup(lambda: setattr(state, "save", original))
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd),
+                         "not saved")
+
+    def test_findings_that_cannot_be_written_leave_the_reviewer_owed(self):
+        # State first, report second left the entry behind when the report write failed: the
+        # structural check then read the *previous* round's file and called the reviewer done.
+        self._branch_with_ui()
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        original = state.save_review_report
+        state.save_review_report = lambda *args, **kwargs: ""
+        self.addCleanup(lambda: setattr(state, "save_review_report", original))
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT + "second round\n",
+                                              self.cwd), "not saved")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertIn("skerry-reviewer", missing,
+                      "last round's file on disk is not this round's review")
+
+    def test_a_repeat_verdict_on_moved_code_is_a_new_pass(self):
+        # Reports are appended, so a reviewer whose second round reads the same ("checked and
+        # clean") was refused as recycled and could not close the gate without being reworded.
+        self._branch_with_ui()
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "",
+                         "the same verdict about different code is a different pass")
+
+    def test_a_fresh_report_after_a_drift_refusal_is_recorded(self):
+        # The snapshot refuses the report it was taken against. Re-running the reviewer inline
+        # produces a different text and no new launch, so nothing refreshed the snapshot and the
+        # reviewer could never be recorded again.
+        self._branch_with_ui()
+        self.box.recorder("skerry-reviewer", "Async agent launched successfully. agentId: abc")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "moved")
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "moved",
+                         "the report that was refused stays refused")
+        rerun = self.REPORT + "\nRe-read after the fix: the unwrapped key is no longer logged.\n"
+        self.assertEqual(policy.record_review("skerry-reviewer", rerun, self.cwd), "")
+
+    def test_a_report_stored_on_another_branch_cannot_close_this_one(self):
+        # The findings file is per-reviewer and spans branches, so on a fresh branch the reviewer
+        # has no entry — and the previous branch's report was accepted as this branch's pass.
+        self._branch_with_ui()
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "")
+        stored = policy.stored_report("skerry-reviewer", self.cwd)
+        run_git(self.cwd, "checkout", "-q", "-b", "feat/next")
+        self.box.write("shared/src/commonMain/kotlin/vault/V.kt", "val v = 1\n")
+        self.assertEqual(policy.record_review("skerry-reviewer", stored, self.cwd), "recycled")
+
+    def test_a_report_kept_after_a_failed_state_write_can_still_be_recorded(self):
+        # The report is appended before the entry, so a state write that fails once left the
+        # findings on disk — and the retry was then refused as a recycled report, forever.
+        self._branch_with_ui()
+        original = state.save
+        state.save = lambda *args, **kwargs: False
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd),
+                         "not saved")
+        state.save = original
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "",
+                         "the file on disk is this round's own report, not a previous pass")
+
+    def test_the_stored_report_is_readable_only_by_its_operator(self):
+        # It is a verbatim copy of whatever path the operator named — a mistyped `--file` can put
+        # a private key in there, and .git is never cleaned.
+        path = state.save_review_report("skerry-reviewer", self.REPORT, self.cwd)
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(os.path.dirname(path)).st_mode & 0o777, 0o700)
+
+    def test_a_report_cannot_carry_an_escape_sequence_into_the_terminal(self):
+        # Reports quote what the reviewer read — terminal fixtures, SFTP names, an AI transcript.
+        # `cat`-ing the file executes the escape, and the next round replays it into a context.
+        path = state.save_review_report(
+            "skerry-reviewer", f"{self.REPORT}\x1b]0;pwned\x07 and {chr(0x202E)}drop\n", self.cwd)
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+        self.assertNotIn("\x1b", body)
+        self.assertNotIn(chr(0x202E), body)
+        self.assertIn("pwned", body, "the text is kept, only the bytes that act are not")
+
+    def test_a_runaway_report_is_capped(self):
+        path = state.save_review_report("skerry-reviewer", "x" * 400_000, self.cwd)
+        self.assertLess(os.path.getsize(path), state.REPORT_CHARS + 500)
+
+    def test_each_round_is_kept_rather_than_overwritten(self):
+        # Findings live on disk so a compaction cannot lose what is still owed; a second round
+        # that does not repeat a first-round item used to erase it.
+        self._branch_with_ui()
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        second = self.REPORT.replace("VaultStore.unlock", "SnippetStore.render")
+        self.assertEqual(policy.record_review("skerry-reviewer", second, self.cwd), "")
+        stored = policy.stored_report("skerry-reviewer", self.cwd)
+        self.assertIn("VaultStore.unlock", stored)
+        self.assertIn("SnippetStore.render", stored)
+
+    def test_findings_are_found_whichever_key_the_runtime_wraps_them_in(self):
+        # A response shaped {"output": …} or {"result": …} is plausible for another agent runtime;
+        # flattening it to "" would report "no findings" and snapshot a launch that never happened.
+        for key in ("content", "text", "output", "result"):
+            self.assertEqual(policy.review_findings({key: self.REPORT}), self.REPORT.strip(), key)
+
+    def test_a_response_nested_beyond_reason_is_not_a_recursion_error(self):
+        response = {"content": "the vault key is logged at INFO in VaultStore.unlock"}
+        for _ in range(4_000):
+            response = {"content": [response]}
+        self.assertEqual(policy.review_findings(response), "",
+                         "a response the walker gives up on carries no findings — it does not "
+                         "take the hook down with it")
+
+    def test_a_launch_acknowledgement_long_enough_to_pass_the_floor_is_still_not_a_review(self):
+        # The length floor alone catches the acknowledgement this harness emits today; the denylist
+        # is there for a wordier one, and nothing proved it discriminated at all.
+        stub = ("Async agent launched successfully. agentId: aae1b895f4e4935a3. The agent is "
+                "working in the background and you will be notified when it completes. Do not "
+                "duplicate its work — avoid touching the same files while it runs. Its transcript "
+                "is written to the task output file named above.")
+        self.assertGreater(len(stub), policy.MIN_REPORT_CHARS)
+        self.assertEqual(policy.review_findings(stub), "")
+
+    def test_a_report_that_quotes_the_launch_wording_is_still_a_report(self):
+        report = self.REPORT + ("\n\nThe hook's note says the agent `is working in the background` "
+                                "and prints its agentId: that string appears in this report because "
+                                "the report is about the hook, and a reviewer quoting the wording it "
+                                "reviews must not be mistaken for the wording itself. This paragraph "
+                                "exists to carry the pass over the stub length.\n")
+        self.assertGreater(len(report), policy.STUB_CHARS)
+        self.assertEqual(policy.review_findings(report), report.strip())
+
+    def test_the_review_command_reads_the_report_from_the_file_it_is_given(self):
+        # `--file` is the form the hook's own note tells the operator to use, and it was the one
+        # path through the command that no test ever took.
+        self._branch_with_ui()
+        path = os.path.join(self.cwd, "report.md")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(self.REPORT)
+        done = self.box.gate("review", "skerry-reviewer", "--file", path)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("VaultStore.unlock", policy.stored_report("skerry-reviewer", self.cwd))
+
+    def test_a_report_file_it_cannot_read_is_not_a_recorded_review(self):
+        self._branch_with_ui()
+        done = self.box.gate("review", "skerry-reviewer", "--file",
+                             os.path.join(self.cwd, "nothing-here.md"))
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("cannot read the report", done.stdout)
+
+    def test_a_reviews_directory_that_already_exists_is_tightened(self):
+        # makedirs(mode=) and os.open(mode=) both ignore the mode when the target already exists,
+        # so the hardening reached new state directories only — every report written before it
+        # stayed world-readable, and so did the directory holding them.
+        path = state.review_report_path("skerry-reviewer", self.cwd)
+        os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
+        os.chmod(os.path.dirname(path), 0o755)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("# skerry-reviewer\n\nan earlier round, written before the hardening\n")
+        os.chmod(path, 0o644)
+        state.save_review_report("skerry-reviewer", self.REPORT, self.cwd)
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(os.path.dirname(path)).st_mode & 0o777, 0o700)
+
+    def test_a_snapshot_from_another_branch_does_not_refuse_this_branchs_report(self):
+        # The drift snapshot outlived the branch it was taken on, so the first report on the next
+        # branch was refused as "moved" — every file differs across a branch switch.
+        self._branch_with_ui()
+        self.box.recorder("skerry-reviewer", "Async agent launched successfully. agentId: abc")
+        run_git(self.cwd, "checkout", "-q", "-b", "feat/next")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        self.assertEqual(policy.review_drift("skerry-reviewer", self.cwd), [])
+        self.assertEqual(policy.record_review("skerry-reviewer", self.REPORT, self.cwd), "")
+
+    def test_a_payload_field_of_the_wrong_type_does_not_break_the_session(self):
+        done = self.box.raw_hook({"tool_name": "Agent", "tool_input": {"subagent_type": 123}})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+
+    def test_a_payload_the_hook_cannot_read_does_not_break_the_session(self):
+        # Every other I/O path in the harness is wrapped; a hook that raises turns a bad payload
+        # into a traceback on every Agent call.
+        done = self.box.raw_hook({"tool_name": "Agent", "tool_input": "not a dict"})
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertNotIn("Traceback", done.stderr)
+
+    def test_an_entry_with_no_findings_on_disk_is_still_owed(self):
+        self._branch_with_ui()
+        st = state.load(self.cwd)
+        st["reviews"] = {"skerry-reviewer": {
+            "digest": policy.reviewer_digest("skerry-reviewer", self.cwd),
+            "branch": state.current_branch(self.cwd)}}
+        state.save(st, self.cwd)
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertIn("skerry-reviewer", missing)
+
+    def test_the_review_command_reports_what_it_refused(self):
+        self._branch_with_ui()
+        self.assertEqual(self.box.gate("review", "not-a-reviewer", stdin=self.REPORT).returncode, 2)
+        stub = self.box.gate("review", "skerry-reviewer", stdin="ok")
+        self.assertEqual(stub.returncode, 2)
+        self.assertIn("no findings", stub.stdout)
+        good = self.box.gate("review", "ecc:skerry-reviewer", stdin=self.REPORT)
+        self.assertEqual(good.returncode, 0, good.stdout + good.stderr)
+        self.assertIn("recorded", good.stdout)
+
+    def test_the_review_command_names_the_files_to_re_read(self):
+        self._branch_with_ui()
+        self.box.recorder("skerry-reviewer", "Async agent launched successfully. agentId: abc")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 2\n")
+        refused = self.box.gate("review", "skerry-reviewer", stdin=self.REPORT)
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("has since moved", refused.stdout)
+        self.assertIn("composeApp/src/commonMain/kotlin/S.kt", refused.stdout)
+
+    def test_a_state_directory_it_cannot_write_is_not_a_saved_state(self):
+        self._branch_with_ui()
+        directory = os.path.dirname(state.state_path(self.cwd))
+        os.makedirs(directory, exist_ok=True)
+        os.chmod(directory, 0o500)
+        self.addCleanup(os.chmod, directory, 0o700)
+        self.assertFalse(state.save({"stages": {}}, self.cwd),
+                         "a write that raised is not a write that happened")
+
+    def test_a_launch_acknowledgement_is_not_a_review(self):
+        # The fan-out runs in the background, so the reply to the launch carries no findings. The
+        # hook used to pin the tree to it, which made a green review gate mean "agents started".
+        self.box.branch("feat/thing")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 1\n")
+        stub = ("Async agent launched successfully.\nagentId: abc123\n"
+                "The agent is working in the background.")
+        self.assertEqual(policy.record_review("skerry-reviewer", stub, self.cwd), "no findings")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertIn("skerry-reviewer", missing)
+
+    def test_findings_record_the_reviewer_against_the_tree_it_read(self):
+        self.box.branch("feat/thing")
+        self.box.write("composeApp/src/commonMain/kotlin/S.kt", "val a = 1\n")
+        report = {"content": [{"text": "## Findings\n\n- the vault key is logged at INFO in "
+                                       "VaultStore.unlock, so a support bundle carries it out of "
+                                       "the machine. Everything else in the diff is clean: no new "
+                                       "primitive, no parity gap, no swallowed cancellation.\n"}]}
+        self.assertEqual(policy.record_review("skerry-reviewer", report, self.cwd), "")
+        missing = policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd),
+                                           self.cwd)
+        self.assertNotIn("skerry-reviewer", missing)
+        with open(state.review_report_path("skerry-reviewer", self.cwd), encoding="utf-8") as fh:
+            self.assertIn("the vault key is logged", fh.read())
+
     def test_an_empty_report_is_not_written(self):
         self.assertEqual(state.save_review_report("skerry-reviewer", "   ", self.cwd), "")
 
     def test_a_reviewer_name_cannot_escape_the_state_directory(self):
         path = state.review_report_path("../../etc/passwd", self.cwd)
         self.assertNotIn("..", path)
+
+
+class TestHarnessRed(SandboxCase):
+    """A bug in the gate has to be provable the same way a bug in the client is.
+
+    Making `.py` files code closed a hole and opened this one: on a `fix/` branch touching nothing
+    but the harness, the gate demanded a RED record that no Gradle task could produce.
+    """
+
+    STUB = ("import unittest\n\n\nclass StubHarness(unittest.TestCase):\n"
+            "    def test_the_bug_is_reproduced(self):\n        {body}\n\n\n"
+            "if __name__ == '__main__':\n    unittest.main()\n")
+
+    def _suite(self, body: str) -> None:
+        self.box.branch("fix/hook-refusal")
+        self.box.write("tools/harness/selftest.py", self.STUB.format(body=body))
+
+    def test_a_failing_harness_test_records_the_red_phase(self):
+        self._suite("self.fail('the report is recorded on a launch')")
+        done = self.box.gate("red", "--tests", "*the_bug_is_reproduced*",
+                             "--file", "tools/harness/policy.py")
+        self.assertEqual(done.returncode, 0, done.stdout)
+        record = state.load(self.cwd)["red"][0]
+        self.assertEqual(record["task"], "selftest")
+        self.assertEqual(record["branch"], "fix/hook-refusal")
+
+    def test_a_harness_test_that_passes_proves_nothing(self):
+        self._suite("self.assertTrue(True)")
+        done = self.box.gate("red", "--tests", "*the_bug_is_reproduced*",
+                             "--file", ".claude/hooks/record-review.py")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("PASSED", done.stdout)
+
+    def test_editing_only_the_suite_does_not_count_as_the_fix(self):
+        # The suite has to sit outside the `src` digest, exactly as Kotlin test sources do —
+        # otherwise the RED phase can be closed by weakening the test that proved the bug.
+        self._suite("self.fail('the report is recorded on a launch')")
+        self.assertTrue(state.is_test("tools/harness/selftest.py"))
+        done = self.box.gate("red", "--tests", "*the_bug_is_reproduced*",
+                             "--file", "tools/harness/policy.py")
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.box.write("tools/harness/selftest.py", self.STUB.format(body="self.assertTrue(True)"))
+        _, debt = policy.gate_debt(self.cwd)
+        self.assertTrue(any(item.startswith("red") for item in debt),
+                        "a test-only edit is not a fix")
+
+    def test_a_pattern_that_is_an_option_is_refused(self):
+        # `--tests '*-v*'` strips to `-v`, which unittest's own argparse rejects with exit 2 — a
+        # usage error was recorded as a test that failed.
+        self._suite("self.fail('never reached')")
+        done = self.box.gate("red", "--tests", "*-v*", "--file", "tools/harness/policy.py")
+        self.assertEqual(done.returncode, 2, done.stdout)
+        self.assertNotIn("red", state.load(self.cwd))
+
+    def test_a_suite_that_cannot_run_is_not_a_failing_test(self):
+        self.box.branch("fix/hook-refusal")
+        self.box.write("tools/harness/selftest.py", "import nothing_that_exists\n")
+        done = self.box.gate("red", "--tests", "*the_bug_is_reproduced*",
+                             "--file", "tools/harness/policy.py")
+        self.assertEqual(done.returncode, 2, done.stdout)
+        self.assertNotIn("red", state.load(self.cwd))
+
+    def test_a_pattern_that_matches_no_harness_test_is_refused(self):
+        self._suite("self.fail('never reached')")
+        done = self.box.gate("red", "--tests", "*NoSuchTest*",
+                             "--file", "tools/harness/state.py")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("matched no test", done.stdout)
+        self.assertNotIn("red", state.load(self.cwd))
+
+
+class TestRedEvidence(unittest.TestCase):
+    """A non-zero exit is not a failing test — in either runner."""
+
+    def test_a_gradle_run_that_never_reached_a_test_is_not_red(self):
+        compile_error = ("> Task :shared:compileKotlinJvm FAILED\n"
+                         "e: file:///s/A.kt:3:1 expecting a top level declaration\n"
+                         "FAILURE: Build failed with an exception.\n")
+        self.assertFalse(gate.proves_a_failing_test(":shared:jvmTest", compile_error))
+        failing = ("> Task :shared:jvmTest FAILED\n\nAT > a() FAILED\n\n"
+                   "3 tests completed, 1 failed\n\nFAILURE: Build failed with an exception.\n"
+                   "> There were failing tests. See the report at: file:///s/index.html\n")
+        self.assertTrue(gate.proves_a_failing_test(":shared:jvmTest", failing))
+
+    def test_the_harness_suite_keeps_its_own_evidence(self):
+        self.assertTrue(gate.proves_a_failing_test(
+            gate.HARNESS_SUITE, "Ran 3 tests in 1.0s\n\nFAILED (failures=1)\n"))
+        self.assertFalse(gate.proves_a_failing_test(
+            gate.HARNESS_SUITE, "ImportError: cannot import name policy\n"))
+
+
+class TestStateFile(SandboxCase):
+    def test_the_state_file_is_readable_only_by_its_operator(self):
+        # It carries the branch, every path in the change and the reviewers' verdicts; on a shared
+        # machine the default 0644 hands all of that to anyone with an account.
+        state.save({"reviews": {}}, self.cwd)
+        path = state.state_path(self.cwd)
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(os.path.dirname(path)).st_mode & 0o777, 0o700)
+
+    def test_a_state_directory_that_already_exists_is_tightened(self):
+        path = state.state_path(self.cwd)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.chmod(os.path.dirname(path), 0o755)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("{}")
+        os.chmod(path, 0o644)
+        state.save({"reviews": {}}, self.cwd)
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(os.path.dirname(path)).st_mode & 0o777, 0o700)
+
+
+class TestSharedDefinitions(unittest.TestCase):
+    def test_the_invisible_byte_list_has_one_definition(self):
+        # One list keeps the byte out of source, the other strips it from a stored report before
+        # the operator cats it. Two copies means a byte added to one is caught by neither.
+        # Identity, not equality: `re.compile` caches by pattern string, so two independent
+        # definitions of the same ranges hand back the same compiled object and an equality test
+        # would pass while the duplication stood.
+        self.assertIs(checks.CONTROL_RANGES, state.CONTROL_RANGES)
 
 
 class TestStageRecording(SandboxCase):

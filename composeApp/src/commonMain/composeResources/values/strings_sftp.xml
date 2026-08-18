@@ -1,7 +1,7 @@
 <resources>
-    <!-- SFTP / file transfer: двухпанельный desktop (SftpView) и мобильный Files (MobileFilesView) -->
+    <!-- SFTP / file transfer: the two-pane desktop (SftpView) and mobile Files (MobileFilesView) -->
 
-    <!-- Заголовки и шапка -->
+    <!-- Titles and work bar -->
     <string name="sftp_wbar_subtitle">SFTP · %1$s</string>
     <string name="sftp_files_title">Files</string>
 
@@ -12,18 +12,18 @@
     <string name="sftp_tip_upload">Upload selection (F5)</string>
     <string name="sftp_tip_download">Download selection (F5)</string>
 
-    <!-- Действия тулбара / FAB -->
+    <!-- Toolbar / FAB actions -->
     <string name="sftp_new_folder">New folder</string>
     <string name="sftp_create">Create</string>
     <string name="sftp_create_directory">Create directory</string>
     <string name="sftp_upload_file">Upload file</string>
     <string name="sftp_download_to_device">Download to device</string>
 
-    <!-- Метки панелей -->
+    <!-- Pane labels -->
     <string name="sftp_pane_local">Local</string>
     <string name="sftp_pane_remote">Remote</string>
 
-    <!-- Статусы / уведомления -->
+    <!-- Statuses / notices -->
     <string name="sftp_unavailable">SFTP unavailable</string>
     <string name="sftp_opening">Opening SFTP…</string>
     <string name="sftp_connecting">Connecting…</string>
@@ -32,36 +32,36 @@
     <string name="sftp_no_session">No active session</string>
     <string name="sftp_no_session_hint">Connect a host to browse files</string>
 
-    <!-- Общие кнопки диалогов -->
+    <!-- Shared dialog buttons -->
     <string name="sftp_cancel">Cancel</string>
     <string name="sftp_delete">Delete</string>
     <string name="sftp_copy">Copy</string>
     <string name="sftp_move">Move</string>
     <string name="sftp_rename">Rename</string>
 
-    <!-- Диалог имени (New folder / Rename) -->
-    <string name="sftp_already_exists">«%1$s» already exists</string>
+    <!-- Name dialog (New folder / Rename) -->
+    <string name="sftp_already_exists">“%1$s” already exists</string>
 
-    <!-- Диалоги удаления -->
+    <!-- Delete dialogs -->
     <string name="sftp_delete_folder_q">Delete folder?</string>
     <string name="sftp_delete_file_q">Delete file?</string>
     <string name="sftp_delete_items_q">Delete %1$d items?</string>
-    <string name="sftp_delete_folder_body">«%1$s» and everything inside it will be removed permanently.</string>
-    <string name="sftp_delete_file_body">«%1$s» will be removed permanently.</string>
+    <string name="sftp_delete_folder_body">“%1$s” and everything inside it will be removed permanently.</string>
+    <string name="sftp_delete_file_body">“%1$s” will be removed permanently.</string>
     <string name="sftp_delete_items_dirs_body">%1$d items (folders with their contents) will be removed permanently.</string>
     <string name="sftp_delete_items_body">%1$d items will be removed permanently.</string>
 
-    <!-- Диалоги копирования / перемещения -->
-    <string name="sftp_what_single">«%1$s»</string>
+    <!-- Copy / move dialogs -->
+    <string name="sftp_what_single">“%1$s”</string>
     <string name="sftp_items_count">%1$d items</string>
     <string name="sftp_copy_to_q">Copy to %1$s?</string>
     <string name="sftp_move_to_q">Move to %1$s?</string>
     <string name="sftp_transfer_body">%1$s → %2$s</string>
 
-    <!-- Ошибка передачи (имя: сообщение) -->
+    <!-- Transfer error (name: message) -->
     <string name="sftp_transfer_error">%1$s: %2$s</string>
 
-    <!-- Подтверждение перезаписи: в приёмнике уже есть объекты с такими именами -->
+    <!-- Overwrite confirmation: the destination already holds entries with these names -->
     <string name="sftp_overwrite_q">Overwrite existing?</string>
     <string name="sftp_overwrite_one">%1$s already exists in the destination.</string>
     <string name="sftp_overwrite_many">%1$d items already exist in the destination and will be overwritten.</string>
@@ -109,12 +109,12 @@
     <string name="sftp_edit_find">Search:</string>
     <string name="sftp_edit_not_found">not found</string>
     <string name="sftp_edit_discard_q">Discard changes?</string>
-    <string name="sftp_edit_discard_body">«%1$s» has unsaved changes. Closing now loses them.</string>
+    <string name="sftp_edit_discard_body">“%1$s” has unsaved changes. Closing now loses them.</string>
     <string name="sftp_edit_discard">Discard</string>
     <string name="sftp_edit_conflict_q">File changed on the source?</string>
-    <string name="sftp_edit_conflict_body">«%1$s» changed since you opened it. Saving overwrites it with your version.</string>
+    <string name="sftp_edit_conflict_body">“%1$s” changed since you opened it. Saving overwrites it with your version.</string>
 
     <!-- Transfer queue under the panes -->
-    <string name="sftp_queue_progress">%1$d%% · %2$s / %3$s</string>
+    <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
     <string name="sftp_queue_done">done</string>
 </resources>
