@@ -21,6 +21,11 @@ kotlin {
             // A packaged app's JVM carries this jpackage restart marker; the tests prove it never
             // leaks into a spawned inference host (see LlmHostCommandLine.scrubEnvironment).
             environment("_JPACKAGE_LAUNCHER", "1")
+            // Read by LlamatikNativeIsaTest to decide whether a guard it cannot run is a failure or
+            // a skip. A Gradle property rather than an environment variable: workers inherit the
+            // daemon's environment, so a variable set on this invocation would not reach a daemon
+            // an earlier step already started, and the guard would quietly skip.
+            systemProperty("skerry.ci", providers.gradleProperty("skerryCi").getOrElse(""))
         }
     }
 

@@ -1,6 +1,7 @@
 package app.skerry.shared.local
 
 import app.skerry.shared.ai.local.LlmHostCommandLine
+import app.skerry.shared.process.isWindows
 import com.pty4j.PtyProcess
 import com.pty4j.PtyProcessBuilder
 import com.pty4j.WinSize
@@ -36,11 +37,9 @@ actual object LocalShell {
         return Pty4jHandle(process)
     }
 
-    private fun defaultShell(): String {
-        val windows = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
-        return if (windows) System.getenv("COMSPEC") ?: "cmd.exe"
+    private fun defaultShell(): String =
+        if (isWindows) System.getenv("COMSPEC") ?: "cmd.exe"
         else System.getenv("SHELL") ?: "/bin/sh"
-    }
 }
 
 private class Pty4jHandle(private val process: PtyProcess) : LocalShellHandle {
