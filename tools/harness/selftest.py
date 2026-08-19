@@ -1180,7 +1180,8 @@ class TestReviewReports(SandboxCase):
         done = self.box.gate("review", "skerry-reviewer", "--file", report)
         self.assertEqual(done.returncode, 2, done.stdout)
         self.assertIn("skerry-reviewer",
-                      policy.missing_reviewers(state.load(self.cwd), policy.classify(self.cwd)))
+                      policy.missing_reviewers(state.load(self.cwd),
+                                               policy.classify(self.cwd), self.cwd))
 
     def test_the_cli_lets_the_next_report_through_like_the_hook_does(self):
         # The CLI refused on drift before `record_review` could see the report, so the retry the

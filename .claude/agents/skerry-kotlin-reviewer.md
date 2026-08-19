@@ -1,6 +1,7 @@
 ---
 name: skerry-kotlin-reviewer
 description: Kotlin reviewer for this repository's actual stack — Kotlin Multiplatform with Compose Multiplatform, coroutines and Flow, no Android architecture components. Reviews idiomatic Kotlin, structured concurrency and recomposition. Runs alongside skerry-reviewer, which owns the project's own rules.
+model: sonnet
 tools: ["Read", "Grep", "Glob", "Bash"]
 ---
 
