@@ -82,22 +82,32 @@
 
 ## Скриншоты
 
-![Терминал с менеджером хостов, вкладками сессий и панелью живых метрик](docs/screenshots/desktop-terminal.png)
+![Терминал с менеджером хостов, вкладками сессий и панелью живых метрик](docs/screenshots/terminal.webp)
 
 <details>
 <summary>Больше скриншотов</summary>
 
-![Двухпанельный SFTP Commander](docs/screenshots/desktop-sftp.png)
+![Четыре панели с синхронным вводом](docs/screenshots/panes.webp)
 
-![Менеджер port forwarding](docs/screenshots/desktop-tunnels.png)
+![Двухпанельный SFTP Commander](docs/screenshots/sftp.webp)
 
-![Vault: ключи, пароли, сертификаты](docs/screenshots/desktop-vault.png)
+![Менеджер port forwarding](docs/screenshots/tunnels.webp)
 
-![AI-ассистент с per-host политиками](docs/screenshots/desktop-ai.png)
+![Vault: ключи, пароли, сертификаты](docs/screenshots/vault.webp)
+
+![Мониторинг хоста: CPU, память, диск, сервисы, контейнеры](docs/screenshots/monitor.webp)
+
+![Раннбуки: многошаговые процедуры с переменными](docs/screenshots/runbooks.webp)
+
+![Сниппеты с переменными и шорткатами](docs/screenshots/snippets.webp)
+
+![AI-ассистент с per-host политиками](docs/screenshots/ai.webp)
+
+![Команда: участники, роли, области доступа, общий vault](docs/screenshots/teams.webp)
 
 | Список хостов | Терминал |
 |---|---|
-| ![Список хостов с группами и тегами](docs/screenshots/mobile-hosts.png) | ![Мобильный терминал](docs/screenshots/mobile-terminal.png) |
+| ![Список хостов с группами и тегами](docs/screenshots/mobile-hosts.webp) | ![Мобильный терминал](docs/screenshots/mobile-terminal.webp) |
 
 </details>
 
