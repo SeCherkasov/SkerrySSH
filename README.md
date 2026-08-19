@@ -82,22 +82,32 @@ Building from source is covered [below](#building-from-source).
 
 ## Screenshots
 
-![Terminal with host manager, session tabs, and live metrics panel](docs/screenshots/desktop-terminal.png)
+![Terminal with host manager, session tabs, and live metrics panel](docs/screenshots/terminal.webp)
 
 <details>
 <summary>More screenshots</summary>
 
-![Dual-pane SFTP commander](docs/screenshots/desktop-sftp.png)
+![Four split panes with synchronized input](docs/screenshots/panes.webp)
 
-![Port forwarding manager](docs/screenshots/desktop-tunnels.png)
+![Dual-pane SFTP commander](docs/screenshots/sftp.webp)
 
-![Vault: keys, passwords, certificates](docs/screenshots/desktop-vault.png)
+![Port forwarding manager](docs/screenshots/tunnels.webp)
 
-![AI assistant with per-host policies](docs/screenshots/desktop-ai.png)
+![Vault: keys, passwords, certificates](docs/screenshots/vault.webp)
+
+![Host monitoring: CPU, memory, disk, services, containers](docs/screenshots/monitor.webp)
+
+![Runbooks: multi-step procedures with variables](docs/screenshots/runbooks.webp)
+
+![Snippets with variables and shortcuts](docs/screenshots/snippets.webp)
+
+![AI assistant with per-host policies](docs/screenshots/ai.webp)
+
+![Team: members, roles, access scopes, shared vault](docs/screenshots/teams.webp)
 
 | Host list | Terminal |
 |---|---|
-| ![Host list with groups and tags](docs/screenshots/mobile-hosts.png) | ![Mobile terminal](docs/screenshots/mobile-terminal.png) |
+| ![Host list with groups and tags](docs/screenshots/mobile-hosts.webp) | ![Mobile terminal](docs/screenshots/mobile-terminal.webp) |
 
 </details>
 
