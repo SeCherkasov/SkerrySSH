@@ -39,9 +39,37 @@ class FileRdpCertificateStoreTest {
     @Test
     fun `a fingerprint seen once is refused when it changes`() {
         assertTrue(store.verify(offer("desk", "aa")))
+        store.remember(offer("desk", "aa"))
         assertTrue(store.verify(offer("desk", "aa")))
 
         assertFalse(store.verify(offer("desk", "bb")), "a changed certificate was accepted")
+    }
+
+    @Test
+    fun `a certificate is only remembered once the connection it came from succeeded`() {
+        // verify() is asked from inside the TLS handshake, before the server has proven it holds
+        // the private key. A peer that presents a certificate lifted from somewhere else and then
+        // walks away must not get to write the entry every later connection is judged against.
+        assertTrue(store.verify(offer("desk", "aa")))
+
+        assertEquals(emptyMap(), store.entries(), "an unproven certificate was recorded")
+
+        store.remember(offer("desk", "aa"))
+        assertEquals(mapOf("desk:3389" to "aa"), store.entries())
+    }
+
+    @Test
+    fun `of two first connections racing, the one the host is not known by is refused`() {
+        // Both pass verify() against an empty store — the entry is written only once each
+        // handshake finishes, and between the two the certificate can differ.
+        val first = offer("desk", "aa")
+        val second = offer("desk", "bb")
+        assertTrue(store.verify(first))
+        assertTrue(store.verify(second))
+
+        assertTrue(store.remember(first))
+        assertFalse(store.remember(second), "a second certificate was accepted for the same host")
+        assertEquals(mapOf("desk:3389" to "aa"), store.entries())
     }
 
     @Test
@@ -54,7 +82,8 @@ class FileRdpCertificateStoreTest {
         hosts.map { host ->
             thread {
                 start.await()
-                store.verify(offer(host, "fp-$host"))
+                val candidate = offer(host, "fp-$host")
+                if (store.verify(candidate)) store.remember(candidate)
             }
         }.forEach { it.join() }
 

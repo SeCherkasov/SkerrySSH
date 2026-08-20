@@ -21,31 +21,37 @@ class FileRdpCertificateStore(
 ) : RdpCertificateVerifier {
 
     /**
-     * Whether [offer] is trusted, recording it on first sight.
-     *
-     * Serialized: one store answers every connection this client makes, and reading the file and
-     * writing it back is not one step. Two first connections at once would otherwise write over
-     * each other, and the host whose fingerprint was lost is trusted on first use a second time —
-     * which is the connection a swapped certificate would have been caught on.
+     * Whether [offer] matches what this host is remembered by. An unknown host is accepted here and
+     * recorded in [remember], not before: the question is asked while the handshake is still in
+     * flight, so at this point anyone who can answer the connection could have sent the chain.
      */
     @Synchronized
     override fun verify(offer: RdpCertificateOffer): Boolean {
+        val known = read()["${offer.host}:${offer.port}"]
+            // First sight. A platform-trusted, name-matching certificate is recorded too, so a
+            // later swap to a self-signed one still shows up as a change.
+            ?: return true
+        // The certificate changed. That is a server rebuild as often as an attack, and a client
+        // cannot tell them apart — accepting it quietly would make the store pointless.
+        return known == offer.fingerprintSha256
+    }
+
+    /**
+     * Commit trust on first use, now that the handshake has proven the server holds the key.
+     *
+     * Serialized, and the decision is re-taken here rather than trusted from [verify]: two first
+     * connections to the same host both pass [verify] against an empty store, and between them the
+     * certificate can differ. Whoever writes first owns the entry; the other is refused, which is
+     * what the single locked read-decide-write did before the two steps were split.
+     */
+    @Synchronized
+    override fun remember(offer: RdpCertificateOffer): Boolean {
         val key = "${offer.host}:${offer.port}"
         val entries = read()
         val known = entries[key]
-        return when (known) {
-            null -> {
-                // First sight: remember it. A platform-trusted, name-matching certificate is
-                // recorded too, so a later swap to a self-signed one still shows up as a change.
-                write(entries + (key to offer.fingerprintSha256))
-                true
-            }
-
-            offer.fingerprintSha256 -> true
-            // The certificate changed. That is a server rebuild as often as an attack, and a client
-            // cannot tell them apart — accepting it quietly would make the store pointless.
-            else -> false
-        }
+        if (known != null) return known == offer.fingerprintSha256
+        write(entries + (key to offer.fingerprintSha256))
+        return true
     }
 
     /** Forget the entry for [host]:[port], so the next connection trusts on first use again. */

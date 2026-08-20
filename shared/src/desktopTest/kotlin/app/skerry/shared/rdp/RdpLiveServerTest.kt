@@ -41,10 +41,10 @@ class RdpLiveServerTest {
         Assumptions.assumeTrue(serverIsListening(), "nothing listening on $host:$port")
 
         val fingerprints = mutableListOf<String>()
-        val transport = RdpTcpTransport(certificateVerifier = { offer ->
-            fingerprints += offer.fingerprintSha256
-            true // trust whatever the test server presents
-        })
+        // Trusts whatever the test server presents, and records nothing anywhere.
+        val transport = RdpTcpTransport(
+            certificateVerifier = RecordingVerifier(onVerify = { fingerprints += it.fingerprintSha256 }),
+        )
 
         val session = transport.connect(
             RdpTarget(host = host, port = port, desktopWidth = 1024, desktopHeight = 768),
