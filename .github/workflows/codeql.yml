@@ -1,0 +1,96 @@
+name: CodeQL
+
+# Advanced setup, replacing GitHub's default setup on purpose. The default setup let autobuild
+# restore a Gradle build cache, so a run could satisfy `assemble` entirely from cache, compile
+# nothing, and extract 52 of 1545 Kotlin files — CodeQL then reported zero findings and GitHub
+# closed the still-unfixed alerts as "fixed". The build below is what keeps that from happening:
+# `--no-build-cache` on a clean checkout forces every Kotlin task to actually run.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Monday 04:32 UTC. Off the hour, where GitHub's scheduler is least contended.
+    - cron: "32 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        if: matrix.build-mode == 'manual'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        if: matrix.build-mode == 'manual'
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+
+      - name: Install Android SDK packages
+        # Same as in ci.yml: the runner's bundled sdkmanager repository predates API 37, so both
+        # archives come from Google's SDK repo directly. :androidApp is in the settings graph, and
+        # its sources carry alerts of their own — skipping it would blind the analysis to them.
+        if: matrix.build-mode == 'manual'
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          install_sdk_pkg() {
+            curl -fsSL "$1" -o "$RUNNER_TEMP/sdk-pkg.zip"
+            rm -rf "$RUNNER_TEMP/sdk-pkg" && unzip -q "$RUNNER_TEMP/sdk-pkg.zip" -d "$RUNNER_TEMP/sdk-pkg"
+            mkdir -p "$(dirname "$2")" && rm -rf "$2"
+            mv "$(find "$RUNNER_TEMP/sdk-pkg" -mindepth 1 -maxdepth 1 -type d)" "$2"
+          }
+          install_sdk_pkg https://dl.google.com/android/repository/platform-37.0_r02.zip "$ANDROID_HOME/platforms/android-37"
+          install_sdk_pkg https://dl.google.com/android/repository/build-tools_r37_linux.zip "$ANDROID_HOME/build-tools/37.0.0"
+
+      - name: Set up Gradle
+        # Dependencies are cached; task outputs deliberately are not (see the build step).
+        if: matrix.build-mode == 'manual'
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+        with:
+          cache-read-only: true
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Build
+        # CodeQL extracts Kotlin by tracing the compiler, so a task served from the build cache
+        # contributes nothing to the database. --no-build-cache makes every compile task run.
+        if: matrix.build-mode == 'manual'
+        run: ./gradlew assemble --no-build-cache --no-daemon --stacktrace
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          category: "/language:${{ matrix.language }}"
