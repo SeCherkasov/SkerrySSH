@@ -7,6 +7,14 @@ package app.skerry.shared.rdp
  * why the decision is delegated to a verifier (TOFU over a remembered fingerprint) instead of being
  * left to the default TLS trust store.
  *
+ * [subject], [issuer] and [host] are text the server authored: run them through
+ * `sanitizeServerText` before they reach a screen.
+ *
+ * [trustedByPlatform] and [hostnameMatches] describe the certificate; they do not decide anything.
+ * The only verifier wired in production is `FileRdpCertificateStore`, which judges by fingerprint
+ * alone — refusing on either flag would refuse nearly every Windows host, which names itself after
+ * the machine rather than the address dialled. They are here for the certificate dialog to show.
+ *
  * [publicKey] is the DER SubjectPublicKeyInfo of the leaf certificate: CredSSP binds the
  * authentication exchange to it, so the value the verifier saw is the value the NLA layer signs.
  * [derChain] is the chain as the server sent it, leaf first.
@@ -48,10 +56,28 @@ data class RdpCertificateOffer(
  * `HostKeyVerifier`, and synchronous for the same reason: it is called from the connect path, and
  * the store it consults is a local file.
  */
-fun interface RdpCertificateVerifier {
+interface RdpCertificateVerifier {
+    /**
+     * Whether this certificate may be talked to. Asked from inside the TLS handshake, which is
+     * before the server has proven it holds the matching private key — so this answers, and
+     * records nothing. Anyone able to answer the connection can reach it with a certificate
+     * copied from elsewhere.
+     */
     fun verify(offer: RdpCertificateOffer): Boolean
+
+    /**
+     * The handshake [offer] came from completed, so the server does hold the key. Trust on first
+     * use is committed here and nowhere else; called once per connection, and only after [verify]
+     * said yes.
+     *
+     * False means this host is now remembered by a different certificate — a second first-time
+     * connection settled between the two calls — and the connection is dropped. Abstract on
+     * purpose: an implementation that forwarded only [verify] would accept every certificate for
+     * ever without recording one, and nothing would say so.
+     */
+    fun remember(offer: RdpCertificateOffer): Boolean
 }
 
 /** The verifier refused the server's certificate; the socket is closed before any data is sent. */
-class RdpCertificateRejectedException(val offer: RdpCertificateOffer) :
-    Exception("server certificate rejected (${offer.fingerprintSha256})")
+class RdpCertificateRejectedException(val offer: RdpCertificateOffer, cause: Throwable? = null) :
+    Exception("server certificate rejected (${offer.fingerprintSha256})", cause)

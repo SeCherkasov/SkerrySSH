@@ -1,6 +1,7 @@
 package app.skerry.shared.rdp
 
 import java.io.DataInputStream
+import java.io.IOException
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
@@ -16,6 +17,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.coroutines.runBlocking
 
@@ -78,7 +80,7 @@ class RdpTcpConnectorTest {
         assertFailsWith<SocketTimeoutException> {
             runBlocking {
                 RdpTcpConnector(
-                    certificateVerifier = RdpCertificateVerifier { true },
+                    certificateVerifier = RecordingVerifier(),
                     negotiationTimeoutMillis = 250,
                 ).connect(host = server.inetAddress.hostAddress, port = server.localPort)
             }
@@ -86,7 +88,7 @@ class RdpTcpConnectorTest {
     }
 
     private fun connect(
-        verifier: RdpCertificateVerifier = RdpCertificateVerifier { true },
+        verifier: RdpCertificateVerifier = RecordingVerifier(),
         cookie: String? = null,
         requestedProtocols: Int = RdpSecurityProtocol.SSL or RdpSecurityProtocol.HYBRID,
     ): RdpConnection = runBlocking {
@@ -147,7 +149,7 @@ class RdpTcpConnectorTest {
         }
         val offers = mutableListOf<RdpCertificateOffer>()
 
-        val connection = connect(verifier = { offer -> offers.add(offer); true })
+        val connection = connect(verifier = RecordingVerifier(onVerify = offers::add))
 
         try {
             assertEquals(1, offers.size)
@@ -166,7 +168,73 @@ class RdpTcpConnectorTest {
     }
 
     @Test
-    fun `a rejected certificate fails the connection and closes the socket`() {
+    fun `a certificate naming the address dialled is reported as a hostname match`() {
+        // The hostname check runs inside the handshake now, off the certificate itself — this is the
+        // test that says it still answers, rather than quietly reporting "no" for everything.
+        val tls = RdpTestCertificates.serverContext(ipAddresses = listOf(server.inetAddress.hostAddress))
+        serve { socket ->
+            DataInputStream(socket.getInputStream()).let { readPacket(it) }
+            socket.getOutputStream().apply { write(connectionConfirm(RdpSecurityProtocol.SSL)); flush() }
+            val secure = tls.socketFactory.createSocket(socket, null, socket.port, false) as SSLSocket
+            secure.useClientMode = false
+            secure.startHandshake()
+        }
+        val offers = mutableListOf<RdpCertificateOffer>()
+
+        val connection = connect(verifier = RecordingVerifier(onVerify = offers::add))
+
+        try {
+            assertTrue(offers.single().hostnameMatches)
+        } finally {
+            connection.close()
+        }
+    }
+
+    @Test
+    fun `a rejected certificate never completes the tls handshake`() {
+        // The trust decision belongs inside the handshake: a client that trusts every chain and only
+        // decides afterwards has already established a session with a server it refuses to talk to.
+        val tls = RdpTestCertificates.serverContext()
+        val serverHandshake = CompletableFuture<Boolean>()
+        serve { socket ->
+            DataInputStream(socket.getInputStream()).let { readPacket(it) }
+            socket.getOutputStream().apply { write(connectionConfirm(RdpSecurityProtocol.SSL)); flush() }
+            val secure = tls.socketFactory.createSocket(socket, null, socket.port, false) as SSLSocket
+            secure.useClientMode = false
+            serverHandshake.complete(runCatching { secure.startHandshake() }.isSuccess)
+        }
+
+        assertFailsWith<RdpCertificateRejectedException> { connect(verifier = RecordingVerifier(answer = false)) }
+
+        assertFalse(serverHandshake.get(TIMEOUT_MS, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun `a certificate is remembered only once the handshake it came from completed`() {
+        // The verifier is asked from inside the handshake, before the server has proven it holds
+        // the key. Trust on first use may only be committed the other side of that.
+        val tls = RdpTestCertificates.serverContext()
+        serve { socket ->
+            DataInputStream(socket.getInputStream()).let { readPacket(it) }
+            socket.getOutputStream().apply { write(connectionConfirm(RdpSecurityProtocol.SSL)); flush() }
+            val secure = tls.socketFactory.createSocket(socket, null, socket.port, false) as SSLSocket
+            secure.useClientMode = false
+            secure.startHandshake()
+        }
+        val verifier = RecordingVerifier()
+
+        val connection = connect(verifier = verifier)
+
+        try {
+            assertEquals(1, verifier.verified.size)
+            assertEquals(verifier.verified, verifier.remembered)
+        } finally {
+            connection.close()
+        }
+    }
+
+    @Test
+    fun `a refused certificate is never remembered`() {
         val tls = RdpTestCertificates.serverContext()
         serve { socket ->
             DataInputStream(socket.getInputStream()).let { readPacket(it) }
@@ -175,8 +243,70 @@ class RdpTcpConnectorTest {
             secure.useClientMode = false
             runCatching { secure.startHandshake() }
         }
+        val verifier = RecordingVerifier(answer = false)
 
-        assertFailsWith<RdpCertificateRejectedException> { connect(verifier = { false }) }
+        val failure = assertFailsWith<RdpCertificateRejectedException> { connect(verifier = verifier) }
+
+        assertEquals(verifier.verified.single(), failure.offer)
+        assertTrue(verifier.remembered.isEmpty())
+    }
+
+    @Test
+    fun `a certificate offered by a handshake that then fails is not remembered`() {
+        // The point of committing trust after the handshake: a peer that presents a certificate it
+        // does not hold the key for cannot finish, and so cannot take the host's entry.
+        val tls = RdpTestCertificates.serverContext()
+        val raw = CompletableFuture<Socket>()
+        serve { socket ->
+            DataInputStream(socket.getInputStream()).let { readPacket(it) }
+            socket.getOutputStream().apply { write(connectionConfirm(RdpSecurityProtocol.SSL)); flush() }
+            val secure = tls.socketFactory.createSocket(socket, null, socket.port, false) as SSLSocket
+            secure.useClientMode = false
+            // TLS 1.2 so the client still has to read the server's Finished after this dies.
+            secure.enabledProtocols = arrayOf("TLSv1.2")
+            raw.complete(socket)
+            runCatching { secure.startHandshake() }
+        }
+        // Kills the connection the moment the certificate has been offered.
+        val verifier = RecordingVerifier { raw.get(TIMEOUT_MS, TimeUnit.MILLISECONDS).close() }
+
+        assertFailsWith<IOException> { connect(verifier = verifier) }
+
+        assertEquals(1, verifier.verified.size)
+        assertTrue(verifier.remembered.isEmpty(), "a failed handshake recorded its certificate")
+    }
+
+    @Test
+    fun `a certificate the store would not commit fails the connection`() {
+        // Another first connection to the same host settled on a different certificate while this
+        // handshake ran. One of the two is what the host is now known by; this one is not.
+        val tls = RdpTestCertificates.serverContext()
+        serve { socket ->
+            DataInputStream(socket.getInputStream()).let { readPacket(it) }
+            socket.getOutputStream().apply { write(connectionConfirm(RdpSecurityProtocol.SSL)); flush() }
+            val secure = tls.socketFactory.createSocket(socket, null, socket.port, false) as SSLSocket
+            secure.useClientMode = false
+            runCatching { secure.startHandshake() }
+        }
+        val verifier = RecordingVerifier(committed = false)
+
+        val failure = assertFailsWith<RdpCertificateRejectedException> { connect(verifier = verifier) }
+
+        assertEquals(verifier.remembered.single(), failure.offer)
+    }
+
+    @Test
+    fun `a handshake that fails for its own reasons is not reported as a rejected certificate`() {
+        // Confirmed, then hung up on before TLS. The connector has to pass that failure through as
+        // it is — reporting a certificate problem would send the user looking at the wrong thing.
+        serve { socket ->
+            DataInputStream(socket.getInputStream()).let { readPacket(it) }
+            socket.getOutputStream().apply { write(connectionConfirm(RdpSecurityProtocol.SSL)); flush() }
+            socket.close()
+        }
+
+        // RdpCertificateRejectedException is not an IOException, so this pins both halves.
+        assertFailsWith<IOException> { connect() }
     }
 
     @Test

@@ -2,12 +2,11 @@ package app.skerry.shared.rdp
 
 import java.io.BufferedOutputStream
 import java.io.DataInputStream
+import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.security.MessageDigest
 import java.security.cert.X509Certificate
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.TrustManagerFactory
@@ -155,42 +154,40 @@ class RdpTcpConnector(
     private class SecureSocket(val socket: SSLSocket, val publicKey: ByteArray)
 
     /**
-     * Wrap [plain] in TLS and put the server's certificate in front of [certificateVerifier].
+     * Wrap [plain] in TLS, with [certificateVerifier] taking the trust decision from inside the
+     * handshake. Refusing there rather than afterwards is the point: a client that trusts every
+     * chain and only makes up its mind once the session is up has already finished a handshake with
+     * a server it will not talk to, and any later slip leaks data over it.
      *
-     * The decision is taken after the handshake completes rather than inside the trust manager: the
-     * verifier's answer also depends on whether the platform trusted the chain and whether the name
-     * matched, and the hostname check needs the finished session. Nothing of ours has been written
-     * at that point, so a refusal costs the server a handshake and nothing else.
+     * Trust on first use is committed the other side of [SSLSocket.startHandshake], though. The
+     * verifier is asked when the server's certificate arrives, which is before the server has
+     * proven it holds the matching key — recording there would let anyone able to answer the
+     * connection register a certificate copied from elsewhere.
      */
     private fun upgradeToTls(plain: Socket, host: String, port: Int): SecureSocket {
-        val trust = CapturingTrustManager(platformTrustManager())
+        val trust = RdpVerifyingTrustManager(certificateVerifier, platformTrustManager(), host, port)
         val context = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
         val secure = context.socketFactory.createSocket(plain, host, port, true) as SSLSocket
         secure.useClientMode = true
         // Not left to the platform's defaults: Android's lag behind the desktop JVM's, and the floor
         // a remote-desktop session is protected by should not depend on which one is running it.
         secure.enabledProtocols = secure.supportedProtocols.filter { it in TLS_FLOOR }.toTypedArray()
-        secure.startHandshake()
-
-        val chain = trust.chain
+        try {
+            secure.startHandshake()
+        } catch (e: IOException) {
+            runCatching { secure.close() }
+            // Our own refusal surfaces here as a generic TLS failure; the caller needs the
+            // certificate that was turned down, not the alert it produced. The alert stays as the
+            // cause — a rejection and a broken handshake read the same way in a bug report.
+            throw trust.rejected?.let { RdpCertificateRejectedException(it, cause = e) } ?: e
+        }
+        // Fails closed: null means the handshake completed without the trust manager being asked
+        // at all — an anonymous suite, or a resumed session (impossible here, the context is new).
+        val offer = trust.accepted
             ?: throw RdpProtocolException("TLS handshake produced no server certificate")
-        val leaf = chain.first()
-        val offer = RdpCertificateOffer(
-            host = host,
-            port = port,
-            fingerprintSha256 = fingerprintOf(leaf),
-            subject = leaf.subjectX500Principal.name,
-            issuer = leaf.issuerX500Principal.name,
-            notBeforeMillis = leaf.notBefore.time,
-            notAfterMillis = leaf.notAfter.time,
-            trustedByPlatform = trust.platformTrusted,
-            hostnameMatches = runCatching {
-                HttpsURLConnection.getDefaultHostnameVerifier().verify(host, secure.session)
-            }.getOrDefault(false),
-            publicKey = leaf.publicKey.encoded,
-            derChain = chain.map { it.encoded },
-        )
-        if (!certificateVerifier.verify(offer)) {
+        if (!certificateVerifier.remember(offer)) {
+            // Another first-time connection to this host settled on a different certificate while
+            // this handshake ran. One of the two is the one the host is now known by; this is not.
             runCatching { secure.close() }
             throw RdpCertificateRejectedException(offer)
         }
@@ -205,34 +202,6 @@ class RdpTcpConnector(
                 .filterIsInstance<X509TrustManager>()
                 .firstOrNull()
         }.getOrNull()
-
-    private fun fingerprintOf(certificate: X509Certificate): String =
-        MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
-            .joinToString(":") { byte -> (byte.toInt() and 0xFF).toString(16).padStart(2, '0').uppercase() }
-
-    /**
-     * Accepts every chain so the decision can be taken by [RdpCertificateVerifier], but records what
-     * the platform's own trust store thought of it — "my enterprise CA issued this" and "the machine
-     * signed it itself" are different answers, and the verifier is the one that gets to weigh them.
-     */
-    private class CapturingTrustManager(private val delegate: X509TrustManager?) : X509TrustManager {
-        @Volatile
-        var chain: Array<X509Certificate>? = null
-
-        @Volatile
-        var platformTrusted = false
-
-        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {
-            this.chain = chain
-            val platform = delegate
-            platformTrusted = platform != null &&
-                runCatching { platform.checkServerTrusted(chain, authType) }.isSuccess
-        }
-
-        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) = Unit
-
-        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-    }
 
     private companion object {
         /** The only TLS versions this client offers; anything older is not negotiable. */
