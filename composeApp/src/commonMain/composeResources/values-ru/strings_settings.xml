@@ -151,7 +151,7 @@
     <string name="settings_security_biometric_recheck">Проверить снова</string>
     <string name="settings_security_biometric_weak_binding">Включено с ослабленной привязкой ключа — биометрия по-прежнему нужна.</string>
     <string name="settings_security_auto_lock">Автоблокировка</string>
-    <string name="settings_security_auto_lock_desc">Блокировка после простоя.</string>
+    <string name="settings_security_auto_lock_desc">Блокировка, когда прекращается ввод. Передача файлов или идущий сценарий откладывают её не более чем на десять интервалов; блокировка закрывает открытые сессии.</string>
     <string name="settings_autolock_1m">Через 1 минуту</string>
     <string name="settings_autolock_5m">Через 5 минут</string>
     <string name="settings_autolock_15m">Через 15 минут</string>
@@ -170,6 +170,7 @@
     <string name="settings_event_unlocked_biometric">Разблокировка биометрией</string>
     <string name="settings_event_device_paired">Привязано новое устройство</string>
     <string name="settings_event_key_exported">Ключ экспортирован в файл</string>
+    <string name="settings_event_lock_incomplete">Автоблокировка завершилась не полностью</string>
     <string name="settings_event_with_detail">%1$s: %2$s</string>
     <string name="settings_event_line">%1$s · %2$s</string>
     <string name="settings_time_today">сегодня %1$s</string>

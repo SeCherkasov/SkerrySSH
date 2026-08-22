@@ -513,6 +513,13 @@ class ConnectionController(
         }
 
     /**
+     * Whether this session is writing a file right now — a transfer or an editor save; `false` when
+     * the SFTP channel was never opened. Cheap enough for the vault's idle auto-lock to poll (see
+     * [VaultGate]'s `workInFlight`).
+     */
+    val writeInFlight: Boolean get() = transferCoordinator?.writeInFlight == true
+
+    /**
      * This session's live host-metrics controller — one per connection, created lazily and cached
      * (like [openPortForwards]/[openTransferCoordinator]); polling runs on the session's [scope]
      * and starts immediately. Stopped by [disconnect] along with the session.

@@ -151,7 +151,7 @@
     <string name="settings_security_biometric_recheck">重新检查</string>
     <string name="settings_security_biometric_weak_binding">已启用，但密钥绑定较弱 — 仍需生物识别。</string>
     <string name="settings_security_auto_lock">自动锁定</string>
-    <string name="settings_security_auto_lock_desc">空闲后锁定。</string>
+    <string name="settings_security_auto_lock_desc">停止输入后锁定。文件传输或正在运行的脚本最多可将其推迟十个间隔；锁定会关闭已打开的会话。</string>
     <string name="settings_autolock_1m">1 分钟后</string>
     <string name="settings_autolock_5m">5 分钟后</string>
     <string name="settings_autolock_15m">15 分钟后</string>
@@ -170,6 +170,7 @@
     <string name="settings_event_unlocked_biometric">通过生物识别解锁</string>
     <string name="settings_event_device_paired">新设备已配对</string>
     <string name="settings_event_key_exported">密钥已导出到文件</string>
+    <string name="settings_event_lock_incomplete">自动锁定未完全完成</string>
     <string name="settings_event_with_detail">%1$s：%2$s</string>
     <string name="settings_event_line">%1$s · %2$s</string>
     <string name="settings_time_today">今天 %1$s</string>

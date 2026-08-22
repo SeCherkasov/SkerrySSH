@@ -245,10 +245,12 @@ internal fun WithWindowInfo(info: WindowInfo?, content: @Composable () -> Unit) 
  * A window-lifecycle owner for the test composition, pinned to STARTED. The real shell gets one
  * from `Window`; `runComposeUiTest` provides none, and a connected remote desktop reads it
  * ([app.skerry.ui.remote.ReportOutputVisibility]) — without an owner the first VNC frame throws.
- * `createUnsafe` because there is no Android main thread to enforce here.
+ * `createUnsafe` because there is no Android main thread to enforce here. Shared with the tests
+ * that stand a single screen up rather than the whole shell ([app.skerry.ui.vault.VaultGate] reads
+ * the owner too, for background auto-lock).
  */
 @Composable
-private fun WithTestLifecycle(content: @Composable () -> Unit) {
+internal fun WithTestLifecycle(content: @Composable () -> Unit) {
     val owner = remember {
         object : LifecycleOwner {
             override val lifecycle: LifecycleRegistry = LifecycleRegistry.createUnsafe(this)

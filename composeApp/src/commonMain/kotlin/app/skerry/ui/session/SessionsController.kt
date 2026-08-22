@@ -287,6 +287,12 @@ class SessionsController(
     val allSessions: List<Session> get() = tabs.flatMap { it.panes }
 
     /**
+     * Whether any open session is writing a file right now — what the vault's idle auto-lock asks
+     * before locking, since locking would close the session the write runs on.
+     */
+    val writeInFlight: Boolean get() = allSessions.any { it.controller.writeInFlight }
+
+    /**
      * The session being worked in: the focused pane of the active tab. What every single-session
      * read-site wants (the status bar, the info panel, the mobile screens, which have no panes).
      */

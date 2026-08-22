@@ -6,6 +6,7 @@ import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
 import app.skerry.ui.tunnel.TunnelManager
+import kotlinx.coroutines.CancellationException
 
 /**
  * Drops everything that still holds a decrypted secret when the vault locks. Passed to
@@ -44,12 +45,40 @@ fun tearDownForLock(
     runbooks: RunbookRunner? = null,
     keyboardInteractive: KeyboardInteractivePromptController? = null,
 ) {
-    tunnels?.closeAll()
+    val failures = TeardownFailures()
+    failures.run { tunnels?.closeAll() }
+    // Guarded per pane, not per step: each pane holds its own decrypted credential, so one that
+    // refuses to let go must not leave the panes after it holding theirs behind a locked vault.
     sessions?.tabs?.forEach { tab ->
-        tab.panes.forEach { it.controller.clearReconnectCredentials() }
+        tab.panes.forEach { pane -> failures.run { pane.controller.clearReconnectCredentials() } }
     }
-    sync?.pauseForLock()
-    snippets?.dismissRun()
-    runbooks?.close()
-    keyboardInteractive?.cancelPending()
+    failures.run { sync?.pauseForLock() }
+    failures.run { snippets?.dismissRun() }
+    failures.run { runbooks?.close() }
+    failures.run { keyboardInteractive?.cancelPending() }
+    failures.rethrowFirst()
+}
+
+/**
+ * Keeps a failed cleanup from cancelling the ones after it. Each step here drops a different secret,
+ * and they are independent: a tunnel that refuses to close must not leave a runbook's resolved
+ * `${{vault:…}}` values in memory behind a locked vault. The first failure is still raised once
+ * everything has had its turn, so the manual lock reports it as before.
+ */
+private class TeardownFailures {
+    private var first: Throwable? = null
+
+    fun run(step: () -> Unit) {
+        try {
+            step()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (first == null) first = e
+        }
+    }
+
+    fun rethrowFirst() {
+        first?.let { throw it }
+    }
 }

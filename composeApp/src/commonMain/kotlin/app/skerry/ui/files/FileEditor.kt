@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.app.LocalUserActivity
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
@@ -290,6 +291,10 @@ private fun EditorBuffer(
     focusEditor: Boolean,
 ) {
     val focus = remember(controller) { FocusRequester() }
+    // A soft keyboard sends no key event to the vault gate's input modifier, and an editor buffer is
+    // not a transfer either — without this, editing a remote file on Android for the idle window
+    // locks the vault and takes the unsaved text with it.
+    val userActivity = LocalUserActivity.current
     // The controller can replace the content on its own (initial load, an edit rejected while a
     // conflict is pending): adopt it, but never on the echo of our own keystroke.
     LaunchedEffect(state.text) {
@@ -302,6 +307,7 @@ private fun EditorBuffer(
     BasicTextField(
         value = value,
         onValueChange = { next ->
+            if (next.text != value.text) userActivity()
             onValueChange(next)
             controller.edit(next.text)
         },

@@ -23,9 +23,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlinx.coroutines.cancel
 
-private const val LHOME = "/local/home"
-private const val RHOME = "/remote/app"
-
 /**
  * Transfer coordinator tests. The local pane runs over a "local" [FakeSftpClient] (an FS stand-in
  * that only sees transfers through its own tree); the remote pane and the transfer channel run
@@ -33,44 +30,6 @@ private const val RHOME = "/remote/app"
  * `upload` seeds the file), and the re-listed remote pane shows it.
  */
 class TransferCoordinatorTest {
-
-    private fun TestScope.scope() = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-
-    private fun localFake() = FakeSftpClient(startDir = LHOME).apply {
-        seedFile("$LHOME/a.txt", size = 10)
-        seedFile("$LHOME/b.txt", size = 20)
-        seedDir("$LHOME/sub")
-        seedFile("$LHOME/sub/inner.txt", size = 7)
-    }
-
-    private fun remoteFake() = FakeSftpClient(startDir = RHOME).apply {
-        seedFile("$RHOME/r.txt", size = 30)
-    }
-
-    private class Rig(
-        val local: FilePaneController,
-        val remote: FilePaneController,
-        val localFake: FakeSftpClient,
-        val remoteFake: FakeSftpClient,
-        val coordinator: TransferCoordinator,
-    )
-
-    private fun TestScope.rig(
-        local: FakeSftpClient = localFake(),
-        remote: FakeSftpClient = remoteFake(),
-        now: () -> Long = { 0L },
-    ): Rig {
-        val localBrowser = SftpFileBrowser(local, "This Mac")
-        val remoteBrowser = SftpFileBrowser(remote, "prod-web-01")
-        val localCtl = FilePaneController(localBrowser, scope())
-        val remoteCtl = FilePaneController(remoteBrowser, scope())
-        localCtl.start(); remoteCtl.start(); advanceUntilIdle()
-        val coordinator = TransferCoordinator(remote, localCtl, localBrowser, remoteCtl, remoteBrowser, scope(), now)
-        return Rig(localCtl, remoteCtl, local, remote, coordinator)
-    }
-
-    private fun FilePaneController.entry(name: String) =
-        (state as FilePaneState.Loaded).entries.first { it.name == name }
 
     @Test
     fun `uploadSelection sends selected local files into the remote directory and refreshes it`() = runTest {
@@ -251,6 +210,8 @@ class TransferCoordinatorTest {
         advanceUntilIdle()
         assertEquals(TransferState.Idle, r.coordinator.transfer)
     }
+
+
 
     @Test
     fun `uploadSource uploads a picked file into the remote directory and refreshes it`() = runTest {

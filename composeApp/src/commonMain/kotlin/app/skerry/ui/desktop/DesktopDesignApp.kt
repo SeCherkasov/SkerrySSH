@@ -403,8 +403,14 @@ fun DesktopDesignApp(
                 // Idle auto-lock threshold from settings: changing it in the UI recomposes VaultGate
                 // and restarts the idle timer; Never (idleMs == null) turns it off.
                 autoLockIdleMs = state.settings.autoLock.idleMs,
+                // Unattended work the user started defers the idle lock — see [IdleLockPolicy]. Read
+                // on every tick of the idle timer, so both getters stay O(open sessions).
+                workInFlight = { liveSessions?.writeInFlight == true || runbookRunner?.stepInFlight == true },
                 // Runs on EVERY lock, including the two automatic ones that bypass the lock action.
-                onBeforeLock = { tearDownForLock(tunnels, sessions, sync, snippets, runbookRunner, keyboardInteractive) },
+                // liveSessions, not the `sessions` parameter: the desktop entry point passes none and
+                // lets this composable build one, so the parameter is null in the shipped app and the
+                // reconnect credentials survived every automatic lock.
+                onBeforeLock = { tearDownForLock(tunnels, liveSessions, sync, snippets, runbookRunner, keyboardInteractive) },
                 onReset = onVaultReset,
                 // onPairingComplete != null (sync is present) — the create screen offers "I have a code":
                 // the coordinator creates the vault under the chosen password itself and accepts the account key.

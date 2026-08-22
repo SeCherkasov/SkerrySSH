@@ -5,6 +5,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -13,6 +14,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
+import app.skerry.ui.app.LocalUserActivity
 
 /**
  * Caret state for a text field whose value lives outside it as a plain [String].
@@ -48,6 +50,14 @@ internal class FieldDraft(private val masked: Boolean = false, private val singl
      * `Left` is how a screen reader reads a field it has just landed on.
      */
     private var gestureCaret: Int? = null
+
+    /**
+     * Reports typing to the vault's idle auto-lock ([app.skerry.ui.app.LocalUserActivity]). Set from
+     * [rememberFieldDraft] on every composition, because the field outlives the value the local had
+     * when it was created. On Android a soft keyboard sends no key event to the composition, so the
+     * text arriving here is the only sign the user is present.
+     */
+    internal var onActivity: () -> Unit = {}
 
     /** Written by [fieldFocus]; read by [rememberFieldDraft] to drive the select-on-focus rule. */
     internal var focused by mutableStateOf(false)
@@ -122,7 +132,10 @@ internal class FieldDraft(private val masked: Boolean = false, private val singl
         // it was, so the retyped character would match the text this field last emitted and the key
         // would go dead for good.
         emitted = next.text != previous || next.text != current
-        if (emitted) onText(next.text)
+        if (emitted) {
+            onActivity()
+            onText(next.text)
+        }
     }
 
     /**
@@ -173,6 +186,10 @@ internal fun rememberFieldDraft(
     singleLine: Boolean = true,
 ): FieldDraft {
     val draft = remember(masked, singleLine) { FieldDraft(masked, singleLine) }
+    // SideEffect, not a bare write: a composition attempt Compose discards must not leave the field
+    // holding a callback from it.
+    val activity = LocalUserActivity.current
+    SideEffect { draft.onActivity = activity }
     // An effect rather than the focus callback: a tap requests focus and then drops the caret at
     // the tapped offset inside the same gesture, so a selection made while the focus is being
     // granted is undone by the very click that asked for it. Applying it once the gesture is over

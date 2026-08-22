@@ -10,9 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -22,6 +19,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,9 +39,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.skerry.shared.vault.BiometricPrompt
+import app.skerry.shared.vault.SecurityEventType
 import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
+import app.skerry.ui.app.LocalUserActivity
 import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vtail_error_biometric_failed
@@ -89,6 +89,7 @@ import app.skerry.ui.generated.resources.vtail_bio_unlock_cancel
 import app.skerry.ui.generated.resources.vtail_bio_unlock_subtitle
 import app.skerry.ui.generated.resources.vtail_bio_unlock_title
 import app.skerry.ui.nav.PlatformBackHandler
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -111,7 +112,7 @@ expect fun deviceMandatesAutoLock(): Boolean
  *
  * If [biometrics] is passed, the unlock form offers biometric unlock (the prompt fires automatically
  * when biometrics is enabled). Auto-lock: the vault locks on background (lifecycle `ON_STOP`) and on
- * idle ([AUTO_LOCK_IDLE_MS], timer restarted by touches).
+ * idle ([AUTO_LOCK_IDLE_MS] by default, [IdleLockPolicy] for what counts as idle).
  *
  * Compose input fields work with [String], so the password is converted to [CharArray] only on submit
  * and wiped immediately by the controller; the field's string buffer lives until recomposition — a
@@ -128,6 +129,12 @@ fun VaultGate(
     // restarts the idle timer. `null` — idle timer off ([AutoLockDuration.Never]); background lock remains
     // (deviceMandatesAutoLock).
     autoLockIdleMs: Long? = AUTO_LOCK_IDLE_MS,
+    // Whether unattended work the user started is running right now — an SFTP transfer, a runbook
+    // run. While it is, the idle timer defers the lock instead of firing it: locking closes the
+    // sessions the work lives on, and losing a half-finished transfer to a timeout is not a
+    // security win. Read on every tick, so it must be cheap. Default `false` — mock path/previews,
+    // where nothing is running. See [IdleLockPolicy] for the policy in full.
+    workInFlight: () -> Boolean = { false },
     modifier: Modifier = Modifier,
     // Teardown of everything holding the decrypted secret, run immediately before EVERY transition to
     // locked — manual lock, background (`ON_STOP`) and the idle timer alike. It lives here rather than
@@ -239,7 +246,34 @@ fun VaultGate(
     // Single door into the locked state: every path goes through the teardown first. Kept fresh via
     // rememberUpdatedState so the DisposableEffect observer below doesn't capture a stale lambda.
     val currentOnBeforeLock by rememberUpdatedState(onBeforeLock)
-    val lockNow = { currentOnBeforeLock(); controller.lock() }
+    // finally, not a plain sequence: a teardown that throws must not leave the vault open — the
+    // idle timer's only other exit is to stop running, and a gate that fails open is not a gate.
+    // The exception still propagates; it just no longer decides whether the vault locks.
+    val lockNow = {
+        try {
+            currentOnBeforeLock()
+        } finally {
+            controller.lock()
+        }
+    }
+
+    // The automatic locks — idle and background — fire on an empty desk, so a cleanup that refuses
+    // must not take the app down with it. It must not vanish either: the vault is locked, but
+    // whatever failed to close is still holding a secret, and the lock screen looks exactly like a
+    // clean lock. The log is the only place left to say otherwise. The manual lock keeps
+    // propagating: there the user is watching, and the crash is the report.
+    val lockAutomatically = {
+        try {
+            lockNow()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // No detail: an exception's text carries host names, and this log is plaintext on disk.
+            // runCatching because the log is a file: on a full disk the write throws, and a record
+            // that cannot be made must not undo the containment it was added to report on.
+            runCatching { securityLog?.record(SecurityEventType.LockIncomplete) }
+        }
+    }
 
     // Background auto-lock: other hands on an unlocked device must not get an open vault after minimizing.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -252,19 +286,46 @@ fun VaultGate(
                 !controller.biometricInFlight &&
                 deviceMandatesAutoLock()
             ) {
-                lockNow()
+                lockAutomatically()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Idle auto-lock: the delay restarts on activityTick change (user touch) and on [autoLockIdleMs]
-    // threshold change from settings. null (AutoLockDuration.Never) — timer off.
-    if (controller.state == VaultGateState.Unlocked && autoLockIdleMs != null) {
-        LaunchedEffect(controller.activityTick, autoLockIdleMs) {
-            delay(autoLockIdleMs)
-            lockNow()
+    // Idle auto-lock: [IdleLockPolicy] owns the rule, this only runs its clock. Input reaches it
+    // through [idleActivity] on the content below and through [LocalUserActivity]; a new threshold
+    // from settings (or null — AutoLockDuration.Never, timer off) makes a new policy, which
+    // restarts the loop. Kept out of the composition otherwise: a policy tick is a plain field,
+    // deliberately not snapshot state, so pointer movement doesn't recompose the whole app.
+    val idlePolicy = remember(autoLockIdleMs) { autoLockIdleMs?.let { IdleLockPolicy(it) } }
+    val currentWorkInFlight by rememberUpdatedState(workInFlight)
+    // Stable per policy: a fresh lambda every recomposition would invalidate every reader of the
+    // static local below.
+    val userActivity: () -> Unit = remember(idlePolicy) { { idlePolicy?.touch() } }
+    if (controller.state == VaultGateState.Unlocked && idlePolicy != null) {
+        LaunchedEffect(idlePolicy) {
+            idlePolicy.restart()
+            while (true) {
+                delay(idlePolicy.tickMs)
+                // A predicate supplied from outside decides only whether to *defer*; if it throws,
+                // the tick proceeds as if nothing were running. The loop has no other restart —
+                // activity is a plain field write, not a state change — so letting an exception out
+                // of here would disable the auto-lock for the rest of the session, silently.
+                val busy = try {
+                    currentWorkInFlight()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    false
+                }
+                if (idlePolicy.onTick(busy)) {
+                    // The vault is locked by lockNow's own `finally` even when the teardown throws;
+                    // nothing here can repair one that did, so the loop ends either way.
+                    lockAutomatically()
+                    break
+                }
+            }
         }
     }
 
@@ -316,19 +377,10 @@ fun VaultGate(
 
             // lock() moves the gate to NeedsUnlock; key(state) tears down the content subtree, whose
             // DisposableEffect drops the live SSH session — locking closes sessions too.
-            VaultGateState.Unlocked -> Box(
-                Modifier.fillMaxSize().pointerInput(Unit) {
-                    // Observe presses on the Initial pass without consuming — children still get events,
-                    // and the idle timer restarts on each touch.
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Initial)
-                            if (event.type == PointerEventType.Press) controller.touch()
-                        }
-                    }
-                },
-            ) {
-                content { lockNow() }
+            VaultGateState.Unlocked -> Box(Modifier.fillMaxSize().idleActivity(idlePolicy)) {
+                CompositionLocalProvider(LocalUserActivity provides userActivity) {
+                    content { lockNow() }
+                }
             }
         }
     }
