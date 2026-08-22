@@ -24,6 +24,8 @@ import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -121,10 +123,77 @@ class SyncCoordinator(
     @Volatile
     private var pendingReplace: PendingReplace? = null
 
-    /** Stash the pending replace, wiping any superseded one's password first. */
-    private fun stashPendingReplace(next: PendingReplace) {
+    /**
+     * A user-initiated linking operation ([connect]/[claimPairing]/[confirmPasswordReplace]) is in flight.
+     * What the double-submit guard reads — not [SyncStatus.Busy], which the silent keep-connected restore
+     * ([restoreSession]) raises just the same: a restore that happened to start first turned the user's own
+     * connect into a no-op, with nothing on screen to say the tap did anything (issue #278). Set on the
+     * calling (main) thread before the launch, cleared when the launched operation returns — @Volatile
+     * because that clear runs on [scope] and the guard reads it without the lock.
+     */
+    @Volatile
+    private var linkingInFlight = false
+
+    /**
+     * Which linking operation [linkingInFlight] currently stands for. A connect that pauses on the
+     * confirmation publishes [SyncStatus.NeedsPasswordReplaceConfirm] and only then unwinds to its own
+     * clear, so the user can confirm inside that window: without a token the confirmed re-run would raise
+     * the flag and the paused connect's clear would drop it again, leaving the re-run running with the
+     * guard down.
+     */
+    @Volatile
+    private var linkingGeneration = 0
+
+    // Both halves are read-modify-write across two threads (taken on the main thread, released on
+    // [scope]), so the token check and the clear have to be one step: a whole beginLinking landing between
+    // endLinking's read and its write would otherwise clear the guard for the operation that just took it.
+    private val linkingLock = SynchronizedObject()
+
+    /** Take the linking guard for a new operation; the token identifies it to [endLinking]. */
+    private fun beginLinking(): Int = synchronized(linkingLock) {
+        linkingInFlight = true
+        linkingGeneration += 1
+        linkingGeneration
+    }
+
+    /** Release the linking guard, unless another operation has taken it over since [beginLinking]. */
+    private fun endLinking(generation: Int) = synchronized(linkingLock) {
+        if (linkingGeneration == generation) linkingInFlight = false
+    }
+
+    // Guards the pending replace together with the status that advertises it. [pauseForLock] declines from
+    // the main thread while [doConnect] is publishing from [scope], and the two orders in between are both
+    // wrong: a decline that lands first leaves the ACCOUNT password stashed behind an already-locked vault,
+    // and one that lands between the stash and the status puts the question on screen with nothing left
+    // able to answer it (both buttons no-op on a null stash).
+    private val pendingLock = SynchronizedObject()
+
+    /**
+     * Publish the pause: stash the connect's params under an owned copy of the password and put the
+     * question on screen, as one step. Returns false when the vault locked first — there is nobody behind
+     * the lock screen to ask, and nothing is stashed, so the caller resolves the connect itself.
+     */
+    private fun publishPendingReplace(
+        serverUrl: String,
+        accountId: String,
+        password: CharArray,
+        keepConnected: Boolean,
+    ): Boolean = synchronized(pendingLock) {
+        if (lockPaused) return false
+        clearPendingReplace() // a superseded pause's password is not left behind
+        pendingReplace = PendingReplace(serverUrl, accountId, password.copyOf(), keepConnected)
+        _status.value = SyncStatus.NeedsPasswordReplaceConfirm(serverUrl, accountId)
+        true
+    }
+
+    /**
+     * Drop the pending replace, wiping the ACCOUNT password it kept. The wipe and the clear are one step
+     * on purpose: a site that does only the second leaves that password in the heap with nothing left
+     * pointing at it.
+     */
+    private fun clearPendingReplace() = synchronized(pendingLock) {
         pendingReplace?.password?.fill(' ')
-        pendingReplace = next
+        pendingReplace = null
     }
 
     // "What to sync" (account level) — stored as a SETTINGS record in the vault, synced by the same
@@ -370,8 +439,7 @@ class SyncCoordinator(
      * process/test teardown. Does not touch the saved link (that's [disconnect]).
      */
     fun close() {
-        pendingReplace?.password?.fill(' ')
-        pendingReplace = null
+        clearPendingReplace()
         scope.cancel()
     }
 
@@ -389,24 +457,31 @@ class SyncCoordinator(
         // Guard against a double launch: a repeat click while the previous connect/claim is in flight
         // would spawn a second Ktor client (pool/socket leak) and a status race. Calls come from UI
         // handlers on the main thread, so check-then-set without CAS is enough (like panel busy flags).
-        if (_status.value == SyncStatus.Busy) {
+        if (linkingInFlight) {
             masterPassword.fill(' ')
             return
         }
+        val linking = beginLinking()
         // Set Busy synchronously, before launch: the onboarding form disables "Skip" on Busy. If we set
         // Busy only in doConnect's first line, a dispatch window would remain where the status is still
         // Disabled and Skip is active: proceeding to biometric enroll, the user would wrap it under a key
         // that connect then replaces (account-key adoption race).
         _status.value = SyncStatus.Busy
         // A fresh connect supersedes any pending vault-password-replace confirmation: wipe its kept password.
-        pendingReplace?.let { it.password.fill(' '); pendingReplace = null }
+        clearPendingReplace()
         // Copy synchronously and wipe the original before launch: the coroutine starts on
         // Dispatchers.Default not immediately, and the caller may wipe the array first — otherwise
         // deriveMasterKey would get an empty password (TOCTOU). The copy is owned by [doConnect] and
         // wiped in its finally.
         val owned = masterPassword.copyOf()
         masterPassword.fill(' ')
-        scope.launch { opMutex.withLock { doConnect(serverUrl, accountId, owned, keepConnected) } }
+        scope.launch {
+            try {
+                opMutex.withLock { doConnect(serverUrl, accountId, owned, keepConnected) }
+            } finally {
+                endLinking(linking)
+            }
+        }
     }
 
     // Under [opMutex] (see connect): session activation must not race with disconnect.
@@ -525,8 +600,14 @@ class SyncCoordinator(
                 // password is an answer about the password, not about the revocation ([cancelPasswordReplace]).
                 // After the close, not before: a refused write throws, and it must not strand the client.
                 if (s.reactivated) rememberReactivation(link)
-                stashPendingReplace(PendingReplace(serverUrl, accountId, masterPassword.copyOf(), keepConnected))
-                _status.value = SyncStatus.NeedsPasswordReplaceConfirm(serverUrl, accountId)
+                if (!publishPendingReplace(serverUrl, accountId, masterPassword, keepConnected)) {
+                    // The vault locked while this connect was on the network (the lock has no idea one is
+                    // in flight, and a sync connect does not defer the idle timer). Fall back to the saved
+                    // state rather than asking a question nobody can see — the reactivation debt above is
+                    // already recorded, and the user reconnects after unlocking.
+                    _status.value = configStore.load()?.let { SyncStatus.Configured(it.serverUrl, it.accountId) }
+                        ?: SyncStatus.Disabled
+                }
                 return
             } else {
                 // Confirmed ([confirmPasswordReplace]): log into the existing account and adopt its key,
@@ -883,10 +964,15 @@ class SyncCoordinator(
     fun confirmPasswordReplace() {
         val pending = pendingReplace ?: return
         pendingReplace = null
+        val linking = beginLinking() // the re-run is the same user action as the connect it resumes
         _status.value = SyncStatus.Busy
         scope.launch {
-            opMutex.withLock {
-                doConnect(pending.serverUrl, pending.accountId, pending.password, pending.keepConnected, allowPasswordReplace = true)
+            try {
+                opMutex.withLock {
+                    doConnect(pending.serverUrl, pending.accountId, pending.password, pending.keepConnected, allowPasswordReplace = true)
+                }
+            } finally {
+                endLinking(linking)
             }
         }
     }
@@ -901,10 +987,9 @@ class SyncCoordinator(
      * that account a rebuild whenever it does connect. Declining is an answer about the password, not about
      * the revocation.
      */
-    fun cancelPasswordReplace() {
-        val pending = pendingReplace ?: return
-        pendingReplace = null
-        pending.password.fill(' ')
+    fun cancelPasswordReplace() = synchronized(pendingLock) {
+        if (pendingReplace == null) return
+        clearPendingReplace()
         _status.value = configStore.load()?.let { SyncStatus.Configured(it.serverUrl, it.accountId) } ?: SyncStatus.Disabled
     }
 
@@ -1099,17 +1184,28 @@ class SyncCoordinator(
      */
     fun claimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean = false) {
         // Guard against a double launch — as in [connect] (a double submit would leak a Ktor client).
-        if (_status.value == SyncStatus.Busy) {
+        if (linkingInFlight) {
             localPassword.fill(' ')
             return
         }
+        val linking = beginLinking()
         // Busy synchronously (like connect): the onboarding form disables "Skip"/double-submit on Busy.
         _status.value = SyncStatus.Busy
         // Copy and wipe the original before launch (TOCTOU): the coroutine doesn't start immediately, and
         // the caller could wipe the array before vault.create/unlock reads it. The copy is owned by doClaimPairing.
         val owned = localPassword.copyOf()
         localPassword.fill(' ')
-        scope.launch { opMutex.withLock { doClaimPairing(payload, owned, keepConnected) } }
+        // A fresh linking attempt supersedes any pending vault-password-replace confirmation, exactly as in
+        // [connect]: leaving it stashed keeps a password copy in memory for an answer that can no longer be
+        // given (the dialog is gone), and its pause stands the keep-connected restore down for as long.
+        clearPendingReplace()
+        scope.launch {
+            try {
+                opMutex.withLock { doClaimPairing(payload, owned, keepConnected) }
+            } finally {
+                endLinking(linking)
+            }
+        }
     }
 
     // Under [opMutex] (see claimPairing): session activation must not race with disconnect.
@@ -1945,6 +2041,15 @@ class SyncCoordinator(
         // this coroutine to opMutex (a long connect holding the lock across lock+unlock) cancels the
         // pause instead of tearing down the session the resume just kept.
         lockPaused = true
+        // The lock drops every other decrypted secret ([tearDownForLock]); the password kept for a pending
+        // confirmation is the ACCOUNT password, and behind the lock screen nobody can answer the question
+        // it belongs to. So the lock declines on the user's behalf — the alternative is that password
+        // sitting in the heap for the whole locked period, which is the state the lock exists to prevent.
+        //
+        // After the flag, not before: a connect still on the network publishes its pause under the same
+        // [pendingLock] this reads. Setting the flag first means that publish is either refused (it sees
+        // the flag) or already done (and this finds the stash) — never lands in between and survives.
+        cancelPasswordReplace()
         // No early return on a null session: a connect in flight holds opMutex and would publish its
         // subscriptions after the lock, with nothing left to stop them. Queueing behind it stops them.
         scope.launch {
@@ -2053,54 +2158,78 @@ class SyncCoordinator(
      * (dataKey needed) — usually from `onVaultUnlocked`. Vault locked / no token → no-op (stays
      * [SyncStatus.Configured]); token expired / no connection → fall back to Configured (link not
      * erased, user reconnects by password). Already connected → no-op.
+     *
+     * A connect paused on [SyncStatus.NeedsPasswordReplaceConfirm] is a no-op too: that pause owns the
+     * status, and a restore writing over it takes the dialog off the screen while the stashed password
+     * stays in memory — nothing but that dialog can confirm or decline it (issue #278).
+     *
+     * The pause defers the restore rather than replacing it: confirming makes a session of its own, which
+     * is what this would have restored. Declining deliberately does NOT call this — a restore that owes a
+     * reactivation rebuild clears the vault and re-pulls it ([reconcileLocked]), and "no, don't change my
+     * password" must not be the button that empties the host list. What releases it afterwards is the next
+     * ordinary trigger: a vault unlock, or an UNREACHABLE→REACHABLE edge if the server was down. On a
+     * server that never went down neither fires, so a declined device stays on [SyncStatus.Configured]
+     * ("reconnect with your password") until the next unlock or app start — visibly offline, not silently.
      */
     fun restoreSession() {
         // Cheap pre-check only — the authoritative copy is re-loaded under the lock below.
         val quick = configStore.load() ?: return
         if (!quick.keepConnected || quick.sealedRefreshToken == null || session != null) return
-        scope.launch {
-            opMutex.withLock {
-                // Re-load and re-check under the lock: while this coroutine waited for opMutex, a
-                // parallel connect/claim may have activated a session (nothing to restore), or a
-                // disconnect may have erased the link — restoring from the stale pre-check copy would
-                // silently re-link a device the user just disconnected (the refresh token is still
-                // valid server-side; disconnect doesn't revoke it).
-                val cfg = configStore.load() ?: return@withLock
-                if (!cfg.keepConnected || cfg.sealedRefreshToken == null || session != null) return@withLock
-                val dataKey = vault.exportDataKey() ?: return@withLock
-                _status.value = SyncStatus.Busy
-                try {
-                    val refreshToken = tokens.open(dataKey, cfg.sealedRefreshToken)
-                    if (refreshToken == null) {
-                        _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
-                        return@withLock
-                    }
-                    val syncClient = clientFactory(cfg.serverUrl)
-                    val newSession = syncClient.refresh(SyncSession(cfg.accountId, "", refreshToken))
-                    // A reconcile interrupted before it finished must still run on this silent restore —
-                    // refresh carries no `reactivated` signal, so a standing debt is the only thing that
-                    // redoes it before the first push, whether it was recorded by this launch or an
-                    // earlier one.
-                    val reconcile = ServerLink(cfg.serverUrl, cfg.accountId) in reconcileDebts
-                    // refresh rotates the token — re-save it sealed under the dataKey (inside activation).
-                    activateSession(
-                        syncClient,
-                        newSession,
-                        cfg.copy(sealedRefreshToken = tokens.seal(dataKey, newSession.refreshToken)),
-                        resetCursor = reconcile,
-                        clearLocalRecords = reconcile,
-                    )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // Any restore failure (expired token, no connection, other) — fall back to Configured,
-                    // don't erase the link (reconnect by password). Catch Exception, not just SyncException:
-                    // otherwise something unexpected would stick on Busy (eternal spinner).
-                    _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
-                } finally {
-                    dataKey.zeroize() // dataKey copy — wipe it, the live key stays with the vault
-                }
+        if (pendingReplace != null) return
+        scope.launch { opMutex.withLock { doRestoreSession() } }
+    }
+
+    // Under [opMutex] (see restoreSession): activating the restored session must not race with a
+    // disconnect or a concurrent connect.
+    private suspend fun doRestoreSession() {
+        // Re-load and re-check under the lock: while this coroutine waited for opMutex, a parallel
+        // connect/claim may have activated a session (nothing to restore), a disconnect may have erased
+        // the link — restoring from the stale pre-check copy would silently re-link a device the user just
+        // disconnected (the refresh token is still valid server-side; disconnect doesn't revoke it) — or a
+        // connect may have paused on the password-replace confirmation, which owns the status from then on.
+        val cfg = configStore.load() ?: return
+        if (!cfg.keepConnected || cfg.sealedRefreshToken == null || session != null) return
+        if (pendingReplace != null) return
+        val dataKey = vault.exportDataKey() ?: return
+        _status.value = SyncStatus.Busy
+        // A client we opened but haven't handed to [activateSession] yet — close it on any exit, as
+        // [doConnect] and [doClaimPairing] do. A failing refresh (dead token, 5xx, a server that flaps its
+        // health ping) would otherwise strand a Ktor engine and its pool once per attempt.
+        var openedClient: SyncClient? = null
+        try {
+            val refreshToken = tokens.open(dataKey, cfg.sealedRefreshToken)
+            if (refreshToken == null) {
+                _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
+                return
             }
+            val syncClient = clientFactory(cfg.serverUrl).also { openedClient = it }
+            val newSession = syncClient.refresh(SyncSession(cfg.accountId, "", refreshToken))
+            // A reconcile interrupted before it finished must still run on this silent restore — refresh
+            // carries no `reactivated` signal, so a standing debt is the only thing that redoes it before
+            // the first push, whether it was recorded by this launch or an earlier one.
+            val reconcile = ServerLink(cfg.serverUrl, cfg.accountId) in reconcileDebts
+            // refresh rotates the token — re-save it sealed under the dataKey (inside activation). Sealed
+            // BEFORE the hand-off below, as in [doChangeAccountPassword]: a throw here with the field
+            // already nulled would leave the client open and unowned, which is the leak this tracks.
+            val sealed = tokens.seal(dataKey, newSession.refreshToken)
+            openedClient = null // ownership passes to activateSession (it closes any superseded client)
+            activateSession(
+                syncClient,
+                newSession,
+                cfg.copy(sealedRefreshToken = sealed),
+                resetCursor = reconcile,
+                clearLocalRecords = reconcile,
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Any restore failure (expired token, no connection, other) — fall back to Configured, don't
+            // erase the link (reconnect by password). Catch Exception, not just SyncException: otherwise
+            // something unexpected would stick on Busy (eternal spinner).
+            _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
+        } finally {
+            runCatching { openedClient?.close() } // opened but never activated
+            dataKey.zeroize() // dataKey copy — wipe it, the live key stays with the vault
         }
     }
 

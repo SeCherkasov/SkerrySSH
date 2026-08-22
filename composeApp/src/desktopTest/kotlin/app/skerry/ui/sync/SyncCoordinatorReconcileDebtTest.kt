@@ -326,10 +326,8 @@ class SyncCoordinatorReconcileDebtTest {
         val vault = freshVault()
         vault.put("r1", RecordType.HOST, "secret".encodeToByteArray())
 
-        val dataKey = vault.exportDataKey()!!
-        val sealed = SealedTokenCodec(crypto).seal(dataKey, "refresh").also { dataKey.zeroize() }
         val config = InMemorySyncConfigStore().also {
-            it.save(SyncConfig(serverUrl, account, deviceId = "devA", keepConnected = true, sealedRefreshToken = sealed))
+            it.save(keepConnectedLink(vault, crypto, serverUrl, account, deviceId = "devA"))
         }
         val debts = DebtRaiseFailingStore(InMemoryReconcileDebtStore())
         val client = ReactivatingClient(ownWrap(vault), reactivated = true)

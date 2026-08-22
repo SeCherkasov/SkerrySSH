@@ -40,6 +40,12 @@ import kotlinx.coroutines.CancellationException
  * connection would go on waiting behind the lock screen for a code nobody can see — and then fail on
  * its own timeout minutes later, looking like the credentials were wrong.
  *
+ * The desktop sync-setup modal is closed too, for a reason the others don't have: its open flag lives
+ * above the vault gate, so the modal survives the lock and comes back on unlock — but the question inside
+ * it does not, because [SyncCoordinator.pauseForLock] declines it. Left open it would return as a plain
+ * connect form standing where the user's question was, with nothing said about the question being answered
+ * for them. Android passes nothing here: its confirmation is a screen, and it releases itself on dispose.
+ *
  * Shared by desktop and Android so the two can't drift apart on which of these gets forgotten.
  */
 fun tearDownForLock(
@@ -50,6 +56,7 @@ fun tearDownForLock(
     runbooks: RunbookRunner? = null,
     keyboardInteractive: KeyboardInteractivePromptController? = null,
     hostTrust: HostTrustPromptController? = null,
+    closeSyncSetup: (() -> Unit)? = null,
 ) {
     val failures = TeardownFailures()
     failures.run { tunnels?.closeAll() }
@@ -63,6 +70,7 @@ fun tearDownForLock(
     failures.run { runbooks?.close() }
     failures.run { keyboardInteractive?.cancelPending() }
     failures.run { hostTrust?.cancelPending() }
+    failures.run { closeSyncSetup?.invoke() }
     failures.rethrowFirst()
 }
 
