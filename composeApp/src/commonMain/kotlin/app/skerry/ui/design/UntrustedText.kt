@@ -66,6 +66,49 @@ internal fun sanitizeServerText(text: String, maxChars: Int, allowNewlines: Bool
     sanitized(text, maxChars, allowNewlines).text
 
 /**
+ * A machine name the far side chose, drawn so the part that decides *which* machine survives the cap.
+ *
+ * [sanitizeServerText] cuts at the end and says nothing about it, and a host name is read left to
+ * right with the registrable suffix last: `vpn.corp.example.com.<110 chars of padding>.evil.net` comes
+ * back as `vpn.corp.example.com.<padding>`, which the trust dialog then draws with the port appended
+ * as if it were the whole endpoint. Padding a name to the cap costs the server nothing. So the tail
+ * is kept and the middle goes, with an ellipsis saying that it did.
+ *
+ * The scan stops at [MAX_HOST_NAME_CHARS]: DNS cannot carry a longer name, so a string that reaches
+ * it names nothing that could be dialled and there is no genuine suffix further along to preserve.
+ */
+internal fun sanitizeServerHost(host: String): String {
+    val cleaned = sanitizeServerText(host, MAX_HOST_NAME_CHARS, allowNewlines = false)
+    if (cleaned.length <= MAX_UNTRUSTED_LABEL_CHARS && sanitizedFits(host, MAX_HOST_NAME_CHARS)) return cleaned
+    val head = cleaned.take(MAX_UNTRUSTED_LABEL_CHARS - HOST_TAIL_CHARS - 1).dropLastWhile { it.isHighSurrogate() }
+    return head + "\u2026" + hostTail(host)
+}
+
+/**
+ * The end of the name, read from the raw string rather than from [sanitizeServerHost]'s scan.
+ *
+ * Past [MAX_HOST_NAME_CHARS] that scan has stopped, so its last characters are still the padding —
+ * taking the tail from it would draw the attacker's own text where the suffix belongs, which is the
+ * one thing the elision exists to prevent. Bounded the same way the sanitizer bounds itself: only
+ * the last [HOST_TAIL_SCAN] characters are looked at, so a flood costs nothing here either.
+ */
+private fun hostTail(host: String): String {
+    // Both cuts fall on UTF-16 units, so either can land between the halves of an astral character.
+    // The sanitizer already trims an orphaned high surrogate off an end; a low one at a start is
+    // this function's own, and draws as the replacement glyph if it survives.
+    val end = host.takeLast(HOST_TAIL_SCAN).dropWhile { it.isLowSurrogate() }
+    return sanitizeServerText(end, HOST_TAIL_SCAN, allowNewlines = false)
+        .takeLast(HOST_TAIL_CHARS)
+        .dropWhile { it.isLowSurrogate() }
+}
+
+/** The longest name DNS can carry, and so the longest one worth reading before eliding. */
+internal const val MAX_HOST_NAME_CHARS = 253
+
+/** How much of the end of an elided host stays: enough for the registrable suffix and a label or two. */
+private const val HOST_TAIL_CHARS = 40
+
+/**
  * Whether [sanitizeServerText] draws [text] whole at [maxChars] — for the surfaces that say when a
  * note was shortened.
  *
@@ -157,6 +200,11 @@ private fun astralDrawsAsSomething(code: Int): Boolean = INVISIBLE_ASTRAL.none {
 
 /** How much input [sanitizeServerText] is willing to walk for each character it may keep. */
 private const val SCAN_FACTOR = 8
+
+/** How much raw text [hostTail] is read from — the same budget per kept character. Declared here
+ *  rather than beside [HOST_TAIL_CHARS] because a file-level constant is initialized in source
+ *  order, and one reading [SCAN_FACTOR] from above it reads zero. */
+private const val HOST_TAIL_SCAN = HOST_TAIL_CHARS * SCAN_FACTOR
 
 /** What [sanitizeServerText] does with one character of server text. */
 private enum class ServerChar { Keep, Break, Space, Drop }

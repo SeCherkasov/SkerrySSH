@@ -461,6 +461,9 @@ internal fun DesktopChrome(
             app.skerry.ui.connection.KeyboardInteractiveHost(
                 app.skerry.ui.app.LocalKeyboardInteractive.current,
             )
+            // A host whose key nobody has vouched for yet, or whose key changed. Same placement and
+            // the same reason: a handshake is blocked on the answer, whatever it opens over.
+            app.skerry.ui.trust.HostTrustHost(app.skerry.ui.app.LocalHostTrust.current)
             // A single password-prompt dialog for all three connect paths; after submit the target
             // ([PendingAuth]) is dispatched through the same openResolved as the bound-secret path.
             pendingAuth?.let { pending ->

@@ -184,6 +184,7 @@
     <!-- Host key refusals (HostKeyRefusal) — one line each, ending in what to do -->
     <string name="conn_err_hostkey_changed">主机密钥已更改。请在“已知主机”中处理。</string>
     <string name="conn_err_hostkey_untrusted">主机密钥尚未受信任。请先用终端连接一次，或在“已知主机”中添加其 CA。</string>
+    <string name="conn_err_hostkey_refused">未接受主机密钥。重新连接以再次查看密钥。</string>
     <string name="conn_err_hostkey_locked">保管库已锁定：无法读取主机密钥信任。请解锁后重试。</string>
     <string name="conn_err_hostkey_cert">该主机必须出示受信任 CA 签发的证书；它出示的已被拒绝。</string>
     <string name="conn_err_hostkey_jump">跳板主机 — %1$s</string>

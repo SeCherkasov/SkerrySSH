@@ -184,6 +184,7 @@
     <!-- Host key refusals (HostKeyRefusal) — one line each, ending in what to do -->
     <string name="conn_err_hostkey_changed">Ключ хоста изменился. Разберитесь в «Известных хостах».</string>
     <string name="conn_err_hostkey_untrusted">Ключ хоста ещё не доверенный. Подключитесь раз терминалом или добавьте его CA в «Известных хостах».</string>
+    <string name="conn_err_hostkey_refused">Ключ хоста не принят. Подключитесь снова, чтобы увидеть ключ.</string>
     <string name="conn_err_hostkey_locked">Хранилище заблокировано: доверие к ключу не прочитать. Разблокируйте и повторите.</string>
     <string name="conn_err_hostkey_cert">Хост обязан предъявить сертификат доверенного CA; предъявленное отклонено.</string>
     <string name="conn_err_hostkey_jump">Промежуточный хост — %1$s</string>

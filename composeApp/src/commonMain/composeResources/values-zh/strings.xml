@@ -87,4 +87,21 @@
     <string name="help_close">关闭</string>
     <string name="help_add">添加</string>
     <string name="help_added">已添加</string>
+    <string name="trust_new_key_title">新的主机密钥</string>
+    <string name="trust_changed_key_title">主机密钥已更改</string>
+    <string name="trust_new_cert_title">新的服务器证书</string>
+    <string name="trust_changed_cert_title">服务器证书已更改</string>
+    <string name="trust_other_type_title">该主机已有其他密钥</string>
+    <string name="trust_new_key_body">尚未记录此主机的密钥。接受前请与服务器上的指纹核对。</string>
+    <string name="trust_new_cert_body">尚未记录此主机的证书。接受前请与服务器上的指纹核对。</string>
+    <string name="trust_fingerprint">指纹（SHA256）</string>
+    <string name="trust_other_type_note">此主机已记录为 %1$s。交换所用算法由服务器选择，因此已更改的密钥可能以新密钥的形式出现。</string>
+    <string name="trust_accept">接受并连接</string>
+    <string name="trust_accept_new_cert">接受新证书</string>
+    <string name="trust_reject">拒绝</string>
+    <string name="trust_cert_subject">主体</string>
+    <string name="trust_cert_issuer">颁发者</string>
+    <string name="trust_cert_valid_until">有效期至</string>
+    <string name="trust_cert_not_verified">系统无法验证此证书：证书链不完整或颁发机构未知。对远程桌面而言这很常见；请以指纹为准。</string>
+    <string name="trust_cert_name_mismatch">证书所指的主机与所拨接的主机不同。</string>
 </resources>

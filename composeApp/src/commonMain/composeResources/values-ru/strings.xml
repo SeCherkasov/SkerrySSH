@@ -87,4 +87,21 @@
     <string name="help_close">Закрыть</string>
     <string name="help_add">Добавить</string>
     <string name="help_added">Добавлено</string>
+    <string name="trust_new_key_title">Новый ключ хоста</string>
+    <string name="trust_changed_key_title">Ключ хоста изменился</string>
+    <string name="trust_new_cert_title">Новый сертификат сервера</string>
+    <string name="trust_changed_cert_title">Сертификат сервера изменился</string>
+    <string name="trust_other_type_title">Хост известен по другому ключу</string>
+    <string name="trust_new_key_body">Ключ этого хоста ещё не записан. Сверьте отпечаток с тем, что на сервере, прежде чем принимать.</string>
+    <string name="trust_new_cert_body">Сертификат этого хоста ещё не записан. Сверьте отпечаток с тем, что на сервере, прежде чем принимать.</string>
+    <string name="trust_fingerprint">ОТПЕЧАТОК (SHA256)</string>
+    <string name="trust_other_type_note">Этот хост уже записан с %1$s. Алгоритм обмена выбирает сервер, поэтому изменившийся ключ может прийти как новый.</string>
+    <string name="trust_accept">Принять и подключиться</string>
+    <string name="trust_accept_new_cert">Принять новый сертификат</string>
+    <string name="trust_reject">Отклонить</string>
+    <string name="trust_cert_subject">Субъект</string>
+    <string name="trust_cert_issuer">Издатель</string>
+    <string name="trust_cert_valid_until">Действителен до</string>
+    <string name="trust_cert_not_verified">Система не подтвердила этот сертификат: неполная цепочка или неизвестный ей центр. Для удалённого рабочего стола это обычно; судите по отпечатку.</string>
+    <string name="trust_cert_name_mismatch">Сертификат выписан не на тот хост, к которому идёт подключение.</string>
 </resources>

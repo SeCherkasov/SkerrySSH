@@ -88,4 +88,21 @@
     <string name="help_close">Close</string>
     <string name="help_add">Add</string>
     <string name="help_added">Added</string>
+    <string name="trust_new_key_title">New host key</string>
+    <string name="trust_changed_key_title">Host key changed</string>
+    <string name="trust_new_cert_title">New server certificate</string>
+    <string name="trust_changed_cert_title">Server certificate changed</string>
+    <string name="trust_other_type_title">Host known by another key</string>
+    <string name="trust_new_key_body">No key is recorded for this host yet. Compare the fingerprint with the one on the server before you accept it.</string>
+    <string name="trust_new_cert_body">No certificate is recorded for this host yet. Compare the fingerprint with the one on the server before you accept it.</string>
+    <string name="trust_fingerprint">FINGERPRINT (SHA256)</string>
+    <string name="trust_other_type_note">This host is already recorded with %1$s. A server picks which algorithm the exchange uses, so a changed key can arrive as a new one.</string>
+    <string name="trust_accept">Accept and connect</string>
+    <string name="trust_accept_new_cert">Accept new certificate</string>
+    <string name="trust_reject">Reject</string>
+    <string name="trust_cert_subject">Subject</string>
+    <string name="trust_cert_issuer">Issuer</string>
+    <string name="trust_cert_valid_until">Valid until</string>
+    <string name="trust_cert_not_verified">The system could not verify this certificate — an incomplete chain or an authority it does not know. Normal for Remote Desktop; judge it by the fingerprint.</string>
+    <string name="trust_cert_name_mismatch">The certificate names a host other than the one dialled.</string>
 </resources>

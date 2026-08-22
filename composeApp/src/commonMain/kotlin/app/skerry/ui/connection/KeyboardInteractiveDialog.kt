@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -84,6 +84,9 @@ fun KeyboardInteractiveDialog(
     // the field and skip re-focusing — the user would resubmit the code that just failed.
     val answers = remember(requestId) { mutableStateListOf(*Array(challenge.prompts.size) { "" }) }
     val focus = remember(requestId) { FocusRequester() }
+    // Keyed too: an unkeyed scroll position outlives the dialog it was scrolled in, so the next
+    // challenge opens part-way down and its first line is off screen.
+    val scroll = remember(requestId) { ScrollState(0) }
     val submit = { onSubmit(answers.toList()) }
 
     // Registered as a modal, holding the caret and drawn where the caret is — see
@@ -106,7 +109,7 @@ fun KeyboardInteractiveDialog(
                 .background(Skerry.colors.surfaceDeep)
                 .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
                 .clickable(interactionSource = noop, indication = null, onClick = {})
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(26.dp),
         ) {
             // Our own heading, never the server's: the wording below is written by whatever host was

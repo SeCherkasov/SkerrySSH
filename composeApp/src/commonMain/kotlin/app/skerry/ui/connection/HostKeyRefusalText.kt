@@ -8,6 +8,7 @@ import app.skerry.ui.generated.resources.conn_err_hostkey_cert
 import app.skerry.ui.generated.resources.conn_err_hostkey_changed
 import app.skerry.ui.generated.resources.conn_err_hostkey_jump
 import app.skerry.ui.generated.resources.conn_err_hostkey_locked
+import app.skerry.ui.generated.resources.conn_err_hostkey_refused
 import app.skerry.ui.generated.resources.conn_err_hostkey_untrusted
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
@@ -26,6 +27,7 @@ internal fun hostKeyRefusalText(refusal: HostKeyRefusal): StringResource = when 
     HostKeyRefusal.NotTrustedYet -> Res.string.conn_err_hostkey_untrusted
     HostKeyRefusal.TrustStoreUnreadable -> Res.string.conn_err_hostkey_locked
     HostKeyRefusal.CertificateRejected -> Res.string.conn_err_hostkey_cert
+    HostKeyRefusal.RejectedByUser -> Res.string.conn_err_hostkey_refused
 }
 
 /**

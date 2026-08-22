@@ -1,5 +1,8 @@
 package app.skerry.shared.ssh
 
+import app.skerry.shared.trust.HostTrustDecider
+import app.skerry.shared.trust.HostTrustKind
+import app.skerry.shared.trust.HostTrustRequest
 import kotlinx.serialization.Serializable
 
 /**
@@ -87,10 +90,13 @@ object NoopHostKeyMismatchStore : HostKeyMismatchStore {
 
 /**
  * Trust-on-first-use over [KnownHostsStore]: the first key for a (host, port, keyType) triple is
- * accepted and remembered; later connections require a matching fingerprint. A mismatch is rejected
- * (key change / possible MITM); the trusted record is left unchanged and the event is recorded in
- * [mismatches] for the known-hosts manager to resolve. A new key type for a known host is treated as
- * a new key.
+ * put to [trust] and, if accepted, remembered; later connections require a matching fingerprint. A
+ * mismatch is put to [trust] as well — accepting replaces the trusted record, refusing leaves it
+ * alone and records the event in [mismatches] for the known-hosts manager to resolve. A new key type
+ * for a known host is treated as a new key.
+ *
+ * [trust] defaults to [HostTrustDecider.SilentTofu], the behaviour of every release before the trust
+ * dialog: a first key accepted without asking, a changed one refused.
  *
  * An unreadable store ([KnownHostsStore.allOrNull] == `null`, e.g. the vault auto-locked during the
  * handshake) rejects the key — fail closed. Trust decisions need the trusted set; without it a
@@ -103,6 +109,7 @@ class TofuHostKeyVerifier(
     private val store: KnownHostsStore,
     private val mismatches: HostKeyMismatchStore = NoopHostKeyMismatchStore,
     private val now: () -> String = { "" },
+    private val trust: HostTrustDecider = HostTrustDecider.SilentTofu,
 ) : HostKeyVerifier {
     override fun check(offer: HostKeyOffer): HostKeyRefusal? {
         // A certificate is remembered by the key inside it: the certificate blob is re-issued on a
@@ -116,18 +123,100 @@ class TofuHostKeyVerifier(
         }
         return when {
             existing == null -> {
-                store.add(KnownHost(host, port, keyType, fingerprint, now()))
-                null
+                // A host already recorded under another algorithm is not a first contact. The server
+                // picks which host-key algorithm the exchange uses, so a peer offering only one this
+                // store has no record of would otherwise turn "this key changed" into "never seen".
+                val others = known.filter { it.host == host && it.port == port }.map { it.keyType }
+                if (!trust.decide(request(host, port, keyType, fingerprint, recorded = null, others = others))) {
+                    return HostKeyRefusal.RejectedByUser
+                }
+                commit(host, port, keyType, fingerprint, shown = null)
             }
             existing.fingerprint == fingerprint -> null
-            else -> {
-                mismatches.record(
-                    HostKeyMismatch(host, port, keyType, existing.fingerprint, fingerprint, now()),
-                )
-                HostKeyRefusal.KeyChanged
-            }
+            else -> keyChanged(host, port, keyType, fingerprint, existing.fingerprint)
         }
     }
+
+    /**
+     * The trusted key differs from what was offered. The user is shown both fingerprints and decides:
+     * accepting replaces the record they were shown (atomically — see [KnownHostsStore.replace], and
+     * see [commit] for what happens when it moved while they read) and clears the event the
+     * known-hosts manager would otherwise still warn about; refusing leaves the trusted key alone and
+     * records the event, which is what happens with no decider wired up at all.
+     */
+    private fun keyChanged(
+        host: String,
+        port: Int,
+        keyType: String,
+        fingerprint: String,
+        recorded: String,
+    ): HostKeyRefusal? {
+        if (trust.decide(request(host, port, keyType, fingerprint, recorded))) {
+            val refusal = commit(host, port, keyType, fingerprint, shown = recorded)
+            if (refusal != null) return refusal
+            mismatches.clear(host, port, keyType)
+            return null
+        }
+        mismatches.record(HostKeyMismatch(host, port, keyType, recorded, fingerprint, now()))
+        return HostKeyRefusal.KeyChanged
+    }
+
+    /**
+     * Writes the answer the user just gave, but only against the record they were shown.
+     *
+     * The dialog holds the handshake open for as long as a person takes to read a fingerprint, and a
+     * second connection to the same host can record a key inside that window. Committing the answer
+     * blind would then overwrite what landed — with the question having said "new host key" and no
+     * change warning ever shown. So the record is read again at the write: unchanged, the answer
+     * applies; already carrying the offered key, someone else wrote it and there is nothing to do;
+     * anything else and this connection is refused, and the key it offered goes to the known-hosts
+     * manager as the mismatch it now is. Gone entirely — forgotten in the manager, or a sync merge
+     * landing a deletion — is refused as well, but as a plain refusal: there is no mismatch to
+     * record and nothing for the user to compare, so reporting a key change would send them to a
+     * panel holding neither a key nor a warning.
+     *
+     * The read and the write are still two steps — the store is the only thing that could make them
+     * one — but they are microseconds apart again instead of minutes.
+     */
+    private fun commit(
+        host: String,
+        port: Int,
+        keyType: String,
+        fingerprint: String,
+        shown: String?,
+    ): HostKeyRefusal? {
+        val known = store.allOrNull() ?: return HostKeyRefusal.TrustStoreUnreadable
+        val landed = known.firstOrNull { it.host == host && it.port == port && it.keyType == keyType }?.fingerprint
+        if (landed == fingerprint) return null
+        if (landed != shown) {
+            // The record the answer was about is gone — forgotten in the manager, or a sync merge
+            // landing a deletion. Nothing changed and nothing is trusted, so reporting a key change
+            // would send the user to a known-hosts panel with neither a key nor a warning in it.
+            if (landed == null) return HostKeyRefusal.RejectedByUser
+            mismatches.record(HostKeyMismatch(host, port, keyType, landed, fingerprint, now()))
+            return HostKeyRefusal.KeyChanged
+        }
+        val record = KnownHost(host, port, keyType, fingerprint, now())
+        if (shown == null) store.add(record) else store.replace(record)
+        return null
+    }
+
+    private fun request(
+        host: String,
+        port: Int,
+        keyType: String,
+        fingerprint: String,
+        recorded: String?,
+        others: List<String> = emptyList(),
+    ) = HostTrustRequest(
+        kind = HostTrustKind.SshHostKey,
+        host = host,
+        port = port,
+        keyType = keyType,
+        fingerprint = fingerprint,
+        recordedFingerprint = recorded,
+        recordedKeyTypes = others.distinct().sorted(),
+    )
 }
 
 /**

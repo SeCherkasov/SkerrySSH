@@ -76,6 +76,7 @@ import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.app.LocalKnownHosts
 import app.skerry.ui.app.LocalTrustedCas
+import app.skerry.ui.design.FingerprintBox
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.Sym
@@ -381,9 +382,9 @@ private fun LiveMismatchPanel(mismatch: HostKeyMismatch, mono: FontFamily, onAcc
         }
         Txt("${mismatch.host} · ${displayKeyType(mismatch.keyType)}", color = Skerry.colors.dim, size = 11.5.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
         Txt(stringResource(Res.string.lib_known_previously_recorded), color = Skerry.colors.moss, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
-        FpBox(mismatch.recordedFingerprint, Skerry.colors.dim, Skerry.colors.moss.copy(alpha = 0.2f), mono)
+        FingerprintBox(mismatch.recordedFingerprint, Skerry.colors.dim, Skerry.colors.moss.copy(alpha = 0.2f), mono)
         Txt(stringResource(Res.string.lib_known_now_offered), color = Skerry.colors.sunset, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
-        FpBox(mismatch.offeredFingerprint, Skerry.colors.sunset, Skerry.colors.sunset.copy(alpha = 0.3f), mono)
+        FingerprintBox(mismatch.offeredFingerprint, Skerry.colors.sunset, Skerry.colors.sunset.copy(alpha = 0.3f), mono)
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 18.dp).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.sunset.copy(alpha = 0.06f)).padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -489,9 +490,9 @@ private fun MismatchPanel(mono: FontFamily) {
         }
         Txt("nas-truenas · ed25519", color = Skerry.colors.dim, size = 11.5.sp, font = mono, modifier = Modifier.padding(bottom = 16.dp))
         Txt("PREVIOUSLY RECORDED · MAR 4", color = Skerry.colors.moss, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(bottom = 6.dp))
-        FpBox("SHA256:9aB0cTn2wE4rXp1kLm7sQ8vZ", Skerry.colors.dim, Skerry.colors.moss.copy(alpha = 0.2f), mono)
+        FingerprintBox("SHA256:9aB0cTn2wE4rXp1kLm7sQ8vZ", Skerry.colors.dim, Skerry.colors.moss.copy(alpha = 0.2f), mono)
         Txt("NOW OFFERED · TODAY", color = Skerry.colors.sunset, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
-        FpBox("SHA256:Kp3xQ9zR1tWv7nB4mL0sJ2dF", Skerry.colors.sunset, Skerry.colors.sunset.copy(alpha = 0.3f), mono)
+        FingerprintBox("SHA256:Kp3xQ9zR1tWv7nB4mL0sJ2dF", Skerry.colors.sunset, Skerry.colors.sunset.copy(alpha = 0.3f), mono)
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 18.dp).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.sunset.copy(alpha = 0.06f)).padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(7.dp),
@@ -512,12 +513,6 @@ private fun MismatchPanel(mono: FontFamily) {
     }
 }
 
-@Composable
-private fun FpBox(text: String, color: Color, border: Color, mono: FontFamily) {
-    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.terminalBg).border(1.dp, border, RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 10.dp)) {
-        Txt(text, color = color, size = 10.5.sp, font = mono)
-    }
-}
 
 @Composable
 private fun SmallButton(label: String, fg: Color, border: Color, bold: Boolean = false) {

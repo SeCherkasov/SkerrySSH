@@ -5,6 +5,7 @@
     <string name="vnc_connect_failed">Failed to connect</string>
     <string name="vnc_error_auth">The server requires an authentication method Skerry doesn't support.</string>
     <string name="vnc_error_protocol">The server sent an unexpected VNC stream.</string>
+    <string name="vnc_error_cert_rejected">Server certificate not accepted. Connect again to see it.</string>
     <string name="vnc_quality">Quality</string>
     <string name="vnc_quality_auto">Auto</string>
     <string name="vnc_quality_low">Low</string>

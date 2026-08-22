@@ -144,9 +144,12 @@ class SshjTransport(
         }
         val client = SSHClient(sshjConfig())
         // TCP connect timeout (see the constant's doc). Protocol-level KEX/I-O timeout is
-        // separate, sshj default ~30s; round-trip ping is its own thing. For a connectVia hop
-        // the TCP dial happened upstream; the timeout is harmless there.
+        // separate; round-trip ping is its own thing. For a connectVia hop the TCP dial happened
+        // upstream; the timeout is harmless there.
         client.connectTimeout = CONNECT_TIMEOUT_MILLIS
+        // The protocol deadline has to outlast the questions asked from inside the exchange it
+        // covers — the host key dialog and a 2FA prompt both answer from there.
+        client.transport.timeoutMs = SSH_PROTOCOL_TIMEOUT_MILLIS
         // Keystroke latency: see TcpNoDelaySocketFactory. Only the entry-point client owns a TCP
         // socket (hops ride upstream direct-tcpip channels, where setting it is a no-op).
         client.socketFactory = TcpNoDelaySocketFactory
