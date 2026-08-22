@@ -202,10 +202,6 @@ class VaultGateController(
     var biometricReducedBinding: Boolean by mutableStateOf(biometrics?.reducedBinding() == true)
         private set
 
-    /** User activity counter — idle auto-lock restarts when it changes. */
-    var activityTick: Int by mutableStateOf(0)
-        private set
-
     /**
      * Whether a biometric prompt is currently in flight. Background auto-lock must skip it: the system
      * prompt may send `ON_STOP`, and locking mid-authentication would leave the user having successfully
@@ -377,11 +373,6 @@ class VaultGateController(
             error = null
             state = VaultGateState.NeedsCreate
         }
-    }
-
-    /** Record user activity — restarts the idle auto-lock timer. */
-    fun touch() {
-        activityTick++
     }
 
     /** Whether biometric unlock can be offered on the unlock form (available and enabled). */

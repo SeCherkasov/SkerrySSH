@@ -151,7 +151,7 @@
     <string name="settings_security_biometric_recheck">Check again</string>
     <string name="settings_security_biometric_weak_binding">On with a weaker key binding — biometrics still required.</string>
     <string name="settings_security_auto_lock">Auto-lock</string>
-    <string name="settings_security_auto_lock_desc">Lock after idle.</string>
+    <string name="settings_security_auto_lock_desc">Locks when your input stops. A transfer or a running script defers it by up to ten intervals; locking closes open sessions.</string>
     <string name="settings_autolock_1m">After 1 minute</string>
     <string name="settings_autolock_5m">After 5 minutes</string>
     <string name="settings_autolock_15m">After 15 minutes</string>
@@ -170,6 +170,7 @@
     <string name="settings_event_unlocked_biometric">Unlocked with biometrics</string>
     <string name="settings_event_device_paired">New device paired</string>
     <string name="settings_event_key_exported">Key exported to file</string>
+    <string name="settings_event_lock_incomplete">Auto-lock did not finish cleanly</string>
     <string name="settings_event_with_detail">%1$s: %2$s</string>
     <string name="settings_event_line">%1$s · %2$s</string>
     <string name="settings_time_today">today %1$s</string>

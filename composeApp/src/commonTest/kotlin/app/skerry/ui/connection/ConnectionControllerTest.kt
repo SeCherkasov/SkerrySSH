@@ -283,6 +283,21 @@ class ConnectionControllerTest {
         scope.cancel()
     }
 
+    /** What the vault's idle auto-lock polls: a session that never opened SFTP writes nothing. */
+    @Test
+    fun `writeInFlight is false while no transfer channel was ever opened`() = runTest {
+        val conn = FakeSshConnection(FakeShellChannel(), sftp = RecordingSftpClient())
+        val (controller, scope) = controllerWith(FakeSshTransport(conn))
+        controller.connect(testTarget, SshAuth.Password("pw"))
+
+        assertFalse(controller.writeInFlight)
+
+        // Opening the channel is not writing either — bytes have to be moving.
+        controller.openTransferCoordinator(FakeFileBrowser(), "host")
+        assertFalse(controller.writeInFlight)
+        scope.cancel()
+    }
+
     @Test
     fun `openTransferCoordinator without a live connection fails`() = runTest {
         val (controller, scope) = controllerWith(FakeSshTransport(FakeSshConnection(FakeShellChannel())))

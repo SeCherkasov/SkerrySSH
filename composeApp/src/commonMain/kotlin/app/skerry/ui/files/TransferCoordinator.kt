@@ -115,6 +115,16 @@ class TransferCoordinator(
     val transfer: TransferState get() = transfers.latest
 
     /**
+     * Whether bytes are moving right now — a transfer, or an editor save ([openEditor]; the same
+     * [editorWrites] lock session teardown waits on). Read by the vault's idle auto-lock, which
+     * defers locking while it is true: a lock closes the session this runs on, and a half-written
+     * file is not what a timeout should leave behind — a save is open-truncate-write, so cutting it
+     * loses the file. [busy] itself stays private: it is the serialization latch, held across the
+     * overwrite prompt too, which is the user being asked something, not work in flight.
+     */
+    val writeInFlight: Boolean get() = transfer is TransferState.Active || editorWrites.isLocked
+
+    /**
      * Overwrite conflict awaiting confirmation: the destination directory already has entries
      * named [OverwriteConflict.names]. While non-null, the UI shows an "Overwrite?" dialog;
      * [resolveOverwrite] either runs the deferred transfer or cancels it.

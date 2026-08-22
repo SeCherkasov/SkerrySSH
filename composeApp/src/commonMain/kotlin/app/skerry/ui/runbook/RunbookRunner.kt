@@ -103,6 +103,35 @@ class RunbookRunner(
     /** Whether a run is in flight (sending or waiting for a confirmation). */
     val active: Boolean get() = phase == RunbookPhase.RUNNING || phase == RunbookPhase.AWAITING_CONFIRM
 
+    /**
+     * Whether a step is executing right now — the run is sending or waiting on the host, and nobody
+     * is waiting on the user. The vault's idle auto-lock defers while this is true, so every state
+     * that is really "waiting for a human" has to be excluded: [RunbookPhase.RUNNING] alone is not
+     * that, because an interactive step ([RunbookStepStatus.AWAITING_COMPLETE]) and a confirmation
+     * pause ([RunbookPhase.AWAITING_CONFIRM]) both leave the run running while the click that ends
+     * them never comes — which is exactly the idleness the timer exists to catch.
+     *
+     * A silent step is excluded too, and that is not the same as a slow one: a step is marked RUNNING
+     * before its line is sent, and the terminal's production guard holds that line back behind a
+     * confirmation of its own. Dismiss that dialog and the step stays RUNNING for the rest of the
+     * session — an unattended desk deferring every later lock. Past [SILENT_STEP_MS] of no output the
+     * run cannot tell whether anything is executing at all, so it stops speaking for the user. The
+     * floor is not [RunbookPolicy.watchdogMinutes]: a runbook's author may switch that off, and how
+     * long a vault stays unlocked is not theirs to set. [RunbookStepState.stalled] counts as well,
+     * for the runbooks that ask to be judged sooner.
+     */
+    val stepInFlight: Boolean
+        get() = phase == RunbookPhase.RUNNING && stepQuietMillis < SILENT_STEP_MS &&
+            run?.let { it.steps.getOrNull(it.currentIndex) }
+                ?.let { it.status == RunbookStepStatus.RUNNING && !it.stalled } == true
+
+    /**
+     * How long the current step has produced no output. Tracked whatever the watchdog is set to,
+     * because [stepInFlight] holds the vault's auto-lock off and cannot depend on a runbook's own
+     * settings. A transfer step never touches the terminal, so it stays at zero and keeps deferring.
+     */
+    private var stepQuietMillis: Long by mutableStateOf(0L)
+
     /** Whether any step failed, including ones the runbook tolerates. */
     val hadFailures: Boolean get() = run?.hadFailures == true
 
@@ -304,10 +333,22 @@ class RunbookRunner(
 
     /** Dismisses the run entirely (stopping it first if needed) and forgets its resolved values. */
     fun close() {
-        stop()
-        // A record parked by a run that ended without anyone flushing it (a phase settled while the
-        // screen was gone) is written now — after this the run it describes no longer exists.
-        flushReport()
+        try {
+            stop()
+            // A record parked by a run that ended without anyone flushing it (a phase settled while
+            // the screen was gone) is written now — after this the run it describes no longer exists.
+            flushReport()
+        } finally {
+            dropRun()
+        }
+    }
+
+    /**
+     * Everything this run still holds in memory. In a `finally`, because [close] is what a vault lock
+     * calls: a report that fails to write (a full disk) must not leave the step output, the resolved
+     * `${{vault:…}}` values and the context closure alive behind a locked vault.
+     */
+    private fun dropRun() {
         synchronized(lock) {
             generation++
             watchJob?.cancel()
@@ -351,6 +392,7 @@ class RunbookRunner(
         val resolved = script?.resolve(index, contextValue) ?: return
         state.status = RunbookStepStatus.RUNNING
         state.startedAtMillis = now()
+        stepQuietMillis = 0
         run.phase = RunbookPhase.RUNNING
         run.currentIndex = index
         phase = RunbookPhase.RUNNING
@@ -429,6 +471,7 @@ class RunbookRunner(
                     val version = target.outputVersion()
                     if (version == lastVersion) quietMillis += pollIntervalMillis else quietMillis = 0
                     lastVersion = version
+                    stepQuietMillis = quietMillis
                     val watchdog = policy.watchdogMinutes
                     markStalled(run, index, generationAtStart, watchdog > 0 && quietMillis >= watchdog * MILLIS_PER_MINUTE)
                     continue
@@ -621,6 +664,14 @@ class RunbookRunner(
 
 /** How long a watchdog minute is; the policy is in minutes, the poll loop counts milliseconds. */
 private const val MILLIS_PER_MINUTE = 60_000L
+
+/**
+ * Silence after which a running step stops counting as work in flight for the vault's idle auto-lock
+ * ([RunbookRunner.stepInFlight]). Matches the default watchdog: long enough for an ordinary command
+ * that prints only when it finishes, short enough that a step parked behind a dialog nobody answered
+ * cannot hold a vault open.
+ */
+private const val SILENT_STEP_MS = 2 * MILLIS_PER_MINUTE
 
 /** Raised in place of opening a channel the session doesn't have — reported, never surfaced raw. */
 private class NoSftpChannelException : Exception("This session has no SFTP channel")

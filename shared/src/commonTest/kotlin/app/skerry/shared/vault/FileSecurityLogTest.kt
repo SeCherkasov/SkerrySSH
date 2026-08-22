@@ -37,6 +37,32 @@ class FileSecurityLogTest {
         assertEquals(SecurityEventType.VaultCreated, recent[2].type)
     }
 
+    /**
+     * An event this build has no name for is a downgrade, a second installed build, or a portable
+     * copy run beside the current one. Decoding the array in one piece would throw, the whole file
+     * would read as empty, and the next record would overwrite the audit trail — including the
+     * VaultCreated anchor [lastPasswordChangeAt] reads. One unrecognised line is dropped instead.
+     */
+    @Test
+    fun anEventFromANewerBuildDropsItsOwnLineNotTheFile() {
+        val l = log()
+        clock = 1; l.record(SecurityEventType.VaultCreated)
+        clock = 2; l.record(SecurityEventType.BiometricEnabled)
+        fs.write(path) {
+            writeUtf8(
+                """[{"type":"VaultCreated","at":"2026-01-01T00:00:01Z"},""" +
+                    """{"type":"SomethingFromTheFuture","at":"2026-01-01T00:00:02Z"},""" +
+                    """{"type":"BiometricEnabled","at":"2026-01-01T00:00:03Z"}]""",
+            )
+        }
+
+        val recent = l.recent(limit = 100)
+
+        assertEquals(2, recent.size, "an unknown event type took the rest of the log with it")
+        assertEquals(SecurityEventType.BiometricEnabled, recent[0].type)
+        assertEquals("2026-01-01T00:00:01Z", l.lastPasswordChangeAt(), "the password-change anchor was lost")
+    }
+
     @Test
     fun recentRespectsLimit() {
         val l = log()

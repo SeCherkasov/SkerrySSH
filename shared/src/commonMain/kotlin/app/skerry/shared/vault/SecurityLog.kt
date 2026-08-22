@@ -4,6 +4,8 @@ import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.decodeFromJsonElement
 import okio.FileSystem
 import okio.Path
 
@@ -37,6 +39,14 @@ enum class SecurityEventType {
      * ([Credential.toString] redacts them), and this log is plaintext on disk.
      */
     KeyExported,
+
+    /**
+     * An automatic lock ran but one of its cleanups failed — the vault is locked, yet something it
+     * was supposed to drop is still holding a secret (a tunnel that refused to close, say). Recorded
+     * with no [SecurityEvent.detail]: the exception's own text carries host names, and this log is
+     * plaintext on disk.
+     */
+    LockIncomplete,
 }
 
 /**
@@ -118,11 +128,21 @@ class FileSecurityLog(
         if (fileSystem.exists(path)) fileSystem.delete(path)
     }
 
-    /** Read the log in chronological order; any error (missing file/corrupt JSON) → empty. */
+    /**
+     * Read the log in chronological order; any error (missing file/corrupt JSON) → empty.
+     *
+     * Entry by entry, not the array in one piece: an event written by a newer build carries a
+     * [SecurityEventType] this one has no name for, and `ignoreUnknownKeys` does not cover unknown
+     * enum *values*. A strict decode would throw for the whole file, which reads as an empty log and
+     * is then overwritten by the next [record] — the device's audit trail destroyed by a downgrade,
+     * looking exactly like a wipe someone did on purpose. One unrecognised entry is dropped instead.
+     */
     private fun read(): List<SecurityEvent> = runCatching {
         if (!fileSystem.exists(path)) return emptyList()
         val text = fileSystem.read(path) { readUtf8() }
-        json.decodeFromString<List<SecurityEvent>>(text)
+        json.decodeFromString<JsonArray>(text).mapNotNull { entry ->
+            runCatching { json.decodeFromJsonElement<SecurityEvent>(entry) }.getOrNull()
+        }
     }.getOrDefault(emptyList())
 
     // Atomic write + harden on tmp before move — see [atomicWriteUtf8].

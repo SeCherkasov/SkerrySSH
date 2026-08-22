@@ -3,20 +3,15 @@ package app.skerry.ui.runbook
 import app.skerry.shared.runbook.Runbook
 import app.skerry.shared.runbook.RunbookMarker
 import app.skerry.shared.runbook.RunbookPolicy
-import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.runbook.RunbookTransferDirection
-import app.skerry.shared.sftp.SftpClient
-import app.skerry.shared.snippet.SnippetMoment
-import app.skerry.ui.sftp.FakeSftpClient
-import app.skerry.shared.snippet.SnippetRunEnvironment
 import app.skerry.shared.snippet.SnippetSegment
 import app.skerry.shared.terminal.TerminalStepMark
 import app.skerry.shared.terminal.UNREADABLE_STATUS
+import app.skerry.ui.sftp.FakeSftpClient
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -28,133 +23,11 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * Runbook run state machine. The terminal is faked as a byte sink plus the two things the runner
- * reads from a real one: the step report its probe emitted (parked until taken, as
- * `TerminalScreenState` parks it) and a counter of host output. Time is virtual.
+ * Runbook run state machine. The rig — the faked terminal, the runbook builders and the shared
+ * teardown — lives in [RunbookRunnerRig.kt]; time is virtual.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RunbookRunnerTest {
-
-    private val poll = 100L
-
-    /** The runbooks under test carry a one-minute watchdog; time is virtual, so the wait is free. */
-    private val stallAfter = 60_000L
-
-    private class FakeTerminal {
-        val sent = mutableListOf<String>()
-        var live: Boolean = true
-        var polls: Int = 0
-
-        /** Bytes the host has produced — the echo of what was typed counts, a step report does too. */
-        var outputVersion: Long = 0L
-
-        /** The report parked by the terminal, waiting for the runner to take it. */
-        private var mark: TerminalStepMark? = null
-
-        /** Every token the runner declared, in order; `null` means it stopped expecting one. */
-        val expected = mutableListOf<String?>()
-
-        /** Fragments of the last declared step that the terminal was told to hide from the echo. */
-        var hiddenEcho: List<String> = emptyList()
-
-        /** What the terminal was expecting at the moment each line was sent. */
-        val declaredWhenSent = mutableListOf<String?>()
-
-        /** SFTP side of the same session; `null` stands for a connection without one. */
-        var sftp: FakeSftpClient? = null
-
-        fun target(sessionId: String = "tab-1") = RunbookTarget(
-            sessionId = sessionId,
-            // The PTY echoes the typed line; what the terminal was told to expect is captured with it.
-            send = { line, _ -> sent += line; declaredWhenSent += expected.lastOrNull(); outputVersion++ },
-            expectStep = { token, hidden -> expected += token; hiddenEcho = hidden },
-            // Consuming, and a report of another step is dropped — as TerminalScreenState does it.
-            takeMark = { token ->
-                polls++
-                val parked = mark
-                mark = null
-                parked?.takeIf { it.token == token }
-            },
-            outputVersion = { outputVersion },
-            isLive = { live },
-            openSftp = sftp?.let { client -> suspend { client as SftpClient } },
-        )
-
-        /** The host wrote something to the terminal — the only thing the watchdog looks at. */
-        fun printed() {
-            outputVersion++
-        }
-
-        /** The shell finished the step and its closing probe emitted the mark. */
-        fun complete(stepIndex: Int, exitCode: Int, output: String? = "", runId: String = RUN_ID) {
-            mark = TerminalStepMark(RunbookMarker.token(runId, stepIndex), exitCode, output)
-            outputVersion++
-        }
-    }
-
-    private fun environment() = SnippetRunEnvironment(
-        moment = SnippetMoment(2026, 7, 26, 14, 5, 9, epochSeconds = 1_784_000_000L),
-        newUuid = { "uuid" },
-        randomChars = { n, _ -> "r".repeat(n) },
-    )
-
-    private fun runbook(vararg steps: RunbookStep, policy: RunbookPolicy = RunbookPolicy(watchdogMinutes = 1)) =
-        Runbook(id = "rb", label = "Deploy", steps = steps.toList(), policy = policy)
-
-    private fun step(id: String, command: String, confirm: Boolean = false, continueOnError: Boolean = false) =
-        RunbookStep.Command(id = id, title = id, command = command, confirm = confirm, continueOnError = continueOnError)
-
-    private fun interactive(id: String, command: String, confirm: Boolean = false) =
-        RunbookStep.Command(id = id, title = id, command = command, confirm = confirm, interactive = true)
-
-    private fun transfer(
-        id: String,
-        localPath: String = "/tmp/release.tgz",
-        remotePath: String = "/srv/incoming/release.tgz",
-        direction: RunbookTransferDirection = RunbookTransferDirection.UPLOAD,
-        confirm: Boolean = false,
-        continueOnError: Boolean = false,
-    ) = RunbookStep.Transfer(
-        id = id,
-        title = id,
-        localPath = localPath,
-        remotePath = remotePath,
-        direction = direction,
-        confirm = confirm,
-        continueOnError = continueOnError,
-    )
-
-    /**
-     * Shared setup and — the point of the helper — shared teardown: a watcher still polling on the
-     * test scheduler makes a *failing* assertion hang runTest's cleanup instead of reporting it, so
-     * the runner is closed and the scope cancelled even when the body throws.
-     */
-    private fun runnerTest(body: TestScope.(RunbookRunner, FakeTerminal) -> Unit) = runTest {
-        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
-        val term = FakeTerminal()
-        val runner = RunbookRunner(
-            scope = scope,
-            newId = { RUN_ID },
-            environment = ::environment,
-            pollIntervalMillis = poll,
-        )
-        try {
-            body(runner, term)
-        } finally {
-            runner.close()
-            scope.cancel()
-        }
-    }
-
-    /** The run in hand — every run here has exactly one session. */
-    private val RunbookRunner.only: RunbookSessionRun get() = run!!
-
-    /** Prepare + confirm in one call: the dialog step has its own coverage in the UI layer. */
-    private fun RunbookRunner.startNow(
-        runbook: Runbook,
-        target: RunbookTarget,
-        contextValue: (SnippetSegment.Variable) -> String,
-    ): Boolean = requestStart(runbook, target) && confirmStart(contextValue = contextValue)
 
     @Test
     fun a_step_that_goes_quiet_without_reporting_is_flagged() = runnerTest { r, term ->
@@ -164,7 +37,7 @@ class RunbookRunnerTest {
         r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
         assertFalse(r.only.steps[0].stalled)
 
-        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(STALL_AFTER + POLL * 2); testScheduler.runCurrent()
 
         assertTrue(r.only.steps[0].stalled)
         // Not killed: `sleep 3600` and a silent migration look exactly the same from here, so the
@@ -178,10 +51,10 @@ class RunbookRunnerTest {
         r.startNow(runbook(step("s1", "apt upgrade")), term.target()) { "" }
 
         repeat(6) {
-            testScheduler.advanceTimeBy(stallAfter / 2); testScheduler.runCurrent()
+            testScheduler.advanceTimeBy(STALL_AFTER / 2); testScheduler.runCurrent()
             term.printed()
         }
-        testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 2); testScheduler.runCurrent()
 
         assertFalse(r.only.steps[0].stalled, "a long step that talks is not a stuck one")
     }
@@ -189,11 +62,11 @@ class RunbookRunnerTest {
     @Test
     fun output_after_a_quiet_spell_clears_the_flag() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "./migrate.sh")), term.target()) { "" }
-        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(STALL_AFTER + POLL * 2); testScheduler.runCurrent()
         assertTrue(r.only.steps[0].stalled)
 
         term.printed()
-        testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 2); testScheduler.runCurrent()
 
         assertFalse(r.only.steps[0].stalled)
     }
@@ -201,11 +74,11 @@ class RunbookRunnerTest {
     @Test
     fun a_step_that_reports_after_a_quiet_spell_does_not_stay_flagged() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "sleep 300")), term.target()) { "" }
-        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(STALL_AFTER + POLL * 2); testScheduler.runCurrent()
         assertTrue(r.only.steps[0].stalled)
 
         term.complete(0, 0)
-        testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 2); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
         assertFalse(r.only.steps[0].stalled)
@@ -214,13 +87,13 @@ class RunbookRunnerTest {
     @Test
     fun stopping_a_flagged_step_clears_the_flag_and_a_late_poll_cannot_bring_it_back() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
-        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(STALL_AFTER + POLL * 2); testScheduler.runCurrent()
         assertTrue(r.only.steps[0].stalled)
 
         r.stop()
         // A poll that passed its staleness check just before Stop must not re-flag a run that is
         // over — the same race the generation guard exists for, now on this flag too.
-        testScheduler.advanceTimeBy(stallAfter * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(STALL_AFTER * 2); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
         assertFalse(r.only.steps[0].stalled)
@@ -229,7 +102,7 @@ class RunbookRunnerTest {
     @Test
     fun a_new_run_after_a_stalled_one_starts_unflagged() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
-        testScheduler.advanceTimeBy(stallAfter + poll * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(STALL_AFTER + POLL * 2); testScheduler.runCurrent()
         assertTrue(r.only.steps[0].stalled)
         r.stop()
 
@@ -250,7 +123,7 @@ class RunbookRunnerTest {
     @Test
     fun the_echoed_line_alone_never_finishes_a_step() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "uptime"), step("s2", "df -h")), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll * 20); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 20); testScheduler.runCurrent()
 
         // Only the first step was ever sent: the echo of its own line is output, not a report.
         assertEquals(1, term.sent.size)
@@ -282,7 +155,7 @@ class RunbookRunnerTest {
     fun the_step_keeps_what_the_terminal_cut_out_for_it() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "curl -fsS localhost/healthz")), term.target()) { "" }
         term.complete(0, 0, output = "healthz 200 OK")
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals("healthz 200 OK", r.only.steps[0].output)
         assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
@@ -294,7 +167,7 @@ class RunbookRunnerTest {
         // "Nothing printed" would be a claim about the command; this is a fact about the terminal.
         r.startNow(runbook(step("s1", "make build")), term.target()) { "" }
         term.complete(0, 0, output = null)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertNull(r.only.steps[0].output)
         assertTrue(r.only.steps[0].outputLost)
@@ -308,7 +181,7 @@ class RunbookRunnerTest {
         // success the operator would trust.
         r.startNow(runbook(step("s1", "deploy")), term.target()) { "" }
         term.complete(0, UNREADABLE_STATUS)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
         assertEquals(UNREADABLE_STATUS, r.only.steps[0].exitCode)
@@ -318,7 +191,7 @@ class RunbookRunnerTest {
     fun a_step_that_printed_nothing_is_not_flagged_as_lost() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "true")), term.target()) { "" }
         term.complete(0, 0, output = "")
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertFalse(r.only.steps[0].outputLost)
     }
@@ -329,7 +202,7 @@ class RunbookRunnerTest {
         // Its token is another step's, and a status is not something to attribute by proximity.
         r.startNow(runbook(step("s1", "uptime")), term.target()) { "" }
         term.complete(stepIndex = 4, exitCode = 0, runId = "older-run")
-        testScheduler.advanceTimeBy(poll * 5); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 5); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status)
         assertNull(r.only.steps[0].exitCode)
@@ -339,14 +212,14 @@ class RunbookRunnerTest {
     fun walks_the_steps_as_each_exit_code_arrives() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "uptime"), step("s2", "df -h")), term.target()) { "" }
         term.complete(0, 0)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
         assertEquals(0, r.only.steps[0].exitCode)
         assertEquals(RunbookStepStatus.RUNNING, r.only.steps[1].status)
 
         term.complete(1, 0)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[1].status)
         assertEquals(RunbookPhase.DONE, r.phase)
@@ -357,7 +230,7 @@ class RunbookRunnerTest {
     @Test
     fun a_confirm_step_waits_until_the_user_says_go() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "reboot", confirm = true)), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll * 10); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 10); testScheduler.runCurrent()
 
         assertEquals(RunbookPhase.AWAITING_CONFIRM, r.phase)
         assertEquals(RunbookStepStatus.AWAITING_CONFIRM, r.only.steps[0].status)
@@ -372,7 +245,7 @@ class RunbookRunnerTest {
     fun a_failing_step_stops_the_run_and_leaves_the_rest_untouched() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "migrate"), step("s2", "restart")), term.target()) { "" }
         term.complete(0, 1)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
         assertEquals(1, r.only.steps[0].exitCode)
@@ -388,14 +261,14 @@ class RunbookRunnerTest {
             term.target(),
         ) { "" }
         term.complete(0, 1)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
         assertEquals(RunbookStepStatus.RUNNING, r.only.steps[1].status)
         assertEquals(RunbookPhase.RUNNING, r.phase)
 
         term.complete(1, 0)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
         // A tolerated failure still colours the run: it finished, but not cleanly.
         assertEquals(RunbookPhase.DONE, r.phase)
         assertTrue(r.hadFailures)
@@ -421,7 +294,7 @@ class RunbookRunnerTest {
 
         // Even if the step's marker turns up afterwards, the run is over.
         term.complete(0, 0)
-        testScheduler.advanceTimeBy(poll * 20); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 20); testScheduler.runCurrent()
         assertEquals(1, term.sent.size)
         assertEquals(RunbookPhase.STOPPED, r.phase)
     }
@@ -429,10 +302,10 @@ class RunbookRunnerTest {
     @Test
     fun a_stopped_run_stops_reading_the_terminal() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "uptime")), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll * 3); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 3); testScheduler.runCurrent()
         r.stop()
         val after = term.polls
-        testScheduler.advanceTimeBy(poll * 20); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 20); testScheduler.runCurrent()
 
         assertEquals(after, term.polls, "a stopped run must not keep polling the terminal")
     }
@@ -440,7 +313,7 @@ class RunbookRunnerTest {
     @Test
     fun a_stop_landing_during_the_poll_does_not_send_the_next_step() = runTest {
         // Single-threaded stand-in for the cross-thread race (same trick as PingControllerTest): the
-        // poll is where Stop lands, so the watcher holds a finished step's exit code that is no
+        // the poll is where Stop lands, so the watcher holds a finished step's exit code that is no
         // longer allowed to advance the run.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         val term = FakeTerminal()
@@ -453,12 +326,12 @@ class RunbookRunnerTest {
             outputVersion = { 0L },
             isLive = { true },
         )
-        val r = RunbookRunner(scope, newId = { RUN_ID }, environment = ::environment, pollIntervalMillis = poll)
+        val r = RunbookRunner(scope, newId = { RUN_ID }, environment = ::environment, pollIntervalMillis = POLL)
         runner = r
         try {
             r.requestStart(runbook(step("s1", "uptime"), step("s2", "df -h")), target)
             r.confirmStart { "" }
-            testScheduler.advanceTimeBy(poll * 5); testScheduler.runCurrent()
+            testScheduler.advanceTimeBy(POLL * 5); testScheduler.runCurrent()
 
             assertEquals(RunbookPhase.STOPPED, r.phase)
             assertEquals(1, term.sent.size, "the next step must not be typed after Stop")
@@ -472,7 +345,7 @@ class RunbookRunnerTest {
     fun losing_the_session_aborts_the_run() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "uptime"), step("s2", "df -h")), term.target()) { "" }
         term.live = false
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookPhase.STOPPED, r.phase)
         assertEquals(1, term.sent.size)
@@ -489,7 +362,7 @@ class RunbookRunnerTest {
     fun a_finished_run_can_be_replaced_by_a_new_one() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "uptime")), term.target()) { "" }
         term.complete(0, 0)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertTrue(r.startNow(runbook(step("s2", "df -h")), term.target()) { "" })
         assertEquals(RunbookPhase.RUNNING, r.phase)
@@ -513,7 +386,7 @@ class RunbookRunnerTest {
     fun closing_a_finished_run_clears_it() = runnerTest { r, term ->
         r.startNow(runbook(step("s1", "uptime")), term.target()) { "" }
         term.complete(0, 0)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
         assertEquals(RunbookPhase.DONE, r.phase)
 
         r.close()
@@ -529,7 +402,7 @@ class RunbookRunnerTest {
             term.target(),
         ) { "" }
 
-        testScheduler.advanceTimeBy(stallAfter * 10); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(STALL_AFTER * 10); testScheduler.runCurrent()
 
         assertFalse(r.only.steps[0].stalled)
         assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status)
@@ -542,7 +415,7 @@ class RunbookRunnerTest {
             term.target(),
         ) { "" }
         term.complete(0, 1)
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
         assertEquals(RunbookStepStatus.RUNNING, r.only.steps[1].status)
@@ -557,7 +430,7 @@ class RunbookRunnerTest {
         term.sftp = sftp
 
         r.startNow(runbook(transfer("s1")), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals("/tmp/release.tgz" to "/srv/incoming/release.tgz", sftp.lastUpload)
         assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
@@ -574,7 +447,7 @@ class RunbookRunnerTest {
         term.sftp = sftp
 
         r.startNow(runbook(transfer("s1")), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(4096L, r.only.steps[0].transferredBytes)
         assertEquals(4096L, r.only.steps[0].totalBytes)
@@ -598,7 +471,7 @@ class RunbookRunnerTest {
             ),
             term.target(),
         ) { "" }
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals("/var/log/app/last.log" to "/tmp/last.log", sftp.lastDownload)
         assertEquals(RunbookStepStatus.SUCCEEDED, r.only.steps[0].status)
@@ -612,7 +485,7 @@ class RunbookRunnerTest {
         term.sftp = sftp
 
         r.startNow(runbook(transfer("s1"), step("s2", "systemctl restart app")), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
         val failure = assertIs<RunbookStepFailure.Transfer>(r.only.steps[0].failure)
@@ -630,7 +503,7 @@ class RunbookRunnerTest {
         term.sftp = sftp
 
         r.startNow(runbook(transfer("s1"), transfer("s2")), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookPhase.DONE, r.phase)
         assertEquals(2, sftp.closeCount, "every transfer closes the channel it opened")
@@ -644,7 +517,7 @@ class RunbookRunnerTest {
         term.sftp = sftp
 
         r.startNow(runbook(transfer("s1")), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
         assertEquals(1, sftp.closeCount, "a throw must not leak the channel")
@@ -680,7 +553,7 @@ class RunbookRunnerTest {
         term.sftp = null
 
         r.startNow(runbook(transfer("s1")), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.FAILED, r.only.steps[0].status)
         assertEquals(RunbookStepFailure.NoSftpChannel, r.only.steps[0].failure)
@@ -697,7 +570,7 @@ class RunbookRunnerTest {
             runbook(transfer("s1", localPath = "/tmp/\${{tag}}.tgz", remotePath = "/srv/releases/\${{tag}}.tgz")),
             term.target(),
         ) { "0.2.1" }
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals("/tmp/0.2.1.tgz" to "/srv/releases/0.2.1.tgz", sftp.lastUpload)
     }
@@ -711,14 +584,90 @@ class RunbookRunnerTest {
         term.sftp = sftp
 
         r.startNow(runbook(transfer("s1"), step("s2", "uptime")), term.target()) { "" }
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
         r.stop()
         sftp.transferGate?.complete(Unit)
-        testScheduler.advanceTimeBy(poll * 5); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 5); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
         assertEquals(RunbookPhase.STOPPED, r.phase)
         assertTrue(term.sent.isEmpty(), "the step after a stopped transfer must not be sent")
+    }
+
+    // --- what the vault's idle auto-lock reads ---
+
+    @Test
+    fun a_step_running_on_the_host_is_work_in_flight() = runnerTest { r, term ->
+        assertFalse(r.stepInFlight, "nothing runs before a run starts")
+
+        r.startNow(runbook(step("s1", "uptime")), term.target()) { "" }
+
+        assertTrue(r.stepInFlight, "a step on the host must defer the lock that would close it")
+
+        term.complete(0, 0)
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
+
+        assertEquals(RunbookPhase.DONE, r.phase)
+        assertFalse(r.stepInFlight, "a finished run still deferred the lock")
+    }
+
+    /**
+     * The distinction the property exists for: a run stopped on the user's turn is exactly the
+     * idleness the timer is meant to catch, and [RunbookRunner.active] is true through both.
+     */
+    @Test
+    fun a_step_waiting_on_the_user_is_not_work_in_flight() = runnerTest { r, term ->
+        r.startNow(runbook(interactive("s1", "htop")), term.target()) { "" }
+        testScheduler.advanceTimeBy(STALL_AFTER); testScheduler.runCurrent()
+
+        assertEquals(RunbookStepStatus.AWAITING_COMPLETE, r.only.steps[0].status)
+        assertTrue(r.active)
+        assertFalse(r.stepInFlight, "an interactive step held the vault open on an empty desk")
+    }
+
+    /**
+     * A step is marked RUNNING before its line is sent, and the terminal's production guard holds
+     * that line back behind a confirmation of its own. Dismiss that dialog and the step stays
+     * RUNNING for the rest of the session — silence past the watchdog is the run itself saying it
+     * cannot tell whether anything is executing.
+     */
+    @Test
+    fun a_step_the_watchdog_flagged_is_not_work_in_flight() = runnerTest { r, term ->
+        r.startNow(runbook(step("s1", "cat <<EOF")), term.target()) { "" }
+        testScheduler.advanceTimeBy(STALL_AFTER + POLL * 2); testScheduler.runCurrent()
+
+        assertTrue(r.only.steps[0].stalled)
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status, "the step is still nominally running")
+        assertFalse(r.stepInFlight, "a step flagged as stuck deferred the lock anyway")
+    }
+
+    /**
+     * The floor is the runner's own, not the runbook's. With the watchdog switched off nothing ever
+     * flags the step, so `stalled` cannot be what excludes it — and a step parked behind a guard
+     * dialog nobody answered would otherwise defer every later lock for the rest of the session.
+     */
+    @Test
+    fun a_silent_step_stops_deferring_with_the_watchdog_off() = runnerTest { r, term ->
+        val rb = runbook(step("s1", "cat <<EOF"), policy = RunbookPolicy(watchdogMinutes = 0))
+        r.startNow(rb, term.target()) { "" }
+
+        assertTrue(r.stepInFlight, "the step was just sent")
+
+        testScheduler.advanceTimeBy(SILENT_FLOOR + POLL); testScheduler.runCurrent()
+
+        assertFalse(r.only.steps[0].stalled, "the watchdog is off — nothing may flag this step")
+        assertEquals(RunbookStepStatus.RUNNING, r.only.steps[0].status, "the step is still nominally running")
+        assertFalse(r.stepInFlight, "silence past the floor deferred the lock anyway")
+    }
+
+    @Test
+    fun a_confirmation_pause_is_not_work_in_flight() = runnerTest { r, term ->
+        r.startNow(runbook(step("s1", "reboot", confirm = true)), term.target()) { "" }
+        testScheduler.advanceTimeBy(STALL_AFTER); testScheduler.runCurrent()
+
+        assertEquals(RunbookPhase.AWAITING_CONFIRM, r.phase)
+        assertTrue(r.active)
+        assertFalse(r.stepInFlight, "a confirmation pause held the vault open on an empty desk")
     }
 
     // --- interactive steps: the command is sent bare and the user decides when it is done ---
@@ -736,7 +685,7 @@ class RunbookRunnerTest {
 
         // However long it runs, only the user finishes it — and the terminal is never polled for a
         // mark that cannot come.
-        testScheduler.advanceTimeBy(stallAfter * 5); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(STALL_AFTER * 5); testScheduler.runCurrent()
         assertEquals(RunbookStepStatus.AWAITING_COMPLETE, r.only.steps[0].status)
         assertEquals(0, term.polls, "an interactive step has no mark to poll for")
         assertFalse(r.only.steps[0].stalled, "the watchdog has no meaning without a probe")
@@ -800,7 +749,7 @@ class RunbookRunnerTest {
     fun losing_the_session_ends_an_interactive_run() = runnerTest { r, term ->
         r.startNow(runbook(interactive("s1", "htop")), term.target()) { "" }
         term.live = false
-        testScheduler.advanceTimeBy(poll * 2); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 2); testScheduler.runCurrent()
 
         assertEquals(RunbookPhase.STOPPED, r.phase)
         assertEquals(RunbookStepStatus.STOPPED, r.only.steps[0].status)
@@ -864,7 +813,7 @@ class RunbookRunnerTest {
 
         r.startNow(runbook(interactive("s1", "mc"), transfer("s2")), term.target()) { "" }
         r.skipStep()
-        testScheduler.advanceTimeBy(poll); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.SKIPPED, r.only.steps[0].status)
         assertEquals("/tmp/release.tgz" to "/srv/incoming/release.tgz", sftp.lastUpload)
@@ -878,12 +827,8 @@ class RunbookRunnerTest {
         // parked in the terminal. The user's click is the only way this step ends.
         r.startNow(runbook(interactive("s1", "htop")), term.target()) { "" }
         term.complete(0, 0)
-        testScheduler.advanceTimeBy(poll * 5); testScheduler.runCurrent()
+        testScheduler.advanceTimeBy(POLL * 5); testScheduler.runCurrent()
 
         assertEquals(RunbookStepStatus.AWAITING_COMPLETE, r.only.steps[0].status)
-    }
-
-    private companion object {
-        const val RUN_ID = "run"
     }
 }

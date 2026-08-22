@@ -313,6 +313,10 @@ fun MobileDesignApp(
                     // Auto-lock threshold from settings: changing it recomposes VaultGate and restarts
                     // the idle timer; Never (idleMs == null) disables it.
                     autoLockIdleMs = state.autoLock.idleMs,
+                    // Unattended work the user started defers the idle lock — see [IdleLockPolicy].
+                    workInFlight = {
+                        liveSessions?.writeInFlight == true || deps.runbookRunner?.stepInFlight == true
+                    },
                     // Runs on EVERY lock, including the two automatic ones that bypass the lock
                     // action — Android had no teardown at all before (only onVaultReset did).
                     onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets, deps.runbookRunner, keyboardInteractive) },

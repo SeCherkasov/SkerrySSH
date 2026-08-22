@@ -96,6 +96,7 @@ import app.skerry.shared.terminal.highlight.applyTo
 import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.searchTerminal
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.ui.app.LocalUserActivity
 import app.skerry.ui.design.ClaimKeyboard
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
@@ -194,6 +195,8 @@ fun TerminalScreen(
     val handleColor = termTheme.cursor
     val mono = rememberTerminalFontFamily(appearance.font)
     val density = LocalDensity.current
+    // Soft-keyboard input is invisible to the vault gate's own input modifier — reported here.
+    val userActivity = LocalUserActivity.current
     // A full TUI screen redraws hundreds of distinct glyph runs per frame; the default layout cache
     // (8 entries) thrashes and re-lays-out every run every frame. Sized to hold a busy screen's runs.
     // Color is passed at draw time (see drawGlyphText), so cache hits stay theme-safe.
@@ -1349,6 +1352,10 @@ fun TerminalScreen(
                   // sticky-ctrl etc. apply only to real input (not to an empty delta).
                   val out = if (raw.isEmpty()) raw else imeTransform?.invoke(raw) ?: raw
                   if (out.isNotEmpty()) {
+                      // The vault's idle auto-lock sees no key event for this path (the soft keyboard
+                      // is its own window), and typing into a session is the plainest evidence there
+                      // is that the user is still here.
+                      userActivity()
                       state.clearSelection()
                       textToolbar.hide()
                       // While reverse-search is open — the soft keyboard edits the query, not the PTY:

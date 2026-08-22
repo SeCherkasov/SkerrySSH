@@ -229,6 +229,14 @@ val LocalRunbooks: ProvidableCompositionLocal<RunbookManager?> = staticCompositi
 val LocalRunbookRunner: ProvidableCompositionLocal<RunbookRunner?> = staticCompositionLocalOf { null }
 
 /**
+ * Reports user input to the vault's idle auto-lock timer from the places the gate's own
+ * [app.skerry.ui.vault.idleActivity] modifier cannot see it: a soft keyboard delivers no key event
+ * to the composition, so on Android text is the only trace the user is still there. Provided by
+ * [app.skerry.ui.vault.VaultGate]; a no-op wherever there is no gate (mock path, previews).
+ */
+val LocalUserActivity: ProvidableCompositionLocal<() -> Unit> = staticCompositionLocalOf { {} }
+
+/**
  * Log of past runs, per runbook — what the run screen's "previous runs" card and the library's
  * "last run" line read. `null` on the mock path and wherever no vault is behind the section.
  */

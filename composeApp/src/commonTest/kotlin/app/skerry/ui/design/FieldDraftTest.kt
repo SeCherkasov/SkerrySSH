@@ -24,6 +24,24 @@ class FieldDraftTest {
         assertEquals(TextRange(10), draft.textFieldValue("report.log").selection)
     }
 
+    /**
+     * The soft-keyboard half of the vault's idle auto-lock: on Android nothing about this typing
+     * reaches the gate's key handler, so the field is what reports the user is still there.
+     */
+    @Test
+    fun typing_reports_activity_to_the_idle_lock() {
+        val draft = FieldDraft()
+        var reported = 0
+        draft.onActivity = { reported++ }
+
+        draft.accept(TextFieldValue("22", TextRange(2)), "2") {}
+        assertEquals(1, reported)
+
+        // A caret move is not typing — and it arrives as a touch, which the gate sees on its own.
+        draft.accept(TextFieldValue("22", TextRange(1)), "22") {}
+        assertEquals(1, reported, "a caret move was reported as typing")
+    }
+
     @Test
     fun focus_selects_the_whole_value_when_armed() {
         val draft = FieldDraft()

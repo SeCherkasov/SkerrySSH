@@ -66,6 +66,7 @@ import app.skerry.ui.generated.resources.settings_event_biometric_disabled
 import app.skerry.ui.generated.resources.settings_event_biometric_enabled
 import app.skerry.ui.generated.resources.settings_event_device_paired
 import app.skerry.ui.generated.resources.settings_event_key_exported
+import app.skerry.ui.generated.resources.settings_event_lock_incomplete
 import app.skerry.ui.generated.resources.settings_event_line
 import app.skerry.ui.generated.resources.settings_event_password_changed
 import app.skerry.ui.generated.resources.settings_event_unlocked_biometric
@@ -328,6 +329,7 @@ private fun SecurityEventType.eventLabel(): String = stringResource(
         SecurityEventType.UnlockedBiometric -> Res.string.settings_event_unlocked_biometric
         SecurityEventType.DevicePaired -> Res.string.settings_event_device_paired
         SecurityEventType.KeyExported -> Res.string.settings_event_key_exported
+        SecurityEventType.LockIncomplete -> Res.string.settings_event_lock_incomplete
     },
 )
 
