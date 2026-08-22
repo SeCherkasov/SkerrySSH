@@ -63,8 +63,11 @@ sealed interface CredentialSecret {
      *
      * The refs are locations, not secrets, but [passphrase] is one — and so is the fact of which
      * files a user keeps keys in, so `toString` redacts everything as the other secrets do. The
-     * refs are device-local by nature: synced to a device where that file doesn't exist, the
-     * profile fails to connect with "file not found" rather than silently authenticating as
+     * refs are device-local by nature — a desktop path means nothing on a phone, a `content://` Uri
+     * resolves on no other device at all — so a credential holding one is kept off sync entirely
+     * ([app.skerry.shared.sync.DeviceLocalRecords]) instead of arriving elsewhere as an entry that
+     * can never connect. On a device that received one from an older client the file is simply
+     * absent, and the connection fails with "file not found" rather than silently authenticating as
      * someone else.
      */
     @Serializable

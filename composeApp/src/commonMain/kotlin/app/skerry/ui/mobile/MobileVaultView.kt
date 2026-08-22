@@ -672,7 +672,7 @@ private fun MobileSecretDetailSheet(
                     }
                 }
                 SecretSectionLabel(encryptionSectionTitle())
-                SecretEncryptionRows(syncing)
+                SecretEncryptionRows(syncing, credential.secret)
                 // Same rule as the desktop panel: audit shows for every secret whose material can
                 // leave the vault — password copies and private-key exports.
                 if (hasAuditTrail(credential)) {

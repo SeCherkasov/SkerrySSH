@@ -3,11 +3,16 @@ package app.skerry.ui.sync
 import app.skerry.shared.sync.InMemorySyncStateStore
 import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSettingsStore
+import app.skerry.shared.vault.Credential
+import app.skerry.shared.vault.CredentialSecret
+import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.RecordType
+import app.skerry.shared.vault.TrashStore
 import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.initializeVaultCrypto
+import app.skerry.shared.vault.trashRecordId
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -60,6 +65,90 @@ class SyncCoordinatorReactivationTest {
             assertFalse(client.pushed.any { it.id == "r1" }, "a reactivated device must not re-push a purged record")
             // The debt is retired once the reconcile's first sync succeeded.
             assertFalse(debts.owes(serverUrl, account), "a completed reconcile retires the debt")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * Issue #174: a file-backed credential is never pushed, so the reconcile's re-pull has nothing to
+     * restore it from — clearing it by type would destroy the only copy that exists.
+     */
+    @Test
+    fun `a reactivated device keeps the file-backed credential it never pushed`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        CredentialStore(vault).put(
+            Credential("cred-file", "tsh", CredentialSecret.KeyFile(privateKeyRef = "/home/maya/.tsh/keys/id")),
+        )
+        CredentialStore(vault).put(
+            Credential("cred-pem", "laptop", CredentialSecret.PrivateKey("-----BEGIN OPENSSH PRIVATE KEY-----")),
+        )
+        // Deleted, so the clear also has to spare its trash snapshot — that snapshot holds the ref.
+        val trashed = Credential("cred-gone", "old tsh", CredentialSecret.KeyFile("/home/maya/.ssh/old"))
+        CredentialStore(vault, TrashStore(vault)).also {
+            it.put(trashed)
+            it.remove(trashed.id)
+        }
+
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val debts = InMemoryReconcileDebtStore()
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault, debtStore = debts)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "reactivation connect should come Online")
+            assertTrue(
+                vault.records().any { it.id == "cred-file" },
+                "the reconcile must not drop a record the server was never given",
+            )
+            assertFalse(client.pushed.any { it.id == "cred-file" }, "and it still must not travel")
+            assertTrue(
+                vault.records().any { it.id == trashRecordId(RecordType.CREDENTIAL, "cred-gone") },
+                "the trash snapshot holds the same ref, so the clear must spare it too",
+            )
+            assertFalse(vault.records().any { it.id == "cred-pem" }, "a synced credential is rebuilt from the server")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * The other half of that rule: sparing has to be NARROWER than the push filter. A blob this device
+     * can no longer open — what [Vault.adoptDataKey] leaves behind when an account key replaces this
+     * vault's own — is not device-local, it is dead: the server may well hold a readable copy. The
+     * clear is the only thing that ever removed it, and a spared one squats on its id, so the copy the
+     * re-pull brings back arrives at a lower version and loses the LWW.
+     */
+    @Test
+    fun `a reactivated device drops the credentials it can no longer decrypt`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        CredentialStore(vault).put(
+            Credential("cred-stale", "old account", CredentialSecret.PrivateKey("-----BEGIN OPENSSH PRIVATE KEY-----")),
+        )
+        // Joining another account: what was written under the old key stays in the file, unreadable.
+        assertTrue(vault.adoptDataKey(crypto.newDataKey(), password.toCharArray()), "the adoption must take")
+        CredentialStore(vault).put(
+            Credential("cred-file", "tsh", CredentialSecret.KeyFile(privateKeyRef = "/home/maya/.tsh/keys/id")),
+        )
+
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val sut = SyncCoordinator(
+            clientFactory = { client }, crypto = crypto, vault = vault, debtStore = InMemoryReconcileDebtStore(),
+        )
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "reactivation connect should come Online")
+            assertFalse(
+                vault.records().any { it.id == "cred-stale" },
+                "an undecryptable leftover is not device-local and must not survive the clear",
+            )
+            assertTrue(
+                vault.records().any { it.id == "cred-file" },
+                "the file-backed credential still must",
+            )
         } finally {
             sut.close()
         }

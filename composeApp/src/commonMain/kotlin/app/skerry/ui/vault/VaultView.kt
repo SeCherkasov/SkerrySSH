@@ -307,7 +307,8 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
         }
         pendingEditCred?.let { target ->
             // Editing touches only the name and the note; the id (which hosts reference) and the secret
-            // stay put, and the change propagates to sync on its own (see CredentialManagerController.edit).
+            // stay put, and the change propagates to sync on its own (see CredentialManagerController.edit)
+            // — except for a file-backed secret, whose whole record stays on this device (issue #174).
             EditSecretDialog(
                 currentLabel = target.label,
                 currentNote = target.note,

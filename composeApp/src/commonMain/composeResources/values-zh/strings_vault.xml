@@ -139,6 +139,7 @@
     <string name="vault_label_key_path">密钥文件</string>
     <string name="vault_label_cert_path">证书文件</string>
     <string name="vault_key_file_missing">此设备无法读取</string>
+    <string name="vault_key_file_device_only">存放在文件中的密钥不参与同步</string>
     <string name="vault_cert_from_file_unreadable">无法读取证书文件</string>
 
     <plurals name="vault_item_count">

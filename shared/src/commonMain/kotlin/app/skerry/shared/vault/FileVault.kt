@@ -304,6 +304,15 @@ class FileVault(
         openRecord(key, record)
     }
 
+    override fun openRecordPayload(record: VaultRecord): ByteArray? = synchronized(lock) {
+        val key = requireUnlocked()
+        if (record.deleted) return@synchronized null
+        // Not looked up by id on purpose: the point is to read a record this vault does not hold
+        // (or holds at another version). openRecord authenticates the blob against the metadata the
+        // record claims, so a forged or replayed one yields null exactly as it does in mergeRemote.
+        openRecord(key, record)
+    }
+
     override fun put(id: String, type: RecordType, payload: ByteArray): Unit = store(id, type, payload, minVersion = 0L)
 
     override fun putAtLeast(id: String, type: RecordType, payload: ByteArray, minVersion: Long): Unit =
@@ -361,13 +370,14 @@ class FileVault(
         commit(currentMeta, updated)
     }
 
-    override fun clearRecords(types: Set<RecordType>): Unit = synchronized(lock) {
+    override fun clearRecords(types: Set<RecordType>, keep: (VaultRecord) -> Boolean): Unit = synchronized(lock) {
         requireUnlocked()
         if (types.isEmpty()) return@synchronized
         val currentMeta = session()
         // Keep records of other types (device-local or currently not synced): they never resurrect a
-        // purged record because they're not pushed, and dropping them would lose local-only data.
-        val kept = records.filterNot { it.type in types }
+        // purged record because they're not pushed, and dropping them would lose local-only data. A
+        // record [keep] spares is kept on exactly that reasoning, one record at a time.
+        val kept = records.filterNot { it.type in types && !keep(it) }
         if (kept.size == records.size) return@synchronized // nothing of these types — leave the file untouched
         // Hard drop, no tombstone (see [Vault.clearRecords]) and no _localChanges: the caller re-pulls
         // the server snapshot, so records still on the server return and purged ones stay gone.

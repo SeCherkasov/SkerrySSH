@@ -54,6 +54,7 @@ import app.skerry.ui.generated.resources.vault_delete
 import app.skerry.ui.generated.resources.vault_edit
 import app.skerry.ui.generated.resources.vault_export_key
 import app.skerry.ui.generated.resources.vault_export_certificate
+import app.skerry.ui.generated.resources.vault_key_file_device_only
 import app.skerry.ui.generated.resources.vault_key_unreadable
 import app.skerry.ui.generated.resources.vault_label_cert_path
 import app.skerry.ui.generated.resources.vault_label_key_path
@@ -229,7 +230,7 @@ internal fun LiveSecretDetail(
             }
         }
         SecretSectionLabel(encryptionSectionTitle())
-        SecretEncryptionRows(syncing)
+        SecretEncryptionRows(syncing, credential.secret)
         // Audit shows for every secret whose material can leave the vault: a password (clipboard
         // copies) and anything with an exportable private key (file exports). A file-backed secret
         // has neither — its material never entered the vault.
@@ -333,6 +334,11 @@ internal fun KeyFileBadges(state: KeyFileState?) {
  * Detail body for a file-backed secret: the refs themselves (that's the whole secret, as far as the
  * vault is concerned), whether each is readable here, and the certificate metadata parsed off disk —
  * the same [CertificateDetailBody] a vault-stored certificate gets, so both kinds read alike.
+ *
+ * It also states that this secret does not sync (issue #174) — a ref is a location, and a location
+ * means nothing on the next device. Said here rather than as a list badge: it is a permanent
+ * property of every file-backed secret, so a badge would be on every such row forever, including
+ * for the users who never connected an account.
  */
 @Composable
 internal fun KeyFileDetailBody(secret: CredentialSecret.KeyFile, state: KeyFileState?, mono: FontFamily) {
@@ -346,6 +352,7 @@ internal fun KeyFileDetailBody(secret: CredentialSecret.KeyFile, state: KeyFileS
     if (state?.certificateExpected == true && !state.certificateReadable) {
         Txt(stringResource(Res.string.vault_cert_from_file_unreadable), color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
     }
+    Txt(stringResource(Res.string.vault_key_file_device_only), color = Skerry.colors.dim, size = 11.sp, modifier = Modifier.padding(bottom = 16.dp))
     state?.certificate?.let { CertificateDetailBody(it, mono) }
 }
 

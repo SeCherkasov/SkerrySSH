@@ -148,6 +148,6 @@ private fun MockSecretDetail(credential: Credential, mono: FontFamily) {
             }
         }
         SecretSectionLabel(encryptionSectionTitle())
-        SecretEncryptionRows(syncing = true)
+        SecretEncryptionRows(syncing = true, secret = credential.secret)
     }
 }

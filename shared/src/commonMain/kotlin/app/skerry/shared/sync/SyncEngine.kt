@@ -97,6 +97,14 @@ class SyncEngine(
      * configs without the feature). See [SyncSettings].
      */
     private val settings: () -> SyncSettings = { SyncSettings() },
+    /**
+     * The other half of the filter, decided on the payload rather than on plaintext metadata: a
+     * record that must stay on this device, neither pushed nor applied from another one. See
+     * [DeviceLocalRecords]. Defaults to [DeviceLocalFilter.None] — what the engine did before the
+     * rule existed, and the right answer for a vault that cannot hold such a record (a team space:
+     * credentials are not shareable).
+     */
+    private val deviceLocal: DeviceLocalFilter = DeviceLocalFilter.None,
 ) {
 
     suspend fun sync(session: SyncSession): SyncOutcome {
@@ -114,8 +122,16 @@ class SyncEngine(
         // type stays local and never reaches the server. The settings record itself always syncs
         // (shouldSync), otherwise a disable would never reach other devices. Push-all by type is
         // simple and correct at current vault sizes; fine-grained dirty tracking is a future optimization.
+        // Device-local records drop out on the same pass: they are excluded by what their payload
+        // holds rather than by their type, so no toggle can put them back (see [DeviceLocalRecords]).
         val filter = settings()
-        val local = vault.records().filter { filter.shouldSync(it.type, it.id) }
+        // Snapshot and decision under one hold of the vault: the device-local check has to open
+        // payloads, and an idle auto-lock landing between the listing and the check would leave the
+        // filter unable to read anything at all — with a push in flight carrying what it could not
+        // judge. Holding the vault makes the whole decision atomic against [Vault.lock].
+        val local = vault.transaction {
+            vault.records().filter { filter.shouldSync(it.type, it.id) && !deviceLocal.blocksOutgoing(it) }
+        }
         // Types a self-hosted server may not know yet go in a batch of their own: the server
         // rejects a whole push batch on an unknown type, and losing hosts/keys/settings sync
         // because a trash snapshot or a trusted CA can't be mirrored would be a far worse trade.
@@ -173,7 +189,11 @@ class SyncEngine(
                     onMerged(vault.mergeRemote(settingsRecords))
                     filter = settings()
                 }
-                val rest = incoming.filter { it.type != RecordType.SETTINGS && filter.shouldSync(it.type, it.id) }
+                val rest = incoming.filter {
+                    it.type != RecordType.SETTINGS &&
+                        filter.shouldSync(it.type, it.id) &&
+                        !deviceLocal.blocksIncoming(it)
+                }
                 if (rest.isNotEmpty()) onMerged(vault.mergeRemote(rest))
             }
             // Compact after merge: otherwise a tombstone just merged from this same page would

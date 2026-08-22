@@ -980,6 +980,39 @@ class FileVaultTest {
     }
 
     @Test
+    fun `openRecordPayload opens a record this vault does not hold, and only an honest one`() = vaultTest {
+        val v = vault()
+        v.create("m".toCharArray())
+        v.put("h1", RecordType.HOST, "host".encodeToByteArray())
+        val record = v.records().first { it.id == "h1" }
+
+        // The point of the method: it reads what the RECORD carries, not what the file holds under
+        // that id — this is how an incoming sync record is judged before mergeRemote decides.
+        assertContentEquals("host".encodeToByteArray(), v.openRecordPayload(record.copy(id = "h1")))
+        // The AAD binds the metadata, so a replay with a bumped version does not open (same refusal
+        // mergeRemote rejects on), and a tombstone never yields its blob.
+        assertNull(v.openRecordPayload(record.copy(version = record.version + 1)))
+        assertNull(v.openRecordPayload(record.copy(type = RecordType.SNIPPET)))
+        assertNull(v.openRecordPayload(record.copy(deleted = true)))
+    }
+
+    @Test
+    fun `clearRecords spares the records the keep predicate names`() = vaultTest {
+        val v = vault()
+        v.create("m".toCharArray())
+        v.put("c1", RecordType.CREDENTIAL, "device-local".encodeToByteArray())
+        v.put("c2", RecordType.CREDENTIAL, "synced".encodeToByteArray())
+        v.put("h1", RecordType.HOST, "host".encodeToByteArray())
+
+        // Type scoping alone cannot express this: c1 and c2 are the same type, and only one of them
+        // is on the server to come back after the re-pull (see [Vault.clearRecords]).
+        v.clearRecords(setOf(RecordType.CREDENTIAL, RecordType.HOST)) { it.id == "c1" }
+
+        assertEquals(listOf("c1"), v.records().map { it.id })
+        assertContentEquals("device-local".encodeToByteArray(), v.openPayload("c1"))
+    }
+
+    @Test
     fun `clearRecords emits no local change`() = runTest {
         initializeVaultCrypto()
         val v = vault()
