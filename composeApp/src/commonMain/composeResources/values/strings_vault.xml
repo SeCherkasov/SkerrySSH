@@ -139,6 +139,7 @@
     <string name="vault_label_key_path">KEY FILE</string>
     <string name="vault_label_cert_path">CERTIFICATE FILE</string>
     <string name="vault_key_file_missing">Not readable from this device</string>
+    <string name="vault_key_file_device_only">Secrets kept in a file are not synced</string>
     <string name="vault_cert_from_file_unreadable">Certificate file not readable</string>
 
     <!-- Section header: how much the vault holds and how it is protected. -->

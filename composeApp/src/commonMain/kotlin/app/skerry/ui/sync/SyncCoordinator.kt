@@ -4,6 +4,7 @@ import app.skerry.shared.platformName
 import app.skerry.shared.sync.AccountSummary
 import app.skerry.shared.sync.MAX_ACCOUNT_ID_CHARS
 import app.skerry.shared.sync.DeviceInfo
+import app.skerry.shared.sync.DeviceLocalRecords
 import app.skerry.shared.sync.RemoteDevice
 import app.skerry.shared.sync.SyncClient
 import app.skerry.shared.sync.SyncEngine
@@ -200,6 +201,10 @@ class SyncCoordinator(
     // sync (see [SyncSettings]). Read lazily from the vault: on a locked vault the store returns default.
     private val settingsStore = SyncSettingsStore(vault)
 
+    // The payload-side half of the same filter: file-backed credentials name a location this device
+    // owns and no other one can resolve, so they never travel in either direction (issue #174).
+    private val deviceLocal = DeviceLocalRecords(vault)
+
     private val engineFactory: (SyncClient) -> SyncRunner = engineFactory
         // The engine knows only the session it syncs, and a session carries no server — so the cursor is
         // pinned to the link the cycle belongs to here, where it is known ([cursorKey], issue #242).
@@ -210,7 +215,13 @@ class SyncCoordinator(
                 // strand its progress silently and re-pull everything for good. The failure surfaces on
                 // the status like any other failed cycle.
                 val key = cursorKey() ?: error("no active link for a live session")
-                SyncEngine(c, vault, KeyedStateStore(syncState, key), settings = { settingsStore.load() }).sync(s)
+                SyncEngine(
+                    c,
+                    vault,
+                    KeyedStateStore(syncState, key),
+                    settings = { settingsStore.load() },
+                    deviceLocal = deviceLocal,
+                ).sync(s)
             }
         }
 
@@ -888,7 +899,8 @@ class SyncCoordinator(
      * disabled locally but enabled on the server would keep its stale record through the clear and then be
      * pushed once the pull flips the filter on — resurrecting the purged record. Clearing by the maximal
      * (everything-on) filter covers any server settings; only never-synced, device-local types (terminal
-     * history) are kept.
+     * history) are kept — plus, record by record, the device-local ones the push filter already refuses
+     * ([DeviceLocalRecords]): nothing on the server would restore those.
      *
      * Throws whatever the clear throws — a vault locked at this moment ([Vault.clearRecords] needs an
      * unlocked one) leaves the debt standing over an un-cleared vault, which is what [reconcileOwed] reads.
@@ -912,7 +924,9 @@ class SyncCoordinator(
         configStore.save(config)
         recordDebt(link)
         val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
-        vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet())
+        // Device-local records are spared one at a time, not by type: they were never pushed, so the
+        // re-pull cannot bring them back and clearing them would simply destroy them (issue #174).
+        vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet(), deviceLocal::survivesClear)
         syncState.setCursor(link.cursorKey, 0) // reactivation always full-pulls to rebuild from the server
         armedFor = link // only now, and named — see [retireDischargedDebt]
     }

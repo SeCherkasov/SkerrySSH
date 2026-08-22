@@ -15,6 +15,7 @@ import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
+import app.skerry.shared.vault.VaultRecord
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
@@ -144,12 +145,12 @@ internal class ClearFailingVault(
     /** How many clears were tried — the observable "the reconcile ran again" for a retry that fails too. */
     val clearAttempts: Int get() = attempts.get()
 
-    override fun clearRecords(types: Set<RecordType>) {
+    override fun clearRecords(types: Set<RecordType>, keep: (VaultRecord) -> Boolean) {
         val n = attempts.getAndIncrement()
         // `n - intact < failures`, not `n < intact + failures`: the default [failures] is Int.MAX_VALUE and
         // the sum would overflow, turning "every clear after the first" into "no clear at all".
         if (n >= intact && n - intact < failures) error("vault is locked")
-        delegate.clearRecords(types)
+        delegate.clearRecords(types, keep)
     }
 }
 

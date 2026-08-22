@@ -99,11 +99,17 @@ fun SecretFactRows(
 
 /**
  * How the secret is protected and where its ciphertext goes. Static facts of this build's crypto
- * (see [VaultCrypto]) plus one live one: whether a sync account exists at all — without it
- * "stored on server" would be a claim about a server the user never connected to.
+ * (see [VaultCrypto]) plus one live one: whether the ciphertext reaches a server at all.
+ *
+ * That last answer takes the secret and not just [syncing] on purpose. An account existing is
+ * account-level; whether THIS secret is pushed is not — a file-backed one never is (issue #174,
+ * [app.skerry.shared.sync.DeviceLocalRecords]). Asking for both leaves no way to pass the
+ * account-level fact where the per-secret one belongs, which is how the row came to claim a server
+ * copy of a record that never left.
  */
 @Composable
-fun SecretEncryptionRows(syncing: Boolean, modifier: Modifier = Modifier) {
+fun SecretEncryptionRows(syncing: Boolean, secret: CredentialSecret, modifier: Modifier = Modifier) {
+    val onServer = syncing && secret !is CredentialSecret.KeyFile
     Column(modifier.fillMaxWidth()) {
         KeyValueRow(stringResource(Res.string.vault_kv_cipher), VAULT_CIPHER)
         KeyValueRow(
@@ -112,7 +118,7 @@ fun SecretEncryptionRows(syncing: Boolean, modifier: Modifier = Modifier) {
         )
         KeyValueRow(
             stringResource(Res.string.vault_kv_stored),
-            stringResource(if (syncing) Res.string.vault_stored_ciphertext else Res.string.vault_stored_local),
+            stringResource(if (onServer) Res.string.vault_stored_ciphertext else Res.string.vault_stored_local),
         )
     }
 }

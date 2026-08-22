@@ -139,6 +139,7 @@
     <string name="vault_label_key_path">ФАЙЛ КЛЮЧА</string>
     <string name="vault_label_cert_path">ФАЙЛ СЕРТИФИКАТА</string>
     <string name="vault_key_file_missing">Недоступен с этого устройства</string>
+    <string name="vault_key_file_device_only">Секреты из файла не синхронизируются</string>
     <string name="vault_cert_from_file_unreadable">Файл сертификата не читается</string>
 
     <plurals name="vault_item_count">

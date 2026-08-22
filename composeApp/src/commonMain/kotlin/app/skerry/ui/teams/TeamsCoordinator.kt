@@ -682,6 +682,11 @@ class TeamsCoordinator(
         val spaceVault = spaces.vaultResettingStale(ref) ?: return
         syncMutex.withLock {
             try {
+                // No device-local filter (issue #174): a space vault cannot hold a credential at
+                // all — the share picker offers hosts, snippets and runbooks, and HOST_SHARE_STRIP
+                // drops `credentialId` on the way in. Offering credentials to a team would have to
+                // pass DeviceLocalRecords(spaceVault) here, or a file-backed ref would reach every
+                // member's device.
                 val engine = SyncEngine(
                     TeamScopedSyncClient(c, ref),
                     spaceVault,

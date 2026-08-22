@@ -184,6 +184,24 @@ interface Vault {
     fun openPayload(id: String): ByteArray?
 
     /**
+     * [openPayload] for a record this vault does not (yet) hold — the incoming half of a sync
+     * cycle, inspected before [mergeRemote] decides anything. Same trial decryption as the merge:
+     * the blob is opened against the metadata [record] claims, so a payload only comes back when it
+     * authenticates. `null` for a tombstone (the same refusal as [openPayload]: a deleted record's
+     * blob is kept for sync but never exposed) and for a blob under another key; a locked vault
+     * throws, as every other read on this interface does.
+     *
+     * Exists so a sync policy can be decided on what a record *is* rather than on its plaintext
+     * metadata — [app.skerry.shared.sync.DeviceLocalRecords]. `null` there means "this blob did not
+     * open", which the caller reads as evidence and acts on; an implementation that simply cannot
+     * open anything must NOT answer it, or every credential silently stops being pushed with nothing
+     * logged and nothing on screen. So the default throws, as [rekeyRecords] does: only a vault that
+     * really encrypts can be asked, and a missing override is loud the first time it is.
+     */
+    fun openRecordPayload(record: VaultRecord): ByteArray? =
+        throw UnsupportedOperationException("openRecordPayload is only supported by vaults that encrypt")
+
+    /**
      * Upsert: seals [payload] under `dataKey` (AAD binds the full record metadata — see
      * [VaultRecord]) and stores a record with this [id]/[type], bumping `version` and updating
      * `updatedAt`.
@@ -240,8 +258,18 @@ interface Vault {
      * still holds it). That is the intended contract for reactivation: a revoked device could not push
      * anyway, so its unsynced edits — additions and deletions alike — are discarded in favor of the server
      * snapshot. No-op by default (fakes); the file vault overrides it. Requires an unlocked vault.
+     *
+     * [keep] spares individual records of those very types: scoping by type alone is not enough once
+     * a record can be device-local by what it *holds* rather than by what it is
+     * ([app.skerry.shared.sync.DeviceLocalFilter.survivesClear] — a file-backed credential is never
+     * pushed, so the re-pull would not bring it back and the clear would simply destroy it). It is
+     * deliberately NOT "everything the push refuses": a blob this vault can no longer open is refused
+     * by the push too, and sparing that one keeps a dead record squatting on an id the server holds a
+     * readable copy of. Anything less loses data, anything more keeps a record the re-pull cannot
+     * replace. [keep] runs under the vault's lock and may read the vault back (it has to, to judge a
+     * payload), so an implementation's lock must be reentrant — as [transaction] already requires.
      */
-    fun clearRecords(types: Set<RecordType>) {}
+    fun clearRecords(types: Set<RecordType>, keep: (VaultRecord) -> Boolean = { false }) {}
 
     /**
      * Changes the master password: rewraps the same `dataKey` under the new password (records aren't
