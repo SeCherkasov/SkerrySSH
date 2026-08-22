@@ -2,6 +2,8 @@ package app.skerry.ui.vault
 
 import app.skerry.shared.ssh.KeyboardInteractiveChallenge
 import app.skerry.shared.ssh.KeyboardInteractivePrompt
+import app.skerry.shared.trust.HostTrustKind
+import app.skerry.shared.trust.HostTrustRequest
 import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.ui.runbook.FakeTerminal
 import app.skerry.ui.runbook.POLL
@@ -11,6 +13,7 @@ import app.skerry.ui.runbook.environment
 import app.skerry.ui.runbook.runbook
 import app.skerry.ui.runbook.startNow
 import app.skerry.ui.runbook.step
+import app.skerry.ui.trust.HostTrustPromptController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -21,8 +24,17 @@ import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+
+private fun hostKey() = HostTrustRequest(
+    kind = HostTrustKind.SshHostKey,
+    host = "desk",
+    port = 22,
+    keyType = "ssh-ed25519",
+    fingerprint = "SHA256:aaaa",
+)
 
 private fun challenge() = KeyboardInteractiveChallenge(
     name = "Two-factor authentication",
@@ -51,11 +63,14 @@ class LockTeardownTest {
             onFinished = { throw IllegalStateException("history log is full") },
         )
         val prompts = KeyboardInteractivePromptController()
+        val trust = HostTrustPromptController()
         try {
             runbooks.startNow(runbook(step("s1", "uptime")), term.target()) { "" }
             val answering = async { prompts.responder.respond(challenge()) }
+            val vouching = async { trust.confirm(hostKey()) }
             yield()
             assertNotNull(prompts.pending.value, "the prompt should be showing before the lock")
+            assertNotNull(trust.pending.value, "the trust question should be showing before the lock")
 
             val failure = assertFailsWith<IllegalStateException> {
                 tearDownForLock(
@@ -65,6 +80,7 @@ class LockTeardownTest {
                     snippets = null,
                     runbooks = runbooks,
                     keyboardInteractive = prompts,
+                    hostTrust = trust,
                 )
             }
 
@@ -75,6 +91,11 @@ class LockTeardownTest {
             yield()
             assertNull(prompts.pending.value, "the prompt after the failing step was never cancelled")
             assertNull(answering.await(), "a cancelled prompt must abort authentication, not answer")
+            // The handshake behind a trust question is held open the whole time it is on screen, and
+            // the lock takes the dialog away — leaving it to its own deadline means the connection
+            // fails a minute and a half later, behind the lock screen, for no reason the user can see.
+            assertNull(trust.pending.value, "the trust question was left on the other side of the lock")
+            assertFalse(vouching.await(), "a question nobody could answer must not trust the key")
         } finally {
             runbooks.close()
             scope.cancel()

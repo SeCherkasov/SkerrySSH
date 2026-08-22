@@ -1,6 +1,8 @@
 package app.skerry.ui.remote
 
 import app.skerry.shared.graphics.RemoteDesktopUpdate
+import app.skerry.shared.rdp.RdpCertificateOffer
+import app.skerry.shared.rdp.RdpCertificateRejectedException
 import app.skerry.ui.vnc.VncFailure
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -11,6 +13,20 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+
+private fun rejectedOffer() = RdpCertificateOffer(
+    host = "rds.example.com",
+    port = 3389,
+    fingerprintSha256 = "SHA256:aa",
+    subject = "CN=rds",
+    issuer = "CN=rds",
+    notBeforeMillis = 0,
+    notAfterMillis = 0,
+    trustedByPlatform = false,
+    hostnameMatches = true,
+    publicKey = ByteArray(0),
+    derChain = emptyList(),
+)
 
 class RemoteDesktopControllerTest {
 
@@ -41,6 +57,36 @@ class RemoteDesktopControllerTest {
         assertTrue(state is RemoteDesktopUiState.Error)
         assertEquals(VncFailure.Other, state.failure)
         assertEquals("refused", state.detail)
+    }
+
+    @Test
+    fun a_certificate_the_user_never_trusted_says_so_instead_of_failing_generically() = runTest {
+        // The whole point of putting the certificate to the user is that they get to decide. Told
+        // only "failed to connect", the one who pressed Reject reads their own answer as a network
+        // fault and retries — which is the symptom the trust dialog was built to end.
+        val controller = RemoteDesktopController(this, newSessionScope = { CoroutineScope(StandardTestDispatcher(testScheduler)) })
+
+        controller.connect { throw RdpCertificateRejectedException(rejectedOffer()) }
+        advanceUntilIdle()
+
+        val state = controller.uiState
+        assertTrue(state is RemoteDesktopUiState.Error)
+        assertEquals(VncFailure.CertificateRejected, state.failure)
+    }
+
+    @Test
+    fun a_refusal_the_transport_wrapped_is_still_read_as_a_refusal() = runTest {
+        // The RDP connector reports a failed TLS handshake as its own exception with the refusal
+        // underneath; unwrapped one level, the user would be told the network failed about an answer
+        // they gave themselves.
+        val controller = RemoteDesktopController(this, newSessionScope = { CoroutineScope(StandardTestDispatcher(testScheduler)) })
+
+        controller.connect { throw IllegalStateException("handshake failed", RdpCertificateRejectedException(rejectedOffer())) }
+        advanceUntilIdle()
+
+        val state = controller.uiState
+        assertTrue(state is RemoteDesktopUiState.Error)
+        assertEquals(VncFailure.CertificateRejected, state.failure)
     }
 
     @Test

@@ -205,6 +205,15 @@ enum class HostKeyRefusal {
 
     /** A trusted CA claims this host, and what the server offered is not a certificate that holds up. */
     CertificateRejected,
+
+    /**
+     * The key was shown to the user and never accepted — turned down, left unanswered until the
+     * deadline, or taken off screen by a vault lock. Distinct from [KeyChanged] because the advice
+     * is the opposite: nothing is wrong with the client's records, the key simply was not trusted.
+     * The three causes are not told apart on purpose — the message says what happened to the
+     * connection, and a user who did not answer is not told they refused.
+     */
+    RejectedByUser,
 }
 
 /** Trust decision for a host key. See [HostKeyOffer]. */
@@ -299,6 +308,34 @@ const val KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS: Long = 120_000
  * thread for the lifetime of the process.
  */
 const val KEYBOARD_INTERACTIVE_RESPONDER_BACKSTOP_MILLIS: Long = 600_000
+
+/**
+ * How long the transport waits for a protocol step — key exchange, service accept — to complete.
+ *
+ * sshj's own default is 30 s, and two of those steps stop to ask the user something: the host key
+ * question and a keyboard-interactive challenge are both answered from inside the exchange the
+ * connecting thread is waiting on. Under the default a person still reading a fingerprint at t=30 s
+ * loses the connection under the cursor, and the verifier — running on the reader thread, which does
+ * not stop — could then record that key as trusted for a connection that had already failed.
+ *
+ * So this covers the longest deadline a prompt gives the user ([KEYBOARD_INTERACTIVE_TIMEOUT_MILLIS])
+ * with room for the answer to travel back — for a prompt that goes up straight away. It does *not*
+ * stretch to cover a queued one: prompts are asked one at a time and a question's own deadline starts
+ * when it reaches the screen, so two hosts dialled together can put the second question up at t=90 s
+ * with a budget that outlives this. That connection is cut while its dialog is on screen and reports
+ * the generic connect failure instead of the refusal — worse to read, and deliberate: the alternative
+ * is a deadline long enough to hide a stalled server behind a queue nobody is watching. The answer
+ * to such a question is still honoured by the store it reaches, so a key can be recorded for a
+ * connection that has already expired: the user did look at that fingerprint, and the next attempt
+ * is judged against it.
+ *
+ * The cost is that a server which accepts TCP and then says nothing takes this long to fail instead
+ * of 30 s. There is no cancellation point inside the dial to shorten it — closing the tab does not
+ * unblock the connecting thread, only reaching this deadline does — so it is five times the wait it
+ * was, held by a worker of the shared [kotlinx.coroutines.Dispatchers.IO] pool. A tab the user can
+ * walk away from, against a key trusted behind their back.
+ */
+const val SSH_PROTOCOL_TIMEOUT_MILLIS: Int = 150_000
 
 interface SshConnection {
     val isConnected: Boolean

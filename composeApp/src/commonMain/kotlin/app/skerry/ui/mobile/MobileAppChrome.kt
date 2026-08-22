@@ -337,6 +337,8 @@ internal fun MobileChrome(
             app.skerry.ui.connection.KeyboardInteractiveHost(
                 app.skerry.ui.app.LocalKeyboardInteractive.current,
             )
+            // The host-trust question, above the sheets for the same reason.
+            app.skerry.ui.trust.HostTrustHost(app.skerry.ui.app.LocalHostTrust.current)
             pending?.let { (host, dest, jump) ->
                 MobilePasswordSheet(
                     host = host,

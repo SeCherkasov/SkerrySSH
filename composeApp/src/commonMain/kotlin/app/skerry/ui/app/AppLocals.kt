@@ -151,6 +151,14 @@ val LocalKeyboardInteractive:
     ProvidableCompositionLocal<app.skerry.ui.connection.KeyboardInteractivePromptController?> =
     staticCompositionLocalOf { null }
 
+/**
+ * Controller behind the host-trust dialog: a server whose key or certificate nobody has vouched for
+ * yet, or whose key has changed, asked about while the handshake waits. Supplied by the chrome root
+ * for the same reason as [LocalKeyboardInteractive]; `null` — mock path/preview.
+ */
+val LocalHostTrust: ProvidableCompositionLocal<app.skerry.ui.trust.HostTrustPromptController?> =
+    staticCompositionLocalOf { null }
+
 
 /** How a host row click connects: single click or double click. Desktop-only setting. */
 enum class HostClickConnectMode(val id: String) {

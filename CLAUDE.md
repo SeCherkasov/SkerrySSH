@@ -32,7 +32,7 @@ Fakes are hand-written; the lint gate is Android lint inside `./gradlew build`.
 ```
 shared/       # KMP core: ssh/, sftp/, vault/, sync/, team/, share/, terminal/, ai/ (+ai/local),
               # telnet/, serial/, mosh/, rdp/, vnc/, graphics/, audio/, tunnel/, container/,
-              # snippet/, runbook/, host/, tag/, files/, guard/, update/
+              # snippet/, runbook/, host/, tag/, files/, guard/, trust/, update/
               # commonMain + jvmSharedMain (shared JVM for desktop+Android) + desktopMain + androidMain
 composeApp/   # UI (Compose Multiplatform): commonMain + androidMain + desktopMain
 androidApp/   # Android app (MainActivity, manifest); applicationId app.skerry

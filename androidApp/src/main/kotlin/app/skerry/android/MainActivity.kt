@@ -29,6 +29,7 @@ import app.skerry.shared.ssh.SshjTransport
 import app.skerry.shared.ssh.KeyFileResolver
 import app.skerry.shared.vault.OkioSecretFileReader
 import app.skerry.ui.vault.AndroidSecretFileReader
+import app.skerry.shared.trust.asDecider
 import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.shared.ssh.HostCertificateVerifier
 import app.skerry.shared.ssh.SshjCaKeyParser
@@ -109,6 +110,10 @@ class MainActivity : FragmentActivity() {
     // Prompt controller for keyboard-interactive challenges, created with the dependency graph and
     // read back when the UI is composed.
     private var keyboardInteractive: KeyboardInteractivePromptController? = null
+
+    // Prompt controller for host-key/certificate trust, alongside the one above and read back the
+    // same way when the UI is composed.
+    private var hostTrust: app.skerry.ui.trust.HostTrustPromptController? = null
 
     // External cleanup on irrecoverable vault reset. The vault itself is already wiped and locked by
     // the controller, so this only clears data outside the vault (host profiles, known_hosts, tunnels).
@@ -348,6 +353,7 @@ class MainActivity : FragmentActivity() {
                     MobileDesignApp(
                         deps,
                         keyboardInteractive = keyboardInteractive,
+                        hostTrust = hostTrust,
                         state = designState,
                         sessions = keepAliveSessions,
                         onVaultReset = onVaultReset,
@@ -637,6 +643,10 @@ class MainActivity : FragmentActivity() {
         // Keyboard-interactive challenges (2FA codes) reach the UI through this controller; shared by
         // every transport that authenticates, so a tunnel or container probe prompts like a session.
         val keyboardInteractive = KeyboardInteractivePromptController().also { this.keyboardInteractive = it }
+        // Desktop parity: an unrecorded or changed host key/certificate is put to the user from
+        // inside the handshake, so the verifiers take the blocking view of the same controller.
+        val hostTrust = app.skerry.ui.trust.HostTrustPromptController().also { this.hostTrust = it }
+        val hostTrustDecider = hostTrust.asDecider()
         // File-backed credentials (key/certificate kept outside the vault) are read at connect time:
         // `content://` refs go through the Storage Access Framework, plain paths through okio. Shared
         // by every transport that authenticates, and carrying the inspector so an expired certificate
@@ -654,7 +664,12 @@ class MainActivity : FragmentActivity() {
             ssh = SshjTransport(
                 HostCertificateVerifier(
                     trustedCaStore,
-                    TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+                    TofuHostKeyVerifier(
+                        knownHostsStore,
+                        mismatchStore,
+                        now = { Instant.now().toString() },
+                        trust = hostTrustDecider,
+                    ),
                 ) { Instant.now().epochSecond },
                 keyFiles = keyFileResolver,
                 keyboardInteractiveResponder = keyboardInteractive.responder,
@@ -903,6 +918,7 @@ class MainActivity : FragmentActivity() {
                     // The app's private files directory is already 0700 to other UIDs, so the
                     // store needs no extra hardening here (unlike the desktop's config directory).
                     okio.Path.Companion.run { filesDir.resolve("rdp_known_certs").absolutePath.toPath() },
+                    trust = hostTrustDecider,
                 ),
                 // Playback for a profile that asks for the session's sound (MS-RDPEA).
                 audioPlayers = app.skerry.shared.audio.AndroidAudioPlayers(applicationContext),

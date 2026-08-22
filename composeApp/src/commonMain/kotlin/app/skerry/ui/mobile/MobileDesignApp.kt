@@ -81,6 +81,7 @@ fun MobileDesignApp(
     deps: AppDependencies = AppDependencies(),
     // Keyboard-interactive prompts (2FA codes a server asks for mid-connect); null in preview.
     keyboardInteractive: app.skerry.ui.connection.KeyboardInteractivePromptController? = null,
+    hostTrust: app.skerry.ui.trust.HostTrustPromptController? = null,
     state: MobileDesignState = remember { MobileDesignState() },
     features: FeatureFlags = FeatureFlags(),
     sessions: SessionsController? = null,
@@ -258,6 +259,7 @@ fun MobileDesignApp(
         else TerminalThemes.fromId(state.themeMode.terminalThemeId(termSystemDark))
     CompositionLocalProvider(
         app.skerry.ui.app.LocalKeyboardInteractive provides keyboardInteractive,
+        app.skerry.ui.app.LocalHostTrust provides hostTrust,
         LocalFonts provides fonts,
         // Terminal appearance from settings (More → Appearance): font + size read by TerminalScreen.
         LocalTerminalAppearance provides terminalAppearance,
@@ -319,7 +321,7 @@ fun MobileDesignApp(
                     },
                     // Runs on EVERY lock, including the two automatic ones that bypass the lock
                     // action — Android had no teardown at all before (only onVaultReset did).
-                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets, deps.runbookRunner, keyboardInteractive) },
+                    onBeforeLock = { tearDownForLock(deps.tunnels, liveSessions, deps.sync, deps.snippets, deps.runbookRunner, keyboardInteractive, hostTrust) },
                     onReset = onVaultReset,
                     // onPairingComplete != null (sync present) — the create screen offers "I have a code":
                     // the coordinator creates the vault under the chosen password and accepts the account key.

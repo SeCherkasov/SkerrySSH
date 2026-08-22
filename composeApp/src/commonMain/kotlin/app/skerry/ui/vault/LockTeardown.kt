@@ -5,6 +5,7 @@ import app.skerry.ui.runbook.RunbookRunner
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.sync.SyncCoordinator
+import app.skerry.ui.trust.HostTrustPromptController
 import app.skerry.ui.tunnel.TunnelManager
 import kotlinx.coroutines.CancellationException
 
@@ -30,6 +31,10 @@ import kotlinx.coroutines.CancellationException
  * (a `${{vault}}` secret among them) and would otherwise keep typing them into a shell while the
  * vault is locked.
  *
+ * A host-trust question waiting for an answer is refused for the same reason a keyboard-interactive
+ * prompt is cancelled: it lives in the unlocked chrome, and a handshake held open behind the lock
+ * screen waits for an answer nobody can give.
+ *
  * A keyboard-interactive prompt waiting for an answer is cancelled, which fails that connection
  * attempt. The dialog is rendered inside the unlocked chrome, so a lock takes it off screen while the
  * connection would go on waiting behind the lock screen for a code nobody can see — and then fail on
@@ -44,6 +49,7 @@ fun tearDownForLock(
     snippets: SnippetManager?,
     runbooks: RunbookRunner? = null,
     keyboardInteractive: KeyboardInteractivePromptController? = null,
+    hostTrust: HostTrustPromptController? = null,
 ) {
     val failures = TeardownFailures()
     failures.run { tunnels?.closeAll() }
@@ -56,6 +62,7 @@ fun tearDownForLock(
     failures.run { snippets?.dismissRun() }
     failures.run { runbooks?.close() }
     failures.run { keyboardInteractive?.cancelPending() }
+    failures.run { hostTrust?.cancelPending() }
     failures.rethrowFirst()
 }
 

@@ -5,6 +5,7 @@
     <string name="vnc_connect_failed">连接失败</string>
     <string name="vnc_error_auth">服务器要求 Skerry 不支持的身份验证方式。</string>
     <string name="vnc_error_protocol">服务器发送了意外的 VNC 数据流。</string>
+    <string name="vnc_error_cert_rejected">未接受服务器证书。重新连接以再次查看。</string>
     <string name="vnc_quality">画质</string>
     <string name="vnc_quality_auto">自动</string>
     <string name="vnc_quality_low">低</string>

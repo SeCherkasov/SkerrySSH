@@ -34,6 +34,7 @@ import app.skerry.ui.connection.KeyboardInteractivePromptController
 import app.skerry.shared.ssh.HostCertificateVerifier
 import app.skerry.shared.ssh.SshjCaKeyParser
 import app.skerry.shared.ssh.TofuHostKeyVerifier
+import app.skerry.shared.trust.asDecider
 import app.skerry.shared.ssh.VaultTrustedCaStore
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileCredentialUsageLog
@@ -155,6 +156,7 @@ private fun readTerminalScrollback(prefs: FilePrefs): Int =
 private class DesktopGraph(
     val deps: AppDependencies,
     val keyboardInteractive: KeyboardInteractivePromptController,
+    val hostTrust: app.skerry.ui.trust.HostTrustPromptController,
     val securityLog: FileSecurityLog,
     val probeTransport: SshTransport,
     val vncTransport: app.skerry.shared.vnc.VncTransport,
@@ -203,6 +205,11 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     // controller; it is shared by every transport that authenticates, so a code asked for while
     // dialing a tunnel or probing a container prompts the same way a session does.
     val keyboardInteractive = KeyboardInteractivePromptController()
+    // Host identity the user has to vouch for: an SSH key or an RDP certificate nobody has recorded
+    // yet, or one that changed. Asked from inside the handshake, which is why the verifiers get the
+    // blocking view of it (`asDecider`) while the dialog answers from the UI.
+    val hostTrust = app.skerry.ui.trust.HostTrustPromptController()
+    val hostTrustDecider = hostTrust.asDecider()
     // File-backed credentials (key/certificate kept outside the vault) are read at connect time, so
     // every transport that authenticates gets the same resolver. `~` expands against the user's home
     // the way an OpenSSH config would; the inspector lets an expired certificate be refused here,
@@ -214,7 +221,12 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
         ssh = SshjTransport(
             HostCertificateVerifier(
                 trustedCaStore,
-                TofuHostKeyVerifier(knownHostsStore, mismatchStore) { Instant.now().toString() },
+                TofuHostKeyVerifier(
+                    knownHostsStore,
+                    mismatchStore,
+                    now = { Instant.now().toString() },
+                    trust = hostTrustDecider,
+                ),
             ) { Instant.now().epochSecond },
             keyFiles = keyFileResolver,
             keyboardInteractiveResponder = keyboardInteractive.responder,
@@ -495,6 +507,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
     return DesktopGraph(
         deps = deps,
         keyboardInteractive = keyboardInteractive,
+        hostTrust = hostTrust,
         securityLog = securityLog,
         probeTransport = probeTransport,
         vncTransport = app.skerry.shared.vnc.VncTcpTransport(),
@@ -506,6 +519,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
                 dir.resolve("rdp_known_certs").toString().toPath(),
                 FileSystem.SYSTEM,
                 harden = { PrivateConfig.harden(Path.of(it.toString())) },
+                trust = hostTrustDecider,
             ),
             // Playback for a profile that asks for the session's sound (MS-RDPEA).
             audioPlayers = app.skerry.shared.audio.JavaSoundPlayers(),
@@ -591,6 +605,7 @@ fun main(args: Array<String>) {
               app.skerry.ui.theme.SkerryTheme(mode = currentThemeMode.value) {
                 app.skerry.ui.desktop.DesktopDesignApp(
                     keyboardInteractive = graph.keyboardInteractive,
+                    hostTrust = graph.hostTrust,
                     sessionShare = graph.deps.sessionShare,
                     sharedSessions = graph.deps.sharedSessions,
                     initialCollapsedGroups = prefs.lines("collapsed_groups").toSet(),

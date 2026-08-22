@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.MobileDesignState
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -61,6 +62,7 @@ import app.skerry.ui.immersive.ImmersiveScreen
 import app.skerry.ui.immersive.hiddenSystemBarsPadding
 import app.skerry.ui.vnc.VncTouchSurface
 import androidx.compose.ui.input.key.Key
+import app.skerry.ui.vnc.remoteDesktopAnnouncement
 import app.skerry.ui.vnc.vncFailureText
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
@@ -102,6 +104,9 @@ fun MobileVncScreen(state: MobileDesignState) {
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
+        // See [VncView]: the live region has to outlive the states it describes, so it sits above
+        // the `when` rather than inside the branch that draws the line.
+        StatusAnnouncer(vnc?.uiState?.let { remoteDesktopAnnouncement(it) }.orEmpty())
         when (val ui = vnc?.uiState) {
             is RemoteDesktopUiState.Connected -> {
                 // The app going to the background stops the server drawing a desktop nobody sees.

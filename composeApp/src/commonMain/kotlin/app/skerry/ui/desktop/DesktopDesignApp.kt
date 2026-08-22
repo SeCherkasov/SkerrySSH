@@ -107,6 +107,7 @@ fun DesktopDesignApp(
     // Keyboard-interactive prompts (2FA codes a server asks for mid-connect). null on the mock path:
     // nothing is connecting, so nothing can ask.
     keyboardInteractive: app.skerry.ui.connection.KeyboardInteractivePromptController? = null,
+    hostTrust: app.skerry.ui.trust.HostTrustPromptController? = null,
     /**
      * Persisted user preferences (Settings). The platform builds this with its own read/write
      * callbacks; the default (no-op callbacks, stock values) is the mock/preview path.
@@ -355,6 +356,7 @@ fun DesktopDesignApp(
         else TerminalThemes.fromId(state.settings.themeMode.terminalThemeId(termSystemDark))
     CompositionLocalProvider(
         app.skerry.ui.app.LocalKeyboardInteractive provides keyboardInteractive,
+        app.skerry.ui.app.LocalHostTrust provides hostTrust,
         LocalFonts provides fonts,
         LocalHosts provides hosts,
         LocalSessions provides liveSessions,
@@ -410,7 +412,7 @@ fun DesktopDesignApp(
                 // liveSessions, not the `sessions` parameter: the desktop entry point passes none and
                 // lets this composable build one, so the parameter is null in the shipped app and the
                 // reconnect credentials survived every automatic lock.
-                onBeforeLock = { tearDownForLock(tunnels, liveSessions, sync, snippets, runbookRunner, keyboardInteractive) },
+                onBeforeLock = { tearDownForLock(tunnels, liveSessions, sync, snippets, runbookRunner, keyboardInteractive, hostTrust) },
                 onReset = onVaultReset,
                 // onPairingComplete != null (sync is present) — the create screen offers "I have a code":
                 // the coordinator creates the vault under the chosen password itself and accepts the account key.

@@ -30,6 +30,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.remoteChromeHidden
 import app.skerry.ui.design.EmptyState
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -122,6 +123,9 @@ fun VncView(state: DesktopDesignState) {
     val tab = sessions?.activeDesktop ?: return
     val vnc = tab.focusedPane.vncController ?: return
     Box(Modifier.fillMaxSize()) {
+        // Above the `when` and composed across every state: a connection that fails or drops
+        // replaces the desktop with one line of text, which is a change nobody hears otherwise.
+        StatusAnnouncer(remoteDesktopAnnouncement(vnc.uiState))
         when (val ui = vnc.uiState) {
             is RemoteDesktopUiState.Connecting -> CenterNotice("hourglass_empty", stringResource(Res.string.vnc_connecting))
             // key(tab.id): switching between two connected desktops keeps this same branch, so
