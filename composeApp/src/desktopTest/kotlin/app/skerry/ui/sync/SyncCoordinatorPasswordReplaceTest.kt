@@ -1,30 +1,19 @@
 package app.skerry.ui.sync
 
-import app.skerry.shared.sync.AccountSummary
 import app.skerry.shared.sync.DeviceInfo
-import app.skerry.shared.sync.PairingResult
-import app.skerry.shared.sync.PairingTicket
-import app.skerry.shared.sync.RecordPage
-import app.skerry.shared.sync.RemoteDevice
-import app.skerry.shared.sync.RemoteRecord
 import app.skerry.shared.sync.SyncClient
 import app.skerry.shared.sync.SyncException
 import app.skerry.shared.sync.SyncOutcome
 import app.skerry.shared.sync.SyncSession
-import app.skerry.shared.sync.SyncSignal
-import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.initializeVaultCrypto
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -54,103 +43,6 @@ class SyncCoordinatorPasswordReplaceTest {
     private val account = "maya"
     private val vaultPassword = "vault-A"
     private val accountPassword = "account-B"
-
-    /**
-     * Network stub modelling one account. [existingAccountPassword] = the password the account already
-     * exists under, or `null` if there's no account yet (so `register` creates it). `login` succeeds only
-     * for the matching authKey; `register` collides when the account exists. The wrapped account dataKey is
-     * a DIFFERENT key wrapped under the account password (adopting it re-keys the joining vault).
-     */
-    private inner class FakeAccountClient(
-        existingAccountPassword: String?,
-        /** The account key to publish. `null` = a fresh random one (a genuinely foreign account). */
-        accountDataKey: DataKey? = null,
-        /** Serve a wrap that can't be unwrapped, modelling a corrupted/mismatched server record. */
-        private val corruptWrap: Boolean = false,
-        /** This device is revoked on the account: the first successful login reactivates it and says so once. */
-        revoked: Boolean = false,
-    ) : SyncClient {
-        // var: a password rotation ([changePassword]) swaps both to the new password's material.
-        private var expectedAuthKey: ByteArray?
-        private var wrappedAccountKey: ByteArray?
-
-        init {
-            if (existingAccountPassword == null) {
-                expectedAuthKey = null
-                wrappedAccountKey = null
-            } else {
-                // Shared cache, not zeroized here: this class builds a client per test and the Argon2id
-                // derivation is what makes the class the slowest in the suite (issue #141).
-                val mk = syncAccountKey(crypto, existingAccountPassword, account)
-                expectedAuthKey = crypto.deriveAuthKey(mk)
-                val key = accountDataKey ?: crypto.newDataKey()
-                wrappedAccountKey = crypto.wrapDataKey(mk, key)
-                key.zeroize()
-            }
-        }
-
-        var registered = false; private set
-
-        // Cleared by the verify that reports it, exactly as the server does it (re-authentication
-        // reactivates the device), so a later login of the same device carries nothing.
-        private val revoked = AtomicBoolean(revoked)
-
-        override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession {
-            if (expectedAuthKey != null) throw SyncException(SyncException.Kind.CONFLICT, "account exists")
-            registered = true
-            return SyncSession(accountId, accessToken = "access", refreshToken = "refresh")
-        }
-
-        override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession {
-            if (expectedAuthKey != null && authKey.contentEquals(expectedAuthKey)) {
-                return SyncSession(accountId, accessToken = "access", refreshToken = "refresh", reactivated = revoked.getAndSet(false))
-            }
-            throw SyncException(SyncException.Kind.UNAUTHORIZED, "wrong password") // server hides "no such account"
-        }
-
-        override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray {
-            val wrap = wrappedAccountKey?.copyOf() ?: throw NotImplementedError("no account")
-            if (corruptWrap) wrap.indices.forEach { wrap[it] = 0 }
-            return wrap
-        }
-
-        /**
-         * Models the server rotation (issue #32): the SRP proof is only accepted for the CURRENT
-         * authKey, then the verifier (authKey) and the wrapped dataKey are swapped to the new ones.
-         * Other-device revocation isn't observable through this stub, so it's not modelled.
-         */
-        override suspend fun changePassword(
-            accountId: String,
-            currentAuthKey: ByteArray,
-            newAuthKey: ByteArray,
-            newWrappedDataKey: ByteArray,
-            device: DeviceInfo,
-        ): SyncSession {
-            if (expectedAuthKey == null || !currentAuthKey.contentEquals(expectedAuthKey)) {
-                throw SyncException(SyncException.Kind.UNAUTHORIZED, "wrong current password")
-            }
-            expectedAuthKey = newAuthKey.copyOf()
-            wrappedAccountKey = newWrappedDataKey.copyOf()
-            return SyncSession(accountId, accessToken = "access2", refreshToken = "refresh2")
-        }
-
-        var closeCalls = 0; private set
-
-        override fun changes(session: SyncSession): Flow<SyncSignal> = emptyFlow()
-        override suspend fun ping(): Boolean = true
-        override suspend fun close() {
-            closeCalls++
-        }
-        override suspend fun pull(session: SyncSession, since: Long): RecordPage = nope()
-        override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage = nope()
-        override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = nope()
-        override suspend fun accountSummary(session: SyncSession): AccountSummary = nope()
-        override suspend fun revokeDevice(session: SyncSession, deviceId: String): Boolean = nope()
-        override suspend fun refresh(session: SyncSession): SyncSession = nope()
-        override suspend fun startPairing(session: SyncSession, encryptedDataKey: ByteArray): PairingTicket = nope()
-        override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult = nope()
-        private fun nope(): Nothing = throw NotImplementedError("the connect flow should not call this")
-    }
 
     /** A local vault created under [vaultPassword] (unlocked, with its own random dataKey). */
     private fun localVault(): Vault {
@@ -193,7 +85,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `joining an existing account under a different password pauses without changing the vault password`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val sut = coordinator(vault, FakeAccountClient(existingAccountPassword = accountPassword))
+        val sut = coordinator(vault, FakeAccountClient(crypto, account, existingAccountPassword = accountPassword))
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
             sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
@@ -209,7 +101,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `confirming re-keys the vault to the account password`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val sut = coordinator(vault, FakeAccountClient(existingAccountPassword = accountPassword))
+        val sut = coordinator(vault, FakeAccountClient(crypto, account, existingAccountPassword = accountPassword))
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
             sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
@@ -226,7 +118,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `cancelling keeps the vault password and returns to the prior state`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val sut = coordinator(vault, FakeAccountClient(existingAccountPassword = accountPassword))
+        val sut = coordinator(vault, FakeAccountClient(crypto, account, existingAccountPassword = accountPassword))
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
             sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
@@ -243,7 +135,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `dismissing the confirmation resolves the paused connect instead of only hiding it`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val sut = coordinator(vault, FakeAccountClient(existingAccountPassword = accountPassword))
+        val sut = coordinator(vault, FakeAccountClient(crypto, account, existingAccountPassword = accountPassword))
         var closed = false
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
@@ -276,7 +168,7 @@ class SyncCoordinatorPasswordReplaceTest {
         initializeVaultCrypto()
         val vault = localVault()
         val ourKey = vault.exportDataKey()!!
-        val client = FakeAccountClient(existingAccountPassword = accountPassword, accountDataKey = ourKey)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword, accountDataKey = ourKey)
         val sut = coordinator(vault, client)
         try {
             // The vault password drifts away from the account password (Settings → Security).
@@ -302,7 +194,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `confirming fails loudly when the account key cannot be adopted`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = accountPassword, corruptWrap = true)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword, corruptWrap = true)
         val sut = coordinator(vault, client)
         try {
             sut.connect(serverUrl, account, accountPassword.toCharArray())
@@ -331,7 +223,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `reconnecting fails loudly when the account key cannot be adopted`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = vaultPassword, corruptWrap = true)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = vaultPassword, corruptWrap = true)
         val sut = coordinator(vault, client)
         try {
             sut.connect(serverUrl, account, vaultPassword.toCharArray())
@@ -364,7 +256,7 @@ class SyncCoordinatorPasswordReplaceTest {
         val vault = localVault()
         // Held LIVE through the revocation — the server purged it in the meantime.
         vault.put("r1", RecordType.HOST, "stale".encodeToByteArray())
-        val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword, revoked = true)
         val store = InMemorySyncConfigStore()
         val debts = InMemoryReconcileDebtStore()
         val sut = coordinator(vault, client, store, debts)
@@ -394,7 +286,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `declining the confirmation leaves no link behind after a reactivating verify`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword, revoked = true)
         val store = InMemorySyncConfigStore()
         val sut = coordinator(vault, client, store)
         try {
@@ -418,7 +310,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `a reactivating verify records the debt without touching the saved link`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword, revoked = true)
         val linked = SyncConfig(serverUrl, account, deviceId = "dev-local", keepConnected = true, sealedRefreshToken = "sealed")
         val store = InMemorySyncConfigStore().apply { save(linked) }
         val debts = InMemoryReconcileDebtStore()
@@ -453,7 +345,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `a confirmed replace that fails on the re-key keeps the reactivation`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = accountPassword, accountDataKey = vault.exportDataKey(), revoked = true)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword, accountDataKey = vault.exportDataKey(), revoked = true)
         val store = configuredStore()
         val debts = InMemoryReconcileDebtStore()
         val sut = coordinator(RewrapUnderFailingVault(vault), client, store, debts)
@@ -482,7 +374,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `a refused reactivation write still closes the client the verify opened`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = accountPassword, revoked = true)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword, revoked = true)
         val linked = InMemorySyncConfigStore().apply { save(SyncConfig(serverUrl, account, deviceId = "dev-local")) }
         val debts = object : ReconcileDebtStore {
             override fun load(): Set<ServerLink> = emptySet()
@@ -502,7 +394,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `connecting with the vault password creates the account without prompting`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = null) // no account yet → register
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = null) // no account yet → register
         val sut = coordinator(vault, client)
         try {
             sut.connect(serverUrl, account, vaultPassword.toCharArray())
@@ -518,7 +410,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `connecting with a non-vault password and no matching account is rejected without registering`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = null) // no account exists
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = null) // no account exists
         val sut = coordinator(vault, client)
         try {
             // "wrong-C" is neither the vault password nor a real account password.
@@ -541,7 +433,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `changing the account password rotates it and re-keys the local vault`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault() // on a synced device the vault password IS the account password
-        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
         val sut = coordinator(vault, client, configuredStore())
         try {
             val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
@@ -558,7 +450,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `changing the account password with a wrong current password changes nothing`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
         val sut = coordinator(vault, client, configuredStore())
         try {
             val result = sut.changeAccountPassword("not-the-password".toCharArray(), rotated.toCharArray())
@@ -574,7 +466,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `changing the account password without sync configured is a no-op`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = vaultPassword)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = vaultPassword)
         val sut = coordinator(vault, client) // no configStore → not configured
         try {
             val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())
@@ -595,7 +487,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `an interrupted rotation leaves the account on the new password and heals on reconnect`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
         val store = configuredStore()
 
         // The server rotates, but the local re-wrap fails (client "dies" between step 3 and 4).
@@ -632,7 +524,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `an interrupted rotation on a keep-connected device clears the auto-restore token`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
         val store = InMemorySyncConfigStore().apply {
             save(SyncConfig(serverUrl, account, deviceId = "dev-local", keepConnected = true, sealedRefreshToken = "sealed-old"))
         }
@@ -670,7 +562,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `a throttled rotation keeps the auto-restore token and is named as throttling`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
         val store = InMemorySyncConfigStore().apply {
             save(SyncConfig(serverUrl, account, deviceId = "dev-local", keepConnected = true, sealedRefreshToken = "sealed-old"))
         }
@@ -697,7 +589,7 @@ class SyncCoordinatorPasswordReplaceTest {
     fun `a rotation against a broken server is named as a server failure`() = runBlocking {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = vaultPassword, accountDataKey = vault.exportDataKey())
         val store = InMemorySyncConfigStore().apply {
             save(SyncConfig(serverUrl, account, deviceId = "dev-local", keepConnected = true, sealedRefreshToken = "sealed-old"))
         }
@@ -725,7 +617,7 @@ class SyncCoordinatorPasswordReplaceTest {
         val vault = localVault()
         // Account exists under a DIFFERENT password than this vault's: local verifyPassword passes,
         // but the server's SRP proof of the current password fails.
-        val client = FakeAccountClient(existingAccountPassword = accountPassword)
+        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword)
         val sut = coordinator(vault, client, configuredStore())
         try {
             val result = sut.changeAccountPassword(vaultPassword.toCharArray(), rotated.toCharArray())

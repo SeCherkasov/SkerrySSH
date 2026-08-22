@@ -27,6 +27,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private fun hostKey() = HostTrustRequest(
     kind = HostTrustKind.SshHostKey,
@@ -100,5 +101,23 @@ class LockTeardownTest {
             runbooks.close()
             scope.cancel()
         }
+    }
+
+    /**
+     * The desktop sync-setup modal outlives the lock — its open flag is held above the vault gate — while
+     * the password-replace question inside it does not. Closed here, it does not come back after the
+     * unlock as a plain connect form standing where the user's question was.
+     */
+    @Test
+    fun `the lock closes the sync setup modal it would otherwise bring back empty`() {
+        var closed = false
+        tearDownForLock(
+            tunnels = null,
+            sessions = null,
+            sync = null,
+            snippets = null,
+            closeSyncSetup = { closed = true },
+        )
+        assertTrue(closed, "the modal survives the lock and would reopen with its question already answered")
     }
 }

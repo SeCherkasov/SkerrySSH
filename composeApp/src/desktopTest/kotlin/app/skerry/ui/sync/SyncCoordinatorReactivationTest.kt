@@ -189,10 +189,8 @@ class SyncCoordinatorReactivationTest {
 
         // The link a keep-connected device already has — the failed connect below never reaches a session,
         // so it seals no token of its own.
-        val dataKey = vault.exportDataKey()!!
-        val sealed = SealedTokenCodec(crypto).seal(dataKey, "refresh").also { dataKey.zeroize() }
         val config = InMemorySyncConfigStore().also {
-            it.save(SyncConfig(serverUrl, account, deviceId = "devA", keepConnected = true, sealedRefreshToken = sealed))
+            it.save(keepConnectedLink(vault, crypto, serverUrl, account, deviceId = "devA"))
         }
         val debts = InMemoryReconcileDebtStore()
         val client = ReactivatingClient(ownWrap(vault), reactivated = true, corruptWraps = 1)

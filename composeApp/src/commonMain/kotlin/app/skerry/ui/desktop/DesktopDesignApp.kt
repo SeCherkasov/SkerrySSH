@@ -412,7 +412,14 @@ fun DesktopDesignApp(
                 // liveSessions, not the `sessions` parameter: the desktop entry point passes none and
                 // lets this composable build one, so the parameter is null in the shipped app and the
                 // reconnect credentials survived every automatic lock.
-                onBeforeLock = { tearDownForLock(tunnels, liveSessions, sync, snippets, runbookRunner, keyboardInteractive, hostTrust) },
+                onBeforeLock = {
+                    tearDownForLock(
+                        tunnels, liveSessions, sync, snippets, runbookRunner, keyboardInteractive, hostTrust,
+                        // The modal's own flag lives here, above the gate, so it outlives the lock — the
+                        // question inside it does not.
+                        closeSyncSetup = state::closeSyncSetup,
+                    )
+                },
                 onReset = onVaultReset,
                 // onPairingComplete != null (sync is present) — the create screen offers "I have a code":
                 // the coordinator creates the vault under the chosen password itself and accepts the account key.

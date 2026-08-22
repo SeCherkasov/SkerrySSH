@@ -203,6 +203,29 @@ internal class DebtClearFailingStore(private val delegate: ReconcileDebtStore) :
 /** Whether the store records a rebuild owed to [url]/[id]. */
 internal fun ReconcileDebtStore.owes(url: String, id: String): Boolean = ServerLink(url, id) in load()
 
+/**
+ * A saved keep-connected link whose refresh token really opens under [vault]'s dataKey — what a device
+ * that restores silently has on disk, and the only shape [SyncCoordinator.restoreSession] gets past its
+ * pre-checks.
+ */
+internal fun keepConnectedLink(
+    vault: Vault,
+    crypto: VaultCrypto,
+    serverUrl: String,
+    account: String,
+    deviceId: String,
+): SyncConfig {
+    val dk = vault.exportDataKey()!!
+    return try {
+        SyncConfig(
+            serverUrl, account, deviceId = deviceId, keepConnected = true,
+            sealedRefreshToken = SealedTokenCodec(crypto).seal(dk, "refresh"),
+        )
+    } finally {
+        dk.zeroize()
+    }
+}
+
 /** A fresh unlocked account vault under [password], with its own random dataKey. */
 internal fun newAccountVault(crypto: VaultCrypto, password: String): Vault {
     val file = Files.createTempFile("skerry-reactivate", ".json").toString().toPath()

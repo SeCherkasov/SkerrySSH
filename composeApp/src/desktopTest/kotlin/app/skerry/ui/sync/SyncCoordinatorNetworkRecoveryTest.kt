@@ -232,17 +232,7 @@ class SyncCoordinatorNetworkRecoveryTest {
         val vault = localVault()
         val configStore = InMemorySyncConfigStore()
         // Seed a keep-connected link (token sealed under the live vault dataKey) so restoreSession applies.
-        val dk = vault.exportDataKey()!!
-        try {
-            configStore.save(
-                SyncConfig(
-                    serverUrl, account, deviceId = "dev-1", keepConnected = true,
-                    sealedRefreshToken = SealedTokenCodec(crypto).seal(dk, "refresh"),
-                ),
-            )
-        } finally {
-            dk.zeroize()
-        }
+        configStore.save(keepConnectedLink(vault, crypto, serverUrl, account, deviceId = "dev-1"))
         val gate = CompletableDeferred<Unit>()
         val client = SwitchableServerClient(registerGate = gate)
         val sut = coordinator(vault, client, configStore)
