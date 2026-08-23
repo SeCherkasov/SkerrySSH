@@ -24,8 +24,8 @@ unavailable to the server.
 
 Multi-arch images (amd64 + arm64) are published to Docker Hub as
 [`secherkasov/skerry-sync`](https://hub.docker.com/r/secherkasov/skerry-sync) — tags:
-exact `<version>`, `<major.minor>`, `latest`. The server is released on its own cadence,
-independently of the Skerry client versions.
+exact `<version>`, `<major.minor>`, `latest`. The server is released separately from the clients — its own
+`server-v*` tag and its own workflow. Its version numbers have matched the client release so far.
 
 ```bash
 docker run -d --name skerry-sync \
