@@ -15,6 +15,7 @@ import app.skerry.ui.desktop.runMobileShell
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_field_command
 import app.skerry.ui.generated.resources.lib_snippets_field_name
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -52,7 +53,22 @@ class MobileSnippetFormTest {
         assertEquals(COMMAND, saved?.command, "the phone editor saved nothing or lost the command")
     }
 
-    /** Same rule as the desktop editor: a snippet with no command has nothing to run. */
+    @Test
+    fun `a snippet with notes typed on the phone lands in the library`() = runMobileShell { shell ->
+        shell.state.push(MobileRoute.Snippets)
+        waitForIdle()
+        openEditor()
+        onField(Res.string.lib_snippets_field_name).performTextInput(NAME)
+        onField(Res.string.lib_snippets_field_command).performTextInput(COMMAND)
+        onField(Res.string.lib_snippets_field_notes).performTextInput("Mobile test notes")
+        onNodeWithTag(UiTags.FORM_SAVE).performClick()
+        waitForIdle()
+
+        val saved = shell.snippets.snippets.map { it.snippet }.singleOrNull { it.label == NAME }
+        assertEquals("Mobile test notes", saved?.notes)
+    }
+
+    /** Same rule as the desktop editor: a snippet with no command is not saved. */
     @Test
     fun `a snippet with no command is not saved`() = runMobileShell { shell ->
         shell.state.push(MobileRoute.Snippets)

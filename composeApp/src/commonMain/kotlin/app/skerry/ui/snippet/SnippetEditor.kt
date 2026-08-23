@@ -67,10 +67,12 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_add_tag
 import app.skerry.ui.generated.resources.lib_snippets_field_command
 import app.skerry.ui.generated.resources.lib_snippets_field_name
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.lib_snippets_field_shortcut
 import app.skerry.ui.generated.resources.lib_snippets_field_tags
 import app.skerry.ui.generated.resources.lib_snippets_new
 import app.skerry.ui.generated.resources.lib_snippets_ph_name
+import app.skerry.ui.generated.resources.lib_snippets_ph_notes
 import app.skerry.ui.generated.resources.lib_snippets_press_keys
 import app.skerry.ui.generated.resources.lib_snippets_save
 import app.skerry.ui.generated.resources.lib_snippets_shortcut_conflict
@@ -116,6 +118,11 @@ internal fun SnippetEditor(
         Column(Modifier.padding(top = 20.dp)) {
             FormField(stringResource(Res.string.lib_snippets_field_command), top = 0.dp, bottom = 8.dp) {
                 CommandField(form.command, { form.command = it }, "df -h | sort -k5 -r", mono)
+            }
+        }
+        Column(Modifier.padding(top = 20.dp)) {
+            FormField(stringResource(Res.string.lib_snippets_field_notes), top = 0.dp, bottom = 8.dp) {
+                NotesField(form.notes, { form.notes = it }, stringResource(Res.string.lib_snippets_ph_notes), LocalFonts.current.ui)
             }
         }
         Column(Modifier.padding(top = 20.dp)) {
@@ -350,6 +357,27 @@ private fun CommandField(value: String, onValueChange: (String) -> Unit, placeho
         decorationBox = { inner ->
             Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp)) {
                 if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = mono)
+                inner()
+            }
+        },
+    )
+}
+
+/** Multiline notes field (UI font, standard card background). */
+@Composable
+private fun NotesField(value: String, onValueChange: (String) -> Unit, placeholder: String, font: FontFamily) {
+    val textColor = Skerry.colors.text
+    val textStyle = remember(font, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = font) }
+    val draft = rememberFieldDraft(value, singleLine = false)
+    BasicTextField(
+        value = draft.textFieldValue(value),
+        onValueChange = { draft.accept(it, value, onValueChange) },
+        textStyle = textStyle,
+        cursorBrush = SolidColor(Skerry.colors.cyan),
+        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
+        decorationBox = { inner ->
+            Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = font)
                 inner()
             }
         },

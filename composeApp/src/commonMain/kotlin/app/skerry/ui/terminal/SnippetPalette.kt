@@ -3,6 +3,9 @@ package app.skerry.ui.terminal
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,11 +41,14 @@ import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.app.LocalSnippets
 import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.rememberModalPresence
+import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import kotlinx.coroutines.delay
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.generated.resources.term_no_matches
@@ -155,21 +161,42 @@ private const val ROW_PREVIEW_LINES = 2
 @Composable
 private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Unit) {
     val s = entry.snippet
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = 7.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Sym("code_blocks", size = 14.sp, color = Skerry.colors.dim)
-            Txt(remember(s) { untrustedLabel(s.label) }.ifBlank { stringResource(Res.string.term_untitled) }, color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
-            // Gated on the filtered chord, not the raw one: a chip drawn around nothing is a stray
-            // pill next to the row.
-            val chord = remember(s) { s.shortcut?.let { untrustedLabel(it) }.orEmpty() }
-            if (chord.isNotBlank()) {
-                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Skerry.colors.bg).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                    Txt(chord, color = Skerry.colors.faint, size = 10.sp, font = mono)
+    val hoverInteraction = remember { MutableInteractionSource() }
+    val hovered by hoverInteraction.collectIsHoveredAsState()
+    var noteVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(hovered) {
+        noteVisible = false
+        if (hovered) {
+            delay(450L)
+            noteVisible = true
+        }
+    }
+    val note = s.notes
+    val shownNote = remember(note) { note?.let { sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true) } }
+
+    Box(Modifier.fillMaxWidth()) {
+        if (noteVisible && !shownNote.isNullOrBlank()) HoverTooltip(shownNote)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .hoverable(hoverInteraction)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 9.dp, vertical = 7.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Sym("code_blocks", size = 14.sp, color = Skerry.colors.dim)
+                Txt(remember(s) { untrustedLabel(s.label) }.ifBlank { stringResource(Res.string.term_untitled) }, color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+                // Gated on the filtered chord, not the raw one: a chip drawn around nothing is a stray
+                // pill next to the row.
+                val chord = remember(s) { s.shortcut?.let { untrustedLabel(it) }.orEmpty() }
+                if (chord.isNotBlank()) {
+                    Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Skerry.colors.bg).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                        Txt(chord, color = Skerry.colors.faint, size = 10.sp, font = mono)
+                    }
                 }
             }
+            CommandLine(s.command, maxLines = ROW_PREVIEW_LINES, modifier = Modifier.padding(top = 3.dp))
         }
-        CommandLine(s.command, maxLines = ROW_PREVIEW_LINES, modifier = Modifier.padding(top = 3.dp))
     }
 }

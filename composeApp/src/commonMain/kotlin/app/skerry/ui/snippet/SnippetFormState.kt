@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 class SnippetFormState private constructor(private val editingId: String?) {
     var label: String by mutableStateOf("")
     var command: String by mutableStateOf("")
+    var notes: String by mutableStateOf("")
 
     /** Committed tags (pills); edited via [addTags]/[removeTag]/[pickTag]. */
     var tags: List<String> by mutableStateOf(emptyList())
@@ -61,6 +62,7 @@ class SnippetFormState private constructor(private val editingId: String?) {
         command = command,
         tags = (tags + parseSnippetTags(tagDraft)).distinct(),
         shortcut = shortcut,
+        notes = notes.trim().ifEmpty { null },
     )
 
     companion object {
@@ -72,6 +74,7 @@ class SnippetFormState private constructor(private val editingId: String?) {
                     command = s.command
                     tags = s.tags
                     shortcut = s.shortcut
+                    notes = s.notes.orEmpty()
                 }
             }
     }

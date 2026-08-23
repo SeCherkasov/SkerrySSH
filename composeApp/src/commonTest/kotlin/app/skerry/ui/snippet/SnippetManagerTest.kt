@@ -44,6 +44,18 @@ class SnippetManagerTest {
     }
 
     @Test
+    fun `save persists notes on snippet`() {
+        val store = FakeSnippetStore()
+        val manager = managerWith(store)
+
+        val id = manager.save(SnippetDraft(label = "Disk", command = "df -h", notes = "Show human-readable disk usage"))
+
+        val entry = manager.snippets.single()
+        assertEquals("Show human-readable disk usage", entry.snippet.notes)
+        assertEquals("Show human-readable disk usage", store.all().single().notes)
+    }
+
+    @Test
     fun `save with existing id updates in place`() {
         val manager = managerWith()
         val id = manager.save(draft(label = "old"))

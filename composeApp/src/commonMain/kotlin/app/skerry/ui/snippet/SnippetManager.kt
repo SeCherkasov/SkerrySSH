@@ -25,6 +25,7 @@ data class SnippetDraft(
     val command: String,
     val tags: List<String> = emptyList(),
     val shortcut: String? = null,
+    val notes: String? = null,
 )
 
 /**
@@ -132,6 +133,7 @@ class SnippetManager(
             command = draft.command,
             tags = normalizeTags(draft.tags),
             shortcut = draft.shortcut?.takeIf { it.isNotBlank() },
+            notes = draft.notes?.takeIf { it.isNotBlank() },
         )
         store.put(snippet)
         val existing = find(id)

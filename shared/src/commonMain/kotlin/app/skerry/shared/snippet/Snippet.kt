@@ -22,4 +22,5 @@ data class Snippet(
     val command: String,
     val tags: List<String> = emptyList(),
     val shortcut: String? = null,
+    val notes: String? = null,
 )

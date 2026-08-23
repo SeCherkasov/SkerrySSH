@@ -14,6 +14,7 @@ import app.skerry.ui.desktop.runDesktopShell
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_field_command
 import app.skerry.ui.generated.resources.lib_snippets_field_name
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -66,6 +67,20 @@ class SnippetEditorFormTest {
 
         assertEquals(before, shell.snippets.snippets.size)
         assertTrue(shell.snippets.snippets.none { it.snippet.label == NAME })
+    }
+
+    @Test
+    fun `a snippet with notes saves notes into the library`() = runDesktopShell { shell ->
+        openEditor()
+        onField(Res.string.lib_snippets_field_name).performTextInput(NAME)
+        onField(Res.string.lib_snippets_field_command).performTextInput(COMMAND)
+        onField(Res.string.lib_snippets_field_notes).performTextInput("Sorts partitions by space used")
+        onNodeWithTag(UiTags.FORM_SAVE).performClick()
+        waitForIdle()
+
+        val saved = shell.snippets.snippets.singleOrNull { it.snippet.label == NAME }
+        assertNotNull(saved, "the editor saved nothing")
+        assertEquals("Sorts partitions by space used", saved.snippet.notes)
     }
 
     private fun ComposeUiTest.openEditor() {

@@ -72,7 +72,9 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.ClippedNotice
 import app.skerry.ui.design.CommandQuote
+import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.design.tagChipLabel
+import app.skerry.ui.terminal.MAX_NOTE_CHARS
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
@@ -137,6 +139,17 @@ internal fun SnippetRunPanel(
             color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 10.dp),
         )
+        val note = snippet.notes
+        val shownNote = remember(note) { note?.let { sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true) } }
+        if (!shownNote.isNullOrBlank()) {
+            Txt(
+                shownNote,
+                color = Skerry.colors.dim,
+                size = 12.sp,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+        }
         if (snippet.tags.isNotEmpty()) {
             FlowRow(
                 Modifier.fillMaxWidth().padding(bottom = 12.dp),
