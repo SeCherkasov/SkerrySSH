@@ -223,6 +223,7 @@
     <string name="lib_teams_err_not_connected">同步未连接</string>
     <string name="lib_teams_err_vault_locked">保险库已锁定</string>
     <string name="lib_teams_err_no_recipient_key">此账户尚未发布共享密钥，请让被邀请者打开一次“团队”</string>
+    <string name="lib_teams_err_recipient_key_changed">核对指纹后此账户的密钥已更改 — 未发送任何内容，请重新邀请并核对新指纹</string>
     <string name="lib_teams_err_already_invited">此账户已是成员或有待处理的邀请</string>
     <string name="lib_teams_err_no_such_account">同步服务器上没有此账户</string>
     <string name="lib_teams_err_key_missing">团队密钥在此设备上不可用</string>

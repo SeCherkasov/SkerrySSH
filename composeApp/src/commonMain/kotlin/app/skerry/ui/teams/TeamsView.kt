@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.runbook.VaultRunbookStore
@@ -57,6 +58,7 @@ import app.skerry.ui.design.SIDEBAR_WIDTH
 import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.design.untrustedLabel
@@ -77,6 +79,7 @@ import app.skerry.ui.generated.resources.lib_teams_err_no_recipient_key
 import app.skerry.ui.generated.resources.lib_teams_err_no_such_account
 import app.skerry.ui.generated.resources.lib_teams_err_not_connected
 import app.skerry.ui.generated.resources.lib_teams_err_protocol
+import app.skerry.ui.generated.resources.lib_teams_err_recipient_key_changed
 import app.skerry.ui.generated.resources.lib_teams_err_scopes_unsupported
 import app.skerry.ui.generated.resources.lib_teams_err_server_error
 import app.skerry.ui.generated.resources.lib_teams_err_too_many_requests
@@ -146,7 +149,8 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     LaunchedEffect(Unit) { tc.refresh(); tc.syncAll(); tick++ }
 
     var showCreate by remember { mutableStateOf(false) }
-    var showInvite by remember { mutableStateOf(false) }
+    // The team the invite dialog was opened for, not a Boolean: see InviteMemberDialogForTeam.
+    var inviteTeamId by remember { mutableStateOf<String?>(null) }
     var invitePreview by remember { mutableStateOf<InvitePreview?>(null) }
     var sharePicker by remember { mutableStateOf<RecordType?>(null) }
     var confirm by remember { mutableStateOf<TeamsConfirm?>(null) }
@@ -177,7 +181,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                 LiveTeamRow(team, active = team.id == selected?.id) { selectedId = team.id }
             }
             Spacer(Modifier.weight(1f))
-            error?.let { Txt(teamsFailureText(it), color = Skerry.colors.sunset, size = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) }
+            TeamsErrorLine(error, size = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp))
             PrimaryButton(stringResource(Res.string.lib_teams_create), onClick = { showCreate = true }, icon = "group_add", modifier = Modifier.fillMaxWidth())
         }
         VLine(Skerry.colors.line)
@@ -191,7 +195,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                     scopeId = scopeId,
                     tick = tick,
                     busy = busy,
-                    onInvite = { showInvite = true; invitePreview = null },
+                    onInvite = { inviteTeamId = selected.id; invitePreview = null },
                     onConfirm = { confirm = it },
                     onAccept = { scope.launch2 { tc.accept(selected.id); afterOp() } },
                     onDecline = { scope.launch2 { tc.decline(selected.id); afterOp() } },
@@ -213,17 +217,17 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
             onCreate = { name -> showCreate = false; scope.launch2 { tc.createTeam(name); afterOp() } },
         )
     }
-    val inviteTeam = selected
-    if (showInvite && inviteTeam != null) {
-        InviteMemberDialog(
+    inviteTeamId?.let { teamId ->
+        InviteMemberDialogForTeam(
+            teams = teams,
+            teamId = teamId,
             preview = invitePreview,
             ownFingerprint = tc.ownFingerprint(),
             busy = busy,
-            assignableRoles = inviteTeam.role.assignableRoles(),
             onLookup = { accountId -> scope.launch2 { invitePreview = tc.previewInvite(accountId) } },
             onEdited = { invitePreview = null },
-            onSend = { accountId, role -> showInvite = false; scope.launch2 { tc.invite(inviteTeam.id, accountId, role); afterOp() } },
-            onDismiss = { showInvite = false },
+            onSend = { id, verified, role -> inviteTeamId = null; scope.launch2 { tc.invite(id, verified, role); afterOp() } },
+            onDismiss = { inviteTeamId = null },
         )
     }
     val shareTeam = selected
@@ -367,12 +371,30 @@ private fun LiveTeamRow(team: TeamUi, active: Boolean, onClick: () -> Unit) {
 /** A record to show the history of: its id, plus the name to put in the dialog's title. */
 internal data class HistoryTarget(val recordId: String, val label: String)
 
+/**
+ * The Teams error line, spoken as well as drawn.
+ *
+ * A Teams failure lands after the dialog that asked for it is gone — invite, share and the
+ * destructive confirmations all close on the click — so this line is the only report of it, and a
+ * plain Txt appearing in a sidebar tells a screen reader nothing (WCAG 4.1.3). The announcer stays
+ * composed while there is no error, so the message that arrives is a change to a node that was
+ * already there rather than an insertion; same shape as SyncFormError (#244).
+ */
+@Composable
+internal fun TeamsErrorLine(failure: TeamsFailure?, size: TextUnit, modifier: Modifier = Modifier) {
+    val text = failure?.let { teamsFailureText(it) } ?: ""
+    StatusAnnouncer(text)
+    if (failure == null) return
+    Txt(text, color = Skerry.colors.sunset, size = size, modifier = modifier)
+}
+
 /** Text for a typed Teams error (analogous to syncFailureText). */
 @Composable
 internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.NotConnected -> stringResource(Res.string.lib_teams_err_not_connected)
     TeamsFailure.VaultLocked -> stringResource(Res.string.lib_teams_err_vault_locked)
     TeamsFailure.NoRecipientKey -> stringResource(Res.string.lib_teams_err_no_recipient_key)
+    TeamsFailure.RecipientKeyChanged -> stringResource(Res.string.lib_teams_err_recipient_key_changed)
     TeamsFailure.AlreadyInvited -> stringResource(Res.string.lib_teams_err_already_invited)
     TeamsFailure.NoSuchAccount -> stringResource(Res.string.lib_teams_err_no_such_account)
     TeamsFailure.KeyMissing -> stringResource(Res.string.lib_teams_err_key_missing)

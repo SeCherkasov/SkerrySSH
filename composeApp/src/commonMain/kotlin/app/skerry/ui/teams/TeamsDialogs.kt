@@ -160,9 +160,54 @@ fun CreateTeamDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
 }
 
 /**
+ * [InviteMemberDialog] for the team that [teamId] names, resolved from [teams] on every recomposition.
+ *
+ * The team is addressed by an id captured when the dialog opened, never by whichever team the screen
+ * has selected now: the selection follows the server's team list, which is refreshed on a sync signal
+ * while the dialog is up. Reading it at Send time would let a reorder — or the deletion of the team
+ * the user was looking at — send the invite to a team whose key nobody meant to share (#316 verifies
+ * the recipient; this is the same rule for the other end of the seal).
+ *
+ * A team that left the list takes its dialog with it, [onDismiss] included: without that the screen
+ * would still hold the vanished id, and a team removed and re-invited under the same id (they are
+ * client-generated) would pop the dialog open again on the next refresh.
+ */
+@Composable
+internal fun InviteMemberDialogForTeam(
+    teams: List<TeamUi>,
+    teamId: String,
+    preview: InvitePreview?,
+    ownFingerprint: String?,
+    busy: Boolean,
+    onLookup: (String) -> Unit,
+    onEdited: () -> Unit,
+    onSend: (String, InvitePreview, TeamRole) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val team = teams.firstOrNull { it.id == teamId }
+    if (team == null) {
+        LaunchedEffect(teamId) { onDismiss() }
+        return
+    }
+    InviteMemberDialog(
+        preview = preview,
+        ownFingerprint = ownFingerprint,
+        busy = busy,
+        assignableRoles = team.role.assignableRoles(),
+        onLookup = onLookup,
+        onEdited = onEdited,
+        onSend = { verified, role -> onSend(team.id, verified, role) },
+        onDismiss = onDismiss,
+    )
+}
+
+/**
  * Two-step invite: enter accountId → [onLookup] fetches the published key; once [preview] arrives,
  * show the fingerprint for verification over a trusted channel and only then allow sending. Changing
  * the entered id clears the preview via [onEdited] (can't send to an unverified key).
+ *
+ * [onSend] carries the preview itself, not the typed id: the send is bound to the fingerprint that
+ * was verified, and the coordinator re-checks the key against it before sealing (#316).
  */
 @Composable
 fun InviteMemberDialog(
@@ -172,7 +217,7 @@ fun InviteMemberDialog(
     assignableRoles: List<TeamRole>,
     onLookup: (String) -> Unit,
     onEdited: () -> Unit,
-    onSend: (String, TeamRole) -> Unit,
+    onSend: (InvitePreview, TeamRole) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var accountId by remember { mutableStateOf("") }
@@ -181,17 +226,20 @@ fun InviteMemberDialog(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     val mono = LocalFonts.current.mono
-    val ready = preview != null && preview.accountId == accountId.trim()
+    // The preview only counts while the typed id still matches it — editing the field must not leave
+    // a stale verification standing behind the Send button.
+    val verified = preview?.takeIf { it.accountId == accountId.trim() }
+    val ready = verified != null
     fun submit() {
         val id = accountId.trim()
         if (id.isEmpty() || busy) return
-        if (ready) onSend(id, role) else onLookup(id)
+        if (verified != null) onSend(verified, role) else onLookup(id)
     }
     TeamsDialogCard(onDismiss, label = stringResource(Res.string.lib_teams_invite_title)) {
         Txt(stringResource(Res.string.lib_teams_invite_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
         Txt(stringResource(Res.string.lib_teams_invite_subtitle), color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
         TeamsTextField(accountId, { accountId = it; onEdited() }, stringResource(Res.string.lib_teams_invite_account_placeholder), ::submit, focus)
-        if (preview != null && ready) {
+        if (verified != null) {
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -202,7 +250,7 @@ fun InviteMemberDialog(
                     .padding(12.dp),
             ) {
                 Txt(stringResource(Res.string.lib_teams_invite_fingerprint).uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
-                Txt(preview.fingerprint, color = Skerry.colors.cyanBright, size = 14.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
+                Txt(verified.fingerprint, color = Skerry.colors.cyanBright, size = 14.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
                 Txt(stringResource(Res.string.lib_teams_invite_verify), color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp))
                 if (ownFingerprint != null) {
                     Txt(stringResource(Res.string.lib_teams_your_fingerprint, ownFingerprint), color = Skerry.colors.faint, size = 11.sp, font = mono, modifier = Modifier.padding(top = 8.dp))

@@ -1,12 +1,17 @@
 package app.skerry.ui.teams
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.desktop.runForm
@@ -51,7 +56,7 @@ class TeamsDialogFormTest {
     @Test
     fun `an invite is looked up before it can be sent`() {
         var lookedUp: String? = null
-        var sent: Pair<String, TeamRole>? = null
+        var sent: Pair<InvitePreview, TeamRole>? = null
         runForm({
             InviteMemberDialog(
                 preview = null,
@@ -60,7 +65,7 @@ class TeamsDialogFormTest {
                 assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
                 onLookup = { lookedUp = it },
                 onEdited = {},
-                onSend = { id, role -> sent = id to role },
+                onSend = { verified, role -> sent = verified to role },
                 onDismiss = {},
             )
         }) {
@@ -75,7 +80,7 @@ class TeamsDialogFormTest {
     /** With the looked-up key on screen the same button sends, and sends the role that is selected. */
     @Test
     fun `an invite is sent once its key is on screen`() {
-        var sent: Pair<String, TeamRole>? = null
+        var sent: Pair<InvitePreview, TeamRole>? = null
         runForm({
             InviteMemberDialog(
                 preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT),
@@ -84,7 +89,7 @@ class TeamsDialogFormTest {
                 assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
                 onLookup = {},
                 onEdited = {},
-                onSend = { id, role -> sent = id to role },
+                onSend = { verified, role -> sent = verified to role },
                 onDismiss = {},
             )
         }) {
@@ -92,7 +97,8 @@ class TeamsDialogFormTest {
             onNodeWithTag(UiTags.FORM_SAVE).performClick()
             waitForIdle()
         }
-        assertEquals(ACCOUNT, sent?.first)
+        assertEquals(ACCOUNT, sent?.first?.accountId)
+        assertEquals(PEER_FINGERPRINT, sent?.first?.fingerprint, "the send must carry the verified fingerprint")
         assertEquals(TeamRole.VIEWER, sent?.second, "the invite should default to the least privilege")
     }
 
@@ -103,7 +109,7 @@ class TeamsDialogFormTest {
     @Test
     fun `changing the account after a lookup does not send to the old key`() {
         var edited = false
-        var sent: Pair<String, TeamRole>? = null
+        var sent: Pair<InvitePreview, TeamRole>? = null
         runForm({
             InviteMemberDialog(
                 preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT),
@@ -112,7 +118,7 @@ class TeamsDialogFormTest {
                 assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
                 onLookup = {},
                 onEdited = { edited = true },
-                onSend = { id, role -> sent = id to role },
+                onSend = { verified, role -> sent = verified to role },
                 onDismiss = {},
             )
         }) {
@@ -123,9 +129,81 @@ class TeamsDialogFormTest {
         assertTrue(edited, "the dialog did not report the id being edited")
         assertNull(sent, "the invite went to the account whose key was on screen, not the typed one")
     }
+
+    /**
+     * The team list is the server's answer and is refreshed under an open dialog: it reorders on a
+     * membership signal, and the team the screen shows as selected moves with it. The invite must
+     * still go to the team the dialog was opened for, or the server picks whose key gets shared.
+     */
+    @Test
+    fun `the invite goes to the team the dialog was opened for, not the first one in the list`() {
+        var teams by mutableStateOf(listOf(team(TEAM_ID), team(OTHER_TEAM_ID)))
+        var sentTo: String? = null
+        runForm({
+            InviteMemberDialogForTeam(
+                teams = teams,
+                teamId = TEAM_ID,
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT),
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                onLookup = {},
+                onEdited = {},
+                onSend = { id, _, _ -> sentTo = id },
+                onDismiss = {},
+            )
+        }) {
+            onNodeWithTag(UiTags.FORM_FIELD).performTextReplacement(ACCOUNT)
+            // The server answers a refresh while the user is still reading the fingerprint out loud.
+            teams = listOf(team(OTHER_TEAM_ID), team(TEAM_ID))
+            waitForIdle()
+            onNodeWithTag(UiTags.FORM_SAVE).performClick()
+            waitForIdle()
+        }
+        assertEquals(TEAM_ID, sentTo)
+    }
+
+    /**
+     * A team that disappeared from the list takes its dialog with it — and the screen has to be told,
+     * or it keeps the vanished id and reopens the dialog the moment a team is re-invited under it.
+     */
+    @Test
+    fun `a team gone from the list closes its invite dialog and clears the screen's state`() {
+        var dismissed = false
+        runForm({
+            InviteMemberDialogForTeam(
+                teams = listOf(team(OTHER_TEAM_ID)),
+                teamId = TEAM_ID,
+                preview = null,
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                onLookup = {},
+                onEdited = {},
+                onSend = { _, _, _ -> },
+                onDismiss = { dismissed = true },
+            )
+        }) {
+            waitForIdle()
+            onAllNodesWithTag(UiTags.FORM_SAVE).fetchSemanticsNodes().let {
+                assertTrue(it.isEmpty(), "the dialog stayed up for a team that is gone")
+            }
+        }
+        assertTrue(dismissed, "the screen was never told the dialog is gone")
+    }
 }
 
+private fun team(id: String) = TeamUi(
+    id = id,
+    name = id,
+    ownerAccountId = ACCOUNT,
+    role = TeamRole.OWNER,
+    status = TeamMemberStatus.ACTIVE,
+    memberCount = 1,
+    hasKey = true,
+)
+
 private const val TEAM = "platform"
+private const val TEAM_ID = "team-opened-for"
+private const val OTHER_TEAM_ID = "team-that-jumped-first"
 private const val ACCOUNT = "alice@example.com"
 private const val OTHER_ACCOUNT = "mallory@example.com"
 private const val OWN_FINGERPRINT = "SHA256:ownownownownownownownownownownownownownownow"
