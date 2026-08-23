@@ -38,6 +38,12 @@ data class RdpConnectRequest(
     val remoteFx: Boolean = true,
     /** Which H.264 ladder the pipeline advertises. */
     val h264: RdpH264Mode = RdpH264Mode.Auto,
+    /**
+     * How the local display is scaled (1.0 = 100%). [width]/[height] are its physical pixels, and
+     * this is what keeps the session at the local DPI instead of at 96 — see
+     * [app.skerry.shared.rdp.RdpDisplayScale].
+     */
+    val displayScale: Float = 1f,
 ) {
     /** The domain half of `DOMAIN\user`, or empty when the name carries none. */
     val domain: String get() = username.substringBefore('\\', missingDelimiterValue = "")

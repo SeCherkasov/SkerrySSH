@@ -261,6 +261,7 @@ fun DesktopDesignApp(
                                     port = request.port,
                                     desktopWidth = request.width,
                                     desktopHeight = request.height,
+                                    displayScale = request.displayScale,
                                     clientName = request.clientName,
                                     loadBalanceInfo = request.loadBalanceInfo,
                                     audioOutput = request.audioOutput,

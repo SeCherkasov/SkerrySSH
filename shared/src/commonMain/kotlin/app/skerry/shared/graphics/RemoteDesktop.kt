@@ -55,8 +55,13 @@ interface RemoteDesktopSession {
     /** Quality/compression preference; a no-op where the protocol has no such knob. */
     suspend fun setQuality(quality: RemoteDesktopQuality)
 
-    /** Ask the server to resize its desktop to [width]×[height]; a no-op where unsupported. */
-    suspend fun setDesktopSize(width: Int, height: Int)
+    /**
+     * Ask the server to resize its desktop to [width]×[height] physical pixels, drawn at [scale]
+     * (1.0 = 100%) on the local display; a no-op where unsupported. Protocols with no notion of DPI
+     * ignore the scale — RFB has none — while RDP passes it on so the session lays out at the
+     * client's DPI instead of at 96.
+     */
+    suspend fun setDesktopSize(width: Int, height: Int, scale: Float = 1f)
 
     /**
      * Choose who draws the cursor: true = we do (the server sends its shape and keeps the

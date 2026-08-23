@@ -31,6 +31,7 @@ open class FakeRemoteDesktop(
     val localCursor = mutableListOf<Boolean>()
     val fullUpdates = mutableListOf<Boolean>()
     val desktopSizes = mutableListOf<Pair<Int, Int>>()
+    val desktopScales = mutableListOf<Float>()
     val visibility = mutableListOf<Boolean>()
     var closed = false
 
@@ -64,8 +65,9 @@ open class FakeRemoteDesktop(
 
     override suspend fun setQuality(quality: RemoteDesktopQuality) = Unit
 
-    override suspend fun setDesktopSize(width: Int, height: Int) {
+    override suspend fun setDesktopSize(width: Int, height: Int, scale: Float) {
         desktopSizes += width to height
+        desktopScales += scale
     }
 
     override suspend fun setLocalCursor(enabled: Boolean) {

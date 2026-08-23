@@ -74,7 +74,9 @@ class VncRemoteDesktop(private val session: VncSession) : RemoteDesktopSession {
         },
     )
 
-    override suspend fun setDesktopSize(width: Int, height: Int) = session.setDesktopSize(width, height)
+    // RFB has no DPI of its own: the scale is dropped, and a HiDPI client gets the desktop it asked
+    // for at the size it asked for.
+    override suspend fun setDesktopSize(width: Int, height: Int, scale: Float) = session.setDesktopSize(width, height)
 
     override suspend fun setLocalCursor(enabled: Boolean) = session.setLocalCursor(enabled)
 

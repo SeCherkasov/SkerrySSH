@@ -483,6 +483,25 @@ class RemoteDesktopScreenStateTest {
     }
 
     @Test
+    fun the_resize_request_carries_the_display_scaling_of_the_viewport() = runTest {
+        // The viewport is physical pixels. Without the scale beside it the server draws a 96 dpi
+        // desktop into them, and the session comes out sharp and half the size of the local UI.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
+        updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
+
+        screen.onViewportSize(IntSize(2880, 1800), scale = 1.5f)
+        screen.toggleRemoteResize()
+        advanceUntilIdle()
+
+        assertEquals(2880 to 1800, session.desktopSizes.single())
+        assertEquals(1.5f, session.desktopScales.single())
+        scope.cancel()
+    }
+
+    @Test
     fun rapid_viewport_changes_collapse_into_the_last_request() = runTest {
         // A window drag-resize spews sizes; only the one the user settles on may reach the server.
         val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))

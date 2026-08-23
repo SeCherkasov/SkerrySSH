@@ -146,12 +146,17 @@ class RemoteDesktopScreenState(
     var remoteResize by mutableStateOf(remoteResizeInitial)
         private set
 
-    // Last known viewport (canvas) size in pixels — the resize target when [remoteResize] is on.
+    // Last known viewport (canvas) size in physical pixels — the resize target when [remoteResize]
+    // is on.
     // @Volatile: written by the UI thread, read by [scheduleRemoteResize] when the session's read
     // loop reacts to RemoteResizeSupported — without it that reader can see a stale Zero and skip
     // the seeded resize.
     @Volatile
     private var viewport = IntSize.Zero
+
+    // The display scaling [viewport] was measured at; @Volatile for the same reason it is.
+    @Volatile
+    private var viewportScale = 1f
 
     // Guarded by [resizeLock]: the debounce job is cancelled-and-replaced from both the UI thread
     // and the read loop, and an unguarded swap can leave two jobs alive with the stale size
@@ -175,9 +180,15 @@ class RemoteDesktopScreenState(
         }
     }
 
-    /** The drawing surface reports its size here (every layout change, cheap when idle). */
-    fun onViewportSize(size: IntSize) {
+    /**
+     * The drawing surface reports its size here (every layout change, cheap when idle), together
+     * with the display scaling it is drawn at ([scale], 1.0 = 100%). The size is physical pixels,
+     * so the scale is what keeps the remote desktop at this machine's DPI instead of filling those
+     * pixels with a 96 dpi desktop half the size of the local UI.
+     */
+    fun onViewportSize(size: IntSize, scale: Float = 1f) {
         viewport = size
+        viewportScale = scale
         if (remoteResize) scheduleRemoteResize()
     }
 
@@ -201,7 +212,7 @@ class RemoteDesktopScreenState(
                     val target = viewport
                     if (target.width <= 0 || target.height <= 0 || target == desktopSize) return@launch
                     try {
-                        session.setDesktopSize(target.width, target.height)
+                        session.setDesktopSize(target.width, target.height, viewportScale)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {

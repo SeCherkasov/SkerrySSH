@@ -23,6 +23,9 @@ class DisplayControlChannelTest {
         /** Indices of the monitor's Width/Height inside the flattened PDU. */
         const val WIDTH = 7
         const val HEIGHT = 8
+
+        /** Index of PhysicalWidth, the first of the five scaling fields, in the same PDU. */
+        const val PHYSICAL_WIDTH = 9
     }
 
     @Test
@@ -63,6 +66,26 @@ class DisplayControlChannelTest {
             ),
             layout(sent.single()),
         )
+    }
+
+    @Test
+    fun `a scaled display states its physical size and both scale factors`() = runTest {
+        // Without these the server fills the physical pixels with a 96 dpi desktop, and every glyph
+        // in the session comes out at a fraction of the size of the client's own UI.
+        channel.onMessage(capsPdu())
+
+        channel.requestResolution(2880, 1800, scale = 1.5f)
+
+        val scale = RdpDisplayScale.of(2880, 1800, 1.5f)
+        assertContentEquals(
+            listOf(
+                scale.physicalWidthMm, scale.physicalHeightMm,
+                0, // Orientation: landscape
+                scale.desktopScaleFactor, scale.deviceScaleFactor,
+            ),
+            layout(sent.single()).subList(PHYSICAL_WIDTH, PHYSICAL_WIDTH + 5),
+        )
+        assertEquals(150, scale.desktopScaleFactor)
     }
 
     @Test

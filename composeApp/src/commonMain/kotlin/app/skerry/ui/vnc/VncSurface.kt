@@ -48,6 +48,7 @@ import androidx.compose.ui.input.pointer.isTertiaryPressed
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -137,11 +138,14 @@ fun VncSurface(
         stringResource(Res.string.rd_surface_release, releaseKeyboardChord()),
     )
     // clipToBounds: a zoomed framebuffer must never draw outside its own area onto the app chrome.
+    // The surface is measured in physical pixels; the density is what tells the remote side how
+    // large one of them is (see [RemoteDesktopScreenState.onViewportSize]).
+    val displayScale = LocalDensity.current.density
     var mod = Modifier.fillMaxSize().clipToBounds().background(Color.Black).semantics {
         contentDescription = surfaceName
     }.onSizeChanged {
         canvasSize = it
-        screen.onViewportSize(it)
+        screen.onViewportSize(it, displayScale)
     }
     // Whether a sprite exists at all changes rarely (null ↔ non-null); WHICH shape it is changes
     // constantly (arrow ↔ I-beam). derivedStateOf keeps the composition subscribed to the former

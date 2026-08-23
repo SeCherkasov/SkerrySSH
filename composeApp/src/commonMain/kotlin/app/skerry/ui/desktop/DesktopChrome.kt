@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
@@ -141,6 +142,9 @@ internal fun DesktopChrome(
     // dialled — RDP fixes its desktop at connect time, and asking for the viewport is what avoids
     // a scaled picture (F-06).
     val windowInfo = LocalWindowInfo.current
+    // The window is measured in physical pixels; this is how large one of them is, and it travels
+    // with the size so the session comes up at this display's DPI (see [RdpDisplayScale]).
+    val displayScale = LocalDensity.current.density
     // Keychain secrets live in the open vault — behind the master-password gate we first fire
     // [onVaultUnlocked], then reload (secrets + synced empty folders).
     LaunchedEffect(credentials) {
@@ -218,6 +222,7 @@ internal fun DesktopChrome(
                 graphicsPipeline = host.rdp?.graphicsPipeline != false,
                 remoteFx = host.rdp?.remoteFx != false,
                 h264 = host.rdp?.h264 ?: app.skerry.shared.rdp.RdpH264Mode.Auto,
+                displayScale = displayScale,
             ),
             remoteResize = host.vncResizeToWindow,
             onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },

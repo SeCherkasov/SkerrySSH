@@ -56,14 +56,19 @@ class DisplayControlChannel(private val send: suspend (ByteArray) -> Unit) : Dyn
     }
 
     /**
-     * Ask the server for a [width]×[height] desktop. A no-op until the server has stated its limits:
+     * Ask the server for a [width]×[height] desktop, drawn at [scale] (1.0 = 100%) on this display
+     * so the session lays itself out at the local DPI instead of at 96 (see [RdpDisplayScale]).
+     * A no-op until the server has stated its limits:
      * the channel exists but says nothing before its capability PDU, and a layout sent then is
      * discarded. Returns whether a layout went out.
      */
-    suspend fun requestResolution(width: Int, height: Int): Boolean {
+    suspend fun requestResolution(width: Int, height: Int, scale: Float = 1f): Boolean {
         if (!capable) return false
         val size = fit(width, height) ?: return false
-        send(monitorLayout(size.first, size.second))
+        // Scaling is derived from the size actually asked for, not the one requested: [fit] may have
+        // shrunk it, and millimetres computed for the larger one would state a DPI this layout does
+        // not have.
+        send(monitorLayout(size.first, size.second, RdpDisplayScale.of(size.first, size.second, scale)))
         return true
     }
 
@@ -99,7 +104,7 @@ class DisplayControlChannel(private val send: suspend (ByteArray) -> Unit) : Dyn
         return w to h
     }
 
-    private fun monitorLayout(width: Int, height: Int): ByteArray = RdpWriter(PDU_SIZE)
+    private fun monitorLayout(width: Int, height: Int, scale: RdpDisplayScale): ByteArray = RdpWriter(PDU_SIZE)
         .u32le(PDU_TYPE_MONITOR_LAYOUT)
         .u32le(PDU_SIZE)
         .u32le(MONITOR_SIZE)
@@ -107,9 +112,11 @@ class DisplayControlChannel(private val send: suspend (ByteArray) -> Unit) : Dyn
         .u32le(MONITOR_PRIMARY)
         .u32le(0).u32le(0) // Left, Top: the primary monitor's corner is the origin
         .u32le(width).u32le(height)
-        // Physical size, orientation and both scale factors are left unset: the server ignores each
-        // of them at zero, and a made-up millimetre size would change the remote DPI for nothing.
-        .zeros(MONITOR_SIZE - 20)
+        // Physical size and both factors state the client's DPI; all four are zero on an unscaled
+        // display, which is how the server is told to keep its own (MS-RDPEDISP 2.2.2.2.1).
+        .u32le(scale.physicalWidthMm).u32le(scale.physicalHeightMm)
+        .u32le(ORIENTATION_LANDSCAPE)
+        .u32le(scale.desktopScaleFactor).u32le(scale.deviceScaleFactor)
         .toByteArray()
 
     companion object {
@@ -123,6 +130,9 @@ class DisplayControlChannel(private val send: suspend (ByteArray) -> Unit) : Dyn
         private const val PDU_TYPE_CAPS = 0x00000005
 
         private const val MONITOR_PRIMARY = 0x00000001
+
+        /** The only orientation a session in a window has (MS-RDPEDISP 2.2.2.2.1). */
+        private const val ORIENTATION_LANDSCAPE = 0
         private const val MONITOR_SIZE = 40
         private const val PDU_SIZE = HEADER_SIZE + 8 + MONITOR_SIZE
 

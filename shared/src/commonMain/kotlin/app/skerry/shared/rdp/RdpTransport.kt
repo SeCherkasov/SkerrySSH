@@ -77,6 +77,12 @@ data class RdpTarget(
      * this is the redirected half of a session rather than a new logon. 0 for a first connection.
      */
     val redirectedSessionId: Int = 0,
+    /**
+     * How the local display is scaled (1.0 = 100%). [desktopWidth]/[desktopHeight] are physical
+     * pixels of that display, and this is what stops the server from filling them with a 96 dpi
+     * desktop half the size of the client's own UI (see [RdpDisplayScale]).
+     */
+    val displayScale: Float = 1f,
 ) {
     companion object {
         const val DEFAULT_PORT = 3389
@@ -151,10 +157,12 @@ interface RdpSession {
     val outputSuppressionSupported: Boolean
 
     /**
-     * Ask the server to serve [width]×[height] from now on (MS-RDPEDISP). Dropped when the server
-     * did not open the display control channel, which is how a host that cannot resize says so.
+     * Ask the server to serve [width]×[height] from now on (MS-RDPEDISP), drawn at [scale]
+     * (1.0 = 100%) on the local display so the session keeps the client's DPI. Dropped when the
+     * server did not open the display control channel, which is how a host that cannot resize says
+     * so.
      */
-    suspend fun setDesktopSize(width: Int, height: Int)
+    suspend fun setDesktopSize(width: Int, height: Int, scale: Float)
 
     /** Send text to the remote clipboard. */
     suspend fun sendClipboardText(text: String)

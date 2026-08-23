@@ -55,6 +55,8 @@ internal fun openMobileRdp(
     password: String,
     /** The screen the session will live on; the desktop is requested at that size (F-06). */
     viewport: androidx.compose.ui.unit.IntSize = androidx.compose.ui.unit.IntSize.Zero,
+    /** How that screen is scaled (1.0 = 100%): [viewport] is physical pixels, this is their size. */
+    displayScale: Float = 1f,
 ) {
     val desktop = app.skerry.ui.remote.rdpDesktopSize(
         viewport,
@@ -81,6 +83,7 @@ internal fun openMobileRdp(
             graphicsPipeline = host.rdp?.graphicsPipeline != false,
             remoteFx = host.rdp?.remoteFx != false,
             h264 = host.rdp?.h264 ?: app.skerry.shared.rdp.RdpH264Mode.Auto,
+            displayScale = displayScale,
         ),
         remoteResize = host.vncResizeToWindow,
         onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
