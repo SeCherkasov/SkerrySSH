@@ -279,7 +279,7 @@
     <string name="lib_teams_card_storage">Storage</string>
     <string name="lib_teams_card_storage_value">ciphertext only</string>
     <string name="lib_teams_card_version">Version</string>
-    <string name="lib_teams_card_devices">Devices</string>
+    <string name="lib_teams_card_devices">Team devices</string>
     <string name="lib_teams_card_devices_value">%1$d paired</string>
     <string name="lib_teams_card_shared">Shared with the team</string>
     <string name="lib_teams_card_hosts">Hosts</string>

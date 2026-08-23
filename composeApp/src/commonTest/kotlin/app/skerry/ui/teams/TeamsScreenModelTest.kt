@@ -28,7 +28,8 @@ class TeamsScreenModelTest {
         role: TeamRole,
         status: TeamMemberStatus = TeamMemberStatus.ACTIVE,
         lastSeenAt: Long? = null,
-    ) = TeamMember(id, role, status, createdAt = 0, lastSeenAt = lastSeenAt)
+        devices: Int? = null,
+    ) = TeamMember(id, role, status, createdAt = 0, lastSeenAt = lastSeenAt, devices = devices)
 
     private fun team(role: TeamRole) = TeamUi(
         id = "team-1",
@@ -43,6 +44,38 @@ class TeamsScreenModelTest {
             TeamScopeUi(id = "s-db", name = "db", memberCount = 1, hasKey = true),
         ),
     )
+
+    @Test
+    fun `the device count is the team's own, and an invite has not brought its devices in yet`() {
+        val count = teamDeviceCount(
+            listOf(
+                member(owner, TeamRole.OWNER, devices = 2),
+                member(admin, TeamRole.ADMIN, devices = 3),
+                member(invitee, TeamRole.VIEWER, TeamMemberStatus.INVITED, devices = 4),
+            ),
+        )
+        assertEquals(5, count)
+    }
+
+    @Test
+    fun `a server that does not report device counts leaves the number unknown, not zero`() {
+        assertNull(teamDeviceCount(listOf(member(owner, TeamRole.OWNER), member(admin, TeamRole.ADMIN))))
+        // One member unreported makes the sum an undercount — say nothing rather than a wrong total.
+        assertNull(teamDeviceCount(listOf(member(owner, TeamRole.OWNER, devices = 2), member(admin, TeamRole.ADMIN))))
+    }
+
+    @Test
+    fun `a member list that has not landed is unknown, not a team with no devices`() {
+        // Offline, a failed members call and the first frame all arrive as an empty list. A team the
+        // screen can draw has at least its owner, so this is never a fact about the team.
+        assertNull(teamDeviceCount(emptyList()))
+        assertNull(teamDeviceCount(listOf(member(invitee, TeamRole.VIEWER, TeamMemberStatus.INVITED, devices = 3))))
+    }
+
+    @Test
+    fun `a member whose every device was revoked counts as zero, which is a fact`() {
+        assertEquals(2, teamDeviceCount(listOf(member(owner, TeamRole.OWNER, devices = 2), member(admin, TeamRole.ADMIN, devices = 0))))
+    }
 
     @Test
     fun `the table lists active members by rank and keeps invitees last`() {

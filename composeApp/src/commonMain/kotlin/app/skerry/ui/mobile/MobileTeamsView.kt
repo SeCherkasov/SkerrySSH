@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -114,6 +115,7 @@ import app.skerry.ui.teams.TeamUi
 import app.skerry.ui.teams.CreateScopeDialog
 import app.skerry.ui.teams.ScopeAccess
 import app.skerry.ui.teams.ScopeAccessDialog
+import app.skerry.ui.teams.NewScopeButton
 import app.skerry.ui.teams.ScopeSection
 import app.skerry.ui.teams.TeamsCoordinator
 import app.skerry.ui.teams.teamsFailureText
@@ -409,6 +411,38 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     }
 }
 
+/**
+ * The phone's team actions. Its own composable for the same reason as the desktop header's: the
+ * screen around it needs a live coordinator, and both the New-scope button's placement and this
+ * row's wrapping have to be assertable without one.
+ */
+@Composable
+internal fun MobileTeamActions(
+    lastSyncedAt: Long?,
+    busy: Boolean,
+    canManage: Boolean,
+    canAudit: Boolean,
+    onSync: () -> Unit,
+    onShowHistory: () -> Unit,
+    onNewScope: () -> Unit,
+    onInvite: () -> Unit,
+) {
+    // A manager sees four actions here and a Row would measure the last of them — Invite — into
+    // whatever is left of a phone's width. It wraps instead; nothing is pushed off the screen.
+    FlowRow(
+        Modifier.fillMaxWidth().padding(top = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        // How stale the screen is, and the way to fix that — the same pill the desktop header carries.
+        SyncPill(lastSyncedAt, onSync)
+        if (canAudit) GhostButton(stringResource(Res.string.lib_teams_history), onClick = onShowHistory, icon = "history")
+        if (canManage) NewScopeButton(onClick = onNewScope, enabled = !busy)
+        if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
+    }
+}
+
 @Composable
 private fun MobileTeamDetail(
     tc: TeamsCoordinator,
@@ -479,12 +513,16 @@ private fun MobileTeamDetail(
         Txt(stringResource(Res.string.lib_teams_no_key), color = Skerry.colors.amber, size = 12.sp, modifier = Modifier.padding(top = 10.dp))
     }
 
-    Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        // How stale the screen is, and the way to fix that — the same pill the desktop header carries.
-        SyncPill(lastSyncedAt, onSync)
-        if (canAudit) GhostButton(stringResource(Res.string.lib_teams_history), onClick = onShowHistory, icon = "history")
-        if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
-    }
+    MobileTeamActions(
+        lastSyncedAt = lastSyncedAt,
+        busy = busy,
+        canManage = canManage,
+        canAudit = canAudit,
+        onSync = onSync,
+        onShowHistory = onShowHistory,
+        onNewScope = onNewScope,
+        onInvite = onInvite,
+    )
 
     MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_scopes))
     ScopeSection(
@@ -492,7 +530,6 @@ private fun MobileTeamDetail(
         selected = scopeId,
         canManage = canManage,
         onSelect = onSelectScope,
-        onNew = onNewScope,
         onAccess = onScopeAccess,
         onDelete = { onConfirm(MobileTeamsConfirm.DeleteScope(team.id, it.id)) },
     )
@@ -553,7 +590,7 @@ private fun MobileTeamDetail(
     // The same three summary cards as the desktop screen, stacked; the lists they lead to on the
     // desktop are already on this screen, so the counts here are plain facts.
     TeamSummaryCardsStacked(
-        cards = teamCards(tc, team, scopeId, tick, teamFeed(tc, team, tick, canAudit)),
+        cards = teamCards(tc, team, scopeId, tick, teamFeed(tc, team, tick, canAudit), members),
         modifier = Modifier.padding(top = 24.dp),
     )
 

@@ -282,7 +282,7 @@
     <string name="lib_teams_card_storage">Хранит</string>
     <string name="lib_teams_card_storage_value">только шифртекст</string>
     <string name="lib_teams_card_version">Версия</string>
-    <string name="lib_teams_card_devices">Устройства</string>
+    <string name="lib_teams_card_devices">Устройства команды</string>
     <string name="lib_teams_card_devices_value">привязано: %1$d</string>
     <string name="lib_teams_card_shared">Общее в команде</string>
     <string name="lib_teams_card_hosts">Хосты</string>

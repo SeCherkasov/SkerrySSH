@@ -60,14 +60,15 @@ import org.jetbrains.compose.resources.stringResource
  * always first — records without a scope stay visible to everyone, as they were before scopes
  * existed. A scope whose key never reached us is shown greyed out: a manager may see it listed and
  * delete it, but its records are ciphertext to them.
+ *
+ * Chips only. Creating a scope is a team action and lives in the screen's header beside Invite —
+ * a button in this row is a different shape from everything around it.
  */
 @Composable
 private fun ScopeChipRow(
     scopes: List<TeamScopeUi>,
     selected: String,
-    canManage: Boolean,
     onSelect: (String) -> Unit,
-    onNew: () -> Unit,
 ) {
     FlowRow(
         Modifier.fillMaxWidth(),
@@ -78,10 +79,13 @@ private fun ScopeChipRow(
         scopes.forEach { scope ->
             ScopeChip(untrustedLabel(scope.name), active = selected == scope.id, muted = !scope.hasKey) { onSelect(scope.id) }
         }
-        if (canManage) {
-            GhostButton(stringResource(Res.string.lib_teams_scope_new), onClick = onNew, icon = "add")
-        }
     }
+}
+
+/** "New scope" as the screen headers carry it — one button, the same on desktop and on the phone. */
+@Composable
+internal fun NewScopeButton(onClick: () -> Unit, enabled: Boolean = true) {
+    GhostButton(stringResource(Res.string.lib_teams_scope_new), onClick = onClick, icon = "add", enabled = enabled)
 }
 
 /**
@@ -95,16 +99,21 @@ internal fun ScopeSection(
     selected: String,
     canManage: Boolean,
     onSelect: (String) -> Unit,
-    onNew: () -> Unit,
     onAccess: (TeamScopeUi) -> Unit,
     onDelete: (TeamScopeUi) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier) {
-        ScopeChipRow(scopes = scopes, selected = selected, canManage = canManage, onSelect = onSelect, onNew = onNew)
+        ScopeChipRow(scopes = scopes, selected = selected, onSelect = onSelect)
         val active = scopes.firstOrNull { it.id == selected } ?: return@Column
         if (canManage) {
-            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // Wraps rather than a Row: on a phone at a large text scale "Delete scope" is the button
+            // that would land off the edge, and the column around it only scrolls vertically.
+            FlowRow(
+                Modifier.fillMaxWidth().padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 GhostButton(stringResource(Res.string.lib_teams_scope_access), onClick = { onAccess(active) }, icon = "key")
                 GhostButton(
                     stringResource(Res.string.lib_teams_scope_delete),

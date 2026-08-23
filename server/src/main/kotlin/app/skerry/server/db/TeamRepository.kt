@@ -84,16 +84,29 @@ class TeamRepository(private val db: Database) {
     }
 
     /**
-     * Newest device activity of each of [accountIds] (epoch millis), for the members list. One query
-     * for the whole team rather than a lookup per member, and accounts with no device row are simply
-     * absent from the map — the endpoint reports them as never seen.
+     * What the members list says about an account's devices: when any of them was last active
+     * ([lastSeenAt], epoch millis) and how many are still paired ([active]). Revoked devices count
+     * as neither gone nor present for freshness — they held the key once — but they are not
+     * devices the team reaches any more, so [active] leaves them out.
      */
-    suspend fun lastSeenByAccount(accountIds: Collection<String>): Map<String, Long> = dbTransaction(db) {
+    data class MemberDevices(val lastSeenAt: Long, val active: Int)
+
+    /**
+     * Device facts for each of [accountIds], for the members list. One query for the whole team
+     * rather than a lookup per member, and accounts with no device row are simply absent from the
+     * map — the endpoint reports them as never seen and holding nothing.
+     */
+    suspend fun devicesByAccount(accountIds: Collection<String>): Map<String, MemberDevices> = dbTransaction(db) {
         if (accountIds.isEmpty()) return@dbTransaction emptyMap()
         Devices.selectAll()
             .where { Devices.accountId inList accountIds.toSet() }
             .groupingBy { it[Devices.accountId] }
-            .fold(0L) { newest, row -> maxOf(newest, row[Devices.lastSeenAt]) }
+            .fold(MemberDevices(0L, 0)) { acc, row ->
+                MemberDevices(
+                    lastSeenAt = maxOf(acc.lastSeenAt, row[Devices.lastSeenAt]),
+                    active = acc.active + if (row[Devices.revoked]) 0 else 1,
+                )
+            }
     }
 
     suspend fun membership(teamId: String, accountId: String): TeamMemberRow? = dbTransaction(db) {

@@ -48,6 +48,7 @@ internal data class TeamCards(
     val lastRekeyAt: Long?,
     val endpoint: String?,
     val serverVersion: String?,
+    /** Devices of the team's own active members — see [teamDeviceCount], null when unknowable. */
     val devices: Int?,
     val hosts: Int,
     val snippets: Int,

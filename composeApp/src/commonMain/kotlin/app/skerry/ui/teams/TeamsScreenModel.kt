@@ -61,6 +61,21 @@ fun teamMemberRows(
         }
 }
 
+/**
+ * How many devices this team is reachable on: the paired devices of its active members. An invitee
+ * has not adopted the team key yet, so their devices are not the team's.
+ *
+ * Null when the answer isn't knowable rather than a total that is silently short — a server that
+ * doesn't report the per-member count, and an empty member list. Empty means the list hasn't landed
+ * (first frame, no session, a failed call): a team the screen can draw always has at least its
+ * owner, so "no active members" is never a fact about the team.
+ */
+fun teamDeviceCount(members: List<TeamMember>): Int? {
+    val active = members.filter { it.status == TeamMemberStatus.ACTIVE }
+    if (active.isEmpty() || active.any { it.devices == null }) return null
+    return active.sumOf { it.devices ?: 0 }
+}
+
 /** Sort rank of a role, highest privilege first. */
 private val TeamRole.rank: Int
     get() = when (this) {

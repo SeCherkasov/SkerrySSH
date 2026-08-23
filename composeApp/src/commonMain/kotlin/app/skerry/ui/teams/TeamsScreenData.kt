@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import app.skerry.shared.sync.AccountSummary
 import app.skerry.shared.team.TeamActivityDay
 import app.skerry.shared.team.TeamActivityEntry
+import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.buildTeamActivityFeed
 import app.skerry.shared.vault.RecordType
 import app.skerry.ui.app.LocalSharedSessions
@@ -80,7 +81,14 @@ private data class ServerFacts(val endpoint: String?, val summary: AccountSummar
 
 /** Counts and server facts behind the three summary cards. */
 @Composable
-internal fun teamCards(tc: TeamsCoordinator, team: TeamUi, scopeId: String, tick: Int, feed: List<TeamActivityDay>): TeamCards {
+internal fun teamCards(
+    tc: TeamsCoordinator,
+    team: TeamUi,
+    scopeId: String,
+    tick: Int,
+    feed: List<TeamActivityDay>,
+    members: List<TeamMember>,
+): TeamCards {
     val sync = LocalSync.current
     val shares = LocalSharedSessions.current
     val counts = remember(team.id, scopeId, tick) {
@@ -102,7 +110,7 @@ internal fun teamCards(tc: TeamsCoordinator, team: TeamUi, scopeId: String, tick
         lastRekeyAt = lastRekeyAt(feed),
         endpoint = server?.endpoint,
         serverVersion = server?.summary?.serverVersion,
-        devices = server?.summary?.devices,
+        devices = remember(members) { teamDeviceCount(members) },
         hosts = counts[RecordType.HOST] ?: 0,
         snippets = counts[RecordType.SNIPPET] ?: 0,
         runbooks = counts[RecordType.RUNBOOK] ?: 0,

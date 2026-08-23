@@ -250,6 +250,51 @@ class TeamRoutesTest {
     }
 
     @Test
+    fun `members report how many devices each account has paired, revoked ones excluded`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val aliceTokens = client.registerAccount(alice, password)
+        val bobTokens = client.registerAccount(bob, password, deviceId = "dev-bob")
+        client.createTeam(aliceTokens.accessToken)
+        client.invite(aliceTokens.accessToken, bob, byteArrayOf(1))
+        client.post("/teams/$teamId/accept") { bearerAuth(bobTokens.accessToken) }
+
+        client.srpLogin(bob, password, deviceId = "dev-bob-2", deviceName = "Phone")
+        val thirdLogin = System.currentTimeMillis()
+        client.srpLogin(bob, password, deviceId = "dev-bob-3", deviceName = "Tablet")
+        // A revoked device holds no team key any more, so it is not one of the team's devices.
+        client.delete("/devices/dev-bob-3") { bearerAuth(bobTokens.accessToken) }
+
+        val members: TeamMembersResponse = client.get("/teams/$teamId/members") { bearerAuth(aliceTokens.accessToken) }.body()
+        val bobRow = members.members.single { it.accountId == bob }
+        assertEquals(1, members.members.single { it.accountId == alice }.devices)
+        assertEquals(2, bobRow.devices)
+        // The revoked device was bob's most recent activity, and it still counts for freshness:
+        // revoking says the key is gone, not that the sign-in never happened.
+        val bobSeen = bobRow.lastSeenAt
+        assertNotNull(bobSeen)
+        assertTrue(bobSeen >= thirdLogin, "the revoked device's activity must still count: $bobSeen < $thirdLogin")
+    }
+
+    @Test
+    fun `an account that has not accepted the invite has no device count in the members list`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val aliceTokens = client.registerAccount(alice, password)
+        client.registerAccount(bob, password, deviceId = "dev-bob")
+        client.createTeam(aliceTokens.accessToken)
+        client.invite(aliceTokens.accessToken, bob, byteArrayOf(1))
+
+        val members: TeamMembersResponse = client.get("/teams/$teamId/members") { bearerAuth(aliceTokens.accessToken) }.body()
+        assertNull(members.members.single { it.accountId == bob }.devices)
+        assertEquals(1, members.members.single { it.accountId == alice }.devices)
+    }
+
+    @Test
     fun `ACL non-members get 404 members cannot invite owner cannot be removed`() = testApplication {
         val services = testServices()
         application { configureServer(services) }

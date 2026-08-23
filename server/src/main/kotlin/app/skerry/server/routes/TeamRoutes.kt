@@ -138,9 +138,20 @@ fun Route.teamRoutes(services: Services) {
         val teamId = call.requiredPathId("id") ?: return@get
         call.requireActiveMember(services, teamId, principal.accountId) ?: return@get
         val rows = services.teams.members(teamId)
-        val lastSeen = services.teams.lastSeenByAccount(rows.map { it.accountId })
+        val devices = services.teams.devicesByAccount(rows.map { it.accountId })
         val members = rows.map {
-            TeamMemberDto(it.accountId, it.role, it.status, it.createdAt, lastSeen[it.accountId])
+            val d = devices[it.accountId]
+            TeamMemberDto(
+                accountId = it.accountId,
+                role = it.role,
+                status = it.status,
+                createdAt = it.createdAt,
+                lastSeenAt = d?.lastSeenAt,
+                // Only for a member who actually joined: an invite is addressed by e-mail and costs
+                // the inviter nothing, so reporting a stranger's device count would make the members
+                // list a probe. The screen sums active members anyway.
+                devices = if (it.status == TeamMemberStatus.ACTIVE) d?.active ?: 0 else null,
+            )
         }
         call.respond(TeamMembersResponse(members))
     }
