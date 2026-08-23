@@ -111,7 +111,9 @@ internal fun MobileFormInput(
         } else {
             KeyboardActions.Default
         },
-        modifier = modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
+        // A captioned MobileFormField still wins; the fallback covers the sheets and palettes that
+        // draw no caption, where the placeholder is the only label the field ever shows.
+        modifier = modifier.fillMaxWidth().fieldFocus(draft).fieldName(fallback = placeholder),
         decorationBox = { inner ->
             Box(
                 Modifier

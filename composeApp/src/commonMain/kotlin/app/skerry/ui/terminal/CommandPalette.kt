@@ -45,6 +45,7 @@ import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_palette_empty
@@ -142,15 +143,17 @@ private fun PaletteSearch(value: String, onValueChange: (String) -> Unit, mono: 
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Sym("search", size = 16.sp, color = Skerry.colors.faint)
+        val placeholder = stringResource(Res.string.term_palette_placeholder)
         Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Txt(stringResource(Res.string.term_palette_placeholder), color = Skerry.colors.faint, size = 13.sp, font = mono)
+            if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = mono)
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
                 singleLine = true,
                 textStyle = style,
                 cursorBrush = SolidColor(Skerry.colors.cyan),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                // The placeholder is the only label this field draws (see fieldName).
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldName(placeholder),
             )
         }
     }

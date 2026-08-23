@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -33,12 +34,14 @@ import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.host.rowLabel
 import app.skerry.ui.secure.SecureScreen
 import app.skerry.ui.vault.VaultPresentation
+import app.skerry.ui.generated.resources.shell_password_host_placeholder
 import app.skerry.ui.generated.resources.shell_use_saved_secret
-import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_password_label
+import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_connect
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.rememberPromptFocus
+import app.skerry.ui.design.LocalFieldLabel
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
@@ -80,15 +83,22 @@ fun MobilePasswordSheet(
             Spacer(Modifier.height(18.dp))
             Txt(stringResource(Res.string.term_password_label), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)
             Spacer(Modifier.height(6.dp))
-            MobileFormInput(
-                value = password,
-                onValueChange = { password = it },
-                modifier = Modifier.focusRequester(focus),
-                placeholder = "••••••••",
-                masked = true,
-                imeAction = ImeAction.Go,
-                onSubmit = { submit() },
-            )
+            // The caption above is a bare sibling `Txt`, so nothing puts it in scope for the field
+            // (see [LocalFieldLabel]) — and the placeholder that would otherwise stand in for a name
+            // is the masking glyphs, drawn to be seen and never to be spoken. The name is the one
+            // the desktop dialog announces (`PasswordDialog`): the caption is drawn in caps, and
+            // "connection password" also tells this prompt apart from the vault's master password.
+            CompositionLocalProvider(LocalFieldLabel provides stringResource(Res.string.shell_password_host_placeholder)) {
+                MobileFormInput(
+                    value = password,
+                    onValueChange = { password = it },
+                    modifier = Modifier.focusRequester(focus),
+                    placeholder = "••••••••",
+                    masked = true,
+                    imeAction = ImeAction.Go,
+                    onSubmit = { submit() },
+                )
+            }
             if (secrets.isNotEmpty()) {
                 Spacer(Modifier.height(18.dp))
                 Txt(stringResource(Res.string.shell_use_saved_secret), color = Skerry.colors.faint, size = 10.5.sp, weight = FontWeight.SemiBold, letterSpacing = 0.6.sp)

@@ -109,6 +109,14 @@ internal fun terminalAi(reply: String) = TerminalAiController(
     scope = CoroutineScope(Dispatchers.Unconfined),
 )
 
+/** The panel's controller, over the same one-shot provider — enough for the panel to compose. */
+internal fun sessionAssistant(reply: String = "") = SessionAssistantController(
+    policy = AiPolicy.Balanced,
+    settings = { AiSettings(apiKey = "sk-test") },
+    providerFactory = { OneShotProvider(reply) },
+    scope = CoroutineScope(Dispatchers.Unconfined),
+)
+
 internal fun terminalState() = TerminalScreenState(SilentSession(), CoroutineScope(Dispatchers.Unconfined), nowMillis = eagerPublishClock())
 
 /** Ctrl everywhere but macOS — what the selection manager listens for. */

@@ -40,6 +40,7 @@ import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.design.fieldName
 import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
@@ -123,7 +124,7 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
 }
 
 @Composable
-private fun RunbookPalette(manager: RunbookManager, onPick: (RunbookEntry) -> Unit) {
+internal fun RunbookPalette(manager: RunbookManager, onPick: (RunbookEntry) -> Unit) {
     // Registered like the snippet palette: it lives in a focusable Popup and must hand the keyboard
     // back to the terminal when it closes.
     rememberModalPresence()
@@ -149,14 +150,16 @@ private fun RunbookPalette(manager: RunbookManager, onPick: (RunbookEntry) -> Un
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Sym("search", size = 15.sp, color = Skerry.colors.faint)
+            val placeholder = stringResource(Res.string.runbook_palette_placeholder)
             Box(Modifier.weight(1f)) {
                 if (query.isEmpty()) {
-                    Txt(stringResource(Res.string.runbook_palette_placeholder), color = Skerry.colors.faint, size = 12.5.sp, font = mono)
+                    Txt(placeholder, color = Skerry.colors.faint, size = 12.5.sp, font = mono)
                 }
                 BasicTextField(
                     query, { query = it }, singleLine = true, textStyle = style,
                     cursorBrush = SolidColor(Skerry.colors.cyan),
-                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocus),
+                    // The placeholder is the only label this field draws (see fieldName).
+                    modifier = Modifier.fillMaxWidth().focusRequester(searchFocus).fieldName(placeholder),
                 )
             }
         }

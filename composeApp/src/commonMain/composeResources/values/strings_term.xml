@@ -125,4 +125,6 @@
     <string name="term_autofit_shrink">Shrink terminal font</string>
     <string name="term_autofit_grow">Enlarge terminal font</string>
     <string name="term_autofit_restore">Restore font size</string>
+    <!-- Accessible name of the invisible field the soft keyboard types into (issue #228) -->
+    <string name="term_keyboard_input">Terminal input</string>
 </resources>

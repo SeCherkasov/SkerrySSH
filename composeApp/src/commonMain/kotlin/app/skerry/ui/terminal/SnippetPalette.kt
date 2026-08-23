@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.design.fieldName
 import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.IconBtn
@@ -116,9 +117,11 @@ internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> U
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Sym("search", size = 15.sp, color = Skerry.colors.faint)
+            val placeholder = stringResource(Res.string.term_run_snippet_placeholder)
             Box(Modifier.weight(1f)) {
-                if (query.isEmpty()) Txt(stringResource(Res.string.term_run_snippet_placeholder), color = Skerry.colors.faint, size = 12.5.sp, font = mono)
-                BasicTextField(query, { query = it }, singleLine = true, textStyle = style, cursorBrush = SolidColor(Skerry.colors.cyan), modifier = Modifier.fillMaxWidth().focusRequester(searchFocus))
+                if (query.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 12.5.sp, font = mono)
+                // The placeholder is the only label this field draws (see fieldName).
+                BasicTextField(query, { query = it }, singleLine = true, textStyle = style, cursorBrush = SolidColor(Skerry.colors.cyan), modifier = Modifier.fillMaxWidth().focusRequester(searchFocus).fieldName(placeholder))
             }
         }
         Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {

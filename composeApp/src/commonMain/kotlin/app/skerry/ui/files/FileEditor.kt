@@ -44,6 +44,7 @@ import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.fieldFocus
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberSeededDraft
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -51,6 +52,7 @@ import app.skerry.ui.generated.resources.ftail_fkey_edit
 import app.skerry.ui.generated.resources.ftail_fkey_quit
 import app.skerry.ui.generated.resources.ftail_fkey_save
 import app.skerry.ui.generated.resources.ftail_fkey_search
+import app.skerry.ui.generated.resources.sftp_edit_buffer
 import app.skerry.ui.generated.resources.sftp_edit_conflict_body
 import app.skerry.ui.generated.resources.sftp_edit_conflict_q
 import app.skerry.ui.generated.resources.sftp_edit_discard
@@ -317,6 +319,8 @@ private fun EditorBuffer(
         modifier = Modifier
             .fillMaxSize()
             .padding(14.dp)
+            // The header names the file; the buffer under it is an unnamed box without this.
+            .fieldName(stringResource(Res.string.sftp_edit_buffer))
             .focusRequester(focus)
             .onPreviewKeyEvent { event ->
                 // Tab types a tab (this is a file editor, and config files are full of them);
@@ -356,7 +360,8 @@ private fun EditorSearchBar(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Sym("search", size = 15.sp, color = Skerry.colors.cyanBright)
-        Txt(stringResource(Res.string.sftp_edit_find), color = Skerry.colors.faint, size = 11.5.sp)
+        val caption = stringResource(Res.string.sftp_edit_find)
+        Txt(caption, color = Skerry.colors.faint, size = 11.5.sp)
         BasicTextField(
             value = draft.textFieldValue(query),
             onValueChange = { draft.accept(it, query, onQueryChange) },
@@ -365,6 +370,8 @@ private fun EditorSearchBar(
             cursorBrush = SolidColor(Skerry.colors.cyan),
             modifier = Modifier
                 .weight(1f)
+                // The caption beside it is a sibling node, so the field has to adopt it.
+                .fieldName(caption)
                 .focusRequester(focus)
                 .fieldFocus(draft)
                 .onPreviewKeyEvent { event ->

@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,9 +42,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.HLine
+import app.skerry.ui.design.LocalFieldLabel
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.settings_ai_models_count
@@ -81,6 +84,14 @@ fun ModelPickerMenu(
             .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)),
     ) {
         // Search row: fixed at the top, filters the list below as you type.
+        //
+        // Under a reset [LocalFieldLabel]: desktop composes this menu inside `FormField("Model")`
+        // and a popup is a subcomposition, so that caption reaches the search box and outranks its
+        // placeholder — naming it after the combo it dropped out of, while the phone (which draws
+        // the menu in the page flow, with no caption over it) called the same field "Search
+        // models…". The menu is a surface of its own: a caption above the trigger names the
+        // trigger, not what is inside the menu it opens.
+        CompositionLocalProvider(LocalFieldLabel provides null) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -100,7 +111,8 @@ fun ModelPickerMenu(
                 // Enter picks the first match, as in the command palette — otherwise the only way
                 // out of the search field is a pointer.
                 keyboardActions = KeyboardActions(onSearch = { filtered.firstOrNull()?.let(onSelect) }),
-                modifier = Modifier.weight(1f),
+                // The placeholder is the only label this field draws (see fieldName).
+                modifier = Modifier.weight(1f).fieldName(searchPlaceholder),
                 decorationBox = { inner ->
                     Box(Modifier.fillMaxWidth()) {
                         if (query.isEmpty()) {
@@ -121,6 +133,7 @@ fun ModelPickerMenu(
                     contentAlignment = Alignment.Center,
                 ) { Sym("close", size = 13.sp, color = Skerry.colors.faint) }
             }
+        }
         }
         // Catalog size, so a refresh's result is visible at a glance (e.g. "321 models"); with a
         // query typed it counts what is actually listed, or it would contradict the rows below.

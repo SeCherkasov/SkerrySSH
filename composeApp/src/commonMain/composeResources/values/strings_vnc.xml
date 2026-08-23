@@ -70,4 +70,6 @@
     <string name="rd_clipboard_failed">The system clipboard refused</string>
     <string name="rd_surface">Remote desktop: %1$s. %2$s</string>
     <string name="rd_surface_release">%1$s releases the keyboard</string>
+    <!-- Same funnel on the remote-desktop screen (issue #228) -->
+    <string name="rd_keyboard_input">Remote desktop input</string>
 </resources>

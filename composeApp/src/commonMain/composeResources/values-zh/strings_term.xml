@@ -124,4 +124,5 @@
     <string name="term_autofit_shrink">缩小终端字体</string>
     <string name="term_autofit_grow">放大终端字体</string>
     <string name="term_autofit_restore">恢复字体大小</string>
+    <string name="term_keyboard_input">终端输入</string>
 </resources>

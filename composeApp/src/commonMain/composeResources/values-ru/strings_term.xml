@@ -127,4 +127,5 @@
     <string name="term_autofit_shrink">Уменьшить шрифт терминала</string>
     <string name="term_autofit_grow">Увеличить шрифт терминала</string>
     <string name="term_autofit_restore">Вернуть размер шрифта</string>
+    <string name="term_keyboard_input">Ввод в терминал</string>
 </resources>

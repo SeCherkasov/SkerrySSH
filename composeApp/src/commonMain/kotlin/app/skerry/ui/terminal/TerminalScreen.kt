@@ -98,6 +98,8 @@ import app.skerry.shared.terminal.searchTerminal
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.app.LocalUserActivity
 import app.skerry.ui.design.ClaimKeyboard
+import app.skerry.ui.design.fieldName
+import app.skerry.ui.generated.resources.term_keyboard_input
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -1372,7 +1374,8 @@ fun TerminalScreen(
                   }
                   imeValue = imeBaseline
               },
-              modifier = Modifier.size(1.dp).focusRequester(imeFocusRequester),
+              // Nothing is drawn in it, so the name is the only thing a reader that lands here gets.
+              modifier = Modifier.size(1.dp).fieldName(stringResource(Res.string.term_keyboard_input)).focusRequester(imeFocusRequester),
               textStyle = TextStyle(color = Color.Transparent),
               cursorBrush = SolidColor(Color.Transparent),
               keyboardOptions = KeyboardOptions(

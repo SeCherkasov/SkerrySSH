@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.ai.AiProviderKind
 import app.skerry.shared.ai.AiRole
 import app.skerry.shared.ai.local.LocalModelCatalog
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.HLine
@@ -308,9 +309,10 @@ private fun AssistantAskRow(
                 )
             }
         }
+        val placeholder = stringResource(Res.string.assistant_ask_placeholder)
         Box(Modifier.weight(1f).padding(bottom = 4.dp)) {
             if (prompt.isEmpty()) {
-                Txt(stringResource(Res.string.assistant_ask_placeholder), color = Skerry.colors.faint, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Txt(placeholder, color = Skerry.colors.faint, size = 12.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             // Wraps and grows up to ASK_MAX_LINES, then scrolls: a pasted error or a long question
             // has to be readable before it is sent, not hidden past the right edge of one line.
@@ -323,7 +325,8 @@ private fun AssistantAskRow(
                 cursorBrush = SolidColor(Skerry.colors.cyan),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                 keyboardActions = KeyboardActions(onSend = { submit() }),
-                modifier = Modifier.fillMaxWidth().focusRequester(focus).onPreviewKeyEvent { event ->
+                // The placeholder is the only label this field draws (see fieldName).
+                modifier = Modifier.fillMaxWidth().focusRequester(focus).fieldName(placeholder).onPreviewKeyEvent { event ->
                     // Enter sends, Shift+Enter breaks the line — the field is multi-line now, so the
                     // key has to be claimed here or it would only ever insert a newline.
                     if (event.type == KeyEventType.KeyDown && event.key == Key.Enter && !event.isShiftPressed) {

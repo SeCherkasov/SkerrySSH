@@ -70,4 +70,5 @@
     <string name="rd_clipboard_failed">系统剪贴板拒绝访问</string>
     <string name="rd_surface">远程桌面：%1$s。%2$s</string>
     <string name="rd_surface_release">%1$s 释放键盘</string>
+    <string name="rd_keyboard_input">远程桌面输入</string>
 </resources>
