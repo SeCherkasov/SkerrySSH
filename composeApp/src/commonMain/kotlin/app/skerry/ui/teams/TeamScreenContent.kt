@@ -132,6 +132,7 @@ internal fun TeamScreen(
         invited = invited,
         onSync = onSync,
         onInvite = onInvite,
+        onNewScope = onNewScope,
         onLeave = { onConfirm(TeamsConfirm.Leave(team.id)) },
         onDelete = { onConfirm(TeamsConfirm.Delete(team.id)) },
     )
@@ -148,7 +149,7 @@ internal fun TeamScreen(
                     modifier = Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
                 )
             }
-            ScopeStrip(team, scopeId, canManage, onSelectScope, onNewScope, onScopeAccess, onDeleteScope = { onConfirm(TeamsConfirm.DeleteScope(team.id, it.id)) })
+            ScopeStrip(team, scopeId, canManage, onSelectScope, onScopeAccess, onDeleteScope = { onConfirm(TeamsConfirm.DeleteScope(team.id, it.id)) })
             val rows = remember(team, members, grants, canManage) {
                 teamMemberRows(team, members, grants?.byScope.orEmpty(), canManage, grants?.complete ?: true)
             }
@@ -162,7 +163,7 @@ internal fun TeamScreen(
                 onRemove = { onConfirm(TeamsConfirm.Remove(team.id, it.member.accountId)) },
             )
             TeamSummaryCards(
-                cards = teamCards(tc, team, scopeId, tick, feed),
+                cards = teamCards(tc, team, scopeId, tick, feed, members),
                 onOpen = onOpenShared,
                 modifier = Modifier.padding(horizontal = 22.dp, vertical = 16.dp),
             )
@@ -182,6 +183,7 @@ private fun TeamHeader(
     invited: Boolean,
     onSync: () -> Unit,
     onInvite: () -> Unit,
+    onNewScope: () -> Unit,
     onLeave: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -189,11 +191,44 @@ private fun TeamHeader(
         title = stringResource(Res.string.lib_teams_header_title),
         subtitle = stringResource(Res.string.lib_teams_header_subtitle, untrustedLabel(team.name), team.memberCount),
         actions = {
-            if (!invited) SyncPill(lastSyncedAt, onSync)
-            if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
-            if (!invited) TeamOverflowMenu(owner = owner, onLeave = onLeave, onDelete = onDelete)
+            TeamHeaderActions(
+                lastSyncedAt = lastSyncedAt,
+                busy = busy,
+                owner = owner,
+                canManage = canManage,
+                invited = invited,
+                onSync = onSync,
+                onNewScope = onNewScope,
+                onInvite = onInvite,
+                onLeave = onLeave,
+                onDelete = onDelete,
+            )
         },
     )
+}
+
+/**
+ * The header's action set. Its own composable rather than a lambda in [TeamHeader] because the
+ * screen around it needs a live coordinator to draw at all: creating a share space is reachable
+ * from here and from nowhere else, and that has to be assertable without one.
+ */
+@Composable
+internal fun TeamHeaderActions(
+    lastSyncedAt: Long?,
+    busy: Boolean,
+    owner: Boolean,
+    canManage: Boolean,
+    invited: Boolean,
+    onSync: () -> Unit,
+    onNewScope: () -> Unit,
+    onInvite: () -> Unit,
+    onLeave: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    if (!invited) SyncPill(lastSyncedAt, onSync)
+    if (canManage) NewScopeButton(onClick = onNewScope, enabled = !busy)
+    if (canManage) PrimaryButton(stringResource(Res.string.lib_teams_invite), onClick = onInvite, icon = "person_add", enabled = !busy)
+    if (!invited) TeamOverflowMenu(owner = owner, onLeave = onLeave, onDelete = onDelete)
 }
 
 /** "synced 12 s ago" — and the way to sync now, since the two are the same question. */
@@ -268,7 +303,6 @@ private fun ScopeStrip(
     scopeId: String,
     canManage: Boolean,
     onSelect: (String) -> Unit,
-    onNew: () -> Unit,
     onAccess: (TeamScopeUi) -> Unit,
     onDeleteScope: (TeamScopeUi) -> Unit,
 ) {
@@ -283,7 +317,6 @@ private fun ScopeStrip(
             selected = scopeId,
             canManage = canManage,
             onSelect = onSelect,
-            onNew = onNew,
             onAccess = onAccess,
             onDelete = onDeleteScope,
         )

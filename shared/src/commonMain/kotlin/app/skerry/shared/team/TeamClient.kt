@@ -100,6 +100,12 @@ class TeamMember(
      * that doesn't report it — the member table then shows nothing rather than inventing a time.
      */
     val lastSeenAt: Long? = null,
+    /**
+     * How many devices this member still has paired, as the server counts them — null on a server
+     * that doesn't report it. The team's own device total is the sum over its active members, so a
+     * single null makes that total unknown rather than an undercount.
+     */
+    val devices: Int? = null,
 )
 
 /** An account's published Teams identity keys (both public halves; see [TeamClient.fetchPublicKey]). */

@@ -69,6 +69,13 @@ data class TeamMemberDto(
      * still around.
      */
     val lastSeenAt: Long? = null,
+    /**
+     * How many devices the member still has paired — revoked ones excluded. Null for a member who
+     * has not accepted the invite (their devices are not the team's, and are nobody's business
+     * here) and on a server that predates the field, which is why the team's device total is a
+     * question the client answers with "unknown" rather than an undercount.
+     */
+    val devices: Int? = null,
 )
 
 @Serializable

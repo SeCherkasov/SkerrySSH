@@ -276,7 +276,7 @@
     <string name="lib_teams_card_storage">存储</string>
     <string name="lib_teams_card_storage_value">仅密文</string>
     <string name="lib_teams_card_version">版本</string>
-    <string name="lib_teams_card_devices">设备</string>
+    <string name="lib_teams_card_devices">团队设备</string>
     <string name="lib_teams_card_devices_value">已配对 %1$d 台</string>
     <string name="lib_teams_card_shared">团队共享</string>
     <string name="lib_teams_card_hosts">主机</string>

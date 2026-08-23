@@ -26,7 +26,6 @@ class TeamScopeNameTest {
             selected = "s1",
             canManage = false,
             onSelect = {},
-            onNew = {},
             onAccess = {},
             onDelete = {},
         )

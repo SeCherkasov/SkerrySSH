@@ -369,7 +369,7 @@ class KtorSyncClient(
             bearerAuth(session.accessToken)
         }.bodyChecked()
         return resp.members.map {
-            TeamMember(it.accountId, TeamRole.fromWire(it.role), TeamMemberStatus.fromWire(it.status), it.createdAt, it.lastSeenAt)
+            TeamMember(it.accountId, TeamRole.fromWire(it.role), TeamMemberStatus.fromWire(it.status), it.createdAt, it.lastSeenAt, it.devices)
         }
     }
 
