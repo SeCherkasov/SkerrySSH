@@ -1,5 +1,7 @@
 package app.skerry.shared.vault
 
+import app.skerry.shared.text.normalizeGroup
+
 /**
  * Store for [Credential] keychain secrets over a [Vault]: each secret is a [RecordType.CREDENTIAL]
  * record whose payload is a JSON serialization of [Credential] (label and secret inside the
@@ -34,20 +36,21 @@ class CredentialStore(
     }
 
     /**
-     * [put] for the forms, which build a whole [Credential] from their fields and have no note field:
-     * the stored [Credential.note] is kept rather than blanked. Read and write are one
-     * [Vault.transaction] for the same reason [edit] is — a merge landing between them would let the
-     * write carry a note the record no longer has, or drop one it just gained.
+     * [put] for the forms, which build a whole [Credential] from their fields and carry neither the
+     * note nor the folder: the stored [Credential.note] and [Credential.group] are kept rather than
+     * blanked. Read and write are one [Vault.transaction] for the same reason [edit] is — a merge
+     * landing between them would let the write carry a note the record no longer has, or drop one it
+     * just gained.
      *
      * A record that does not exist yet keeps whatever the caller passed, which is how a freshly
      * created secret can still be born with a note. A **deleted** one is left alone, as in [edit]:
      * [get] answers `null` for a tombstone as well as for an absent id, and writing through that
      * would raise the deleted secret from the dead on every synced device.
      */
-    fun putKeepingNote(credential: Credential) = vault.transaction {
+    fun putKeepingMeta(credential: Credential) = vault.transaction {
         if (isTombstoned(credential.id)) return@transaction
         val stored = get(credential.id)
-        put(if (stored == null) credential else credential.copy(note = stored.note))
+        put(if (stored == null) credential else credential.copy(note = stored.note, group = stored.group))
     }
 
     /** Whether [id] is a credential this vault has already deleted (as opposed to never seen). */
@@ -56,7 +59,8 @@ class CredentialStore(
 
     /**
      * Edits what a secret is called in place: keeps its [Credential.id] (hosts reference secrets by id, not
-     * label) and its secret material, replacing only the [Credential.label] and [Credential.note].
+     * label) and its secret material, replacing only the [Credential.label], [Credential.note] and
+     * [Credential.group].
      * The re-[put] bumps the record version, so the change propagates to other devices via sync like
      * any other edit. No-op if [id] is missing or deleted — a tombstone must not be resurrected under
      * a new name.
@@ -66,9 +70,12 @@ class CredentialStore(
      * [get] and the [put], and the [put] would resurrect the deleted record under the new label and push
      * that un-delete to every device.
      */
-    fun edit(id: String, label: String, note: String?) = vault.transaction {
+    fun edit(id: String, label: String, note: String?, group: String?) = vault.transaction {
         val existing = get(id) ?: return@transaction
-        put(existing.copy(label = label, note = note))
+        // The store is where a folder name is made canonical, as it is for snippets and runbooks:
+        // the grouping key is the name itself, so two names that draw alike have to be one name, no
+        // matter which form wrote them.
+        put(existing.copy(label = label, note = note, group = normalizeGroup(group)))
     }
 
     /** Soft-delete a secret (tombstone). Hosts referencing it are reconciled in the UI layer. */

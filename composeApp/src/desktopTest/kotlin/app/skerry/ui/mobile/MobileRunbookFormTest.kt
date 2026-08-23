@@ -17,6 +17,13 @@ import app.skerry.ui.desktop.press
 import app.skerry.ui.desktop.runMobileShell
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_field_name
+import androidx.compose.ui.test.onNodeWithContentDescription
+import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_none
+import app.skerry.ui.generated.resources.shell_group_name_placeholder
+import app.skerry.ui.generated.resources.shtail_group_label
+import kotlin.test.assertNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -52,6 +59,41 @@ class MobileRunbookFormTest {
         val step = saved.steps.single()
         assertTrue(step is RunbookStep.Command)
         assertEquals(COMMAND, step.command)
+    }
+
+    /**
+     * The sheet has its own select and its own create dialog. Creating writes at the sheet's root,
+     * so clearing the folder afterwards is what proves the select's own line is wired.
+     */
+    @Test
+    fun `a folder created on the phone lands on the runbook`() = runMobileShell { shell ->
+        shell.state.push(MobileRoute.Runbooks)
+        waitForIdle()
+        openEditor()
+        onField(Res.string.runbook_field_name).performTextInput(NAME)
+        firstStepCommand().performTextInput(COMMAND)
+        onNodeWithText(string(Res.string.conn_group_none)).performClick()
+        onNodeWithText(string(Res.string.conn_group_new)).performClick()
+        waitForIdle()
+        onNodeWithContentDescription(string(Res.string.shell_group_name_placeholder)).performTextInput(FOLDER)
+        onNodeWithText(string(Res.string.conn_create)).performClick()
+        waitForIdle()
+        press(UiTags.FORM_SAVE)
+
+        assertEquals(FOLDER, shell.runbooks.runbooks.map { it.runbook }.singleOrNull { it.label == NAME }?.group)
+
+        onNodeWithText(NAME).performClick()
+        waitForIdle()
+        onNodeWithContentDescription("${string(Res.string.shtail_group_label)}, $FOLDER").performClick()
+        waitForIdle()
+        onNodeWithText(string(Res.string.conn_group_none)).performClick()
+        waitForIdle()
+        press(UiTags.FORM_SAVE)
+
+        assertNull(
+            shell.runbooks.runbooks.map { it.runbook }.singleOrNull { it.label == NAME }?.group,
+            "the select never cleared the folder",
+        )
     }
 
     @Test
@@ -101,3 +143,4 @@ class MobileRunbookFormTest {
 
 private const val NAME = "restart nginx"
 private const val COMMAND = "systemctl restart nginx"
+private const val FOLDER = "Production"

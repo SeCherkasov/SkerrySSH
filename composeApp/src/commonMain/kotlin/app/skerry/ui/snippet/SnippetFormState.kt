@@ -1,5 +1,6 @@
 package app.skerry.ui.snippet
 
+import app.skerry.shared.text.normalizeGroup
 import app.skerry.shared.text.normalizeNotes
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -19,6 +20,9 @@ class SnippetFormState private constructor(private val editingId: String?) {
     var label: String by mutableStateOf("")
     var command: String by mutableStateOf("")
     var notes: String by mutableStateOf("")
+
+    /** Folder the snippet is filed under, empty for none — the value the "Group" select edits. */
+    var group: String by mutableStateOf("")
 
     /** Committed tags (pills); edited via [addTags]/[removeTag]/[pickTag]. */
     var tags: List<String> by mutableStateOf(emptyList())
@@ -64,6 +68,7 @@ class SnippetFormState private constructor(private val editingId: String?) {
         tags = (tags + parseSnippetTags(tagDraft)).distinct(),
         shortcut = shortcut,
         notes = normalizeNotes(notes),
+        group = normalizeGroup(group),
     )
 
     companion object {
@@ -76,6 +81,7 @@ class SnippetFormState private constructor(private val editingId: String?) {
                     tags = s.tags
                     shortcut = s.shortcut
                     notes = s.notes.orEmpty()
+                    group = s.group.orEmpty()
                 }
             }
     }

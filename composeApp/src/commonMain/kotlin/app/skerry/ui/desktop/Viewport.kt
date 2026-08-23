@@ -50,7 +50,7 @@ fun Viewport(state: DesktopDesignState) {
         DesktopView.Ports -> ({ TunnelsView() })
         DesktopView.Snippets -> ({ SnippetsView(state) })
         DesktopView.Runbooks -> ({ RunbooksView(state) })
-        DesktopView.Vault -> ({ VaultView() })
+        DesktopView.Vault -> ({ VaultView(state) })
         DesktopView.Known -> ({ KnownHostsView() })
         DesktopView.Teams -> ({ TeamsView() })
         // Spelled out rather than left to an `else`, so the compiler refuses a new DesktopView that

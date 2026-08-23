@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.runbook.VaultRunbookStore
 import app.skerry.shared.snippet.VaultSnippetStore
-import app.skerry.shared.team.HOST_SHARE_STRIP
+import app.skerry.shared.team.shareStripFields
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
@@ -445,7 +445,7 @@ internal fun SharePicker(
         emptyText = stringResource(Res.string.lib_teams_share_empty),
         onPick = { item ->
             scope.launch2 {
-                tc.shareRecord(ref, item.id, kind, if (kind == RecordType.HOST) HOST_SHARE_STRIP else emptySet())
+                tc.shareRecord(ref, item.id, kind, shareStripFields(kind))
                 onDone()
             }
         },

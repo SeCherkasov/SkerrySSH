@@ -16,7 +16,6 @@
     <string name="conn_field_username">Username</string>
     <string name="conn_field_domain">Domain</string>
     <string name="conn_field_authentication">Authentication</string>
-    <string name="conn_field_group">Group</string>
     <string name="conn_field_tags">Tags</string>
     <string name="conn_field_notes">Notes</string>
     <string name="conn_notes_placeholder">Maintenance window, owner, anything worth remembering</string>

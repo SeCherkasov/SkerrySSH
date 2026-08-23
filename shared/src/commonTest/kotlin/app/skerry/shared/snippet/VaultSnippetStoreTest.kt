@@ -1,8 +1,10 @@
 package app.skerry.shared.snippet
 
 import app.skerry.shared.vault.FakeVault
+import app.skerry.shared.vault.RecordType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class VaultSnippetStoreTest {
 
@@ -39,5 +41,21 @@ class VaultSnippetStoreTest {
         val store = VaultSnippetStore(FakeVault())
         store.put(Snippet(id = "s1", label = "Disk", command = "df -h", notes = "Check root partition usage"))
         assertEquals("Check root partition usage", store.all().single().notes)
+    }
+
+    @Test
+    fun `a snippet written before folders existed reads back unfiled`() {
+        val vault = FakeVault()
+        // A payload from a client predating the field: no "group" key at all. The decoder has to
+        // read it as unfiled, not fail the record and take the snippet with it.
+        vault.put(
+            "s1",
+            RecordType.SNIPPET,
+            """{"id":"s1","label":"Disk","command":"df -h","tags":["ops"]}""".encodeToByteArray(),
+        )
+
+        val stored = VaultSnippetStore(vault).all().single()
+        assertEquals("Disk", stored.label)
+        assertNull(stored.group)
     }
 }

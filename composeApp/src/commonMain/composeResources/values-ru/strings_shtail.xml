@@ -21,12 +21,20 @@
     <!-- Host grouping: synthetic bucket for hosts without a group (display only) -->
     <string name="shtail_ungrouped">Без группы</string>
 
+    <!-- Подпись поля «Группа» везде, где запись кладётся в папку (сниппет, ранбук, хранилище) -->
+    <string name="shtail_group_label">Группа</string>
+
+    <!-- Folder header/picker: a name that filtered away to nothing (only invisible characters) -->
+    <string name="shtail_group_unnamed">Папка без имени</string>
+
     <!-- Чипы фильтра хостов: чип «без фильтра по тегу» (только отображение, см. ALL_HOSTS_CHIP) -->
     <string name="shtail_chip_all">Все</string>
 
     <!-- Шапка папки: шеврон, сворачивающий группу (%1$s — имя группы) -->
     <string name="shtail_group_collapse">Свернуть «%1$s»</string>
     <string name="shtail_group_expand">Развернуть «%1$s»</string>
+    <string name="shtail_group_state_collapsed">Свёрнута</string>
+    <string name="shtail_group_state_expanded">Развёрнута</string>
 
     <!-- Шапка папки: карандаш, открывающий диалог переименования/удаления (%1$s — имя группы) -->
     <string name="shtail_group_rename">Переименовать «%1$s»</string>

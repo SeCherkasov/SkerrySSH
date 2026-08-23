@@ -129,7 +129,7 @@ class VaultDialogFormTest {
     @Test
     fun `re-saving an unchanged secret changes nothing`() {
         var renamed: String? = null
-        runForm({ EditSecretDialog(currentLabel = NAME, currentNote = null, onDismiss = {}, onConfirm = { label, _ -> renamed = label }) }) {
+        runForm({ EditSecretDialog(currentLabel = NAME, currentNote = null, currentGroup = null, group = "", onDismiss = {}, onConfirm = { label, _, _ -> renamed = label }, groupField = {}) }) {
             onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
 
             onField(Res.string.vault_field_name).performTextReplacement(RENAMED)
@@ -147,8 +147,11 @@ class VaultDialogFormTest {
             EditSecretDialog(
                 currentLabel = NAME,
                 currentNote = "drop after the audit",
+                currentGroup = null,
+                group = "",
                 onDismiss = {},
-                onConfirm = { label, note -> saved = label to note },
+                onConfirm = { label, note, _ -> saved = label to note },
+                groupField = {},
             )
         }) {
             onField(Res.string.vault_field_name).performTextReplacement(RENAMED)
@@ -166,8 +169,11 @@ class VaultDialogFormTest {
             EditSecretDialog(
                 currentLabel = NAME,
                 currentNote = "drop after the audit",
+                currentGroup = null,
+                group = "",
                 onDismiss = {},
-                onConfirm = { label, note -> saved = label to note },
+                onConfirm = { label, note, _ -> saved = label to note },
+                groupField = {},
             )
         }) {
             onField(Res.string.vault_field_note).performTextReplacement("   ")
@@ -177,11 +183,75 @@ class VaultDialogFormTest {
         assertEquals(NAME to null, saved)
     }
 
+    /**
+     * The folder alone is enough of a change too — and it is the one value the dialog does not own:
+     * the select writes it into the caller's state (the "New group" overlay stands above this
+     * dialog), so what the dialog must do is notice it moved and hand back what it was given.
+     */
+    @Test
+    fun `filing a secret into a folder enables save and hands the folder back`() {
+        var saved: Triple<String, String?, String?>? = null
+        runForm({
+            EditSecretDialog(
+                currentLabel = NAME,
+                currentNote = null,
+                currentGroup = null,
+                group = "  client-acme  ",
+                onDismiss = {},
+                onConfirm = { label, note, group -> saved = Triple(label, note, group) },
+                groupField = {},
+            )
+        }) {
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsEnabled().performClick()
+            waitForIdle()
+        }
+        assertEquals(Triple(NAME, null, "client-acme"), saved)
+    }
+
+    /** Taking a secret out of its folder is a change like any other, and "none" is null. */
+    @Test
+    fun `clearing the folder hands back null`() {
+        var saved: Triple<String, String?, String?>? = null
+        runForm({
+            EditSecretDialog(
+                currentLabel = NAME,
+                currentNote = null,
+                currentGroup = "client-acme",
+                group = "",
+                onDismiss = {},
+                onConfirm = { label, note, group -> saved = Triple(label, note, group) },
+                groupField = {},
+            )
+        }) {
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsEnabled().performClick()
+            waitForIdle()
+        }
+        assertEquals(Triple(NAME, null, null), saved)
+    }
+
+    /** A folder that normalizes back to the stored one is no change: nothing to push to sync. */
+    @Test
+    fun `re-picking the folder a secret is already in changes nothing`() {
+        runForm({
+            EditSecretDialog(
+                currentLabel = NAME,
+                currentNote = null,
+                currentGroup = "client-acme",
+                group = "client-acme ",
+                onDismiss = {},
+                onConfirm = { _, _, _ -> },
+                groupField = {},
+            )
+        }) {
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+        }
+    }
+
     /** The note alone is enough of a change: a secret can be re-annotated without being renamed. */
     @Test
     fun `editing only the note enables save and normalizes it`() {
         var saved: Pair<String, String?>? = null
-        runForm({ EditSecretDialog(currentLabel = NAME, currentNote = null, onDismiss = {}, onConfirm = { label, note -> saved = label to note }) }) {
+        runForm({ EditSecretDialog(currentLabel = NAME, currentNote = null, currentGroup = null, group = "", onDismiss = {}, onConfirm = { label, note, _ -> saved = label to note }, groupField = {}) }) {
             onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
 
             onField(Res.string.vault_field_note).performTextReplacement("  temp access for the audit  ")

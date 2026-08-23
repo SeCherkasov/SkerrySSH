@@ -17,6 +17,24 @@ import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vault_delete
 import app.skerry.ui.generated.resources.vtail_category_passwords
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performTextInput
+import app.skerry.ui.desktop.onField
+import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_none
+import app.skerry.ui.generated.resources.shell_group_name_placeholder
+import app.skerry.ui.generated.resources.vault_edit
+import app.skerry.ui.generated.resources.vault_field_note
+import app.skerry.ui.generated.resources.vault_save
+import androidx.compose.runtime.CompositionLocalProvider
+import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
+import app.skerry.ui.app.LocalCredentials
+import app.skerry.ui.app.LocalVault
+import app.skerry.ui.design.FolderCollapse
+import app.skerry.ui.desktop.EmptyVault
+import app.skerry.ui.desktop.runForm
+import app.skerry.ui.desktop.seededVault
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -76,6 +94,43 @@ class VaultSecretsTest {
         onNodeWithText(KEY_SECRET).assertDoesNotExist()
     }
 
+    /**
+     * The keychain's own picker, end to end. The dialog hands three same-typed values back in a row
+     * and the folder is the one it does not own — it is written into the screen's state by a select
+     * standing beside the dialog. This is where a swapped argument would file the note as a folder,
+     * and nothing below the dialog would notice.
+     *
+     * Mounted directly rather than through the shell: the edit is refused unless a vault says it is
+     * unlocked ([EmptyVault]), and the shell harness has no vault at all.
+     */
+    @Test
+    fun `a folder picked in the keychain lands on the secret and the note stays where it was`() {
+        val credentials = seededVault(BouncyCastleSshKeyGenerator())
+        runForm({
+            CompositionLocalProvider(LocalCredentials provides credentials, LocalVault provides EmptyVault) {
+                VaultView(collapse = NoFolderCollapse)
+            }
+        }) {
+            onNodeWithText(KEY_SECRET).performClick()
+            waitForIdle()
+            onNodeWithText(string(Res.string.vault_edit)).performClick()
+            waitForIdle()
+            onField(Res.string.vault_field_note).performTextInput(NOTE)
+            onNodeWithText(string(Res.string.conn_group_none)).performClick()
+            onNodeWithText(string(Res.string.conn_group_new)).performClick()
+            waitForIdle()
+            onNodeWithContentDescription(string(Res.string.shell_group_name_placeholder)).performTextInput(FOLDER)
+            onNodeWithText(string(Res.string.conn_create)).performClick()
+            waitForIdle()
+            onNodeWithText(string(Res.string.vault_save)).performClick()
+            waitForIdle()
+        }
+
+        val saved = credentials.credentials.first { it.label == KEY_SECRET }
+        assertEquals(NOTE, saved.note, "the note and the folder were swapped on the way in")
+        assertEquals(FOLDER, saved.group, "the folder picked in the keychain never reached the record")
+    }
+
     /** The keychain id behind a label — what a host actually points at. */
     private fun DesktopShell.credentialId(label: String): String =
         credentials.credentials.first { it.label == label }.id
@@ -93,3 +148,11 @@ class VaultSecretsTest {
 // is what the seeded hosts are bound to.
 private const val KEY_SECRET = "work-laptop"
 private const val PASSWORD_SECRET = "db-admin"
+
+/** The vault screen only asks the fold state which folders are closed; none are. */
+private object NoFolderCollapse : FolderCollapse {
+    override fun isGroupCollapsed(name: String): Boolean = false
+    override fun toggleGroupCollapsed(name: String) = Unit
+}
+private const val FOLDER = "client-acme"
+private const val NOTE = "rotate before the audit"

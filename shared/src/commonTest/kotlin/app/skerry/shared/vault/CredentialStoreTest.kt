@@ -1,5 +1,6 @@
 package app.skerry.shared.vault
 
+import app.skerry.shared.text.MAX_GROUP_LENGTH
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -110,7 +111,7 @@ class CredentialStoreTest {
         val secret = CredentialSecret.PrivateKey(privateKeyPem = "pem", passphrase = "pp")
         store.put(Credential("c-1", "old name", secret))
 
-        store.edit("c-1", "new name", note = null)
+        store.edit("c-1", "new name", note = null, group = null)
 
         assertEquals(Credential("c-1", "new name", secret), store.get("c-1"))
     }
@@ -121,7 +122,7 @@ class CredentialStoreTest {
         val store = CredentialStore(vault)
         store.put(Credential("c-1", "old", CredentialSecret.Password("s")))
 
-        store.edit("c-1", "new", note = null)
+        store.edit("c-1", "new", note = null, group = null)
 
         // An edit is a re-put of the same id: the version must advance so LWW/live-sync push it.
         assertEquals(2L, vault.records().single { it.id == "c-1" }.version)
@@ -131,7 +132,7 @@ class CredentialStoreTest {
     fun `edit of a missing id is a no-op`() {
         val store = CredentialStore(FakeVault())
 
-        store.edit("ghost", "whatever", note = null)
+        store.edit("ghost", "whatever", note = null, group = null)
 
         assertNull(store.get("ghost"))
         assertEquals(emptyList(), store.all())
@@ -145,7 +146,7 @@ class CredentialStoreTest {
         // A plain put is a single call and holds no transaction — the control for the assertion below.
         assertFalse(vault.lastPutInTransaction)
 
-        store.edit("c-1", "new", note = null)
+        store.edit("c-1", "new", note = null, group = null)
 
         // edit's read AND its put must run under a held transaction, or a concurrent mergeRemote can
         // slip a tombstone between them (TOCTOU resurrection across all synced devices).
@@ -159,7 +160,7 @@ class CredentialStoreTest {
         store.put(Credential("c-1", "old", CredentialSecret.Password("s")))
         store.remove("c-1")
 
-        store.edit("c-1", "back from the dead", note = null)
+        store.edit("c-1", "back from the dead", note = null, group = null)
 
         assertNull(store.get("c-1"))
     }
@@ -180,32 +181,32 @@ class CredentialStoreTest {
         val secret = CredentialSecret.PrivateKey(privateKeyPem = "pem", passphrase = null)
         store.put(Credential("c-1", "temp key", secret))
 
-        store.edit("c-1", "temp key", note = "audit access, drop after 2026-09-01")
+        store.edit("c-1", "temp key", note = "audit access, drop after 2026-09-01", group = null)
         assertEquals("audit access, drop after 2026-09-01", store.get("c-1")?.note)
 
-        store.edit("c-1", "temp key", note = null)
+        store.edit("c-1", "temp key", note = null, group = null)
         assertNull(store.get("c-1")?.note)
     }
 
     @Test
-    fun `putKeepingNote keeps the stored note under new material`() {
+    fun `putKeepingMeta keeps the stored note under new material`() {
         val store = CredentialStore(FakeVault())
         store.put(Credential("c-1", "temp key", CredentialSecret.PrivateKey("pem")))
-        store.edit("c-1", "temp key", note = "audit access")
+        store.edit("c-1", "temp key", note = "audit access", group = null)
 
         // What a form re-saving a secret does: it builds the whole record from its fields, and it
         // has no note field to build one from.
-        store.putKeepingNote(Credential("c-1", "temp key", CredentialSecret.PrivateKey("pem2")))
+        store.putKeepingMeta(Credential("c-1", "temp key", CredentialSecret.PrivateKey("pem2")))
 
         assertEquals("audit access", store.get("c-1")?.note)
         assertEquals(CredentialSecret.PrivateKey("pem2"), store.get("c-1")?.secret)
     }
 
     @Test
-    fun `putKeepingNote keeps the caller's note when there is no record yet`() {
+    fun `putKeepingMeta keeps the caller's note when there is no record yet`() {
         val store = CredentialStore(FakeVault())
 
-        store.putKeepingNote(Credential("c-1", "fresh", CredentialSecret.Password("x"), note = "born with one"))
+        store.putKeepingMeta(Credential("c-1", "fresh", CredentialSecret.Password("x"), note = "born with one"))
 
         assertEquals("born with one", store.get("c-1")?.note)
     }
@@ -216,18 +217,18 @@ class CredentialStoreTest {
 
         // The note lives in the same encrypted payload as the material it describes, and says as much
         // about it: it is redacted from logs and crash reports with the rest.
-        assertEquals("Credential(id=c-1, label=redacted, note=redacted, secret=redacted)", cred.toString())
+        assertEquals("Credential(id=c-1, label=redacted, note=redacted, group=redacted, secret=redacted)", cred.toString())
     }
 
     @Test
-    fun `putKeepingNote runs its read-modify-write inside a single transaction`() {
+    fun `putKeepingMeta runs its read-modify-write inside a single transaction`() {
         val vault = FakeVault()
         val store = CredentialStore(vault)
         store.put(Credential("c-1", "temp key", CredentialSecret.Password("x")))
         // A plain put holds no transaction — the control, as in the `edit` case above.
         assertFalse(vault.lastPutInTransaction)
 
-        store.putKeepingNote(Credential("c-1", "temp key", CredentialSecret.Password("y")))
+        store.putKeepingMeta(Credential("c-1", "temp key", CredentialSecret.Password("y")))
 
         // Both halves: a merge landing a tombstone between a read taken outside the transaction and
         // the write inside it would still raise the deleted secret on every device.
@@ -236,7 +237,7 @@ class CredentialStoreTest {
     }
 
     @Test
-    fun `putKeepingNote does not raise a deleted credential from the dead`() {
+    fun `putKeepingMeta does not raise a deleted credential from the dead`() {
         val store = CredentialStore(FakeVault())
         store.put(Credential("c-1", "temp key", CredentialSecret.Password("x")))
         store.remove("c-1")
@@ -244,7 +245,7 @@ class CredentialStoreTest {
         // get() answers null for a tombstone exactly as it does for an id that never existed, so a
         // write through that would resurrect the secret on every synced device — the same trap
         // `edit` guards against.
-        store.putKeepingNote(Credential("c-1", "temp key", CredentialSecret.Password("y")))
+        store.putKeepingMeta(Credential("c-1", "temp key", CredentialSecret.Password("y")))
 
         assertNull(store.get("c-1"))
         assertEquals(emptyList(), store.all())
@@ -262,6 +263,77 @@ class CredentialStoreTest {
         val store = CredentialStore(vault)
 
         assertEquals(Credential("c-1", "Prod root", CredentialSecret.Password("s3cret"), note = null), store.get("c-1"))
+    }
+
+    @Test
+    fun `edit writes the folder and can clear it again`() {
+        val store = CredentialStore(FakeVault())
+        store.put(Credential("c-1", "temp key", CredentialSecret.PrivateKey("pem")))
+
+        store.edit("c-1", "temp key", note = null, group = "client-acme")
+        assertEquals("client-acme", store.get("c-1")?.group)
+
+        store.edit("c-1", "temp key", note = null, group = null)
+        assertNull(store.get("c-1")?.group)
+    }
+
+    @Test
+    fun `edit makes the folder canonical, whichever form wrote it`() {
+        val store = CredentialStore(FakeVault())
+        store.put(Credential("c-1", "temp key", CredentialSecret.PrivateKey("pem")))
+
+        // The grouping key is the name itself: a stray space or an invisible character would file
+        // the secret into a second folder that draws exactly like the first.
+        store.edit("c-1", "temp key", note = null, group = "  client-acme\u200B ")
+        assertEquals("client-acme", store.get("c-1")?.group)
+
+        store.edit("c-1", "temp key", note = null, group = "   ")
+        assertNull(store.get("c-1")?.group)
+
+        store.edit("c-1", "temp key", note = null, group = "x".repeat(200))
+        assertEquals(MAX_GROUP_LENGTH, store.get("c-1")?.group?.length)
+    }
+
+    @Test
+    fun `putKeepingMeta keeps the stored folder under new material`() {
+        val store = CredentialStore(FakeVault())
+        store.put(Credential("c-1", "temp key", CredentialSecret.PrivateKey("pem")))
+        store.edit("c-1", "temp key", note = null, group = "client-acme")
+
+        // Rotating the material rebuilds the record from the form's fields, and the form has no
+        // folder field: the secret must not fall out of its folder on a rotation.
+        store.putKeepingMeta(Credential("c-1", "temp key", CredentialSecret.PrivateKey("pem2")))
+
+        assertEquals("client-acme", store.get("c-1")?.group)
+    }
+
+    @Test
+    fun `the folder is written into the payload the vault seals`() {
+        val vault = FakeVault()
+        val store = CredentialStore(vault)
+        store.put(Credential("c-1", "prod root", CredentialSecret.Password("x"), group = "client-acme"))
+
+        // The whole point of the field living beside the note: what a sync server holds in the clear
+        // is the record header, and a folder named after a customer would name that customer to it.
+        // Here it is part of the payload, which the real vault stores encrypted.
+        val payload = vault.openPayload("c-1")!!.decodeToString()
+        assertTrue(payload.contains("client-acme"))
+        assertEquals("client-acme", store.get("c-1")?.group)
+    }
+
+    @Test
+    fun `a credential written before folders existed reads back ungrouped`() {
+        val vault = FakeVault()
+        // A payload from a client predating the field: no "group" key at all.
+        vault.put(
+            "c-1",
+            RecordType.CREDENTIAL,
+            """{"id":"c-1","label":"Prod root","note":"keep","secret":{"type":"password","password":"s3cret"}}""".encodeToByteArray(),
+        )
+        val store = CredentialStore(vault)
+
+        assertEquals("keep", store.get("c-1")?.note)
+        assertNull(store.get("c-1")?.group)
     }
 
     @Test

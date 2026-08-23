@@ -52,6 +52,16 @@ class RunbookManagerTest {
     }
 
     @Test
+    fun `save normalizes the folder and drops a blank one`() {
+        val m = manager()
+        val filed = m.save(draft(commands = arrayOf("uptime")).copy(group = "  client-acme  "))
+        assertEquals("client-acme", m.find(filed)?.runbook?.group)
+
+        val unfiled = m.save(draft(commands = arrayOf("uptime")).copy(group = "   "))
+        assertNull(m.find(unfiled)?.runbook?.group)
+    }
+
+    @Test
     fun `tags are canonicalized on save`() {
         val m = manager()
         val id = m.save(draft(commands = arrayOf("uptime")).copy(tags = listOf("#DB", "db", "Ops")))

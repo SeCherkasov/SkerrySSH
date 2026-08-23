@@ -38,6 +38,9 @@ import app.skerry.ui.generated.resources.conn_group_rename_title
 import app.skerry.ui.generated.resources.shell_group_name_placeholder
 import app.skerry.ui.generated.resources.conn_save
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.shared.text.MAX_GROUP_LENGTH
+import app.skerry.shared.text.capText
+import app.skerry.shared.text.normalizeGroup
 import app.skerry.ui.design.LocalFieldLabel
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
@@ -87,7 +90,9 @@ internal fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -
         Spacer(Modifier.height(14.dp))
         // "Production" is an example of what to type, not what the field is (see [LocalFieldLabel]).
         CompositionLocalProvider(LocalFieldLabel provides stringResource(Res.string.shell_group_name_placeholder)) {
-            MobileFormInput(name, { name = it }, "Production")
+            // Capped per keystroke, as on the desktop: a pasted name longer than the record keeps
+            // would otherwise be shown in full here and come back cut on the next open.
+            MobileFormInput(name, { name = capText(it, MAX_GROUP_LENGTH) }, "Production")
         }
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -130,10 +135,11 @@ internal fun MobileGroupRenameDialog(
     onDelete: () -> Unit,
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
-    val canSave = name.isNotBlank() && name.trim() != initialName
-    // Trim here so the controller (Host.group) and collapsedGroups sync see the same canonical
-    // key; otherwise a trailing space would desync the folder's collapsed state.
-    val submit = { if (canSave) onSave(name.trim()) }
+    // Canonical here so the controller (Host.group) and the collapsed set see the same key: two
+    // forms of one name desync the folder's fold state and draw it as two folders.
+    val canonical = normalizeGroup(name)?.takeIf { it != initialName }
+    val canSave = canonical != null
+    val submit = { canonical?.let(onSave); Unit }
     // System back/gesture dismisses the dialog (like tapping the scrim), intercepted before frame navigation.
     PlatformBackHandler(onBack = onDismiss)
     MobileCenteredDialog(onDismiss = onDismiss) {
@@ -143,7 +149,12 @@ internal fun MobileGroupRenameDialog(
         Spacer(Modifier.height(14.dp))
         // Prefilled with the old name: selected on focus, so a tap and a keystroke replace it.
         CompositionLocalProvider(LocalFieldLabel provides stringResource(Res.string.shell_group_name_placeholder)) {
-            MobileFormInput(name, { name = it }, "Production", selectAllOnFocus = name == initialName)
+            MobileFormInput(
+                name,
+                { name = capText(it, MAX_GROUP_LENGTH) },
+                "Production",
+                selectAllOnFocus = name == initialName,
+            )
         }
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -16,7 +16,6 @@
     <string name="conn_field_username">Пользователь</string>
     <string name="conn_field_domain">Домен</string>
     <string name="conn_field_authentication">Аутентификация</string>
-    <string name="conn_field_group">Группа</string>
     <string name="conn_field_tags">Теги</string>
     <string name="conn_field_notes">Заметки</string>
     <string name="conn_notes_placeholder">Окно обслуживания, владелец — всё, что стоит помнить</string>

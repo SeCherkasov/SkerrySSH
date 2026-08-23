@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.design.ModalTextField
 import app.skerry.shared.host.Host
 import app.skerry.shared.text.capNotes
 import app.skerry.shared.ssh.ConnectionType
@@ -66,7 +67,6 @@ import app.skerry.ui.generated.resources.conn_field_image_quality
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
-import app.skerry.ui.generated.resources.conn_field_group
 import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_jump_host
 import app.skerry.ui.generated.resources.conn_field_keep_alive
@@ -91,6 +91,7 @@ import app.skerry.ui.generated.resources.conn_title_new
 import app.skerry.ui.generated.resources.conn_title_new_desktop
 import app.skerry.ui.generated.resources.conn_title_edit_desktop
 import app.skerry.ui.generated.resources.conn_subtitle_new_desktop
+import app.skerry.ui.generated.resources.shtail_group_label
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.CancelButton
@@ -341,7 +342,7 @@ fun NewConnectionModal(state: DesktopDesignState, editHost: Host? = null, duplic
                     )
                 }
                 Spacer14()
-                Field(stringResource(Res.string.conn_field_group)) { GroupPicker(form, allHosts) }
+                Field(stringResource(Res.string.shtail_group_label)) { GroupPicker(form, allHosts) }
                 if (form.connectionType.usesSshAuth) {
                     Spacer14()
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

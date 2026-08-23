@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.runbook.RunbookTransferDirection
 import app.skerry.ui.design.Chip
+import app.skerry.ui.design.GROUP_FIELD_WIDTH
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
@@ -74,6 +76,7 @@ import app.skerry.ui.generated.resources.runbook_vars_hint
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.FormField
+import app.skerry.ui.generated.resources.shtail_group_label
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
 import androidx.compose.runtime.CompositionLocalProvider
@@ -84,13 +87,22 @@ import androidx.compose.ui.text.style.TextDirection
 private val WATCHDOG_CHOICES = listOf(0, 2, 5, 15)
 
 /**
- * The runbook form itself — name, description, tags, the step list and the run policy — over
+ * The runbook form itself — name, description, group, tags, the step list and the run policy — over
  * [RunbookFormState]. Shared by the desktop panel ([RunbookEditorPanel]) and the mobile sheet: same
  * fields, same validation, only the surrounding chrome differs, which is what [horizontalPadding]
  * is for (the panel pads itself, the sheet doesn't).
+ *
+ * [groupField] is the "Group" select itself, passed in because the two platforms draw a dropdown
+ * differently (a compact desktop menu against a phone-sized one with its own create overlay) while
+ * every other field here is identical on both. It edits [RunbookFormState.group].
  */
 @Composable
-fun RunbookEditorFields(form: RunbookFormState, mono: FontFamily, horizontalPadding: Dp = 24.dp) {
+fun RunbookEditorFields(
+    form: RunbookFormState,
+    mono: FontFamily,
+    horizontalPadding: Dp = 24.dp,
+    groupField: @Composable () -> Unit,
+) {
     Column(Modifier.padding(horizontal = horizontalPadding, vertical = 20.dp)) {
         FormField(stringResource(Res.string.runbook_field_name), top = 0.dp, bottom = 8.dp) {
             RunbookLineField(form.label, { form.label = it }, stringResource(Res.string.runbook_ph_name), LocalFonts.current.ui)
@@ -103,6 +115,10 @@ fun RunbookEditorFields(form: RunbookFormState, mono: FontFamily, horizontalPadd
                     stringResource(Res.string.runbook_ph_description), LocalFonts.current.ui, singleLine = false,
                 )
             }
+        }
+
+        Column(Modifier.padding(top = 20.dp).width(GROUP_FIELD_WIDTH)) {
+            FormField(stringResource(Res.string.shtail_group_label), top = 0.dp, bottom = 8.dp, field = groupField)
         }
 
         Column(Modifier.padding(top = 20.dp)) {
@@ -357,3 +373,4 @@ private fun RunbookCommandField(value: String, onValueChange: (String) -> Unit, 
         },
     )
 }
+

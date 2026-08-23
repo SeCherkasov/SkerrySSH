@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.runbook.VaultRunbookStore
 import app.skerry.shared.snippet.VaultSnippetStore
-import app.skerry.shared.team.HOST_SHARE_STRIP
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus

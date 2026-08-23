@@ -86,8 +86,8 @@ sealed interface CredentialSecret {
  * ([app.skerry.shared.host.Host.credentialId]): one secret can serve multiple hosts. The whole
  * thing — including [label] — lives in the encrypted payload of a [RecordType.CREDENTIAL] record:
  * [VaultRecord]'s plaintext metadata must not reveal key names or types (zero-knowledge). For the
- * same reason `toString` redacts [label], [note] and [secret], leaving only [id] (already plaintext
- * in the metadata).
+ * same reason `toString` redacts [label], [note], [group] and [secret], leaving only [id] (already
+ * plaintext in the metadata).
  *
  * [note] is an optional free-form remark ("temp access for the audit, delete in May"), the keychain's
  * counterpart of [app.skerry.shared.host.Host.notes] and normalized the same way
@@ -95,6 +95,13 @@ sealed interface CredentialSecret {
  * with `null` — unknown keys are ignored and the default fills in, so no migration is needed. It is
  * a remark about a secret, not a second secret, but it sits in the same encrypted payload as the
  * material it describes and is redacted from logs with it.
+ *
+ * [group] is the optional folder the keychain files it under, inside its secret kind (the UI's
+ * `VaultCategoryKind`) — the counterpart of [app.skerry.shared.host.Host.group], normalized by
+ * [app.skerry.shared.text.normalizeGroup] like every other one. It is plaintext metadata about a
+ * secret and therefore belongs *in the encrypted payload*, next to [note] and never in
+ * [VaultRecord]'s header: a folder called `client-acme` must not be readable from the sync server.
+ * A record written before the field existed reads back with `null`, no migration needed.
  */
 @Serializable
 data class Credential(
@@ -102,6 +109,8 @@ data class Credential(
     val label: String,
     val secret: CredentialSecret,
     val note: String? = null,
+    val group: String? = null,
 ) {
-    override fun toString(): String = "Credential(id=$id, label=redacted, note=redacted, secret=redacted)"
+    override fun toString(): String =
+        "Credential(id=$id, label=redacted, note=redacted, group=redacted, secret=redacted)"
 }

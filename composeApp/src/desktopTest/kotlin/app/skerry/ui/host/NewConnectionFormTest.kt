@@ -17,6 +17,13 @@ import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_name
 import app.skerry.ui.generated.resources.conn_field_port
 import app.skerry.ui.generated.resources.conn_field_username
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import app.skerry.ui.desktop.string
+import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_none
+import app.skerry.ui.generated.resources.shell_group_name_placeholder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -48,6 +55,28 @@ class NewConnectionFormTest {
         assertEquals(USER, saved.username)
         // Port is prefilled by the form, not typed: the profile must carry it anyway.
         assertEquals(DEFAULT_SSH_PORT, saved.port)
+    }
+
+    /**
+     * The connection form draws the same select as the library editors, wired by a line of its own.
+     * A copy of a one-line closure needs proof that this copy is the one that runs.
+     */
+    @Test
+    fun `a folder created in the form lands on the profile`() = runDesktopShell { shell ->
+        openForm()
+        onField(Res.string.conn_field_name).performTextInput(NAME)
+        onField(Res.string.conn_field_host_address).performTextInput(ADDRESS)
+        onField(Res.string.conn_field_username).performTextInput(USER)
+        onNodeWithText(string(Res.string.conn_group_none)).performClick()
+        onNodeWithText(string(Res.string.conn_group_new)).performClick()
+        waitForIdle()
+        onNodeWithContentDescription(string(Res.string.shell_group_name_placeholder)).performTextInput(FOLDER)
+        onNodeWithText(string(Res.string.conn_create)).performClick()
+        waitForIdle()
+        onNodeWithTag(UiTags.FORM_SAVE).performClick()
+        waitForIdle()
+
+        assertEquals(FOLDER, shell.hosts.hosts.singleOrNull { it.label == NAME }?.group)
     }
 
     /** Save stays shut until the profile could actually be dialled — an SSH host needs a user. */
@@ -112,6 +141,7 @@ class NewConnectionFormTest {
     }
 }
 
+private const val FOLDER = "Production"
 private const val NAME = "test-box"
 private const val ADDRESS = "10.0.0.99"
 private const val USER = "deploy"

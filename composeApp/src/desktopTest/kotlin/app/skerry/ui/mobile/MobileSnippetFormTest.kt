@@ -16,6 +16,12 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_field_command
 import app.skerry.ui.generated.resources.lib_snippets_field_name
 import app.skerry.ui.generated.resources.lib_snippets_field_notes
+import androidx.compose.ui.test.onNodeWithContentDescription
+import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_none
+import app.skerry.ui.generated.resources.shell_group_name_placeholder
+import app.skerry.ui.generated.resources.shtail_group_label
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -130,6 +136,41 @@ class MobileSnippetFormTest {
         assertNull(shell.snippets.pendingRun, "the sheet ran a command it was not showing")
     }
 
+    /** Parity: the sheet has its own select and its own create dialog, wired by its own line. */
+    @Test
+    fun `a folder created on the phone lands on the snippet`() = runMobileShell { shell ->
+        shell.state.push(MobileRoute.Snippets)
+        waitForIdle()
+        openEditor()
+        onField(Res.string.lib_snippets_field_name).performTextInput(NAME)
+        onField(Res.string.lib_snippets_field_command).performTextInput(COMMAND)
+        onNodeWithText(string(Res.string.conn_group_none)).performClick()
+        onNodeWithText(string(Res.string.conn_group_new)).performClick()
+        waitForIdle()
+        onNodeWithContentDescription(string(Res.string.shell_group_name_placeholder)).performTextInput(FOLDER)
+        onNodeWithText(string(Res.string.conn_create)).performClick()
+        waitForIdle()
+        onNodeWithTag(UiTags.FORM_SAVE).performClick()
+        waitForIdle()
+
+        val saved = shell.snippets.snippets.map { it.snippet }.singleOrNull { it.label == NAME }
+        assertEquals(FOLDER, saved?.group, "the folder picked on the phone never reached the record")
+
+        // And back out again. Creating a folder writes the name at the sheet's root, so only
+        // clearing it goes through the select's own onChange — the line the sheet wires by hand.
+        onNodeWithText(NAME).performClick()
+        waitForIdle()
+        onNodeWithContentDescription("${string(Res.string.shtail_group_label)}, $FOLDER").performClick()
+        waitForIdle()
+        onNodeWithText(string(Res.string.conn_group_none)).performClick()
+        waitForIdle()
+        onNodeWithTag(UiTags.FORM_SAVE).performClick()
+        waitForIdle()
+
+        val cleared = shell.snippets.snippets.map { it.snippet }.singleOrNull { it.label == NAME }
+        assertNull(cleared?.group, "the select never cleared the folder")
+    }
+
     private fun ComposeUiTest.openEditor() {
         onNodeWithTag(UiTags.NEW_SNIPPET).performClick()
         waitForIdle()
@@ -138,3 +179,4 @@ class MobileSnippetFormTest {
 
 private const val NAME = "disk usage"
 private const val COMMAND = "df -h"
+private const val FOLDER = "Production"

@@ -11,8 +11,10 @@ import kotlinx.serialization.Serializable
  *
  * Identity is the stable [id] (assigned at creation, unchanged by edits); [label] is the display
  * name, [description] an optional note shown while the run is in progress (what this procedure is
- * for, when to abort). [tags] group runbooks in the library exactly like snippet tags. [policy] is
- * how the run as a whole behaves — see [RunbookPolicy].
+ * for, when to abort). [tags] group runbooks in the library exactly like snippet tags. [group] is
+ * the optional folder the library files it under, one per runbook, exactly like
+ * [app.skerry.shared.snippet.Snippet.group]. [policy] is how the run as a whole behaves — see
+ * [RunbookPolicy].
  *
  * Steps carry the same `${{…}}` variables as snippets ([app.skerry.shared.snippet.SnippetTemplate]);
  * they are resolved once for the whole run, so a placeholder used in two steps means the same value
@@ -26,6 +28,7 @@ data class Runbook(
     val steps: List<RunbookStep> = emptyList(),
     val tags: List<String> = emptyList(),
     val policy: RunbookPolicy = RunbookPolicy(),
+    val group: String? = null,
 )
 
 /**

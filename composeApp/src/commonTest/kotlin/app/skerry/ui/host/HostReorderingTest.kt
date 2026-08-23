@@ -95,7 +95,7 @@ class HostReorderingTest {
 
     @Test
     fun blank_and_null_groups_are_one_ungrouped_bucket() {
-        // Hosts with group="" and group=null are one "Ungrouped" folder; moving to null keeps them together.
+        // Hosts with group="" and group=null are one ungrouped folder; moving to null keeps them together.
         val hosts = listOf(host("blank", ""), host("nul", null), host("p", "Prod"))
 
         val result = moveHostToGroup(hosts, hostId = "p", targetGroup = null, targetIndexInGroup = 0)
@@ -103,7 +103,7 @@ class HostReorderingTest {
         // "" and null are merged into one bucket, so all three end up adjacent; the raw group value on
         // the hosts themselves is not rewritten ([groupHostsByFolder] still folds them into Ungrouped).
         assertEquals(listOf("p", "blank", "nul"), result.map { it.id })
-        assertEquals(listOf("Ungrouped"), groupHostsByFolder(result).map { it.name })
+        assertEquals(listOf(UNGROUPED_LABEL), groupHostsByFolder(result).map { it.name })
     }
 
     @Test

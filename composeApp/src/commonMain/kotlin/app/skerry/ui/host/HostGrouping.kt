@@ -9,11 +9,12 @@ import app.skerry.ui.generated.resources.conn_type_container
 import app.skerry.ui.generated.resources.conn_type_local
 import app.skerry.ui.generated.resources.conn_type_mosh
 import app.skerry.ui.generated.resources.conn_type_serial
+import app.skerry.ui.design.UNGROUPED_FOLDER
+import app.skerry.ui.design.ungroupedFolderLabel
 import app.skerry.ui.generated.resources.conn_type_ssh
 import app.skerry.ui.generated.resources.conn_type_telnet
 import app.skerry.ui.generated.resources.conn_type_vnc
 import app.skerry.ui.generated.resources.conn_type_rdp
-import app.skerry.ui.generated.resources.shtail_ungrouped
 import org.jetbrains.compose.resources.stringResource
 
 /** A host list folder: group name plus its hosts (in source list order). */
@@ -25,12 +26,18 @@ data class HostFolder(val name: String, val hosts: List<Host>)
  * Used as the grouping key in [groupHostsByFolder] and in `folder.name != UNGROUPED_LABEL`
  * comparisons; not localized, since that would break grouping on locale change. For display, use
  * [ungroupedLabel].
+ *
+ * A name a host *can* carry, unlike the bucket the other lists use ([UNGROUPED_FOLDER]), and
+ * deliberately so: here a group called `Ungrouped` falls into the bucket instead of standing beside
+ * it, which is the sidebar's own long-standing rule and the one its empty groups are checked
+ * against. The newer lists key their bucket by something no record can hold, so a folder somebody
+ * names `Ungrouped` stays a folder of its own there.
  */
 const val UNGROUPED_LABEL = "Ungrouped"
 
 /** Localized "ungrouped" bucket label for display (not for grouping, see [UNGROUPED_LABEL]). */
 @Composable
-fun ungroupedLabel(): String = stringResource(Res.string.shtail_ungrouped)
+fun ungroupedLabel(): String = ungroupedFolderLabel()
 
 /**
  * Group hosts by [Host.group] for the sidebar. Folders appear in order of the group's first

@@ -8,12 +8,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RunbookFormStateTest {
 
-    private fun entry(vararg steps: RunbookStep) = RunbookEntry(
-        Runbook(id = "rb", label = "Deploy", description = "note", steps = steps.toList(), tags = listOf("ops")),
+    private fun entry(vararg steps: RunbookStep, group: String? = null) = RunbookEntry(
+        Runbook(id = "rb", label = "Deploy", description = "note", steps = steps.toList(), tags = listOf("ops"), group = group),
     )
 
     @Test
@@ -36,6 +37,23 @@ class RunbookFormStateTest {
         assertEquals("drain", form.steps[0].command)
         assertFalse(form.steps[0].confirm)
         assertTrue(form.steps[0].continueOnError)
+    }
+
+    @Test
+    fun `the folder survives the edit round-trip and a cleared one is no folder`() {
+        val form = RunbookFormState.fromEntry(
+            entry(RunbookStep.Command(id = "s1", command = "drain"), group = "client-acme"),
+        )
+        assertEquals("client-acme", form.group)
+        assertEquals("client-acme", form.toDraft().group)
+
+        form.group = "   "
+        assertNull(form.toDraft().group)
+    }
+
+    @Test
+    fun `a runbook saved before folders existed opens unfiled`() {
+        assertEquals("", RunbookFormState.fromEntry(entry(RunbookStep.Command(id = "s1", command = "a"))).group)
     }
 
     @Test

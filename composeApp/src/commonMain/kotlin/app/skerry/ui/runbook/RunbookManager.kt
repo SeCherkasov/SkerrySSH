@@ -11,6 +11,7 @@ import app.skerry.shared.runbook.RunbookStore
 import app.skerry.shared.runbook.isRunnable
 import app.skerry.shared.runbook.withId
 import app.skerry.shared.tag.normalizeTags
+import app.skerry.shared.text.normalizeGroup
 
 /**
  * Editable runbook fields without [Runbook.id]: the create/edit form works on a draft and
@@ -23,6 +24,7 @@ data class RunbookDraft(
     val steps: List<RunbookStep> = emptyList(),
     val tags: List<String> = emptyList(),
     val policy: RunbookPolicy = RunbookPolicy(),
+    val group: String? = null,
 )
 
 /** One row of the runbook list: the saved [runbook], updated via [RunbookManager.save]. */
@@ -77,6 +79,7 @@ class RunbookManager(
             steps = steps,
             tags = normalizeTags(draft.tags),
             policy = draft.policy,
+            group = normalizeGroup(draft.group),
         )
         store.put(runbook)
         val existing = find(id)

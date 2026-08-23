@@ -51,7 +51,6 @@ import app.skerry.ui.generated.resources.lib_teams_scopes
 import app.skerry.ui.generated.resources.lib_teams_sidebar
 import androidx.compose.ui.text.style.TextOverflow
 import app.skerry.shared.snippet.VaultSnippetStore
-import app.skerry.shared.team.HOST_SHARE_STRIP
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus

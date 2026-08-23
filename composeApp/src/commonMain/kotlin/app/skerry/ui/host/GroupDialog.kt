@@ -52,6 +52,9 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
+import app.skerry.shared.text.MAX_GROUP_LENGTH
+import app.skerry.shared.text.capText
+import app.skerry.shared.text.normalizeGroup
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.design.fieldName
 
@@ -74,8 +77,11 @@ fun GroupDialog(
     // Renaming opens on the old name, autofocused: select it so typing replaces it instead of
     // landing in front of it. Creating starts empty and has nothing to select.
     val draft = rememberFieldDraft(name, selectAllOnFocus = editing && name == initialName)
-    val canSave = name.trim().isNotEmpty()
-    val save = { if (canSave) onSave(name) }
+    // Canonical before it leaves the dialog, as for every other folder name: the same string goes to
+    // `Host.group` in the vault and to the side channel of empty/collapsed groups, and a name that
+    // reached them in two forms would draw as two folders no one can tell apart.
+    val canonical = normalizeGroup(name)
+    val save = { canonical?.let(onSave); Unit }
     ModalScrim(onDismiss = onDismiss) {
         Column(
             Modifier
@@ -102,7 +108,7 @@ fun GroupDialog(
             // field places the caret.
             BasicTextField(
                 value = draft.textFieldValue(name),
-                onValueChange = { draft.accept(it, name) { name = it } },
+                onValueChange = { draft.accept(it, name) { name = capText(it, MAX_GROUP_LENGTH) } },
                 singleLine = true,
                 textStyle = TextStyle(color = Skerry.colors.text, fontSize = 13.sp, fontFamily = LocalFonts.current.ui),
                 cursorBrush = SolidColor(Skerry.colors.cyan),
@@ -145,7 +151,7 @@ fun GroupDialog(
                 PrimaryButton(
                     if (editing) stringResource(Res.string.shell_save) else stringResource(Res.string.shell_create),
                     onClick = save,
-                    enabled = canSave,
+                    enabled = canonical != null,
                     modifier = Modifier.testTag(UiTags.FORM_SAVE),
                 )
             }

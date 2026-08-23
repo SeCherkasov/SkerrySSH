@@ -21,12 +21,20 @@
     <!-- 主机分组：无分组主机的合成桶（仅显示） -->
     <string name="shtail_ungrouped">未分组</string>
 
+    <!-- 记录归入文件夹处的“分组”字段标题（代码片段、运行手册、保险库） -->
+    <string name="shtail_group_label">分组</string>
+
+    <!-- Folder header/picker: a name that filtered away to nothing (only invisible characters) -->
+    <string name="shtail_group_unnamed">未命名文件夹</string>
+
     <!-- 主机筛选标签：无标签筛选的标签（仅用于显示，参见 ALL_HOSTS_CHIP） -->
     <string name="shtail_chip_all">全部</string>
 
     <!-- 文件夹标题：折叠分组的箭头（%1$s 为分组名称） -->
     <string name="shtail_group_collapse">折叠 %1$s</string>
     <string name="shtail_group_expand">展开 %1$s</string>
+    <string name="shtail_group_state_collapsed">已折叠</string>
+    <string name="shtail_group_state_expanded">已展开</string>
 
     <!-- 文件夹标题：打开重命名/删除对话框的铅笔图标（%1$s 为分组名称） -->
     <string name="shtail_group_rename">重命名 %1$s</string>

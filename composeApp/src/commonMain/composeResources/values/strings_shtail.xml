@@ -21,12 +21,20 @@
     <!-- Host grouping: synthetic bucket for hosts without a group (display only) -->
     <string name="shtail_ungrouped">Ungrouped</string>
 
+    <!-- Caption of the "Group" field wherever a record is filed into a folder (snippet, runbook, keychain) -->
+    <string name="shtail_group_label">Group</string>
+
+    <!-- Folder header/picker: a name that filtered away to nothing (only invisible characters) -->
+    <string name="shtail_group_unnamed">Unnamed folder</string>
+
     <!-- Host filter chips: "no tag filter" chip label (display only, see ALL_HOSTS_CHIP) -->
     <string name="shtail_chip_all">All</string>
 
     <!-- Folder header: the chevron that folds a group away (%1$s is the group name) -->
     <string name="shtail_group_collapse">Collapse %1$s</string>
     <string name="shtail_group_expand">Expand %1$s</string>
+    <string name="shtail_group_state_collapsed">Collapsed</string>
+    <string name="shtail_group_state_expanded">Expanded</string>
 
     <!-- Folder header: the pencil opening the rename/delete dialog (%1$s is the group name) -->
     <string name="shtail_group_rename">Rename %1$s</string>
