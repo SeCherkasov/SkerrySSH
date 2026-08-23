@@ -8,8 +8,8 @@ import kotlin.test.assertNull
 
 class SnippetFormStateTest {
 
-    private fun entry(notes: String? = null) =
-        SnippetEntry(Snippet(id = "s1", label = "Rollout", command = "kubectl apply -f -", notes = notes))
+    private fun entry(notes: String? = null, group: String? = null) =
+        SnippetEntry(Snippet(id = "s1", label = "Rollout", command = "kubectl apply -f -", notes = notes, group = group))
 
     /** Editing a snippet and saving it unchanged must not drop the note it already carried. */
     @Test
@@ -53,5 +53,21 @@ class SnippetFormStateTest {
         form.notes = "a".repeat(MAX_NOTES_LENGTH + 400)
 
         assertEquals(MAX_NOTES_LENGTH, form.toDraft().notes?.length)
+    }
+
+    @Test
+    fun `the folder survives the edit round-trip and a cleared one is no folder`() {
+        val form = SnippetFormState.fromEntry(entry(group = "client-acme"))
+        assertEquals("client-acme", form.group)
+        assertEquals("client-acme", form.toDraft().group)
+
+        form.group = "   "
+        assertNull(form.toDraft().group)
+    }
+
+    @Test
+    fun `a snippet saved before folders existed opens unfiled`() {
+        assertEquals("", SnippetFormState.fromEntry(entry()).group)
+        assertNull(SnippetFormState.fromEntry(entry()).toDraft().group)
     }
 }

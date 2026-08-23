@@ -143,7 +143,7 @@ class CredentialManagerController(
     /**
      * Creates (if [CredentialDraft.id] == null) or updates a secret; returns the assigned id.
      *
-     * The id comes back whether or not anything was written: [CredentialStore.putKeepingNote] no-ops
+     * The id comes back whether or not anything was written: [CredentialStore.putKeepingMeta] no-ops
      * on a record deleted in the meantime, and nothing here can tell. Harmless while every draft is
      * a new secret, as they all are today — a form that edits an existing one has to read the record
      * back before it reports the save as done.
@@ -153,10 +153,11 @@ class CredentialManagerController(
         val secret = draft.toSecret()
         // Compared before the write: afterwards the store already holds the new material.
         val rotated = draft.id?.let { find(it) }?.secret?.let { it != secret } == true
-        // The note is not part of the draft — no form has a field for it, only [edit] writes one —
-        // so the store keeps whatever is on the record. No form re-saves an existing secret today;
-        // this is what a rotation form would need the moment one is wired.
-        store.putKeepingNote(Credential(id = id, label = draft.label, secret = secret))
+        // Neither the note nor the folder is part of the draft — no creation form has a field for
+        // them, only [edit] writes them — so the store keeps whatever is on the record. No form
+        // re-saves an existing secret today; this is what a rotation form would need the moment one
+        // is wired.
+        store.putKeepingMeta(Credential(id = id, label = draft.label, secret = secret))
         // Only a new secret is born here; replacing the material of an existing one is a rotation,
         // which is what the row reports as "rotated 12 days ago". Re-saving the same material is
         // neither — a rename must not read as a key change.
@@ -169,13 +170,14 @@ class CredentialManagerController(
     }
 
     /**
-     * Edits a secret in place — keeps its id and secret material, changing only the label and the
-     * note — and reloads the list. A no-op if [id] is missing/deleted. The edit propagates to sync on
-     * its own (it's a re-put of the same record; see [CredentialStore.edit]). [note] arrives already
-     * normalized ([app.skerry.shared.text.normalizeNotes]).
+     * Edits a secret in place — keeps its id and secret material, changing only the label, the note
+     * and the folder — and reloads the list. A no-op if [id] is missing/deleted. The edit propagates
+     * to sync on its own (it's a re-put of the same record; see [CredentialStore.edit]). [note] and
+     * [group] arrive already normalized ([app.skerry.shared.text.normalizeNotes],
+     * [app.skerry.shared.text.normalizeGroup]).
      */
-    fun edit(id: String, label: String, note: String?) {
-        store.edit(id, label, note)
+    fun edit(id: String, label: String, note: String?, group: String?) {
+        store.edit(id, label, note, group)
         credentials = store.all()
     }
 

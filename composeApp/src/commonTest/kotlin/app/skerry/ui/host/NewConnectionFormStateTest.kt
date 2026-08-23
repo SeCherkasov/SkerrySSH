@@ -5,6 +5,7 @@ import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.text.MAX_NOTES_LENGTH
 import app.skerry.ui.identity.CredentialDraft
 import app.skerry.ui.identity.CredentialKind
+import app.skerry.shared.text.MAX_GROUP_LENGTH
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -63,6 +64,20 @@ class NewConnectionFormStateTest {
         }
         assertEquals("Production", f.toDraft().group)
         assertNull(f.toDraft().id)
+    }
+
+    @Test
+    fun toDraft_stores_the_group_in_the_form_every_other_record_stores_it_in() {
+        // Same canonical form as a snippet, a runbook or a keychain secret: a host filed under a
+        // name with a zero-width character in it would otherwise sit in a second folder that draws
+        // exactly like the first one.
+        val f = NewConnectionFormState().apply { name = "h"; address = "a"; username = "u" }
+
+        f.group = "ops\u200Bteam"
+        assertEquals("opsteam", f.toDraft().group)
+
+        f.group = "a".repeat(MAX_GROUP_LENGTH * 2)
+        assertEquals(MAX_GROUP_LENGTH, f.toDraft().group?.length)
     }
 
     @Test

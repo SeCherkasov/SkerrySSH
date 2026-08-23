@@ -51,10 +51,13 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.text.capNotes
+import app.skerry.ui.design.FormField
+import app.skerry.shared.text.normalizeGroup
 import app.skerry.shared.text.normalizeNotes
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyType
 import app.skerry.ui.design.fieldName
+import app.skerry.ui.generated.resources.shtail_group_label
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vault_add
 import app.skerry.ui.generated.resources.vault_add_password
@@ -299,26 +302,45 @@ internal fun PasswordConfirmDialog(
 }
 
 /**
- * Edits what a keychain secret is called: its NAME and its free-form NOTE. The secret material and
- * id are untouched. Confirm is enabled only for a non-blank name once something actually changed —
- * re-saving identical text is a pointless sync push. Shared by desktop and mobile. [onConfirm] gets
- * the trimmed label and the normalized note (`null` when it is blank).
+ * Edits what a keychain secret is called: its NAME, the folder it is filed under and its free-form
+ * NOTE. The secret material and id are untouched. Confirm is enabled only for a non-blank name once
+ * something actually changed — re-saving identical text is a pointless sync push. Shared by desktop
+ * and mobile. [onConfirm] gets the trimmed label, the normalized note and the normalized folder
+ * name (`null` when either is blank).
+ *
+ * All three are plaintext metadata that lives inside the vault's encrypted payload, never in a
+ * record header — a folder called `client-acme` must be unreadable to the sync server, exactly like
+ * the note beside it.
+ *
+ * [groupField] is the folder select, passed in because the two platforms draw a dropdown
+ * differently while the rest of the dialog is identical. Its value is [group], held by the caller
+ * rather than here: picking "New group…" opens an overlay that stands above this dialog, and an
+ * overlay outside the dialog cannot write into state inside it.
  */
 @Composable
 internal fun EditSecretDialog(
     currentLabel: String,
     currentNote: String?,
+    currentGroup: String?,
+    group: String,
     onDismiss: () -> Unit,
-    onConfirm: (label: String, note: String?) -> Unit,
+    onConfirm: (label: String, note: String?, group: String?) -> Unit,
+    groupField: @Composable () -> Unit,
 ) {
     var name by remember { mutableStateOf(currentLabel) }
     var note by remember { mutableStateOf(currentNote.orEmpty()) }
     val trimmed = name.trim()
     val normalizedNote = normalizeNotes(note)
-    val valid = trimmed.isNotEmpty() && (trimmed != currentLabel || normalizedNote != currentNote)
+    val normalizedGroup = normalizeGroup(group)
+    val valid = trimmed.isNotEmpty() &&
+        (trimmed != currentLabel || normalizedNote != currentNote || normalizedGroup != currentGroup)
     VaultDialogScaffold(stringResource(Res.string.vault_edit_title, currentLabel), null, onDismiss) {
         // The old label arrives prefilled: select it so typing replaces the name outright.
         DialogField(stringResource(Res.string.vault_field_name), name, { name = it }, placeholder = currentLabel, selectAllOnFocus = name == currentLabel)
+        // A Column, not a Box: [FormField] emits the caption and the control as two siblings.
+        Column(Modifier.padding(top = 16.dp)) {
+            FormField(stringResource(Res.string.shtail_group_label), top = 0.dp, bottom = 5.dp, field = groupField)
+        }
         // Capped per keystroke, so the field can never hold more than the store would keep.
         Box(Modifier.padding(top = 16.dp)) {
             DialogField(
@@ -330,7 +352,7 @@ internal fun EditSecretDialog(
                 mono = false,
             )
         }
-        DialogButtons(confirmLabel = stringResource(Res.string.vault_save), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onConfirm(trimmed, normalizedNote) })
+        DialogButtons(confirmLabel = stringResource(Res.string.vault_save), confirmEnabled = valid, onDismiss = onDismiss, onConfirm = { onConfirm(trimmed, normalizedNote, normalizedGroup) })
     }
 }
 

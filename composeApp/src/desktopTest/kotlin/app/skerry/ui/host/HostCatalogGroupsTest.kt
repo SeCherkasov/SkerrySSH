@@ -110,6 +110,22 @@ class HostCatalogGroupsTest {
         )
     }
 
+    /**
+     * The dialog is a write path like any other, and the name it writes reaches two places at once —
+     * `Host.group` in the vault and the shell's own list of folders. A name stored in two forms
+     * draws as two folders no one can tell apart, so it is canonical before it leaves the dialog.
+     */
+    @Test
+    fun `a folder name is stored canonical wherever it is typed`() = runDesktopShell { shell ->
+        openGroupDialog(PROD_GROUP)
+        onNodeWithTag(UiTags.FORM_FIELD).performTextInput(" ops\u200Bteam ")
+        onNodeWithTag(UiTags.FORM_SAVE).performClick()
+        waitForIdle()
+
+        assertEquals("opsteam", shell.hosts.hosts.first { it.label == DB_HOST }.group)
+        onCatalog("opsteam").assertIsDisplayed()
+    }
+
     /** Deleting a folder is an ungrouping: the profiles in it survive, filed under no group. */
     @Test
     fun `deleting a folder ungroups its hosts and keeps them`() = runDesktopShell { shell ->

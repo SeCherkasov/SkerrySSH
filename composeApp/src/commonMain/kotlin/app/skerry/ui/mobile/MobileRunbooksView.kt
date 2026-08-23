@@ -19,7 +19,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -78,6 +77,10 @@ import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.generated.resources.runbook_run_needs_save
 import androidx.compose.runtime.derivedStateOf
+import app.skerry.ui.design.FolderSections
+import app.skerry.ui.design.mobileFolderHeaderPadding
+import app.skerry.ui.runbook.RUNBOOK_FOLDER_SCOPE
+import app.skerry.ui.runbook.runbookFolders
 
 /**
  * Runbooks screen (More → Runbooks): the saved procedures plus an add FAB. Tapping a card opens the
@@ -136,8 +139,17 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    runbooks.forEach { entry ->
-                        key(entry.id) { RunbookCard(entry, mono) { editing = entry; adding = false } }
+                    // Same folders as the desktop list, under the same scope key; the fold is
+                    // this device's own view preference and does not travel with the vault.
+                    FolderSections(
+                        items = runbooks,
+                        scope = RUNBOOK_FOLDER_SCOPE,
+                        collapse = state,
+                        group = { it.runbook.group },
+                        itemKey = { it.id },
+                        headerPadding = mobileFolderHeaderPadding(),
+                    ) { entry ->
+                        RunbookCard(entry, mono) { editing = entry; adding = false }
                     }
                 }
             }
@@ -239,6 +251,9 @@ private fun MobileRunbookEditSheet(
     onDeleted: () -> Unit,
     onRun: () -> Unit,
 ) {
+    // Kept at the sheet level so the create overlay renders at the root rather than inside the
+    // form's scroll — the same reason the connection sheet holds its own.
+    var createGroupOpen by remember { mutableStateOf(false) }
     // Shared form state (desktop <-> mobile): same fields, same validation, same draft assembly.
     val form = remember(entry) { RunbookFormState.fromEntry(entry) }
     // Run starts the saved procedure while the fields above show a draft: edited here, the button
@@ -288,7 +303,15 @@ private fun MobileRunbookEditSheet(
             // taller than the sheet's ceiling, and a clipped Run button is a procedure the phone
             // cannot start at all. weight(fill = false) keeps a short form short.
             Column(modalBody()) {
-                RunbookEditorFields(form, mono, horizontalPadding = 18.dp)
+                RunbookEditorFields(form, mono, horizontalPadding = 18.dp) {
+                    val folders = remember(manager.runbooks) { runbookFolders(manager.runbooks) }
+                    MobileGroupSelectField(
+                        value = form.group,
+                        groups = folders,
+                        onChange = { form.group = it },
+                        onCreateGroup = { createGroupOpen = true },
+                    )
+                }
             }
             Column(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (entry != null) {
@@ -328,5 +351,12 @@ private fun MobileRunbookEditSheet(
                 Spacer(Modifier.height(4.dp))
             }
         }
+    }
+    // A sibling above the sheet, with its own full-screen scrim, so it rises above the keyboard.
+    if (createGroupOpen) {
+        MobileGroupCreateDialog(
+            onDismiss = { createGroupOpen = false },
+            onCreate = { name -> form.group = name.trim(); createGroupOpen = false },
+        )
     }
 }

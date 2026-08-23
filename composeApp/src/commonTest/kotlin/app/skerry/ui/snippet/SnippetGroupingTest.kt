@@ -12,7 +12,8 @@ class SnippetGroupingTest {
         tags: List<String> = emptyList(),
         command: String = "cmd",
         notes: String? = null,
-    ) = SnippetEntry(Snippet(id = label, label = label, command = command, tags = tags, notes = notes))
+        group: String? = null,
+    ) = SnippetEntry(Snippet(id = label, label = label, command = command, tags = tags, notes = notes, group = group))
 
     @Test
     fun groups_by_tag_in_alphabetical_order() {
@@ -92,6 +93,23 @@ class SnippetGroupingTest {
 
         assertEquals(listOf("Disk usage"), filterSnippets(all, activeChip = "disk", query = "disk").map { it.snippet.label })
         assertTrue(filterSnippets(all, activeChip = "disk", query = "iostat").isEmpty())
+    }
+
+    @Test
+    fun search_reaches_the_folder() {
+        // The folder is what the user filed it under; a search that ignores it makes the folder a
+        // thing you can only find by scrolling.
+        val all = listOf(entry("Rollout", group = "client-acme"), entry("Disk"))
+
+        assertEquals(listOf("Rollout"), filterSnippets(all, query = "acme").map { it.snippet.label })
+        assertEquals(listOf("Rollout"), filterSnippets(all, query = "CLIENT").map { it.snippet.label })
+    }
+
+    @Test
+    fun the_editor_is_offered_the_folders_the_library_already_uses() {
+        val all = listOf(entry("A", group = "staging"), entry("B"), entry("C", group = "Prod"), entry("D", group = "staging"))
+
+        assertEquals(listOf("Prod", "staging"), snippetFolders(all))
     }
 
     @Test

@@ -56,6 +56,20 @@ class SnippetManagerTest {
     }
 
     @Test
+    fun `save normalizes the folder and drops a blank one`() {
+        val store = FakeSnippetStore()
+        val manager = managerWith(store)
+
+        val filed = manager.save(SnippetDraft(label = "Disk", command = "df -h", group = "  client-acme  "))
+        assertEquals("client-acme", manager.find(filed)?.snippet?.group)
+        assertEquals("client-acme", store.all().single().group)
+
+        // "No group" is the absence of a value, so the Ungrouped bucket has one thing to test for.
+        val unfiled = manager.save(SnippetDraft(label = "Ports", command = "ss -tulpn", group = "   "))
+        assertNull(manager.find(unfiled)?.snippet?.group)
+    }
+
+    @Test
     fun `save with existing id updates in place`() {
         val manager = managerWith()
         val id = manager.save(draft(label = "old"))

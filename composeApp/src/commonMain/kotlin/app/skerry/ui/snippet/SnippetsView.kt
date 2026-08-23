@@ -28,6 +28,8 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.EmptyState
+import app.skerry.ui.design.FolderCollapse
+import app.skerry.ui.design.FolderSections
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.GhostButton
@@ -75,7 +77,7 @@ fun SnippetsView(state: DesktopDesignState) {
         }
         return
     }
-    LiveSnippetsView(manager, state.snippetLibrary, mono)
+    LiveSnippetsView(manager, state.snippetLibrary, state, mono)
 }
 
 /** What the panel is showing: the selected snippet's run card, a new snippet's form, or an edit form. */
@@ -92,7 +94,12 @@ private sealed interface PanelMode {
 }
 
 @Composable
-private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibraryState, mono: FontFamily) {
+private fun LiveSnippetsView(
+    manager: SnippetManager,
+    library: SnippetLibraryState,
+    collapse: FolderCollapse,
+    mono: FontFamily,
+) {
     var selectedId by remember { mutableStateOf<String?>(null) }
     var mode by remember { mutableStateOf<PanelMode>(PanelMode.Run) }
     var helpOpen by remember { mutableStateOf(false) }
@@ -132,13 +139,20 @@ private fun LiveSnippetsView(manager: SnippetManager, library: SnippetLibrarySta
                     SnippetsEmptyList(libraryEmpty = all.isEmpty(), onInstallStarterPack = { manager.installStarterPack() })
                 } else {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        visible.forEach { entry ->
-                            key(entry.id) {
-                                // Keyed by id so selecting a row doesn't recreate every row's lambda.
-                                val onClick = remember(entry.id) { { selectedId = entry.id; mode = PanelMode.Run } }
-                                SnippetListRow(entry = entry, selected = entry.id == selected?.id, onClick = onClick)
-                                HLine()
-                            }
+                        // Folders section the library; with nothing filed it stays the flat list it
+                        // was. The chip row and the search narrow first — a folder header counts
+                        // what the filter left in it, not what the library holds.
+                        FolderSections(
+                            items = visible,
+                            scope = SNIPPET_FOLDER_SCOPE,
+                            collapse = collapse,
+                            group = { it.snippet.group },
+                            itemKey = { it.id },
+                        ) { entry ->
+                            // Keyed by id so selecting a row doesn't recreate every row's lambda.
+                            val onClick = remember(entry.id) { { selectedId = entry.id; mode = PanelMode.Run } }
+                            SnippetListRow(entry = entry, selected = entry.id == selected?.id, onClick = onClick)
+                            HLine()
                         }
                     }
                 }

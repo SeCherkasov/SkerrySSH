@@ -29,6 +29,10 @@ import app.skerry.ui.generated.resources.runbook_run
 import app.skerry.ui.generated.resources.runbook_none_runnable
 import app.skerry.ui.generated.resources.runbook_run_no_steps
 import app.skerry.ui.generated.resources.runbook_toolbar_tip
+import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_none
+import app.skerry.ui.generated.resources.shell_group_name_placeholder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -118,6 +122,29 @@ class RunbookEditorFormTest {
         assertEquals(COMMAND, step.command)
     }
 
+    /**
+     * The same select as the snippet editor, wired by a line of this editor's own. The picker is
+     * proved in `GroupSelectFormTest`; what a copy of a one-line closure needs is proof that this
+     * copy is the one that runs.
+     */
+    @Test
+    fun `a folder created in the editor lands on the runbook`() = runDesktopShell { shell ->
+        openEditor()
+        onField(Res.string.runbook_field_name).performTextInput(NAME)
+        firstStepCommand().performTextInput(COMMAND)
+        onNodeWithText(string(Res.string.conn_group_none)).performScrollTo().performClick()
+        onNodeWithText(string(Res.string.conn_group_new)).performClick()
+        waitForIdle()
+        onNodeWithContentDescription(string(Res.string.shell_group_name_placeholder)).performTextInput(FOLDER)
+        onNodeWithText(string(Res.string.conn_create)).performClick()
+        waitForIdle()
+        onNodeWithTag(UiTags.FORM_SAVE).performScrollTo().performClick()
+        waitForIdle()
+
+        val saved = shell.runbooks.runbooks.map { it.runbook }.singleOrNull { it.label == NAME }
+        assertEquals(FOLDER, saved?.group, "the folder picked in the editor never reached the record")
+    }
+
     @Test
     fun `cancelling the editor writes nothing`() = runDesktopShell { shell ->
         openEditor()
@@ -146,3 +173,4 @@ class RunbookEditorFormTest {
 private const val NAME = "restart nginx"
 private const val DESCRIPTION = "reload the unit and check it came back"
 private const val COMMAND = "systemctl restart nginx"
+private const val FOLDER = "Production"

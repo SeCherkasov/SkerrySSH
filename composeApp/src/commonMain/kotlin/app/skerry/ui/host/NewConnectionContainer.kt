@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.ui.design.ModalTextField
 import app.skerry.shared.container.ContainerEntry
 import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.ssh.SshAuth

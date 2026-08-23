@@ -1,5 +1,6 @@
 package app.skerry.ui.app
 
+import app.skerry.ui.design.FolderCollapse
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -180,7 +181,7 @@ class DesktopDesignState(
     // they're kept by name here and persisted. Defaults (empty, no-op) are for mock/preview/tests.
     initialCustomGroups: List<CustomGroup> = emptyList(),
     private val onCustomGroupsChange: (List<CustomGroup>) -> Unit = {},
-) {
+) : FolderCollapse {
     // Session-level view (Terminal/SFTP/Ports): mock/preview fallback when there are no live
     // sessions; in live mode each tab holds its own sub-view ([app.skerry.ui.session.Session.view]).
     var view: DesktopView by mutableStateOf(DesktopView.Terminal); private set
@@ -508,10 +509,10 @@ class DesktopDesignState(
     fun requestCastOpen() { _castOpenRequests.tryEmit(Unit) }
 
     /** Whether folder [name] is collapsed (its host list hidden). */
-    fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
+    override fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
 
     /** Toggle folder [name] collapsed/expanded and report the new set outward (for persistence). */
-    fun toggleGroupCollapsed(name: String) {
+    override fun toggleGroupCollapsed(name: String) {
         collapsedGroups = if (name in collapsedGroups) collapsedGroups - name else collapsedGroups + name
         onCollapsedGroupsChange(collapsedGroups)
     }

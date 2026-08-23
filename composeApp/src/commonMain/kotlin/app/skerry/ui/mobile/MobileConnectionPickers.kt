@@ -372,78 +372,20 @@ internal fun MobileKeepAlivePicker(form: NewConnectionFormState) {
 }
 
 /**
- * The sheet's "Group" field: a dropdown select — "No group", the catalog's already-created groups
- * ([groupSuggestions]), and "New group…" which opens the creation dialog. The selected group is
- * stored in [NewConnectionFormState.group]; creating a new one just sets its name (the profile
- * creates the folder on save). No free-form entry in the field itself — only the list + explicit
- * creation, to avoid typo-duplicate groups on the phone.
+ * The sheet's "Group" field over the shared control ([MobileGroupSelectField]): the catalog's
+ * already-created groups ([groupSuggestions]) plus "No group" and "New group…". The selected name is
+ * stored in [NewConnectionFormState.group]; creating a new one only sets the name (the profile
+ * creates the folder on save).
  */
 @Composable
 internal fun MobileGroupPicker(form: NewConnectionFormState, allHosts: List<Host>, onCreateGroup: () -> Unit) {
-    var menuOpen by remember { mutableStateOf(false) }
     val groups = remember(allHosts) { groupSuggestions(allHosts) }
-    val hasGroup = form.group.isNotBlank()
-    Column {
-        AnchoredDropdown(
-            expanded = menuOpen,
-            onDismiss = { menuOpen = false },
-            trigger = {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(Skerry.colors.bg)
-                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
-                        .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { menuOpen = !menuOpen }
-                        .padding(horizontal = 14.dp, vertical = 13.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Txt(if (hasGroup) form.group else stringResource(Res.string.conn_group_none), color = if (hasGroup) Skerry.colors.text else Skerry.colors.faint, size = 15.sp)
-                    Sym(if (menuOpen) "expand_less" else "expand_more", size = 20.sp, color = Skerry.colors.faint)
-                }
-            },
-            menu = { width ->
-                Column(
-                    Modifier
-                        .width(width)
-                        .clip(RoundedCornerShape(11.dp))
-                        .background(Skerry.colors.surface2)
-                        .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(11.dp))
-                        .heightIn(max = 320.dp)
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = 4.dp),
-                ) {
-                    MobileGroupOption(stringResource(Res.string.conn_group_none), selected = !hasGroup) { form.group = ""; menuOpen = false }
-                    groups.forEach { group ->
-                        key(group) {
-                            MobileGroupOption(group, selected = form.group == group) { form.group = group; menuOpen = false }
-                        }
-                    }
-                    HLine(modifier = Modifier.padding(vertical = 4.dp))
-                    MobileGroupOption(stringResource(Res.string.conn_group_new), selected = false, icon = "add") { menuOpen = false; onCreateGroup() }
-                }
-            },
-        )
-    }
-}
-
-/** Group select option row: optional icon + name + checkmark when selected. */
-@Composable
-private fun MobileGroupOption(title: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 13.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(11.dp),
-    ) {
-        if (icon != null) Sym(icon, size = 18.sp, color = Skerry.colors.cyanBright)
-        Txt(title, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 14.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
-        if (selected) Sym("check", size = 17.sp, color = Skerry.colors.cyanBright)
-    }
+    MobileGroupSelectField(
+        value = form.group,
+        groups = groups,
+        onChange = { form.group = it },
+        onCreateGroup = onCreateGroup,
+    )
 }
 
 /** Authentication dropdown option row: icon + name + subtitle + checkmark when selected. */

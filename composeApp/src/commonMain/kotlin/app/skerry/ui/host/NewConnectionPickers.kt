@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -29,8 +28,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import app.skerry.shared.host.Host
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.vault.CredentialSecret
@@ -53,11 +50,6 @@ import app.skerry.ui.generated.resources.conn_auth_password_option
 import app.skerry.ui.generated.resources.conn_auth_password_placeholder
 import app.skerry.ui.generated.resources.conn_auth_private_key
 import app.skerry.ui.generated.resources.conn_auth_select_credential
-import app.skerry.ui.generated.resources.conn_cancel
-import app.skerry.ui.generated.resources.conn_create
-import app.skerry.ui.generated.resources.conn_group_new
-import app.skerry.ui.generated.resources.conn_group_new_title
-import app.skerry.ui.generated.resources.conn_group_none
 import app.skerry.ui.generated.resources.conn_jump_none
 import app.skerry.ui.generated.resources.conn_protocol_container
 import app.skerry.ui.generated.resources.conn_protocol_local
@@ -71,17 +63,15 @@ import app.skerry.ui.host.rowLabel
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.AnchoredDropdown
-import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.HLine
 import app.skerry.ui.app.LocalCredentials
-import app.skerry.ui.design.ModalScrim
-import app.skerry.ui.design.consumeClicks
-import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.i18n.label
 import app.skerry.ui.vault.title
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.design.ModalTextField
+import app.skerry.ui.design.GroupSelectField
 
 @Composable
 internal fun ProtocolPicker(form: NewConnectionFormState, protocols: List<ConnectionType>) {
@@ -258,92 +248,12 @@ internal fun KeepAlivePicker(form: NewConnectionFormState) {
 }
 
 /**
- * "Group" field: a dropdown select (like [AuthPicker]) - "No group", already-created catalog groups
- * ([groupSuggestions]), and "New group..." opening the create dialog. The selected group is stored in
- * [NewConnectionFormState.group]; creating a new one just sets its name (the profile creates the folder
- * on save). No free-text input in the field itself, only the list plus explicit creation, to avoid
- * typo-duplicate groups.
+ * "Group" field of the connection form: the shared folder select ([GroupSelectField]) over the
+ * groups the catalog already has ([groupSuggestions]), writing the chosen name into
+ * [NewConnectionFormState.group]. The profile creates the folder when it is saved.
  */
 @Composable
 internal fun GroupPicker(form: NewConnectionFormState, allHosts: List<Host>) {
-    var menuOpen by remember { mutableStateOf(false) }
-    var createOpen by remember { mutableStateOf(false) }
     val groups = remember(allHosts) { groupSuggestions(allHosts) }
-    val hasGroup = form.group.isNotBlank()
-    AnchoredDropdown(
-        expanded = menuOpen,
-        onDismiss = { menuOpen = false },
-        trigger = {
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).clickable { menuOpen = !menuOpen }.padding(horizontal = 11.dp, vertical = 9.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Txt(if (hasGroup) form.group else stringResource(Res.string.conn_group_none), color = if (hasGroup) Skerry.colors.text else Skerry.colors.faint, size = 13.sp)
-                Sym(if (menuOpen) "expand_less" else "expand_more", size = 16.sp, color = Skerry.colors.faint)
-            }
-        },
-        menu = { width ->
-            SuggestionMenu(width) {
-                GroupOption(stringResource(Res.string.conn_group_none), selected = !hasGroup) { form.group = ""; menuOpen = false }
-                groups.forEach { group ->
-                    key(group) { GroupOption(group, selected = form.group == group) { form.group = group; menuOpen = false } }
-                }
-                HLine(modifier = Modifier.padding(vertical = 4.dp))
-                GroupOption(stringResource(Res.string.conn_group_new), selected = false, icon = "add") { menuOpen = false; createOpen = true }
-            }
-        },
-    )
-    if (createOpen) {
-        GroupCreateDialog(onDismiss = { createOpen = false }, onCreate = { name -> form.group = name.trim(); createOpen = false })
-    }
-}
-
-/** One option row of the group select: optional icon plus title plus a checkmark when selected. */
-@Composable
-private fun GroupOption(title: String, selected: Boolean, icon: String? = null, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(if (selected) Skerry.colors.cyan10 else Color.Transparent).clickable(onClick = onClick).padding(horizontal = 11.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        if (icon != null) Sym(icon, size = 15.sp, color = Skerry.colors.cyanBright)
-        Txt(title, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.text, size = 12.5.sp, weight = if (selected) FontWeight.Medium else FontWeight.Normal, modifier = Modifier.weight(1f))
-        if (selected) Sym("check", size = 15.sp, color = Skerry.colors.cyanBright)
-    }
-}
-
-/**
- * Modal dialog for creating a new group (Popup over the connection modal): name field plus Cancel/Create.
- * A blank name doesn't create anything (button disabled). The name is only set on the form, the folder
- * appears in the catalog when the host is saved.
- */
-@Composable
-private fun GroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    val canCreate = name.isNotBlank()
-    Popup(alignment = Alignment.Center, onDismissRequest = onDismiss, properties = PopupProperties(focusable = true)) {
-        ModalScrim(onDismiss = onDismiss) {
-            Column(
-                Modifier
-                    .widthIn(max = 360.dp)
-                    .fillMaxWidth()
-                    .padding(20.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Skerry.colors.surfaceDeep)
-                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(12.dp))
-                    .consumeClicks()
-                    .padding(22.dp),
-            ) {
-                Txt(stringResource(Res.string.conn_group_new_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold)
-                Spacer14()
-                ModalTextField(name, { name = it }, "Production")
-                Spacer14()
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
-                    CancelButton(stringResource(Res.string.conn_cancel), onClick = onDismiss)
-                    PrimaryButton(stringResource(Res.string.conn_create), onClick = { onCreate(name) }, enabled = canCreate)
-                }
-            }
-        }
-    }
+    GroupSelectField(value = form.group, groups = groups, onChange = { form.group = it })
 }

@@ -14,6 +14,12 @@ import kotlinx.serialization.Serializable
  * ([app.skerry.shared.text.normalizeNotes]): trimmed, capped, blank collapsed to `null`. It is
  * never sent to the shell — only the [command] is.
  *
+ * [group] is the optional folder the library files it under — the counterpart of
+ * [app.skerry.shared.host.Host.group], normalized the same way for every record that has one
+ * ([app.skerry.shared.text.normalizeGroup]). One folder per snippet, unlike [tags], which are
+ * many-to-many and stay what the filter chips narrow by: a folder says where the snippet *lives*, a
+ * tag what it is about.
+ *
  * [shortcut] is the global launch hotkey in canonical form (`Ctrl+Shift+D`), `null` for none.
  * Defaulted fields, [notes] included; older `snippets.json` without them reads as-is
  * (backward-compat). The launch target (active terminal or a specific host) isn't stored on the
@@ -28,4 +34,5 @@ data class Snippet(
     val tags: List<String> = emptyList(),
     val shortcut: String? = null,
     val notes: String? = null,
+    val group: String? = null,
 )

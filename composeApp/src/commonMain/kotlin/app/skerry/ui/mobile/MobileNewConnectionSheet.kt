@@ -50,7 +50,6 @@ import app.skerry.ui.generated.resources.conn_field_audio
 import app.skerry.ui.generated.resources.conn_field_authentication
 import app.skerry.ui.generated.resources.conn_field_baud
 import app.skerry.ui.generated.resources.conn_field_device
-import app.skerry.ui.generated.resources.conn_field_group
 import app.skerry.ui.generated.resources.conn_field_jump_host
 import app.skerry.ui.generated.resources.conn_field_keep_alive
 import app.skerry.ui.generated.resources.conn_field_host_address
@@ -92,6 +91,7 @@ import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.generated.resources.shell_tip_close
+import app.skerry.ui.generated.resources.shtail_group_label
 
 /**
  * "New connection" bottom sheet: scrim + panel with the host profile form. With a live
@@ -339,7 +339,7 @@ fun MobileNewConnectionSheet(state: MobileDesignState) {
                 Spacer(Modifier.height(14.dp))
             }
             // Group suggestions come from already-created hosts (parity with desktop GroupPicker); empty in preview.
-            MobileFormField(stringResource(Res.string.conn_field_group)) { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
+            MobileFormField(stringResource(Res.string.shtail_group_label)) { MobileGroupPicker(form, hosts?.hosts ?: emptyList(), onCreateGroup = { createGroupOpen = true }) }
             Spacer(Modifier.height(14.dp))
             MobileFormField(stringResource(Res.string.conn_field_tags)) {
                 // Suggestions are tags from other hosts not yet added here (parity with desktop Tags); empty in preview.

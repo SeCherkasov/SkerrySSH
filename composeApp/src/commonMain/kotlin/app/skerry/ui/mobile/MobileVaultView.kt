@@ -21,8 +21,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,7 +43,6 @@ import app.skerry.shared.vault.CredentialUsage
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.vault_add_password
-import app.skerry.ui.generated.resources.vault_any_principal
 import app.skerry.ui.generated.resources.vault_badge_expired
 import app.skerry.ui.generated.resources.vault_copy_certificate
 import app.skerry.ui.generated.resources.vault_copy_password
@@ -150,6 +149,10 @@ import app.skerry.ui.vault.rememberCertInfo
 import app.skerry.ui.vault.rememberKeyInfo
 import app.skerry.ui.vault.secretMetaLine
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.design.FolderSections
+import app.skerry.ui.design.mobileFolderHeaderPadding
+import app.skerry.ui.vault.credentialFolders
+import app.skerry.ui.vault.vaultFolderScope
 
 /**
  * Vault push screen (More → Vault): three keychain categories (SSH keys/Passwords/Certificates) switched by pills, plus
@@ -242,7 +245,16 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
                 if (credItems.isEmpty()) {
                     MobileVaultEmpty(category)
                 } else {
-                    credItems.forEach { credential ->
+                    // Folders inside the kind, under the same scope key the desktop keychain
+                    // uses; the fold is per device.
+                    FolderSections(
+                        items = credItems,
+                        scope = vaultFolderScope(category),
+                        collapse = state,
+                        group = { it.group },
+                        itemKey = { it.id },
+                        headerPadding = mobileFolderHeaderPadding(horizontal = 6.dp),
+                    ) { credential ->
                         MobileSecretRow(
                             credential = credential,
                             usage = credentials.usageOf(credential.id),
@@ -324,19 +336,41 @@ private fun MobileVaultLive(state: MobileDesignState, credentials: CredentialMan
             )
         }
         pendingEdit?.let { target ->
-            // Editing touches only the name and the note; the id (hosts reference it) and the secret stay
-            // put, and the change propagates to sync on its own (see CredentialManagerController.edit).
+            // Editing touches the name, the folder and the note; the id (hosts reference it) and the
+            // secret stay put, and the change propagates to sync on its own (see
+            // CredentialManagerController.edit). The folder is state out here rather than inside the
+            // dialog: the "New group" overlay stands above the dialog and writes into it.
+            var editGroup by remember(target.id) { mutableStateOf(target.group.orEmpty()) }
+            var createGroupOpen by remember(target.id) { mutableStateOf(false) }
             EditSecretDialog(
                 currentLabel = target.label,
                 currentNote = target.note,
+                currentGroup = target.group,
+                group = editGroup,
                 onDismiss = { pendingEdit = null },
-                onConfirm = { newLabel, newNote ->
+                onConfirm = { newLabel, newNote, newGroup ->
                     // Abort on a lock race: idle auto-lock can fire while the dialog is open, and vault
                     // CRUD throws once locked. Mirrors the delete guard.
-                    if (vault?.isUnlocked == true) credentials.edit(target.id, newLabel, newNote)
+                    if (vault?.isUnlocked == true) credentials.edit(target.id, label = newLabel, note = newNote, group = newGroup)
                     pendingEdit = null
                 },
+                groupField = {
+                    val folders = remember(allCreds) { credentialFolders(allCreds) }
+                    MobileGroupSelectField(
+                        value = editGroup,
+                        groups = folders,
+                        onChange = { editGroup = it },
+                        onCreateGroup = { createGroupOpen = true },
+                    )
+                },
             )
+            // Above the edit dialog, with its own scrim, so it is not trapped inside it.
+            if (createGroupOpen) {
+                MobileGroupCreateDialog(
+                    onDismiss = { createGroupOpen = false },
+                    onCreate = { name -> editGroup = name.trim(); createGroupOpen = false },
+                )
+            }
         }
         pendingDelete?.let { victim ->
             val bound = VaultPresentation.hostsUsing(victim.id, hosts)

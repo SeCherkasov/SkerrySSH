@@ -15,6 +15,13 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_field_command
 import app.skerry.ui.generated.resources.lib_snippets_field_name
 import app.skerry.ui.generated.resources.lib_snippets_field_notes
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import app.skerry.ui.desktop.string
+import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_none
+import app.skerry.ui.generated.resources.shell_group_name_placeholder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -83,6 +90,30 @@ class SnippetEditorFormTest {
         assertEquals("Sorts partitions by space used", saved.snippet.notes)
     }
 
+    /**
+     * The picker itself is proved in `GroupSelectFormTest`; what this pins is the line that wires it
+     * into the editor. Dropping it leaves a select that opens, offers folders and changes nothing —
+     * a fault no test that stubs the field can see.
+     */
+    @Test
+    fun `a folder created in the editor lands on the snippet`() = runDesktopShell { shell ->
+        openEditor()
+        onField(Res.string.lib_snippets_field_name).performTextInput(NAME)
+        onField(Res.string.lib_snippets_field_command).performTextInput(COMMAND)
+        onNodeWithText(string(Res.string.conn_group_none)).performClick()
+        onNodeWithText(string(Res.string.conn_group_new)).performClick()
+        waitForIdle()
+        onNodeWithContentDescription(string(Res.string.shell_group_name_placeholder)).performTextInput(FOLDER)
+        onNodeWithText(string(Res.string.conn_create)).performClick()
+        waitForIdle()
+        onNodeWithTag(UiTags.FORM_SAVE).performClick()
+        waitForIdle()
+
+        val saved = shell.snippets.snippets.singleOrNull { it.snippet.label == NAME }
+        assertNotNull(saved, "the editor saved nothing")
+        assertEquals(FOLDER, saved.snippet.group, "the folder picked in the editor never reached the record")
+    }
+
     private fun ComposeUiTest.openEditor() {
         onNodeWithTag(UiTags.railView(DesktopView.Snippets)).performClick()
         waitForIdle()
@@ -93,3 +124,4 @@ class SnippetEditorFormTest {
 
 private const val NAME = "disk usage"
 private const val COMMAND = "df -h | sort -k5 -r"
+private const val FOLDER = "Production"

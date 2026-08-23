@@ -35,6 +35,7 @@ import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.ConfirmActionDialog
 import app.skerry.ui.design.EmptyState
+import app.skerry.ui.design.FolderSections
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.GhostButton
@@ -146,15 +147,21 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
                     )
                 } else {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        visible.forEach { entry ->
-                            key(entry.id) {
-                                // Keyed by id so selecting a row doesn't recreate every row's lambda.
-                                val onClick = remember(entry.id) {
-                                    { selectedId = entry.id; mode = RunbookPanelMode.Run }
-                                }
-                                RunbookListRow(entry, entry.id == selected?.id, mono, onClick)
-                                HLine()
+                        // Folders section the library; with nothing filed it stays the flat list it
+                        // was. A header counts what the search left in its folder, not the library.
+                        FolderSections(
+                            items = visible,
+                            scope = RUNBOOK_FOLDER_SCOPE,
+                            collapse = state,
+                            group = { it.runbook.group },
+                            itemKey = { it.id },
+                        ) { entry ->
+                            // Keyed by id so selecting a row doesn't recreate every row's lambda.
+                            val onClick = remember(entry.id) {
+                                { selectedId = entry.id; mode = RunbookPanelMode.Run }
                             }
+                            RunbookListRow(entry, entry.id == selected?.id, mono, onClick)
+                            HLine()
                         }
                     }
                 }
@@ -302,5 +309,6 @@ internal fun RunbookEntry.matches(query: String): Boolean {
     return runbook.label.lowercase().contains(q) ||
         runbook.description.lowercase().contains(q) ||
         runbook.tags.any { it.lowercase().contains(q) } ||
+        runbook.group?.lowercase()?.contains(q) == true ||
         runbook.steps.any { it.title.lowercase().contains(q) || it.summaryLine().lowercase().contains(q) }
 }

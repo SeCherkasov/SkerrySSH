@@ -99,6 +99,9 @@ import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.SidebarSectionTitle
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.FolderCollapse
+import app.skerry.ui.design.FolderSections
+import app.skerry.ui.design.GroupSelectField
 import app.skerry.ui.design.VLine
 import app.skerry.ui.theme.Skerry
 
@@ -117,17 +120,17 @@ internal val DETAIL_PANEL_WIDTH = 400.dp
  * Without a keychain controller (offscreen render/preview) renders the static [MockVaultView] mock.
  */
 @Composable
-fun VaultView() {
+fun VaultView(collapse: FolderCollapse) {
     when (val credentials = LocalCredentials.current) {
         null -> MockVaultView()
-        else -> LiveVaultView(credentials)
+        else -> LiveVaultView(credentials, collapse)
     }
 }
 
 // Live path: vault keychain secrets + accounts + generate/add/import/delete.
 
 @Composable
-private fun LiveVaultView(credentials: CredentialManagerController) {
+private fun LiveVaultView(credentials: CredentialManagerController, collapse: FolderCollapse) {
     val mono = LocalFonts.current.mono
     val hostsController = LocalHosts.current
     val hosts = hostsController?.hosts ?: emptyList()
@@ -185,7 +188,15 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
                         VaultEmptyCategory(category, Modifier.weight(1f).fillMaxHeight())
                     } else {
                         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
-                            credItems.forEach { credential ->
+                            // Folders inside the kind, which is the outer level here: the sidebar
+                            // already navigates by kind, so a folder sections what one kind holds.
+                            FolderSections(
+                                items = credItems,
+                                scope = vaultFolderScope(category),
+                                collapse = collapse,
+                                group = { it.group },
+                                itemKey = { it.id },
+                            ) { credential ->
                                 LiveSecretRow(
                                     credential = credential,
                                     selected = credential.id == selectedCred?.id,
@@ -306,18 +317,28 @@ private fun LiveVaultView(credentials: CredentialManagerController) {
             )
         }
         pendingEditCred?.let { target ->
-            // Editing touches only the name and the note; the id (which hosts reference) and the secret
-            // stay put, and the change propagates to sync on its own (see CredentialManagerController.edit)
-            // — except for a file-backed secret, whose whole record stays on this device (issue #174).
+            // Editing touches the name, the folder and the note; the id (which hosts reference) and
+            // the secret stay put, and the change propagates to sync on its own (see
+            // CredentialManagerController.edit) — except for a file-backed secret, whose whole record
+            // stays on this device (issue #174).
+            // The folder is edited outside the dialog (see [EditSecretDialog]); keyed on the secret
+            // so opening the next one starts from that secret's folder, not the previous one's.
+            var editGroup by remember(target.id) { mutableStateOf(target.group.orEmpty()) }
             EditSecretDialog(
                 currentLabel = target.label,
                 currentNote = target.note,
+                currentGroup = target.group,
+                group = editGroup,
                 onDismiss = { pendingEditCred = null },
-                onConfirm = { newLabel, newNote ->
+                onConfirm = { newLabel, newNote, newGroup ->
                     // Abort on a lock race: idle auto-lock can fire while the dialog is open, and vault
                     // CRUD throws once locked.
-                    if (vault?.isUnlocked == true) credentials.edit(target.id, newLabel, newNote)
+                    if (vault?.isUnlocked == true) credentials.edit(target.id, label = newLabel, note = newNote, group = newGroup)
                     pendingEditCred = null
+                },
+                groupField = {
+                    val folders = remember(allCreds) { credentialFolders(allCreds) }
+                    GroupSelectField(editGroup, folders) { editGroup = it }
                 },
             )
         }

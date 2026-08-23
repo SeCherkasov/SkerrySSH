@@ -41,6 +41,7 @@ import app.skerry.ui.snippet.SnippetFormState
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.installStarterPack
 import app.skerry.ui.snippet.matches
+import app.skerry.ui.snippet.snippetFolders
 import app.skerry.ui.snippet.snippetTagSuggestions
 import app.skerry.ui.design.tagChipLabel
 import app.skerry.ui.generated.resources.Res
@@ -69,6 +70,7 @@ import app.skerry.ui.generated.resources.lib_snippets_run_title
 import app.skerry.ui.generated.resources.lib_snippets_save_snippet
 import app.skerry.ui.generated.resources.lib_snippets_screen_title
 import app.skerry.ui.generated.resources.shell_save
+import app.skerry.ui.generated.resources.shtail_group_label
 import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
@@ -163,6 +165,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                 MobileSnippetLibrary(
                     all = snippets,
                     library = state.snippetLibrary,
+                    collapse = state,
                     onEdit = { entry -> editing = entry; adding = false },
                     onRenameCategory = { tag -> renamingTag = tag },
                 )
@@ -196,6 +199,7 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
             MobileSnippetEditSheet(
                 entry = target,
                 allSnippets = snippets.map { it.snippet },
+                folders = remember(snippets) { snippetFolders(snippets) },
                 canRun = target != null && activeTerminal != null,
                 onDismiss = { adding = false; editing = null },
                 onSave = { draft ->
@@ -309,6 +313,7 @@ internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry
 private fun MobileSnippetEditSheet(
     entry: SnippetEntry?,
     allSnippets: List<Snippet>,
+    folders: List<String>,
     canRun: Boolean,
     onDismiss: () -> Unit,
     onSave: (SnippetDraft) -> Unit,
@@ -318,6 +323,9 @@ private fun MobileSnippetEditSheet(
     // Shared form state (desktop <-> mobile): seeds from entry (including shortcut, so Save
     // doesn't drop a hotkey assigned on desktop), canSave, tags, draft assembly.
     val form = remember { SnippetFormState.fromEntry(entry) }
+    // Kept at the sheet level so the create overlay renders at the root rather than inside the
+    // form's scroll — the same reason the connection sheet holds its own.
+    var createGroupOpen by remember { mutableStateOf(false) }
 
     MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.9f) {
         Txt(
@@ -336,6 +344,14 @@ private fun MobileSnippetEditSheet(
             }
             MobileFormField(stringResource(Res.string.lib_snippets_field_notes)) {
                 MobileFormInput(form.notes, { form.notes = capNotes(it) }, stringResource(Res.string.lib_snippets_ph_notes), singleLine = false, minHeightDp = 64)
+            }
+            MobileFormField(stringResource(Res.string.shtail_group_label)) {
+                MobileGroupSelectField(
+                    value = form.group,
+                    groups = folders,
+                    onChange = { form.group = it },
+                    onCreateGroup = { createGroupOpen = true },
+                )
             }
             MobileFormField(stringResource(Res.string.lib_snippets_field_tags)) {
                 // Own tags are excluded via selected; suggestions come from all snippets (including the
@@ -389,6 +405,13 @@ private fun MobileSnippetEditSheet(
             }
             Spacer(Modifier.height(4.dp))
         }
+    }
+    // A sibling above the sheet, with its own full-screen scrim, so it rises above the keyboard.
+    if (createGroupOpen) {
+        MobileGroupCreateDialog(
+            onDismiss = { createGroupOpen = false },
+            onCreate = { name -> form.group = name.trim(); createGroupOpen = false },
+        )
     }
 }
 

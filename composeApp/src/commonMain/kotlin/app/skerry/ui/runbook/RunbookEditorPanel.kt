@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import app.skerry.ui.design.GroupSelectField
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -52,7 +53,12 @@ internal fun RunbookEditorPanel(
                 color = Skerry.colors.text, size = 17.sp, weight = FontWeight.SemiBold,
             )
         }
-        RunbookEditorFields(form, mono, horizontalPadding = 0.dp)
+        RunbookEditorFields(form, mono, horizontalPadding = 0.dp) {
+            // Folders of the whole library, this runbook's own included: it is already filed there,
+            // and the select has to be able to show what it is showing.
+            val folders = remember(manager.runbooks) { runbookFolders(manager.runbooks) }
+            GroupSelectField(form.group, folders) { form.group = it }
+        }
         Row(Modifier.padding(top = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PrimaryButton(
                 stringResource(Res.string.runbook_save),

@@ -24,8 +24,14 @@ fun normalizeNotes(raw: String): String? = capNotes(raw.trim()).ifBlank { null }
  * silent corruption rather than an honest truncation. The dangling half is dropped instead.
  * Used by the input fields (per keystroke) and by [normalizeNotes] (on the way to the store).
  */
-fun capNotes(raw: String): String {
-    if (raw.length <= MAX_NOTES_LENGTH) return raw
-    val cut = if (raw[MAX_NOTES_LENGTH - 1].isHighSurrogate()) MAX_NOTES_LENGTH - 1 else MAX_NOTES_LENGTH
+fun capNotes(raw: String): String = capText(raw, MAX_NOTES_LENGTH)
+
+/**
+ * [capNotes] over any limit — the folder name ([normalizeGroup]) is cut by the same rule, and the
+ * surrogate arithmetic is the part that must not be written twice.
+ */
+fun capText(raw: String, max: Int): String {
+    if (raw.length <= max) return raw
+    val cut = if (raw[max - 1].isHighSurrogate()) max - 1 else max
     return raw.substring(0, cut)
 }

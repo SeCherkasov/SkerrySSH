@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import app.skerry.shared.runbook.RunbookPolicy
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.shared.runbook.RunbookTransferDirection
+import app.skerry.shared.text.normalizeGroup
 import app.skerry.ui.snippet.parseSnippetTags
 
 /** What a step row is being edited as; the saved shape follows from it ([RunbookStepDraft.toStep]). */
@@ -85,6 +86,9 @@ class RunbookFormState private constructor(private val editingId: String?) {
     var label: String by mutableStateOf("")
     var description: String by mutableStateOf("")
 
+    /** Folder the runbook is filed under, empty for none — the value the "Group" select edits. */
+    var group: String by mutableStateOf("")
+
     /** Committed tags (pills); edited via [addTags]/[removeTag]. */
     var tags: List<String> by mutableStateOf(emptyList())
         private set
@@ -148,6 +152,7 @@ class RunbookFormState private constructor(private val editingId: String?) {
         steps = steps.map { it.toStep() },
         tags = (tags + parseSnippetTags(tagDraft)).distinct(),
         policy = policy(),
+        group = normalizeGroup(group),
     )
 
     companion object {
@@ -158,6 +163,7 @@ class RunbookFormState private constructor(private val editingId: String?) {
                 label = runbook.label
                 description = runbook.description
                 tags = runbook.tags
+                group = runbook.group.orEmpty()
                 stopOnFirstFailure = runbook.policy.stopOnFirstFailure
                 watchdogMinutes = runbook.policy.watchdogMinutes
                 if (runbook.steps.isNotEmpty()) steps = runbook.steps.map { it.toDraft() }

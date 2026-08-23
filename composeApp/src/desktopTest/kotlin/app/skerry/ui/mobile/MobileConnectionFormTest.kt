@@ -14,6 +14,13 @@ import app.skerry.ui.generated.resources.conn_field_host_address
 import app.skerry.ui.generated.resources.conn_field_name
 import app.skerry.ui.generated.resources.conn_field_tags
 import app.skerry.ui.generated.resources.conn_field_username
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
+import app.skerry.ui.desktop.string
+import app.skerry.ui.generated.resources.conn_create
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_none
+import app.skerry.ui.generated.resources.shell_group_name_placeholder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -58,6 +65,45 @@ class MobileConnectionFormTest {
         onNodeWithTag(UiTags.FORM_SAVE).assertExists()
     }
 
+    /**
+     * The sheet's own select and its own create dialog: creating writes at the sheet's root, so
+     * the second half — clearing the folder on the saved profile — is what proves the select's
+     * own line is wired.
+     */
+    @Test
+    fun `a folder created on the phone lands on the profile`() = runMobileShell { shell ->
+        openSheet()
+        onField(Res.string.conn_field_name).performTextInput(NAME)
+        onField(Res.string.conn_field_host_address).performTextInput(ADDRESS)
+        onField(Res.string.conn_field_username).performTextInput(USER)
+        // The field sits below the fold of the sheet: its dropdown is placed against the trigger,
+        // so the trigger has to be on screen before the menu can be reached.
+        onNodeWithText(string(Res.string.conn_group_none)).performScrollTo().performClick()
+        waitForIdle()
+        onNodeWithText(string(Res.string.conn_group_new)).performClick()
+        waitForIdle()
+        onNodeWithContentDescription(string(Res.string.shell_group_name_placeholder)).performTextInput(FOLDER)
+        onNodeWithText(string(Res.string.conn_create)).performClick()
+        waitForIdle()
+        save()
+
+        assertEquals(FOLDER, shell.hosts.hosts.singleOrNull { it.label == NAME }?.group)
+
+        // Creating writes the name at the sheet's root; picking an existing folder is the select's
+        // own line, and the folder the first profile made is now one the second can pick.
+        openSheet()
+        onField(Res.string.conn_field_name).performTextInput(SECOND)
+        onField(Res.string.conn_field_host_address).performTextInput(ADDRESS)
+        onField(Res.string.conn_field_username).performTextInput(USER)
+        onNodeWithText(string(Res.string.conn_group_none)).performScrollTo().performClick()
+        waitForIdle()
+        onNodeWithText(FOLDER).performClick()
+        waitForIdle()
+        save()
+
+        assertEquals(FOLDER, shell.hosts.hosts.singleOrNull { it.label == SECOND }?.group)
+    }
+
     /** Desktop parity: a tag still sitting in the box when Save is pressed must not be dropped. */
     @Test
     fun `a tag left in the box is saved with the profile`() = runMobileShell { shell ->
@@ -87,7 +133,9 @@ class MobileConnectionFormTest {
     }
 }
 
+private const val FOLDER = "Production"
 private const val NAME = "phone-box"
+private const val SECOND = "phone-box-2"
 private const val ADDRESS = "10.0.0.77"
 private const val USER = "deploy"
 private const val TAG = "staging"

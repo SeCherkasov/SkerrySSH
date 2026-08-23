@@ -35,16 +35,23 @@ import app.skerry.ui.snippet.hasCategories
 import app.skerry.ui.snippet.snippetChipLabel
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
+import app.skerry.ui.design.FolderCollapse
+import app.skerry.ui.design.FolderSections
+import app.skerry.ui.design.mobileFolderHeaderPadding
+import app.skerry.ui.snippet.SNIPPET_FOLDER_SCOPE
 
 /**
- * Snippet library body on mobile: search field, tag chips and one flat list of cards. Same
- * [SnippetLibraryState] as the desktop section, only the layout differs — a snippet carries several
- * tags, so grouping listed it once per tag; the chip row narrows the same list instead.
+ * Snippet library body on mobile: search field, tag chips and the cards, sectioned into folders as
+ * soon as anything is filed into one ([FolderSections]). Same [SnippetLibraryState] and the same
+ * fold state as the desktop section, only the layout differs — a snippet carries several tags, so
+ * grouping by tag listed it once per tag; the chip row narrows the same list instead, and the
+ * folder it is filed under is a single section.
  */
 @Composable
 internal fun MobileSnippetLibrary(
     all: List<SnippetEntry>,
     library: SnippetLibraryState,
+    collapse: FolderCollapse,
     onEdit: (SnippetEntry) -> Unit,
     onRenameCategory: (String) -> Unit,
 ) {
@@ -74,11 +81,19 @@ internal fun MobileSnippetLibrary(
         Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        visible.forEach { entry ->
-            key(entry.id) {
-                val onClick = remember(entry.id) { { onEdit(entry) } }
-                MobileSnippetCard(entry.snippet, onClick)
-            }
+        // The same folders as the desktop library, under the same scope key. The fold itself is a
+        // view preference this device keeps to itself, so what carries over is where the folders
+        // are, not which of them happen to be open here.
+        FolderSections(
+            items = visible,
+            scope = SNIPPET_FOLDER_SCOPE,
+            collapse = collapse,
+            group = { it.snippet.group },
+            itemKey = { it.id },
+            headerPadding = mobileFolderHeaderPadding(),
+        ) { entry ->
+            val onClick = remember(entry.id) { { onEdit(entry) } }
+            MobileSnippetCard(entry.snippet, onClick)
         }
     }
 }

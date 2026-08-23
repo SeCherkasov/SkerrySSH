@@ -86,7 +86,7 @@ class CredentialManagerControllerTest {
         val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
         controller.save(CredentialDraft(label = "old", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = "pem", passphrase = "pp"))
 
-        controller.edit("gen", "new", note = null)
+        controller.edit("gen", "new", note = null, group = null)
 
         val c = controller.credentials.single()
         assertEquals("gen", c.id)
@@ -95,10 +95,24 @@ class CredentialManagerControllerTest {
     }
 
     @Test
+    fun `edit files the secret into a folder and the reactive list shows it`() {
+        val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
+        controller.save(CredentialDraft(label = "Prod root", kind = CredentialKind.PASSWORD, password = "s3cret"))
+
+        controller.edit("gen", "Prod root", note = null, group = "client-acme")
+
+        // The list the keychain draws from is the one the folder has to reach, not just the store.
+        assertEquals("client-acme", controller.credentials.single().group)
+
+        controller.edit("gen", "Prod root", note = null, group = null)
+        assertNull(controller.credentials.single().group)
+    }
+
+    @Test
     fun `edit of a missing id is a no-op`() {
         val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
 
-        controller.edit("missing", "x", note = null)
+        controller.edit("missing", "x", note = null, group = null)
 
         assertEquals(emptyList(), controller.credentials)
     }
@@ -107,7 +121,7 @@ class CredentialManagerControllerTest {
     fun `edit writes the note, and re-saving the secret keeps it`() {
         val controller = CredentialManagerController(CredentialStore(FakeCredVault())) { "gen" }
         controller.save(CredentialDraft(label = "temp key", kind = CredentialKind.PRIVATE_KEY, privateKeyPem = "pem"))
-        controller.edit("gen", "temp key", note = "drop after the audit")
+        controller.edit("gen", "temp key", note = "drop after the audit", group = null)
 
         // Rotating the material goes through the form, which has no note field: the remark on the
         // secret must survive that write rather than be silently dropped.

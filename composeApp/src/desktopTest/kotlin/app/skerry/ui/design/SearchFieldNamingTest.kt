@@ -33,6 +33,8 @@ import app.skerry.ui.files.FileEditorScreen
 import app.skerry.ui.files.PathJumpField
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.assistant_ask_placeholder
+import app.skerry.ui.generated.resources.conn_group_new
+import app.skerry.ui.generated.resources.conn_group_none
 import app.skerry.ui.generated.resources.ftail_fkey_search
 import app.skerry.ui.generated.resources.rd_keyboard_input
 import app.skerry.ui.generated.resources.runbook_palette_placeholder
@@ -47,8 +49,10 @@ import app.skerry.ui.generated.resources.term_palette_placeholder
 import app.skerry.ui.generated.resources.term_run_snippet_placeholder
 import app.skerry.ui.mobile.MobileAiBarInput
 import app.skerry.ui.mobile.MobileCommandPaletteSheet
+import app.skerry.ui.mobile.MobileFormField
 import app.skerry.ui.mobile.MobileGroupCreateDialog
 import app.skerry.ui.mobile.MobileGroupRenameDialog
+import app.skerry.ui.mobile.MobileGroupSelectField
 import app.skerry.ui.mobile.MobilePasswordSheet
 import app.skerry.ui.mobile.VncImeField
 import app.skerry.ui.remote.FakeRemoteDesktop
@@ -218,6 +222,33 @@ class SearchFieldNamingTest {
             onNodeWithContentDescription(MASK_DOTS).assertDoesNotExist()
         }
 
+    /**
+     * The desktop "New group" dialog is opened from inside the Group field and drawn in a `Popup`,
+     * which is a subcomposition — so the field's caption reaches it and would name the folder-name
+     * box after the select it was opened from. Clicking the trigger by its announced name checks
+     * the other half at the same time: a picker trigger says its caption *and* its value.
+     */
+    @Test
+    fun `the new group name field keeps its own name inside the group field`() =
+        runForm({ FormField(GROUP_CAPTION) { GroupSelectField(value = "", groups = emptyList(), onChange = {}) } }) {
+            onNodeWithContentDescription("$GROUP_CAPTION, ${string(Res.string.conn_group_none)}").performClick()
+            onNodeWithText(string(Res.string.conn_group_new)).performClick()
+            waitForIdle()
+
+            assertNamedInput(Res.string.shell_group_name_placeholder)
+        }
+
+    /** The phone's trigger is hand-drawn, so it carries the same naming by hand. */
+    @Test
+    fun `the phone's group field announces the caption with the folder`() =
+        runForm({
+            MobileFormField(GROUP_CAPTION) {
+                MobileGroupSelectField(value = "client-acme", groups = listOf("client-acme"), onChange = {}, onCreateGroup = {})
+            }
+        }) {
+            onNodeWithContentDescription("$GROUP_CAPTION, client-acme").assertExists()
+        }
+
     /** Same shape with an example value for a placeholder: "Production" is not what the field is. */
     @Test
     fun `the group name field is named by what it holds, not by the example in it`() =
@@ -290,3 +321,6 @@ private val HOST = Host("h1", "prod-web-01", "192.168.1.45", 22, "root")
 
 /** Any caption will do — what matters is that one is in scope at all. */
 private const val FORM_CAPTION = "Model"
+
+/** The caption the four editors put over the folder select. */
+private const val GROUP_CAPTION = "Group"

@@ -1,5 +1,6 @@
 package app.skerry.ui.app
 
+import app.skerry.ui.design.FolderCollapse
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -197,7 +198,7 @@ class MobileDesignState(
     private val onTerminalScrollbackChange: (Int) -> Unit = {},
     initialTerminalCursorStyle: TerminalCursorStyle = TerminalCursorStyle.DEFAULT,
     private val onTerminalCursorStyleChange: (TerminalCursorStyle) -> Unit = {},
-) {
+) : FolderCollapse {
     var tab: MobileTab by mutableStateOf(MobileTab.Hosts); private set
 
     /** Which section's protocols the open New connection sheet offers (see [openNewConn]). */
@@ -301,10 +302,10 @@ class MobileDesignState(
     var collapsedGroups: Set<String> by mutableStateOf(initialCollapsedGroups); private set
 
     /** Whether folder [name] is collapsed (its host list is hidden). */
-    fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
+    override fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups
 
     /** Collapse/expand folder [name] and report the new set outward (for persistence). */
-    fun toggleGroupCollapsed(name: String) {
+    override fun toggleGroupCollapsed(name: String) {
         collapsedGroups = if (name in collapsedGroups) collapsedGroups - name else collapsedGroups + name
         onCollapsedGroupsChange(collapsedGroups)
     }

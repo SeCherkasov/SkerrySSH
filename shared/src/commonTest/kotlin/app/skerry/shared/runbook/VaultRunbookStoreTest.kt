@@ -1,8 +1,10 @@
 package app.skerry.shared.runbook
 
 import app.skerry.shared.vault.FakeVault
+import app.skerry.shared.vault.RecordType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class VaultRunbookStoreTest {
 
@@ -47,5 +49,21 @@ class VaultRunbookStoreTest {
         VaultRunbookStore(vault).put(runbook("r1"))
         vault.locked = true
         assertEquals(emptyList(), VaultRunbookStore(vault).all())
+    }
+
+    @Test
+    fun `a runbook written before folders existed reads back unfiled`() {
+        val vault = FakeVault()
+        // A payload from a client predating the field: no "group" key at all. It has to read as
+        // unfiled rather than fail the record and take the runbook with it.
+        vault.put(
+            "r1",
+            RecordType.RUNBOOK,
+            """{"id":"r1","label":"Drain","steps":[{"id":"s1","command":"uptime"}]}""".encodeToByteArray(),
+        )
+
+        val stored = VaultRunbookStore(vault).all().single()
+        assertEquals("Drain", stored.label)
+        assertNull(stored.group)
     }
 }

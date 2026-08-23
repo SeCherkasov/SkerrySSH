@@ -8,6 +8,7 @@ import app.skerry.shared.ai.AiPolicy
 import app.skerry.shared.container.ContainerRuntime
 import app.skerry.shared.container.ContainerSpec
 import app.skerry.shared.host.Host
+import app.skerry.shared.text.normalizeGroup
 import app.skerry.shared.text.normalizeNotes
 import app.skerry.shared.rdp.RdpH264Mode
 import app.skerry.shared.rdp.RdpImageQuality
@@ -313,7 +314,7 @@ class NewConnectionFormState {
         address = address.trim(),
         port = portOrNull ?: defaultPortFor(connectionType),
         username = qualifiedUsername(),
-        group = group.trim().ifBlank { null },
+        group = normalizeGroup(group),
         credentialId = credentialId,
         interactiveAuth = authMode == AuthMode.INTERACTIVE,
         tags = tags,

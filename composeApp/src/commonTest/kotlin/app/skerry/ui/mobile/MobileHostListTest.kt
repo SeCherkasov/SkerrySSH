@@ -1,6 +1,7 @@
 package app.skerry.ui.mobile
 
 import app.skerry.shared.host.Host
+import app.skerry.ui.host.UNGROUPED_LABEL
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import app.skerry.ui.host.ALL_HOSTS_CHIP
@@ -46,7 +47,7 @@ class MobileHostListTest {
             host("3", "scratch", group = null),
         )
         val view = buildMobileHostList(hosts, activeChip = ALL_HOSTS_CHIP)
-        assertEquals(listOf("Production", "Homelab", "Ungrouped"), view.sections.map { it.name })
+        assertEquals(listOf("Production", "Homelab", UNGROUPED_LABEL), view.sections.map { it.name })
         assertEquals(listOf("web"), view.sections[0].hosts.map { it.label })
         assertEquals(listOf("scratch"), view.sections[2].hosts.map { it.label })
     }

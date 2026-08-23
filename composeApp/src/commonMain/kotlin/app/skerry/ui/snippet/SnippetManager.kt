@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.text.normalizeGroup
 import app.skerry.shared.text.normalizeNotes
 import app.skerry.shared.snippet.Snippet
 import app.skerry.shared.snippet.SnippetRunEnvironment
@@ -27,6 +28,7 @@ data class SnippetDraft(
     val tags: List<String> = emptyList(),
     val shortcut: String? = null,
     val notes: String? = null,
+    val group: String? = null,
 )
 
 /**
@@ -135,6 +137,7 @@ class SnippetManager(
             tags = normalizeTags(draft.tags),
             shortcut = draft.shortcut?.takeIf { it.isNotBlank() },
             notes = draft.notes?.let(::normalizeNotes),
+            group = normalizeGroup(draft.group),
         )
         store.put(snippet)
         val existing = find(id)

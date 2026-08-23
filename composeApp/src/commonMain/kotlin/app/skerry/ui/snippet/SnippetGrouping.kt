@@ -6,6 +6,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_chip_all
 import app.skerry.ui.generated.resources.lib_snippets_uncategorized
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.folderNames
 import app.skerry.ui.design.tagChipLabel
 
 /** A snippet library section: category name plus its snippets (in source list order). */
@@ -21,6 +22,17 @@ const val UNCATEGORIZED_KEY = "Uncategorized"
 
 /** Technical key of the "all snippets" chip at the start of the library filter row. */
 const val ALL_SNIPPETS_CHIP = "All"
+
+/**
+ * Names the library's folders in the one collapsed set the app persists
+ * ([app.skerry.ui.design.folderCollapseKey]) — a `Production` folder here and a `Production` folder
+ * of hosts fold independently.
+ */
+const val SNIPPET_FOLDER_SCOPE = "snippet"
+
+/** Folders the library already uses — what the editor's "Group" select offers. */
+fun snippetFolders(snippets: List<SnippetEntry>): List<String> =
+    folderNames(snippets.map { it.snippet.group })
 
 /** Localized "uncategorized" bucket label for display (not for grouping, see [UNCATEGORIZED_KEY]). */
 @Composable
@@ -69,12 +81,13 @@ fun hasCategories(snippets: List<SnippetEntry>): Boolean = snippets.any { it.sni
 fun snippetCategoryChips(snippets: List<SnippetEntry>): List<String> =
     listOf(ALL_SNIPPETS_CHIP) + groupSnippetsByCategory(snippets).map { it.name }
 
-/** Case-insensitive search across a snippet's name, command, tags and notes. */
+/** Case-insensitive search across a snippet's name, command, folder, tags and notes. */
 fun SnippetEntry.matches(query: String): Boolean {
     val q = query.trim().lowercase()
     return snippet.label.lowercase().contains(q) ||
         snippet.command.lowercase().contains(q) ||
         snippet.notes?.lowercase()?.contains(q) == true ||
+        snippet.group?.lowercase()?.contains(q) == true ||
         snippet.tags.any { it.lowercase().contains(q) }
 }
 

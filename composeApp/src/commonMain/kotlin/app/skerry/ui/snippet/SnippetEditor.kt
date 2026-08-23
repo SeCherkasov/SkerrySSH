@@ -68,6 +68,7 @@ import app.skerry.ui.desktop.matchDesktopShortcut
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_add_tag
 import app.skerry.ui.generated.resources.lib_snippets_field_command
+import app.skerry.ui.generated.resources.shtail_group_label
 import app.skerry.ui.generated.resources.lib_snippets_field_name
 import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.lib_snippets_field_shortcut
@@ -83,6 +84,8 @@ import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.FormField
+import app.skerry.ui.design.GROUP_FIELD_WIDTH
+import app.skerry.ui.design.GroupSelectField
 import app.skerry.ui.design.untrustedLabel
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
@@ -130,6 +133,14 @@ internal fun SnippetEditor(
                     form.notes, { form.notes = capNotes(it) }, stringResource(Res.string.lib_snippets_ph_notes),
                     LocalFonts.current.ui, singleLine = false, minHeight = 52.dp,
                 )
+            }
+        }
+        Column(Modifier.padding(top = 20.dp).width(GROUP_FIELD_WIDTH)) {
+            FormField(stringResource(Res.string.shtail_group_label), top = 0.dp, bottom = 8.dp) {
+                // Folders of the whole library, this snippet's own included: it is already filed
+                // there, and the select has to be able to show what it is showing.
+                val folders = remember(manager.snippets) { snippetFolders(manager.snippets) }
+                GroupSelectField(form.group, folders) { form.group = it }
             }
         }
         Column(Modifier.padding(top = 20.dp)) {
@@ -379,3 +390,4 @@ private fun CommandField(value: String, onValueChange: (String) -> Unit, placeho
         },
     )
 }
+
