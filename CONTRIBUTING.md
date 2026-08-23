@@ -65,8 +65,8 @@ Wire the keep-alive setting end to end with dead-link detection
 1. Branch from `main`.
 2. Make sure `./gradlew test allTests` passes — CI runs it on every PR, under `xvfb-run`.
 3. Keep desktop ⇆ Android parity for anything user-facing.
-4. When touching `README.md`, mirror the change in `README.ru.md` (and vice versa) — the
-   two must stay structurally identical.
+4. When touching `README.md`, mirror the change in `README.ru.md` and `README.zh.md` (and vice
+   versa) — the three must stay structurally identical.
 
 ## Packaging notes
 

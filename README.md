@@ -2,7 +2,7 @@
 
 <img src="docs/img/banner.png" alt="Skerry — the SSH client, the way it should be. Terminal · SFTP · tunnels · VNC/RDP · encrypted vault · no accounts, no cloud. Linux · Windows · macOS · Android" width="820">
 
-**English** · [Русский](README.ru.md)
+**English** · [Русский](README.ru.md) · [简体中文](README.zh.md)
 
 [![CI](https://github.com/SeCherkasov/SkerrySSH/actions/workflows/ci.yml/badge.svg)](https://github.com/SeCherkasov/SkerrySSH/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/SeCherkasov/SkerrySSH)](../../releases/latest)
