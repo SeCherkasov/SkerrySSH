@@ -1,8 +1,15 @@
 package app.skerry.ui.remote
 
 import androidx.compose.ui.unit.IntSize
+import app.skerry.shared.host.Host
+import app.skerry.shared.rdp.RdpH264Mode
+import app.skerry.shared.rdp.RdpSpec
+import app.skerry.shared.rdp.RdpImageQuality
+import app.skerry.shared.ssh.ConnectionType
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Connect-time defaults for an RDP session: the desktop size follows the viewport instead of a
@@ -19,6 +26,54 @@ class RdpConnectDefaultsTest {
         // Clamped into what the protocol allows rather than refused.
         assertEquals(IntSize(200, 200), rdpDesktopSize(IntSize(64, 90), FALLBACK))
         assertEquals(IntSize(8192, 8192), rdpDesktopSize(IntSize(20_000, 9_000), FALLBACK))
+    }
+
+    @Test
+    fun every_option_of_the_profile_reaches_the_request() {
+        // The step desktop and mobile share. It used to be typed out on both sides, and the last
+        // field added to it went missing on one — every option here is non-default on purpose.
+        val host = Host(
+            id = "h1",
+            label = "rds",
+            address = "rds.example.com",
+            port = 3390,
+            username = "CORP\\ann",
+            connectionType = ConnectionType.RDP,
+            rdp = RdpSpec(
+                loadBalanceInfo = "tsv://farm",
+                audioOutput = true,
+                audioOutputDeviceId = "hdmi-0",
+                clipboard = false,
+                quality = RdpImageQuality.High,
+                graphicsPipeline = false,
+                remoteFx = false,
+                h264 = RdpH264Mode.Avc420,
+            ),
+        )
+
+        val request = host.toRdpRequest(
+            "secret",
+            RemoteViewport(IntSize(2880, 1800), 1.5f),
+            clientName = "SKERRY",
+            fallback = FALLBACK,
+        )
+
+        assertEquals("rds.example.com", request.host)
+        assertEquals(3390, request.port)
+        assertEquals("CORP\\ann", request.username)
+        assertEquals("secret", request.password)
+        assertEquals(2880 to 1800, request.width to request.height)
+        assertEquals("SKERRY", request.clientName)
+        assertEquals("tsv://farm", request.loadBalanceInfo)
+        assertTrue(request.audioOutput)
+        assertEquals("hdmi-0", request.audioDeviceId)
+        assertFalse(request.clipboard)
+        assertEquals(RdpImageQuality.High, request.imageQuality)
+        assertFalse(request.graphicsPipeline)
+        assertFalse(request.remoteFx)
+        assertEquals(RdpH264Mode.Avc420, request.h264)
+        // The viewport's scaling, not a default: without it the session is drawn at 96 dpi.
+        assertEquals(1.5f, request.displayScale)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package app.skerry.shared.rdp
 
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -58,6 +59,18 @@ class RdpDisplayScaleTest {
         assertEquals(RdpDisplayScale.DEVICE_100, RdpDisplayScale.of(1920, 1080, 1.1f).deviceScaleFactor)
         assertEquals(RdpDisplayScale.DEVICE_140, RdpDisplayScale.of(2560, 1440, 1.25f).deviceScaleFactor)
         assertEquals(RdpDisplayScale.DEVICE_180, RdpDisplayScale.of(3840, 2160, 2f).deviceScaleFactor)
+    }
+
+    @Test
+    fun `the millimetres are derived from the pixels and the factor, never measured`() {
+        // Deliberate: the size is what the pixel count and the reported factor imply, so it tells a
+        // server nothing it cannot already compute. Reading a real EDID or DisplayMetrics.xdpi here
+        // would turn a protocol field into a hardware fingerprint.
+        val scale = RdpDisplayScale.of(2560, 1440, 1.25f)
+        val applied = scale.desktopScaleFactor / 100.0
+
+        assertEquals((2560 * 25.4 / (96 * applied)).roundToInt(), scale.physicalWidthMm)
+        assertEquals((1440 * 25.4 / (96 * applied)).roundToInt(), scale.physicalHeightMm)
     }
 
     @Test

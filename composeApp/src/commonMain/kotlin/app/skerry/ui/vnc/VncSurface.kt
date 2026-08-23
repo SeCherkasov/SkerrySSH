@@ -62,6 +62,7 @@ import app.skerry.ui.generated.resources.rd_surface
 import app.skerry.ui.generated.resources.rd_surface_release
 import app.skerry.ui.settings.releaseKeyboardChord
 import app.skerry.ui.remote.RemoteDesktopScreenState
+import app.skerry.ui.remote.RemoteViewport
 import app.skerry.ui.remote.RemoteStatsOverlay
 import app.skerry.ui.remote.readLockKeys
 import app.skerry.ui.remote.RemoteModifiers
@@ -145,7 +146,7 @@ fun VncSurface(
         contentDescription = surfaceName
     }.onSizeChanged {
         canvasSize = it
-        screen.onViewportSize(it, displayScale)
+        screen.onViewportSize(RemoteViewport(it, displayScale))
     }
     // Whether a sprite exists at all changes rarely (null ↔ non-null); WHICH shape it is changes
     // constantly (arrow ↔ I-beam). derivedStateOf keeps the composition subscribed to the former

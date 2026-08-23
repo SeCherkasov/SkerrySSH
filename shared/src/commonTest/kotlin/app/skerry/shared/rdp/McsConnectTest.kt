@@ -119,12 +119,9 @@ class McsConnectTest {
         assertTrue(earlyCapabilityFlags and 0x0001 != 0, "understands the error info PDU")
         core.skip(64 + 1 + 1) // clientDigProductId, connectionType, pad
         assertEquals(RdpSecurityProtocol.HYBRID, core.u32le()) // serverSelectedProtocol, echoed back
-        // The optional tail: an unscaled client says nothing, and every field stays zero.
-        assertEquals(0, core.u32le()) // desktopPhysicalWidth
-        assertEquals(0, core.u32le()) // desktopPhysicalHeight
-        assertEquals(0, core.u16le()) // desktopOrientation
-        assertEquals(0, core.u32le()) // desktopScaleFactor
-        assertEquals(0, core.u32le()) // deviceScaleFactor
+        // An unscaled client says nothing: the optional tail is absent, so the block is the same
+        // bytes an older Skerry sent and no server sees a longer one for a session it cannot use.
+        assertEquals(0, core.remaining, "an unscaled client appended an optional tail")
     }
 
     @Test
@@ -143,6 +140,7 @@ class McsConnectTest {
         assertEquals(0, core.u16le()) // desktopOrientation: landscape
         assertEquals(150, core.u32le()) // desktopScaleFactor
         assertEquals(RdpDisplayScale.DEVICE_140, core.u32le())
+        assertEquals(0, core.remaining, "the block length did not grow with the tail it carries")
     }
 
     @Test

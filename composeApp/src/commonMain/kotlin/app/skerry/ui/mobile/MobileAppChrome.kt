@@ -40,6 +40,7 @@ import app.skerry.ui.connection.connectableSecrets
 import app.skerry.ui.host.rowLabel
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.nav.PlatformBackHandler
+import app.skerry.ui.remote.RemoteViewport
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.generated.resources.term_ai_dismiss
@@ -154,7 +155,7 @@ internal fun MobileChrome(
                     // arrives with its credential link stripped and has no other way in.
                     val password = credentials?.useForConnect(host.credentialId)?.toRdpPassword()
                     when {
-                        password != null -> openMobileRdp(sessions, state, hostManager, host, password, windowInfo.containerSize, displayScale)
+                        password != null -> openMobileRdp(sessions, state, hostManager, host, mobileRdpRequest(host, password, RemoteViewport(windowInfo.containerSize, displayScale)))
                         host.username.isBlank() -> state.openEditConn(host)
                         else -> pendingRdp = host
                     }
@@ -380,7 +381,7 @@ internal fun MobileChrome(
                     onDismiss = { pendingRdp = null },
                     onConnect = { pw ->
                         pendingRdp = null
-                        openMobileRdp(sessions, state, hostManager, host, pw, windowInfo.containerSize, displayScale)
+                        openMobileRdp(sessions, state, hostManager, host, mobileRdpRequest(host, pw, RemoteViewport(windowInfo.containerSize, displayScale)))
                     },
                     secrets = connectableSecrets(credentials?.credentials.orEmpty(), host, hostManager?.hosts.orEmpty()),
                     onUseSecret = { secret ->
@@ -389,7 +390,7 @@ internal fun MobileChrome(
                         val password = secret.toRdpPassword()
                         if (password != null) {
                             pendingRdp = null
-                            openMobileRdp(sessions, state, hostManager, host, password, windowInfo.containerSize, displayScale)
+                            openMobileRdp(sessions, state, hostManager, host, mobileRdpRequest(host, password, RemoteViewport(windowInfo.containerSize, displayScale)))
                         }
                     },
                 )

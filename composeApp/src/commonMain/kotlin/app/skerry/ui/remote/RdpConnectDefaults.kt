@@ -1,7 +1,10 @@
 package app.skerry.ui.remote
 
 import androidx.compose.ui.unit.IntSize
+import app.skerry.shared.host.Host
 import app.skerry.shared.rdp.RdpClientSettings
+import app.skerry.shared.rdp.RdpH264Mode
+import app.skerry.shared.rdp.RdpImageQuality
 
 /**
  * The desktop size an RDP session should ask for: the viewport it will live in, because RDP fixes
@@ -15,6 +18,42 @@ fun rdpDesktopSize(viewport: IntSize, fallback: IntSize): IntSize {
         (viewport.width and 1.inv())
             .coerceIn(RdpClientSettings.MIN_DIMENSION, RdpClientSettings.MAX_DIMENSION),
         viewport.height.coerceIn(RdpClientSettings.MIN_DIMENSION, RdpClientSettings.MAX_DIMENSION),
+    )
+}
+
+/**
+ * Everything this profile dials with, resolved against the [viewport] the session will live in and
+ * the [password] the caller already holds.
+ *
+ * One place on purpose: desktop and mobile used to type this list out separately, differing only in
+ * [clientName] and [fallback], and one field added to it went missing on the other side more than
+ * once. The [viewport] carries its scaling with it so the session comes up at the local DPI.
+ */
+fun Host.toRdpRequest(
+    password: String,
+    viewport: RemoteViewport,
+    clientName: String,
+    fallback: IntSize,
+): RdpConnectRequest {
+    val desktop = rdpDesktopSize(viewport.size, fallback)
+    return RdpConnectRequest(
+        host = address,
+        port = port,
+        username = username,
+        password = password,
+        width = desktop.width,
+        height = desktop.height,
+        keyboardLayout = currentKeyboardLayout(),
+        clientName = clientName,
+        loadBalanceInfo = rdp?.loadBalanceInfo.orEmpty(),
+        audioOutput = rdp?.audioOutput == true,
+        audioDeviceId = rdp?.audioOutputDeviceId.orEmpty(),
+        clipboard = rdp?.clipboard != false,
+        imageQuality = rdp?.quality ?: RdpImageQuality.DEFAULT,
+        graphicsPipeline = rdp?.graphicsPipeline != false,
+        remoteFx = rdp?.remoteFx != false,
+        h264 = rdp?.h264 ?: RdpH264Mode.Auto,
+        displayScale = viewport.scale,
     )
 }
 

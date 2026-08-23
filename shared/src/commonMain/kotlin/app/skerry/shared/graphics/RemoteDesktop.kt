@@ -61,7 +61,7 @@ interface RemoteDesktopSession {
      * ignore the scale — RFB has none — while RDP passes it on so the session lays out at the
      * client's DPI instead of at 96.
      */
-    suspend fun setDesktopSize(width: Int, height: Int, scale: Float = 1f)
+    suspend fun setDesktopSize(width: Int, height: Int, scale: Float)
 
     /**
      * Choose who draws the cursor: true = we do (the server sends its shape and keeps the

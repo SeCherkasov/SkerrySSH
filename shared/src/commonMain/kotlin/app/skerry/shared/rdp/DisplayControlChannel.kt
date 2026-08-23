@@ -62,7 +62,7 @@ class DisplayControlChannel(private val send: suspend (ByteArray) -> Unit) : Dyn
      * the channel exists but says nothing before its capability PDU, and a layout sent then is
      * discarded. Returns whether a layout went out.
      */
-    suspend fun requestResolution(width: Int, height: Int, scale: Float = 1f): Boolean {
+    suspend fun requestResolution(width: Int, height: Int, scale: Float): Boolean {
         if (!capable) return false
         val size = fit(width, height) ?: return false
         // Scaling is derived from the size actually asked for, not the one requested: [fit] may have
@@ -115,7 +115,7 @@ class DisplayControlChannel(private val send: suspend (ByteArray) -> Unit) : Dyn
         // Physical size and both factors state the client's DPI; all four are zero on an unscaled
         // display, which is how the server is told to keep its own (MS-RDPEDISP 2.2.2.2.1).
         .u32le(scale.physicalWidthMm).u32le(scale.physicalHeightMm)
-        .u32le(ORIENTATION_LANDSCAPE)
+        .u32le(ORIENTATION_NONE)
         .u32le(scale.desktopScaleFactor).u32le(scale.deviceScaleFactor)
         .toByteArray()
 
@@ -131,8 +131,12 @@ class DisplayControlChannel(private val send: suspend (ByteArray) -> Unit) : Dyn
 
         private const val MONITOR_PRIMARY = 0x00000001
 
-        /** The only orientation a session in a window has (MS-RDPEDISP 2.2.2.2.1). */
-        private const val ORIENTATION_LANDSCAPE = 0
+        /**
+         * desktopOrientation, in degrees: the desktop is asked for at the size it is drawn at, so
+         * it is never rotated — a portrait screen asks for a taller desktop, not a turned one
+         * (MS-RDPEDISP 2.2.2.2.1).
+         */
+        private const val ORIENTATION_NONE = 0
         private const val MONITOR_SIZE = 40
         private const val PDU_SIZE = HEADER_SIZE + 8 + MONITOR_SIZE
 

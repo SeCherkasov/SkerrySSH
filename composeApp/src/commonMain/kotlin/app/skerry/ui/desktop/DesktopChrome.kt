@@ -49,6 +49,7 @@ import app.skerry.ui.app.GroupDialog
 import app.skerry.ui.host.GroupDialog as GroupEditDialog
 import app.skerry.ui.host.rowLabel
 import app.skerry.ui.identity.CredentialManagerController
+import app.skerry.ui.remote.toRdpRequest
 import app.skerry.ui.session.BroadcastPanel
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.session.broadcastTargets
@@ -197,32 +198,15 @@ internal fun DesktopChrome(
     // Opens an RDP tab with the password in hand — from the profile's secret or from the prompt.
     fun openRdpWith(host: Host, password: String) {
         state.recordRecentHost(host.id)
-        val desktop = app.skerry.ui.remote.rdpDesktopSize(
-            windowInfo.containerSize,
-            fallback = androidx.compose.ui.unit.IntSize(RDP_DEFAULT_WIDTH, RDP_DEFAULT_HEIGHT),
-        )
         sessions?.openRdp(
             host.id,
             host.rowLabel(),
             host.connectionSubtitle(),
-            app.skerry.ui.remote.RdpConnectRequest(
-                host = host.address,
-                port = host.port,
-                username = host.username,
-                password = password,
-                width = desktop.width,
-                height = desktop.height,
-                keyboardLayout = app.skerry.ui.remote.currentKeyboardLayout(),
+            host.toRdpRequest(
+                password,
+                app.skerry.ui.remote.RemoteViewport(windowInfo.containerSize, displayScale),
                 clientName = RDP_CLIENT_NAME,
-                loadBalanceInfo = host.rdp?.loadBalanceInfo.orEmpty(),
-                audioOutput = host.rdp?.audioOutput == true,
-                audioDeviceId = host.rdp?.audioOutputDeviceId.orEmpty(),
-                clipboard = host.rdp?.clipboard != false,
-                imageQuality = host.rdp?.quality ?: app.skerry.shared.rdp.RdpImageQuality.DEFAULT,
-                graphicsPipeline = host.rdp?.graphicsPipeline != false,
-                remoteFx = host.rdp?.remoteFx != false,
-                h264 = host.rdp?.h264 ?: app.skerry.shared.rdp.RdpH264Mode.Auto,
-                displayScale = displayScale,
+                fallback = androidx.compose.ui.unit.IntSize(RDP_DEFAULT_WIDTH, RDP_DEFAULT_HEIGHT),
             ),
             remoteResize = host.vncResizeToWindow,
             onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },

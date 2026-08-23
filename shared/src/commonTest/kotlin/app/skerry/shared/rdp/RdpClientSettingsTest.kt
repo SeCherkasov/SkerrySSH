@@ -24,6 +24,7 @@ class RdpClientSettingsTest {
         redirectedSessionId = 42,
         remoteFx = false,
         h264 = RdpH264Mode.Avc420,
+        displayScale = 1.5f,
     )
 
     @Test
@@ -41,6 +42,7 @@ class RdpClientSettingsTest {
         // Non-default in the fixture on purpose: a dropped mapping would read back the default.
         assertFalse(settings.wantsRemoteFx)
         assertEquals(RdpH264Mode.Avc420, settings.h264)
+        assertEquals(1.5f, settings.displayScale)
     }
 
     @Test
