@@ -8,6 +8,9 @@
 [![Релиз](https://img.shields.io/github/v/release/SeCherkasov/SkerrySSH)](../../releases/latest)
 [![Клиенты: GPL-3.0](https://img.shields.io/badge/clients-GPL--3.0-blue)](LICENSE)
 [![Сервер: AGPL-3.0](https://img.shields.io/badge/server-AGPL--3.0-blue)](server/LICENSE)
+[![Вики](https://img.shields.io/badge/wiki-%D1%80%D1%83%D0%BA%D0%BE%D0%B2%D0%BE%D0%B4%D1%81%D1%82%D0%B2%D0%BE%20%D0%B8%20%D1%80%D0%B0%D0%B7%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D0%B0-brightgreen)](https://github.com/SeCherkasov/SkerrySSH/wiki/Home-ru)
+
+📖 **[Вики](https://github.com/SeCherkasov/SkerrySSH/wiki/Home-ru)** — руководство пользователя и документация по разработке (RU · EN)
 
 </div>
 
