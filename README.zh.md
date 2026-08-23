@@ -8,6 +8,9 @@
 [![发布](https://img.shields.io/github/v/release/SeCherkasov/SkerrySSH)](../../releases/latest)
 [![客户端: GPL-3.0](https://img.shields.io/badge/clients-GPL--3.0-blue)](LICENSE)
 [![服务端: AGPL-3.0](https://img.shields.io/badge/server-AGPL--3.0-blue)](server/LICENSE)
+[![Wiki](https://img.shields.io/badge/wiki-user%20guide%20%26%20development-brightgreen)](https://github.com/SeCherkasov/SkerrySSH/wiki)
+
+📖 **[Wiki](https://github.com/SeCherkasov/SkerrySSH/wiki)** — 用户指南与开发文档（English · Русский）
 
 </div>
 
