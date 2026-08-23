@@ -1,5 +1,6 @@
 package app.skerry.ui.snippet
 
+import app.skerry.shared.text.normalizeNotes
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,7 +63,7 @@ class SnippetFormState private constructor(private val editingId: String?) {
         command = command,
         tags = (tags + parseSnippetTags(tagDraft)).distinct(),
         shortcut = shortcut,
-        notes = notes.trim().ifEmpty { null },
+        notes = normalizeNotes(notes),
     )
 
     companion object {

@@ -49,8 +49,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.text.capNotes
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.FieldLabel
@@ -122,7 +124,12 @@ internal fun SnippetEditor(
         }
         Column(Modifier.padding(top = 20.dp)) {
             FormField(stringResource(Res.string.lib_snippets_field_notes), top = 0.dp, bottom = 8.dp) {
-                NotesField(form.notes, { form.notes = it }, stringResource(Res.string.lib_snippets_ph_notes), LocalFonts.current.ui)
+                // Capped per keystroke, the way a host's note is: the store caps too, but a field
+                // that keeps accepting text it will not save lies about what was written.
+                EditField(
+                    form.notes, { form.notes = capNotes(it) }, stringResource(Res.string.lib_snippets_ph_notes),
+                    LocalFonts.current.ui, singleLine = false, minHeight = 52.dp,
+                )
             }
         }
         Column(Modifier.padding(top = 20.dp)) {
@@ -316,21 +323,31 @@ private fun ShortcutField(value: String?, mono: FontFamily, conflictText: String
 
 // --- Editor fields ---
 
-/** Single-line editable field. */
+/**
+ * Editable field in the UI font. Single-line by default; [minHeight] turns it into a prose box (the
+ * notes field), which is the only thing that separated the two.
+ */
 @Composable
-private fun EditField(value: String, onValueChange: (String) -> Unit, placeholder: String, font: FontFamily) {
+private fun EditField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    font: FontFamily,
+    singleLine: Boolean = true,
+    minHeight: Dp = Dp.Unspecified,
+) {
     val textColor = Skerry.colors.text
     val textStyle = remember(font, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = font) }
-    val draft = rememberFieldDraft(value)
+    val draft = rememberFieldDraft(value, singleLine = singleLine)
     BasicTextField(
         value = draft.textFieldValue(value),
         onValueChange = { draft.accept(it, value, onValueChange) },
-        singleLine = true,
+        singleLine = singleLine,
         textStyle = textStyle,
         cursorBrush = SolidColor(Skerry.colors.cyan),
         modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
         decorationBox = { inner ->
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
+            Box(Modifier.fillMaxWidth().heightIn(min = minHeight).clip(RoundedCornerShape(7.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp)).padding(horizontal = 11.dp, vertical = 9.dp)) {
                 if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = font)
                 inner()
             }
@@ -357,27 +374,6 @@ private fun CommandField(value: String, onValueChange: (String) -> Unit, placeho
         decorationBox = { inner ->
             Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 16.dp, vertical = 14.dp)) {
                 if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = mono)
-                inner()
-            }
-        },
-    )
-}
-
-/** Multiline notes field (UI font, standard card background). */
-@Composable
-private fun NotesField(value: String, onValueChange: (String) -> Unit, placeholder: String, font: FontFamily) {
-    val textColor = Skerry.colors.text
-    val textStyle = remember(font, textColor) { TextStyle(color = textColor, fontSize = 13.sp, fontFamily = font) }
-    val draft = rememberFieldDraft(value, singleLine = false)
-    BasicTextField(
-        value = draft.textFieldValue(value),
-        onValueChange = { draft.accept(it, value, onValueChange) },
-        textStyle = textStyle,
-        cursorBrush = SolidColor(Skerry.colors.cyan),
-        modifier = Modifier.fillMaxWidth().fieldFocus(draft).fieldName(),
-        decorationBox = { inner ->
-            Box(Modifier.fillMaxWidth().heightIn(min = 52.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.bg).border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(8.dp)).padding(horizontal = 14.dp, vertical = 10.dp)) {
-                if (value.isEmpty()) Txt(placeholder, color = Skerry.colors.faint, size = 13.sp, font = font)
                 inner()
             }
         },

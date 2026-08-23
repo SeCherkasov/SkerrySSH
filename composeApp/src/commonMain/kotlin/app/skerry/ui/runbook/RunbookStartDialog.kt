@@ -52,7 +52,7 @@ import app.skerry.ui.design.CommandQuote
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.design.sanitizedFits
-import app.skerry.ui.terminal.MAX_NOTE_CHARS
+import app.skerry.ui.design.MAX_NOTE_CHARS
 
 /**
  * Confirmation shown before a runbook starts: prompts for the `${{…}}` values its steps need and

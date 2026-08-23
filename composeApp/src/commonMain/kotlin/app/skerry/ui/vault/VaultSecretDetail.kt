@@ -25,8 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,7 +75,7 @@ import app.skerry.ui.generated.resources.vault_used_by_snippets
 import app.skerry.ui.generated.resources.vault_used_by_snippets_one
 import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.host.rowLabel
-import app.skerry.ui.terminal.MAX_NOTE_CHARS
+import app.skerry.ui.design.NoteBlock
 import app.skerry.ui.known.shortFingerprint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -372,15 +370,7 @@ internal fun KeyFileDetailBody(secret: CredentialSecret.KeyFile, state: KeyFileS
  */
 @Composable
 internal fun SecretNote(note: String?) {
-    val shown = remember(note) { note?.let { sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true) } }
-    if (shown.isNullOrBlank()) return
-    val label = stringResource(Res.string.vault_label_note)
-    Txt(
-        shown,
-        color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 17.sp,
-        // Comma-joined, the way Compose joins the texts it merges (see design/fieldValueName).
-        modifier = Modifier.padding(bottom = 14.dp).semantics { contentDescription = "$label, $shown" },
-    )
+    NoteBlock(note, stringResource(Res.string.vault_label_note), Modifier.padding(bottom = 14.dp), size = 11.5.sp)
 }
 
 @Composable

@@ -2,8 +2,6 @@ package app.skerry.ui.terminal
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,13 +42,13 @@ import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.Dot
-import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.MenuItem
 import app.skerry.ui.design.MenuPanel
+import app.skerry.ui.design.RowNoteTooltip
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
-import app.skerry.ui.design.sanitizeServerText
+import app.skerry.ui.design.rememberRowNote
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.term_menu_delete
@@ -72,7 +69,6 @@ import app.skerry.ui.host.icon
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.sessionDotColor
-import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.theme.Skerry
 import app.skerry.ui.generated.resources.shell_tip_more_actions
@@ -237,9 +233,6 @@ internal fun HostRow(host: MockHost, state: DesktopDesignState, mono: FontFamily
     )
 }
 
-/** How long the pointer must rest on a host row before its note pops up. */
-private const val NOTE_TOOLTIP_DELAY_MS = 450L
-
 /**
  * Shared host row for the sidebar (mock and live catalog): status dot + protocol icon + name +
  * optional badge. [icon] is the profile's [app.skerry.ui.host.icon] and stays [Skerry.colors.faint] — the two
@@ -283,35 +276,18 @@ internal fun HostEntryRow(
     var snippetPickerOpen by remember { mutableStateOf(false) }
     // The profile's note is shown on hover — mouse-only by nature; on Android the same code simply
     // never reports a hover (the note lives in the host detail screen there).
-    val hoverInteraction = remember { MutableInteractionSource() }
-    val hovered by hoverInteraction.collectIsHoveredAsState()
-    // Dwell before the note pops up, so sweeping the pointer down the list doesn't flash a tooltip
-    // over every row on the way.
-    var noteVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(hovered) {
-        noteVisible = false
-        if (hovered) {
-            delay(NOTE_TOOLTIP_DELAY_MS)
-            noteVisible = true
-        }
-    }
+    val note = rememberRowNote(host?.notes)
     // The tooltip is a sibling of the row, not a child: inside the row its (zero-sized) popup node
     // would still collect the row's 8dp item spacing and shift the label sideways on hover.
     Box(Modifier.fillMaxWidth()) {
-        val note = host?.notes
-        // A shared profile's note is its author's text; it keeps its lines (prose), but not the
-        // characters that would let it draw as something else, and not more of them than a tooltip
-        // can hold — the field has no cap of its own.
-        val shownNote = remember(note) { note?.let { sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true) } }
         // Suppressed while the row's own popups are up, so the note doesn't land on top of them.
-        val popupOpen = menuOpen || snippetPickerOpen
-        if (noteVisible && !popupOpen && !shownNote.isNullOrBlank()) HoverTooltip(shownNote)
+        RowNoteTooltip(note, suppressed = menuOpen || snippetPickerOpen)
         Row(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(5.dp))
                 .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-                .hoverable(hoverInteraction)
+                .hoverable(note.interaction)
                 .hostConnectClick(
                     onClick = {
                         // Connecting also marks the row selected (single-click mode too — it reads as
@@ -395,5 +371,3 @@ internal fun HostEntryRow(
     }
 }
 
-/** How much of a profile's note a tooltip or a detail row will draw. */
-internal const val MAX_NOTE_CHARS = 600

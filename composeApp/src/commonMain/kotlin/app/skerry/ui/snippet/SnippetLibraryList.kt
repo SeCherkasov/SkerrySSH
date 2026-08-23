@@ -4,8 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +38,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.FilterChipRow
-import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.fieldFocus
@@ -48,17 +45,18 @@ import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.RowNoteTooltip
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
-import app.skerry.ui.design.sanitizeServerText
-import app.skerry.ui.terminal.MAX_NOTE_CHARS
-import kotlinx.coroutines.delay
+import app.skerry.ui.design.NoteBlock
+import app.skerry.ui.design.rememberRowNote
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_placeholder
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_subtitle
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_title
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_save
@@ -126,26 +124,16 @@ internal fun SnippetListRow(
     onClick: () -> Unit,
 ) {
     val s = entry.snippet
-    val hoverInteraction = remember { MutableInteractionSource() }
-    val hovered by hoverInteraction.collectIsHoveredAsState()
-    var noteVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(hovered) {
-        noteVisible = false
-        if (hovered) {
-            delay(450L)
-            noteVisible = true
-        }
-    }
-    val note = s.notes
-    val shownNote = remember(note) { note?.let { sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true) } }
-
+    // Hovering gives the whole note, the way a host row does. A line of it is drawn either way:
+    // the search matches on the note, and a hit whose only match is invisible reads as a stray row.
+    val note = rememberRowNote(s.notes)
     Box(Modifier.fillMaxWidth()) {
-        if (noteVisible && !shownNote.isNullOrBlank()) HoverTooltip(shownNote)
+        RowNoteTooltip(note)
         Row(
             Modifier
                 .fillMaxWidth()
                 .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-                .hoverable(hoverInteraction)
+                .hoverable(note.interaction)
                 .clickable(onClick = onClick)
                 .padding(horizontal = 18.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -168,6 +156,10 @@ internal fun SnippetListRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 CommandLine(s.command, modifier = Modifier.padding(top = 3.dp))
+                NoteBlock(
+                    s.notes, stringResource(Res.string.lib_snippets_field_notes),
+                    Modifier.padding(top = 3.dp), size = 11.sp, maxLines = 1,
+                )
             }
             // Tags are metadata, not the row's subject: they get whatever width is left after the command.
             if (s.tags.isNotEmpty()) {

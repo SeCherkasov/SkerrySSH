@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.skerry.shared.text.normalizeNotes
 import app.skerry.shared.snippet.Snippet
 import app.skerry.shared.snippet.SnippetRunEnvironment
 import app.skerry.shared.snippet.SnippetSegment
@@ -133,7 +134,7 @@ class SnippetManager(
             command = draft.command,
             tags = normalizeTags(draft.tags),
             shortcut = draft.shortcut?.takeIf { it.isNotBlank() },
-            notes = draft.notes?.takeIf { it.isNotBlank() },
+            notes = draft.notes?.let(::normalizeNotes),
         )
         store.put(snippet)
         val existing = find(id)

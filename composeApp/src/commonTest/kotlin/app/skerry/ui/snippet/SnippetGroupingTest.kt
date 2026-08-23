@@ -7,8 +7,12 @@ import kotlin.test.assertTrue
 
 class SnippetGroupingTest {
 
-    private fun entry(label: String, tags: List<String> = emptyList(), command: String = "cmd") =
-        SnippetEntry(Snippet(id = label, label = label, command = command, tags = tags))
+    private fun entry(
+        label: String,
+        tags: List<String> = emptyList(),
+        command: String = "cmd",
+        notes: String? = null,
+    ) = SnippetEntry(Snippet(id = label, label = label, command = command, tags = tags, notes = notes))
 
     @Test
     fun groups_by_tag_in_alphabetical_order() {
@@ -88,5 +92,16 @@ class SnippetGroupingTest {
 
         assertEquals(listOf("Disk usage"), filterSnippets(all, activeChip = "disk", query = "disk").map { it.snippet.label })
         assertTrue(filterSnippets(all, activeChip = "disk", query = "iostat").isEmpty())
+    }
+
+    @Test
+    fun search_reaches_the_notes() {
+        val all = listOf(
+            entry("Rollout", command = "kubectl apply -f -", notes = "Drains the canary pool first"),
+            entry("Disk", command = "df -h"),
+        )
+
+        assertEquals(listOf("Rollout"), filterSnippets(all, query = "canary").map { it.snippet.label })
+        assertEquals(listOf("Rollout"), filterSnippets(all, query = "DRAINS").map { it.snippet.label })
     }
 }

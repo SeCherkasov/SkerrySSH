@@ -4,8 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,15 +39,17 @@ import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.app.LocalSnippets
 import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.connection.ConnectionUiState
-import app.skerry.ui.design.HoverTooltip
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.NOTE_PEEK_LINES
+import app.skerry.ui.design.NoteBlock
+import app.skerry.ui.design.RowNoteTooltip
 import app.skerry.ui.design.rememberModalPresence
-import app.skerry.ui.design.sanitizeServerText
+import app.skerry.ui.design.rememberRowNote
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
-import kotlinx.coroutines.delay
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.generated.resources.term_no_matches
 import app.skerry.ui.generated.resources.term_no_snippets_yet
@@ -161,26 +161,17 @@ private const val ROW_PREVIEW_LINES = 2
 @Composable
 private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Unit) {
     val s = entry.snippet
-    val hoverInteraction = remember { MutableInteractionSource() }
-    val hovered by hoverInteraction.collectIsHoveredAsState()
-    var noteVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(hovered) {
-        noteVisible = false
-        if (hovered) {
-            delay(450L)
-            noteVisible = true
-        }
-    }
-    val note = s.notes
-    val shownNote = remember(note) { note?.let { sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true) } }
-
+    // The hover tooltip carries the whole note; the row itself carries the opening of it, because
+    // this palette runs a fitting command on one click with no confirmation — a warning only a
+    // pointer can reveal is no warning for whoever drives it from the keyboard.
+    val note = rememberRowNote(s.notes)
     Box(Modifier.fillMaxWidth()) {
-        if (noteVisible && !shownNote.isNullOrBlank()) HoverTooltip(shownNote)
+        RowNoteTooltip(note)
         Column(
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(6.dp))
-                .hoverable(hoverInteraction)
+                .hoverable(note.interaction)
                 .clickable(onClick = onClick)
                 .padding(horizontal = 9.dp, vertical = 7.dp),
         ) {
@@ -197,6 +188,10 @@ private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Uni
                 }
             }
             CommandLine(s.command, maxLines = ROW_PREVIEW_LINES, modifier = Modifier.padding(top = 3.dp))
+            NoteBlock(
+                s.notes, stringResource(Res.string.lib_snippets_field_notes),
+                Modifier.padding(top = 3.dp), size = 11.sp, maxLines = NOTE_PEEK_LINES,
+            )
         }
     }
 }

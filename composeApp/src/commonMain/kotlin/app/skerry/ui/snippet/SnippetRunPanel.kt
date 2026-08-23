@@ -56,6 +56,7 @@ import app.skerry.ui.generated.resources.lib_snippets_copy
 import app.skerry.ui.generated.resources.lib_snippets_delete
 import app.skerry.ui.generated.resources.lib_snippets_edit_action
 import app.skerry.ui.generated.resources.lib_snippets_field_command
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.lib_snippets_no_session
 import app.skerry.ui.generated.resources.lib_snippets_preview_runs
 import app.skerry.ui.generated.resources.lib_snippets_run
@@ -72,9 +73,8 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.ClippedNotice
 import app.skerry.ui.design.CommandQuote
-import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.design.tagChipLabel
-import app.skerry.ui.terminal.MAX_NOTE_CHARS
+import app.skerry.ui.design.NoteBlock
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
@@ -139,17 +139,7 @@ internal fun SnippetRunPanel(
             color = Skerry.colors.text, size = 15.sp, weight = FontWeight.SemiBold,
             modifier = Modifier.padding(bottom = 10.dp),
         )
-        val note = snippet.notes
-        val shownNote = remember(note) { note?.let { sanitizeServerText(it, MAX_NOTE_CHARS, allowNewlines = true) } }
-        if (!shownNote.isNullOrBlank()) {
-            Txt(
-                shownNote,
-                color = Skerry.colors.dim,
-                size = 12.sp,
-                lineHeight = 17.sp,
-                modifier = Modifier.padding(bottom = 10.dp),
-            )
-        }
+        SnippetNote(snippet.notes)
         if (snippet.tags.isNotEmpty()) {
             FlowRow(
                 Modifier.fillMaxWidth().padding(bottom = 12.dp),
@@ -360,3 +350,8 @@ private fun ParamInput(
     )
 }
 
+/** The snippet's note, under its name — the shared [NoteBlock], named and filtered like every other. */
+@Composable
+internal fun SnippetNote(note: String?) {
+    NoteBlock(note, stringResource(Res.string.lib_snippets_field_notes), Modifier.padding(bottom = 10.dp))
+}

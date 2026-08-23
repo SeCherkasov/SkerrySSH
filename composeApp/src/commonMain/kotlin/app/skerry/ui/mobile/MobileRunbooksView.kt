@@ -60,6 +60,7 @@ import app.skerry.ui.generated.resources.runbook_run_needs_session
 import app.skerry.ui.generated.resources.runbook_run_no_steps
 import app.skerry.ui.generated.resources.runbook_save
 import app.skerry.ui.generated.resources.runbook_section
+import app.skerry.ui.generated.resources.runbook_field_description
 import app.skerry.ui.generated.resources.runbook_step_count
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.runbook.RunbookEditorFields
@@ -69,8 +70,8 @@ import app.skerry.ui.runbook.RunbookFormState
 import app.skerry.ui.runbook.RunbookManager
 import app.skerry.ui.runbook.runbookTarget
 import app.skerry.ui.design.untrustedLabel
-import app.skerry.ui.design.sanitizeServerText
-import app.skerry.ui.terminal.MAX_NOTE_CHARS
+import app.skerry.ui.design.NOTE_PEEK_LINES
+import app.skerry.ui.design.NoteBlock
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 import androidx.compose.ui.platform.testTag
@@ -195,7 +196,7 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
 }
 
 @Composable
-private fun RunbookCard(entry: RunbookEntry, mono: FontFamily, onClick: () -> Unit) {
+internal fun RunbookCard(entry: RunbookEntry, mono: FontFamily, onClick: () -> Unit) {
     val runbook = entry.runbook
     Column(
         Modifier
@@ -219,13 +220,10 @@ private fun RunbookCard(entry: RunbookEntry, mono: FontFamily, onClick: () -> Un
             color = Skerry.colors.faint, size = 11.sp, font = mono,
             modifier = Modifier.padding(top = 6.dp),
         )
-        if (runbook.description.isNotBlank()) {
-            Txt(
-                remember(runbook) { sanitizeServerText(runbook.description, MAX_NOTE_CHARS, allowNewlines = true) },
-                color = Skerry.colors.dim, size = 12.sp, maxLines = 2,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp),
-            )
-        }
+        NoteBlock(
+            runbook.description, stringResource(Res.string.runbook_field_description),
+            Modifier.padding(top = 6.dp), maxLines = NOTE_PEEK_LINES,
+        )
     }
 }
 

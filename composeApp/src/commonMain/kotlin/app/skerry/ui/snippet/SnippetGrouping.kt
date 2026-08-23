@@ -69,17 +69,18 @@ fun hasCategories(snippets: List<SnippetEntry>): Boolean = snippets.any { it.sni
 fun snippetCategoryChips(snippets: List<SnippetEntry>): List<String> =
     listOf(ALL_SNIPPETS_CHIP) + groupSnippetsByCategory(snippets).map { it.name }
 
-/** Case-insensitive search across a snippet's name, command and tags. */
+/** Case-insensitive search across a snippet's name, command, tags and notes. */
 fun SnippetEntry.matches(query: String): Boolean {
     val q = query.trim().lowercase()
     return snippet.label.lowercase().contains(q) ||
         snippet.command.lowercase().contains(q) ||
+        snippet.notes?.lowercase()?.contains(q) == true ||
         snippet.tags.any { it.lowercase().contains(q) }
 }
 
 /**
  * Narrow [snippets] by the active chip ([activeChip] = category, `All` = no filter) and [query] (AND).
- * Search is case-insensitive across label/command/tags (see [SnippetEntry.matches]).
+ * Search is case-insensitive across label/command/tags/notes (see [SnippetEntry.matches]).
  */
 fun filterSnippets(
     snippets: List<SnippetEntry>,
