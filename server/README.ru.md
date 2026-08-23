@@ -24,8 +24,8 @@ Vaultwarden). Сервер хранит **только шифротекст** �
 
 Мультиархитектурные образы (amd64 + arm64) публикуются на Docker Hub как
 [`secherkasov/skerry-sync`](https://hub.docker.com/r/secherkasov/skerry-sync) — теги:
-точная `<версия>`, `<major.minor>`, `latest`. Сервер релизится в своём собственном темпе,
-независимо от версий клиентов Skerry.
+точная `<версия>`, `<major.minor>`, `latest`. Сервер релизится отдельно от клиентов — своим тегом
+`server-v*` и своим workflow. Номера версий до сих пор совпадали с клиентским релизом.
 
 ```bash
 docker run -d --name skerry-sync \
