@@ -3,6 +3,7 @@ package app.skerry.ui.snippet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,14 +45,18 @@ import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.RowNoteTooltip
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
+import app.skerry.ui.design.NoteBlock
+import app.skerry.ui.design.rememberRowNote
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_placeholder
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_subtitle
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_title
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_save
@@ -119,37 +124,48 @@ internal fun SnippetListRow(
     onClick: () -> Unit,
 ) {
     val s = entry.snippet
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(
-            Modifier.size(30.dp).clip(RoundedCornerShape(7.dp))
-                .background(if (selected) Skerry.colors.cyan.copy(alpha = 0.14f) else Skerry.colors.overlayMed),
-            contentAlignment = Alignment.Center,
+    // Hovering gives the whole note, the way a host row does. A line of it is drawn either way:
+    // the search matches on the note, and a hit whose only match is invisible reads as a stray row.
+    val note = rememberRowNote(s.notes)
+    Box(Modifier.fillMaxWidth()) {
+        RowNoteTooltip(note)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(if (selected) Skerry.colors.cyan10 else Color.Transparent)
+                .hoverable(note.interaction)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 18.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Sym("code_blocks", size = 16.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
-        }
-        Column(Modifier.weight(1f)) {
-            Txt(
-                remember(s) { untrustedLabel(s.label) }.ifBlank { stringResource(Res.string.lib_snippets_untitled) },
-                color = if (selected) Skerry.colors.cyanBright else Skerry.colors.textBright,
-                size = 12.5.sp,
-                weight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            CommandLine(s.command, modifier = Modifier.padding(top = 3.dp))
-        }
-        // Tags are metadata, not the row's subject: they get whatever width is left after the command.
-        if (s.tags.isNotEmpty()) {
-            Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                s.tags.take(MAX_ROW_TAGS).forEach { tag -> key(tag) { Chip(remember(tag) { tagChipLabel(tag) }) } }
+            Box(
+                Modifier.size(30.dp).clip(RoundedCornerShape(7.dp))
+                    .background(if (selected) Skerry.colors.cyan.copy(alpha = 0.14f) else Skerry.colors.overlayMed),
+                contentAlignment = Alignment.Center,
+            ) {
+                Sym("code_blocks", size = 16.sp, color = if (selected) Skerry.colors.cyanBright else Skerry.colors.dim)
+            }
+            Column(Modifier.weight(1f)) {
+                Txt(
+                    remember(s) { untrustedLabel(s.label) }.ifBlank { stringResource(Res.string.lib_snippets_untitled) },
+                    color = if (selected) Skerry.colors.cyanBright else Skerry.colors.textBright,
+                    size = 12.5.sp,
+                    weight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                CommandLine(s.command, modifier = Modifier.padding(top = 3.dp))
+                NoteBlock(
+                    s.notes, stringResource(Res.string.lib_snippets_field_notes),
+                    Modifier.padding(top = 3.dp), size = 11.sp, maxLines = 1,
+                )
+            }
+            // Tags are metadata, not the row's subject: they get whatever width is left after the command.
+            if (s.tags.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    s.tags.take(MAX_ROW_TAGS).forEach { tag -> key(tag) { Chip(remember(tag) { tagChipLabel(tag) }) } }
+                }
             }
         }
     }

@@ -41,6 +41,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SectionHeader
 import app.skerry.ui.design.SidebarSearchField
+import app.skerry.ui.design.NoteBlock
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
@@ -56,6 +57,7 @@ import app.skerry.ui.generated.resources.runbook_no_matches
 import app.skerry.ui.generated.resources.runbook_section
 import app.skerry.ui.generated.resources.runbook_search
 import app.skerry.ui.generated.resources.runbook_select_or_create
+import app.skerry.ui.generated.resources.runbook_field_description
 import app.skerry.ui.generated.resources.runbook_step_count
 import app.skerry.ui.generated.resources.runbook_steps_total
 import app.skerry.ui.generated.resources.runbook_untitled
@@ -245,7 +247,7 @@ private fun RunbooksHeader(
 /** One runbook row: name and its first steps on the left, tags on the right. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RunbookListRow(entry: RunbookEntry, selected: Boolean, mono: FontFamily, onClick: () -> Unit) {
+internal fun RunbookListRow(entry: RunbookEntry, selected: Boolean, mono: FontFamily, onClick: () -> Unit) {
     val runbook = entry.runbook
     Row(
         Modifier
@@ -274,6 +276,12 @@ private fun RunbookListRow(entry: RunbookEntry, selected: Boolean, mono: FontFam
                     },
                 color = Skerry.colors.faint, size = 11.sp, font = mono,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp),
+            )
+            // The search matches on the description, and a hit whose only match is invisible reads
+            // as a stray row — the same reason the snippet library row draws its note.
+            NoteBlock(
+                runbook.description, stringResource(Res.string.runbook_field_description),
+                Modifier.padding(top = 3.dp), size = 11.sp, maxLines = 1,
             )
         }
         if (runbook.tags.isNotEmpty()) {

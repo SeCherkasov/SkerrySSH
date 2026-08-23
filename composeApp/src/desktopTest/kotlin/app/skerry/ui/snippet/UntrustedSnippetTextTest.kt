@@ -15,7 +15,9 @@ import app.skerry.ui.teams.ShareItem
 import app.skerry.ui.teams.SharePickerDialog
 import app.skerry.shared.snippet.SnippetMoment
 import app.skerry.shared.snippet.SnippetRunEnvironment
+import app.skerry.ui.design.MAX_NOTE_CHARS
 import app.skerry.ui.design.boundedVisibleText
+import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.desktop.drawnText
 import app.skerry.ui.desktop.allText
@@ -39,6 +41,7 @@ import kotlinx.coroutines.cancel
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import androidx.compose.ui.test.onNodeWithContentDescription
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.lib_snippets_run_title
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.desktop.runDesktopShell
@@ -63,6 +66,8 @@ class UntrustedSnippetTextTest {
     // the tail of the line, so what is drawn reads as a comment and what runs is the command.
     private val label = "Rollout\u202Etuollor"
     private val command = "echo ok \u202E# rm -rf /"
+    private val note = "safe to re-run\u202Enur-er ot efasnu"
+    private val drawnNote = sanitizeServerText(note, MAX_NOTE_CHARS, allowNewlines = true)
 
     // Every peer-authored field of the record, not just the two the row is named after.
     private val snippet = Snippet(
@@ -71,6 +76,7 @@ class UntrustedSnippetTextTest {
         command = command,
         tags = listOf("pro\u202Ed"),
         shortcut = "Ctrl+\u202EK",
+        notes = note,
     )
 
     @Test
@@ -81,6 +87,7 @@ class UntrustedSnippetTextTest {
             // drawn is the line that runs — a filter that deleted it would pass the check above.
             onNodeWithText(boundedVisibleText(command), useUnmergedTree = true).assertExists()
             onNodeWithText(untrustedLabel(label), useUnmergedTree = true).assertExists()
+            assertNoteDrawn()
         }
     }
 
@@ -98,17 +105,19 @@ class UntrustedSnippetTextTest {
         }) {
             assertNothingReordered()
             onNodeWithText(boundedVisibleText(command), useUnmergedTree = true).assertExists()
+            assertNoteDrawn()
         }
     }
 
     @Test
     fun `the terminal palette draws neither the label nor the command raw`() {
         val manager = seededSnippets().apply {
-            save(SnippetDraft(label = label, command = command, shortcut = "Ctrl+\u202EK"))
+            save(SnippetDraft(label = label, command = command, shortcut = "Ctrl+\u202EK", notes = snippet.notes))
         }
         runForm({ SnippetPalette(manager) {} }) {
             assertNothingReordered()
             onNodeWithText(boundedVisibleText(command), useUnmergedTree = true).assertExists()
+            assertNoteDrawn()
         }
     }
 
@@ -117,6 +126,7 @@ class UntrustedSnippetTextTest {
         runForm({ MobileSnippetCard(snippet) {} }) {
             assertNothingReordered()
             onNodeWithText(boundedVisibleText(command), useUnmergedTree = true).assertExists()
+            assertNoteDrawn()
         }
     }
 
@@ -371,6 +381,19 @@ class UntrustedSnippetTextTest {
             runner.close()
             scope.cancel()
         }
+    }
+
+    /**
+     * The note is drawn, filtered, and named — on the four surfaces that show it without a pointer.
+     * The negative check above passes just as well when the note was dropped altogether, and the note
+     * is the whole point on two of them: the palette row runs its command on one click, and the
+     * library row can be in the list because the search matched a note and nothing else.
+     */
+    private fun ComposeUiTest.assertNoteDrawn() {
+        onNodeWithContentDescription(
+            string(Res.string.lib_snippets_field_notes) + ", " + drawnNote,
+            useUnmergedTree = true,
+        ).assertExists()
     }
 
     private fun ComposeUiTest.assertNothingReordered() {

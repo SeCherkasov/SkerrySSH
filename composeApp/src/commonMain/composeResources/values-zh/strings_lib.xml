@@ -61,9 +61,11 @@
     <string name="lib_snippets_untitled">未命名</string>
     <string name="lib_snippets_field_name">名称</string>
     <string name="lib_snippets_field_command">命令</string>
+    <string name="lib_snippets_field_notes">备注</string>
     <string name="lib_snippets_field_tags">标签</string>
     <string name="lib_snippets_field_shortcut">快捷键</string>
     <string name="lib_snippets_ph_name">磁盘使用报告</string>
+    <string name="lib_snippets_ph_notes">可选，记录此片段的用法、参数说明与注意事项</string>
     <string name="lib_snippets_add_tag">添加标签…</string>
     <string name="lib_snippets_press_keys">按键…</string>
     <string name="lib_snippets_shortcut_conflict">已被“%1$s”使用</string>

@@ -61,9 +61,11 @@
     <string name="lib_snippets_untitled">Untitled</string>
     <string name="lib_snippets_field_name">Name</string>
     <string name="lib_snippets_field_command">Command</string>
+    <string name="lib_snippets_field_notes">Notes</string>
     <string name="lib_snippets_field_tags">Tags</string>
     <string name="lib_snippets_field_shortcut">Shortcut</string>
     <string name="lib_snippets_ph_name">Disk usage report</string>
+    <string name="lib_snippets_ph_notes">Optional notes, usage instructions, or parameters</string>
     <string name="lib_snippets_add_tag">add tag…</string>
     <string name="lib_snippets_press_keys">Press keys…</string>
     <string name="lib_snippets_shortcut_conflict">Already used by “%1$s”</string>

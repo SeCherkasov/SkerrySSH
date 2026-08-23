@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.text.capNotes
 import app.skerry.shared.snippet.Snippet
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.snippet.SnippetHelpDialog
@@ -51,10 +52,14 @@ import app.skerry.ui.generated.resources.lib_snippets_empty_mobile
 import app.skerry.ui.generated.resources.lib_snippets_starter_pack
 import app.skerry.ui.generated.resources.lib_snippets_field_command
 import app.skerry.ui.generated.resources.lib_snippets_field_name
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.lib_snippets_field_tags
 import app.skerry.ui.generated.resources.lib_snippets_new
 import app.skerry.ui.generated.resources.lib_snippets_no_matches
 import app.skerry.ui.generated.resources.lib_snippets_ph_name
+import app.skerry.ui.generated.resources.lib_snippets_ph_notes
+import app.skerry.ui.design.NOTE_PEEK_LINES
+import app.skerry.ui.design.NoteBlock
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_placeholder
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_subtitle
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_title
@@ -234,6 +239,12 @@ internal fun MobileSnippetCard(snippet: Snippet, onClick: () -> Unit) {
             Sym("code_blocks", size = 18.sp, color = Skerry.colors.cyanBright)
             Txt(remember(snippet) { untrustedLabel(snippet.label) }.ifBlank { stringResource(Res.string.lib_snippets_untitled) }, color = Skerry.colors.text, size = 14.5.sp, weight = FontWeight.SemiBold)
         }
+        // A peek at the note, not the whole of it: the card is a row in a list, and the full text is
+        // in the editor.
+        NoteBlock(
+            snippet.notes, stringResource(Res.string.lib_snippets_field_notes),
+            Modifier.padding(top = 4.dp), size = 11.5.sp, maxLines = NOTE_PEEK_LINES,
+        )
         if (snippet.command.isNotBlank()) {
             Box(
                 Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(8.dp)).background(Skerry.colors.terminalBg).padding(horizontal = 11.dp, vertical = 9.dp),
@@ -322,6 +333,9 @@ private fun MobileSnippetEditSheet(
             }
             MobileFormField(stringResource(Res.string.lib_snippets_field_command)) {
                 MobileFormInput(form.command, { form.command = it }, "df -h | sort -k5 -r", mono = true, background = Skerry.colors.terminalBg, singleLine = false, minHeightDp = 88)
+            }
+            MobileFormField(stringResource(Res.string.lib_snippets_field_notes)) {
+                MobileFormInput(form.notes, { form.notes = capNotes(it) }, stringResource(Res.string.lib_snippets_ph_notes), singleLine = false, minHeightDp = 64)
             }
             MobileFormField(stringResource(Res.string.lib_snippets_field_tags)) {
                 // Own tags are excluded via selected; suggestions come from all snippets (including the

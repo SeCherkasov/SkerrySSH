@@ -9,11 +9,16 @@ import kotlinx.serialization.Serializable
  * active terminal and executed (with a newline). [tags] are user labels for grouping/search
  * (#monitoring, #disk).
  *
+ * [notes] is an optional free-form remark about the snippet (what it does to the box, which
+ * parameters it expects, when not to run it), stored the way every other note is
+ * ([app.skerry.shared.text.normalizeNotes]): trimmed, capped, blank collapsed to `null`. It is
+ * never sent to the shell — only the [command] is.
+ *
  * [shortcut] is the global launch hotkey in canonical form (`Ctrl+Shift+D`), `null` for none.
- * Defaulted field; older `snippets.json` without it reads as-is (backward-compat). The launch
- * target (active terminal or a specific host) isn't stored on the snippet — it's chosen at launch
- * time: the terminal palette targets the active session, while "Run snippet…" in a host's context
- * menu runs it on that host.
+ * Defaulted fields, [notes] included; older `snippets.json` without them reads as-is
+ * (backward-compat). The launch target (active terminal or a specific host) isn't stored on the
+ * snippet — it's chosen at launch time: the terminal palette targets the active session, while
+ * "Run snippet…" in a host's context menu runs it on that host.
  */
 @Serializable
 data class Snippet(
@@ -22,4 +27,5 @@ data class Snippet(
     val command: String,
     val tags: List<String> = emptyList(),
     val shortcut: String? = null,
+    val notes: String? = null,
 )

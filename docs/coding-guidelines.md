@@ -69,7 +69,8 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Any icon | `ui/design/Sym` (Material Symbols glyph) + `DesignFonts` |
 | Fonts | `ui/design/DesignFoundation`: `rememberUiFont`, `rememberMono`, `rememberMaterialSymbols` |
 | Buttons | `PrimaryButton`, `GhostButton`, `CancelButton`, `IconBtn` (hover/tooltip chrome); `ui/design/GlyphButton` for a touch glyph box — square tap target, `Role.Button`, optional long-press — don't hand-roll the `Box`+`Sym`+`clickable` shape again |
-| Small controls | `Toggle`, `Badge`, `Dot`, `MeterBar`, `NumberStepper`, `HoverTooltip` |
+| Small controls | `Toggle`, `Badge`, `Dot`, `MeterBar`, `NumberStepper`, `HoverTooltip` (raw popup — a *row's* note goes through `RowNote` below) |
+| A stored note on a row or in a panel | `ui/design/RowNote`: `rememberRowNote` + `RowNoteTooltip` for the hover variant (the dwell, the filter and the popup-suppression the host sidebar, the snippet library and the terminal palette all share), `NoteBlock` for the static one (keychain secret, run panel, list row, card) — it names itself for a screen reader, which a bare dim `Txt` does not. `MAX_NOTE_CHARS` is how much of a note any of them draws, `NOTE_PEEK_LINES` how many lines a row in a list peeks at; what is *stored* is capped by `shared/text/normalizeNotes` |
 | A setting as a label + switch row | `ToggleRow` (optional second line); `SettingToggleRow` / `MobileSyncToggleRow` are its settings and sync scales and should converge onto it |
 | A fact as a label + value row in a detail panel | `KeyValueRow`; `InfoRow` (session info panel) and `CardRow` (tunnel dashboard) are the same shape and should converge onto it |
 | Chips | `Chip` (label, active/inactive) vs `ChipButton` (action chip: colour, outline/filled, enabled) — pick one, don't add a third |

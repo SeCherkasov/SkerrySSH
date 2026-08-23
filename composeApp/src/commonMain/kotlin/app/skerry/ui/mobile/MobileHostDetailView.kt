@@ -55,7 +55,7 @@ import app.skerry.ui.generated.resources.shell_details
 import app.skerry.ui.generated.resources.shell_edit_host
 import app.skerry.ui.generated.resources.shell_duplicate_host
 import app.skerry.ui.generated.resources.shell_delete_host
-import app.skerry.ui.terminal.MAX_NOTE_CHARS
+import app.skerry.ui.design.MAX_NOTE_CHARS
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.LocalConnectHost
 import app.skerry.ui.design.HLine

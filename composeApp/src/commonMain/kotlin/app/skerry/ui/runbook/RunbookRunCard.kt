@@ -45,7 +45,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.design.CommandLine
 import app.skerry.ui.design.untrustedLabel
-import app.skerry.ui.design.sanitizeServerText
+import app.skerry.ui.design.NoteBlock
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_runs_on
 import app.skerry.ui.generated.resources.lib_snippets_variables
@@ -64,13 +64,13 @@ import app.skerry.ui.generated.resources.runbook_run_no_steps
 import app.skerry.ui.generated.resources.runbook_step_confirm
 import app.skerry.ui.generated.resources.runbook_step_continue_on_error
 import app.skerry.ui.generated.resources.runbook_step_n
+import app.skerry.ui.generated.resources.runbook_field_description
 import app.skerry.ui.generated.resources.runbook_steps
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.sftp.fileDateText
 import app.skerry.ui.design.tagChipLabel
 import app.skerry.ui.theme.Skerry
-import app.skerry.ui.terminal.MAX_NOTE_CHARS
 import org.jetbrains.compose.resources.stringResource
 
 /** Width of the runbook panel — wider than the snippet one: its rows are whole step lines. */
@@ -130,12 +130,10 @@ internal fun RunbookRunCard(
                 runbook.tags.forEach { tag -> key(tag) { Chip(remember(tag) { tagChipLabel(tag) }) } }
             }
         }
-        if (runbook.description.isNotBlank()) {
-            Txt(
-                remember(runbook) { sanitizeServerText(runbook.description, MAX_NOTE_CHARS, allowNewlines = true) }, color = Skerry.colors.dim, size = 12.sp,
-                lineHeight = 17.sp, modifier = Modifier.padding(bottom = 14.dp),
-            )
-        }
+        NoteBlock(
+            runbook.description, stringResource(Res.string.runbook_field_description),
+            Modifier.padding(bottom = 14.dp),
+        )
 
         FieldLabel(labelUppercase(stringResource(Res.string.runbook_steps)), top = 0.dp, bottom = 7.dp)
         runbook.steps.forEachIndexed { index, step ->

@@ -3,6 +3,7 @@ package app.skerry.ui.terminal
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,10 +42,15 @@ import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.NOTE_PEEK_LINES
+import app.skerry.ui.design.NoteBlock
+import app.skerry.ui.design.RowNoteTooltip
 import app.skerry.ui.design.rememberModalPresence
+import app.skerry.ui.design.rememberRowNote
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.generated.resources.term_no_matches
 import app.skerry.ui.generated.resources.term_no_snippets_yet
@@ -158,21 +164,37 @@ private const val ROW_PREVIEW_LINES = 2
 @Composable
 private fun PaletteRow(entry: SnippetEntry, mono: FontFamily, onClick: () -> Unit) {
     val s = entry.snippet
-    Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = 7.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            Sym("code_blocks", size = 14.sp, color = Skerry.colors.dim)
-            Txt(remember(s) { untrustedLabel(s.label) }.ifBlank { stringResource(Res.string.term_untitled) }, color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
-            // Gated on the filtered chord, not the raw one: a chip drawn around nothing is a stray
-            // pill next to the row.
-            val chord = remember(s) { s.shortcut?.let { untrustedLabel(it) }.orEmpty() }
-            if (chord.isNotBlank()) {
-                Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Skerry.colors.bg).padding(horizontal = 5.dp, vertical = 1.dp)) {
-                    Txt(chord, color = Skerry.colors.faint, size = 10.sp, font = mono)
+    // The hover tooltip carries the whole note; the row itself carries the opening of it, because
+    // this palette runs a fitting command on one click with no confirmation — a warning only a
+    // pointer can reveal is no warning for whoever drives it from the keyboard.
+    val note = rememberRowNote(s.notes)
+    Box(Modifier.fillMaxWidth()) {
+        RowNoteTooltip(note)
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(6.dp))
+                .hoverable(note.interaction)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 9.dp, vertical = 7.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                Sym("code_blocks", size = 14.sp, color = Skerry.colors.dim)
+                Txt(remember(s) { untrustedLabel(s.label) }.ifBlank { stringResource(Res.string.term_untitled) }, color = Skerry.colors.textBright, size = 12.5.sp, weight = FontWeight.Medium)
+                // Gated on the filtered chord, not the raw one: a chip drawn around nothing is a stray
+                // pill next to the row.
+                val chord = remember(s) { s.shortcut?.let { untrustedLabel(it) }.orEmpty() }
+                if (chord.isNotBlank()) {
+                    Box(Modifier.clip(RoundedCornerShape(4.dp)).background(Skerry.colors.bg).padding(horizontal = 5.dp, vertical = 1.dp)) {
+                        Txt(chord, color = Skerry.colors.faint, size = 10.sp, font = mono)
+                    }
                 }
             }
+            CommandLine(s.command, maxLines = ROW_PREVIEW_LINES, modifier = Modifier.padding(top = 3.dp))
+            NoteBlock(
+                s.notes, stringResource(Res.string.lib_snippets_field_notes),
+                Modifier.padding(top = 3.dp), size = 11.sp, maxLines = NOTE_PEEK_LINES,
+            )
         }
-        CommandLine(s.command, maxLines = ROW_PREVIEW_LINES, modifier = Modifier.padding(top = 3.dp))
     }
 }

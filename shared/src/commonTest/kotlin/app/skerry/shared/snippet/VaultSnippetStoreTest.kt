@@ -33,4 +33,11 @@ class VaultSnippetStoreTest {
         VaultSnippetStore(vault).put(snippet("s1"))
         assertEquals(listOf("s1"), VaultSnippetStore(vault).all().map { it.id })
     }
+
+    @Test
+    fun `put preserves notes`() {
+        val store = VaultSnippetStore(FakeVault())
+        store.put(Snippet(id = "s1", label = "Disk", command = "df -h", notes = "Check root partition usage"))
+        assertEquals("Check root partition usage", store.all().single().notes)
+    }
 }
