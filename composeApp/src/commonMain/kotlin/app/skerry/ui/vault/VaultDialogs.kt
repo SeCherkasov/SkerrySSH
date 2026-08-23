@@ -54,6 +54,7 @@ import app.skerry.shared.text.capNotes
 import app.skerry.shared.text.normalizeNotes
 import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyType
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.vault_add
 import app.skerry.ui.generated.resources.vault_add_password
@@ -121,8 +122,6 @@ import app.skerry.ui.design.rememberFieldDraft
 import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.contentDescription
 
 @Composable
 internal fun GenerateKeyDialog(onDismiss: () -> Unit, onCreate: (name: String, type: SshKeyType) -> Unit) {
@@ -446,7 +445,7 @@ internal fun DialogField(
             value = draft.textFieldValue(value),
             onValueChange = { draft.accept(it, value, onValueChange) },
             modifier = Modifier.fillMaxWidth().fieldFocus(draft)
-                .semantics { contentDescription = label }
+                .fieldName(label)
                 .onFocusChanged { focused = it.isFocused },
             singleLine = singleLine,
             textStyle = style,

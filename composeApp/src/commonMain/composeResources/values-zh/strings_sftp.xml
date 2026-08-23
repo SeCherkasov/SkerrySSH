@@ -115,4 +115,6 @@
     <!-- Transfer queue under the panes -->
     <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
     <string name="sftp_queue_done">完成</string>
+    <string name="sftp_path_field">跳转到路径</string>
+    <string name="sftp_edit_buffer">文件内容</string>
 </resources>

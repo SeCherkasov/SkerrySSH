@@ -115,4 +115,6 @@
     <!-- Transfer queue under the panes -->
     <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
     <string name="sftp_queue_done">готово</string>
+    <string name="sftp_path_field">Перейти к пути</string>
+    <string name="sftp_edit_buffer">Содержимое файла</string>
 </resources>

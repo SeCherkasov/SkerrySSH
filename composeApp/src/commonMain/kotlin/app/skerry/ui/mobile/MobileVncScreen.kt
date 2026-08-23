@@ -1,6 +1,8 @@
 package app.skerry.ui.mobile
 
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.generated.resources.rd_keyboard_input
 import app.skerry.ui.remote.remoteKeyEvent
 import app.skerry.ui.remote.RemoteDesktopPanel
 import app.skerry.ui.remote.rememberClipboardActions
@@ -30,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -46,10 +49,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.app.LocalSessions
+import app.skerry.ui.app.LocalUserActivity
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
@@ -60,6 +68,8 @@ import app.skerry.ui.generated.resources.vnc_connection_lost
 import app.skerry.ui.generated.resources.vnc_session_closed
 import app.skerry.ui.immersive.ImmersiveScreen
 import app.skerry.ui.immersive.hiddenSystemBarsPadding
+import app.skerry.ui.terminal.ANCHOR
+import app.skerry.ui.terminal.imeDeltaToPty
 import app.skerry.ui.vnc.VncTouchSurface
 import androidx.compose.ui.input.key.Key
 import app.skerry.ui.vnc.remoteDesktopAnnouncement
@@ -230,35 +240,59 @@ private fun MobileVncBar(
 
 /**
  * Hidden 1-pixel text field that holds IME focus and forwards typed characters as RFB key events.
- * Diffing the field value turns insertions into key press+release and deletions into Backspace.
+ *
+ * The same funnel the terminal uses ([imeDeltaToPty]): the field is reset to [ANCHOR] after every
+ * change, so what it holds is never the text typed — on a Windows or VNC login screen that text is
+ * a password, and a field's value is `EditableText` in the semantics tree. Diffing against the
+ * anchor turns insertions into key press+release and deletions into Backspace; the anchor is what
+ * makes the first deletion visible at all. [KeyboardOptions] keep the same characters out of
+ * autocorrect and the IME's personalised dictionary.
+ *
  * The soft keyboard is raised explicitly: focus alone is not enough once the field has been focused
  * before (requestFocus on an already-focused field is a no-op, so the keyboard would never return).
  */
 @Composable
-private fun VncImeField(screen: RemoteDesktopScreenState, onClosed: () -> Unit) {
-    var value by remember { mutableStateOf(TextFieldValue("")) }
+internal fun VncImeField(screen: RemoteDesktopScreenState, onClosed: () -> Unit) {
+    val baseline = remember { TextFieldValue(ANCHOR, selection = TextRange(ANCHOR.length)) }
+    var value by remember { mutableStateOf(baseline) }
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
+    val userActivity = LocalUserActivity.current
     BasicTextField(
         value = value,
         onValueChange = { new ->
-            val old = value.text
-            when {
-                new.text.length > old.length -> new.text.substring(old.length).forEach { c ->
-                    val event = if (c == '\n') remoteKeyEvent(Key.Enter, 0) else remoteKeyEvent(Key.Unknown, c.code)
-                    if (event != null) { screen.onKey(event, true); screen.onKey(event, false) }
+            val delta = imeDeltaToPty(ANCHOR, new.text)
+            // The vault's idle auto-lock sees no key or pointer event for this path — the soft
+            // keyboard is its own window — and typing into a session is the plainest evidence
+            // there is that the user is still here (issue #291).
+            if (delta.isNotEmpty()) userActivity()
+            for (ch in delta) {
+                val event = when (ch.code) {
+                    127, 8 -> remoteKeyEvent(Key.Backspace, 0) // DEL / BS
+                    13, 10 -> remoteKeyEvent(Key.Enter, 0) // CR / LF
+                    else -> remoteKeyEvent(Key.Unknown, ch.code)
                 }
-                new.text.length < old.length -> repeat(old.length - new.text.length) {
-                    val backspace = remoteKeyEvent(Key.Backspace, 0) ?: return@repeat
-                    screen.onKey(backspace, true)
-                    screen.onKey(backspace, false)
-                }
+                if (event != null) { screen.onKey(event, true); screen.onKey(event, false) }
             }
-            // Keep a small buffer so the field doesn't grow unbounded; reset when it gets long.
-            value = if (new.text.length > 64) TextFieldValue("") else new
+            value = baseline
         },
-        modifier = Modifier.size(1.dp).focusRequester(focus),
+        // Nothing is drawn in it, so the name is the only thing a reader that lands here gets.
+        modifier = Modifier.size(1.dp).fieldName(stringResource(Res.string.rd_keyboard_input)).focusRequester(focus),
         cursorBrush = androidx.compose.ui.graphics.SolidColor(Color.Transparent),
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            // Password rather than Ascii: it is the variation an IME reads as "do not learn this",
+            // and Ascii alone leaves suggestions and personalised learning on — what is typed here
+            // is a remote login. Nothing is drawn in the field, so masking costs no visual.
+            //
+            // The terminal's funnel deliberately keeps Ascii: a shell needs IME_FLAG_FORCE_ASCII
+            // (which the password variation drops), and the password type also costs glide typing,
+            // voice input and stylus handwriting on the app's primary Android input surface. Here
+            // none of those are worth a keystroke of a remote login screen.
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.None,
+        ),
     )
     LaunchedEffect(Unit) {
         focus.requestFocus()

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,8 +35,10 @@ import app.skerry.ui.generated.resources.conn_group_delete
 import app.skerry.ui.generated.resources.conn_group_new_title
 import app.skerry.ui.generated.resources.conn_group_rename_hint
 import app.skerry.ui.generated.resources.conn_group_rename_title
+import app.skerry.ui.generated.resources.shell_group_name_placeholder
 import app.skerry.ui.generated.resources.conn_save
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.LocalFieldLabel
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
 
@@ -82,7 +85,10 @@ internal fun MobileGroupCreateDialog(onDismiss: () -> Unit, onCreate: (String) -
     MobileCenteredDialog(onDismiss = onDismiss) {
         Txt(stringResource(Res.string.conn_group_new_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
         Spacer(Modifier.height(14.dp))
-        MobileFormInput(name, { name = it }, "Production")
+        // "Production" is an example of what to type, not what the field is (see [LocalFieldLabel]).
+        CompositionLocalProvider(LocalFieldLabel provides stringResource(Res.string.shell_group_name_placeholder)) {
+            MobileFormInput(name, { name = it }, "Production")
+        }
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(
@@ -136,7 +142,9 @@ internal fun MobileGroupRenameDialog(
         Txt(stringResource(Res.string.conn_group_rename_hint), color = Skerry.colors.dim, size = 12.5.sp)
         Spacer(Modifier.height(14.dp))
         // Prefilled with the old name: selected on focus, so a tap and a keystroke replace it.
-        MobileFormInput(name, { name = it }, "Production", selectAllOnFocus = name == initialName)
+        CompositionLocalProvider(LocalFieldLabel provides stringResource(Res.string.shell_group_name_placeholder)) {
+            MobileFormInput(name, { name = it }, "Production", selectAllOnFocus = name == initialName)
+        }
         Spacer(Modifier.height(18.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(

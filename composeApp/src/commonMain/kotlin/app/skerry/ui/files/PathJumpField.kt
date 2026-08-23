@@ -26,7 +26,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.TextUnit
+import app.skerry.ui.design.fieldName
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.sftp_path_field
 import app.skerry.ui.theme.Skerry
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Type-to-jump path editor shared by the desktop SFTP panes and the mobile Files breadcrumb.
@@ -60,6 +64,9 @@ fun PathJumpField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
         keyboardActions = KeyboardActions(onGo = { onCommit(draft.text) }),
         modifier = modifier
+            // Nothing on screen labels this field — it opens over the breadcrumb already holding
+            // the path, so its own name is all a reader has (see fieldName).
+            .fieldName(stringResource(Res.string.sftp_path_field))
             .focusRequester(focus)
             .onFocusChanged { if (it.isFocused) everFocused = true else if (everFocused) onCancel() }
             .onPreviewKeyEvent { event ->

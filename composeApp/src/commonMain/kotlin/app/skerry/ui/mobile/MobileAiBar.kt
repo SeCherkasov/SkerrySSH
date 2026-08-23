@@ -43,6 +43,7 @@ import app.skerry.ui.ai.TerminalAiController
 import app.skerry.ui.ai.aiBlockedMessage
 import app.skerry.ui.ai.aiFailureMessage
 import app.skerry.ui.ai.shortLabel
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.labelUppercase
 import app.skerry.ui.terminal.TerminalScreenState
 import app.skerry.ui.generated.resources.Res
@@ -188,7 +189,8 @@ internal fun MobileAiBarInput(controller: TerminalAiController, terminal: Termin
                         }
                     }
                     else -> {
-                        if (prompt.isEmpty()) Txt(stringResource(Res.string.term_ai_ask_short), color = Skerry.colors.dim, size = 13.sp)
+                        val placeholder = stringResource(Res.string.term_ai_ask_short)
+                        if (prompt.isEmpty()) Txt(placeholder, color = Skerry.colors.dim, size = 13.sp)
                         BasicTextField(
                             value = prompt,
                             onValueChange = { prompt = it },
@@ -197,7 +199,8 @@ internal fun MobileAiBarInput(controller: TerminalAiController, terminal: Termin
                             cursorBrush = SolidColor(Skerry.colors.cyan),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { submit() }),
-                            modifier = Modifier.fillMaxWidth(),
+                            // The placeholder is the only label this field draws (see fieldName).
+                            modifier = Modifier.fillMaxWidth().fieldName(placeholder),
                         )
                     }
                 }
