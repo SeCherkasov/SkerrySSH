@@ -18,6 +18,8 @@ dependencies {
     // for its own JVM targets, and an AGP unit-test task is not one — a bare kotlin("test") here
     // resolves to the JUnit 4 variant and `kotlin.test.Test` does not compile.
     testImplementation(kotlin("test-junit5"))
+    // KeepAliveRuntime's session graph lives on Dispatchers.Main; a host JVM needs setMain for it.
+    testImplementation(libs.kotlinx.coroutines.test)
 }
 
 android {

@@ -23,11 +23,14 @@ class DisplayControlChannelTest {
         /** Indices of the monitor's Width/Height inside the flattened PDU. */
         const val WIDTH = 7
         const val HEIGHT = 8
+
+        /** Index of PhysicalWidth, the first of the five scaling fields, in the same PDU. */
+        const val PHYSICAL_WIDTH = 9
     }
 
     @Test
     fun `a resolution request before the server's capabilities is not sent`() = runTest {
-        channel.requestResolution(1920, 1080)
+        channel.requestResolution(1920, 1080, scale = 1f)
 
         assertTrue(sent.isEmpty(), "a monitor layout went out before the server offered the channel")
     }
@@ -46,7 +49,7 @@ class DisplayControlChannelTest {
     fun `a resolution request is a layout of one primary monitor`() = runTest {
         channel.onMessage(capsPdu())
 
-        channel.requestResolution(1920, 1080)
+        channel.requestResolution(1920, 1080, scale = 1f)
 
         assertContentEquals(
             listOf(
@@ -58,7 +61,7 @@ class DisplayControlChannelTest {
                 0, 0, // Left, Top
                 1920, 1080, // Width, Height
                 0, 0, // PhysicalWidth, PhysicalHeight — unknown, so the server ignores them
-                0, // Orientation: landscape
+                0, // Orientation: not rotated
                 0, 0, // DesktopScaleFactor, DeviceScaleFactor — unset
             ),
             layout(sent.single()),
@@ -66,10 +69,57 @@ class DisplayControlChannelTest {
     }
 
     @Test
+    fun `a scaled display states its physical size and both scale factors`() = runTest {
+        // Without these the server fills the physical pixels with a 96 dpi desktop, and every glyph
+        // in the session comes out at a fraction of the size of the client's own UI.
+        channel.onMessage(capsPdu())
+
+        channel.requestResolution(2880, 1800, scale = 1.5f)
+
+        val scale = RdpDisplayScale.of(2880, 1800, 1.5f)
+        assertContentEquals(
+            listOf(
+                scale.physicalWidthMm, scale.physicalHeightMm,
+                0, // Orientation: not rotated
+                scale.desktopScaleFactor, scale.deviceScaleFactor,
+            ),
+            layout(sent.single()).subList(PHYSICAL_WIDTH, PHYSICAL_WIDTH + 5),
+        )
+        assertEquals(150, scale.desktopScaleFactor)
+    }
+
+    @Test
+    fun `the millimetres describe the size the server was actually asked for`() = runTest {
+        // A server whose area limit shrinks the desktop: millimetres computed for the size the user
+        // asked for would state a DPI this layout does not have, and the session would come back
+        // scaled by the wrong factor.
+        channel.onMessage(capsPdu(factorA = 1280, factorB = 1024))
+
+        channel.requestResolution(2880, 1800, scale = 1.5f)
+
+        val fields = layout(sent.single())
+        val fitted = RdpDisplayScale.of(fields[WIDTH], fields[HEIGHT], 1.5f)
+        assertTrue(fields[WIDTH] < 2880, "the area limit did not shrink the desktop")
+        assertContentEquals(
+            listOf(
+                fitted.physicalWidthMm, fitted.physicalHeightMm,
+                0, // Orientation: not rotated
+                fitted.desktopScaleFactor, fitted.deviceScaleFactor,
+            ),
+            fields.subList(PHYSICAL_WIDTH, PHYSICAL_WIDTH + 5),
+        )
+        val requested = RdpDisplayScale.of(2880, 1800, 1.5f)
+        assertTrue(
+            fitted.physicalWidthMm != requested.physicalWidthMm,
+            "the fitted and the requested size happen to agree, so this test proves nothing",
+        )
+    }
+
+    @Test
     fun `an odd width is rounded down, which the protocol requires`() = runTest {
         channel.onMessage(capsPdu())
 
-        channel.requestResolution(1367, 768)
+        channel.requestResolution(1367, 768, scale = 1f)
 
         assertEquals(1366, layout(sent.single())[WIDTH])
     }
@@ -78,7 +128,7 @@ class DisplayControlChannelTest {
     fun `a size outside the protocol's range is clamped instead of refused`() = runTest {
         channel.onMessage(capsPdu())
 
-        channel.requestResolution(120, 20_000)
+        channel.requestResolution(120, 20_000, scale = 1f)
 
         val fields = layout(sent.single())
         assertEquals(200, fields[WIDTH], "width below the minimum")
@@ -90,7 +140,7 @@ class DisplayControlChannelTest {
         // 1000 x 1000 = one megapixel; a 1920x1080 desktop is twice that.
         channel.onMessage(capsPdu(factorA = 1000, factorB = 1000))
 
-        channel.requestResolution(1920, 1080)
+        channel.requestResolution(1920, 1080, scale = 1f)
 
         val fields = layout(sent.single())
         val width = fields[WIDTH]
@@ -104,7 +154,7 @@ class DisplayControlChannelTest {
     fun `a truncated capability PDU leaves the channel unusable rather than half-configured`() = runTest {
         channel.onMessage(RdpWriter(12).u32le(0x00000005).u32le(12).u32le(16).toByteArray())
 
-        channel.requestResolution(1920, 1080)
+        channel.requestResolution(1920, 1080, scale = 1f)
 
         assertTrue(channel.drainUpdates().isEmpty())
         assertTrue(sent.isEmpty())

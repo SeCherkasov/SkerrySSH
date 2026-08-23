@@ -58,8 +58,8 @@ open class FakeRdpSession(
         calls += "visible($visible)"
     }
 
-    override suspend fun setDesktopSize(width: Int, height: Int) {
-        calls += "size($width,$height)"
+    override suspend fun setDesktopSize(width: Int, height: Int, scale: Float) {
+        calls += "size($width,$height,$scale)"
     }
 
     override suspend fun sendClipboardText(text: String) {

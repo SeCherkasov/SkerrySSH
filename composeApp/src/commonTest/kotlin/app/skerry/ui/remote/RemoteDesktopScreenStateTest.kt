@@ -474,11 +474,53 @@ class RemoteDesktopScreenStateTest {
         updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
         assertTrue(screen.canResizeRemote)
 
-        screen.onViewportSize(IntSize(1280, 720))
+        screen.onViewportSize(RemoteViewport(IntSize(1280, 720), 1f))
         screen.toggleRemoteResize()
         assertTrue(session.desktopSizes.isEmpty()) // debounced, not instant
         advanceUntilIdle()
         assertEquals(1280 to 720, session.desktopSizes.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun the_resize_request_carries_the_display_scaling_of_the_viewport() = runTest {
+        // The viewport is physical pixels. Without the scale beside it the server draws a 96 dpi
+        // desktop into them, and the session comes out sharp and half the size of the local UI.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
+        updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
+
+        screen.onViewportSize(RemoteViewport(IntSize(2880, 1800), 1.5f))
+        screen.toggleRemoteResize()
+        advanceUntilIdle()
+
+        assertEquals(2880 to 1800, session.desktopSizes.single())
+        assertEquals(1.5f, session.desktopScales.single())
+        scope.cancel()
+    }
+
+    @Test
+    fun a_display_scale_change_at_an_unchanged_size_still_reaches_the_server() = runTest {
+        // The OS scaling can change under a session whose pixel size never moves: Android's
+        // "Display size", or a maximised window on Windows. Deduping on the size alone leaves the
+        // remote desktop at the DPI it connected with until the user happens to resize something.
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val updates = MutableSharedFlow<RemoteDesktopUpdate>(extraBufferCapacity = 8)
+        val session = FakeRemoteDesktop(framebuffer = RemoteFramebuffer(2880, 1800), updates = updates)
+        val screen = RemoteDesktopScreenState(session, scope)
+        updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
+
+        screen.onViewportSize(RemoteViewport(IntSize(2880, 1800), 1f))
+        screen.toggleRemoteResize()
+        advanceUntilIdle()
+        assertTrue(session.desktopSizes.isEmpty(), "the session was resized to the size it already had")
+
+        screen.onViewportSize(RemoteViewport(IntSize(2880, 1800), 1.5f))
+        advanceUntilIdle()
+        assertEquals(2880 to 1800, session.desktopSizes.single())
+        assertEquals(1.5f, session.desktopScales.single())
         scope.cancel()
     }
 
@@ -492,9 +534,9 @@ class RemoteDesktopScreenStateTest {
         updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
         screen.toggleRemoteResize()
 
-        screen.onViewportSize(IntSize(100, 100))
-        screen.onViewportSize(IntSize(200, 200))
-        screen.onViewportSize(IntSize(300, 300))
+        screen.onViewportSize(RemoteViewport(IntSize(100, 100), 1f))
+        screen.onViewportSize(RemoteViewport(IntSize(200, 200), 1f))
+        screen.onViewportSize(RemoteViewport(IntSize(300, 300), 1f))
         advanceUntilIdle()
         assertEquals(listOf(300 to 300), session.desktopSizes)
         scope.cancel()
@@ -508,7 +550,7 @@ class RemoteDesktopScreenStateTest {
         val screen = RemoteDesktopScreenState(session, scope)
         updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
 
-        screen.onViewportSize(IntSize(2, 1))
+        screen.onViewportSize(RemoteViewport(IntSize(2, 1), 1f))
         screen.toggleRemoteResize()
         advanceUntilIdle()
         assertTrue(session.desktopSizes.isEmpty())
@@ -525,7 +567,7 @@ class RemoteDesktopScreenStateTest {
         val screen = RemoteDesktopScreenState(session, scope)
         updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
 
-        screen.onViewportSize(IntSize(1000, 700))
+        screen.onViewportSize(RemoteViewport(IntSize(1000, 700), 1f))
         screen.toggleRemoteResize()
         advanceUntilIdle()
         assertEquals(listOf(1000 to 700), session.desktopSizes)
@@ -545,7 +587,7 @@ class RemoteDesktopScreenStateTest {
         val session = FakeRemoteDesktop(updates = updates)
         val screen = RemoteDesktopScreenState(session, scope, remoteResizeInitial = true)
 
-        screen.onViewportSize(IntSize(1280, 720))
+        screen.onViewportSize(RemoteViewport(IntSize(1280, 720), 1f))
         updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
         advanceUntilIdle()
         assertEquals(listOf(1280 to 720), session.desktopSizes)
@@ -573,7 +615,7 @@ class RemoteDesktopScreenStateTest {
         updates.emit(RemoteDesktopUpdate.RemoteResizeSupported)
 
         screen.toggleRemoteResize()
-        screen.onViewportSize(IntSize(1280, 720))
+        screen.onViewportSize(RemoteViewport(IntSize(1280, 720), 1f))
         screen.toggleRemoteResize() // off again before the debounce fires
         advanceUntilIdle()
         assertTrue(session.desktopSizes.isEmpty())

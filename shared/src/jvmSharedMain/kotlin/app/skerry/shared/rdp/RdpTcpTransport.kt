@@ -416,8 +416,8 @@ class RdpSocketSession(
     override val outputSuppressionSupported: Boolean =
         state.capabilities.suppressOutputSupported && state.capabilities.refreshRectSupported
 
-    override suspend fun setDesktopSize(width: Int, height: Int) {
-        withContext(Dispatchers.IO) { display.requestResolution(width, height) }
+    override suspend fun setDesktopSize(width: Int, height: Int, scale: Float) {
+        withContext(Dispatchers.IO) { display.requestResolution(width, height, scale) }
     }
 
     override suspend fun sendClipboardText(text: String) =

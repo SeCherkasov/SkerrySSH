@@ -107,7 +107,7 @@ class RemoteDesktopScreenState(
      */
     fun setZoom(scale: Float, offset: Offset) {
         userScale = scale.coerceIn(1f, 8f)
-        userOffset = clampPan(offset, viewport, desktopSize.width, desktopSize.height, userScale)
+        userOffset = clampPan(offset, viewport.size, desktopSize.width, desktopSize.height, userScale)
     }
 
     /** Reset zoom/pan back to plain fit-to-window. */
@@ -146,12 +146,22 @@ class RemoteDesktopScreenState(
     var remoteResize by mutableStateOf(remoteResizeInitial)
         private set
 
-    // Last known viewport (canvas) size in pixels — the resize target when [remoteResize] is on.
+    // Last known viewport (canvas) size in physical pixels and the display scaling it was measured
+    // at — the resize target when [remoteResize] is on. One value, not two fields: the size and the
+    // scale describe one DPI together, and a debounce firing between two separate writes would send
+    // a layout whose millimetres and scale factor disagree.
     // @Volatile: written by the UI thread, read by [scheduleRemoteResize] when the session's read
     // loop reacts to RemoteResizeSupported — without it that reader can see a stale Zero and skip
     // the seeded resize.
     @Volatile
-    private var viewport = IntSize.Zero
+    private var viewport = RemoteViewport.None
+
+    // The layout the server was last asked for, seeded with the first measurement so a session that
+    // opens already the right size owes nothing. Deduping against [desktopSize] alone would compare
+    // pixels only, and the display scaling can change while they do not — Android's "Display size",
+    // a maximised window on Windows — leaving the session at the DPI it connected with.
+    @Volatile
+    private var sentLayout: RemoteViewport? = null
 
     // Guarded by [resizeLock]: the debounce job is cancelled-and-replaced from both the UI thread
     // and the read loop, and an unguarded swap can leave two jobs alive with the stale size
@@ -175,9 +185,15 @@ class RemoteDesktopScreenState(
         }
     }
 
-    /** The drawing surface reports its size here (every layout change, cheap when idle). */
-    fun onViewportSize(size: IntSize) {
-        viewport = size
+    /**
+     * The drawing surface reports itself here (every layout change, cheap when idle): its size in
+     * physical pixels together with the scaling they are drawn at ([RemoteViewport.scale]). The
+     * scale is what keeps the remote desktop at this machine's DPI instead of filling those pixels
+     * with a 96 dpi desktop half the size of the local UI.
+     */
+    fun onViewportSize(viewport: RemoteViewport) {
+        this.viewport = viewport
+        if (sentLayout == null) sentLayout = viewport
         if (remoteResize) scheduleRemoteResize()
     }
 
@@ -198,10 +214,13 @@ class RemoteDesktopScreenState(
                     // volatile [viewport] is always the freshest, and re-checking [remoteResize]
                     // honours a toggle-off that landed while this debounce was pending.
                     if (!remoteResize) return@launch
-                    val target = viewport
-                    if (target.width <= 0 || target.height <= 0 || target == desktopSize) return@launch
+                    val requested = viewport
+                    val (target, displayScale) = requested
+                    if (target.width <= 0 || target.height <= 0) return@launch
+                    if (target == desktopSize && requested == sentLayout) return@launch
                     try {
-                        session.setDesktopSize(target.width, target.height)
+                        session.setDesktopSize(target.width, target.height, displayScale)
+                        sentLayout = requested
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {

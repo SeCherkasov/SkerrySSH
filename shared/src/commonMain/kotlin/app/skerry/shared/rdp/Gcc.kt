@@ -16,6 +16,12 @@ object Gcc {
 
     // TS_UD_HEADER::type (MS-RDPBCGR 2.2.1.3.1). Client blocks are 0xC0xx, server blocks 0x0Cxx.
     private const val CS_CORE = 0xC001
+
+    /**
+     * desktopOrientation, in degrees: the desktop is asked for at the size it is drawn at, so it is
+     * never rotated — a portrait screen asks for a taller desktop, not a turned one.
+     */
+    private const val ORIENTATION_NONE = 0
     private const val CS_SECURITY = 0xC002
     private const val CS_NET = 0xC003
     private const val CS_CLUSTER = 0xC004
@@ -182,6 +188,19 @@ object Gcc {
         writer.u8(0) // connectionType, ignored without RNS_UD_CS_VALID_CONNECTION_TYPE
         writer.u8(0) // pad1octet
         writer.u32le(settings.selectedProtocol)
+        // The optional tail (MS-RDPBCGR 2.2.1.3.2): the display's physical size and the scale it is
+        // drawn at, so the session comes up at this client's DPI rather than at 96. Omitted, not
+        // zero-filled, when the display is unscaled: the server ignores a zeroed tail anyway, and
+        // leaving the block byte-identical to what shipped before keeps a client that gains nothing
+        // from the tail out of the blast radius of servers that read this optional area loosely.
+        val scale = RdpDisplayScale.of(settings.desktopWidth, settings.desktopHeight, settings.displayScale)
+        if (scale != RdpDisplayScale.NONE) {
+            writer.u32le(scale.physicalWidthMm)
+            writer.u32le(scale.physicalHeightMm)
+            writer.u16le(ORIENTATION_NONE)
+            writer.u32le(scale.desktopScaleFactor)
+            writer.u32le(scale.deviceScaleFactor)
+        }
         writer.patchU16le(start + 2, writer.size - start)
     }
 

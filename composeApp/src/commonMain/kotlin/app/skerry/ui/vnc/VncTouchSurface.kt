@@ -1,6 +1,7 @@
 package app.skerry.ui.vnc
 
 import app.skerry.ui.remote.RemoteDesktopScreenState
+import app.skerry.ui.remote.RemoteViewport
 import app.skerry.ui.remote.RemoteStatsOverlay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -28,6 +29,7 @@ import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import kotlin.math.abs
@@ -64,9 +66,12 @@ fun VncTouchSurface(screen: RemoteDesktopScreenState, modifier: Modifier = Modif
         }
     }
 
+    // The surface is measured in physical pixels; the density is what the remote side needs to know
+    // how large one of them is (see [RemoteDesktopScreenState.onViewportSize]).
+    val displayScale = LocalDensity.current.density
     var mod = modifier.fillMaxSize().clipToBounds().background(Color.Black).onSizeChanged {
         canvasSize = it
-        screen.onViewportSize(it)
+        screen.onViewportSize(RemoteViewport(it, displayScale))
     }
     // A frozen last frame after a drop takes no input, and nothing tracks a cursor on it.
     if (interactive) mod = mod.pointerInput(screen, pad) { vncTouchGestures(screen, pad) { canvasSize } }

@@ -119,6 +119,28 @@ class McsConnectTest {
         assertTrue(earlyCapabilityFlags and 0x0001 != 0, "understands the error info PDU")
         core.skip(64 + 1 + 1) // clientDigProductId, connectionType, pad
         assertEquals(RdpSecurityProtocol.HYBRID, core.u32le()) // serverSelectedProtocol, echoed back
+        // An unscaled client says nothing: the optional tail is absent, so the block is the same
+        // bytes an older Skerry sent and no server sees a longer one for a session it cannot use.
+        assertEquals(0, core.remaining, "an unscaled client appended an optional tail")
+    }
+
+    @Test
+    fun `client core data states the display scaling so the session is not drawn at 96 dpi`() {
+        val core = Gcc.clientUserData(
+            settings.copy(desktopWidth = 2880, desktopHeight = 1800, displayScale = 1.5f),
+        ).blockAt(0xC001)
+        val expected = RdpDisplayScale.of(2880, 1800, 1.5f)
+
+        core.skip(4 + 2 + 2 + 2 + 2) // version, desktop width/height, colour depth, SAS sequence
+        core.skip(4 + 4 + 32 + 12 + 64) // keyboard, build, client name, keyboard detail, IME
+        core.skip(2 + 2 + 4 + 2 + 2 + 2) // colour and product fields, early capability flags
+        core.skip(64 + 1 + 1 + 4) // clientDigProductId, connectionType, pad, serverSelectedProtocol
+        assertEquals(expected.physicalWidthMm, core.u32le())
+        assertEquals(expected.physicalHeightMm, core.u32le())
+        assertEquals(0, core.u16le()) // desktopOrientation: landscape
+        assertEquals(150, core.u32le()) // desktopScaleFactor
+        assertEquals(RdpDisplayScale.DEVICE_140, core.u32le())
+        assertEquals(0, core.remaining, "the block length did not grow with the tail it carries")
     }
 
     @Test

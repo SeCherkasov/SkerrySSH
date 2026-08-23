@@ -30,6 +30,8 @@ import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
 import app.skerry.ui.known.TrustedCaController
+import app.skerry.ui.remote.toCredentials
+import app.skerry.ui.remote.toTarget
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.runbook.RunbookManager
 import app.skerry.ui.runbook.RunbookRunner
@@ -252,35 +254,7 @@ fun DesktopDesignApp(
                 openVncSession = vncTransport?.let { vt ->
                     { target, auth -> app.skerry.shared.vnc.VncRemoteDesktop(vt.connect(target, auth)) }
                 },
-                openRdpSession = rdpTransport?.let { rt ->
-                    { request ->
-                        app.skerry.shared.rdp.RdpRemoteDesktop(
-                            rt.connect(
-                                app.skerry.shared.rdp.RdpTarget(
-                                    host = request.host,
-                                    port = request.port,
-                                    desktopWidth = request.width,
-                                    desktopHeight = request.height,
-                                    clientName = request.clientName,
-                                    loadBalanceInfo = request.loadBalanceInfo,
-                                    audioOutput = request.audioOutput,
-                                    audioDeviceId = request.audioDeviceId,
-                                    clipboard = request.clipboard,
-                                    imageQuality = request.imageQuality,
-                                    keyboardLayout = request.keyboardLayout,
-                                    graphicsPipeline = request.graphicsPipeline,
-                                    remoteFx = request.remoteFx,
-                                    h264 = request.h264,
-                                ),
-                                app.skerry.shared.rdp.RdpCredentials(
-                                    username = request.user,
-                                    password = request.password,
-                                    domain = request.domain,
-                                ),
-                            ),
-                        )
-                    }
-                },
+                openRdpSession = rdpTransport?.let { app.skerry.ui.remote.rdpSessionFactory(it) },
                 // Session half of the Teams activity feed. Both privacy rules (the setting, and
                 // "never a host of our own") live in the coordinator, not here.
                 onHostSessionOpened = { hostId -> teams?.reportSessionOpened(hostId) },

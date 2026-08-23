@@ -14,6 +14,7 @@ import app.skerry.shared.ssh.SshJump
 import app.skerry.ui.connection.connectionSubtitle
 import app.skerry.ui.connection.toTarget
 import app.skerry.ui.host.rowLabel
+import app.skerry.ui.remote.toRdpRequest
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.MobileRoute
@@ -52,36 +53,14 @@ internal fun openMobileRdp(
     state: MobileDesignState,
     hostManager: app.skerry.ui.host.HostManagerController?,
     host: Host,
-    password: String,
-    /** The screen the session will live on; the desktop is requested at that size (F-06). */
-    viewport: androidx.compose.ui.unit.IntSize = androidx.compose.ui.unit.IntSize.Zero,
+    /** Built by the caller from the screen it measured — see [app.skerry.ui.remote.toRdpRequest]. */
+    request: app.skerry.ui.remote.RdpConnectRequest,
 ) {
-    val desktop = app.skerry.ui.remote.rdpDesktopSize(
-        viewport,
-        fallback = androidx.compose.ui.unit.IntSize(MOBILE_RDP_WIDTH, MOBILE_RDP_HEIGHT),
-    )
     sessions?.openRdp(
         host.id,
         host.rowLabel(),
         host.connectionSubtitle(),
-        app.skerry.ui.remote.RdpConnectRequest(
-            host = host.address,
-            port = host.port,
-            username = host.username,
-            password = password,
-            width = desktop.width,
-            height = desktop.height,
-            keyboardLayout = app.skerry.ui.remote.currentKeyboardLayout(),
-            clientName = "Skerry",
-            loadBalanceInfo = host.rdp?.loadBalanceInfo.orEmpty(),
-            audioOutput = host.rdp?.audioOutput == true,
-            audioDeviceId = host.rdp?.audioOutputDeviceId.orEmpty(),
-            clipboard = host.rdp?.clipboard != false,
-            imageQuality = host.rdp?.quality ?: app.skerry.shared.rdp.RdpImageQuality.DEFAULT,
-            graphicsPipeline = host.rdp?.graphicsPipeline != false,
-            remoteFx = host.rdp?.remoteFx != false,
-            h264 = host.rdp?.h264 ?: app.skerry.shared.rdp.RdpH264Mode.Auto,
-        ),
+        request,
         remoteResize = host.vncResizeToWindow,
         onRemoteResizeChanged = { on -> hostManager?.setVncResizeToWindow(host.id, on) },
         quality = host.vncQuality,
@@ -89,6 +68,15 @@ internal fun openMobileRdp(
     )
     if (sessions != null) state.push(MobileRoute.Vnc)
 }
+
+/** The screen an RDP session dialled from the mobile chrome lives in, with its scaling. */
+internal fun mobileRdpRequest(host: Host, password: String, viewport: app.skerry.ui.remote.RemoteViewport) =
+    host.toRdpRequest(
+        password,
+        viewport,
+        clientName = "Skerry",
+        fallback = androidx.compose.ui.unit.IntSize(MOBILE_RDP_WIDTH, MOBILE_RDP_HEIGHT),
+    )
 
 internal fun openMobileVnc(
     sessions: SessionsController?,

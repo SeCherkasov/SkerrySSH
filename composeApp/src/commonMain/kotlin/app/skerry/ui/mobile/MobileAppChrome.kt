@@ -40,6 +40,7 @@ import app.skerry.ui.connection.connectableSecrets
 import app.skerry.ui.host.rowLabel
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.nav.PlatformBackHandler
+import app.skerry.ui.remote.RemoteViewport
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.generated.resources.term_ai_dismiss
@@ -94,6 +95,9 @@ internal fun MobileChrome(
     // every container change (IME, rotation, split screen). The size is read when an RDP session
     // is dialled — the desktop is requested at that size instead of a hardcoded 1280×720 (F-06).
     val windowInfo = LocalWindowInfo.current
+    // The size above is physical pixels; this is how large one of them is, and it travels with the
+    // size so an RDP session comes up at this screen's DPI (see [RdpDisplayScale]).
+    val displayScale = LocalDensity.current.density
     // Keychain secrets live in the open vault — behind the master password gate, first fire
     // [onVaultUnlocked], then reload. [MobileChrome] composes only behind the gate and
     // re-enters composition on every unlock, so also reload AI settings here from the now-open vault
@@ -151,7 +155,7 @@ internal fun MobileChrome(
                     // arrives with its credential link stripped and has no other way in.
                     val password = credentials?.useForConnect(host.credentialId)?.toRdpPassword()
                     when {
-                        password != null -> openMobileRdp(sessions, state, hostManager, host, password, windowInfo.containerSize)
+                        password != null -> openMobileRdp(sessions, state, hostManager, host, mobileRdpRequest(host, password, RemoteViewport(windowInfo.containerSize, displayScale)))
                         host.username.isBlank() -> state.openEditConn(host)
                         else -> pendingRdp = host
                     }
@@ -377,7 +381,7 @@ internal fun MobileChrome(
                     onDismiss = { pendingRdp = null },
                     onConnect = { pw ->
                         pendingRdp = null
-                        openMobileRdp(sessions, state, hostManager, host, pw, windowInfo.containerSize)
+                        openMobileRdp(sessions, state, hostManager, host, mobileRdpRequest(host, pw, RemoteViewport(windowInfo.containerSize, displayScale)))
                     },
                     secrets = connectableSecrets(credentials?.credentials.orEmpty(), host, hostManager?.hosts.orEmpty()),
                     onUseSecret = { secret ->
@@ -386,7 +390,7 @@ internal fun MobileChrome(
                         val password = secret.toRdpPassword()
                         if (password != null) {
                             pendingRdp = null
-                            openMobileRdp(sessions, state, hostManager, host, password, windowInfo.containerSize)
+                            openMobileRdp(sessions, state, hostManager, host, mobileRdpRequest(host, password, RemoteViewport(windowInfo.containerSize, displayScale)))
                         }
                     },
                 )

@@ -3,9 +3,6 @@ package app.skerry.android
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import app.skerry.shared.rdp.RdpCredentials
-import app.skerry.shared.rdp.RdpRemoteDesktop
-import app.skerry.shared.rdp.RdpTarget
 import app.skerry.shared.rdp.RdpTransport
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
@@ -19,6 +16,7 @@ import app.skerry.shared.vnc.VncRemoteDesktop
 import app.skerry.shared.vnc.VncTransport
 import app.skerry.ui.connection.ConnectionController
 import app.skerry.ui.remote.RemoteDesktopController
+import app.skerry.ui.remote.rdpSessionFactory
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.teams.TeamsCoordinator
 import app.skerry.ui.terminal.TerminalSessionPrefs
@@ -126,32 +124,9 @@ internal object KeepAliveRuntime {
                 VncRemoteDesktop(vnc.connect(target, auth))
             },
             openRdpSession = { request ->
+                // The current graph, per connect, for the same reason [liveTransport] reads it late.
                 val rdp = requireNotNull(deps?.rdpTransport) { "no RDP transport wired" }
-                RdpRemoteDesktop(
-                    rdp.connect(
-                        RdpTarget(
-                            host = request.host,
-                            port = request.port,
-                            desktopWidth = request.width,
-                            desktopHeight = request.height,
-                            clientName = request.clientName,
-                            loadBalanceInfo = request.loadBalanceInfo,
-                            audioOutput = request.audioOutput,
-                            audioDeviceId = request.audioDeviceId,
-                            clipboard = request.clipboard,
-                            imageQuality = request.imageQuality,
-                            keyboardLayout = request.keyboardLayout,
-                            graphicsPipeline = request.graphicsPipeline,
-                            remoteFx = request.remoteFx,
-                            h264 = request.h264,
-                        ),
-                        RdpCredentials(
-                            username = request.user,
-                            password = request.password,
-                            domain = request.domain,
-                        ),
-                    ),
-                )
+                rdpSessionFactory(rdp)(request)
             },
             // Desktop parity: the session half of the Teams activity feed (the coordinator holds
             // the privacy gates). Reported to the CURRENT coordinator — the first one's sync link

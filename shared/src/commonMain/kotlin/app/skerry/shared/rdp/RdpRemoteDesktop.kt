@@ -146,7 +146,8 @@ class RdpRemoteDesktop(
      * server that never opened one — the session then keeps the size it connected with and the view
      * scales to fit.
      */
-    override suspend fun setDesktopSize(width: Int, height: Int) = session.setDesktopSize(width, height)
+    override suspend fun setDesktopSize(width: Int, height: Int, scale: Float) =
+        session.setDesktopSize(width, height, scale)
 
     /** The RDP cursor is always the client's to draw; there is nothing to hand over. */
     override suspend fun setLocalCursor(enabled: Boolean) = Unit

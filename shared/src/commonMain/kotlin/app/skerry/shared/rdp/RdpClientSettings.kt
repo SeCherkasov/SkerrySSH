@@ -32,6 +32,12 @@ data class RdpClientSettings(
     val redirectedSessionId: Int = 0,
     /** How much of the desktop the server is asked to draw; goes into the Client Info PDU. */
     val imageQuality: RdpImageQuality = RdpImageQuality.DEFAULT,
+    /**
+     * How this display is scaled locally (1.0 = 100%). [desktopWidth]/[desktopHeight] are physical
+     * pixels, so without this a HiDPI client gets a 96 dpi desktop rendered into them — sharp, and
+     * half the size of its own UI. See [RdpDisplayScale].
+     */
+    val displayScale: Float = 1f,
 ) {
     init {
         require(desktopWidth in MIN_DIMENSION..MAX_DIMENSION) { "desktop width out of range" }
@@ -83,6 +89,7 @@ fun RdpTarget.clientSettings(selectedProtocol: Int, audioOpened: Boolean): RdpCl
         wantsRemoteFx = remoteFx,
         h264 = h264,
         imageQuality = imageQuality,
+        displayScale = displayScale,
         channels = buildList {
             if (clipboard) add(RdpClientSettings.CHANNEL_CLIPBOARD)
             if (audioOpened) add(RdpClientSettings.CHANNEL_AUDIO)

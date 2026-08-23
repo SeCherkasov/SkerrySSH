@@ -20,6 +20,8 @@ import app.skerry.ui.AppDependencies
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.shared.terminal.VaultTerminalHistoryStore
 import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.remote.toCredentials
+import app.skerry.ui.remote.toTarget
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.sync.SyncStatus
 import app.skerry.ui.sync.SyncOnboardingScreen
@@ -122,35 +124,7 @@ fun MobileDesignApp(
         openVncSession = deps.vncTransport?.let { vt ->
             { target, auth -> app.skerry.shared.vnc.VncRemoteDesktop(vt.connect(target, auth)) }
         },
-        openRdpSession = deps.rdpTransport?.let { rt ->
-            { request ->
-                app.skerry.shared.rdp.RdpRemoteDesktop(
-                    rt.connect(
-                        app.skerry.shared.rdp.RdpTarget(
-                            host = request.host,
-                            port = request.port,
-                            desktopWidth = request.width,
-                            desktopHeight = request.height,
-                            clientName = request.clientName,
-                            loadBalanceInfo = request.loadBalanceInfo,
-                            audioOutput = request.audioOutput,
-                            audioDeviceId = request.audioDeviceId,
-                            clipboard = request.clipboard,
-                            imageQuality = request.imageQuality,
-                            keyboardLayout = request.keyboardLayout,
-                            graphicsPipeline = request.graphicsPipeline,
-                            remoteFx = request.remoteFx,
-                            h264 = request.h264,
-                        ),
-                        app.skerry.shared.rdp.RdpCredentials(
-                            username = request.user,
-                            password = request.password,
-                            domain = request.domain,
-                        ),
-                    ),
-                )
-            }
-        },
+                openRdpSession = deps.rdpTransport?.let { app.skerry.ui.remote.rdpSessionFactory(it) },
                 // Desktop parity: the session half of the Teams activity feed (the coordinator holds
                 // the privacy gates).
                 onHostSessionOpened = { hostId -> deps.teams?.reportSessionOpened(hostId) },
