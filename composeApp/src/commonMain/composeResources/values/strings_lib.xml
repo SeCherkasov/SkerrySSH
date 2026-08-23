@@ -226,6 +226,7 @@
     <string name="lib_teams_err_not_connected">Sync is not connected</string>
     <string name="lib_teams_err_vault_locked">Vault is locked</string>
     <string name="lib_teams_err_no_recipient_key">This account hasn't published a sharing key yet — ask the invitee to open Teams once</string>
+    <string name="lib_teams_err_recipient_key_changed">The account's key changed after you verified the fingerprint — nothing was sent, invite again and check the new one</string>
     <string name="lib_teams_err_already_invited">This account is already a member or has a pending invite</string>
     <string name="lib_teams_err_no_such_account">No such account on the sync server</string>
     <string name="lib_teams_err_key_missing">Team key is unavailable on this device</string>

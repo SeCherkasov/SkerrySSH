@@ -46,7 +46,7 @@ import app.skerry.shared.snippet.VaultSnippetStore
 
 /** Typed cause of a Teams operation failure (text in the UI layer, syncFailureText style). */
 enum class TeamsFailure {
-    NotConnected, VaultLocked, NoRecipientKey, AlreadyInvited, NoSuchAccount,
+    NotConnected, VaultLocked, NoRecipientKey, RecipientKeyChanged, AlreadyInvited, NoSuchAccount,
     KeyMissing, Network, Protocol, Forbidden, VaultUnreadable,
     TooManyRequests, ServerError, AlreadyShared, ScopesUnsupported,
 }
@@ -81,7 +81,11 @@ data class TeamUi(
     val scopes: List<TeamScopeUi> = emptyList(),
 )
 
-/** Invite confirmation data: the invitee's key fingerprint is verified over voice/chat. */
+/**
+ * Invite confirmation data: the invitee's key fingerprint is verified over voice/chat. Passing it
+ * back to [TeamsCoordinator.invite] is what binds the send to the key that was read out loud — the
+ * type exists so an invite cannot be sent without one.
+ */
 data class InvitePreview(val accountId: String, val fingerprint: String)
 
 /**
@@ -322,15 +326,30 @@ class TeamsCoordinator(
         }
     }
 
-    /** Invite step 2: seal+sign teamKey+name to the invitee's key and create an invite membership with role [role]. */
-    suspend fun invite(teamId: String, accountId: String, role: TeamRole) {
+    /**
+     * Invite step 2: seal+sign teamKey+name to the key [verified] was taken from and create an
+     * invite membership with role [role].
+     *
+     * The key is fetched again here (the preview is a UI state that may be minutes old), so it is
+     * re-fingerprinted and compared against the one the user confirmed out of band. The server owns
+     * the key table: answering the lookup with the invitee's real key and the send with one of its
+     * own would otherwise seal the team key to the server, with the user having verified a
+     * fingerprint that was never used (#316). A mismatch stops the send with
+     * [TeamsFailure.RecipientKeyChanged] — which is also the right answer for the honest case, an
+     * invitee who rotated their identity between the two steps.
+     */
+    suspend fun invite(teamId: String, verified: InvitePreview, role: TeamRole) {
         val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         val entry = keyStore.get(teamId) ?: return markError(TeamsFailure.KeyMissing)
         val teamKey = entry.dataKey() ?: return markError(TeamsFailure.KeyMissing)
+        val accountId = verified.accountId
         op {
             val identity = identityStore.ensure()
             val recipient = c.fetchPublicKey(s, accountId)
                 ?: return@op markError(TeamsFailure.NoRecipientKey)
+            if (accountKeyFingerprint(recipient.sharing, recipient.signing) != verified.fingerprint) {
+                return@op markError(TeamsFailure.RecipientKeyChanged)
+            }
             // Sign the envelope with our identity and bind it to (teamId, inviter=self, invitee, epoch):
             // a malicious server can neither forge the invite nor retarget it to another team/invitee.
             val envelope = inviteCodec.seal(

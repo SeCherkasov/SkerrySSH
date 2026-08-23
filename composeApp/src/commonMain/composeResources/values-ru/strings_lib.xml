@@ -229,6 +229,7 @@
     <string name="lib_teams_err_not_connected">Синхронизация не подключена</string>
     <string name="lib_teams_err_vault_locked">Хранилище заблокировано</string>
     <string name="lib_teams_err_no_recipient_key">Аккаунт ещё не опубликовал ключ шеринга — попросите приглашаемого один раз открыть вкладку Teams</string>
+    <string name="lib_teams_err_recipient_key_changed">Ключ аккаунта изменился после сверки отпечатка — ничего не отправлено, пригласите заново и сверьте новый</string>
     <string name="lib_teams_err_already_invited">Этот аккаунт уже участник или уже приглашён</string>
     <string name="lib_teams_err_no_such_account">Такого аккаунта нет на sync-сервере</string>
     <string name="lib_teams_err_key_missing">Ключ команды недоступен на этом устройстве</string>

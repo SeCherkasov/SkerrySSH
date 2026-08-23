@@ -106,8 +106,8 @@ import app.skerry.ui.generated.resources.shell_create
 import app.skerry.ui.generated.resources.shell_route_team
 import app.skerry.ui.teams.HistoryTarget
 import app.skerry.ui.teams.TeamActivityDialog
-import app.skerry.ui.teams.InviteMemberDialog
 import app.skerry.ui.teams.RolePickerDialog
+import app.skerry.ui.teams.InviteMemberDialogForTeam
 import app.skerry.ui.teams.InvitePreview
 import app.skerry.ui.teams.SharedRecordUi
 import app.skerry.ui.teams.TeamScopeUi
@@ -118,7 +118,7 @@ import app.skerry.ui.teams.ScopeAccessDialog
 import app.skerry.ui.teams.NewScopeButton
 import app.skerry.ui.teams.ScopeSection
 import app.skerry.ui.teams.TeamsCoordinator
-import app.skerry.ui.teams.teamsFailureText
+import app.skerry.ui.teams.TeamsErrorLine
 import app.skerry.ui.teams.SyncPill
 import app.skerry.ui.teams.SharePicker
 import app.skerry.ui.teams.runbookSummary
@@ -229,7 +229,8 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     LaunchedEffect(Unit) { tc.refresh(); tc.syncAll(); tick++ }
 
     var showCreate by remember { mutableStateOf(false) }
-    var showInvite by remember { mutableStateOf(false) }
+    // The team the invite dialog was opened for, not a Boolean (desktop parity).
+    var inviteTeamId by remember { mutableStateOf<String?>(null) }
     var invitePreview by remember { mutableStateOf<InvitePreview?>(null) }
     var sharePicker by remember { mutableStateOf<RecordType?>(null) }
     var confirm by remember { mutableStateOf<MobileTeamsConfirm?>(null) }
@@ -249,7 +250,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     // Column's trailing children they'd get whatever height the scroll body left (≈0) and collapse.
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
-        error?.let { Txt(teamsFailureText(it), color = Skerry.colors.sunset, size = 11.5.sp, modifier = Modifier.padding(vertical = 6.dp)) }
+        TeamsErrorLine(error, size = 11.5.sp, modifier = Modifier.padding(vertical = 6.dp))
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -272,7 +273,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
                 tick = tick,
                 busy = busy,
                 lastSyncedAt = syncStamps[selected.id],
-                onInvite = { showInvite = true; invitePreview = null },
+                onInvite = { inviteTeamId = selected.id; invitePreview = null },
                 onShare = { sharePicker = it },
                 onConfirm = { confirm = it },
                 onAccept = { scope.launch { tc.accept(selected.id); tick++ } },
@@ -326,17 +327,17 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
             onCreate = { name -> showCreate = false; scope.launch { tc.createTeam(name); tick++ } },
         )
     }
-    val inviteTeam = selected
-    if (showInvite && inviteTeam != null) {
-        InviteMemberDialog(
+    inviteTeamId?.let { teamId ->
+        InviteMemberDialogForTeam(
+            teams = teams,
+            teamId = teamId,
             preview = invitePreview,
             ownFingerprint = tc.ownFingerprint(),
             busy = busy,
-            assignableRoles = inviteTeam.role.assignableRoles(),
             onLookup = { accountId -> scope.launch { invitePreview = tc.previewInvite(accountId) } },
             onEdited = { invitePreview = null },
-            onSend = { accountId, role -> showInvite = false; scope.launch { tc.invite(inviteTeam.id, accountId, role); tick++ } },
-            onDismiss = { showInvite = false },
+            onSend = { id, verified, role -> inviteTeamId = null; scope.launch { tc.invite(id, verified, role); tick++ } },
+            onDismiss = { inviteTeamId = null },
         )
     }
     val historyTeam = selected
