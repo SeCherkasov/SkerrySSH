@@ -147,9 +147,14 @@
     <string name="lib_teams_invite_send">Отправить приглашение</string>
     <string name="lib_teams_your_fingerprint">Ваш отпечаток: %1$s</string>
     <string name="lib_teams_invited_banner">Вас пригласили в эту команду</string>
+    <string name="lib_teams_invite_checking">Проверяем отправителя приглашения…</string>
     <string name="lib_teams_invited_by">Пригласил %1$s</string>
     <string name="lib_teams_invited_fingerprint">Перед принятием сверьте отпечаток пригласившего по доверенному каналу: %1$s</string>
     <string name="lib_teams_invite_unverified">Не удалось проверить отправителя приглашения. Не принимайте, если не доверяете.</string>
+    <string name="lib_teams_invite_check_failed">Приглашение проверить не удалось.</string>
+    <string name="lib_teams_invite_check_retry">Повторить</string>
+    <string name="lib_teams_invite_key_changed_ack">Новый отпечаток подтверждён по доверенному каналу</string>
+    <string name="lib_teams_invite_key_changed">Отличается от ключа, закреплённого за этим аккаунтом. Сверьте новый отпечаток по доверенному каналу.</string>
     <string name="lib_teams_accept">Принять</string>
     <string name="lib_teams_decline">Отклонить</string>
     <string name="lib_teams_role_owner">ВЛАДЕЛЕЦ</string>
@@ -256,6 +261,11 @@
     <string name="lib_teams_scope_members_count">с доступом: %1$d</string>
     <string name="lib_teams_err_already_shared">Эта запись уже расшарена в другой области этой команды — сначала уберите её оттуда</string>
     <string name="lib_teams_err_scopes_unsupported">Этот sync-сервер слишком старый для областей доступа — обновите сервер</string>
+    <string name="lib_teams_err_peer_key_unconfirmed">Опубликованный ключ участника не тот, что был подтверждён, — под него ничего не запечатано. Удалите его из команды и пригласите заново, чтобы подтвердить новый ключ</string>
+    <string name="lib_teams_err_unconfirmed_key_ignored">Пришёл ключ команды, подписанный неподтверждённой личностью, — он проигнорирован</string>
+    <string name="lib_teams_err_invite_unverified">Приглашение не проверено — откройте команду и сверьте отпечаток пригласившего перед принятием</string>
+    <string name="lib_teams_err_pin_not_recorded">Подтверждённый отпечаток не удалось сохранить на этом устройстве — этому ключу ничего не отправлено</string>
+    <string name="lib_teams_err_identity_unreadable">Устройство не может прочитать свой командный ключ, приглашение здесь не открыть</string>
     <!-- Экран команды: шапка, таблица участников, карточки (см. TeamsView) -->
     <string name="lib_teams_header_title">Команда</string>
     <!-- %1$s — название команды, %2$d — число участников -->

@@ -25,7 +25,7 @@ import io.ktor.server.routing.put
 /** Allowed values for the plaintext `type` field (mirrors core `RecordType`). */
 private val ALLOWED_TYPES = setOf(
     "HOST", "GROUP", "IDENTITY", "CREDENTIAL", "KNOWN_HOST", "SNIPPET", "TUNNEL", "SETTINGS",
-    "TEAM", "TEAM_IDENTITY", "TRASH", "RUNBOOK", "RUNBOOK_RUN", "TRUSTED_CA",
+    "TEAM", "TEAM_IDENTITY", "TEAM_PEER", "TRASH", "RUNBOOK", "RUNBOOK_RUN", "TRUSTED_CA",
 )
 
 /** Ciphertext storage: dataKey wrapping, delta reads, and batch push with LWW. */

@@ -70,6 +70,10 @@ internal class FakeVault : Vault {
 
     override fun putAtLeast(id: String, type: RecordType, payload: ByteArray, minVersion: Long) {
         lastPutInTransaction = transactionDepth > 0
+        // [FileVault.store] refuses this, so the fake has to as well: an id belongs to one type for
+        // its whole life, or a store handed a server-chosen id overwrites another store's record.
+        val existing = entries[id]?.record
+        require(existing == null || existing.type == type) { "record id already holds a ${existing?.type}" }
         val version = maxOf((entries[id]?.record?.version ?: 0L) + 1, minVersion)
         entries[id] = Entry(
             VaultRecord(id, type, version, "2026-06-12T00:00:00Z", "test-device", deleted = false, blob = SEALED),

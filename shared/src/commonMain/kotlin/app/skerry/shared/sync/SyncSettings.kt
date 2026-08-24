@@ -37,8 +37,10 @@ data class SyncSettings(
     fun shouldSync(type: RecordType, id: String = ""): Boolean = when (type) {
         RecordType.SETTINGS -> true
         // Team keys and the identity pair carry access to Teams: always synced between a user's
-        // devices, otherwise a team wouldn't open on a second device.
-        RecordType.TEAM, RecordType.TEAM_IDENTITY -> true
+        // devices, otherwise a team wouldn't open on a second device. A verified peer fingerprint
+        // travels with them — a colleague verified on the desktop must be pinned on the phone too,
+        // or the device that happens to run the next rotation seals to an unchecked key (#319).
+        RecordType.TEAM, RecordType.TEAM_IDENTITY, RecordType.TEAM_PEER -> true
         // A runbook is a checklist of the same commands, saved and shared for the same reasons, so
         // it follows the snippets toggle instead of adding a switch nobody would set differently.
         RecordType.SNIPPET, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN -> syncSnippets

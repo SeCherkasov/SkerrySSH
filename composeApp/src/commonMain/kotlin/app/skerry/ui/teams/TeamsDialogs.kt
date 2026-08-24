@@ -38,6 +38,8 @@ import app.skerry.ui.design.CancelButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.StatusAnnouncer
+import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
 import app.skerry.shared.team.TeamRole
@@ -47,6 +49,8 @@ import app.skerry.ui.generated.resources.lib_teams_create_subtitle
 import app.skerry.ui.generated.resources.lib_teams_create_title
 import app.skerry.ui.generated.resources.lib_teams_invite_account_placeholder
 import app.skerry.ui.generated.resources.lib_teams_invite_fingerprint
+import app.skerry.ui.generated.resources.lib_teams_invite_key_changed
+import app.skerry.ui.generated.resources.lib_teams_invite_key_changed_ack
 import app.skerry.ui.generated.resources.lib_teams_invite_next
 import app.skerry.ui.generated.resources.lib_teams_invite_send
 import app.skerry.ui.generated.resources.lib_teams_invite_subtitle
@@ -230,15 +234,33 @@ fun InviteMemberDialog(
     // a stale verification standing behind the Send button.
     val verified = preview?.takeIf { it.accountId == accountId.trim() }
     val ready = verified != null
+    // Keyed on the fingerprint, not on the dialog: the tick belongs to the key it was given for, and
+    // a lookup answering with a different one asks the question again.
+    var acknowledged by remember(verified?.fingerprint) { mutableStateOf(false) }
+    // A key that moved costs a second, deliberate gesture. Sending replaces the pin, so an honest
+    // rotation and a server trying its luck reach this dialog looking identical — the difference is
+    // in what the person on the trusted channel says, and one click could not carry it (#319).
+    val blockedByKeyChange = verified != null && verified.keyChanged && !acknowledged
     fun submit() {
         val id = accountId.trim()
-        if (id.isEmpty() || busy) return
+        if (id.isEmpty() || busy || blockedByKeyChange) return
         if (verified != null) onSend(verified, role) else onLookup(id)
     }
     TeamsDialogCard(onDismiss, label = stringResource(Res.string.lib_teams_invite_title)) {
         Txt(stringResource(Res.string.lib_teams_invite_title), color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
         Txt(stringResource(Res.string.lib_teams_invite_subtitle), color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 16.dp))
         TeamsTextField(accountId, { accountId = it; onEdited() }, stringResource(Res.string.lib_teams_invite_account_placeholder), ::submit, focus)
+        // The lookup's answer arrives while the field has focus and Send silently becomes live; the
+        // fingerprint block below is an insertion nothing announces on its own (WCAG 4.1.3).
+        StatusAnnouncer(
+            when {
+                verified == null -> ""
+                verified.keyChanged ->
+                    stringResource(Res.string.lib_teams_invite_fingerprint) + " " + verified.fingerprint + " " +
+                        stringResource(Res.string.lib_teams_invite_key_changed)
+                else -> stringResource(Res.string.lib_teams_invite_fingerprint) + " " + verified.fingerprint
+            },
+        )
         if (verified != null) {
             Column(
                 Modifier
@@ -252,6 +274,19 @@ fun InviteMemberDialog(
                 Txt(stringResource(Res.string.lib_teams_invite_fingerprint).uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
                 Txt(verified.fingerprint, color = Skerry.colors.cyanBright, size = 14.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
                 Txt(stringResource(Res.string.lib_teams_invite_verify), color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp))
+                // An account whose fingerprint moved is either an honest identity rotation or the
+                // server trying its luck. Sending replaces the pin, so the difference has to be on
+                // screen — the person on the trusted channel is the only one who can tell (#319).
+                if (verified.keyChanged) {
+                    Txt(stringResource(Res.string.lib_teams_invite_key_changed), color = Skerry.colors.amber, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp))
+                    ToggleRow(
+                        label = stringResource(Res.string.lib_teams_invite_key_changed_ack),
+                        on = acknowledged,
+                        onToggle = { acknowledged = !acknowledged },
+                        labelSize = 11.5.sp,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
                 if (ownFingerprint != null) {
                     Txt(stringResource(Res.string.lib_teams_your_fingerprint, ownFingerprint), color = Skerry.colors.faint, size = 11.sp, font = mono, modifier = Modifier.padding(top = 8.dp))
                 }
@@ -270,7 +305,7 @@ fun InviteMemberDialog(
             PrimaryButton(
                 if (ready) stringResource(Res.string.lib_teams_invite_send) else stringResource(Res.string.lib_teams_invite_next),
                 onClick = ::submit,
-                enabled = accountId.trim().isNotEmpty() && !busy,
+                enabled = accountId.trim().isNotEmpty() && !busy && !blockedByKeyChange,
                 modifier = Modifier.testTag(UiTags.FORM_SAVE),
             )
         }

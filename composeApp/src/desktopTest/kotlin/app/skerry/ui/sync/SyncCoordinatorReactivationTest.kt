@@ -3,6 +3,8 @@ package app.skerry.ui.sync
 import app.skerry.shared.sync.InMemorySyncStateStore
 import app.skerry.shared.sync.SyncSettings
 import app.skerry.shared.sync.SyncSettingsStore
+import app.skerry.shared.team.Pin
+import app.skerry.shared.team.TeamPeerStore
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vault.CredentialStore
@@ -662,6 +664,37 @@ class SyncCoordinatorReactivationTest {
                 "an activation that doesn't reconcile must not sync a vault that still owes one",
             )
             assertFalse(client.pushed.any { it.id == "r1" }, "the purged record must not reach the server")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /**
+     * Issue #319: `reactivated` is the server's own flag, and the re-pull that follows it returns
+     * whatever the server chooses to return. A verified peer fingerprint dropped here and not handed
+     * back is a device walked back to trusting the next key the server publishes — so the pins are the
+     * one sync-capable type the clear leaves alone.
+     */
+    @Test
+    fun `a reactivated device keeps the peer fingerprints a human verified`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = freshVault()
+        TeamPeerStore(vault).confirm("bob@example.com", "aaaa-bbbb-cccc")
+        vault.put("team-1", RecordType.TEAM, "team key".encodeToByteArray())
+
+        val client = ReactivatingClient(ownWrap(vault), reactivated = true)
+        val sut = SyncCoordinator(clientFactory = { client }, crypto = crypto, vault = vault)
+        try {
+            sut.connect(serverUrl, account, password.toCharArray())
+            sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+            assertTrue(sut.status.value is SyncStatus.Online, "reactivation connect should come Online")
+            assertEquals(
+                "aaaa-bbbb-cccc",
+                (TeamPeerStore(vault).pin("bob@example.com") as? Pin.Known)?.fingerprint,
+                "the reconcile must not hand the pin back to the server to re-issue",
+            )
+            // The team key itself is cleared as before: losing it costs a re-pull, not a verification.
+            assertFalse(vault.records().any { it.id == "team-1" })
         } finally {
             sut.close()
         }

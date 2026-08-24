@@ -27,6 +27,7 @@ import okio.FileSystem
 import okio.Path.Companion.toPath
 import java.nio.file.Files
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -120,7 +121,7 @@ class TeamsCoordinatorInviteCacheTest {
             newId = { "unused" },
         )
 
-        assertNotNull(coord.acceptPreview(teamId)) // banner shown: the verified invite is now cached
+        assertIs<InviteVerdict.Verified>(coord.acceptPreview(teamId)) // banner shown: the verified invite is now cached
         client.teams = emptyList() // invite revoked / team deleted server-side
         coord.refresh()
 
