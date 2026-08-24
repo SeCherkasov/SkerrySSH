@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasStateDescription
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -88,7 +89,12 @@ class RunbookEditorFormTest {
         shell.runbooks.save(RunbookDraft(label = "Synced empty procedure"))
 
         onNodeWithContentDescription(string(Res.string.runbook_toolbar_tip)).performClick()
-        waitForIdle()
+        // The palette fills from the library on the shell's own scope, which waitForIdle does not
+        // wait for: asserting on the frame after the click reads an empty palette on a loaded
+        // runner and a full one on an idle machine (issue #330).
+        waitUntil("the palette to list the runnable runbook", timeoutMillis = 10_000) {
+            onAllNodesWithText("Runnable").fetchSemanticsNodes().isNotEmpty()
+        }
 
         onNodeWithText("Runnable").assertIsDisplayed()
         onNodeWithText("Synced empty procedure").assertDoesNotExist()
@@ -100,7 +106,9 @@ class RunbookEditorFormTest {
         shell.runbooks.save(RunbookDraft(label = "Synced empty procedure"))
 
         onNodeWithContentDescription(string(Res.string.runbook_toolbar_tip)).performClick()
-        waitForIdle()
+        waitUntil("the palette to say why it offers nothing", timeoutMillis = 10_000) {
+            onAllNodesWithText(string(Res.string.runbook_none_runnable)).fetchSemanticsNodes().isNotEmpty()
+        }
 
         onNodeWithText(string(Res.string.runbook_none_runnable)).assertIsDisplayed()
     }

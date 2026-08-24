@@ -129,8 +129,18 @@ class SyncCoordinator(
      * What the double-submit guard reads — not [SyncStatus.Busy], which the silent keep-connected restore
      * ([restoreSession]) raises just the same: a restore that happened to start first turned the user's own
      * connect into a no-op, with nothing on screen to say the tap did anything (issue #278). Set on the
-     * calling (main) thread before the launch, cleared when the launched operation returns — @Volatile
-     * because that clear runs on [scope] and the guard reads it without the lock.
+     * calling (main) thread before the launch; released by the operation ITSELF, the moment what it was
+     * going to do is decided — in [activateSession], with the session live and the first cycle about to
+     * publish it. What is left of the operation then needs no guard: [opMutex] serializes it and the
+     * next connect simply queues behind it, instead of being dropped in silence (issue #328). The
+     * `finally` around each launch is the backstop for every path that never gets that far (a failure,
+     * a cancellation, the password-replace pause). @Volatile because the release runs on
+     * [scope] and the guard reads it without the lock.
+     *
+     * Deliberately NOT keyed on the status alone: [_status] is written from a dozen places that never
+     * took the guard — a background cycle on the previous session, [disconnect], [pauseForLock] — and any
+     * of them landing in the window between [beginLinking] and the operation's own first status would
+     * hand the guard back for an operation that has not begun.
      */
     @Volatile
     private var linkingInFlight = false
@@ -465,8 +475,8 @@ class SyncCoordinator(
      * the account key (see [doConnect]).
      */
     fun connect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean = false) {
-        // Guard against a double launch: a repeat click while the previous connect/claim is in flight
-        // would spawn a second Ktor client (pool/socket leak) and a status race. Calls come from UI
+        // Guard against a double launch: a repeat click while the previous connect/claim is still
+        // deciding would spawn a second Ktor client (pool/socket leak) and a status race. Calls come from UI
         // handlers on the main thread, so check-then-set without CAS is enough (like panel busy flags).
         if (linkingInFlight) {
             masterPassword.fill(' ')
@@ -488,15 +498,22 @@ class SyncCoordinator(
         masterPassword.fill(' ')
         scope.launch {
             try {
-                opMutex.withLock { doConnect(serverUrl, accountId, owned, keepConnected) }
+                opMutex.withLock { doConnect(serverUrl, accountId, owned, keepConnected, linking = linking) }
             } finally {
+                // [doConnect] wipes the copy it was handed; this covers the connect that never got that
+                // far — cancelled while queued on [opMutex], with the password resident. A cancel that
+                // lands before the body is entered runs no `finally` at all and is not covered here;
+                // only [close] cancels this scope, and nothing in the app calls it.
+                owned.fill(' ')
                 endLinking(linking)
             }
         }
     }
 
     // Under [opMutex] (see connect): session activation must not race with disconnect.
-    private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false) {
+    // [linking]: the operation this connect is, if it is a user-initiated one — [activateSession] releases
+    // its guard once the session is live.
+    private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false, linking: Int? = null) {
         _status.value = SyncStatus.Busy
         val dataKey = vault.exportDataKey()
         if (dataKey == null) {
@@ -680,6 +697,7 @@ class SyncCoordinator(
                 SyncConfig(serverUrl, accountId, deviceId, keepConnected, sealed),
                 resetCursor = adoptedKey || mustReconcile,
                 clearLocalRecords = mustReconcile,
+                linking = linking,
             )
         } catch (e: CancellationException) {
             throw e // don't swallow cancellation — it would break structured concurrency
@@ -716,6 +734,12 @@ class SyncCoordinator(
         config: SyncConfig,
         resetCursor: Boolean,
         clearLocalRecords: Boolean = false,
+        /**
+         * The linking operation this activation belongs to, if it is one ([restoreSession] and
+         * [doChangeAccountPassword] never take the guard and pass `null`). Released below, as soon as the
+         * operation's own result is on screen.
+         */
+        linking: Int? = null,
     ) {
         // Publish and reconcile in ONE [syncMutex] section. Publishing is what makes a session syncable,
         // and the reconcile below is what makes it safe to sync: split into two sections, the mutex is
@@ -773,6 +797,19 @@ class SyncCoordinator(
                 }
             }
             health.setTarget(config.serverUrl)
+            // The operation is decided here: the session is live, the link is saved, the reconcile has
+            // run. Everything left — this first cycle, the subscriptions, the superseded client's socket
+            // pool — is tail work no observer can tell apart from being connected, and a connect issued
+            // on the strength of what it publishes used to hit a guard nothing on screen accounted for
+            // and be dropped in silence (issue #328). Released BEFORE the cycle publishes, not after:
+            // whoever is woken by that status must find the guard already down. A repeat click landing
+            // inside the cycle costs one redundant connect, which [opMutex] serializes; a double click
+            // is long over by the time an activation gets this far.
+            //
+            // Released here rather than off the status itself: [_status] is written by a dozen paths that
+            // never took the guard — a cycle on the session this one replaces, [disconnect], the
+            // auto-lock — and any of them would otherwise hand back a guard that is not theirs.
+            if (linking != null) endLinking(linking)
             // The debt recorded above is retired by the sync cycle itself ([retireDischargedDebt]) — not
             // here, because a first cycle that fails leaves it to a later retry to finish the reconcile.
             runSync()
@@ -991,9 +1028,12 @@ class SyncCoordinator(
         scope.launch {
             try {
                 opMutex.withLock {
-                    doConnect(pending.serverUrl, pending.accountId, pending.password, pending.keepConnected, allowPasswordReplace = true)
+                    doConnect(pending.serverUrl, pending.accountId, pending.password, pending.keepConnected, allowPasswordReplace = true, linking = linking)
                 }
             } finally {
+                // see [connect]: the re-run cancelled while queued never reaches [doConnect]'s wipe, and
+                // the stash it was handed is by then the only reference left to that password.
+                pending.password.fill(' ') // idempotent with [doConnect]'s own wipe on the normal path
                 endLinking(linking)
             }
         }
@@ -1223,15 +1263,17 @@ class SyncCoordinator(
         clearPendingReplace()
         scope.launch {
             try {
-                opMutex.withLock { doClaimPairing(payload, owned, keepConnected) }
+                opMutex.withLock { doClaimPairing(payload, owned, keepConnected, linking = linking) }
             } finally {
+                owned.fill(' ') // see [connect]: the claim cancelled while queued never reaches the wipe
                 endLinking(linking)
             }
         }
     }
 
     // Under [opMutex] (see claimPairing): session activation must not race with disconnect.
-    private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean) {
+    // [linking]: as in [doConnect] — the operation whose guard [activateSession] releases.
+    private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean, linking: Int? = null) {
         _status.value = SyncStatus.Busy
         val parsed = PairingPayload.decode(payload)
         if (parsed == null) {
@@ -1311,6 +1353,7 @@ class SyncCoordinator(
                 result.session,
                 SyncConfig(parsed.serverUrl, result.accountId, deviceId, keepConnected, sealed),
                 resetCursor = true,
+                linking = linking,
             )
         } catch (e: CancellationException) {
             throw e

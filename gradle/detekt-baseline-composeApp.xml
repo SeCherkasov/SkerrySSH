@@ -31,8 +31,8 @@
     <ID>CyclomaticComplexMethod:Screenshot.kt$@OptIn(ExperimentalComposeUiApi::class) fun main()</ID>
     <ID>CyclomaticComplexMethod:Screenshot.kt$@OptIn(ExperimentalComposeUiApi::class) private fun renderMobile(out: String, viewName: String, overlay: String, live: Boolean)</ID>
     <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doChangeAccountPassword(cfg: SyncConfig, current: CharArray, next: CharArray): AccountPasswordChange</ID>
-    <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean)</ID>
-    <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false)</ID>
+    <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean, linking: Int? = null)</ID>
+    <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false, linking: Int? = null)</ID>
     <ID>CyclomaticComplexMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun runSyncLocked(c: SyncClient, s: SyncSession)</ID>
     <ID>CyclomaticComplexMethod:SyncFailureText.kt$internal fun syncFailureResource(reason: SyncFailureReason): StringResource</ID>
     <ID>CyclomaticComplexMethod:TeamActivityFeedView.kt$private fun rowIcon(kind: TeamActivityKind): String</ID>
@@ -61,8 +61,8 @@
     <ID>LongMethod:Screenshot.kt$@OptIn(ExperimentalComposeUiApi::class) fun main()</ID>
     <ID>LongMethod:SessionShareController.kt$SessionShareController$fun share(teamId: String, teamName: String, paneId: String, label: String, source: ShareSource, readOnlyOnly: Boolean)</ID>
     <ID>LongMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doChangeAccountPassword(cfg: SyncConfig, current: CharArray, next: CharArray): AccountPasswordChange</ID>
-    <ID>LongMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean)</ID>
-    <ID>LongMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false)</ID>
+    <ID>LongMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean, linking: Int? = null)</ID>
+    <ID>LongMethod:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false, linking: Int? = null)</ID>
     <ID>LongMethod:TerminalThemeTest.kt$TerminalThemeTest$@Test fun every_theme_matches_its_golden_palette()</ID>
     <ID>LongMethod:VncTouchSurface.kt$private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.vncTouchGestures( screen: RemoteDesktopScreenState, pad: VncTrackpad, canvasSize: () -&gt; IntSize, )</ID>
     <ID>LongMethod:main.kt$fun main(args: Array&lt;String&gt;)</ID>
@@ -88,8 +88,8 @@
     <ID>NestedBlockDepth:AndroidSecretFileReader.kt$AndroidSecretFileReader$override fun read(ref: String): SecretFileResult</ID>
     <ID>NestedBlockDepth:HostMenuWidthTest.kt$HostMenuWidthTest$@Test fun `the row menu never renders narrower than its floor`()</ID>
     <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doChangeAccountPassword(cfg: SyncConfig, current: CharArray, next: CharArray): AccountPasswordChange</ID>
-    <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean)</ID>
-    <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false)</ID>
+    <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doClaimPairing(payload: String, localPassword: CharArray, keepConnected: Boolean, linking: Int? = null)</ID>
+    <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun doConnect(serverUrl: String, accountId: String, masterPassword: CharArray, keepConnected: Boolean, allowPasswordReplace: Boolean = false, linking: Int? = null)</ID>
     <ID>NestedBlockDepth:SyncCoordinator.kt$SyncCoordinator$private suspend fun runSyncLocked(c: SyncClient, s: SyncSession)</ID>
     <ID>NestedBlockDepth:TerminalGlyphs.kt$internal fun DrawScope.drawCellUnderline(style: TermStyle, left: Float, top: Float, width: Float, chh: Float, palette: Palette, effects: UnderlineEffects, theme: TerminalTheme)</ID>
     <ID>SpreadOperator:KeyboardInteractiveDialog.kt$(*Array(challenge.prompts.size) { "" })</ID>

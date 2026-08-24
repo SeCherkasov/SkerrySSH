@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.InternalComposeUiApi
@@ -19,6 +18,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
 import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.render.SceneFrames
 import app.skerry.ui.theme.SkerryTheme
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -50,17 +50,12 @@ class HostRowFocusTraversalTest {
                     }
                 }
             }
-            var timeNanos = 0L
-            fun frame() {
-                Snapshot.sendApplyNotifications()
-                timeNanos += 16_666_667L
-                scene.render(timeNanos)
-            }
-            frame()
+            val frames = SceneFrames(scene)
+            frames.advance()
             fun tab() {
                 scene.sendKeyEvent(KeyEvent(Key.Tab, KeyEventType.KeyDown))
                 scene.sendKeyEvent(KeyEvent(Key.Tab, KeyEventType.KeyUp))
-                frame()
+                frames.advance()
             }
 
             tab()

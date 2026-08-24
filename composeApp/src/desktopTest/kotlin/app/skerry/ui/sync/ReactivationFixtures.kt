@@ -16,6 +16,7 @@ import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
 import app.skerry.shared.vault.VaultRecord
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
@@ -58,7 +59,19 @@ internal class ReactivatingClient(
     /** What every pull serves. A non-empty page is what moves the cursor off zero. */
     private val serves: List<RemoteRecord> = emptyList(),
     private val servesCursor: Long = 1,
+    /**
+     * Held open until completed, so a test can stand inside the window a superseding connect spends
+     * closing this client — the tail of an activation whose status is already on screen.
+     */
+    private val closeGate: CompletableDeferred<Unit>? = null,
+    /**
+     * Held open until completed, so a test can stand inside a connect that has reached the server: the
+     * operation holds the coordinator's operation lock and its guard, with nothing published yet.
+     */
+    private val loginGate: CompletableDeferred<Unit>? = null,
 ) : SyncClient {
+    /** Completed when [login] is entered — the signal that the connect is at the server. */
+    val loggingIn: CompletableDeferred<Unit> = CompletableDeferred()
     val pushed: MutableList<RemoteRecord> = CopyOnWriteArrayList()
 
     /** What each pull asked for — `0` is the full re-pull a reconcile's cursor reset forces. */
@@ -81,8 +94,11 @@ internal class ReactivatingClient(
 
     override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession =
         throw SyncException(SyncException.Kind.CONFLICT, "account exists")
-    override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession =
-        SyncSession(accountId, accessToken = accessToken, refreshToken = "refresh", reactivated = revoked.getAndSet(false))
+    override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession {
+        loggingIn.complete(Unit)
+        loginGate?.await()
+        return SyncSession(accountId, accessToken = accessToken, refreshToken = "refresh", reactivated = revoked.getAndSet(false))
+    }
     override suspend fun fetchWrappedDataKey(session: SyncSession): ByteArray {
         val n = fetches.getAndIncrement()
         if (throwOnFirstFetch && n == 0) throw SyncException(SyncException.Kind.NETWORK, "unreachable")
@@ -110,6 +126,7 @@ internal class ReactivatingClient(
     // tests drive and re-save the config from under the assertions. Reachability is covered elsewhere.
     override suspend fun ping(): Boolean = false
     override suspend fun close() {
+        closeGate?.await()
         closed.set(true)
     }
     override suspend fun listDevices(session: SyncSession): List<RemoteDevice> = emptyList()
