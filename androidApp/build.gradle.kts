@@ -31,8 +31,14 @@ android {
         applicationId = "app.skerry"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        // Version from the single source (gradle.properties); the release workflow overrides it.
-        versionCode = (providers.gradleProperty("skerry.versionCode").orNull ?: "1").toInt()
+        // Version from the single source (gradle.properties). A workflow_dispatch input can
+        // override either value, and a `v*` tag push takes versionName from the tag.
+        // The code has no fallback on purpose. It used to default to 1, which no release could
+        // reach while the workflow always passed `-Pskerry.versionCode` (it stamped the CI run
+        // number). It no longer does, so a lost property line would quietly publish an APK that
+        // every installed build outranks — failing configuration is the cheaper end of that.
+        versionCode = providers.gradleProperty("skerry.versionCode").orNull?.trim()?.toIntOrNull()
+            ?: error("skerry.versionCode is missing or not a whole number — see gradle.properties")
         versionName = providers.gradleProperty("skerry.versionName").orNull ?: "0.1.0"
         // Local AI (Llamatik/llama.cpp): the AAR carries natives for four ABIs (~52 MB unpacked).
         // The project's real Android devices are arm64; the other ABIs are dead weight in the APK.

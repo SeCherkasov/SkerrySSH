@@ -9,7 +9,9 @@ Rules apply to **lines this branch adds**, not to the whole repository — legac
 debt. The i18n parity rule is the exception: it is a property of the resource set as a whole, and
 the set is clean today, so any drift belongs to the change that caused it.
 
-Escape hatch: `harness-allow: <rule>` anywhere on the offending line.
+Escape hatch: `harness-allow: <rule>` anywhere on the offending line — except `version-bump`,
+whose file has no *end-of-line* comment syntax, so a trailing marker would land inside the version
+string. Its hatch is a line of its own, spelled exactly `# harness-allow: version-bump`.
 """
 
 from __future__ import annotations
@@ -118,6 +120,10 @@ SECRET_PATHS = ("/vault/", "/guard/", "/team/", "/share/", "/sync/")
 SHORTCUT_FILE = "composeApp/src/commonMain/kotlin/app/skerry/ui/desktop/DesktopShortcuts.kt"
 KEYBOARD_SETTINGS = "composeApp/src/commonMain/kotlin/app/skerry/ui/settings/KeyboardSection.kt"
 FILE_SIZE_LIMIT = 500
+VERSION_FILE = "gradle.properties"
+VERSION_RULE = "version-bump"
+VERSION_NAME = re.compile(r"^\s*skerry\.versionName\s*=\s*(\S+)\s*$")
+VERSION_CODE = re.compile(r"^\s*skerry\.versionCode\s*=\s*(\d+)\s*$")
 
 
 def _line_rules(added: list[tuple[str, int, str]]) -> list[Finding]:
@@ -331,6 +337,112 @@ def _shortcut_rule(added: list[tuple[str, int, str]]) -> list[Finding]:
     return []
 
 
+def _version_bump(added: list[tuple[str, int, str]], cwd: str | None, base: str) -> list[Finding]:
+    """A release bump must move both halves of the version, and move the code upwards.
+
+    The release workflow used to stamp the APK with `github.run_number`, monotonic for free. It now
+    reads `skerry.versionCode` as it is written here, so forgetting the bump no longer fails
+    anywhere in this repository — it fails at the store upload, days later, on an artifact that is
+    already tagged and published.
+
+    The hatch is a comment line in the file, not the offending line: a `.properties` value runs to
+    the end of its line, so a trailing `harness-allow` would end up inside the version string.
+    """
+    mine = [(line, text) for path, line, text in added if path == VERSION_FILE]
+    # A line that is nothing but the marker, not merely a line containing it: the file's own comment
+    # block documents this rule, and a reworded paragraph re-adds every line of it — on the release
+    # bump, which is the one commit the rule exists for.
+    if any(text.strip() == f"# harness-allow: {VERSION_RULE}" for _, text in mine):
+        return []
+    named = coded = None
+    for line, text in mine:
+        if VERSION_NAME.match(text):
+            named = line
+        match = VERSION_CODE.match(text)
+        if match:
+            coded = (line, int(match.group(1)))
+    if named is None:
+        return []
+    if coded is None:
+        # git emits changed lines only, so a code left exactly where it was is absent from the diff
+        # — "not written" and "not moved" are the same mistake and get the same sentence.
+        return [Finding(VERSION_RULE, BLOCK, VERSION_FILE, named,
+                        "skerry.versionName moved without skerry.versionCode — Android refuses an "
+                        "update whose code did not grow, and the stores reject the upload.")]
+    line, code = coded
+    previous, problem = _previous_version_code(cwd, base)
+    if problem:
+        return [Finding(VERSION_RULE, BLOCK, VERSION_FILE, line, problem)]
+    if previous is not None and code <= previous:
+        return [Finding(VERSION_RULE, BLOCK, VERSION_FILE, line,
+                        f"skerry.versionCode {code} is not above {previous} — an Android version "
+                        "code only ever grows.")]
+    return []
+
+
+def _baseline_refs(cwd: str | None, base: str) -> list[tuple[str, str]]:
+    """Every commit whose version code this branch has to clear, as (name, commit).
+
+    Not the branch point alone: two branches forked from the same commit can reach for the same
+    number, and the second one has to be told. Not one ref either — a local `main` that has not been
+    pulled since the last release answers with a code that is already spent, and a baseline that can
+    only be *too low* turns "no comparison" into a confident wrong one.
+
+    A name is kept once `rev-parse --verify` peels it to a commit — `git show :gradle.properties` is
+    not a failure but the syntax for reading the *index*, which hands back the very value being
+    committed — and only if that commit shares history with HEAD. This repository has had its
+    history rewritten once; an abandoned ref left behind by that can carry a high code belonging to
+    no lineage we are on, and taking the maximum would make it block every branch forever.
+
+    Dedup is on the commit, not the name: in the ordinary case all three candidates are the same
+    commit, and a finding that names it twice reads as two baselines failing instead of one.
+    """
+    found: list[tuple[str, str]] = []
+    for ref in ("origin/main", "main", base or state.merge_base(cwd=cwd)):
+        if not ref:
+            continue
+        code, out = state.git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd)
+        commit = out.strip()
+        if code != 0 or any(commit == known for _, known in found):
+            continue
+        if state.git(["merge-base", commit, "HEAD"], cwd)[0] == 0:
+            found.append((ref, commit))
+    return found
+
+
+def _previous_version_code(cwd: str | None, base: str) -> tuple[int | None, str | None]:
+    """(the code to beat, why it could not be read).
+
+    The highest code across every baseline, so a stale ref can lower the bar for nobody.
+
+    A file that does not exist there is the one silence kept: that is what the first commit of a
+    fresh clone looks like, and it is not a version that went backwards. Everything else is
+    reported — a monotonicity rule that quietly stops comparing is worse than one that says it
+    could not.
+    """
+    refs = _baseline_refs(cwd, base)
+    if not refs:
+        return None, ("neither main nor the branch point resolves, so the previous "
+                      "skerry.versionCode could not be read — it was not compared.")
+    codes, seen = [], []
+    for ref, commit in refs:
+        code, text = state.git(["show", f"{commit}:{VERSION_FILE}"], cwd)
+        if code != 0:
+            continue
+        seen.append(ref)
+        for line in text.split("\n"):
+            match = VERSION_CODE.match(line)
+            if match:
+                codes.append(int(match.group(1)))
+                break
+    if codes:
+        return max(codes), None
+    if seen:
+        return None, (f"{VERSION_FILE} at {', '.join(seen)} carries no skerry.versionCode — the "
+                      "value this branch has to beat could not be read, so it was not compared.")
+    return None, None
+
+
 def _tests_present(added: list[tuple[str, int, str]], task: dict) -> list[Finding]:
     if task["kind"] not in ("bug", "feature"):
         return []
@@ -368,6 +480,7 @@ def run(cwd: str | None = None, task: dict | None = None, base: str = "") -> lis
     findings = _line_rules(added)
     findings += _cancellation_rule(added, cwd)
     findings += _shortcut_rule(added)
+    findings += _version_bump(added, cwd, base)
     findings += _tests_present(added, task)
     findings += _file_size(cwd, added)
     findings += _i18n_parity(cwd)

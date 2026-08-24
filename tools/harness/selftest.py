@@ -729,6 +729,154 @@ class TestChecks(SandboxCase):
         self.box.write(checks.KEYBOARD_SETTINGS, "val row = KeyboardBinding(label, \"F1\")\n")
         self.assertEqual(self._findings("shortcut-settings"), [])
 
+    def test_a_version_name_without_a_code_is_blocked(self):
+        self.box.write("gradle.properties", "skerry.versionName=0.4.1\n")
+        found = self._findings("version-bump")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].severity, checks.BLOCK)
+
+    def test_a_version_name_with_a_code_is_fine(self):
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.1\nskerry.versionCode=116\n")
+        self.assertEqual(self._findings("version-bump"), [])
+
+    def test_a_version_code_alone_is_fine(self):
+        # Seeding the code without touching the name is the safe direction — the rule is about a
+        # release that moves the name and leaves the code behind, not the reverse.
+        self.box.write("gradle.properties", "skerry.versionCode=116\n")
+        self.assertEqual(self._findings("version-bump"), [])
+
+    def test_a_version_code_that_does_not_grow_is_blocked(self):
+        self._seed_version("0.4.0", 200)
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.1\nskerry.versionCode=116\n")
+        found = self._findings("version-bump")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].severity, checks.BLOCK)
+        # The message proves which branch fired: a code equal to the base is absent from the diff
+        # entirely, so counting findings cannot tell the comparison from the missing-code rule.
+        self.assertIn("is not above 200", found[0].message)
+
+    def test_a_version_code_that_grows_is_fine(self):
+        self._seed_version("0.4.0", 116)
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.1\nskerry.versionCode=117\n")
+        self.assertEqual(self._findings("version-bump"), [])
+
+    def test_a_code_a_sibling_branch_already_took_is_blocked(self):
+        # main moved to 117 after this branch forked, so 117 is still an addition against the fork
+        # point — only a comparison against main's tip can see that it is already spent.
+        self._seed_version("0.4.1", 117, merge_back=False)
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.1\nskerry.versionCode=117\n")
+        found = self._findings("version-bump")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].severity, checks.BLOCK)
+        self.assertIn("is not above 117", found[0].message)
+
+    def test_a_baseline_without_a_code_is_reported_not_ignored(self):
+        # The file exists but carries no code line: a real previous value may have been there and
+        # the rule stopped comparing, so it says so instead of passing in silence.
+        self._seed_version("0.4.0", None)
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.1\nskerry.versionCode=116\n")
+        found = self._findings("version-bump")
+        self.assertEqual(len(found), 1)
+        # BLOCK, not WARN: a warning is print-only here — `checks.main` sets its exit code from the
+        # blocking findings alone, so "could not compare" would commit exactly like "compared fine".
+        self.assertEqual(found[0].severity, checks.BLOCK)
+
+    def test_an_allow_comment_silences_the_version_rule(self):
+        self._seed_version("0.4.0", 200)
+        self.box.write("gradle.properties",
+                       "# harness-allow: version-bump\n"
+                       "skerry.versionName=0.4.1\nskerry.versionCode=116\n")
+        self.assertEqual(self._findings("version-bump"), [])
+
+    def test_prose_about_the_hatch_does_not_invoke_it(self):
+        # The file's own comment block documents this rule; a reworded paragraph must not disarm it.
+        self._seed_version("0.4.0", 200)
+        self.box.write("gradle.properties",
+                       "# the version-bump check takes a harness-allow: version-bump line\n"
+                       "skerry.versionName=0.4.1\nskerry.versionCode=116\n")
+        self.assertEqual(len(self._findings("version-bump")), 1)
+
+    def test_a_stale_baseline_cannot_lower_the_bar(self):
+        # main regressed below the branch point — a rewritten history, or a ref never pulled. The
+        # highest code any baseline knows is the one to beat, so the lower ref buys nothing.
+        self._seed_version("0.4.0", 200)
+        run_git(self.box.path, "checkout", "-q", "main")
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.0\nskerry.versionCode=100\n")
+        self.box.commit("main regresses")
+        run_git(self.box.path, "checkout", "-q", "refactor/checks")
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.1\nskerry.versionCode=150\n")
+        found = self._findings("version-bump")
+        self.assertEqual(len(found), 1)
+        self.assertIn("is not above 200", found[0].message)
+
+    def test_a_tree_with_no_baseline_at_all_is_reported(self):
+        # Outside a repository both git calls fail, exactly as they do on an unborn HEAD — where the
+        # old code read `git show :gradle.properties`, which is the *index*, and compared the value
+        # being committed with itself.
+        previous, problem = checks._previous_version_code(tempfile.gettempdir(), "")
+        self.assertIsNone(previous)
+        self.assertTrue(problem)
+
+    def test_an_unrelated_ref_cannot_raise_the_bar(self):
+        # A leftover origin/main from before a history rewrite: it resolves, and it carries a high
+        # code that belongs to a lineage this branch is not on. Taking the maximum unfiltered would
+        # let it block every legitimate bump until the number climbed past an abandoned one.
+        self._seed_version("0.4.0", 116)
+        run_git(self.box.path, "checkout", "-q", "--orphan", "abandoned")
+        self.box.write("gradle.properties",
+                       "skerry.versionName=9.0.0\nskerry.versionCode=9000\n")
+        self.box.commit("abandoned lineage")
+        head = run_git(self.box.path, "rev-parse", "HEAD").strip()
+        run_git(self.box.path, "checkout", "-q", "refactor/checks")
+        run_git(self.box.path, "update-ref", "refs/remotes/origin/main", head)
+        # The ref has to actually exist, or the test passes on a baseline that was never consulted.
+        self.assertEqual(
+            run_git(self.box.path, "rev-parse", "--verify", "--quiet", "origin/main^{commit}").strip(),
+            head)
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.1\nskerry.versionCode=117\n")
+        self.assertEqual(self._findings("version-bump"), [])
+
+    def test_a_baseline_whose_code_line_does_not_parse_is_blocked(self):
+        # The regex is the only reader of that line. A reformat at the baseline — a trailing
+        # comment, a quoted value — is not "no previous code", it is a comparison that cannot be
+        # made, and this rule is not allowed to fall silent on one.
+        run_git(self.box.path, "checkout", "-q", "main")
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.0\nskerry.versionCode=116 # bumped for 0.4.0\n")
+        self.box.commit("seed an unreadable code")
+        run_git(self.box.path, "checkout", "-q", "refactor/checks")
+        run_git(self.box.path, "merge", "-q", "main")
+        self.box.write("gradle.properties",
+                       "skerry.versionName=0.4.1\nskerry.versionCode=117\n")
+        found = self._findings("version-bump")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].severity, checks.BLOCK)
+        # Named once, not once per candidate ref: without dedup on the commit the same tree renders
+        # as "at main, <sha>" and reads as two independent baselines failing.
+        self.assertIn("gradle.properties at main carries no skerry.versionCode", found[0].message)
+
+    def _seed_version(self, name: str, code: int | None, merge_back: bool = True) -> None:
+        """Put a version on main, and by default on this branch's point as well.
+
+        `merge_back=False` leaves main ahead: that is the sibling-branch case, where the code is
+        already spent on main but still reads as an addition against the fork point.
+        """
+        body = f"skerry.versionName={name}\n" + (f"skerry.versionCode={code}\n" if code else "")
+        run_git(self.box.path, "checkout", "-q", "main")
+        self.box.write("gradle.properties", body)
+        self.box.commit(f"seed {name}")
+        run_git(self.box.path, "checkout", "-q", "refactor/checks")
+        if merge_back:
+            run_git(self.box.path, "merge", "-q", "main")
+
     def test_a_feature_without_tests_is_blocked(self):
         self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
         task = {"kind": "feature", "areas": ["shared"], "paths": [], "code_paths": []}

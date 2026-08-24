@@ -73,7 +73,9 @@ Wire the keep-alive setting end to end with dead-link detection
 - **ProGuard/minification is disabled on purpose** for the desktop release — it broke the
   crypto stack (JNA/libsodium, okio, BouncyCastle's signed jar). See the comment in
   `composeApp/build.gradle.kts` before trying to re-enable it.
-- **Releases**: pushing a `v*` tag runs the release workflow, which builds
+- **Releases**: bump both `skerry.versionName` and `skerry.versionCode` in `gradle.properties`
+  first — the workflow takes the Android version code from that file and nothing downstream can
+  recover from a code that did not grow. Then pushing a `v*` tag runs the release workflow, which builds
   `.deb`/`.rpm`/`.AppImage` (x64 + arm64), `.msi` (x64), `.dmg` (arm64 + x64, unsigned),
   a signed `.apk`, and `SHA256SUMS.txt`, and publishes them as a **draft** GitHub Release
   — a maintainer reviews and publishes it manually.
