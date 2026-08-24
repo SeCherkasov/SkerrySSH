@@ -43,6 +43,7 @@ import app.skerry.ui.files.fileBrowserFailureText
 import app.skerry.ui.files.fileDisplayName
 import app.skerry.ui.files.transferFailureText
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_local_label
 import app.skerry.ui.generated.resources.shell_tip_close
 import app.skerry.ui.generated.resources.ftail_file_fallback
 import app.skerry.ui.generated.resources.ftail_fkey_edit
@@ -66,6 +67,42 @@ import app.skerry.ui.sftp.NameDialog
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.theme.Skerry
+
+/**
+ * Breadcrumb row of the live pane. Everything it shows and everything it does comes from [pane], so
+ * the one live call site wires a pane rather than repeating six arguments — the same seam
+ * [MobileLivePane] is, and testable the same way. [filterOpen] is the screen's own state, since the
+ * quick-filter row it toggles is drawn outside this row.
+ */
+@Composable
+internal fun MobileLiveBreadcrumb(
+    pane: FilePaneController,
+    mono: FontFamily,
+    filterOpen: Boolean,
+    onFilterOpenChange: (Boolean) -> Unit,
+) {
+    MobileFilesBreadcrumbRow(
+        pane.label.ifBlank { stringResource(Res.string.ftail_local_label) },
+        pane.path,
+        mono,
+        onGoToPath = pane::goToPath,
+        // The funnel both opens and closes: closing while filter text is present also clears it, so
+        // the icon is never a visible no-op.
+        onToggleFilter = {
+            if (filterOpen || pane.nameFilter.isNotEmpty()) {
+                pane.setNameFilter("")
+                onFilterOpenChange(false)
+            } else {
+                onFilterOpenChange(true)
+            }
+        },
+        filterActive = filterOpen || pane.nameFilter.isNotEmpty(),
+        // The phone's F9: the desktop panel has a refresh button, this screen had nothing but
+        // leaving the directory and coming back (issue #327).
+        onRefresh = pane::refresh,
+        busy = pane.busy,
+    )
+}
 
 /**
  * Live pane (Remote or Local) over [FilePaneController]: listing + ".." up row + rename/delete
@@ -129,6 +166,7 @@ internal fun MobileLivePane(
             title = stringResource(Res.string.sftp_rename),
             confirmLabel = stringResource(Res.string.sftp_rename),
             initial = entry.name,
+            existing = pane.currentEntryNames(),
             onConfirm = { pane.rename(entry, it); renaming = null },
             onDismiss = { renaming = null },
         )

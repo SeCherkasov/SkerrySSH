@@ -22,6 +22,7 @@ import app.skerry.ui.app.LocalSftpPrefs
 import app.skerry.ui.app.SftpPrefs
 import app.skerry.ui.design.AnchoredDropdown
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.labelUppercase
@@ -29,6 +30,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.sftp_col_modified
 import app.skerry.ui.generated.resources.sftp_col_permissions
 import app.skerry.ui.generated.resources.sftp_columns
+import app.skerry.ui.generated.resources.sftp_loading
 import app.skerry.ui.generated.resources.sftp_new_folder
 import app.skerry.ui.generated.resources.sftp_tip_back
 import app.skerry.ui.generated.resources.sftp_tip_download
@@ -79,8 +81,23 @@ internal fun SftpWorkBarActions(
     onNewFolder: () -> Unit,
     onFilter: () -> Unit,
     onTransfer: () -> Unit,
+    // A pane is already listing/deleting/renaming: the panes drop a second request while one runs,
+    // so the button says what it is doing instead of looking live and doing nothing.
+    busy: Boolean = false,
 ) {
-    IconBtn("refresh", onClick = onRefresh, box = 26, tooltip = stringResource(Res.string.sftp_tip_refresh), enabled = enabled)
+    // One button across both states, and it keeps its name: what changed is the panes' state, which
+    // goes to the live region, not the button's identity. Unlike the phone's single-pane control it
+    // stays live while busy — it refreshes BOTH panes, and the one that is idle still has a listing
+    // to fetch; each pane drops its own redundant request.
+    IconBtn(
+        if (busy) "sync" else "refresh",
+        onClick = onRefresh,
+        box = 26,
+        tint = if (busy) Skerry.colors.cyanBright else Skerry.colors.dim,
+        tooltip = stringResource(Res.string.sftp_tip_refresh),
+        enabled = enabled,
+    )
+    StatusAnnouncer(if (busy) stringResource(Res.string.sftp_loading) else "")
     IconBtn("create_new_folder", onClick = onNewFolder, box = 26, tooltip = stringResource(Res.string.sftp_new_folder), enabled = enabled)
     IconBtn("filter_alt", onClick = onFilter, box = 26, tooltip = stringResource(Res.string.sftp_tip_filter), enabled = enabled)
     ColumnsMenu(LocalSftpPrefs.current)

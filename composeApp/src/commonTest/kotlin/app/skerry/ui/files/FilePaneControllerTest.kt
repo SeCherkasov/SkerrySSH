@@ -9,6 +9,7 @@ import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.ui.sftp.FakeSftpClient
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -17,20 +18,27 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val HOME = "/home/skerry"
 
-/** Fake source rooted at HOME, seeded with a mix of directories and files. */
-private fun seededBrowser(): SftpFileBrowser {
-    val fake = FakeSftpClient(startDir = HOME).apply {
-        seedDir("$HOME/zeta")
-        seedDir("$HOME/alpha")
-        seedFile("$HOME/readme.txt", size = 11)
-        seedFile("$HOME/build.log", size = 200)
-    }
-    return SftpFileBrowser(fake, label = "prod-web-01")
+/**
+ * Fake source rooted at HOME, seeded with a mix of directories and files. Handed out as the client
+ * itself for the tests that hold its next listing in flight ([FakeSftpClient.listGate]) or make it
+ * refuse a delete ([FakeSftpClient.removeError]).
+ */
+private fun seededFake(): FakeSftpClient = FakeSftpClient(startDir = HOME).apply {
+    seedDir("$HOME/zeta")
+    seedDir("$HOME/alpha")
+    seedFile("$HOME/readme.txt", size = 11)
+    seedFile("$HOME/build.log", size = 200)
 }
+
+private fun browserOn(fake: FakeSftpClient): SftpFileBrowser = SftpFileBrowser(fake, label = "prod-web-01")
+
+private fun seededBrowser(): SftpFileBrowser = browserOn(seededFake())
 
 /** Same seed plus a nested file under alpha, for testing navigation into a directory. */
 private fun seededBrowserWithNested(): SftpFileBrowser {
@@ -195,6 +203,352 @@ class FilePaneControllerTest {
         advanceUntilIdle()
         val names = c.loaded().entries.map { it.name }
         assertTrue("manual.txt" in names && "readme.txt" !in names)
+    }
+
+    /**
+     * Issue #327. A phone talks to its servers over a link where every round trip costs: the delete
+     * itself is one, the listing that follows is another. Holding the row on screen for the second
+     * one reads as "the delete did nothing" — so the listing drops the row the moment the source
+     * confirms it is gone, and the relist that follows only reconciles what else moved.
+     */
+    @Test
+    fun `delete drops the row when the source confirms, without waiting for the relist`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        val target = c.entry("readme.txt")
+        val relist = CompletableDeferred<Unit>()
+        fake.listGate = relist
+
+        c.delete(target)
+        advanceUntilIdle()
+
+        assertEquals(listOf("alpha", "zeta", "build.log"), c.loaded().entries.map { it.name })
+        assertTrue(c.busy, "the relist is still in flight")
+
+        relist.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("alpha", "zeta", "build.log"), c.loaded().entries.map { it.name })
+        assertFalse(c.busy, "the operation is over")
+    }
+
+    /** Same contract for a batch delete: each row goes as its own removal is confirmed. */
+    @Test
+    fun `deleteSelected drops the rows it deleted before the relist returns`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        c.selectOnly(c.entry("readme.txt"))
+        c.toggle(c.entry("build.log"))
+        val relist = CompletableDeferred<Unit>()
+        fake.listGate = relist
+
+        c.deleteSelected()
+        advanceUntilIdle()
+
+        assertEquals(listOf("alpha", "zeta"), c.loaded().entries.map { it.name })
+        relist.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("alpha", "zeta"), c.loaded().entries.map { it.name })
+    }
+
+    /** A delete the source refuses is not a delete: the row has to survive it. */
+    @Test
+    fun `a delete the source refuses leaves the file where it was`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        fake.removeError = "Permission denied"
+
+        c.delete(c.entry("readme.txt"))
+        advanceUntilIdle()
+        assertIs<FilePaneState.Error>(c.state)
+
+        fake.removeError = null
+        c.refresh()
+        advanceUntilIdle()
+        assertTrue(c.loaded().entries.any { it.name == "readme.txt" }, "nothing was deleted")
+    }
+
+    /** The renamed row carries its new name straight away, sorted into its new place. */
+    @Test
+    fun `rename shows the new name before the relist returns`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        val relist = CompletableDeferred<Unit>()
+        fake.listGate = relist
+
+        c.rename(c.entry("readme.txt"), "manual.txt")
+        advanceUntilIdle()
+
+        assertEquals(listOf("alpha", "zeta", "build.log", "manual.txt"), c.loaded().entries.map { it.name })
+        assertEquals("$HOME/manual.txt", c.loaded().entries.last().path)
+
+        relist.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(listOf("alpha", "zeta", "build.log", "manual.txt"), c.loaded().entries.map { it.name })
+    }
+
+    /**
+     * Issue #313: the pane acts on the *name* it showed, resolved against the directory it was
+     * showing — a listing entry named ".." is a hostile server trying to make the user's confirmed
+     * delete land above the directory they were looking at.
+     */
+    @Test
+    fun `a delete of a row the server named dot-dot never reaches the source`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+
+        c.delete(FileItem("..", "$HOME/..", FileItemType.Directory, size = 0, modifiedEpochSeconds = 0))
+        advanceUntilIdle()
+
+        // IllegalName and nothing else: unguarded, this reaches the source and comes back as the
+        // browser's own prefix refusal, a different failure on a request that should never be sent.
+        assertEquals(FileBrowserFailure.IllegalName, assertIs<FilePaneState.Error>(c.state).failure)
+        c.refresh()
+        advanceUntilIdle()
+        assertEquals(listOf("alpha", "zeta", "build.log", "readme.txt"), c.loaded().entries.map { it.name })
+    }
+
+    /** The path the server attached to the row is not what gets deleted — the name under it is. */
+    @Test
+    fun `a delete follows the row name, not the path the server attached to it`() = runTest {
+        val fake = seededFake().apply { seedFile("/etc/passwd", size = 42) }
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+
+        c.delete(c.entry("readme.txt").copy(path = "/etc/passwd"))
+        advanceUntilIdle()
+
+        assertNotNull(fake.stat("/etc/passwd"), "the path the server pointed at is untouched")
+        assertNull(fake.stat("$HOME/readme.txt"), "the row the user confirmed is gone")
+    }
+
+    /** Same rule on the rename source: a ".." row must not become a handle on the parent directory. */
+    @Test
+    fun `a rename of a row the server named dot-dot never reaches the source`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+
+        c.rename(FileItem("..", "$HOME/..", FileItemType.Directory, size = 0, modifiedEpochSeconds = 0), "loot")
+        advanceUntilIdle()
+
+        assertEquals(FileBrowserFailure.IllegalName, assertIs<FilePaneState.Error>(c.state).failure)
+        // Where the unguarded rename lands: "$HOME/.." resolves to /home, and the source moves the
+        // whole parent under the directory on screen.
+        assertNull(fake.stat("$HOME/loot"), "the parent directory was not moved anywhere")
+    }
+
+    /** Renaming acts on the row's name in the directory on screen, whatever path the listing carried. */
+    @Test
+    fun `a rename follows the row name, not the path the server attached to it`() = runTest {
+        val fake = seededFake().apply { seedFile("/etc/passwd", size = 42) }
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+
+        c.rename(c.entry("readme.txt").copy(path = "/etc/passwd"), "manual.txt")
+        advanceUntilIdle()
+
+        assertNotNull(fake.stat("/etc/passwd"), "the path the server pointed at is untouched")
+        assertNotNull(fake.stat("$HOME/manual.txt"), "the row the user confirmed was renamed in place")
+        assertNull(fake.stat("$HOME/readme.txt"))
+    }
+
+    /**
+     * A quick filter is a view, not a scope: renaming a row out of it must not read as "my file is
+     * gone" — the same rule [mkdir] already follows for a directory created out of view.
+     */
+    @Test
+    fun `a rename out of the active filter clears the filter instead of hiding the row`() = runTest {
+        val c = controllerOn(seededBrowser())
+        c.start()
+        advanceUntilIdle()
+        c.setNameFilter("log")
+        assertEquals(listOf("build.log"), c.loaded().entries.map { it.name })
+
+        c.rename(c.entry("build.log"), "notes.txt")
+        advanceUntilIdle()
+
+        assertEquals("", c.nameFilter)
+        assertTrue(c.loaded().entries.any { it.name == "notes.txt" }, "the renamed row is on screen")
+    }
+
+    /** Renaming the row under the cursor must not throw the cursor back to the top of the listing. */
+    @Test
+    fun `rename keeps the cursor on the row it renamed`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        c.setCursor(c.entry("readme.txt"))
+        val relist = CompletableDeferred<Unit>()
+        fake.listGate = relist
+
+        c.rename(c.entry("readme.txt"), "manual.txt")
+        advanceUntilIdle()
+        assertEquals("$HOME/manual.txt", c.cursoredItem()?.path, "before the relist")
+
+        relist.complete(Unit)
+        advanceUntilIdle()
+        assertEquals("$HOME/manual.txt", c.cursoredItem()?.path, "after the relist")
+    }
+
+    /**
+     * A rename the source resolved by replacing the target: both listings key their rows on the
+     * path, and two rows sharing one is a hard failure on desktop, not a cosmetic one.
+     */
+    @Test
+    fun `a rename onto an existing name leaves one row on that path`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        val relist = CompletableDeferred<Unit>()
+        fake.listGate = relist
+
+        c.rename(c.entry("readme.txt"), "build.log")
+        advanceUntilIdle()
+
+        assertEquals(1, c.loaded().entries.count { it.path == "$HOME/build.log" })
+    }
+
+    /**
+     * The pane drops a request that arrives while it is working, which is right for a keypress the
+     * user can press again and wrong for something they confirmed in a dialog: the dialog closes,
+     * the row stays, and nothing was ever sent. That is issue #327 read literally.
+     */
+    @Test
+    fun `a delete confirmed while the pane is working is not discarded`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        val target = c.entry("readme.txt")
+
+        val listing = CompletableDeferred<Unit>()
+        fake.listGate = listing
+        c.refresh()
+        advanceUntilIdle()
+        assertTrue(c.busy, "the refresh is still in flight")
+
+        c.delete(target)
+        advanceUntilIdle()
+
+        fake.listGate = null
+        listing.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(c.loaded().entries.any { it.name == "readme.txt" }, "the confirmed delete has to reach the source")
+        assertFalse(c.busy)
+    }
+
+    /**
+     * A batch delete waits its turn now, and the listing stays live under the user's finger while it
+     * does. The rows it removes have to be the rows they confirmed, not whatever happens to be
+     * selected by the time its turn comes.
+     */
+    @Test
+    fun `deleteSelected removes the rows that were selected when it was confirmed`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        c.selectOnly(c.entry("readme.txt"))
+
+        val listing = CompletableDeferred<Unit>()
+        fake.listGate = listing
+        c.refresh()
+        advanceUntilIdle()
+
+        c.deleteSelected()
+        c.selectOnly(c.entry("build.log"))
+        advanceUntilIdle()
+
+        fake.listGate = null
+        listing.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(listOf("alpha", "zeta", "build.log"), c.loaded().entries.map { it.name })
+    }
+
+    /**
+     * The pane keeps showing the old directory until a navigation's listing lands, so an operation
+     * confirmed in that window belongs to the directory on screen. Resolving it against wherever the
+     * pane ended up would delete or move something the user never saw.
+     */
+    @Test
+    fun `a rename confirmed before a navigation lands stays in the directory it was confirmed in`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        val target = c.entry("readme.txt")
+
+        val listing = CompletableDeferred<Unit>()
+        fake.listGate = listing
+        c.open(c.entry("alpha"))
+        advanceUntilIdle()
+
+        c.rename(target, "manual.txt")
+        advanceUntilIdle()
+
+        fake.listGate = null
+        listing.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals("$HOME/alpha", c.path, "the navigation still lands")
+        assertEquals(
+            listOf("alpha", "build.log", "manual.txt", "zeta"),
+            fake.list(HOME).map { it.name }.sorted(),
+        )
+        assertEquals(emptyList(), fake.list("$HOME/alpha").map { it.name })
+    }
+
+    /** The pane says when it is working, so a screen can show it instead of looking stuck. */
+    @Test
+    fun `busy is false at rest and true while an operation runs`() = runTest {
+        val fake = seededFake()
+        val c = controllerOn(browserOn(fake))
+        c.start()
+        advanceUntilIdle()
+        assertFalse(c.busy)
+        val alpha = c.entry("alpha")
+        val gate = CompletableDeferred<Unit>()
+        fake.listGate = gate
+
+        c.open(alpha)
+        advanceUntilIdle()
+        assertTrue(c.busy, "the listing of alpha is still in flight")
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertFalse(c.busy)
+    }
+
+    /** A pane whose scope died mid-flight would otherwise stay busy forever and refuse everything after. */
+    @Test
+    fun `busy clears when the pane scope is already gone`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val c = FilePaneController(seededBrowser(), scope)
+        c.start()
+        advanceUntilIdle()
+        scope.cancel()
+
+        c.refresh()
+        advanceUntilIdle()
+
+        assertFalse(c.busy)
     }
 
     @Test

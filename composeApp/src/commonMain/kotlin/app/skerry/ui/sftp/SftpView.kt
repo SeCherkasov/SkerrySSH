@@ -284,6 +284,7 @@ private fun LiveSftpView(
                 SftpWorkBarActions(
                     localActive = active == ActivePane.Local,
                     enabled = c != null,
+                    busy = c != null && (c.local.busy || c.remote.busy),
                     onRefresh = { fKey(9) },
                     onNewFolder = { fKey(7) },
                     onFilter = { if (active == ActivePane.Local) localFilterTick++ else remoteFilterTick++ },

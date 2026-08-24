@@ -163,7 +163,7 @@ class TransferCoordinator(
         confirmOverwrite(items, remote) { destDir ->
             launchExclusive {
                 runUpload(items, destDir)
-                remote.refresh()
+                remote.reloadNow()
                 local.clearSelection()
             }
         }
@@ -185,7 +185,7 @@ class TransferCoordinator(
         confirmOverwrite(items, local) { destDir ->
             launchExclusive {
                 runDownload(items, destDir, sourceDir)
-                local.refresh()
+                local.reloadNow()
                 remote.clearSelection()
             }
         }
@@ -206,8 +206,8 @@ class TransferCoordinator(
                 launchExclusive {
                     runUpload(items, destDir)
                     val failed = deleteSources(items) { localBrowser.delete(it) }
-                    remote.refresh()
-                    local.refresh()
+                    remote.reloadNow()
+                    local.reloadNow()
                     if (failed == null) local.clearSelection() else transfers.fail(failed.name, FileTransferFailure.DeleteSource)
                 }
             }
@@ -225,8 +225,8 @@ class TransferCoordinator(
                     // Deletes via a path rebuilt from the directory snapshot + a validated name, not
                     // server-controlled item.path.
                     val failed = deleteSources(items) { remoteBrowser.delete(it.copy(path = safeRemoteChild(it.name, remoteDir))) }
-                    local.refresh()
-                    remote.refresh()
+                    local.reloadNow()
+                    remote.reloadNow()
                     if (failed == null) remote.clearSelection() else transfers.fail(failed.name, FileTransferFailure.DeleteSource)
                 }
             }
@@ -305,7 +305,7 @@ class TransferCoordinator(
             sftp.upload(source.stagingPath, target) { transferred, total ->
                 transfers.step(source.name, 1, 1, transferred, total)
             }
-            remote.refresh()
+            remote.reloadNow()
         }
     }
 
@@ -328,7 +328,7 @@ class TransferCoordinator(
             item = item.copy(path = childPath(pane.path, item.name)),
             readOnly = readOnly,
             scope = scope,
-            onSaved = { pane.refresh() },
+            onSaved = { pane.reloadNow() },
         ).also { it.open() }
     }
 
