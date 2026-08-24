@@ -119,6 +119,8 @@ import app.skerry.ui.teams.rememberInviteAcknowledgement
 import app.skerry.ui.teams.readyToAccept
 import app.skerry.ui.generated.resources.lib_teams_invite_check_retry
 import app.skerry.ui.generated.resources.lib_teams_invite_key_changed_ack
+import app.skerry.ui.teams.ConfirmPeerKeyDialogFor
+import app.skerry.ui.teams.rememberMemberPins
 import app.skerry.ui.teams.InvitePreview
 import app.skerry.ui.teams.SharedRecordUi
 import app.skerry.ui.teams.TeamScopeUi
@@ -249,6 +251,8 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     // One record's history instead of the team's whole feed (desktop parity).
     var historyRecord by remember { mutableStateOf<HistoryTarget?>(null) }
     var rolePicker by remember { mutableStateOf<TeamMember?>(null) }
+    // The member whose key the confirm ceremony is open for — the account id, not the row (desktop parity).
+    var confirmKeyFor by remember { mutableStateOf<String?>(null) }
     // Selected share space of the current team ("" = team-wide), like the desktop screen.
     var selectedScope by remember { mutableStateOf("") }
     var showCreateScope by remember { mutableStateOf(false) }
@@ -297,6 +301,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
                 onShowHistory = { showHistory = true },
                 onShowRecordHistory = { historyRecord = it },
                 onChangeRole = { member -> rolePicker = member },
+                onConfirmKey = { accountId -> confirmKeyFor = accountId },
                 onSelectScope = { selectedScope = it },
                 onNewScope = { showCreateScope = true },
                 onScopeAccess = { scopeAccess = it },
@@ -338,6 +343,15 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
             onCreate = { name -> showCreate = false; scope.launch { tc.createTeam(name); tick++ } },
         )
     }
+    confirmKeyFor?.let { accountId ->
+        ConfirmPeerKeyDialogFor(
+            tc = tc,
+            accountId = accountId,
+            busy = busy,
+            onConfirm = { verified -> confirmKeyFor = null; scope.launch { tc.confirmPeer(verified); tick++ } },
+            onDismiss = { confirmKeyFor = null },
+        )
+    }
     inviteTeamId?.let { teamId ->
         InviteMemberDialogForTeam(
             teams = teams,
@@ -345,7 +359,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
             preview = invitePreview,
             ownFingerprint = tc.ownFingerprint(),
             busy = busy,
-            onLookup = { accountId -> scope.launch { invitePreview = tc.previewInvite(accountId) } },
+            onLookup = { accountId -> scope.launch { invitePreview = tc.previewPeerKey(accountId) } },
             onEdited = { invitePreview = null },
             onSend = { id, verified, role -> inviteTeamId = null; scope.launch { tc.invite(id, verified, role); tick++ } },
             onDismiss = { inviteTeamId = null },
@@ -473,6 +487,7 @@ private fun MobileTeamDetail(
     onShowHistory: () -> Unit,
     onShowRecordHistory: (HistoryTarget) -> Unit,
     onChangeRole: (TeamMember) -> Unit,
+    onConfirmKey: (String) -> Unit,
     onSelectScope: (String) -> Unit,
     onNewScope: () -> Unit,
     onScopeAccess: (TeamScopeUi) -> Unit,
@@ -586,8 +601,13 @@ private fun MobileTeamDetail(
     MobileTeamsSectionLabel(stringResource(Res.string.share_live_sessions))
     SharedSessionsList(team.id, LocalSharedSessions.current, onJoin = rememberJoinSharedSession(), modifier = Modifier.padding(bottom = 14.dp))
     MobileTeamsSectionLabel(stringResource(Res.string.lib_teams_members))
-    val rows = remember(team, members, grants, canManage) {
-        teamMemberRows(team, members, grants?.byScope.orEmpty(), canManage, grants?.complete ?: true)
+    // One vault pass for the whole list, keyed to the same reread as the list itself (desktop parity).
+    val marks = rememberMemberPins(tc, members.map { it.accountId }, tick)
+    val rows = remember(team, members, grants, canManage, marks) {
+        teamMemberRows(
+            team, members, grants?.byScope.orEmpty(), canManage, grants?.complete ?: true,
+            marks?.self, marks?.pins.orEmpty(),
+        )
     }
     val now = remember(tick, members) { epochMillis() }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -597,6 +617,7 @@ private fun MobileTeamDetail(
                 now = now,
                 onChangeRole = { onChangeRole(row.member) },
                 onRemove = { onConfirm(MobileTeamsConfirm.Remove(team.id, row.member.accountId)) },
+                onConfirmKey = { onConfirmKey(row.member.accountId) },
             )
         }
     }

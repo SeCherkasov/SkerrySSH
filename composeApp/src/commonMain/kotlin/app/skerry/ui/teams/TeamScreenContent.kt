@@ -109,6 +109,7 @@ internal fun TeamScreen(
     onSync: () -> Unit,
     onShowHistory: () -> Unit,
     onChangeRole: (TeamMember) -> Unit,
+    onConfirmKey: (String) -> Unit,
     onSelectScope: (String) -> Unit,
     onNewScope: () -> Unit,
     onScopeAccess: (TeamScopeUi) -> Unit,
@@ -161,8 +162,14 @@ internal fun TeamScreen(
                 )
             }
             ScopeStrip(team, scopeId, canManage, onSelectScope, onScopeAccess, onDeleteScope = { onConfirm(TeamsConfirm.DeleteScope(team.id, it.id)) })
-            val rows = remember(team, members, grants, canManage) {
-                teamMemberRows(team, members, grants?.byScope.orEmpty(), canManage, grants?.complete ?: true)
+            // One vault pass for the whole list, keyed to the same reread as the list itself: the
+            // marks and the rows must not disagree about who has been confirmed (#323).
+            val marks = rememberMemberPins(tc, members.map { it.accountId }, tick)
+            val rows = remember(team, members, grants, canManage, marks) {
+                teamMemberRows(
+                    team, members, grants?.byScope.orEmpty(), canManage, grants?.complete ?: true,
+                    marks?.self, marks?.pins.orEmpty(),
+                )
             }
             // Read once per reread rather than per row, so every row of one paint agrees on "now".
             val now = remember(tick, members) { epochMillis() }
@@ -172,6 +179,7 @@ internal fun TeamScreen(
                 scopesLoading = canManage && grants == null,
                 onChangeRole = { onChangeRole(it.member) },
                 onRemove = { onConfirm(TeamsConfirm.Remove(team.id, it.member.accountId)) },
+                onConfirmKey = { onConfirmKey(it.member.accountId) },
             )
             TeamSummaryCards(
                 cards = teamCards(tc, team, scopeId, tick, feed, members),

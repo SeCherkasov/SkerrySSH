@@ -10,10 +10,11 @@ import androidx.compose.ui.graphics.Color
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_invite_check_failed
 import app.skerry.ui.generated.resources.lib_teams_invite_checking
-import app.skerry.ui.generated.resources.lib_teams_invite_key_changed
 import app.skerry.ui.generated.resources.lib_teams_invite_unverified
 import app.skerry.ui.generated.resources.lib_teams_invited_by
 import app.skerry.ui.generated.resources.lib_teams_invited_fingerprint
+import app.skerry.shared.team.PinNotice
+import app.skerry.shared.team.pinNotice
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
@@ -49,19 +50,27 @@ internal sealed interface InviteCheck {
 internal class InviteAcknowledgement(val moved: String?, val acknowledged: Boolean, val toggle: () -> Unit)
 
 /**
- * Holds that acknowledgement for one banner. Remembered as the fingerprint that was acknowledged
- * rather than as a flag: the check is re-run by every reread of the screen and visits [Pending] on
- * the way there, so a flag keyed on the state would be cleared by an action on some other team and
- * ask the user to tick it again. A different fingerprint is a different question, and matches nothing.
+ * Holds that acknowledgement for one banner. Remembered as the question that was answered — the
+ * fingerprint and what the record said against it — rather than as a flag: the check is re-run by
+ * every reread of the screen and visits [Pending] on the way there, so a flag keyed on the state
+ * would be cleared by an action on some other team and ask the user to tick it again.
+ *
+ * The notice is half of that pair because these records arrive from this account's own devices
+ * whenever the server delivers them, and the question can get harder under a standing tick: a
+ * "nobody confirmed either of them" the user answered must not stand in for "this differs from the
+ * fingerprint confirmed for this account" once the confirmation lands (#323).
  *
  * One holder for both surfaces — a second copy of this is a copy no test on the other surface reads.
  */
 @Composable
 internal fun rememberInviteAcknowledgement(check: InviteCheck): InviteAcknowledgement {
-    var acknowledgedFor by remember { mutableStateOf<String?>(null) }
-    val moved = (check as? InviteCheck.Verified)?.preview?.takeIf { it.keyChanged }?.fingerprint
-    val acknowledged = moved != null && acknowledgedFor == moved
-    return InviteAcknowledgement(moved, acknowledged) { acknowledgedFor = if (acknowledged) null else moved }
+    var answered by remember { mutableStateOf<Pair<String, PinNotice>?>(null) }
+    val preview = (check as? InviteCheck.Verified)?.preview
+    val asked = preview
+        ?.let { it.fingerprint to pinNotice(it.pinned, it.fingerprint) }
+        ?.takeIf { (_, notice) -> notice != PinNotice.NOTHING }
+    val acknowledged = asked != null && answered == asked
+    return InviteAcknowledgement(asked?.first, acknowledged) { answered = if (acknowledged) null else asked }
 }
 
 /**
@@ -110,7 +119,8 @@ internal fun inviteCheckAnnouncement(check: InviteCheck): String = when (check) 
         val preview = check.preview
         val identity = stringResource(Res.string.lib_teams_invited_by, untrustedLabel(preview.accountId)) + " " +
             stringResource(Res.string.lib_teams_invited_fingerprint, preview.fingerprint)
-        if (preview.keyChanged) identity + " " + stringResource(Res.string.lib_teams_invite_key_changed) else identity
+        val notice = pinNoticeText(pinNotice(preview.pinned, preview.fingerprint))
+        if (notice != null) "$identity $notice" else identity
     }
 }
 
@@ -131,7 +141,9 @@ internal fun inviteCheckLines(check: InviteCheck): List<InviteCheckLine> = when 
         val preview = check.preview
         add(InviteCheckLine(stringResource(Res.string.lib_teams_invited_by, untrustedLabel(preview.accountId)), Skerry.colors.dim))
         add(InviteCheckLine(stringResource(Res.string.lib_teams_invited_fingerprint, preview.fingerprint), Skerry.colors.cyanBright, mono = true))
-        if (preview.keyChanged) add(InviteCheckLine(stringResource(Res.string.lib_teams_invite_key_changed), Skerry.colors.amber))
+        // Worded by how the record it disagrees with got there: a fingerprint a human confirmed and
+        // one the server was simply first to answer with are not the same claim (#323).
+        pinNoticeText(pinNotice(preview.pinned, preview.fingerprint))?.let { add(InviteCheckLine(it, Skerry.colors.amber)) }
     }
 }
 

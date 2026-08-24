@@ -39,9 +39,9 @@ import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.ModalScrim
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.StatusAnnouncer
-import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.consumeClicks
+import app.skerry.shared.team.pinNotice
 import app.skerry.shared.team.TeamRole
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_invite_role
@@ -49,15 +49,12 @@ import app.skerry.ui.generated.resources.lib_teams_create_subtitle
 import app.skerry.ui.generated.resources.lib_teams_create_title
 import app.skerry.ui.generated.resources.lib_teams_invite_account_placeholder
 import app.skerry.ui.generated.resources.lib_teams_invite_fingerprint
-import app.skerry.ui.generated.resources.lib_teams_invite_key_changed
-import app.skerry.ui.generated.resources.lib_teams_invite_key_changed_ack
 import app.skerry.ui.generated.resources.lib_teams_invite_next
 import app.skerry.ui.generated.resources.lib_teams_invite_send
 import app.skerry.ui.generated.resources.lib_teams_invite_subtitle
 import app.skerry.ui.generated.resources.lib_teams_invite_title
 import app.skerry.ui.generated.resources.lib_teams_invite_verify
 import app.skerry.ui.generated.resources.lib_teams_name_placeholder
-import app.skerry.ui.generated.resources.lib_teams_your_fingerprint
 import app.skerry.ui.generated.resources.shell_cancel
 import app.skerry.ui.generated.resources.shell_create
 import org.jetbrains.compose.resources.stringResource
@@ -229,18 +226,24 @@ fun InviteMemberDialog(
     var role by remember { mutableStateOf(assignableRoles.lastOrNull() ?: TeamRole.VIEWER) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    val mono = LocalFonts.current.mono
     // The preview only counts while the typed id still matches it — editing the field must not leave
     // a stale verification standing behind the Send button.
     val verified = preview?.takeIf { it.accountId == accountId.trim() }
     val ready = verified != null
-    // Keyed on the fingerprint, not on the dialog: the tick belongs to the key it was given for, and
-    // a lookup answering with a different one asks the question again.
-    var acknowledged by remember(verified?.fingerprint) { mutableStateOf(false) }
-    // A key that moved costs a second, deliberate gesture. Sending replaces the pin, so an honest
-    // rotation and a server trying its luck reach this dialog looking identical — the difference is
-    // in what the person on the trusted channel says, and one click could not carry it (#319).
-    val blockedByKeyChange = verified != null && verified.keyChanged && !acknowledged
+    // What the peer record says against this fingerprint, worded by how the record got there: a key
+    // a human confirmed and a key the server was simply first to answer with are not the same claim,
+    // and the dialog used to describe both as "confirmed" (#323).
+    val notice = verified?.let { pinNoticeText(pinNotice(it.pinned, it.fingerprint)) }
+    // Keyed on the fingerprint and on what is said against it, not on the dialog: the tick belongs to
+    // the question it answered. A lookup answering with a different key asks it again — and so does
+    // one that answers the same key while the record behind it escalates from "nobody confirmed
+    // either of these" to "this differs from the fingerprint confirmed for this account".
+    var acknowledged by remember(verified?.fingerprint, notice) { mutableStateOf(false) }
+    // A record that disagrees costs a second, deliberate gesture. Sending replaces the pin, so an
+    // honest rotation and a server trying its luck reach this dialog looking identical — the
+    // difference is in what the person on the trusted channel says, and one click could not carry
+    // it (#319).
+    val blockedByKeyChange = notice != null && !acknowledged
     fun submit() {
         val id = accountId.trim()
         if (id.isEmpty() || busy || blockedByKeyChange) return
@@ -253,44 +256,23 @@ fun InviteMemberDialog(
         // The lookup's answer arrives while the field has focus and Send silently becomes live; the
         // fingerprint block below is an insertion nothing announces on its own (WCAG 4.1.3).
         StatusAnnouncer(
-            when {
-                verified == null -> ""
-                verified.keyChanged ->
-                    stringResource(Res.string.lib_teams_invite_fingerprint) + " " + verified.fingerprint + " " +
-                        stringResource(Res.string.lib_teams_invite_key_changed)
-                else -> stringResource(Res.string.lib_teams_invite_fingerprint) + " " + verified.fingerprint
+            if (verified == null) {
+                ""
+            } else {
+                stringResource(Res.string.lib_teams_invite_fingerprint) + " " + verified.fingerprint +
+                    (notice?.let { " $it" } ?: "")
             },
         )
         if (verified != null) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-                    .clip(RoundedCornerShape(7.dp))
-                    .background(Skerry.colors.cyan.copy(alpha = 0.06f))
-                    .border(1.dp, Skerry.colors.cyan14, RoundedCornerShape(7.dp))
-                    .padding(12.dp),
-            ) {
-                Txt(stringResource(Res.string.lib_teams_invite_fingerprint).uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
-                Txt(verified.fingerprint, color = Skerry.colors.cyanBright, size = 14.sp, font = mono, modifier = Modifier.padding(top = 4.dp))
-                Txt(stringResource(Res.string.lib_teams_invite_verify), color = Skerry.colors.dim, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp))
-                // An account whose fingerprint moved is either an honest identity rotation or the
-                // server trying its luck. Sending replaces the pin, so the difference has to be on
-                // screen — the person on the trusted channel is the only one who can tell (#319).
-                if (verified.keyChanged) {
-                    Txt(stringResource(Res.string.lib_teams_invite_key_changed), color = Skerry.colors.amber, size = 11.5.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 8.dp))
-                    ToggleRow(
-                        label = stringResource(Res.string.lib_teams_invite_key_changed_ack),
-                        on = acknowledged,
-                        onToggle = { acknowledged = !acknowledged },
-                        labelSize = 11.5.sp,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
-                }
-                if (ownFingerprint != null) {
-                    Txt(stringResource(Res.string.lib_teams_your_fingerprint, ownFingerprint), color = Skerry.colors.faint, size = 11.sp, font = mono, modifier = Modifier.padding(top = 8.dp))
-                }
-            }
+            FingerprintCeremony(
+                fingerprint = verified.fingerprint,
+                instruction = stringResource(Res.string.lib_teams_invite_verify),
+                notice = notice,
+                acknowledged = acknowledged,
+                onAcknowledge = { acknowledged = !acknowledged },
+                ownFingerprint = ownFingerprint,
+                modifier = Modifier.padding(top = 12.dp),
+            )
         }
         if (assignableRoles.isNotEmpty()) {
             Txt(stringResource(Res.string.lib_teams_invite_role).uppercase(), color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))

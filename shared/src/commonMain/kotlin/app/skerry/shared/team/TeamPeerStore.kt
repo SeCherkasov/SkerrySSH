@@ -3,6 +3,7 @@ package app.skerry.shared.team
 import app.skerry.shared.sync.SyncSession
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultRecord
 import app.skerry.shared.vault.VaultRecordCodec
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +21,30 @@ import kotlinx.serialization.Serializable
  * what makes one verification durable — it is the fingerprint every later fetch is held to.
  */
 @Serializable
-data class TeamPeerEntry(val fingerprint: String)
+data class TeamPeerEntry(
+    val fingerprint: String,
+    /**
+     * How the fingerprint got here. Defaulted rather than required, and defaulted to the weaker of
+     * the two: records written before this field existed carry no claim at all, and reading them as
+     * a confirmation would put the word on a fingerprint nobody read out loud — the defect this
+     * field exists to fix (#323). Such a pin still guards every seal; it is only asked to be
+     * confirmed from the member list before a screen calls it confirmed.
+     */
+    val origin: PinOrigin = PinOrigin.FIRST_SIGHT,
+)
+
+/**
+ * How a pinned fingerprint was established. The distinction is the whole point of the record: a key
+ * the server answered with is held to from then on, but nobody vouched for it, and only a human on a
+ * channel the server does not own can turn it into a confirmation (#323).
+ */
+enum class PinOrigin {
+    /** A human read the fingerprint out loud: the invite ceremony, or the member list's own confirm. */
+    CONFIRMED,
+
+    /** Whatever the server answered the first time something was sealed to the account. */
+    FIRST_SIGHT,
+}
 
 /** What this account holds for a peer: nothing, something it cannot read, or a fingerprint. */
 sealed interface Pin {
@@ -35,8 +59,25 @@ sealed interface Pin {
      */
     data object Unreadable : Pin
 
-    /** The fingerprint pinned for the account. */
-    class Known(val fingerprint: String) : Pin
+    /**
+     * The fingerprint pinned for the account, and what the record claims about it.
+     *
+     * A data class because a pin is compared: the ceremony carries the one it was shown into the
+     * write that replaces it, and screens hold it inside their own state.
+     */
+    data class Known(val fingerprint: String, val origin: PinOrigin) : Pin
+}
+
+/** What a [TeamPeerStore.confirm] did, or why it did nothing. */
+enum class ConfirmOutcome {
+    /** The fingerprint is on record, confirmed. */
+    RECORDED,
+
+    /** The record moved between the ceremony and the write, so what was shown is not what was replaced. */
+    MOVED,
+
+    /** The id is not this store's to write: a record of another type holds it. */
+    REFUSED,
 }
 
 /** Store of [RecordType.TEAM_PEER] records. Synced between the account's own devices like team keys. */
@@ -56,24 +97,54 @@ class TeamPeerStore(
     /** What is pinned for [accountId]. */
     fun pin(accountId: String): Pin = vault.transaction {
         if (!vault.isUnlocked) return@transaction Pin.Unreadable
-        val id = recordId(accountId)
-        // One transaction for both reads: a compact landing between them would drop the record
-        // `codec.get` just failed on, and the fallback would read the fail-open answer.
-        codec.get(id)?.let { return@transaction Pin.Known(it.fingerprint) }
-        // codec.get answers null for "absent", "tombstoned", "present but does not decrypt" and
-        // "present as another type" alike. Both of the last two mean a pin this device cannot read:
-        // a blob that stopped opening (an adopted account key), or a record the server named after
-        // this id and got there first. Reading either as "nothing pinned" would pin whatever the
-        // server publishes next — so any live record at the id fails the read closed.
-        // [None] is answered exactly when a first-sight pin could be written here, and a tombstone
-        // holds an id's type until compaction — so a deleted TEAM the server named after this pin
-        // leaves the slot unwritable just as a live one does. Reading that as "nothing was ever
-        // pinned" would pin on first sight, silently drop the write, and call the next fetch first
-        // sight again: every later seal follows whatever the server publishes, forever and without
-        // a word (#319 reopened for that account). Unwritable reads as unreadable, which fails closed.
-        val at = recordAt(id)
-        if (at == null || (at.deleted && at.type == RecordType.TEAM_PEER)) Pin.None else Pin.Unreadable
+        // One transaction for the lookup and the read it decides: a compact landing between them
+        // would drop the record the payload read is about to ask for.
+        pinAt(recordAt(recordId(accountId)))
     }
+
+    /**
+     * What [record] — whatever sits at a pin's id, of any type, tombstoned or not — says is pinned
+     * for that account.
+     *
+     * A payload that does not decrypt, and a record of another type the server named after this id
+     * and got there first, both mean a pin this device cannot read. Reading either as "nothing
+     * pinned" would pin whatever the server publishes next — so any live record at the id fails the
+     * read closed. [Pin.None] is answered exactly when a first-sight pin could be written here, and
+     * a tombstone holds an id's type until compaction: a deleted TEAM the server named after this
+     * pin leaves the slot unwritable just as a live one does. Reading that as "nothing was ever
+     * pinned" would pin on first sight, silently drop the write, and call the next fetch first sight
+     * again — every later seal following whatever the server publishes, forever and without a word
+     * (#319 reopened for that account). Unwritable reads as unreadable, which fails closed.
+     */
+    private fun pinAt(record: VaultRecord?): Pin {
+        if (record != null && record.type == RecordType.TEAM_PEER && !record.deleted) {
+            codec.decode(vault.openPayload(record.id))
+                ?.let { return Pin.Known(it.fingerprint, it.origin) }
+        }
+        return if (record == null || (record.deleted && record.type == RecordType.TEAM_PEER)) Pin.None else Pin.Unreadable
+    }
+
+    /**
+     * What is pinned for each of [accountIds] — the member list's read, in one transaction so every
+     * row of one paint answers against the same vault state.
+     *
+     * Suspending, and on [vaultDispatcher] for the same reason the write path is: the transaction
+     * takes the account vault's single lock, which every write holds across a whole-file re-serialize
+     * and rewrite. Read from a composition it would block the frame for the length of a sync merge's
+     * commit.
+     */
+    suspend fun pins(accountIds: Collection<String>): Map<String, Pin> =
+        withContext(vaultDispatcher) {
+            vault.transaction {
+                if (!vault.isUnlocked) return@transaction accountIds.associateWith { Pin.Unreadable }
+                // One pass over the record list for the whole table. [pin] scans it per account — and
+                // twice for one with no pin, which is the common case — while the member list is the
+                // server's to size and this runs inside the account vault's single lock.
+                val wanted = accountIds.mapTo(mutableSetOf()) { recordId(it) }
+                val found = vault.records().filter { it.id in wanted }.associateBy { it.id }
+                accountIds.associateWith { pinAt(found[recordId(it)]) }
+            }
+        }
 
     /**
      * The record at [id], of this type or another, tombstoned or not. Tombstones count for the write
@@ -83,24 +154,38 @@ class TeamPeerStore(
     private fun recordAt(id: String) = vault.records().firstOrNull { it.id == id }
 
     /**
-     * Pin a fingerprint a human just confirmed out of band (the invite send, the invite accept).
-     * Replaces whatever was pinned: an honest identity rotation is re-confirmed by the same ceremony
-     * that pinned the first key, and the user is shown that it moved before they get here.
+     * Pin a fingerprint a human just confirmed out of band (the invite send, the invite accept, the
+     * member list's own ceremony). Replaces whatever was pinned: an honest identity rotation is
+     * re-confirmed by the same ceremony that pinned the first key, and the user is shown that it
+     * moved before they get here.
      *
-     * Answers `false` when the id is not this store's to write — a record of another type is sitting
-     * on it. The ceremony the caller was about to record has to stop there.
+     * [shown] is what the ceremony was drawn against — pass it and the write is refused if the record
+     * moved since. What a moved pin costs is a second, deliberate acknowledgement, and that gate is
+     * decided from a pin read when the screen opened: the records sync between this account's own
+     * devices, and the server chooses when one arrives. Delivering it after the dialog said "nothing
+     * is on record" would otherwise replace a confirmed pin with no gate at all. Null means the
+     * caller has no ceremony to hold the write to.
      */
-    fun confirm(accountId: String, fingerprint: String): Boolean {
+    fun confirm(accountId: String, fingerprint: String, shown: Pin? = null): ConfirmOutcome {
         check(vault.isUnlocked) { "pinning a peer needs an unlocked vault" }
         return vault.transaction {
             val id = recordId(accountId)
-            // False rather than a throw when another record already holds the id: [Vault.put] refuses
+            // Refused rather than thrown when another record already holds the id: [Vault.put] refuses
             // to re-type a record, and the caller has to stop the ceremony it was about to record —
-            // sealing a key whose confirmation cannot be written is worse than not sealing it.
+            // sealing a key whose confirmation cannot be written is worse than not sealing it. Checked
+            // before [shown], because an id this store cannot write is the more specific answer.
             val squat = recordAt(id)
-            if (squat != null && squat.type != RecordType.TEAM_PEER) return@transaction false
-            codec.put(id, TeamPeerEntry(fingerprint))
-            true
+            if (squat != null && squat.type != RecordType.TEAM_PEER) return@transaction ConfirmOutcome.REFUSED
+            // Measured on what the ceremony's gate was decided from — [pinNotice] against the
+            // fingerprint about to be written — rather than on the record as a whole. A first sight
+            // of that very fingerprint landing mid-ceremony contradicts nothing the user was told,
+            // and refusing there would throw away a phone call; a record that became a *confirmed*
+            // one asks a harder question than the one they answered, and does refuse.
+            if (shown != null && pinNotice(pin(accountId), fingerprint) != pinNotice(shown, fingerprint)) {
+                return@transaction ConfirmOutcome.MOVED
+            }
+            codec.put(id, TeamPeerEntry(fingerprint, PinOrigin.CONFIRMED))
+            ConfirmOutcome.RECORDED
         }
     }
 
@@ -117,7 +202,7 @@ class TeamPeerStore(
             // store's record still holds — a write the vault would refuse anyway.
             val at = recordAt(id)
             if (at == null || (at.deleted && at.type == RecordType.TEAM_PEER)) {
-                codec.put(id, TeamPeerEntry(fingerprint))
+                codec.put(id, TeamPeerEntry(fingerprint, PinOrigin.FIRST_SIGHT))
             }
         }
     }

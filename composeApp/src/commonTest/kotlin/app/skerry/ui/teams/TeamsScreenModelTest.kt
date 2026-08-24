@@ -1,5 +1,7 @@
 package app.skerry.ui.teams
 
+import app.skerry.shared.team.Pin
+import app.skerry.shared.team.PinOrigin
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
@@ -124,6 +126,81 @@ class TeamsScreenModelTest {
 
         assertTrue(rows.none { it.scopesKnown })
         assertTrue(teamMemberRows(team(TeamRole.OWNER), listOf(member(owner, TeamRole.OWNER)), emptyMap(), canManage = true).all { it.scopesKnown })
+    }
+
+    /**
+     * The mark a row wears for its key. "Confirmed" may only describe a fingerprint a human read out
+     * loud, so a first sight, a record this device cannot read and an account nothing was ever sealed
+     * to are three states the row must not draw as one (#323).
+     */
+    @Test
+    fun `each row states how its member's key got on record`() {
+        val rows = teamMemberRows(
+            team = team(TeamRole.OWNER),
+            members = listOf(
+                member(owner, TeamRole.OWNER),
+                member(admin, TeamRole.ADMIN),
+                member(editor, TeamRole.EDITOR),
+                member(invitee, TeamRole.VIEWER),
+            ),
+            scopeGrants = emptyMap(),
+            canManage = true,
+            selfAccountId = owner,
+            pins = mapOf(
+                admin to Pin.Known("SHA256:aaa", PinOrigin.CONFIRMED),
+                editor to Pin.Known("SHA256:bbb", PinOrigin.FIRST_SIGHT),
+                invitee to Pin.Unreadable,
+            ),
+        )
+
+        fun trustOf(id: String) = rows.single { it.member.accountId == id }.trust
+        assertEquals(PeerTrust.SELF, trustOf(owner), "there is no ceremony with oneself")
+        assertEquals(PeerTrust.CONFIRMED, trustOf(admin))
+        assertEquals(PeerTrust.FIRST_SIGHT, trustOf(editor))
+        assertEquals(PeerTrust.UNREADABLE, trustOf(invitee))
+    }
+
+    /**
+     * Without a live session the screen cannot say whose row is whose, and reading that as "not me"
+     * put the amber "confirm this member's key" on the reader themselves.
+     */
+    @Test
+    fun `with no session to say whose row is whose, no row claims anything`() {
+        val rows = teamMemberRows(
+            team = team(TeamRole.OWNER),
+            members = listOf(member(owner, TeamRole.OWNER), member(admin, TeamRole.ADMIN)),
+            scopeGrants = emptyMap(),
+            canManage = true,
+            selfAccountId = null,
+            pins = mapOf(admin to Pin.Known("SHA256:aaa", PinOrigin.CONFIRMED)),
+        )
+
+        assertTrue(rows.all { it.trust == PeerTrust.UNKNOWN })
+        assertTrue(rows.none { it.trust.confirmable })
+    }
+
+    /**
+     * Every member but oneself is offered the ceremony — a confirmed one included. A colleague who
+     * rotates their identity leaves a pin that no longer matches their published key, and the mark is
+     * the only way back to a seal that is not refused.
+     */
+    @Test
+    fun `every member but oneself is offered the ceremony`() {
+        val rows = teamMemberRows(
+            team = team(TeamRole.OWNER),
+            members = listOf(member(owner, TeamRole.OWNER), member(admin, TeamRole.ADMIN)),
+            scopeGrants = emptyMap(),
+            canManage = true,
+            selfAccountId = owner,
+            // Nothing pinned for the other member: the state every team that predates the store is in.
+            pins = emptyMap(),
+        )
+
+        assertEquals(PeerTrust.NONE, rows.single { it.member.accountId == admin }.trust)
+        assertTrue(rows.single { it.member.accountId == admin }.trust.confirmable)
+        assertTrue(PeerTrust.CONFIRMED.confirmable, "a rotated identity has no other way back")
+        assertFalse(PeerTrust.SELF.confirmable)
+        assertFalse(PeerTrust.UNKNOWN.confirmable)
     }
 
     @Test

@@ -151,7 +151,20 @@
     <string name="lib_teams_invite_check_failed">The invite couldn't be checked.</string>
     <string name="lib_teams_invite_check_retry">Retry</string>
     <string name="lib_teams_invite_key_changed_ack">New fingerprint confirmed over a trusted channel</string>
-    <string name="lib_teams_invite_key_changed">This differs from the key pinned for this account. Confirm the new fingerprint over a trusted channel before continuing.</string>
+    <string name="lib_teams_invite_key_changed">This differs from the fingerprint confirmed for this account. Confirm the new one over a trusted channel before continuing.</string>
+    <string name="lib_teams_key_changed_unconfirmed">This differs from the key this device saw first — nobody confirmed either of them. Confirm this fingerprint over a trusted channel before continuing.</string>
+    <string name="lib_teams_key_pin_unreadable">This device can't read what is on record for this account. Confirm this fingerprint over a trusted channel before continuing.</string>
+    <string name="lib_teams_peer_confirmed">Fingerprint confirmed over a trusted channel</string>
+    <string name="lib_teams_peer_confirm">Confirm this member's key</string>
+    <string name="lib_teams_peer_mark">%1$s. %2$s</string>
+    <string name="lib_teams_peer_confirm_action">Confirm</string>
+    <string name="lib_teams_peer_verify">Read this fingerprint back to the member over a trusted channel. Every key sealed to this account afterwards is held to it.</string>
+    <string name="lib_teams_peer_checking">Fetching the member's key…</string>
+    <string name="lib_teams_peer_check_failed">The member's key couldn't be read.</string>
+    <string name="lib_teams_peer_state_confirmed">A fingerprint for this account was already confirmed over a trusted channel.</string>
+    <string name="lib_teams_peer_state_first_sight">On record from a first sight: this is what the server answered, and nobody has confirmed it.</string>
+    <string name="lib_teams_peer_state_none">This device has nothing on record for this account yet.</string>
+    <string name="lib_teams_peer_state_unreadable">This device can't read what is on record for this account.</string>
     <string name="lib_teams_accept">Accept</string>
     <string name="lib_teams_decline">Decline</string>
     <string name="lib_teams_role_owner">OWNER</string>
@@ -258,10 +271,11 @@
     <string name="lib_teams_scope_members_count">%1$d with access</string>
     <string name="lib_teams_err_already_shared">This record is already shared into another scope of this team — unshare it there first</string>
     <string name="lib_teams_err_scopes_unsupported">This sync server is too old for access scopes — update the server</string>
-    <string name="lib_teams_err_peer_key_unconfirmed">A member's published key is not the one confirmed for them — nothing was sealed to it. Remove them from the team and invite again to confirm the new key</string>
-    <string name="lib_teams_err_unconfirmed_key_ignored">A team key arrived signed by an identity that is not the confirmed one, and was ignored</string>
+    <string name="lib_teams_err_peer_key_unconfirmed">A member's published key is not the one on record for them — nothing was sealed to it. Check the fingerprint over a trusted channel and confirm it in the member list</string>
+    <string name="lib_teams_err_unconfirmed_key_ignored">A team key arrived signed by a key that is not the one on record for that account, and was ignored</string>
     <string name="lib_teams_err_invite_unverified">This invite was not verified — reopen the team and check the inviter's fingerprint before accepting</string>
     <string name="lib_teams_err_pin_not_recorded">The confirmed fingerprint couldn't be stored on this device — nothing was sent to that key</string>
+    <string name="lib_teams_err_pin_moved">What is on record for this account changed while its fingerprint was on screen — nothing was confirmed. Check it again</string>
     <string name="lib_teams_err_identity_unreadable">This device can't read its team identity, so the invite can't be opened here</string>
     <!-- Teams screen: header, member table, summary cards (see TeamsView) -->
     <string name="lib_teams_header_title">Team</string>

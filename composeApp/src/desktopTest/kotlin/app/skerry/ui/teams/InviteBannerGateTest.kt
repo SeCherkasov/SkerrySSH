@@ -14,7 +14,10 @@ import app.skerry.ui.generated.resources.lib_teams_invite_check_failed
 import app.skerry.ui.generated.resources.lib_teams_invite_check_retry
 import app.skerry.ui.generated.resources.lib_teams_invite_key_changed
 import app.skerry.ui.generated.resources.lib_teams_invite_key_changed_ack
+import app.skerry.ui.generated.resources.lib_teams_key_changed_unconfirmed
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.shared.team.Pin
+import app.skerry.shared.team.PinOrigin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -79,7 +82,7 @@ class InviteBannerGateTest {
         runForm({
             accept = stringResource(Res.string.lib_teams_accept)
             InviteBanner(
-                InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT)),
+                InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, Pin.None)),
                 busy = false,
                 onAccept = {},
                 onDecline = {},
@@ -97,13 +100,39 @@ class InviteBannerGateTest {
         runForm({
             warning = stringResource(Res.string.lib_teams_invite_key_changed)
             InviteBanner(
-                InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, keyChanged = true)),
+                InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, pinned = confirmedPin(OTHER_FINGERPRINT))),
                 busy = false,
                 onAccept = {},
                 onDecline = {},
             )
         }) {
             onNodeWithText(warning).assertExists()
+        }
+    }
+
+    /**
+     * And is called out by how the record it disagrees with got there. The banner builds its own
+     * lines rather than sharing the invite dialog's block, so the two wordings can drift apart here
+     * without any other test noticing (#323).
+     */
+    @Test
+    fun `a fingerprint that moved from a first sight is worded as one nobody confirmed`() {
+        var unconfirmed = ""
+        var confirmed = ""
+        runForm({
+            unconfirmed = stringResource(Res.string.lib_teams_key_changed_unconfirmed)
+            confirmed = stringResource(Res.string.lib_teams_invite_key_changed)
+            InviteBanner(
+                InviteCheck.Verified(
+                    InvitePreview(INVITER, FINGERPRINT, pinned = Pin.Known(OTHER_FINGERPRINT, PinOrigin.FIRST_SIGHT)),
+                ),
+                busy = false,
+                onAccept = {},
+                onDecline = {},
+            )
+        }) {
+            onNodeWithText(unconfirmed).assertExists()
+            onNodeWithText(confirmed).assertDoesNotExist()
         }
     }
 
@@ -121,7 +150,7 @@ class InviteBannerGateTest {
             accept = stringResource(Res.string.lib_teams_accept)
             ack = stringResource(Res.string.lib_teams_invite_key_changed_ack)
             InviteBanner(
-                InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, keyChanged = true)),
+                InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, pinned = confirmedPin(OTHER_FINGERPRINT))),
                 busy = false,
                 onAccept = {},
                 onDecline = {},
@@ -168,7 +197,7 @@ class InviteBannerGateTest {
     fun `an acknowledgement survives a re-check that answers the same fingerprint`() {
         var accept = ""
         var ack = ""
-        val verified = InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, keyChanged = true))
+        val verified = InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, pinned = confirmedPin(OTHER_FINGERPRINT)))
         val check = mutableStateOf<InviteCheck>(verified)
         runForm({
             accept = stringResource(Res.string.lib_teams_accept)
@@ -181,10 +210,41 @@ class InviteBannerGateTest {
 
             runOnIdle { check.value = InviteCheck.Pending }
             waitForIdle()
-            runOnIdle { check.value = InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, keyChanged = true)) }
+            runOnIdle { check.value = InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, pinned = confirmedPin(OTHER_FINGERPRINT))) }
             waitForIdle()
 
             onNodeWithText(accept).assertIsEnabled()
+        }
+    }
+
+    /**
+     * And neither does it answer a harder question about the same fingerprint. The check re-runs on
+     * every reread, and the record it measures against arrives from this account's own devices
+     * whenever the server chooses to deliver it: a tick given for "nobody confirmed either of them"
+     * must not stand in for "this differs from the fingerprint confirmed for this account" (#323).
+     */
+    @Test
+    fun `an acknowledgement given against a first sight does not answer for a confirmed pin`() {
+        var accept = ""
+        var ack = ""
+        val check = mutableStateOf<InviteCheck>(
+            InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, Pin.Known(OTHER_FINGERPRINT, PinOrigin.FIRST_SIGHT))),
+        )
+        runForm({
+            accept = stringResource(Res.string.lib_teams_accept)
+            ack = stringResource(Res.string.lib_teams_invite_key_changed_ack)
+            InviteBanner(check.value, busy = false, onAccept = {}, onDecline = {})
+        }) {
+            onNodeWithContentDescription(ack).performClick()
+            waitForIdle()
+            onNodeWithText(accept).assertIsEnabled()
+
+            runOnIdle {
+                check.value = InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, confirmedPin(OTHER_FINGERPRINT)))
+            }
+            waitForIdle()
+
+            onNodeWithText(accept).assertIsNotEnabled()
         }
     }
 
@@ -193,7 +253,7 @@ class InviteBannerGateTest {
     fun `an acknowledgement does not carry over to another fingerprint`() {
         var accept = ""
         var ack = ""
-        val check = mutableStateOf<InviteCheck>(InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, keyChanged = true)))
+        val check = mutableStateOf<InviteCheck>(InviteCheck.Verified(InvitePreview(INVITER, FINGERPRINT, pinned = confirmedPin(OTHER_FINGERPRINT))))
         runForm({
             accept = stringResource(Res.string.lib_teams_accept)
             ack = stringResource(Res.string.lib_teams_invite_key_changed_ack)
@@ -202,7 +262,7 @@ class InviteBannerGateTest {
             onNodeWithContentDescription(ack).performClick()
             waitForIdle()
 
-            runOnIdle { check.value = InviteCheck.Verified(InvitePreview(INVITER, OTHER_FINGERPRINT, keyChanged = true)) }
+            runOnIdle { check.value = InviteCheck.Verified(InvitePreview(INVITER, OTHER_FINGERPRINT, pinned = confirmedPin(FINGERPRINT))) }
             waitForIdle()
 
             onNodeWithText(accept).assertIsNotEnabled()
@@ -211,6 +271,9 @@ class InviteBannerGateTest {
 
     private companion object {
         const val INVITER = "bob@example.com"
+        /** A fingerprint a human confirmed for the account, so a different one on screen has moved. */
+        fun confirmedPin(fingerprint: String) = Pin.Known(fingerprint, PinOrigin.CONFIRMED)
+
         const val OTHER_FINGERPRINT = "SKY-9999 8888 7777 6666"
         const val FINGERPRINT = "SKY-1111 2222 3333 4444"
     }

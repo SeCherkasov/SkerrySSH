@@ -121,7 +121,7 @@ class TeamsCoordinatorInviteBindingTest {
         val client = FakeInviteClient(bob, keysOf(real))
         val coord = coordinator(f, client)
 
-        val preview = assertNotNull(coord.previewInvite(bob), "lookup must return a fingerprint")
+        val preview = assertNotNull(coord.previewPeerKey(bob), "lookup must return a fingerprint")
         // The server swaps its answer between the two steps: the fingerprint the user just read out
         // loud is no longer the key the second fetch returns.
         client.bobKeys = keysOf(crypto.newSharingKeyPair())
@@ -146,7 +146,7 @@ class TeamsCoordinatorInviteBindingTest {
         val client = FakeInviteClient(bob, keysOf(real))
         val coord = coordinator(f, client)
 
-        val preview = assertNotNull(coord.previewInvite(bob))
+        val preview = assertNotNull(coord.previewPeerKey(bob))
         client.bobKeys = AccountKeys(real.publicKey, crypto.newSigningKeyPair().publicKey)
         coord.invite(teamId, preview, TeamRole.VIEWER)
 
@@ -164,7 +164,7 @@ class TeamsCoordinatorInviteBindingTest {
         val client = FakeInviteClient(bob, keysOf(real))
         val coord = coordinator(f, client)
 
-        val preview = assertNotNull(coord.previewInvite(bob))
+        val preview = assertNotNull(coord.previewPeerKey(bob))
         coord.invite(teamId, preview, TeamRole.VIEWER)
 
         assertNull(coord.lastError.value)

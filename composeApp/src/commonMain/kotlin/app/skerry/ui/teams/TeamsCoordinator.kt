@@ -9,8 +9,11 @@ import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.SyncException
 import app.skerry.shared.team.AccountIdentity
 import app.skerry.shared.team.AccountKeys
+import app.skerry.shared.team.ConfirmOutcome
 import app.skerry.shared.team.PeerKeys
 import app.skerry.shared.team.Pin
+import app.skerry.shared.team.PinNotice
+import app.skerry.shared.team.pinNotice
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamIdentityStore
@@ -80,6 +83,15 @@ enum class TeamsFailure {
     PinNotRecorded,
 
     /**
+     * The record for the account moved while its fingerprint was on screen, so the confirmation was
+     * not written (#323). Its own value rather than [PinNotRecorded]: nothing is wrong with this
+     * device, the question simply has to be asked again against what is on record now — a pin that
+     * moved costs an acknowledgement, and a gate decided against a record that has since changed is
+     * no gate.
+     */
+    PinMovedMeanwhile,
+
+    /**
      * This device cannot read the Teams identity an invite is sealed to — the record is gone (a
      * reactivation reconcile drops it and the re-pull has not landed) or no longer decrypts. A
      * separate value because the alternative is telling the user their colleague sent something
@@ -127,12 +139,33 @@ data class InvitePreview(
     val accountId: String,
     val fingerprint: String,
     /**
-     * The account already had a different fingerprint pinned. Confirming this one replaces it, so
-     * the screen has to say so — an identity that moved is either an honest rotation or the server
-     * trying its luck, and only the person on the other end of the trusted channel can tell.
+     * What this account already held for [accountId] when the fingerprint was read. Carried whole
+     * rather than as a flag: whether the record on the other side of the comparison was confirmed by
+     * a human or merely seen first decides what a screen may call it (#323).
+     *
+     * Required, not defaulted: the write this preview is passed to holds itself to this value, and
+     * [Pin.None] is a positive claim that the ceremony saw an empty record. Defaulting to it would
+     * let a caller that never read a pin pass the very gate that read exists for.
      */
-    val keyChanged: Boolean = false,
-)
+    val pinned: Pin,
+) {
+    /**
+     * The record does not simply agree with [fingerprint], so confirming replaces it and costs a
+     * second, deliberate gesture. An identity that moved is either an honest rotation or the server
+     * trying its luck, and only the person on the other end of the trusted channel can tell; a pin
+     * this device cannot read asks the same question, having nothing to compare against.
+     */
+    val keyChanged: Boolean get() = pinNotice(pinned, fingerprint) != PinNotice.NOTHING
+}
+
+/** What a peer-key lookup answered: the fingerprint to confirm, or why it could not be fetched. */
+sealed interface PeerKeyVerdict {
+    /** The account's published key, fingerprinted, under whatever this device already holds for it. */
+    data class Ready(val preview: InvitePreview) : PeerKeyVerdict
+
+    /** The key could not be read — offline, no published key, a server that errored. Worth retrying. */
+    data class Failed(val reason: TeamsFailure) : PeerKeyVerdict
+}
 
 /** What [TeamsCoordinator.acceptPreview] could establish about an invite. */
 sealed interface InviteVerdict {
@@ -408,22 +441,39 @@ class TeamsCoordinator(
         }
     }
 
-    /** Invite step 1: the invitee's key + fingerprint for verification over a trusted channel. */
-    suspend fun previewInvite(accountId: String): InvitePreview? {
-        val (s, c) = live() ?: run { markError(TeamsFailure.NotConnected); return null }
+    /**
+     * The account's published key and what this device holds for it — the lookup behind both
+     * ceremonies that show a fingerprint to a human: the invite dialog's first step, and the member
+     * list's own confirmation of a colleague this account never invited (#323).
+     *
+     * The reason a lookup failed is the answer rather than a write to [lastError], because the
+     * confirm dialog is a modal with a line of its own to say it on: routing it through the error
+     * slot as well would make a screen reader say the same failure twice, on two live regions, the
+     * way the invite banner used to (WCAG 4.1.3).
+     */
+    suspend fun peerKey(accountId: String): PeerKeyVerdict {
+        val (s, c) = live() ?: return PeerKeyVerdict.Failed(TeamsFailure.NotConnected)
         return try {
             val keys = c.fetchPublicKey(s, accountId)
-            if (keys == null) {
-                markError(TeamsFailure.NoRecipientKey)
-                null
-            } else {
-                val fingerprint = accountKeyFingerprint(keys.sharing, keys.signing)
-                InvitePreview(accountId, fingerprint, keyChanged = pinMoved(accountId, fingerprint))
-            }
+                ?: return PeerKeyVerdict.Failed(TeamsFailure.NoRecipientKey)
+            val fingerprint = accountKeyFingerprint(keys.sharing, keys.signing)
+            val pinned = peerStore.pins(listOf(accountId))[accountId] ?: Pin.None
+            PeerKeyVerdict.Ready(InvitePreview(accountId, fingerprint, pinned))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            markError(e.toFailure())
+            PeerKeyVerdict.Failed(e.toFailure())
+        }
+    }
+
+    /**
+     * [peerKey] for the invite dialog, which has no line of its own and reports through [lastError]
+     * like the rest of its steps.
+     */
+    suspend fun previewPeerKey(accountId: String): InvitePreview? = when (val verdict = peerKey(accountId)) {
+        is PeerKeyVerdict.Ready -> verdict.preview
+        is PeerKeyVerdict.Failed -> {
+            markError(verdict.reason)
             null
         }
     }
@@ -471,11 +521,59 @@ class TeamsCoordinator(
             // the server names, and another record may already hold it — must stop the seal rather
             // than surface once the team key has left.
             if (!vault.isUnlocked) return@op markError(TeamsFailure.VaultLocked)
-            if (!peerStore.confirm(accountId, verified.fingerprint)) return@op markError(TeamsFailure.PinNotRecorded)
+            confirmShown(accountId, verified)?.let { return@op markError(it) }
             c.invite(s, teamId, accountId, role, envelope)
             refreshUnlocked(s, c)
         }
     }
+
+    /**
+     * Record [verified] as a fingerprint a human read out loud — the same ceremony the invite ends
+     * with, for a colleague this account never invited (#323).
+     *
+     * Without it the only way to confirm an account was to invite it: a scope grant and a rotation
+     * pin whatever the server answered on the first sight and show no fingerprint at all, so the
+     * record could never say more than "this is what we saw first". Promoting one is what lets the
+     * screens use the word "confirmed" about anything.
+     *
+     * The key is fetched again and re-fingerprinted here, exactly as [invite] does and for the same
+     * reason: the preview is a UI state that may be minutes old, and the key table is the server's —
+     * answering the lookup with the colleague's real key and this call with one of its own would
+     * write a confirmation for a key nobody read (#316).
+     */
+    suspend fun confirmPeer(verified: InvitePreview) {
+        val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
+        if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
+        op {
+            val keys = c.fetchPublicKey(s, verified.accountId) ?: return@op markError(TeamsFailure.NoRecipientKey)
+            if (accountKeyFingerprint(keys.sharing, keys.signing) != verified.fingerprint) {
+                return@op markError(TeamsFailure.RecipientKeyChanged)
+            }
+            if (!vault.isUnlocked) return@op markError(TeamsFailure.VaultLocked)
+            confirmShown(verified.accountId, verified)?.let { markError(it) }
+        }
+    }
+
+    /**
+     * Record the fingerprint [shown] carries as confirmed, held to the pin the ceremony was drawn
+     * against. Answers the failure to report, or null when it is on record.
+     *
+     * One place because all three ceremonies — the invite send, the invite accept, the member list's
+     * own confirm — end in the same write and owe the same two refusals.
+     */
+    private fun confirmShown(accountId: String, shown: InvitePreview): TeamsFailure? =
+        when (peerStore.confirm(accountId, shown.fingerprint, shown.pinned)) {
+            ConfirmOutcome.RECORDED -> null
+            ConfirmOutcome.MOVED -> TeamsFailure.PinMovedMeanwhile
+            ConfirmOutcome.REFUSED -> TeamsFailure.PinNotRecorded
+        }
+
+    /**
+     * What this account holds for each of [accountIds] — how the member table tells a fingerprint a
+     * human confirmed from one the server was simply first to answer with (#323). One vault pass, so
+     * every row of a paint agrees.
+     */
+    suspend fun peerPins(accountIds: Collection<String>): Map<String, Pin> = peerStore.pins(accountIds)
 
     /** Change a member's role (owner/admin; the server enforces anti-escalation). */
     suspend fun changeRole(teamId: String, accountId: String, role: TeamRole) {
@@ -599,9 +697,7 @@ class TeamsCoordinator(
             // The keys the signature was checked against, not a second fetch of the same account: the
             // server owns the key table, and answering the check with a key it forged the invite
             // under and the fingerprint with the real colleague's key is the whole attack (#319).
-            val inviter = verified.payload.inviterAccountId
-            val fingerprint = accountKeyFingerprint(verified.inviterKeys.sharing, verified.inviterKeys.signing)
-            InviteVerdict.Verified(InvitePreview(inviter, fingerprint, keyChanged = pinMoved(inviter, fingerprint)))
+            InviteVerdict.Verified(verified.preview())
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -626,11 +722,7 @@ class TeamsCoordinator(
             // for this account): a membership whose later envelopes nothing guards is the state this
             // whole change exists to prevent.
             if (!vault.isUnlocked) return@op markError(TeamsFailure.VaultLocked)
-            val pinned = peerStore.confirm(
-                invite.inviterAccountId,
-                accountKeyFingerprint(verified.inviterKeys.sharing, verified.inviterKeys.signing),
-            )
-            if (!pinned) return@op markError(TeamsFailure.PinNotRecorded)
+            confirmShown(invite.inviterAccountId, verified.preview())?.let { return@op markError(it) }
             // Placeholder role: the server returns the actual role at refreshUnlocked (listTeams).
             keyStore.put(teamId, invite.teamName, TeamRole.VIEWER, invite.teamKey, invite.epoch)
             c.accept(s, teamId)
@@ -1059,8 +1151,23 @@ class TeamsCoordinator(
         )
     }
 
-    /** A pending invite whose signature was checked, with the very keys it was checked against. */
-    internal class VerifiedInvite(val payload: TeamInvitePayload, val inviterKeys: AccountKeys)
+    /**
+     * A pending invite whose signature was checked, with the very keys it was checked against and
+     * what was pinned for the inviter when the banner drew its fingerprint. [pinned] is read here
+     * rather than at accept time: it is what decided whether the banner demanded an acknowledgement,
+     * and the write that follows is held to it.
+     */
+    internal class VerifiedInvite(
+        val payload: TeamInvitePayload,
+        val inviterKeys: AccountKeys,
+        val pinned: Pin,
+    ) {
+        fun preview() = InvitePreview(
+            payload.inviterAccountId,
+            accountKeyFingerprint(inviterKeys.sharing, inviterKeys.signing),
+            pinned,
+        )
+    }
 
     /**
      * Open the invite envelope for [teamId] and verify the inviter's signature and binding. Returns
@@ -1075,7 +1182,10 @@ class TeamsCoordinator(
         if (payload.teamId != teamId || payload.inviteeAccountId != s.accountId) return null
         val inviterKeys = c.fetchPublicKey(s, payload.inviterAccountId) ?: return null
         if (!inviteCodec.verify(payload, inviterKeys.signing)) return null
-        return VerifiedInvite(payload, inviterKeys).also { verified ->
+        // The pin is read here so the banner's fingerprint and the acknowledgement it may demand are
+        // decided against one state, and the accept that follows is held to that same state.
+        val pinned = peerStore.pins(listOf(payload.inviterAccountId))[payload.inviterAccountId] ?: Pin.None
+        return VerifiedInvite(payload, inviterKeys, pinned).also { verified ->
             verifiedInvites.update { it + (teamId to verified) }
         }
     }
@@ -1108,19 +1218,6 @@ class TeamsCoordinator(
                 _busy.value = false
             }
         }
-    }
-
-    /**
-     * Whether [fingerprint] differs from what is pinned for [accountId] — false when nothing is
-     * pinned yet. Only the two ceremonies that show a fingerprint to a human ask this; everything
-     * else refuses a moved key outright (see [fetchPinned]).
-     */
-    private fun pinMoved(accountId: String, fingerprint: String): Boolean = when (val pin = peerStore.pin(accountId)) {
-        Pin.None -> false
-        // Nothing to compare against, and sending replaces the record: the user is the only one who
-        // can say whether this fingerprint is the colleague's, so they are asked rather than told.
-        Pin.Unreadable -> true
-        is Pin.Known -> pin.fingerprint != fingerprint
     }
 
     /**
