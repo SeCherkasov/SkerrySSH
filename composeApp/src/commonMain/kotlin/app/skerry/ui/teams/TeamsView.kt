@@ -81,6 +81,7 @@ import app.skerry.ui.generated.resources.lib_teams_err_no_recipient_key
 import app.skerry.ui.generated.resources.lib_teams_err_no_such_account
 import app.skerry.ui.generated.resources.lib_teams_err_not_connected
 import app.skerry.ui.generated.resources.lib_teams_err_peer_key_unconfirmed
+import app.skerry.ui.generated.resources.lib_teams_err_pin_moved
 import app.skerry.ui.generated.resources.lib_teams_err_pin_not_recorded
 import app.skerry.ui.generated.resources.lib_teams_err_protocol
 import app.skerry.ui.generated.resources.lib_teams_err_recipient_key_changed
@@ -162,6 +163,9 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     // Set to look at one record's history instead of the team's whole feed ("who touched this host").
     var historyRecord by remember { mutableStateOf<HistoryTarget?>(null) }
     var rolePicker by remember { mutableStateOf<TeamMember?>(null) }
+    // The member whose key the confirm ceremony is open for — the account id, not the row: the member
+    // list is refreshed on every sync signal while the dialog is up.
+    var confirmKeyFor by remember { mutableStateOf<String?>(null) }
     // Selected share space of the current team ("" = team-wide). Kept per team so switching teams
     // doesn't land on a scope id that belongs to another one.
     var selectedScope by remember { mutableStateOf("") }
@@ -206,6 +210,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                     onSync = { scope.launch2 { tc.refresh(); tc.syncTeam(selected.id); afterOp() } },
                     onShowHistory = { showHistory = true },
                     onChangeRole = { member -> rolePicker = member },
+                    onConfirmKey = { accountId -> confirmKeyFor = accountId },
                     onSelectScope = { selectedScope = it },
                     onNewScope = { showCreateScope = true },
                     onScopeAccess = { scopeAccess = it },
@@ -228,10 +233,19 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
             preview = invitePreview,
             ownFingerprint = tc.ownFingerprint(),
             busy = busy,
-            onLookup = { accountId -> scope.launch2 { invitePreview = tc.previewInvite(accountId) } },
+            onLookup = { accountId -> scope.launch2 { invitePreview = tc.previewPeerKey(accountId) } },
             onEdited = { invitePreview = null },
             onSend = { id, verified, role -> inviteTeamId = null; scope.launch2 { tc.invite(id, verified, role); afterOp() } },
             onDismiss = { inviteTeamId = null },
+        )
+    }
+    confirmKeyFor?.let { accountId ->
+        ConfirmPeerKeyDialogFor(
+            tc = tc,
+            accountId = accountId,
+            busy = busy,
+            onConfirm = { verified -> confirmKeyFor = null; scope.launch2 { tc.confirmPeer(verified); afterOp() } },
+            onDismiss = { confirmKeyFor = null },
         )
     }
     val shareTeam = selected
@@ -414,6 +428,7 @@ internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.UnconfirmedKeyIgnored -> stringResource(Res.string.lib_teams_err_unconfirmed_key_ignored)
     TeamsFailure.InviteUnverified -> stringResource(Res.string.lib_teams_err_invite_unverified)
     TeamsFailure.PinNotRecorded -> stringResource(Res.string.lib_teams_err_pin_not_recorded)
+    TeamsFailure.PinMovedMeanwhile -> stringResource(Res.string.lib_teams_err_pin_moved)
     TeamsFailure.IdentityUnreadable -> stringResource(Res.string.lib_teams_err_identity_unreadable)
 }
 

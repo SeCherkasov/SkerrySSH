@@ -24,6 +24,7 @@ class TeamPeerStoreTest {
 
     private val session = SyncSession("alice@example.com", "access", "refresh")
     private val bob = "bob@example.com"
+    private val carol = "carol@example.com"
 
     /** A client whose key table answers with whatever it was last set to — i.e. the sync server. */
     private class FakeKeys(var keys: AccountKeys?) : TeamClient {
@@ -240,7 +241,7 @@ class TeamPeerStoreTest {
 
         assertEquals(Pin.Unreadable, store.pin(bob))
         assertIs<PeerKeys.Unconfirmed>(store.fetchPinned(session, FakeKeys(keys(1)), bob))
-        assertFalse(store.confirm(bob, "aaaa-bbbb"), "an id another record holds is not this store's")
+        assertEquals(ConfirmOutcome.REFUSED, store.confirm(bob, "aaaa-bbbb"), "an id another record holds is not this store's")
         // Neither adopted nor destroyed: the squat is the server's doing, and this client leaves it
         // exactly where it is while refusing to read a pin out of it.
         val squat = vault.records().single { it.id == squatId }
@@ -266,7 +267,7 @@ class TeamPeerStoreTest {
         vault.remove(squatId)
 
         assertEquals(Pin.Unreadable, store.pin(bob), "a pin that cannot be written cannot be trusted")
-        assertFalse(store.confirm(bob, "aaaa-bbbb"))
+        assertEquals(ConfirmOutcome.REFUSED, store.confirm(bob, "aaaa-bbbb"))
         // Refused, not thrown: whatever ceremony asked for the pin reports it and stops, rather than
         // unwinding on an exception from the vault.
         store.rememberFirstSight(bob, "aaaa-bbbb")
@@ -287,10 +288,158 @@ class TeamPeerStoreTest {
         vault.unreadable += vault.records().single { it.type == RecordType.TEAM_PEER }.id
 
         assertEquals(Pin.Unreadable, store.pin(bob))
-        assertTrue(store.confirm(bob, "cccc-dddd"))
+        assertEquals(ConfirmOutcome.RECORDED, store.confirm(bob, "cccc-dddd"))
 
         vault.unreadable.clear()
         assertEquals("cccc-dddd", pinned(store, bob))
+    }
+
+    /**
+     * The two ways a fingerprint reaches the record are not the same claim, and the record used to
+     * hold neither: an invite ceremony and whatever the server answered on a first grant both left
+     * the same [Pin.Known], so the screens could only say "pinned" and called it "confirmed" (#323).
+     */
+    @Test
+    fun `a pin says whether a human confirmed it or the server was simply first`() = runTest {
+        initializeVaultCrypto()
+        val vault = FakeVault()
+        val store = TeamPeerStore(vault)
+
+        store.rememberFirstSight(bob, "aaaa-bbbb")
+        assertEquals(PinOrigin.FIRST_SIGHT, origin(store, bob))
+
+        store.confirm(carol, "cccc-dddd")
+        assertEquals(PinOrigin.CONFIRMED, origin(store, carol))
+    }
+
+    /**
+     * Confirming a key this device had only ever seen is the promotion the member list exists for:
+     * the fingerprint does not move, but what the record claims about it does.
+     */
+    @Test
+    fun `confirming a first sight pin promotes it without moving the fingerprint`() = runTest {
+        initializeVaultCrypto()
+        val vault = FakeVault()
+        val store = TeamPeerStore(vault)
+        store.rememberFirstSight(bob, "aaaa-bbbb")
+
+        assertEquals(ConfirmOutcome.RECORDED, store.confirm(bob, "aaaa-bbbb"))
+
+        assertEquals("aaaa-bbbb", pinned(store, bob))
+        assertEquals(PinOrigin.CONFIRMED, origin(store, bob))
+    }
+
+    /**
+     * Records written before the provenance existed carry no claim at all. Reading them as confirmed
+     * would put the word on a fingerprint nobody ever read out loud — which is the whole defect — so
+     * an absent provenance is a first sight, and the member list asks for the ceremony.
+     */
+    @Test
+    fun `a pin written before provenance was recorded reads as a first sight`() = runTest {
+        initializeVaultCrypto()
+        val vault = FakeVault()
+        val store = TeamPeerStore(vault)
+        vault.put(pinIdOf(bob), RecordType.TEAM_PEER, """{"fingerprint":"aaaa-bbbb"}""".encodeToByteArray())
+
+        assertEquals("aaaa-bbbb", pinned(store, bob))
+        assertEquals(PinOrigin.FIRST_SIGHT, origin(store, bob))
+    }
+
+    /** One vault pass for a whole member list, and every row of it reading the same vault state. */
+    @Test
+    fun `pins answers for a whole list, absent accounts included`() = runTest {
+        initializeVaultCrypto()
+        val vault = FakeVault()
+        val store = TeamPeerStore(vault)
+        store.confirm(bob, "aaaa-bbbb")
+
+        val pins = store.pins(listOf(bob, carol))
+
+        assertEquals("aaaa-bbbb", (pins[bob] as? Pin.Known)?.fingerprint)
+        assertEquals(Pin.None, pins[carol], "an account nothing was ever sealed to has no pin")
+    }
+
+    /**
+     * What a moved pin costs is a second, deliberate acknowledgement, and that gate is decided from a
+     * pin read when the ceremony opened. These records sync between this account's own devices and
+     * the server chooses when one arrives: delivered after the screen said "nothing is on record", it
+     * would replace a confirmed pin having asked nothing (#323).
+     */
+    @Test
+    fun `a confirmation is refused when the record moved since the ceremony saw it`() = runTest {
+        initializeVaultCrypto()
+        val vault = FakeVault()
+        val store = TeamPeerStore(vault)
+        val shown = store.pin(bob) // nothing on record: the dialog demands no acknowledgement
+
+        store.rememberFirstSight(bob, "aaaa-bbbb") // …and the record lands while it is on screen
+
+        assertEquals(ConfirmOutcome.MOVED, store.confirm(bob, "cccc-dddd", shown))
+        assertEquals("aaaa-bbbb", pinned(store, bob), "the record the ceremony never saw stands")
+        assertEquals(PinOrigin.FIRST_SIGHT, origin(store, bob))
+    }
+
+    @Test
+    fun `a confirmation against the record the ceremony saw is written`() = runTest {
+        initializeVaultCrypto()
+        val vault = FakeVault()
+        val store = TeamPeerStore(vault)
+        store.rememberFirstSight(bob, "aaaa-bbbb")
+        val shown = store.pin(bob)
+
+        assertEquals(ConfirmOutcome.RECORDED, store.confirm(bob, "cccc-dddd", shown))
+        assertEquals("cccc-dddd", pinned(store, bob))
+        assertEquals(PinOrigin.CONFIRMED, origin(store, bob))
+    }
+
+    /** An id this store cannot write is the more specific answer, and outranks the moved check. */
+    @Test
+    fun `a squatted id is refused rather than reported as moved`() = runTest {
+        initializeVaultCrypto()
+        val vault = FakeVault()
+        val store = TeamPeerStore(vault)
+        val shown = store.pin(bob)
+        vault.put(pinIdOf(bob), RecordType.TEAM, "team key".encodeToByteArray())
+
+        assertEquals(ConfirmOutcome.REFUSED, store.confirm(bob, "cccc-dddd", shown))
+    }
+
+    /**
+     * The refusal is measured on what the ceremony's question was decided from, not on the record
+     * as a whole. A first sight landing on the very fingerprint the user just read out loud
+     * contradicts nothing they were told — refusing there would throw away a phone call because a
+     * rotation happened to seal to the same key while it was being made (#323).
+     */
+    @Test
+    fun `a first sight of the fingerprint on screen does not refuse the confirmation`() = runTest {
+        initializeVaultCrypto()
+        val vault = FakeVault()
+        val store = TeamPeerStore(vault)
+        val shown = store.pin(bob) // nothing on record: the ceremony demands no acknowledgement
+
+        store.rememberFirstSight(bob, "aaaa-bbbb") // …and a seal to the same key lands behind it
+
+        assertEquals(ConfirmOutcome.RECORDED, store.confirm(bob, "aaaa-bbbb", shown))
+        assertEquals(PinOrigin.CONFIRMED, origin(store, bob))
+    }
+
+    /**
+     * And still refuses when the provenance alone moved: "nobody confirmed either of them" is a
+     * weaker claim than "this differs from the fingerprint confirmed for this account", and the
+     * acknowledgement was given against the weaker one.
+     */
+    @Test
+    fun `a confirmation is refused when the record it disagrees with became a confirmed one`() = runTest {
+        initializeVaultCrypto()
+        val vault = FakeVault()
+        val store = TeamPeerStore(vault)
+        store.rememberFirstSight(bob, "aaaa-bbbb")
+        val shown = store.pin(bob) // the ceremony warns about a first sight
+
+        store.confirm(bob, "aaaa-bbbb") // another of this account's devices confirms it meanwhile
+
+        assertEquals(ConfirmOutcome.MOVED, store.confirm(bob, "cccc-dddd", shown))
+        assertEquals("aaaa-bbbb", pinned(store, bob), "the stronger record the ceremony never saw stands")
     }
 
     /** The pin's record id, asked of the store rather than assumed from its namespace. */
@@ -303,4 +452,8 @@ class TeamPeerStoreTest {
     /** The pin's own fingerprint, or null when nothing readable is pinned. */
     private fun pinned(store: TeamPeerStore, accountId: String) =
         (store.pin(accountId) as? Pin.Known)?.fingerprint
+
+    /** What the pin claims about its fingerprint, or null when nothing readable is pinned. */
+    private fun origin(store: TeamPeerStore, accountId: String) =
+        (store.pin(accountId) as? Pin.Known)?.origin
 }

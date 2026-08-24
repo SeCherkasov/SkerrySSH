@@ -18,9 +18,15 @@ import app.skerry.shared.team.TeamRole
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_invite_key_changed
+import app.skerry.ui.generated.resources.lib_teams_invite_check_retry
 import app.skerry.ui.generated.resources.lib_teams_invite_key_changed_ack
+import app.skerry.ui.generated.resources.lib_teams_key_changed_unconfirmed
+import app.skerry.ui.generated.resources.lib_teams_key_pin_unreadable
+import app.skerry.ui.generated.resources.lib_teams_peer_state_first_sight
 import app.skerry.ui.desktop.runForm
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.shared.team.Pin
+import app.skerry.shared.team.PinOrigin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -89,7 +95,7 @@ class TeamsDialogFormTest {
         var sent: Pair<InvitePreview, TeamRole>? = null
         runForm({
             InviteMemberDialog(
-                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT),
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, pinned = Pin.None),
                 ownFingerprint = OWN_FINGERPRINT,
                 busy = false,
                 assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
@@ -119,7 +125,7 @@ class TeamsDialogFormTest {
         runForm({
             warning = stringResource(Res.string.lib_teams_invite_key_changed)
             InviteMemberDialog(
-                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, keyChanged = true),
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, pinned = Pin.Known(MOVED_FROM, PinOrigin.CONFIRMED)),
                 ownFingerprint = OWN_FINGERPRINT,
                 busy = false,
                 assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
@@ -147,7 +153,7 @@ class TeamsDialogFormTest {
         runForm({
             ack = stringResource(Res.string.lib_teams_invite_key_changed_ack)
             InviteMemberDialog(
-                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, keyChanged = true),
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, pinned = Pin.Known(MOVED_FROM, PinOrigin.CONFIRMED)),
                 ownFingerprint = OWN_FINGERPRINT,
                 busy = false,
                 assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
@@ -175,7 +181,7 @@ class TeamsDialogFormTest {
         runForm({
             warning = stringResource(Res.string.lib_teams_invite_key_changed)
             InviteMemberDialog(
-                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT),
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, pinned = Pin.None),
                 ownFingerprint = OWN_FINGERPRINT,
                 busy = false,
                 assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
@@ -192,6 +198,173 @@ class TeamsDialogFormTest {
     }
 
     /**
+     * The member list's own ceremony (#323). A first sight is what the server answered when something
+     * was first sealed to the account: nothing about it has to be acknowledged, it simply has never
+     * been vouched for, and confirming is exactly that — the fingerprint on screen, read out loud.
+     */
+    @Test
+    fun `a first sight key is confirmed with the fingerprint that is on screen`() {
+        var confirmed: InvitePreview? = null
+        runForm({
+            ConfirmPeerKeyDialog(
+                accountId = ACCOUNT,
+                check = PeerKeyVerdict.Ready(
+                    InvitePreview(ACCOUNT, PEER_FINGERPRINT, pinned = Pin.Known(PEER_FINGERPRINT, PinOrigin.FIRST_SIGHT)),
+                ),
+                trust = PeerTrust.FIRST_SIGHT,
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                onRetry = {},
+                onConfirm = { confirmed = it },
+                onDismiss = {},
+            )
+        }) {
+            waitForIdle()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsEnabled().performClick()
+            waitForIdle()
+        }
+        assertEquals(PEER_FINGERPRINT, confirmed?.fingerprint)
+    }
+
+    /**
+     * A key that moved costs the same second gesture here as it does on the invite — and says so in
+     * its own words: neither the record nor the key on screen was ever confirmed by anyone, which is
+     * not the sentence a moved *confirmed* pin gets.
+     */
+    @Test
+    fun `a key that moved from a first sight is worded as such and still costs the acknowledgement`() {
+        var warning = ""
+        var confirmedWording = ""
+        var ack = ""
+        var confirmed: InvitePreview? = null
+        runForm({
+            warning = stringResource(Res.string.lib_teams_key_changed_unconfirmed)
+            confirmedWording = stringResource(Res.string.lib_teams_invite_key_changed)
+            ack = stringResource(Res.string.lib_teams_invite_key_changed_ack)
+            ConfirmPeerKeyDialog(
+                accountId = ACCOUNT,
+                check = PeerKeyVerdict.Ready(
+                    InvitePreview(ACCOUNT, PEER_FINGERPRINT, pinned = Pin.Known(MOVED_FROM, PinOrigin.FIRST_SIGHT)),
+                ),
+                trust = PeerTrust.FIRST_SIGHT,
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                onRetry = {},
+                onConfirm = { confirmed = it },
+                onDismiss = {},
+            )
+        }) {
+            waitForIdle()
+            onNodeWithText(warning).assertExists()
+            onNodeWithText(confirmedWording).assertDoesNotExist()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+            onNodeWithContentDescription(ack).performClick()
+            waitForIdle()
+            onNodeWithTag(UiTags.FORM_SAVE).performClick()
+            waitForIdle()
+        }
+        assertEquals(PEER_FINGERPRINT, confirmed?.fingerprint, "the confirm carries the fingerprint that was acknowledged")
+    }
+
+    /**
+     * A record this device cannot read has nothing to compare the fingerprint against, so it asks the
+     * same second question a moved pin does — the fail-closed branch `pinNotice` exists for.
+     */
+    @Test
+    fun `a pin this device cannot read still costs the acknowledgement`() {
+        var warning = ""
+        var ack = ""
+        var confirmed: InvitePreview? = null
+        runForm({
+            warning = stringResource(Res.string.lib_teams_key_pin_unreadable)
+            ack = stringResource(Res.string.lib_teams_invite_key_changed_ack)
+            ConfirmPeerKeyDialog(
+                accountId = ACCOUNT,
+                check = PeerKeyVerdict.Ready(InvitePreview(ACCOUNT, PEER_FINGERPRINT, pinned = Pin.Unreadable)),
+                trust = PeerTrust.UNREADABLE,
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                onRetry = {},
+                onConfirm = { confirmed = it },
+                onDismiss = {},
+            )
+        }) {
+            waitForIdle()
+            onNodeWithText(warning).assertExists()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+            onNodeWithContentDescription(ack).performClick()
+            waitForIdle()
+            onNodeWithTag(UiTags.FORM_SAVE).performClick()
+            waitForIdle()
+        }
+        assertEquals(PEER_FINGERPRINT, confirmed?.fingerprint)
+    }
+
+    /**
+     * The one fact the decision turns on has to be spoken. What the record already held arrives from
+     * a vault read that starts when the dialog mounts, so its line is inserted after a screen reader
+     * has read the dialog — and a node inserted with its text announces nothing. It goes into the
+     * live region with the fingerprint, or the user confirming a key is never told whether they are
+     * replacing something a human vouched for (WCAG 4.1.3).
+     */
+    @Test
+    fun `the dialog announces what the record held, not only the fingerprint`() {
+        var state by mutableStateOf(PeerTrust.UNKNOWN)
+        var wording = ""
+        runForm({
+            wording = stringResource(Res.string.lib_teams_peer_state_first_sight)
+            ConfirmPeerKeyDialog(
+                accountId = ACCOUNT,
+                check = PeerKeyVerdict.Ready(
+                    InvitePreview(ACCOUNT, PEER_FINGERPRINT, pinned = Pin.Known(PEER_FINGERPRINT, PinOrigin.FIRST_SIGHT)),
+                ),
+                trust = state,
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                onRetry = {},
+                onConfirm = {},
+                onDismiss = {},
+            )
+        }) {
+            waitForIdle()
+            state = PeerTrust.FIRST_SIGHT
+            waitForIdle()
+            onNodeWithContentDescription(wording, substring = true).assertExists()
+            onNodeWithContentDescription(PEER_FINGERPRINT, substring = true).assertExists()
+        }
+    }
+
+    /** Nothing is confirmable before the key is on screen, and a lookup that failed offers a retry. */
+    @Test
+    fun `a key still being fetched confirms nothing, and a failed one retries`() {
+        var retried = 0
+        var check by mutableStateOf<PeerKeyVerdict?>(null)
+        var retry = ""
+        runForm({
+            retry = stringResource(Res.string.lib_teams_invite_check_retry)
+            ConfirmPeerKeyDialog(
+                accountId = ACCOUNT,
+                check = check,
+                trust = PeerTrust.NONE,
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                onRetry = { retried += 1 },
+                onConfirm = {},
+                onDismiss = {},
+            )
+        }) {
+            waitForIdle()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+            check = PeerKeyVerdict.Failed(TeamsFailure.NotConnected)
+            waitForIdle()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+            onNodeWithText(retry).performClick()
+            waitForIdle()
+        }
+        assertEquals(1, retried)
+    }
+
+    /**
      * Editing the id after a lookup makes the fingerprint on screen the wrong one. The dialog says so
      * through [onEdited], and the press must go back to being a lookup rather than a send.
      */
@@ -201,7 +374,7 @@ class TeamsDialogFormTest {
         var sent: Pair<InvitePreview, TeamRole>? = null
         runForm({
             InviteMemberDialog(
-                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT),
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, pinned = Pin.None),
                 ownFingerprint = OWN_FINGERPRINT,
                 busy = false,
                 assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
@@ -232,7 +405,7 @@ class TeamsDialogFormTest {
             InviteMemberDialogForTeam(
                 teams = teams,
                 teamId = TEAM_ID,
-                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT),
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, pinned = Pin.None),
                 ownFingerprint = OWN_FINGERPRINT,
                 busy = false,
                 onLookup = {},
@@ -297,3 +470,6 @@ private const val ACCOUNT = "alice@example.com"
 private const val OTHER_ACCOUNT = "mallory@example.com"
 private const val OWN_FINGERPRINT = "SHA256:ownownownownownownownownownownownownownownow"
 private const val PEER_FINGERPRINT = "SHA256:peerpeerpeerpeerpeerpeerpeerpeerpeerpeerpeer"
+
+/** What the account was confirmed under before — so the fingerprint on screen has moved. */
+private const val MOVED_FROM = "SHA256:oldoldoldoldoldoldoldoldoldoldoldoldoldoldold"

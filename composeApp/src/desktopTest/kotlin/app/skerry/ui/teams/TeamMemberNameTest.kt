@@ -29,6 +29,7 @@ class TeamMemberNameTest {
             now = NOW,
             onChangeRole = {},
             onRemove = {},
+            onConfirmKey = {},
         )
     }) {
         onNodeWithText(FLATTENED).assertIsDisplayed()
@@ -38,7 +39,7 @@ class TeamMemberNameTest {
     /** The phone draws the same row, and the removal it opens is irreversible. */
     @Test
     fun `the phone member row draws the account id flattened`() = runForm({
-        MobileMemberRow(row(), now = NOW, onChangeRole = {}, onRemove = {})
+        MobileMemberRow(row(), now = NOW, onChangeRole = {}, onRemove = {}, onConfirmKey = {})
     }) {
         onNodeWithText(FLATTENED).assertIsDisplayed()
         onNodeWithText(SPOOFED).assertDoesNotExist()

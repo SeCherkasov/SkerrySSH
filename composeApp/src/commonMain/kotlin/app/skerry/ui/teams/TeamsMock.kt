@@ -110,6 +110,7 @@ internal fun TeamsMockView() {
                         now = now,
                         onChangeRole = {},
                         onRemove = {},
+                        onConfirmKey = {},
                     )
                     TeamSummaryCards(
                         cards = TeamCards(

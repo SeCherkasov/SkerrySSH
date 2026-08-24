@@ -62,6 +62,8 @@ internal fun TeamMemberTable(
     scopesLoading: Boolean = false,
     onChangeRole: (TeamMemberRowUi) -> Unit,
     onRemove: (TeamMemberRowUi) -> Unit,
+    /** Opens the fingerprint ceremony for a member whose key nobody has confirmed (#323). */
+    onConfirmKey: (TeamMemberRowUi) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxWidth()) {
@@ -74,14 +76,26 @@ internal fun TeamMemberTable(
         }
         HLine()
         rows.forEach { row ->
-            MemberRow(row, now, scopesLoading, onChangeRole = { onChangeRole(row) }, onRemove = { onRemove(row) })
+            MemberRow(
+                row, now, scopesLoading,
+                onChangeRole = { onChangeRole(row) },
+                onRemove = { onRemove(row) },
+                onConfirmKey = { onConfirmKey(row) },
+            )
             HLine()
         }
     }
 }
 
 @Composable
-private fun MemberRow(row: TeamMemberRowUi, now: Long, scopesLoading: Boolean, onChangeRole: () -> Unit, onRemove: () -> Unit) {
+private fun MemberRow(
+    row: TeamMemberRowUi,
+    now: Long,
+    scopesLoading: Boolean,
+    onChangeRole: () -> Unit,
+    onRemove: () -> Unit,
+    onConfirmKey: () -> Unit,
+) {
     val mono = LocalFonts.current.mono
     val member = row.member
     val invited = member.status == TeamMemberStatus.INVITED
@@ -101,7 +115,11 @@ private fun MemberRow(row: TeamMemberRowUi, now: Long, scopesLoading: Boolean, o
                 weight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                // Shrinks rather than pushes the mark off the row: a long account id must not be the
+                // reason a key nobody confirmed has nothing on screen to say so.
+                modifier = Modifier.weight(1f, fill = false),
             )
+            PeerTrustBadge(row.trust, onConfirm = onConfirmKey)
         }
         Box(Modifier.width(ROLE_WIDTH)) {
             if (invited) {

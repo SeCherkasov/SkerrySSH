@@ -31,6 +31,7 @@ import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_nothing_shared
 import app.skerry.ui.generated.resources.lib_teams_status_invited
 import app.skerry.ui.teams.HistoryTarget
+import app.skerry.ui.teams.PeerTrustBadge
 import app.skerry.ui.teams.RoleBadge
 import app.skerry.ui.teams.SharedRecordUi
 import app.skerry.ui.teams.TeamMemberRowUi
@@ -116,6 +117,8 @@ internal fun MobileMemberRow(
     now: Long,
     onChangeRole: () -> Unit,
     onRemove: () -> Unit,
+    /** Opens the fingerprint ceremony for a member whose key nobody has confirmed (#323). */
+    onConfirmKey: () -> Unit,
 ) {
     val mono = LocalFonts.current.mono
     val m = row.member
@@ -128,7 +131,15 @@ internal fun MobileMemberRow(
     ) {
         InitialsAvatar(m.accountId, size = 28.dp)
         Column(Modifier.weight(1f)) {
-            Txt(untrustedLabel(m.accountId), color = Skerry.colors.text, size = 12.5.sp, font = mono, weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Txt(
+                    untrustedLabel(m.accountId), color = Skerry.colors.text, size = 12.5.sp, font = mono,
+                    weight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    // Shrinks rather than pushes the mark off the card, exactly as the desktop row does.
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                PeerTrustBadge(row.trust, onConfirm = onConfirmKey)
+            }
             // Same rule as the desktop table: an access list we failed to read is "?", never an
             // empty chip row — the phone is where granting and revoking actually happens.
             // A space name is a peer's too, and here it shares a line with "last seen".

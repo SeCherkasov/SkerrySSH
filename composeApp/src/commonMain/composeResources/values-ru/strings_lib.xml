@@ -154,7 +154,20 @@
     <string name="lib_teams_invite_check_failed">Приглашение проверить не удалось.</string>
     <string name="lib_teams_invite_check_retry">Повторить</string>
     <string name="lib_teams_invite_key_changed_ack">Новый отпечаток подтверждён по доверенному каналу</string>
-    <string name="lib_teams_invite_key_changed">Отличается от ключа, закреплённого за этим аккаунтом. Сверьте новый отпечаток по доверенному каналу.</string>
+    <string name="lib_teams_invite_key_changed">Отличается от отпечатка, подтверждённого для этого аккаунта. Сверьте новый по доверенному каналу.</string>
+    <string name="lib_teams_key_changed_unconfirmed">Отличается от ключа, который это устройство увидело первым; ни один из них никто не подтверждал. Сверьте отпечаток по доверенному каналу.</string>
+    <string name="lib_teams_key_pin_unreadable">Устройство не может прочитать запись по этому аккаунту. Сверьте отпечаток по доверенному каналу.</string>
+    <string name="lib_teams_peer_confirmed">Отпечаток подтверждён по доверенному каналу</string>
+    <string name="lib_teams_peer_confirm">Подтвердить ключ участника</string>
+    <string name="lib_teams_peer_mark">%1$s. %2$s</string>
+    <string name="lib_teams_peer_confirm_action">Подтвердить</string>
+    <string name="lib_teams_peer_verify">Сверьте отпечаток с участником по доверенному каналу. Все последующие ключи, запечатанные этому аккаунту, проверяются по нему.</string>
+    <string name="lib_teams_peer_checking">Запрашиваем ключ участника…</string>
+    <string name="lib_teams_peer_check_failed">Ключ участника прочитать не удалось.</string>
+    <string name="lib_teams_peer_state_confirmed">Отпечаток для этого аккаунта уже подтверждён по доверенному каналу.</string>
+    <string name="lib_teams_peer_state_first_sight">Записан при первой встрече: так ответил сервер, никто это не подтверждал.</string>
+    <string name="lib_teams_peer_state_none">На этом устройстве по этому аккаунту записей ещё нет.</string>
+    <string name="lib_teams_peer_state_unreadable">Устройство не может прочитать запись по этому аккаунту.</string>
     <string name="lib_teams_accept">Принять</string>
     <string name="lib_teams_decline">Отклонить</string>
     <string name="lib_teams_role_owner">ВЛАДЕЛЕЦ</string>
@@ -261,10 +274,11 @@
     <string name="lib_teams_scope_members_count">с доступом: %1$d</string>
     <string name="lib_teams_err_already_shared">Эта запись уже расшарена в другой области этой команды — сначала уберите её оттуда</string>
     <string name="lib_teams_err_scopes_unsupported">Этот sync-сервер слишком старый для областей доступа — обновите сервер</string>
-    <string name="lib_teams_err_peer_key_unconfirmed">Опубликованный ключ участника не тот, что был подтверждён, — под него ничего не запечатано. Удалите его из команды и пригласите заново, чтобы подтвердить новый ключ</string>
-    <string name="lib_teams_err_unconfirmed_key_ignored">Пришёл ключ команды, подписанный неподтверждённой личностью, — он проигнорирован</string>
+    <string name="lib_teams_err_peer_key_unconfirmed">Опубликованный ключ участника не тот, что за ним записан, — под него ничего не запечатано. Сверьте отпечаток по доверенному каналу и подтвердите его в списке участников</string>
+    <string name="lib_teams_err_unconfirmed_key_ignored">Пришёл ключ команды, подписанный не тем ключом, что записан за этим аккаунтом, — он проигнорирован</string>
     <string name="lib_teams_err_invite_unverified">Приглашение не проверено — откройте команду и сверьте отпечаток пригласившего перед принятием</string>
     <string name="lib_teams_err_pin_not_recorded">Подтверждённый отпечаток не удалось сохранить на этом устройстве — этому ключу ничего не отправлено</string>
+    <string name="lib_teams_err_pin_moved">Пока отпечаток был на экране, запись об этом аккаунте изменилась — ничего не подтверждено. Сверьте заново</string>
     <string name="lib_teams_err_identity_unreadable">Устройство не может прочитать свой командный ключ, приглашение здесь не открыть</string>
     <!-- Экран команды: шапка, таблица участников, карточки (см. TeamsView) -->
     <string name="lib_teams_header_title">Команда</string>

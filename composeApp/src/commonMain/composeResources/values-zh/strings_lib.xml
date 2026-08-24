@@ -148,7 +148,20 @@
     <string name="lib_teams_invite_check_failed">无法检查此邀请。</string>
     <string name="lib_teams_invite_check_retry">重试</string>
     <string name="lib_teams_invite_key_changed_ack">已通过可信渠道确认新指纹</string>
-    <string name="lib_teams_invite_key_changed">与该账户已固定的密钥不一致。继续之前请通过可信渠道核对新指纹。</string>
+    <string name="lib_teams_invite_key_changed">与该账户已确认的指纹不一致。继续之前请通过可信渠道核对新指纹。</string>
+    <string name="lib_teams_key_changed_unconfirmed">与本设备最初看到的密钥不一致，且两者都无人确认。继续之前请通过可信渠道核对该指纹。</string>
+    <string name="lib_teams_key_pin_unreadable">本设备无法读取该账户的记录。继续之前请通过可信渠道核对该指纹。</string>
+    <string name="lib_teams_peer_confirmed">指纹已通过可信渠道确认</string>
+    <string name="lib_teams_peer_confirm">确认该成员的密钥</string>
+    <string name="lib_teams_peer_mark">%1$s。%2$s</string>
+    <string name="lib_teams_peer_confirm_action">确认</string>
+    <string name="lib_teams_peer_verify">请通过可信渠道与该成员核对此指纹。此后封装给该账户的每把密钥都以它为准。</string>
+    <string name="lib_teams_peer_checking">正在获取成员的密钥…</string>
+    <string name="lib_teams_peer_check_failed">无法读取该成员的密钥。</string>
+    <string name="lib_teams_peer_state_confirmed">该账户的指纹此前已通过可信渠道确认。</string>
+    <string name="lib_teams_peer_state_first_sight">来自首次见到的记录：这是服务器的答复，无人确认过。</string>
+    <string name="lib_teams_peer_state_none">本设备尚无该账户的任何记录。</string>
+    <string name="lib_teams_peer_state_unreadable">本设备无法读取该账户的记录。</string>
     <string name="lib_teams_accept">接受</string>
     <string name="lib_teams_decline">拒绝</string>
     <string name="lib_teams_role_owner">拥有者</string>
@@ -255,10 +268,11 @@
     <string name="lib_teams_scope_members_count">%1$d 人可访问</string>
     <string name="lib_teams_err_already_shared">该记录已共享到此团队的另一个范围 — 请先在那里取消共享</string>
     <string name="lib_teams_err_scopes_unsupported">此同步服务器版本过旧，不支持访问范围 — 请更新服务器</string>
-    <string name="lib_teams_err_peer_key_unconfirmed">成员发布的密钥不是已确认的那把 — 未向其封装任何密钥。将其移出团队后重新邀请，以确认新密钥</string>
-    <string name="lib_teams_err_unconfirmed_key_ignored">收到的团队密钥由未确认的身份签名，已被忽略</string>
+    <string name="lib_teams_err_peer_key_unconfirmed">成员发布的密钥不是为其记录的那把 — 未向其封装任何密钥。请通过可信渠道核对指纹，并在成员列表中确认</string>
+    <string name="lib_teams_err_unconfirmed_key_ignored">收到的团队密钥所用的签名密钥不是该账户已记录的那把，已被忽略</string>
     <string name="lib_teams_err_invite_unverified">此邀请未经验证 — 请打开团队并核对邀请者的指纹后再接受</string>
     <string name="lib_teams_err_pin_not_recorded">无法在此设备上保存已确认的指纹，未向该密钥发送任何内容</string>
+    <string name="lib_teams_err_pin_moved">指纹显示期间该账户的记录已发生变化 — 未确认任何内容。请重新核对</string>
     <string name="lib_teams_err_identity_unreadable">此设备无法读取自己的团队身份密钥，无法在此打开邀请</string>
     <!-- 团队界面：标题栏、成员表、汇总卡片（见 TeamsView） -->
     <string name="lib_teams_header_title">团队</string>

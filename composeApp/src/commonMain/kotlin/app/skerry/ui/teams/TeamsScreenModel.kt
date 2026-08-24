@@ -1,5 +1,6 @@
 package app.skerry.ui.teams
 
+import app.skerry.shared.team.Pin
 import app.skerry.shared.team.TeamActivityDay
 import app.skerry.shared.team.TeamActivityKind
 import app.skerry.shared.team.TeamMember
@@ -23,6 +24,11 @@ data class TeamMemberRowUi(
     val scopesKnown: Boolean,
     /** The viewer may change this member's role or remove them (mirrors the server ACL). */
     val manageable: Boolean,
+    /**
+     * What this device holds for the member's Teams key — and in particular whether a human ever
+     * confirmed it, or the server was simply the first to answer with it (#323).
+     */
+    val trust: PeerTrust = PeerTrust.NONE,
 )
 
 /**
@@ -40,6 +46,14 @@ fun teamMemberRows(
     scopeGrants: Map<String, Set<String>>,
     canManage: Boolean,
     grantsComplete: Boolean = true,
+    /**
+     * This account, so its own row is not offered a ceremony with itself. Null means the screen
+     * cannot tell — there is no live session — and then no row wears a mark at all: reading unknown
+     * as "not me" put the amber "confirm this member's key" on the reader themselves.
+     */
+    selfAccountId: String? = null,
+    /** What is pinned for each member — [app.skerry.shared.team.Pin.None] for anyone absent from it. */
+    pins: Map<String, Pin> = emptyMap(),
 ): List<TeamMemberRowUi> {
     val scopeNames = team.scopes.associate { it.id to it.name }
     return members
@@ -57,6 +71,10 @@ fun teamMemberRows(
                 manageable = canManage &&
                     member.accountId != team.ownerAccountId &&
                     canModifyMember(team.role, member.role),
+                trust = peerTrust(
+                    pins[member.accountId] ?: Pin.None,
+                    self = selfAccountId?.let { it == member.accountId },
+                ),
             )
         }
 }
