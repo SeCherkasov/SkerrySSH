@@ -3,22 +3,19 @@ package app.skerry.ui.terminal
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
 import app.skerry.shared.ssh.PtySize
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
+import app.skerry.ui.render.SceneFrames
 import kotlin.test.Test
-import kotlin.test.assertTrue
-import kotlin.test.fail
+import kotlin.test.assertFalse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -70,47 +67,41 @@ class TerminalThemeSwitchRenderTest {
                         TerminalScreen(state, Modifier.fillMaxSize())
                     }
                 }
-                var timeNanos = 0L
-                fun frame(): PixelMap {
-                    Snapshot.sendApplyNotifications()
-                    timeNanos += 16_666_667L
-                    return scene.render(timeNanos).toComposeImageBitmap().toPixelMap()
-                }
+                val frames = SceneFrames(scene)
 
                 // First frames: layout -> LaunchedEffect(resize) -> sized=true. Emit output only after
                 // the grid settles: shrinking from 80x24 to the actual grid pushes top rows into
                 // scrollback under autoscroll, so the test rows must stay on screen.
-                repeat(3) { frame() }
+                frames.settle(LAYOUT_FRAMES)
                 // Line 1: SGR 44, background fill (drawRect). Line 2: SGR 32 + 3x U+2588 FULL BLOCK,
                 // solid glyphs (drawText). Exactly three blocks: the TextMeasurer cache holds 8
                 // entries, and all keys must fit in it (as with a few short user runs), or LRU eviction
                 // would mask a stale-color bug.
                 session.emit("\u001b[44m          \u001b[0m\r\n\u001b[32m███\u001b[0m")
 
-                // Wait for both old-palette render paths to draw (frames for effects/snapshot publish).
-                var pixels = frame()
-                var attempts = 0
-                while ((!pixels.hasColor(NIGHT_SEA_ANSI_BLUE) || !pixels.hasColor(NIGHT_SEA_ANSI_GREEN)) && attempts < 30) {
-                    pixels = frame()
-                    attempts++
-                }
-                assertTrue(pixels.hasColor(NIGHT_SEA_ANSI_BLUE), "did not see SGR 44 fill in the Night Sea palette")
-                assertTrue(pixels.hasColor(NIGHT_SEA_ANSI_GREEN), "did not see SGR 32 glyphs in the Night Sea palette")
+                // Both old-palette render paths have to have drawn before the switch means anything.
+                frames.awaitFrame("the SGR 44 fill in the Night Sea palette") { it.hasColor(NIGHT_SEA_ANSI_BLUE) }
+                frames.awaitFrame("the SGR 32 glyphs in the Night Sea palette") { it.hasColor(NIGHT_SEA_ANSI_GREEN) }
 
                 // Switch theme at runtime, as clicking the Appearance card does.
                 theme.value = TerminalThemes.SolarizedLight
-                pixels = frame()
-                pixels = frame() // second frame in case of deferred invalidation
 
-                assertTrue(pixels.hasColor(SOLARIZED_BG), "terminal background should recolor to Solarized Light")
-                assertTrue(pixels.hasColor(SOLARIZED_ANSI_BLUE), "SGR 44 fill should recolor to Solarized blue")
-                if (pixels.hasColor(NIGHT_SEA_ANSI_BLUE)) {
-                    fail("SGR 44 fill stayed Night Sea blue: background layer not repainted after theme switch")
+                frames.awaitFrame("the terminal background to recolor to Solarized Light") { it.hasColor(SOLARIZED_BG) }
+                frames.awaitFrame("the SGR 44 fill to recolor to Solarized blue") { it.hasColor(SOLARIZED_ANSI_BLUE) }
+                // The last of the three positives is also where both negatives are read: the repaint this
+                // test is about is one frame carrying the new palette and nothing of the old, not two
+                // conditions that may hold frames apart.
+                val recolored = frames.awaitFrame("the SGR 32 glyphs to recolor to Solarized green") {
+                    it.hasColor(SOLARIZED_ANSI_GREEN)
                 }
-                if (pixels.hasColor(NIGHT_SEA_ANSI_GREEN)) {
-                    fail("SGR 32 glyphs stayed Night Sea green: drawText painted with stale TextMeasurer cache color")
-                }
-                assertTrue(pixels.hasColor(SOLARIZED_ANSI_GREEN), "SGR 32 glyphs should recolor to Solarized green")
+                assertFalse(
+                    recolored.hasColor(NIGHT_SEA_ANSI_BLUE),
+                    "the SGR 44 fill is still Night Sea blue: the background layer did not repaint",
+                )
+                assertFalse(
+                    recolored.hasColor(NIGHT_SEA_ANSI_GREEN),
+                    "the SGR 32 glyphs are still Night Sea green: drawText painted from a stale TextMeasurer cache",
+                )
             }
         } finally {
             scope.cancel()
@@ -128,6 +119,9 @@ class TerminalThemeSwitchRenderTest {
     }
 
     private companion object {
+        /** Frames spent letting layout settle before the first emit — nothing is asserted about them. */
+        const val LAYOUT_FRAMES = 3
+
         val NIGHT_SEA_ANSI_BLUE = 0xFF4A9EDB.toInt()
         val NIGHT_SEA_ANSI_GREEN = 0xFF5DCE9E.toInt()
         val SOLARIZED_BG = 0xFFFDF6E3.toInt()

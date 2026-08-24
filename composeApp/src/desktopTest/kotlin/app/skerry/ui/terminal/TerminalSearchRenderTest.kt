@@ -2,15 +2,12 @@ package app.skerry.ui.terminal
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
@@ -19,6 +16,7 @@ import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.render.SceneFrames
 import app.skerry.ui.theme.SkerryTheme
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -45,6 +43,9 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 @OptIn(ExperimentalComposeUiApi::class)
 class TerminalSearchRenderTest {
+
+    /** Frames spent letting layout settle before the first emit — nothing is asserted about them. */
+    private val layoutFrames = 3
 
     /** Fake PTY session: output only, input/resize are no-ops. */
     private class FakeSession : TerminalSession {
@@ -81,44 +82,38 @@ class TerminalSearchRenderTest {
                         }
                     }
                 }
-                var timeNanos = 0L
-                fun frame(): PixelMap {
-                    Snapshot.sendApplyNotifications()
-                    timeNanos += 16_666_667L
-                    return scene.render(timeNanos).toComposeImageBitmap().toPixelMap()
-                }
+                val frames = SceneFrames(scene)
 
                 // Let layout settle (resize -> sized=true) before emitting, so the rows stay on screen.
-                repeat(3) { frame() }
+                frames.settle(layoutFrames)
                 // Blank lines first: the panel is pinned to the pane's top-right corner and would
                 // otherwise cover the very rows whose highlight this test looks for.
                 session.emit("\r\n\r\n\r\n\r\nalpha one\r\nalpha two")
 
                 val match = theme.searchMatch.over(theme.background)
                 val current = theme.searchCurrentMatch.over(theme.background)
-                var pixels = frame()
-                repeat(3) { pixels = frame() }
-                assertFalse(pixels.hasColorNear(match), "nothing is highlighted before a search runs")
+                // A fixed budget, and here that IS the claim: nothing may ever paint the wash, so
+                // there is no condition to wait for — only frames in which it must not appear.
+                assertFalse(
+                    frames.settle(layoutFrames).hasColorNear(match),
+                    "nothing is highlighted before a search runs",
+                )
 
                 state.search.open()
                 state.search.updateQuery("alpha")
                 assertTrue(state.search.matches.size == 2, "expected both rows to match, got ${state.search.matches}")
 
-                pixels = frame()
-                var attempts = 0
-                while (!(pixels.hasColorNear(match) && pixels.hasColorNear(current)) && attempts < 30) {
-                    pixels = frame()
-                    attempts++
-                }
-                assertTrue(pixels.hasColorNear(match), "an unselected hit should carry the match wash")
-                assertTrue(pixels.hasColorNear(current), "the selected hit should carry the stronger wash")
+                // Both washes on ONE frame: they come out of the same draw pass, and "each appeared at
+                // some point" would pass on a frame that never showed them together.
+                val hits = frames.awaitFrame("an unselected hit to carry the match wash") { it.hasColorNear(match) }
+                assertTrue(hits.hasColorNear(current), "the selected hit must carry the stronger wash on that frame")
 
                 // Closing the panel drops the highlight with it.
                 state.search.close()
-                pixels = frame()
-                repeat(2) { pixels = frame() }
-                assertFalse(pixels.hasColorNear(match), "highlight should disappear once search is closed")
-                assertFalse(pixels.hasColorNear(current), "selected-hit highlight should disappear too")
+                val closed = frames.awaitFrame("the match wash to disappear once search is closed") {
+                    !it.hasColorNear(match)
+                }
+                assertFalse(closed.hasColorNear(current), "the selected-hit wash must be gone on that frame too")
             }
         } finally {
             scope.cancel()

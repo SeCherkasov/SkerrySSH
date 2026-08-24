@@ -1,12 +1,9 @@
 package app.skerry.ui.terminal
 
-import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.graphics.PixelMap
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.toComposeImageBitmap
-import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.use
 import app.skerry.shared.host.Host
@@ -29,11 +26,11 @@ import app.skerry.ui.connection.toTarget
 import app.skerry.ui.desktop.DesktopDesignApp
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.host.hostCatalogOf
+import app.skerry.ui.render.SceneFrames
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.theme.SkerryTheme
 import kotlin.test.Test
-import kotlin.test.assertTrue
-import kotlin.test.fail
+import kotlin.test.assertFalse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,65 +66,48 @@ class FullAppThemeSwitchRenderTest {
                 scene.setContent {
                     SkerryTheme { DesktopDesignApp(state = state, hosts = hosts, sessions = sessions) }
                 }
-                var timeNanos = 0L
-                fun frame(): PixelMap {
-                    Snapshot.sendApplyNotifications()
-                    timeNanos += 16_666_667L
-                    val img = scene.render(timeNanos).toComposeImageBitmap().toPixelMap()
-                    Thread.sleep(16) // async fonts/fake connection, as in Screenshot.kt
-                    return img
-                }
+                // The terminal comes up on a fake connection and async fonts, neither of which is on
+                // the frame clock: every wait below is for the screen to say something, never for a
+                // number of frames to go by (issue #330).
+                val frames = SceneFrames(scene, pauseMillis = FRAME_PAUSE_MS)
 
-                // Wait for a live terminal with the Night Sea palette (SGR 44 fill).
-                var pixels = frame()
-                var attempts = 0
-                while (!pixels.hasColor(NIGHT_SEA_ANSI_BLUE) && attempts < 120) {
-                    pixels = frame()
-                    attempts++
+                frames.awaitFrame("a live terminal with SGR 44 fill in the Night Sea palette") {
+                    it.hasColor(NIGHT_SEA_ANSI_BLUE)
                 }
-                assertTrue(
-                    pixels.hasColor(NIGHT_SEA_ANSI_BLUE),
-                    "did not see a live terminal with SGR 44 fill in the Night Sea palette",
-                )
 
                 // Unified theming: switching the APP theme alone must recolor the terminal to the
                 // theme's twin (Blackwater's ANSI blue is unique to its terminal palette — the
                 // green-accent chrome never paints it).
                 state.settings.chooseThemeMode(app.skerry.ui.theme.ThemeMode.BLACKWATER)
-                repeat(5) { pixels = frame() }
-                assertTrue(
-                    pixels.hasColor(BLACKWATER_ANSI_BLUE),
-                    "terminal should follow the app theme to its terminal twin",
-                )
-                if (pixels.hasColor(NIGHT_SEA_ANSI_BLUE)) {
-                    fail("Night Sea blue pixels remain after the app theme switch: the terminal did not follow")
+                // Both halves on ONE frame: "the new colour appeared" and "the old one is gone at some
+                // later point" is a weaker claim than the repaint this test is about.
+                val switched = frames.awaitFrame("the terminal to follow the app theme to its terminal twin") {
+                    it.hasColor(BLACKWATER_ANSI_BLUE)
                 }
+                assertFalse(switched.hasColor(NIGHT_SEA_ANSI_BLUE), "Night Sea pixels survived the app theme switch")
                 state.settings.chooseThemeMode(app.skerry.ui.theme.ThemeMode.DARK)
-                repeat(5) { pixels = frame() }
 
                 // Exact user path: open Settings -> Appearance over the terminal, opt into a
                 // separate terminal theme (unified theming follows the app theme otherwise),
                 // click the theme card, close settings; the terminal stays in composition.
                 state.openSettings()
                 state.showSettingsTab(app.skerry.ui.app.SettingsTab.Appearance)
-                repeat(3) { pixels = frame() }
+                frames.settle(SETTLE_FRAMES)
                 state.settings.toggleCustomTerminalTheme()
                 state.settings.chooseTerminalTheme(TerminalThemes.SolarizedLight)
-                repeat(3) { pixels = frame() }
+                frames.settle(SETTLE_FRAMES)
                 state.closeSettings()
-                repeat(5) { pixels = frame() }
 
-                assertTrue(
-                    pixels.hasColor(SOLARIZED_BG),
-                    "terminal background should recolor to Solarized Light",
-                )
-                assertTrue(
-                    pixels.hasColor(SOLARIZED_ANSI_BLUE),
-                    "SGR 44 fill should recolor to Solarized blue",
-                )
-                if (pixels.hasColor(NIGHT_SEA_ANSI_BLUE)) {
-                    fail("Night Sea blue pixels (ANSI 4) remain: terminal was not repainted after theme switch")
+                frames.awaitFrame("the terminal background to recolor to Solarized Light") {
+                    it.hasColor(SOLARIZED_BG)
                 }
+                val recolored = frames.awaitFrame("the SGR 44 fill to recolor to Solarized blue") {
+                    it.hasColor(SOLARIZED_ANSI_BLUE)
+                }
+                assertFalse(
+                    recolored.hasColor(NIGHT_SEA_ANSI_BLUE),
+                    "Night Sea ANSI 4 pixels survived the terminal theme switch",
+                )
             }
         } finally {
             sessions.disconnectAll()
@@ -178,6 +158,12 @@ class FullAppThemeSwitchRenderTest {
     }
 
     private companion object {
+        /** Wall clock each frame gives back to the fake connection and the async fonts. */
+        const val FRAME_PAUSE_MS = 16L
+
+        /** Frames spent letting the settings panel appear — nothing is asserted about them. */
+        const val SETTLE_FRAMES = 3
+
         val NIGHT_SEA_ANSI_BLUE = 0xFF4A9EDB.toInt()
         val BLACKWATER_ANSI_BLUE = 0xFF1E86CC.toInt()
         val SOLARIZED_BG = 0xFFFDF6E3.toInt()
