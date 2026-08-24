@@ -73,22 +73,26 @@ import app.skerry.ui.generated.resources.lib_teams_empty_title
 import app.skerry.ui.generated.resources.lib_teams_err_already_invited
 import app.skerry.ui.generated.resources.lib_teams_err_already_shared
 import app.skerry.ui.generated.resources.lib_teams_err_forbidden
+import app.skerry.ui.generated.resources.lib_teams_err_invite_unverified
+import app.skerry.ui.generated.resources.lib_teams_err_identity_unreadable
 import app.skerry.ui.generated.resources.lib_teams_err_key_missing
 import app.skerry.ui.generated.resources.lib_teams_err_network
 import app.skerry.ui.generated.resources.lib_teams_err_no_recipient_key
 import app.skerry.ui.generated.resources.lib_teams_err_no_such_account
 import app.skerry.ui.generated.resources.lib_teams_err_not_connected
+import app.skerry.ui.generated.resources.lib_teams_err_peer_key_unconfirmed
+import app.skerry.ui.generated.resources.lib_teams_err_pin_not_recorded
 import app.skerry.ui.generated.resources.lib_teams_err_protocol
 import app.skerry.ui.generated.resources.lib_teams_err_recipient_key_changed
 import app.skerry.ui.generated.resources.lib_teams_err_scopes_unsupported
 import app.skerry.ui.generated.resources.lib_teams_err_server_error
 import app.skerry.ui.generated.resources.lib_teams_err_too_many_requests
+import app.skerry.ui.generated.resources.lib_teams_err_unconfirmed_key_ignored
 import app.skerry.ui.generated.resources.lib_teams_err_vault_locked
 import app.skerry.ui.generated.resources.lib_teams_err_vault_unreadable
-import app.skerry.ui.generated.resources.lib_teams_header_title
 import app.skerry.ui.generated.resources.lib_teams_header_subtitle
+import app.skerry.ui.generated.resources.lib_teams_header_title
 import app.skerry.ui.generated.resources.lib_teams_invite
-import app.skerry.ui.generated.resources.lib_teams_invite_unverified
 import app.skerry.ui.generated.resources.lib_teams_invited_banner
 import app.skerry.ui.generated.resources.lib_teams_invited_by
 import app.skerry.ui.generated.resources.lib_teams_invited_fingerprint
@@ -101,13 +105,13 @@ import app.skerry.ui.generated.resources.lib_teams_remove_member_title
 import app.skerry.ui.generated.resources.lib_teams_scope_delete
 import app.skerry.ui.generated.resources.lib_teams_scope_delete_message
 import app.skerry.ui.generated.resources.lib_teams_scopes
+import app.skerry.ui.generated.resources.lib_teams_share_empty
 import app.skerry.ui.generated.resources.lib_teams_share_host
 import app.skerry.ui.generated.resources.lib_teams_share_host_title
 import app.skerry.ui.generated.resources.lib_teams_share_runbook
 import app.skerry.ui.generated.resources.lib_teams_share_runbook_title
 import app.skerry.ui.generated.resources.lib_teams_share_snippet
 import app.skerry.ui.generated.resources.lib_teams_share_snippet_title
-import app.skerry.ui.generated.resources.lib_teams_share_empty
 import app.skerry.ui.generated.resources.lib_teams_shared_hosts_count
 import app.skerry.ui.generated.resources.lib_teams_shared_runbooks_count
 import app.skerry.ui.generated.resources.lib_teams_shared_snippets_count
@@ -406,6 +410,11 @@ internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.ServerError -> stringResource(Res.string.lib_teams_err_server_error)
     TeamsFailure.AlreadyShared -> stringResource(Res.string.lib_teams_err_already_shared)
     TeamsFailure.ScopesUnsupported -> stringResource(Res.string.lib_teams_err_scopes_unsupported)
+    TeamsFailure.PeerKeyUnconfirmed -> stringResource(Res.string.lib_teams_err_peer_key_unconfirmed)
+    TeamsFailure.UnconfirmedKeyIgnored -> stringResource(Res.string.lib_teams_err_unconfirmed_key_ignored)
+    TeamsFailure.InviteUnverified -> stringResource(Res.string.lib_teams_err_invite_unverified)
+    TeamsFailure.PinNotRecorded -> stringResource(Res.string.lib_teams_err_pin_not_recorded)
+    TeamsFailure.IdentityUnreadable -> stringResource(Res.string.lib_teams_err_identity_unreadable)
 }
 
 /** launch from click handlers: a param-less suspend block, shorter than a lambda with CoroutineScope. */

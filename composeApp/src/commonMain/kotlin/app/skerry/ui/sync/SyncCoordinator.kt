@@ -900,7 +900,9 @@ class SyncCoordinator(
      * pushed once the pull flips the filter on — resurrecting the purged record. Clearing by the maximal
      * (everything-on) filter covers any server settings; only never-synced, device-local types (terminal
      * history) are kept — plus, record by record, the device-local ones the push filter already refuses
-     * ([DeviceLocalRecords]): nothing on the server would restore those.
+     * ([DeviceLocalRecords]): nothing on the server would restore those. The one sync-capable type held
+     * back is [RecordType.TEAM_PEER]: a re-pull restores a pin only if the server wants it restored, and
+     * a device without its pins seals the next rotation to whatever key the server answers with (#319).
      *
      * Throws whatever the clear throws — a vault locked at this moment ([Vault.clearRecords] needs an
      * unlocked one) leaves the debt standing over an un-cleared vault, which is what [reconcileOwed] reads.
@@ -926,7 +928,13 @@ class SyncCoordinator(
         val syncCapable = SyncSettings(syncHosts = true, syncSnippets = true)
         // Device-local records are spared one at a time, not by type: they were never pushed, so the
         // re-pull cannot bring them back and clearing them would simply destroy them (issue #174).
-        vault.clearRecords(RecordType.entries.filter { syncCapable.shouldSync(it) }.toSet(), deviceLocal::survivesClear)
+        // Verified peer fingerprints are spared by type, and for the opposite reason: the re-pull WOULD
+        // bring them back, but only as the server chooses to hand them back. `reactivated` is the
+        // server's own flag, so a server that raises it and then answers the pull without the pins has
+        // walked this device back to trusting whatever key it publishes next (#319). A stale pin costs a
+        // re-confirmation; a missing one costs the confirmation itself.
+        val dropped = RecordType.entries.filter { syncCapable.shouldSync(it) && it != RecordType.TEAM_PEER }
+        vault.clearRecords(dropped.toSet(), deviceLocal::survivesClear)
         syncState.setCursor(link.cursorKey, 0) // reactivation always full-pulls to rebuild from the server
         armedFor = link // only now, and named — see [retireDischargedDebt]
     }

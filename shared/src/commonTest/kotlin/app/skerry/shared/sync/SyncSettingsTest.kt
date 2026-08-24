@@ -31,7 +31,9 @@ class SyncSettingsTest {
         val s = SyncSettings(syncHosts = false, syncSnippets = false)
         // TEAM/TEAM_IDENTITY hold team keys and the identity pair; without them another device
         // can't open team vaults at all, so selective sync never gates them (like SETTINGS).
-        val alwaysOn = setOf(RecordType.SETTINGS, RecordType.TEAM, RecordType.TEAM_IDENTITY)
+        // TEAM_PEER is the verified fingerprint each seal is held to — a device without it seals to
+        // whatever the server answers, so it is not gateable either (#319).
+        val alwaysOn = setOf(RecordType.SETTINGS, RecordType.TEAM, RecordType.TEAM_IDENTITY, RecordType.TEAM_PEER)
         RecordType.entries.filter { it !in alwaysOn }
             .forEach { assertFalse(s.shouldSync(it), "$it must be gated when both off") }
         alwaysOn.forEach { assertTrue(s.shouldSync(it), "$it must always sync") }

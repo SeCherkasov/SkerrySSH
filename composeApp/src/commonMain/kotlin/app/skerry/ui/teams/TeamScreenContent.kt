@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -48,7 +49,9 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
 import app.skerry.ui.design.SectionHeader
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
+import app.skerry.ui.design.ToggleRow
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.boundedVisibleText
 import app.skerry.ui.design.untrustedLabel
@@ -59,10 +62,9 @@ import app.skerry.ui.generated.resources.lib_teams_delete
 import app.skerry.ui.generated.resources.lib_teams_header_subtitle
 import app.skerry.ui.generated.resources.lib_teams_header_title
 import app.skerry.ui.generated.resources.lib_teams_invite
-import app.skerry.ui.generated.resources.lib_teams_invite_unverified
+import app.skerry.ui.generated.resources.lib_teams_invite_check_retry
+import app.skerry.ui.generated.resources.lib_teams_invite_key_changed_ack
 import app.skerry.ui.generated.resources.lib_teams_invited_banner
-import app.skerry.ui.generated.resources.lib_teams_invited_by
-import app.skerry.ui.generated.resources.lib_teams_invited_fingerprint
 import app.skerry.ui.generated.resources.lib_teams_leave
 import app.skerry.ui.generated.resources.lib_teams_no_key
 import app.skerry.ui.generated.resources.lib_teams_scopes
@@ -139,7 +141,16 @@ internal fun TeamScreen(
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
             if (invited) {
-                InviteBanner(tc, team, busy, onAccept = onAccept, onDecline = onDecline)
+                // Both counters only ever go up, so their sum changes whichever moves: a screen-wide
+                // reread and the banner's own Retry each start a fresh check.
+                var retries by remember(team.id) { mutableIntStateOf(0) }
+                InviteBanner(
+                    rememberInviteCheck(tc, team.id, tick + retries),
+                    busy,
+                    onAccept = onAccept,
+                    onDecline = onDecline,
+                    onRetry = { retries += 1 },
+                )
                 return@Column
             }
             if (!team.hasKey) {
@@ -323,13 +334,30 @@ private fun ScopeStrip(
     }
 }
 
-/** The invite this account hasn't answered yet: who sent it, their fingerprint, accept or decline. */
+/**
+ * The invite this account hasn't answered yet: who sent it, their fingerprint, accept or decline.
+ *
+ * Accept is offered only once the invite is opened, verified and its fingerprint drawn: it is that
+ * fingerprint the user confirms out of band, and accepting without it is the ceremony skipped
+ * entirely (#319). The coordinator refuses such an accept as well. [check] is passed in rather than
+ * started here so both the state and the gating can be rendered on their own.
+ *
+ * [onRetry] runs the check again: a screen showing an invite offers no sync of its own, so without
+ * it a check that could not be made stayed on screen until the app restarted.
+ */
 @Composable
-private fun InviteBanner(tc: TeamsCoordinator, team: TeamUi, busy: Boolean, onAccept: () -> Unit, onDecline: () -> Unit) {
+internal fun InviteBanner(
+    check: InviteCheck,
+    busy: Boolean,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+    onRetry: () -> Unit = {},
+) {
     val mono = LocalFonts.current.mono
-    // Verify the inviter's identity (signature + fingerprint) before offering Accept. Null = the
-    // invite couldn't be authenticated (forged/tampered) — warn and don't reveal a fingerprint.
-    val acceptPreview by produceState<InvitePreview?>(null, team.id) { value = tc.acceptPreview(team.id) }
+    val ack = rememberInviteAcknowledgement(check)
+    // Above the states it describes, never inside the `when`: a live region only announces a node
+    // that survives the change and carries the text itself (see StatusAnnouncer).
+    StatusAnnouncer(inviteCheckAnnouncement(check))
     Column(
         Modifier
             .fillMaxWidth()
@@ -344,15 +372,31 @@ private fun InviteBanner(tc: TeamsCoordinator, team: TeamUi, busy: Boolean, onAc
             Sym("mail", size = 18.sp, color = Skerry.colors.amber)
             Txt(stringResource(Res.string.lib_teams_invited_banner), color = Skerry.colors.text, size = 12.5.sp, modifier = Modifier.weight(1f))
             GhostButton(stringResource(Res.string.lib_teams_decline), onClick = onDecline, fg = Skerry.colors.dim)
-            PrimaryButton(stringResource(Res.string.lib_teams_accept), onClick = onAccept, enabled = !busy)
+            PrimaryButton(
+                stringResource(Res.string.lib_teams_accept),
+                onClick = onAccept,
+                enabled = readyToAccept(check, busy, ack.acknowledged),
+            )
         }
-        acceptPreview.let { p ->
-            if (p == null) {
-                Txt(stringResource(Res.string.lib_teams_invite_unverified), color = Skerry.colors.sunset, size = 11.5.sp)
-            } else {
-                Txt(stringResource(Res.string.lib_teams_invited_by, untrustedLabel(p.accountId)), color = Skerry.colors.dim, size = 11.5.sp)
-                Txt(stringResource(Res.string.lib_teams_invited_fingerprint, p.fingerprint), color = Skerry.colors.cyanBright, size = 11.5.sp, font = mono)
-            }
+        inviteCheckLines(check).forEach { line ->
+            Txt(
+                line.text,
+                color = line.color,
+                size = 11.5.sp,
+                lineHeight = 16.sp,
+                font = if (line.mono) mono else null,
+            )
+        }
+        if (check is InviteCheck.Failed) {
+            GhostButton(stringResource(Res.string.lib_teams_invite_check_retry), onClick = onRetry, fg = Skerry.colors.amber)
+        }
+        if (ack.moved != null) {
+            ToggleRow(
+                label = stringResource(Res.string.lib_teams_invite_key_changed_ack),
+                on = ack.acknowledged,
+                onToggle = ack.toggle,
+                labelSize = 11.5.sp,
+            )
         }
     }
 }

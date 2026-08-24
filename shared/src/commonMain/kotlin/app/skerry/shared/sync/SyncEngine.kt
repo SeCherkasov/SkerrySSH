@@ -13,7 +13,7 @@ import kotlin.coroutines.cancellation.CancellationException
  * supported server release accepts it.
  */
 private val TYPES_NEWER_THAN_SOME_SERVERS =
-    setOf(RecordType.TRASH, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN, RecordType.TRUSTED_CA)
+    setOf(RecordType.TRASH, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN, RecordType.TRUSTED_CA, RecordType.TEAM_PEER)
 
 /**
  * How a server that predates one of [TYPES_NEWER_THAN_SOME_SERVERS] answers a push carrying it:

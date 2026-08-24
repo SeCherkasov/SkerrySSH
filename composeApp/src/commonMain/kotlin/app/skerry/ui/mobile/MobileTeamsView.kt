@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -65,6 +66,7 @@ import app.skerry.ui.design.ConfirmActionDialog
 import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.session.SessionStatus
@@ -108,6 +110,15 @@ import app.skerry.ui.teams.HistoryTarget
 import app.skerry.ui.teams.TeamActivityDialog
 import app.skerry.ui.teams.RolePickerDialog
 import app.skerry.ui.teams.InviteMemberDialogForTeam
+import app.skerry.ui.teams.InviteCheck
+import app.skerry.ui.teams.inviteCheckAnnouncement
+import app.skerry.ui.teams.rememberInviteCheck
+import app.skerry.ui.design.ToggleRow
+import app.skerry.ui.teams.inviteCheckLines
+import app.skerry.ui.teams.rememberInviteAcknowledgement
+import app.skerry.ui.teams.readyToAccept
+import app.skerry.ui.generated.resources.lib_teams_invite_check_retry
+import app.skerry.ui.generated.resources.lib_teams_invite_key_changed_ack
 import app.skerry.ui.teams.InvitePreview
 import app.skerry.ui.teams.SharedRecordUi
 import app.skerry.ui.teams.TeamScopeUi
@@ -503,9 +514,46 @@ private fun MobileTeamDetail(
                 Sym("mail", size = 18.sp, color = Skerry.colors.amber)
                 Txt(stringResource(Res.string.lib_teams_invited_banner), color = Skerry.colors.text, size = 12.5.sp)
             }
+            // The same ceremony as on the desktop, drawn from the same state: who sent it, the
+            // fingerprint to confirm over a trusted channel, and Accept only once both are on screen
+            // (#319). The phone showed two buttons and nothing to check them against.
+            // Both counters only ever go up, so their sum changes whichever moves — the screen's
+            // reread, or Retry below.
+            var retries by remember(team.id) { mutableIntStateOf(0) }
+            val check = rememberInviteCheck(tc, team.id, tick + retries)
+            val ack = rememberInviteAcknowledgement(check)
+            // Composed above the lines it describes, not among them: only a node that survives the
+            // state change and carries the text itself announces anything (see StatusAnnouncer).
+            StatusAnnouncer(inviteCheckAnnouncement(check))
+            inviteCheckLines(check).forEach { line ->
+                Txt(
+                    line.text,
+                    color = line.color,
+                    size = 12.sp,
+                    lineHeight = 17.sp,
+                    font = if (line.mono) LocalFonts.current.mono else null,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
+            if (ack.moved != null) {
+                ToggleRow(
+                    label = stringResource(Res.string.lib_teams_invite_key_changed_ack),
+                    on = ack.acknowledged,
+                    onToggle = ack.toggle,
+                    labelSize = 12.sp,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+            }
             Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PrimaryButton(stringResource(Res.string.lib_teams_accept), onClick = onAccept, enabled = !busy)
+                PrimaryButton(
+                    stringResource(Res.string.lib_teams_accept),
+                    onClick = onAccept,
+                    enabled = readyToAccept(check, busy, ack.acknowledged),
+                )
                 GhostButton(stringResource(Res.string.lib_teams_decline), onClick = onDecline, fg = Skerry.colors.dim)
+                if (check is InviteCheck.Failed) {
+                    GhostButton(stringResource(Res.string.lib_teams_invite_check_retry), onClick = { retries += 1 }, fg = Skerry.colors.amber)
+                }
             }
         }
         return

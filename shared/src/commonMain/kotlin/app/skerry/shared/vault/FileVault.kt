@@ -273,11 +273,11 @@ class FileVault(
         for (r in remote) {
             val index = working.indexOfFirst { it.id == r.id }
             val local = if (index >= 0) working[index] else null
-            // LWW: higher version wins; on a tie, the lexicographically larger deviceId wins.
-            val wins = local == null ||
-                r.version > local.version ||
-                (r.version == local.version && r.deviceId > local.deviceId)
-            if (!wins) continue
+            if (retypes(local, r)) {
+                rejected += r
+                continue
+            }
+            if (!outranks(local, r)) continue
             // Trial-decrypt before storing: the AAD binds the metadata the record claims, so a
             // compromised server can't roll a record back by replaying an old genuine ciphertext
             // with a bumped version, forge a tombstone from a live blob, or replace a readable
@@ -295,6 +295,27 @@ class FileVault(
         }
         MergeResult(applied, rejected)
     }
+
+    /**
+     * Whether [remote] would change the type of the record already holding its id. An id belongs to
+     * one type for as long as a record holds it (see [store]) — through the sync path as well: a
+     * server that hands back a record carrying another store's id and a type of its own choosing
+     * would otherwise re-type it here, which is the very substitution the local rule refuses (#319).
+     * Such a record joins `rejected`, where a forged one goes, and the local record survives.
+     *
+     * A tombstone does not hold the id here, though [store] treats it as holding one: the remote
+     * record authenticates under this account's key, so it was written by one of our own devices
+     * under the same rule, and refusing it would strand it for good — the cursor moves past a
+     * rejection and only the server's compaction list would ever free the id.
+     */
+    private fun retypes(local: VaultRecord?, remote: VaultRecord) =
+        local != null && !local.deleted && local.type != remote.type
+
+    /** LWW: higher version wins; on a tie, the lexicographically larger deviceId wins. */
+    private fun outranks(local: VaultRecord?, remote: VaultRecord) =
+        local == null ||
+            remote.version > local.version ||
+            (remote.version == local.version && remote.deviceId > local.deviceId)
 
     override fun openPayload(id: String): ByteArray? = synchronized(lock) {
         val key = requireUnlocked()
@@ -322,6 +343,12 @@ class FileVault(
         val key = requireUnlocked()
         val currentMeta = session()
         val index = records.indexOfFirst { it.id == id }
+        // A record is located by id ALONE, and not every id is this device's to choose: a team id, a
+        // peer's account id and a scope id all arrive from the sync server. Re-typing a record in place
+        // would let a server that names a team after another store's record have this client overwrite
+        // it — a verified peer fingerprint replaced by a team key, and the next rotation sealed to
+        // whatever key the server publishes (#319). An id belongs to one type for its whole life.
+        require(index < 0 || records[index].type == type) { "record id already holds a ${records[index].type}" }
         val version = maxOf(if (index >= 0) records[index].version + 1 else 1L, minVersion)
         val at = now()
         val blob = crypto.seal(key, payload, recordAad(id, type, version, deviceId, deleted = false, updatedAt = at))

@@ -7,14 +7,20 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamRole
 import app.skerry.ui.app.UiTags
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_teams_invite_key_changed
+import app.skerry.ui.generated.resources.lib_teams_invite_key_changed_ack
 import app.skerry.ui.desktop.runForm
+import org.jetbrains.compose.resources.stringResource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -100,6 +106,89 @@ class TeamsDialogFormTest {
         assertEquals(ACCOUNT, sent?.first?.accountId)
         assertEquals(PEER_FINGERPRINT, sent?.first?.fingerprint, "the send must carry the verified fingerprint")
         assertEquals(TeamRole.VIEWER, sent?.second, "the invite should default to the least privilege")
+    }
+
+    /**
+     * A fingerprint that differs from the one pinned for the account is either an honest identity
+     * rotation or the server substituting a key of its own. Sending replaces the pin, so the dialog
+     * has to say which fingerprint the user is about to promote to verified (#319).
+     */
+    @Test
+    fun `an account whose key moved says so before the invite is sent`() {
+        var warning = ""
+        runForm({
+            warning = stringResource(Res.string.lib_teams_invite_key_changed)
+            InviteMemberDialog(
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, keyChanged = true),
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
+                onLookup = {},
+                onEdited = {},
+                onSend = { _, _ -> },
+                onDismiss = {},
+            )
+        }) {
+            onNodeWithTag(UiTags.FORM_FIELD).performTextReplacement(ACCOUNT)
+            waitForIdle()
+            onNodeWithText(warning).assertExists()
+        }
+    }
+
+    /**
+     * And says it at the price of a second, deliberate gesture: sending promotes the new fingerprint
+     * to the pinned one, so an honest rotation and a server trying its luck reach this dialog looking
+     * the same. One click could not carry the difference the trusted channel establishes.
+     */
+    @Test
+    fun `an account whose key moved cannot be invited on one click`() {
+        var ack = ""
+        var sent: InvitePreview? = null
+        runForm({
+            ack = stringResource(Res.string.lib_teams_invite_key_changed_ack)
+            InviteMemberDialog(
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT, keyChanged = true),
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
+                onLookup = {},
+                onEdited = {},
+                onSend = { verified, _ -> sent = verified },
+                onDismiss = {},
+            )
+        }) {
+            onNodeWithTag(UiTags.FORM_FIELD).performTextReplacement(ACCOUNT)
+            waitForIdle()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled()
+            onNodeWithContentDescription(ack).performClick()
+            waitForIdle()
+            onNodeWithTag(UiTags.FORM_SAVE).performClick()
+            waitForIdle()
+        }
+        assertEquals(PEER_FINGERPRINT, sent?.fingerprint, "the send carries the fingerprint that was acknowledged")
+    }
+
+    /** The usual case — a key nobody has pinned a different value for — must not cry wolf. */
+    @Test
+    fun `a first invite to an account carries no key-changed warning`() {
+        var warning = ""
+        runForm({
+            warning = stringResource(Res.string.lib_teams_invite_key_changed)
+            InviteMemberDialog(
+                preview = InvitePreview(accountId = ACCOUNT, fingerprint = PEER_FINGERPRINT),
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                assignableRoles = listOf(TeamRole.ADMIN, TeamRole.VIEWER),
+                onLookup = {},
+                onEdited = {},
+                onSend = { _, _ -> },
+                onDismiss = {},
+            )
+        }) {
+            onNodeWithTag(UiTags.FORM_FIELD).performTextReplacement(ACCOUNT)
+            waitForIdle()
+            onNodeWithText(warning).assertDoesNotExist()
+        }
     }
 
     /**

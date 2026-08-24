@@ -996,6 +996,84 @@ class FileVaultTest {
         assertNull(v.openRecordPayload(record.copy(deleted = true)))
     }
 
+    /**
+     * A record is located by id alone, and not every id is this device's to choose — a team id, a
+     * peer's account id and a scope id all come from the sync server. Re-typing a record in place
+     * would let a store handed one of those ids overwrite another store's record (#319).
+     */
+    @Test
+    fun `a put may not change an existing record's type`() = vaultTest {
+        val v = vault()
+        v.create("m".toCharArray())
+        v.put("x1", RecordType.TEAM_PEER, "fingerprint".encodeToByteArray())
+
+        assertFailsWith<IllegalArgumentException> { v.put("x1", RecordType.TEAM, "team key".encodeToByteArray()) }
+        assertFailsWith<IllegalArgumentException> {
+            v.putAtLeast("x1", RecordType.TEAM, "team key".encodeToByteArray(), minVersion = 9L)
+        }
+
+        val record = v.records().single()
+        assertEquals(RecordType.TEAM_PEER, record.type)
+        assertEquals(1L, record.version)
+        assertContentEquals("fingerprint".encodeToByteArray(), v.openPayload("x1"))
+        // The type is fixed for the record, not for the id: the same id may be reused once the record
+        // it named is physically gone (compact drops the tombstone; a reconcile clear drops the record).
+        v.remove("x1")
+        v.compact(listOf("x1"))
+        v.put("x1", RecordType.TEAM, "team key".encodeToByteArray())
+        assertEquals(RecordType.TEAM, v.records().single().type)
+    }
+
+    /**
+     * The same rule through the sync path. The record below is authentic — sealed under the shared
+     * account key, honest AAD — and it wins LWW on the deviceId tie-break; its type is the only thing
+     * standing between a verified peer fingerprint and a team key landing on top of it (#319).
+     */
+    @Test
+    fun `mergeRemote may not change an existing record's type`() = vaultTest {
+        val a = vault().apply {
+            create("master".toCharArray())
+            put("peer:bob", RecordType.TEAM_PEER, "fingerprint".encodeToByteArray())
+        }
+        val b = FileVault("/vault-b.json".toPath(), crypto, deviceId = "device-2", fileSystem = fs, now = { TS })
+        b.createWithDataKey(a.exportDataKey()!!)
+        b.put("peer:bob", RecordType.TEAM, "team key".encodeToByteArray())
+
+        val result = a.mergeRemote(listOf(b.records().single()))
+
+        assertEquals(listOf("peer:bob"), result.rejected.map { it.id })
+        assertTrue(result.applied.isEmpty())
+        val kept = a.records().single()
+        assertEquals(RecordType.TEAM_PEER, kept.type)
+        assertContentEquals("fingerprint".encodeToByteArray(), a.openPayload("peer:bob"))
+    }
+
+    /**
+     * A tombstone is where the two rules part. [store] keeps the id reserved until the record is
+     * physically gone, but a remote record authenticates under this account's key — it was written by
+     * one of our own devices under that same rule — and a rejection is never re-delivered, so
+     * refusing it would strand it until the server chose to compact the id.
+     */
+    @Test
+    fun `mergeRemote takes an id whose local record is a tombstone`() = vaultTest {
+        val a = vault().apply {
+            create("master".toCharArray())
+            put("peer:bob", RecordType.TEAM, "team key".encodeToByteArray())
+            remove("peer:bob")
+        }
+        val b = FileVault("/vault-b.json".toPath(), crypto, deviceId = "device-2", fileSystem = fs, now = { TS })
+        b.createWithDataKey(a.exportDataKey()!!)
+        // Written three times so the pin outranks the tombstone (put + remove left it at version 2);
+        // every version is sealed by the device itself, so all of them authenticate.
+        repeat(3) { b.put("peer:bob", RecordType.TEAM_PEER, "fingerprint".encodeToByteArray()) }
+
+        val result = a.mergeRemote(listOf(b.records().single()))
+
+        assertEquals(listOf("peer:bob"), result.applied.map { it.id })
+        assertEquals(RecordType.TEAM_PEER, a.records().single().type)
+        assertContentEquals("fingerprint".encodeToByteArray(), a.openPayload("peer:bob"))
+    }
+
     @Test
     fun `clearRecords spares the records the keep predicate names`() = vaultTest {
         val v = vault()

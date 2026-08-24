@@ -8,22 +8,29 @@ import app.skerry.shared.sync.KeyedStateStore
 import app.skerry.shared.sync.SyncStateStore
 import app.skerry.shared.sync.SyncException
 import app.skerry.shared.team.AccountIdentity
+import app.skerry.shared.team.AccountKeys
+import app.skerry.shared.team.PeerKeys
+import app.skerry.shared.team.Pin
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamClient
+import app.skerry.shared.team.TeamIdentityStore
 import app.skerry.shared.team.TeamInviteCodec
 import app.skerry.shared.team.TeamInvitePayload
 import app.skerry.shared.team.TeamKeyStore
-import app.skerry.shared.team.TeamIdentityStore
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
+import app.skerry.shared.team.TeamPeerStore
 import app.skerry.shared.team.TeamRole
 import app.skerry.shared.team.TeamScopeRef
-import app.skerry.shared.vault.DataKey
 import app.skerry.shared.team.TeamScopedSyncClient
 import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamSummary
 import app.skerry.shared.team.TeamVaults
 import app.skerry.shared.team.accountKeyFingerprint
+import app.skerry.shared.team.checkPinned
+import app.skerry.shared.team.fetchPinned
+import app.skerry.shared.team.stripShareFields
+import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
@@ -38,7 +45,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import app.skerry.shared.team.stripShareFields
 import app.skerry.shared.terminal.epochMillis
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.runbook.VaultRunbookStore
@@ -49,6 +55,37 @@ enum class TeamsFailure {
     NotConnected, VaultLocked, NoRecipientKey, RecipientKeyChanged, AlreadyInvited, NoSuchAccount,
     KeyMissing, Network, Protocol, Forbidden, VaultUnreadable,
     TooManyRequests, ServerError, AlreadyShared, ScopesUnsupported,
+
+    /**
+     * A peer's published key is not the fingerprint pinned for them — nothing was sealed to it
+     * (#319). Either the key moved, or the pin itself can no longer be read on this device.
+     */
+    PeerKeyUnconfirmed,
+
+    /**
+     * A team or scope key arrived signed by an identity that is not the pinned one, and was ignored
+     * (#319). Said once per pass over the keys, however many of them one pass steps over — and again
+     * on the next pass, because the condition stands until the key is confirmed or withdrawn.
+     */
+    UnconfirmedKeyIgnored,
+
+    /** Accept was reached without the inviter's fingerprint having been shown and confirmed (#319). */
+    InviteUnverified,
+
+    /**
+     * The fingerprint the user just confirmed could not be recorded on this device, so nothing was
+     * sealed to the key it belongs to (#319). Its own value rather than [PeerKeyUnconfirmed]: that
+     * one tells a manager to re-invite the member, which is not something an invitee can do.
+     */
+    PinNotRecorded,
+
+    /**
+     * This device cannot read the Teams identity an invite is sealed to — the record is gone (a
+     * reactivation reconcile drops it and the re-pull has not landed) or no longer decrypts. A
+     * separate value because the alternative is telling the user their colleague sent something
+     * forged when nothing is wrong with the invite (#319).
+     */
+    IdentityUnreadable,
 }
 
 /**
@@ -86,7 +123,32 @@ data class TeamUi(
  * back to [TeamsCoordinator.invite] is what binds the send to the key that was read out loud — the
  * type exists so an invite cannot be sent without one.
  */
-data class InvitePreview(val accountId: String, val fingerprint: String)
+data class InvitePreview(
+    val accountId: String,
+    val fingerprint: String,
+    /**
+     * The account already had a different fingerprint pinned. Confirming this one replaces it, so
+     * the screen has to say so — an identity that moved is either an honest rotation or the server
+     * trying its luck, and only the person on the other end of the trusted channel can tell.
+     */
+    val keyChanged: Boolean = false,
+)
+
+/** What [TeamsCoordinator.acceptPreview] could establish about an invite. */
+sealed interface InviteVerdict {
+    /** Opened and verified: [preview] is the inviter and the fingerprint to confirm out of band. */
+    data class Verified(val preview: InvitePreview) : InviteVerdict
+
+    /** No envelope, or one that does not verify — forged, tampered with, or not addressed to us. */
+    data object Unverified : InviteVerdict
+
+    /**
+     * The check could not be made — [reason] says why (offline, locked vault, server error). Worth
+     * retrying, and carried on the verdict rather than written to [TeamsCoordinator.lastError]: the
+     * banner is the one voice for this, and the error line is a second live region on the same screen.
+     */
+    data class Failed(val reason: TeamsFailure) : InviteVerdict
+}
 
 /**
  * Teams coordinator: ties [TeamClient] (network), the account vault (team keys and identity), per-team
@@ -116,6 +178,7 @@ class TeamsCoordinator(
 
     private val keyStore = TeamKeyStore(vault)
     private val identityStore = TeamIdentityStore(vault, crypto)
+    private val peerStore = TeamPeerStore(vault)
     private val inviteCodec = TeamInviteCodec(crypto)
 
     private val spaces = TeamSpaces(
@@ -127,6 +190,37 @@ class TeamsCoordinator(
         markError = { markError(it) },
         syncSpace = { syncSpace(it) },
     )
+
+    /**
+     * account+fingerprint pairs already reported by [adoptingKeys], so one refusal is announced once
+     * per pass rather than once per scope it appears in. Cleared with the error slot itself
+     * ([resetError]) — the set is a de-duplicator, not a record of what the user has seen.
+     */
+    private val reportedUnconfirmed = mutableSetOf<String>()
+
+    /**
+     * Every seal to another account resolves its keys through here: the fingerprint pinned for that
+     * account, refusing a key that is not the confirmed one instead of trusting the server's latest
+     * answer (#319). What to do with a refusal is the caller's — it answers something the user asked
+     * for, and each caller knows which of its steps it belongs to.
+     */
+    private val sealingKeys: PeerKeyLookup = { s, c, accountId -> peerStore.fetchPinned(s, c, accountId) }
+
+    /**
+     * The same check for keys arriving from the other side — a team rekey envelope, a scope grant.
+     * Two differences, both because the account id here is one the server chose rather than one a
+     * user typed: nothing is pinned on first sight (a pin written from here would let the server fix
+     * its own key as the account's confirmed one), and each account+fingerprint is reported once per
+     * pass — a team with a dozen scopes granted to the same refused account has one thing to say
+     * about it, not a dozen.
+     */
+    private val adoptingKeys: PeerKeyLookup = { s, c, accountId ->
+        peerStore.checkPinned(s, c, accountId).also {
+            if (it is PeerKeys.Unconfirmed && reportedUnconfirmed.add("${it.accountId}:${it.fingerprint}")) {
+                markError(TeamsFailure.UnconfirmedKeyIgnored)
+            }
+        }
+    }
 
     private val opMutex = Mutex()
     private val syncMutex = Mutex()
@@ -170,8 +264,15 @@ class TeamsCoordinator(
     private val _lastError = MutableStateFlow<TeamsFailure?>(null)
     val lastError: StateFlow<TeamsFailure?> = _lastError
 
-    fun clearError() {
+    /**
+     * Empties the error slot — and with it the memory of what was already reported into it. The dedup
+     * in [adoptingKeys] exists only so one refusal doesn't re-fire for every scope of one pass; the
+     * slot is emptied at the start of every operation, and from there the warning has to be earnable
+     * again, or the next pass over the same unconfirmed key would say nothing.
+     */
+    private fun resetError() {
         _lastError.value = null
+        reportedUnconfirmed.clear()
     }
 
     /**
@@ -316,7 +417,8 @@ class TeamsCoordinator(
                 markError(TeamsFailure.NoRecipientKey)
                 null
             } else {
-                InvitePreview(accountId, accountKeyFingerprint(keys.sharing, keys.signing))
+                val fingerprint = accountKeyFingerprint(keys.sharing, keys.signing)
+                InvitePreview(accountId, fingerprint, keyChanged = pinMoved(accountId, fingerprint))
             }
         } catch (e: CancellationException) {
             throw e
@@ -362,6 +464,14 @@ class TeamsCoordinator(
                 teamName = entry.name,
                 epoch = entry.epoch,
             )
+            // The fingerprint was read out loud and the envelope is sealed to the key it belongs to:
+            // pin it, so every later seal to this colleague (a scope grant, a rotation) is held to
+            // the same key instead of trusting the server's next answer (#319).
+            // Written before the send, not after it: a pin this device cannot write — the id is one
+            // the server names, and another record may already hold it — must stop the seal rather
+            // than surface once the team key has left.
+            if (!vault.isUnlocked) return@op markError(TeamsFailure.VaultLocked)
+            if (!peerStore.confirm(accountId, verified.fingerprint)) return@op markError(TeamsFailure.PinNotRecorded)
             c.invite(s, teamId, accountId, role, envelope)
             refreshUnlocked(s, c)
         }
@@ -463,22 +573,39 @@ class TeamsCoordinator(
 
     /**
      * Invite step (invitee side): open+verify the envelope and return the **verified inviter's**
-     * account + fingerprint for out-of-band confirmation before accepting. null if the envelope is
-     * missing/forged (signature invalid, wrong team, or not addressed to us).
+     * account + fingerprint for out-of-band confirmation before accepting.
+     *
+     * The three answers are kept apart. [InviteVerdict.Unverified] is a statement about the envelope
+     * — missing, forged, wrong team, not addressed to us — and it is permanent until a new one is
+     * sent. [InviteVerdict.Failed] means the check did not happen: no connection, a locked vault, a
+     * server that errored. Collapsing the second into the first tells the user their colleague sent
+     * something forged because their Wi-Fi dropped; both refuse Accept, but only one is worth
+     * retrying.
+     *
+     * The verdict IS the report — nothing here writes [lastError]. The banner that asked for it draws
+     * the answer and announces it, and [TeamsErrorLine] is a second live region on the same screen:
+     * routing the same event through both makes a screen reader say two unrelated sentences about one
+     * thing, on the ordinary offline path (WCAG 4.1.3).
      */
-    suspend fun acceptPreview(teamId: String): InvitePreview? {
-        val (s, c) = live() ?: run { markError(TeamsFailure.NotConnected); return null }
-        if (!vault.isUnlocked) { markError(TeamsFailure.VaultLocked); return null }
+    suspend fun acceptPreview(teamId: String): InviteVerdict {
+        val (s, c) = live() ?: return InviteVerdict.Failed(TeamsFailure.NotConnected)
+        if (!vault.isUnlocked) return InviteVerdict.Failed(TeamsFailure.VaultLocked)
+        // Before the envelope, because the envelope cannot be opened without it: an identity this
+        // device cannot read is a local condition, and folding it into the verdict below would
+        // accuse the inviter of forging what they sent correctly.
+        if (identityStore.load() == null) return InviteVerdict.Failed(TeamsFailure.IdentityUnreadable)
         return try {
-            val verified = openVerifiedInvite(s, c, teamId) ?: run { markError(TeamsFailure.KeyMissing); return null }
-            val inviterKeys = c.fetchPublicKey(s, verified.payload.inviterAccountId)
-                ?: run { markError(TeamsFailure.NoRecipientKey); return null }
-            InvitePreview(verified.payload.inviterAccountId, accountKeyFingerprint(inviterKeys.sharing, inviterKeys.signing))
+            val verified = openVerifiedInvite(s, c, teamId) ?: return InviteVerdict.Unverified
+            // The keys the signature was checked against, not a second fetch of the same account: the
+            // server owns the key table, and answering the check with a key it forged the invite
+            // under and the fingerprint with the real colleague's key is the whole attack (#319).
+            val inviter = verified.payload.inviterAccountId
+            val fingerprint = accountKeyFingerprint(verified.inviterKeys.sharing, verified.inviterKeys.signing)
+            InviteVerdict.Verified(InvitePreview(inviter, fingerprint, keyChanged = pinMoved(inviter, fingerprint)))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            markError(e.toFailure())
-            null
+            InviteVerdict.Failed(e.toFailure())
         }
     }
 
@@ -487,12 +614,23 @@ class TeamsCoordinator(
         val (s, c) = live() ?: return markError(TeamsFailure.NotConnected)
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
-            // Reuse the invite acceptPreview already opened+verified (no second listTeams/fetchPublicKey),
-            // falling back to a fresh open if the banner didn't run. Either way the signature was checked:
-            // a server-fabricated invite to a fake team is rejected even if the user skipped the fingerprint.
-            val verified = cachedInvite(teamId) ?: openVerifiedInvite(s, c, teamId)
-                ?: return@op markError(TeamsFailure.Forbidden)
+            // Only the invite the banner opened, verified and *showed*. Accepting without it used to
+            // fall back to a fresh open whose only check is a signature against a server-supplied key,
+            // which is no ceremony at all — and the button was live while the banner still resolved
+            // and after it came back unverifiable (#319).
+            val verified = cachedInvite(teamId) ?: return@op markError(TeamsFailure.InviteUnverified)
             val invite = verified.payload
+            // The fingerprint on the banner was confirmed over a trusted channel: pin the inviter, so
+            // the rotation envelopes they send later are held to the same identity. First, and the
+            // join is abandoned if it cannot be written (another record holds the id the server chose
+            // for this account): a membership whose later envelopes nothing guards is the state this
+            // whole change exists to prevent.
+            if (!vault.isUnlocked) return@op markError(TeamsFailure.VaultLocked)
+            val pinned = peerStore.confirm(
+                invite.inviterAccountId,
+                accountKeyFingerprint(verified.inviterKeys.sharing, verified.inviterKeys.signing),
+            )
+            if (!pinned) return@op markError(TeamsFailure.PinNotRecorded)
             // Placeholder role: the server returns the actual role at refreshUnlocked (listTeams).
             keyStore.put(teamId, invite.teamName, TeamRole.VIEWER, invite.teamKey, invite.epoch)
             c.accept(s, teamId)
@@ -518,6 +656,8 @@ class TeamsCoordinator(
             // walked away with.
             val heldScopes = if (accountId == sess.accountId) emptyList() else scopesHeldBy(sess, c, teamId, accountId)
             c.removeMember(sess, teamId, accountId)
+            var teamRotation: TeamsFailure? = null
+            var scopeRotation: TeamsFailure? = null
             if (accountId == sess.accountId) {
                 // Voluntary leave/decline: we can't rotate (we're gone). A remaining manager rotates.
                 forgetTeamLocally(teamId)
@@ -530,31 +670,38 @@ class TeamsCoordinator(
                 // must not skip them. Unguarded it unwound past the loop, so one 5xx on the rekey
                 // left the removed member holding every scope key they had — the exact hole the
                 // rotation exists to close — with nothing to retry it.
-                var teamRotation: Exception? = null
+                // A rotation also fails without throwing: a recipient whose key is not the confirmed
+                // one is skipped while the rest of it commits. That verdict comes back as a return
+                // value rather than through `lastError` — the slot is written by suspend functions
+                // that hold no lock (the member and grant listings a screen keeps refreshing), so
+                // reading it back here would report whichever of them landed last.
                 try {
-                    rotateTeamKey(sess, c, teamId)
+                    teamRotation = rotateTeamKey(sess, c, teamId)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    teamRotation = e
+                    teamRotation = e.toFailure()
                 }
                 // Each scope rotates independently: one failing must not leave the rest un-rotated,
                 // since every skipped scope is a key the removed member still holds.
                 heldScopes.forEach { scopeId ->
-                    try {
+                    val failure = try {
                         rotateScopeKey(sess, c, TeamScopeRef(teamId, scopeId))
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        markError(e.toFailure())
+                        e.toFailure()
                     }
+                    scopeRotation = moreSerious(scopeRotation, failure)
                 }
-                // Reported last on purpose: `lastError` holds one value, and the team key is the
-                // more serious of the two — a scope failure landing after it would otherwise hide
-                // "the removed member still holds the team key" behind "one scope did not rotate".
-                teamRotation?.let { markError(it.toFailure()) }
             }
             refreshUnlocked(sess, c)
+            // Reported after the reread, not before it: refreshUnlocked writes `lastError` of its own
+            // (an unconfirmed key it steps over), so a verdict published first would be replaced by
+            // the milder one. And folded rather than written twice: the team key is usually the more
+            // serious of the two, but not when its own verdict is a rotation that committed while
+            // skipping a recipient — a scope that did not rotate at all outranks that.
+            moreSerious(teamRotation, scopeRotation)?.let { markError(it) }
         }
     }
 
@@ -596,7 +743,14 @@ class TeamsCoordinator(
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         if (scopesUnsupported) return markError(TeamsFailure.ScopesUnsupported)
         op {
-            spaces.grantScope(s, c, teamId, scopeId, accountId, identityStore.ensure())
+            val recipient = when (val fetched = sealingKeys(s, c, accountId)) {
+                is PeerKeys.Pinned -> TeamRecipient(accountId, fetched.keys)
+                PeerKeys.Unpublished -> return@op markError(TeamsFailure.NoRecipientKey)
+                // Nothing on this screen shows a fingerprint, so there is nothing for the user to
+                // contradict: a member whose key moved is re-invited, and that ceremony confirms it.
+                is PeerKeys.Unconfirmed -> return@op markError(TeamsFailure.PeerKeyUnconfirmed)
+            }
+            spaces.grantScope(s, c, TeamScopeRef(teamId, scopeId), recipient, identityStore.ensure())
             refreshUnlocked(s, c)
         }
     }
@@ -610,12 +764,15 @@ class TeamsCoordinator(
         if (!vault.isUnlocked) return markError(TeamsFailure.VaultLocked)
         op {
             c.revokeScope(s, teamId, scopeId, accountId)
+            var rotation: TeamsFailure? = null
             if (accountId == s.accountId) {
                 spaces.forgetScope(teamId, scopeId) // gave up our own access: the local copy must go
             } else {
-                rotateScopeKey(s, c, TeamScopeRef(teamId, scopeId))
+                rotation = rotateScopeKey(s, c, TeamScopeRef(teamId, scopeId))
             }
             refreshUnlocked(s, c)
+            // After the reread, for the reason spelled out in removeMember: it reports on its own.
+            rotation?.let { markError(it) }
         }
     }
 
@@ -806,7 +963,8 @@ class TeamsCoordinator(
      */
     private suspend fun refreshScopes(s: SyncSession, c: TeamClient, teamId: String, identity: AccountIdentity?): List<TeamScopeUi> =
         try {
-            spaces.refreshScopes(s, c, teamId, identity).also { scopesUnsupported = false }
+            spaces.refreshScopes(s, c, teamId, identity?.let { SealingIdentity(it, adoptingKeys) })
+                .also { scopesUnsupported = false }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -854,7 +1012,14 @@ class TeamsCoordinator(
             val payload = inviteCodec.open(identity.sharing, envelope) ?: continue
             if (payload.teamId != summary.id || payload.inviteeAccountId != s.accountId) continue
             if (payload.epoch <= local.epoch) continue
-            val rotatorKeys = c.fetchPublicKey(s, payload.inviterAccountId) ?: continue
+            // Held to the pin: the envelope is signed with whatever key the server publishes for the
+            // rotator, so an account whose fingerprint was verified once cannot be impersonated by a
+            // key the server swapped in afterwards (#319).
+            val rotatorKeys = when (val fetched = adoptingKeys(s, c, payload.inviterAccountId)) {
+                is PeerKeys.Pinned -> fetched.keys
+                PeerKeys.Unpublished -> continue
+                is PeerKeys.Unconfirmed -> continue // reported by the lookup
+            }
             if (!inviteCodec.verify(payload, rotatorKeys.signing)) continue
             keyStore.rekey(summary.id, payload.teamKey, payload.epoch)
             teamVaults.reset(TeamScopeRef(summary.id)) // old-key file is unreadable under the new key
@@ -865,13 +1030,13 @@ class TeamsCoordinator(
     }
 
     /** Rotate the team key (member removal). See [TeamSpaces.rotate] for the fail-closed contract. */
-    private suspend fun rotateTeamKey(s: SyncSession, c: TeamClient, teamId: String) {
+    private suspend fun rotateTeamKey(s: SyncSession, c: TeamClient, teamId: String): TeamsFailure? {
         val identity = identityStore.ensure()
-        spaces.rotate(
+        return spaces.rotate(
             s, c,
             RotationTarget(
                 ref = TeamScopeRef(teamId),
-                identity = identity,
+                sealing = SealingIdentity(identity, sealingKeys),
                 serverEpoch = { sess, cl -> cl.listTeams(sess).firstOrNull { it.id == teamId }?.keyEpoch },
                 recipients = { sess, cl -> cl.members(sess, teamId).map { it.accountId } },
                 commit = { sess, cl, epoch, envelopes -> cl.rekey(sess, teamId, epoch, envelopes) },
@@ -880,13 +1045,13 @@ class TeamsCoordinator(
     }
 
     /** Rotate one scope's key (grant revoked, or its holder removed from the team). */
-    private suspend fun rotateScopeKey(s: SyncSession, c: TeamClient, ref: TeamScopeRef) {
+    private suspend fun rotateScopeKey(s: SyncSession, c: TeamClient, ref: TeamScopeRef): TeamsFailure? {
         val identity = identityStore.ensure()
-        spaces.rotate(
+        return spaces.rotate(
             s, c,
             RotationTarget(
                 ref = ref,
-                identity = identity,
+                sealing = SealingIdentity(identity, sealingKeys),
                 serverEpoch = { sess, cl -> cl.listScopes(sess, ref.teamId).firstOrNull { it.scopeId == ref.scopeId }?.keyEpoch },
                 recipients = { sess, cl -> cl.scopeGrants(sess, ref.teamId, ref.scopeId).map { it.accountId } },
                 commit = { sess, cl, epoch, envelopes -> cl.rekeyScope(sess, ref.teamId, ref.scopeId, epoch, envelopes) },
@@ -894,7 +1059,8 @@ class TeamsCoordinator(
         )
     }
 
-    internal class VerifiedInvite(val payload: TeamInvitePayload)
+    /** A pending invite whose signature was checked, with the very keys it was checked against. */
+    internal class VerifiedInvite(val payload: TeamInvitePayload, val inviterKeys: AccountKeys)
 
     /**
      * Open the invite envelope for [teamId] and verify the inviter's signature and binding. Returns
@@ -909,7 +1075,7 @@ class TeamsCoordinator(
         if (payload.teamId != teamId || payload.inviteeAccountId != s.accountId) return null
         val inviterKeys = c.fetchPublicKey(s, payload.inviterAccountId) ?: return null
         if (!inviteCodec.verify(payload, inviterKeys.signing)) return null
-        return VerifiedInvite(payload).also { verified ->
+        return VerifiedInvite(payload, inviterKeys).also { verified ->
             verifiedInvites.update { it + (teamId to verified) }
         }
     }
@@ -932,7 +1098,7 @@ class TeamsCoordinator(
         opMutex.withLock {
             _busy.value = true
             try {
-                _lastError.value = null
+                resetError()
                 block()
             } catch (e: CancellationException) {
                 throw e
@@ -942,6 +1108,31 @@ class TeamsCoordinator(
                 _busy.value = false
             }
         }
+    }
+
+    /**
+     * Whether [fingerprint] differs from what is pinned for [accountId] — false when nothing is
+     * pinned yet. Only the two ceremonies that show a fingerprint to a human ask this; everything
+     * else refuses a moved key outright (see [fetchPinned]).
+     */
+    private fun pinMoved(accountId: String, fingerprint: String): Boolean = when (val pin = peerStore.pin(accountId)) {
+        Pin.None -> false
+        // Nothing to compare against, and sending replaces the record: the user is the only one who
+        // can say whether this fingerprint is the colleague's, so they are asked rather than told.
+        Pin.Unreadable -> true
+        is Pin.Known -> pin.fingerprint != fingerprint
+    }
+
+    /**
+     * The more serious of two rotation verdicts, for the single error slot. A rotation that did not
+     * commit outranks one that committed while leaving a recipient out: the first is the removed
+     * member possibly still holding a live key, the second is one colleague to re-confirm.
+     */
+    private fun moreSerious(current: TeamsFailure?, next: TeamsFailure?): TeamsFailure? = when {
+        current == null -> next
+        next == null -> current
+        current == TeamsFailure.PeerKeyUnconfirmed -> next
+        else -> current
     }
 
     private fun markError(reason: TeamsFailure) {

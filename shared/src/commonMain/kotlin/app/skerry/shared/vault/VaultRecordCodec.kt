@@ -51,13 +51,21 @@ internal class VaultRecordCodec<T>(
 
     /**
      * Soft-delete a record (tombstone) — delegates to [Vault.remove]. With a [trash] configured the
-     * value is snapshotted first, in the same transaction: a merge landing between the snapshot and
-     * the tombstone would otherwise let the trash hold a payload the deletion never applied to.
+     * value is snapshotted first, in the same transaction as the removal and the ownership check
+     * below: a merge landing in between would otherwise let the trash hold a payload the deletion
+     * never applied to, or move the id under another store between the check and the tombstone.
+     *
+     * A record of another type under the same id is left alone: [Vault.remove] takes no type, and
+     * several stores file ids the sync server chose, so deleting by id alone would let a "team" the
+     * server named after a verified peer fingerprint tombstone that fingerprint (#319). Only this
+     * store's own records are this store's to delete.
      */
     fun remove(id: String) {
-        val bin = trash ?: return vault.remove(id)
         vault.transaction {
-            get(id)?.let { bin.capture(id, type, label(it)) }
+            // Inside the transaction with the removal it guards: a merge landing between the two
+            // would let this tombstone a record the guard was there to spare.
+            if (vault.records().any { it.id == id && it.type != type }) return@transaction
+            trash?.let { bin -> get(id)?.let { bin.capture(id, type, label(it)) } }
             vault.remove(id)
         }
     }

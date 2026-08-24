@@ -33,6 +33,12 @@ enum class RecordType {
     TEAM_IDENTITY,
 
     /**
+     * Fingerprint of another account's published Teams keys, as this account verified it — the pin
+     * every later seal to that account is held to (see [app.skerry.shared.team.TeamPeerStore]).
+     */
+    TEAM_PEER,
+
+    /**
      * Snapshot of a deleted record kept for the trash window (see [app.skerry.shared.vault.TrashStore]).
      * A separate type, not a fatter tombstone: tombstones stay empty, and clients that don't know
      * this type keep the record verbatim without ever showing it.
