@@ -298,8 +298,8 @@ jobs:
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
       - name: Assemble release APK
-        # versionCode must be a monotonic integer; the tag's semver can't map to one, so use
-        # the run number (grows every run). A dispatch input still overrides it if provided.
+        # versionCode comes from gradle.properties as it stands there (see the note in that file);
+        # a workflow_dispatch input overrides it.
         # Signing passwords are scoped to this step only; version values go through env (not
         # interpolated into the shell) to close the expression-injection surface.
         env:
@@ -307,11 +307,11 @@ jobs:
           SKERRY_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           SKERRY_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           VERSION_NAME: ${{ needs.version.outputs.name }}
-          VERSION_CODE: ${{ needs.version.outputs.code || github.run_number }}
+          VERSION_CODE: ${{ needs.version.outputs.code }}
         run: >
           ./gradlew :androidApp:assembleRelease --stacktrace
           ${VERSION_NAME:+"-Pskerry.versionName=$VERSION_NAME"}
-          "-Pskerry.versionCode=$VERSION_CODE"
+          ${VERSION_CODE:+"-Pskerry.versionCode=$VERSION_CODE"}
 
       - name: Rename APK to match the other artifacts
         # AGP emits androidApp-release.apk. Rename it to the Skerry-<version> scheme the
