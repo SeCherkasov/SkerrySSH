@@ -606,7 +606,7 @@ private fun MobileTeamDetail(
     val rows = remember(team, members, grants, canManage, marks) {
         teamMemberRows(
             team, members, grants?.byScope.orEmpty(), canManage, grants?.complete ?: true,
-            marks?.self, marks?.pins.orEmpty(),
+            marks?.self, marks?.pins.orEmpty(), marks?.refused.orEmpty(),
         )
     }
     val now = remember(tick, members) { epochMillis() }

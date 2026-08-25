@@ -11,6 +11,7 @@ import app.skerry.ui.desktop.runForm
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_teams_peer_confirm
 import app.skerry.ui.generated.resources.lib_teams_peer_confirmed
+import app.skerry.ui.generated.resources.lib_teams_peer_refused
 import app.skerry.ui.mobile.MobileMemberRow
 import org.jetbrains.compose.resources.stringResource
 import kotlin.test.Test
@@ -75,6 +76,40 @@ class PeerTrustBadgeTest {
         assertEquals(ACCOUNT, opened, "a confirmed pin that stopped matching has no other way back")
     }
 
+    /**
+     * The row a refused seal is talking about. Its own mark, not the amber one a first sight wears:
+     * the error says "confirm it in the member list", and on a team of a dozen a mark shared with
+     * every unrelated first sight names nobody (#326).
+     */
+    @Test
+    fun `the refused row wears its own mark and opens the ceremony`() {
+        var opened: String? = null
+        var refusedMark = ""
+        var plainAction = ""
+        runForm({
+            refusedMark = stringResource(Res.string.lib_teams_peer_refused)
+            plainAction = stringResource(Res.string.lib_teams_peer_confirm)
+            TeamMemberTable(
+                rows = listOf(row(PeerTrust.REFUSED, ACCOUNT), row(PeerTrust.FIRST_SIGHT, OTHER)),
+                now = NOW,
+                onChangeRole = {},
+                onRemove = {},
+                onConfirmKey = { opened = it.member.accountId },
+            )
+        }) {
+            waitForIdle()
+            assertEquals(
+                1,
+                onAllNodesWithContentDescription(refusedMark, substring = true).fetchSemanticsNodes().size,
+                "the mark names one row, not every row that is not confirmed",
+            )
+            onNodeWithContentDescription(refusedMark, substring = true).performClick()
+            waitForIdle()
+        }
+        assertEquals(ACCOUNT, opened)
+        assertTrue(refusedMark != plainAction, "a refusal that reads like a first sight names nobody")
+    }
+
     @Test
     fun `the own row and a row whose owner cannot be told wear no mark`() {
         listOf(PeerTrust.SELF, PeerTrust.UNKNOWN).forEach { trust ->
@@ -115,9 +150,9 @@ class PeerTrustBadgeTest {
     }
 }
 
-private fun row(trust: PeerTrust) = TeamMemberRowUi(
+private fun row(trust: PeerTrust, accountId: String = ACCOUNT) = TeamMemberRowUi(
     member = TeamMember(
-        accountId = ACCOUNT,
+        accountId = accountId,
         role = TeamRole.EDITOR,
         status = TeamMemberStatus.ACTIVE,
         createdAt = NOW,
@@ -131,4 +166,5 @@ private fun row(trust: PeerTrust) = TeamMemberRowUi(
 )
 
 private const val ACCOUNT = "bob@example.com"
+private const val OTHER = "carol@example.com"
 private const val NOW = 1_700_000_000_000L

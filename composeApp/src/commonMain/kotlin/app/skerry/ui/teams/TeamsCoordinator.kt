@@ -224,12 +224,16 @@ class TeamsCoordinator(
         syncSpace = { syncSpace(it) },
     )
 
+    /** Which colleagues a lookup refused, and what has already been said about them (#326). */
+    private val refusals = PeerRefusals()
+
     /**
-     * account+fingerprint pairs already reported by [adoptingKeys], so one refusal is announced once
-     * per pass rather than once per scope it appears in. Cleared with the error slot itself
-     * ([resetError]) — the set is a de-duplicator, not a record of what the user has seen.
+     * The rows whose published key is not the one on record for them — what the member list draws
+     * its refused mark from. A mark stands until the account's own key is looked at again, not until
+     * the next operation empties the error slot: a rotation can refuse several colleagues at once,
+     * and dealing with one of them says nothing about the others (#326).
      */
-    private val reportedUnconfirmed = mutableSetOf<String>()
+    val refusedPeers: StateFlow<Set<String>> get() = refusals.accounts
 
     /**
      * Every seal to another account resolves its keys through here: the fingerprint pinned for that
@@ -237,7 +241,7 @@ class TeamsCoordinator(
      * answer (#319). What to do with a refusal is the caller's — it answers something the user asked
      * for, and each caller knows which of its steps it belongs to.
      */
-    private val sealingKeys: PeerKeyLookup = { s, c, accountId -> peerStore.fetchPinned(s, c, accountId) }
+    private val sealingKeys: PeerKeyLookup = { s, c, accountId -> refusals.record(accountId, peerStore.fetchPinned(s, c, accountId)) }
 
     /**
      * The same check for keys arriving from the other side — a team rekey envelope, a scope grant.
@@ -248,10 +252,8 @@ class TeamsCoordinator(
      * about it, not a dozen.
      */
     private val adoptingKeys: PeerKeyLookup = { s, c, accountId ->
-        peerStore.checkPinned(s, c, accountId).also {
-            if (it is PeerKeys.Unconfirmed && reportedUnconfirmed.add("${it.accountId}:${it.fingerprint}")) {
-                markError(TeamsFailure.UnconfirmedKeyIgnored)
-            }
+        refusals.record(accountId, peerStore.checkPinned(s, c, accountId)).also {
+            if (it is PeerKeys.Unconfirmed && refusals.announcing(it)) markError(TeamsFailure.UnconfirmedKeyIgnored)
         }
     }
 
@@ -305,7 +307,7 @@ class TeamsCoordinator(
      */
     private fun resetError() {
         _lastError.value = null
-        reportedUnconfirmed.clear()
+        refusals.forgetAnnounced()
     }
 
     /**
@@ -559,11 +561,12 @@ class TeamsCoordinator(
      * against. Answers the failure to report, or null when it is on record.
      *
      * One place because all three ceremonies — the invite send, the invite accept, the member list's
-     * own confirm — end in the same write and owe the same two refusals.
+     * own confirm — end in the same write and owe the same two refusals. And it is the one write
+     * that retires a refusal mark: the pin now names the key the server publishes.
      */
     private fun confirmShown(accountId: String, shown: InvitePreview): TeamsFailure? =
         when (peerStore.confirm(accountId, shown.fingerprint, shown.pinned)) {
-            ConfirmOutcome.RECORDED -> null
+            ConfirmOutcome.RECORDED -> null.also { refusals.settled(accountId) }
             ConfirmOutcome.MOVED -> TeamsFailure.PinMovedMeanwhile
             ConfirmOutcome.REFUSED -> TeamsFailure.PinNotRecorded
         }
@@ -985,11 +988,15 @@ class TeamsCoordinator(
             .forEach { syncTeam(it.id) }
     }
 
-    /** Lock team vaults (called when the account vault locks — team keys become inaccessible). */
+    /** Lock team vaults and drop what this account held (called on vault reset — another account). */
     fun lock() {
         teamVaults.lockAll()
         _teams.value = emptyList()
         verifiedInvites.value = emptyMap() // drop cached invite payloads (they hold teamKey material)
+        // The refusal marks go with them: they are read off the flow rather than re-derived from a
+        // vault pass, and the member listing of the next account is a single round trip that lands
+        // before anything would empty them.
+        refusals.clear()
     }
 
     // --- internals ---
