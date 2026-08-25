@@ -44,7 +44,20 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
     /** When set, [list] blocks until it completes — lets a test hold a pane's load in flight. */
     var listGate: CompletableDeferred<Unit>? = null
 
+    /**
+     * Listings a tree cannot hold, answered in place of a directory's own children: two entries
+     * under one name, or a directory that lists itself as its own child. Called with the normalized
+     * path [list] was asked for; returning `null` falls back to the tree. A real server is under no
+     * obligation to send a listing that a tree could hold, which is exactly what the callers of
+     * [list] have to survive.
+     */
+    var listAnswer: ((String) -> List<SftpEntry>?)? = null
+
     override suspend fun list(path: String): List<SftpEntry> {
+        listAnswer?.invoke(realpathSync(path))?.let { answer ->
+            listGate?.await()
+            return answer
+        }
         val dir = children[realpathSync(path)] ?: throw SftpException("No directory $path")
         // Answered from the tree as it was when the request arrived, like a real round trip: a
         // listing held in flight must be able to land stale.

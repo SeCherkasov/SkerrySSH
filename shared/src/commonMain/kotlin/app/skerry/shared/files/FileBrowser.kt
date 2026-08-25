@@ -42,6 +42,9 @@ interface FileBrowser {
 
     /**
      * Contents of directory [path], excluding `.` and `..`; order is not guaranteed (the panel sorts).
+     * Paths and names are both distinct — the panel keys its rows by [FileItem.path] and every
+     * operation on a row resolves its name, so a repeat of either is a crash or a wrong file, and a
+     * source that cannot promise it de-duplicates before answering.
      * @throws FileBrowserException if the path doesn't exist, isn't a directory, or access is denied
      */
     suspend fun list(path: String): List<FileItem>

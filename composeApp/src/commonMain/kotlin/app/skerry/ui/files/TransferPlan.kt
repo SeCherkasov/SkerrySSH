@@ -62,7 +62,11 @@ private class DownloadWalk(private val sftp: SftpClient) {
             FileItemType.File -> plan.files += DownloadTask(name, remotePath, localPath, size)
             FileItemType.Directory -> {
                 plan.dirs += localPath
-                sftp.list(remotePath).forEach { child ->
+                // De-duplicated by name, not by path: the walk reads the SFTP client directly rather
+                // than the browser that de-duplicates for the panel, and every local path it writes
+                // is built from the name. A repeat would plan two tasks onto one local file, and the
+                // second would overwrite the first while the progress bar counted two.
+                sftp.list(remotePath).distinctBy { it.name }.forEach { child ->
                     walk(child.name, childPath(remotePath, child.name), child.type.toItemType(), child.size, localPath)
                 }
             }

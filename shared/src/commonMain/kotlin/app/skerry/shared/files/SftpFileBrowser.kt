@@ -19,8 +19,22 @@ class SftpFileBrowser(
 
     override suspend fun realpath(path: String): String = guard { sftp.realpath(path) }
 
+    /**
+     * A listing is entirely the other side's text, and nothing in SFTP promises the entries in one
+     * are distinct — an overlay/merged filesystem repeats a name by construction, a hostile server
+     * by choice. Both halves of an entry have to be unique, for two different reasons:
+     *
+     * - the panel keys its rows by [FileItem.path], and Compose refuses a duplicate key
+     *   mid-composition, which takes the window (desktop) or the activity (Android) with it;
+     * - a row draws the name and never the path, and every operation on a row resolves that name
+     *   against the directory it was listed in, so two rows under one name are two rows the user
+     *   cannot tell apart that act on one file.
+     *
+     * The first entry of each wins: which of them the server meant is unknowable, and keeping the
+     * later one would make the listing depend on packet order.
+     */
     override suspend fun list(path: String): List<FileItem> =
-        guard { sftp.list(path).map { it.toFileItem() } }
+        guard { sftp.list(path).map { it.toFileItem() }.distinctBy { it.path }.distinctBy { it.name } }
 
     override suspend fun mkdir(path: String): Unit = guard { sftp.mkdir(path) }
 

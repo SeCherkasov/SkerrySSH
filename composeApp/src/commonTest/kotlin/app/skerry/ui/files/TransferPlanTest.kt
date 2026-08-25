@@ -5,6 +5,8 @@ import app.skerry.shared.files.FileBrowserFailure
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.files.SftpFileBrowser
+import app.skerry.shared.sftp.SftpEntry
+import app.skerry.shared.sftp.SftpEntryType
 import app.skerry.ui.sftp.FakeSftpClient
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -167,5 +169,26 @@ class TransferPlanTest {
         assertEquals("$REMOTE/a.txt", safeRemoteChild("a.txt", REMOTE))
         assertFailsWith<FileBrowserException> { safeRemoteChild("../a.txt", REMOTE) }
         assertFailsWith<FileBrowserException> { safeRemoteChild("..", REMOTE) }
+    }
+
+    @Test
+    fun `a nested listing that repeats a name is planned once`() = runTest {
+        // The walk reads the SFTP client directly, not the de-duplicated browser, and it builds every
+        // local path from the entry's name — so a repeat inside a directory being downloaded plans two
+        // tasks writing the same local file, and the second silently overwrites the first while the
+        // progress bar counts two.
+        val entry = SftpEntry("dup.txt", "$REMOTE/proj/dup.txt", SftpEntryType.File, 5, 0, 0b110_100_100)
+        val remote = remote().apply {
+            listAnswer = { path -> if (path == "$REMOTE/proj") listOf(entry, entry) else null }
+        }
+
+        val plan = buildDownloadPlan(
+            remote,
+            listOf(item("proj", FileItemType.Directory, "$REMOTE/proj")),
+            localDir = LOCAL,
+            remoteDir = REMOTE,
+        )
+
+        assertEquals(listOf("$LOCAL/proj/dup.txt"), plan.files.map { it.localPath })
     }
 }
