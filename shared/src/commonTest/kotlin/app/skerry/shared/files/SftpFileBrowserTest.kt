@@ -56,6 +56,53 @@ class SftpFileBrowserTest {
     }
 
     @Test
+    fun `two entries under one path collapse into the first`() = runTest {
+        // Nothing in SFTP promises the names in a listing are distinct: a merged/overlay filesystem,
+        // a buggy server or a hostile one can all repeat one. The panel keys its rows by path, and a
+        // repeat there takes the window down mid-composition (#309), so the repeat stops here.
+        client.listResult = listOf(
+            SftpEntry("dup", "/d/dup", SftpEntryType.File, 42, 100, 0b110_100_100),
+            // A different name, so this row is collapsed by the path filter and by nothing else.
+            SftpEntry("other", "/d/dup", SftpEntryType.Directory, 0, 200, 0b111_101_101),
+        )
+
+        val items = browser().list("/d")
+
+        // The first one wins: which of the two the server meant is unknowable, and picking the later
+        // one would make the listing depend on the order the packets happened to arrive in.
+        assertEquals(1, items.size)
+        assertEquals(FileItemType.File, items.single().type)
+        assertEquals(42, items.single().size)
+    }
+
+    @Test
+    fun `two entries under one name collapse too, whatever paths they claim`() = runTest {
+        // A row draws the name and never the path, and every operation on a row resolves that name
+        // against the directory it was listed in (#313). So a listing that repeats a name under two
+        // paths draws two rows the user cannot tell apart, and deleting the second one deletes the
+        // file behind the first: the duplicate-key crash one layer up, with the panel still standing.
+        client.listResult = listOf(
+            SftpEntry("dup", "/d/dup", SftpEntryType.File, 1, 100, 0b110_100_100),
+            SftpEntry("dup", "/d/sub/dup", SftpEntryType.File, 2, 200, 0b110_100_100),
+        )
+
+        val items = browser().list("/d")
+
+        assertEquals(1, items.size)
+        assertEquals("/d/dup", items.single().path)
+    }
+
+    @Test
+    fun `entries the user can act on separately all survive`() = runTest {
+        client.listResult = listOf(
+            SftpEntry("one", "/d/one", SftpEntryType.File, 1, 100, 0b110_100_100),
+            SftpEntry("two", "/d/two", SftpEntryType.File, 2, 200, 0b110_100_100),
+        )
+
+        assertEquals(2, browser().list("/d").size)
+    }
+
+    @Test
     fun `mkdir and rename are delegated`() = runTest {
         browser().mkdir("/d/new")
         browser().rename("/d/a", "/d/b")
