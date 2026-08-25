@@ -12,6 +12,7 @@ import app.skerry.ui.generated.resources.ftail_err_illegal_name
 import app.skerry.ui.generated.resources.ftail_err_local_io
 import app.skerry.ui.generated.resources.ftail_err_open_source
 import app.skerry.ui.generated.resources.ftail_err_open_target
+import app.skerry.ui.generated.resources.ftail_err_session_closed
 import app.skerry.ui.generated.resources.ftail_err_sftp
 import app.skerry.ui.generated.resources.ftail_err_too_large
 import app.skerry.ui.generated.resources.ftail_transfer_error
@@ -50,5 +51,6 @@ fun transferFailureText(failure: FileTransferFailure): String = stringResource(
         FileTransferFailure.IllegalName -> Res.string.ftail_err_illegal_name
         FileTransferFailure.OpenSource -> Res.string.ftail_err_open_source
         FileTransferFailure.OpenTarget -> Res.string.ftail_err_open_target
+        FileTransferFailure.SessionClosed -> Res.string.ftail_err_session_closed
     },
 )

@@ -117,6 +117,11 @@
     <!-- Transfer queue under the panes -->
     <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
     <string name="sftp_queue_done">done</string>
+    <string name="sftp_queue_waiting">waiting</string>
+    <string name="sftp_queue_backlog">Waiting for the channel: %1$d</string>
+    <string name="sftp_queue_cancel">Cancel %1$s</string>
+    <string name="sftp_queue_clear">Clear %1$s</string>
+    <string name="sftp_queue_state">%1$s: %2$s</string>
     <!-- Accessible names for the two inputs the panes draw without a caption (issue #228) -->
     <string name="sftp_path_field">Jump to path</string>
     <string name="sftp_edit_buffer">File contents</string>

@@ -4,6 +4,7 @@ package app.skerry.ui.connection
 
 import app.skerry.shared.files.FileContentBrowser
 import app.skerry.shared.files.FileItem
+import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.mosh.MoshSetupException
@@ -22,6 +23,10 @@ import app.skerry.shared.ssh.SshAuthenticationException
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshHostKeyRejectedException
 import app.skerry.shared.ssh.SshTarget
+import app.skerry.ui.files.FakeUploadSource
+import app.skerry.ui.files.entry
+import app.skerry.ui.files.localFake
+import app.skerry.ui.files.remoteFake
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -526,6 +531,38 @@ class ConnectionControllerTest {
         scope.cancel()
     }
 
+    @Test
+    fun `disconnecting releases a transfer that was still waiting for the channel`() = runTest {
+        // The session teardown is the last thing that can hand a picked file back to the platform:
+        // whatever is still queued when the channel closes never gets a turn (issue #317).
+        val remote = remoteFake().apply { uploadSize = 10 }
+        val gate = CompletableDeferred<Unit>()
+        remote.transferGate = gate
+        val connection = FakeSshConnection(FakeShellChannel(), sftp = remote)
+        val (controller, scope) = controllerWith(FakeSshTransport(connection))
+        controller.connect(testTarget, SshAuth.Password("pw"))
+        advanceUntilIdle()
+
+        val coordinator = controller.openTransferCoordinator(SftpFileBrowser(localFake(), "This Mac"), "prod-web-01")
+        advanceUntilIdle()
+        coordinator.local.toggle(coordinator.local.entry("a.txt"))
+        coordinator.uploadSelection()
+        advanceUntilIdle() // held inside the first transfer
+
+        val source = FakeUploadSource("picked.txt", "/tmp/picked.txt")
+        coordinator.uploadSource(source)
+        advanceUntilIdle()
+        assertEquals(0, source.cleanups)
+
+        controller.disconnect()
+        advanceUntilIdle()
+
+        assertEquals(1, source.cleanups, "the staged copy must not outlive the session that dropped it")
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        scope.cancel()
+    }
 }
 
 /** SFTP client stub: only object identity and the closed flag matter. */

@@ -52,7 +52,6 @@
     <ID>EmptyFunctionBlock:ScreenshotSeeds.kt$&lt;no name provided&gt;${}</ID>
     <ID>EmptyFunctionBlock:SecureScreen.desktop.kt${}</ID>
     <ID>ExceptionRaisedInUnexpectedLocation:FilePicker.android.kt$SafDownloadTarget$override suspend fun finalize(): Unit</ID>
-    <ID>ExceptionRaisedInUnexpectedLocation:TransferCoordinatorTest.kt$TransferCoordinatorTest.FakeDownloadTarget$override suspend fun finalize()</ID>
     <ID>LargeClass:FilePaneControllerTest.kt$FilePaneControllerTest</ID>
     <ID>LargeClass:SessionsControllerTest.kt$SessionsControllerTest</ID>
     <ID>LargeClass:SyncCoordinator.kt$SyncCoordinator</ID>
@@ -111,7 +110,6 @@
     <ID>TooGenericExceptionThrown:HostMetricsControllerTest.kt$HostMetricsControllerTest$throw RuntimeException("boom")</ID>
     <ID>TooGenericExceptionThrown:HostMetricsMonitorControllerTest.kt$HostMetricsMonitorControllerTest$throw RuntimeException("channel dropped")</ID>
     <ID>TooGenericExceptionThrown:PingControllerTest.kt$PingControllerTest$throw RuntimeException("boom")</ID>
-    <ID>TooGenericExceptionThrown:TransferCoordinatorTest.kt$TransferCoordinatorTest.FakeDownloadTarget$throw RuntimeException(it)</ID>
     <ID>UnusedParameter:MobileSnippetsView.kt$mono: FontFamily</ID>
     <ID>UnusedPrivateProperty:ScreenshotFakes.kt$FakeConnection$val tick = polls++</ID>
     <ID>UseCheckOrError:RemoteDesktopScreenStateTest.kt$RemoteDesktopScreenStateTest.&lt;no name provided&gt;$throw IllegalStateException("Socket closed")</ID>

@@ -770,8 +770,13 @@ class ConnectionController(
      * outlives the editor UI, so the channel is closed only once that write is done
      * ([TransferCoordinator.awaitEditorWrites]) — otherwise closing the tab right after Save would
      * leave the remote file truncated (the write is an in-place truncate).
+     *
+     * Transfers still waiting for the channel are released first: their turn will never come, and
+     * each of them may hold a handle the platform gave the user's picker — a document created at a
+     * chosen location, a cached copy of a picked file (issue #317).
      */
     private fun closeSftpQuietly(client: SftpClient, coordinator: TransferCoordinator?) {
+        coordinator?.releaseQueued()
         scope.launch(NonCancellable) {
             runCatching { coordinator?.awaitEditorWrites() }
             runCatching { client.close() }

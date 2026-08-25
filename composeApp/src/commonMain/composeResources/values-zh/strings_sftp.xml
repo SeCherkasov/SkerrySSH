@@ -115,6 +115,11 @@
     <!-- Transfer queue under the panes -->
     <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
     <string name="sftp_queue_done">完成</string>
+    <string name="sftp_queue_waiting">等待中</string>
+    <string name="sftp_queue_backlog">等待通道：%1$d</string>
+    <string name="sftp_queue_cancel">取消 %1$s</string>
+    <string name="sftp_queue_clear">清除 %1$s</string>
+    <string name="sftp_queue_state">%1$s：%2$s</string>
     <string name="sftp_path_field">跳转到路径</string>
     <string name="sftp_edit_buffer">文件内容</string>
 </resources>
