@@ -44,6 +44,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.lib_snippets_run_title
 import app.skerry.ui.app.DesktopView
+import app.skerry.ui.desktop.clickIconWhenEnabled
 import app.skerry.ui.desktop.runDesktopShell
 import app.skerry.ui.runbook.RunbookDraft
 import app.skerry.ui.generated.resources.runbook_toolbar_tip
@@ -339,7 +340,7 @@ class UntrustedSnippetTextTest {
 
             shell.state.showView(DesktopView.Terminal)
             waitForIdle()
-            onNodeWithContentDescription(string(Res.string.runbook_toolbar_tip)).performClick()
+            clickIconWhenEnabled(string(Res.string.runbook_toolbar_tip), shell)
             waitForIdle()
             assertNothingReordered()
 

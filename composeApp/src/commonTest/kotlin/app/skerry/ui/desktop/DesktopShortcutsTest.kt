@@ -1,13 +1,36 @@
 package app.skerry.ui.desktop
 
 import androidx.compose.ui.input.key.Key
+import app.skerry.shared.ssh.SshAuth
+import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.connection.FakeShellChannel
+import app.skerry.ui.connection.FakeSshConnection
+import app.skerry.ui.connection.FakeSshTransport
+import app.skerry.ui.connection.testTarget
+import app.skerry.shared.vnc.VncAuth
+import app.skerry.shared.vnc.VncRemoteDesktop
+import app.skerry.ui.remote.RemoteDesktopController
+import app.skerry.ui.connection.FakeVncTransport
+import app.skerry.ui.session.MAX_PANES
 import app.skerry.ui.session.PaneDirection
+import app.skerry.ui.session.SessionView
+import app.skerry.ui.session.SessionsController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class DesktopShortcutsTest {
 
     private fun match(ctrl: Boolean = false, shift: Boolean = false, alt: Boolean = false, meta: Boolean = false, key: Key) =
@@ -190,5 +213,150 @@ class DesktopShortcutsTest {
             assertFalse(survivesModal(other), "$other must not act on the session under a modal")
         }
         assertFalse(survivesModal(null), "an unmatched chord runs nothing")
+    }
+
+    /**
+     * The add-pane chord is the one refusal in this file that fires over a live terminal, so it
+     * stays consumed: Ctrl+Shift+D let through is EOT on the wire, and the shell it reaches exits.
+     */
+    @Test
+    fun `Add pane is consumed even once the tab cannot take another`() = runTest {
+        val (sessions, scope) = sessions()
+        sessions.open(hostId = "h", title = "h", subtitle = "u@h:22", target = testTarget, auth = auth)
+        advanceUntilIdle()
+        val state = DesktopDesignState()
+        repeat(MAX_PANES - 1) {
+            assertTrue(runDesktopShortcut(DesktopShortcut.AddPane, state, sessions) {}, "pane ${it + 2} of $MAX_PANES")
+        }
+        assertTrue(
+            runDesktopShortcut(DesktopShortcut.AddPane, state, sessions) {},
+            "a full tab has nowhere to put a pane, but the chord must not reach the shell as EOT",
+        )
+        scope.cancel()
+    }
+
+    /**
+     * The chords that nudge a toolbar button are worth no more than the button: with nothing
+     * connected the button refuses, so the chord has to fall through rather than be spent on a
+     * request nobody acts on. Playback is the exception — it opens a file, not a session.
+     */
+    @Test
+    fun `the session chords fall through with nothing connected`() = runTest {
+        val (sessions, scope) = sessions()
+        val state = DesktopDesignState()
+        for (chord in listOf(DesktopShortcut.SnippetPalette, DesktopShortcut.ToggleRecording, DesktopShortcut.CommandPalette)) {
+            assertFalse(runDesktopShortcut(chord, state, sessions) {}, "$chord must fall through with no session")
+        }
+        assertTrue(runDesktopShortcut(DesktopShortcut.PlayRecording, state, sessions) {}, "playback needs no session")
+
+        sessions.open(hostId = "h", title = "h", subtitle = "u@h:22", target = testTarget, auth = auth)
+        advanceUntilIdle()
+        // The half that keeps the gate honest: consuming the chord and doing nothing would satisfy
+        // the refusals above and the two "consumed and nothing more" tests both.
+        val asked = recordRequests(state)
+        for (chord in listOf(DesktopShortcut.SnippetPalette, DesktopShortcut.ToggleRecording, DesktopShortcut.CommandPalette)) {
+            assertTrue(runDesktopShortcut(chord, state, sessions) {}, "$chord acts on a connected session")
+        }
+        advanceUntilIdle()
+        assertEquals(listOf("snippets", "record"), asked, "both buttons are nudged")
+        assertTrue(state.commandPaletteOpen, "the palette has a terminal to insert into")
+        scope.cancel()
+    }
+
+    /**
+     * The palette fills the command line of the pane behind it, so it brings that view forward
+     * first — pressed over the file panel it would otherwise write into a terminal nobody is
+     * looking at, and the command would be found half-typed on the next switch back. Find and the
+     * assistant chord already do this; the palette was the one that did not.
+     */
+    @Test
+    fun `the command palette brings the terminal view forward`() = runTest {
+        val (sessions, scope) = sessions()
+        sessions.open(hostId = "h", title = "h", subtitle = "u@h:22", target = testTarget, auth = auth)
+        advanceUntilIdle()
+        sessions.setActiveView(SessionView.Sftp)
+        val state = DesktopDesignState()
+        assertTrue(runDesktopShortcut(DesktopShortcut.CommandPalette, state, sessions) {})
+        assertEquals(SessionView.Terminal, sessions.active?.view, "the palette writes into the terminal")
+        assertTrue(state.commandPaletteOpen)
+        scope.cancel()
+    }
+
+    /**
+     * Mock mode — no session manager at all, which is how the offscreen screenshot pipeline runs
+     * the app. Nothing is connected there, so nothing is nudged; the chord is consumed all the
+     * same, because that shell draws a terminal too and a fall-through would type Ctrl+Shift+S into
+     * it as XOFF.
+     */
+    @Test
+    fun `the session chords are consumed with no session manager`() = runTest {
+        val state = DesktopDesignState()
+        val asked = recordRequests(state)
+        for (chord in listOf(DesktopShortcut.SnippetPalette, DesktopShortcut.ToggleRecording, DesktopShortcut.CommandPalette)) {
+            assertTrue(runDesktopShortcut(chord, state, sessions = null) {}, "$chord in mock mode")
+        }
+        advanceUntilIdle()
+        assertFalse(state.commandPaletteOpen, "there is no pane for the palette to insert into")
+        assertEquals(emptyList(), asked, "no button to nudge, so nothing is asked for")
+    }
+
+    /**
+     * A remote desktop has no terminal for the chord to act on — and the framebuffer under it holds
+     * the keyboard, so letting the chord through does not lose it, it types it into the guest.
+     *
+     * Consumed and nothing more: swallowing the key is the whole job here. Opening a panel that
+     * cannot reach a terminal would trade a keystroke in the guest for an overlay whose every row
+     * is a no-op, which is the worse half of both.
+     */
+    @Test
+    fun `the session chords are consumed over a remote desktop`() = runTest {
+        val (sessions, scope) = sessions(vnc = FakeVncTransport())
+        sessions.openVnc(hostId = "h", title = "h", subtitle = "h:5900", target = testTarget, auth = VncAuth.None)
+        advanceUntilIdle()
+        val state = DesktopDesignState()
+        val asked = recordRequests(state)
+        for (chord in listOf(DesktopShortcut.SnippetPalette, DesktopShortcut.ToggleRecording, DesktopShortcut.CommandPalette)) {
+            assertTrue(runDesktopShortcut(chord, state, sessions) {}, "$chord must not reach the guest")
+        }
+        advanceUntilIdle()
+        assertFalse(state.commandPaletteOpen, "the command palette has no terminal to insert into here")
+        assertEquals(emptyList(), asked, "no toolbar button is composed over a desktop tab")
+        assertTrue(
+            runDesktopShortcut(DesktopShortcut.FindInTerminal, state, sessions) {},
+            "find must not reach the guest either",
+        )
+        scope.cancel()
+    }
+
+    private val auth = SshAuth.Password("pw")
+
+    /**
+     * Both button-nudging request flows, in the order they fire. `replay = 0`, so the collectors
+     * have to be live before the chord runs — hence the unconfined dispatcher.
+     */
+    private fun TestScope.recordRequests(state: DesktopDesignState): List<String> {
+        val asked = mutableListOf<String>()
+        val live = UnconfinedTestDispatcher(testScheduler)
+        backgroundScope.launch(live) { state.snippetPaletteRequests.collect { asked += "snippets" } }
+        backgroundScope.launch(live) { state.recordingToggleRequests.collect { asked += "record" } }
+        return asked
+    }
+
+    private fun TestScope.sessions(vnc: FakeVncTransport? = null): Pair<SessionsController, CoroutineScope> {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        var n = 0
+        val controller = SessionsController(
+            newId = { "s${n++}" },
+            controllerFactory = {
+                ConnectionController(
+                    transport = FakeSshTransport(FakeSshConnection(FakeShellChannel())),
+                    scope = scope,
+                    newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
+                )
+            },
+            vncControllerFactory = vnc?.let { { RemoteDesktopController(scope) } },
+            openVncSession = vnc?.let { t -> { target, auth -> VncRemoteDesktop(t.connect(target, auth)) } },
+        )
+        return controller to scope
     }
 }

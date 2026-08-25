@@ -89,6 +89,11 @@ internal fun runDesktopShortcut(
         // Opens the form of the section on screen: pressed over the desktops list it creates a
         // remote desktop, over the hosts list a shell.
         DesktopShortcut.NewConnection -> state.openModal(state.section)
+        // A tab that is full, a remote desktop or a recording has nowhere to put another pane, and
+        // the chord is still consumed: unlike the refusals below it fires over a live terminal, and
+        // falling through would send Ctrl+Shift+D on to the shell as EOT and end the session. The
+        // snippet binding it could otherwise have reached is marked reserved in the editor, which
+        // warns rather than refuses — so a fall-through here is not certain to reach nothing.
         DesktopShortcut.AddPane -> if (sessions != null) sessions.addPane() else state.toggleSplit()
         DesktopShortcut.SyncPanes -> if (sessions != null) sessions.toggleSyncInput() else Unit
         // Handled by the pane grid itself ([paneGridDirection]), which sees the key only while the
@@ -102,8 +107,11 @@ internal fun runDesktopShortcut(
         }
         // Search over the buffer of the pane the user is looking at (the focused one on a split).
         // With no terminal on screen there is nothing to search: fall through instead of no-oping,
-        // so the chord can still reach a snippet binding.
+        // so the chord can still reach a snippet binding — except over a remote desktop, where a
+        // fall-through reaches no binding either (that needs a connected terminal too) and is typed
+        // into the guest instead.
         DesktopShortcut.FindInTerminal -> {
+            if (sessions?.activeDesktop != null) return true
             val session = sessions?.active ?: return false
             val terminal = paneTerminal(session.focusedPane.controller.uiState) ?: return false
             // The panel lives inside the terminal view, so bring that view up first — pressed over
@@ -114,15 +122,38 @@ internal fun runDesktopShortcut(
         }
         DesktopShortcut.Lock -> onLock()
         DesktopShortcut.Broadcast -> state.openBroadcast()
-        // These three live in toolbar buttons that own their state; the shortcut nudges them.
-        DesktopShortcut.SnippetPalette -> state.requestSnippetPalette()
-        DesktopShortcut.ToggleRecording -> state.requestRecordingToggle()
+        // These three live in toolbar buttons that own their state; the shortcut nudges them, and
+        // asks for nothing where there is no connected pane to nudge for — the button would refuse,
+        // and a request nobody acts on is a chord spent for nothing. Not airtight: with the tab
+        // switched to Files, Monitor or a runbook the pane is still connected but the terminal
+        // toolbar is out of composition, so the request is emitted into a replay-0 flow and
+        // dropped. Closing that needs the request to become a flag the button reads when it does
+        // compose, which is a change of its own — and playback is not exempt from it but the worst
+        // case of it: its button needs no session, yet it lives in the same toolbar, so ⌘⇧P is
+        // dropped over a remote desktop and over an open recording too.
+        DesktopShortcut.SnippetPalette -> {
+            if (!consumesSessionChord(sessions)) return false
+            if (actsOnSessionChord(sessions)) state.requestSnippetPalette()
+        }
+        DesktopShortcut.ToggleRecording -> {
+            if (!consumesSessionChord(sessions)) return false
+            if (actsOnSessionChord(sessions)) state.requestRecordingToggle()
+        }
         DesktopShortcut.PlayRecording -> state.requestCastOpen()
         // Only over a live terminal: the palette inserts into it, so with nothing to insert into the
-        // key falls through (to the snippet hotkey) instead of opening a dead-end overlay.
+        // key falls through (to the snippet hotkey) instead of opening a dead-end overlay — and over
+        // a remote desktop, where it cannot fall through, it opens nothing at all.
         DesktopShortcut.CommandPalette -> {
-            if (sessions?.activeSession?.controller?.uiState !is ConnectionUiState.Connected) return false
-            state.openCommandPalette()
+            if (!consumesSessionChord(sessions)) return false
+            if (actsOnSessionChord(sessions)) {
+                // The picked command lands on the pane's command line, so bring that view up first
+                // — the same reason find and the assistant do it. Pressed over the file panel the
+                // command would otherwise be typed where nobody is looking and found on the way
+                // back.
+                state.clearOverlay()
+                sessions?.setActiveView(SessionView.Terminal)
+                state.openCommandPalette()
+            }
         }
         DesktopShortcut.OpenAssistant -> {
             // The panel lives beside the terminal, so bring that view up first — pressed over SFTP
@@ -135,6 +166,24 @@ internal fun runDesktopShortcut(
     }
     return true
 }
+
+/**
+ * Whether a chord that nudges a session button has something to act on — a connected pane, which is
+ * the same terminal its button reads before drawing itself enabled.
+ */
+private fun actsOnSessionChord(sessions: SessionsController?): Boolean =
+    sessions?.activeSession?.controller?.uiState is ConnectionUiState.Connected
+
+/**
+ * Whether the chord is consumed even where [actsOnSessionChord] says there is nothing to do. Two
+ * cases: a remote-desktop tab, where the framebuffer holds the keyboard, so a chord let through is
+ * not lost but typed into the guest; and the preview shell (no session manager at all), which draws
+ * a terminal of its own for the same reason. Swallowing the key is the whole job there — the caller
+ * still asks [actsOnSessionChord] before doing anything, because a panel that can reach no terminal
+ * is a worse answer than a key that does nothing.
+ */
+private fun consumesSessionChord(sessions: SessionsController?): Boolean =
+    sessions == null || sessions.activeDesktop != null || actsOnSessionChord(sessions)
 
 /**
  * The terminal of a pane's connection state, or `null` if it has none. A dropped session keeps its

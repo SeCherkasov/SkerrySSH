@@ -31,6 +31,7 @@ import app.skerry.ui.app.LocalSharedSessions
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.design.ChipButton
 import app.skerry.ui.design.GhostButton
+import app.skerry.ui.design.CloseWhenUnavailable
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.InitialsAvatar
 import app.skerry.ui.design.Toggle
@@ -99,7 +100,9 @@ fun ShareSessionButton(
     LaunchedEffect(live, terminal?.cols, terminal?.rows) {
         if (live) controller?.announceGeometry()
     }
-    LaunchedEffect(requests, terminal) { requests?.collect { if (live || terminal != null) open = true } }
+    // `live` is a key too, not just a captured value: a stream stopped without the terminal changing
+    // would otherwise leave this collector opening the panel on a share that is already over.
+    LaunchedEffect(requests, terminal, live) { requests?.collect { if (live || terminal != null) open = true } }
     // A pane that is watching someone else's session gets the viewer's panel behind the same button:
     // its only control is asking the host for permission to type. Relaying a colleague's stream on
     // to a third team is never offered — the pane's own flag decides that, not the viewer registry,
@@ -112,18 +115,19 @@ fun ShareSessionButton(
     if (session?.controller?.isWatched == true) return
     if (controller == null) return
     Box {
+        // Nothing to share without a live session, but a stream already running keeps the control
+        // that stops it. Disabled rather than dimmed-and-live: the guard used to sit in the handler,
+        // where the press was taken and dropped.
+        val canShare = live || terminal != null
+        CloseWhenUnavailable(canShare) { open = false }
         IconBtn(
             name = if (live) "cast_connected" else "cast",
-            tint = when {
-                live -> Skerry.colors.cyanBright
-                terminal != null -> Skerry.colors.dim
-                // Nothing to share without a live session — dimmed, and the panel doesn't open.
-                else -> Skerry.colors.faint
-            },
-            onClick = { if (live || terminal != null) open = !open },
+            tint = if (live) Skerry.colors.cyanBright else Skerry.colors.dim,
+            onClick = { open = !open },
+            enabled = canShare,
             tooltip = stringResource(if (live) Res.string.share_session_stop else Res.string.share_session),
         )
-        if (open) {
+        if (open && canShare) {
             Popup(
                 alignment = Alignment.TopEnd,
                 onDismissRequest = { open = false },

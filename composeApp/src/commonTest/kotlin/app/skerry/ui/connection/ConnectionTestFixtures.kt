@@ -7,6 +7,7 @@ package app.skerry.ui.connection
 // kept around.
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
@@ -19,7 +20,14 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshTransport
+import app.skerry.shared.vnc.VncAuth
+import app.skerry.shared.vnc.VncPointerEvent
+import app.skerry.shared.vnc.VncQuality
+import app.skerry.shared.vnc.VncSession
+import app.skerry.shared.vnc.VncTransport
+import app.skerry.shared.vnc.VncUpdate
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -142,4 +150,33 @@ internal class FakeShellChannel : ShellChannel {
         emissions.close()
     }
 
+}
+
+/** VNC transport that returns a fresh fake session on each connect; list is used to verify closes. */
+internal class FakeVncTransport : VncTransport {
+    val sessions = mutableListOf<FakeVncSession>()
+    override suspend fun connect(target: SshTarget, auth: VncAuth): VncSession =
+        FakeVncSession().also { sessions += it }
+}
+
+internal class FakeVncSession : VncSession {
+    var closed = false
+        private set
+
+    override val serverName = "desk"
+    override val framebuffer = RemoteFramebuffer(1, 1)
+
+    // Never emits: keeps the read loop parked (like a quiet server) until the scope is cancelled.
+    override val updates: Flow<VncUpdate> = flow { awaitCancellation() }
+
+    override suspend fun sendPointer(event: VncPointerEvent) {}
+    override suspend fun sendKey(keySym: Long, down: Boolean) {}
+    override suspend fun sendClientCutText(text: String) {}
+    override suspend fun requestUpdate(incremental: Boolean) {}
+    override suspend fun setQuality(quality: VncQuality) {}
+    override suspend fun setDesktopSize(width: Int, height: Int) {}
+    override suspend fun setLocalCursor(enabled: Boolean) {}
+    override suspend fun close() {
+        closed = true
+    }
 }

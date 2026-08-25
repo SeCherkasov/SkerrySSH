@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -20,7 +21,10 @@ import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.app.LocalSessionShare
+import app.skerry.ui.app.LocalRunbookRunner
+import app.skerry.ui.app.UiTags
 import app.skerry.ui.app.LocalSessions
+import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.app.LocalTeams
 import app.skerry.ui.design.rememberModalPresence
 import app.skerry.ui.design.IconBtn
@@ -42,8 +46,10 @@ import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.generated.resources.shell_tip_sync_panes
 import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.runbook.RunbookPaletteButton
+import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.share.ShareSessionButton
+import app.skerry.ui.share.ShareUiState
 import app.skerry.ui.share.shareableTeams
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.StringResource
@@ -72,6 +78,48 @@ internal enum class ToolbarAction(val group: ToolbarGroup, val needsSession: Boo
     Snippets(ToolbarGroup.Session, needsSession = true),
     Monitor(ToolbarGroup.Workspace, needsSession = true),
     Files(ToolbarGroup.Workspace, needsSession = true),
+}
+
+/**
+ * Whether [action] can act on the pane in focus, for both of the places one action is drawn: the
+ * button in the row and, once the row is too narrow to hold it, the row of the overflow menu. One
+ * answer for both — a menu row that fires a request the parked button then drops is the same dead
+ * press the buttons themselves stopped making.
+ *
+ * The rule itself is a plain function over booleans, and this reads the composition for them: the
+ * buttons' own request collectors run inside a `LaunchedEffect` and cannot call a composable, and a
+ * rule that only exists inside one is a rule no test can enumerate.
+ */
+@Composable
+internal fun toolbarActionEnabled(action: ToolbarAction, active: Session?): Boolean {
+    val runner = LocalRunbookRunner.current
+    return toolbarActionEnabled(
+        action,
+        hasTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal != null,
+        runnerIdle = runner != null && !runner.active && runner.pending == null,
+        shareLive = LocalSessionShare.current?.state is ShareUiState.Live,
+    )
+}
+
+/**
+ * The rule behind [toolbarActionEnabled], over the three facts the composition supplies:
+ * [hasTerminal] — the pane in focus is connected, [runnerIdle] — no runbook is mid-run, and
+ * [shareLive] — a stream is on the air right now.
+ */
+internal fun toolbarActionEnabled(
+    action: ToolbarAction,
+    hasTerminal: Boolean,
+    runnerIdle: Boolean,
+    shareLive: Boolean,
+): Boolean = when (action) {
+    // Nothing to send into without a connected session.
+    ToolbarAction.Snippets, ToolbarAction.Record -> hasTerminal
+    // Same, plus one run at a time.
+    ToolbarAction.Runbook -> hasTerminal && runnerIdle
+    // Nothing to share without a connected session — but a stream already running keeps the control
+    // that stops it, and on a narrow toolbar the menu row is the only copy of that control left.
+    ToolbarAction.Share -> hasTerminal || shareLive
+    ToolbarAction.Files, ToolbarAction.Monitor, ToolbarAction.Play -> true
 }
 
 /**
@@ -226,12 +274,16 @@ internal fun RowScope.SessionActions(
     // Add pane: live mode puts another independent session on the active tab's grid (up to
     // MAX_PANES); mock/preview toggles the demo split. Dimmed and inert once the tab is full — the
     // same treatment the info button gets when there is nothing for it to open.
-    val canAddPane = tab?.layout?.isFull != true && tab?.isPlayer != true
+    // The tab's own answer, not a second copy of it: `addPane` refuses a full tab, a remote desktop
+    // and a recording, and the copy this replaces had lost one of the three. A remote-desktop tab
+    // does not reach this line today (`activeTerminal` filters it out, so the button is not drawn),
+    // which is exactly why a second copy of the rule could lose that arm unnoticed.
+    val canAddPane = tab?.acceptsPane != false
     if (hasSession) {
         IconBtn(
             "splitscreen_right",
-            onClick = { if (sessions == null) state.toggleSplit() else if (canAddPane) sessions.addPane() },
-            tint = if (canAddPane) Skerry.colors.dim else Skerry.colors.faint,
+            onClick = { if (sessions == null) state.toggleSplit() else sessions.addPane() },
+            enabled = canAddPane,
             tooltip = stringResource(Res.string.shell_tip_add_pane),
         )
     }
@@ -286,7 +338,14 @@ internal fun RowScope.SessionActions(
         )
     }
     if (hidden.isNotEmpty()) {
-        OverflowActionsButton(hidden, state, tabKey = tab?.id, onOpenSftp = openSftp, onOpenMonitor = openMonitor)
+        OverflowActionsButton(
+            hidden,
+            state,
+            tabKey = tab?.id,
+            enabled = { toolbarActionEnabled(it, active) },
+            onOpenSftp = openSftp,
+            onOpenMonitor = openMonitor,
+        )
     }
     // Power: closes the active session (live path) with a confirmation prompt (destructive, no
     // auto-reconnect); no-op stub in mock mode. With no session open there is nothing to close.
@@ -386,12 +445,18 @@ internal fun OverflowActionsButton(
     hidden: Set<ToolbarAction>,
     state: DesktopDesignState,
     tabKey: Any?,
+    enabled: @Composable (ToolbarAction) -> Boolean,
     onOpenSftp: () -> Unit,
     onOpenMonitor: () -> Unit,
 ) {
     var open by remember(tabKey) { mutableStateOf(false) }
     Box {
-        IconBtn("more_horiz", onClick = { open = !open }, tooltip = stringResource(Res.string.shell_tip_more_actions))
+        IconBtn(
+            "more_horiz",
+            modifier = Modifier.testTag(UiTags.TOOLBAR_OVERFLOW),
+            onClick = { open = !open },
+            tooltip = stringResource(Res.string.shell_tip_more_actions),
+        )
         if (open) {
             Popup(alignment = Alignment.TopEnd, onDismissRequest = { open = false }, properties = PopupProperties(focusable = true)) {
                 // Same as [PaneMenu]: a focusable popup holds the keyboard, so it counts as a modal.
@@ -408,7 +473,7 @@ internal fun OverflowActionsButton(
                             ToolbarAction.Play -> state::requestCastOpen
                             ToolbarAction.Share -> state::requestSharePanel
                         }
-                        MenuActionRow(icon = action.icon, label = stringResource(action.label)) {
+                        MenuActionRow(icon = action.icon, label = stringResource(action.label), enabled = enabled(action)) {
                             open = false
                             run()
                         }

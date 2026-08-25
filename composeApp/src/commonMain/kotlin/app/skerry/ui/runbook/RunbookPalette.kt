@@ -42,6 +42,7 @@ import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.fieldName
 import kotlinx.coroutines.flow.SharedFlow
+import app.skerry.ui.design.CloseWhenUnavailable
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.Sym
@@ -58,6 +59,8 @@ import app.skerry.ui.generated.resources.runbook_toolbar_tip
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
+import app.skerry.ui.terminal.ToolbarAction
+import app.skerry.ui.terminal.toolbarActionEnabled
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
@@ -79,11 +82,23 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
     var open by remember(active) { mutableStateOf(false) }
     // Same signal channel the snippet palette uses: the shortcut and the overflow menu reach the
     // palette without this button having to be on screen (it may be parked out of a narrow toolbar).
-    LaunchedEffect(requests, terminal) { requests?.collect { if (terminal != null) open = true } }
+    // The same condition the button carries, not half of it: a request that arrives mid-run would
+    // otherwise set the flag for a popup the render guard then drops without a word.
+    LaunchedEffect(requests, terminal) {
+        requests?.collect { if (terminal != null && runner?.let { !it.active && it.pending == null } == true) open = true }
+    }
     if (manager == null || runner == null) return
     // While this tab is part of a run, the icon is the way back to the run screen rather than a
     // palette: a second runbook can't start anyway, and the run is what the icon now stands for.
     val inRun = active?.id?.let(runner::runIn)
+    // Nothing to run into without a connected session, and one run at a time: the button is
+    // disabled rather than offering a list that can't start anything. Disabled, not merely dimmed —
+    // a guard inside the handler would still take the press and the focus with nothing to show.
+    val enabled = toolbarActionEnabled(ToolbarAction.Runbook, active)
+    // Ahead of the early return below on purpose: that return takes this out of the composition for
+    // the whole length of a run started from the Runbooks section, which is exactly when the flag
+    // has to be cleared — otherwise the palette is back the moment the run ends.
+    CloseWhenUnavailable(enabled && inRun == null) { open = false }
     if (inRun != null) {
         val sessions = LocalSessions.current
         IconBtn(
@@ -94,29 +109,32 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
         )
         return
     }
-    // Nothing to run into without a connected session, and one run at a time: the button dims and
-    // doesn't open rather than offering a list that can't start anything.
-    val enabled = terminal != null && !runner.active && runner.pending == null
     Box {
         IconBtn(
             "checklist",
-            onClick = { if (enabled) open = !open },
-            tint = if (enabled) Skerry.colors.dim else Skerry.colors.faint,
+            onClick = { open = !open },
+            enabled = enabled,
             tooltip = stringResource(Res.string.runbook_toolbar_tip),
         )
         if (open && enabled) {
-            Popup(
-                alignment = Alignment.TopEnd,
-                onDismissRequest = { open = false },
-                properties = PopupProperties(focusable = true),
-            ) {
-                RunbookPalette(manager) { entry ->
-                    runner.requestStart(
-                        entry.runbook,
-                        runbookTarget(active.id, terminal, active.controller),
-                        recording = terminal.recording,
-                    )
-                    open = false
+            // The pane and its terminal spelled out again rather than leaned on through `enabled`:
+            // the palette hands both to the runner, and the compiler cannot see through a predicate.
+            val pane = active
+            val live = terminal
+            if (pane != null && live != null) {
+                Popup(
+                    alignment = Alignment.TopEnd,
+                    onDismissRequest = { open = false },
+                    properties = PopupProperties(focusable = true),
+                ) {
+                    RunbookPalette(manager) { entry ->
+                        runner.requestStart(
+                            entry.runbook,
+                            runbookTarget(pane.id, live, pane.controller),
+                            recording = live.recording,
+                        )
+                        open = false
+                    }
                 }
             }
         }

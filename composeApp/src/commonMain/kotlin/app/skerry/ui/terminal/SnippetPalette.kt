@@ -40,6 +40,7 @@ import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.design.fieldName
 import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.connection.ConnectionUiState
+import app.skerry.ui.design.CloseWhenUnavailable
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.NOTE_PEEK_LINES
@@ -82,9 +83,12 @@ internal fun SnippetPaletteButton(active: Session?, requests: SharedFlow<Unit>? 
     // be a dead-end popup, so the key falls through to whatever else wants it.
     LaunchedEffect(requests, terminal) { requests?.collect { if (terminal != null) open = true } }
     if (manager == null) return
+    val enabled = toolbarActionEnabled(ToolbarAction.Snippets, active)
+    CloseWhenUnavailable(enabled) { open = false }
     Box {
-        // Nowhere to run without a connected session — the button is dimmed and doesn't open.
-        IconBtn("bolt", onClick = { if (terminal != null) open = !open }, tint = if (terminal != null) Skerry.colors.dim else Skerry.colors.faint, tooltip = stringResource(Res.string.shell_tip_snippets))
+        // Nowhere to run without a connected session: disabled rather than dimmed-but-live, so the
+        // press is refused instead of landing on a handler that drops it.
+        IconBtn("bolt", onClick = { open = !open }, enabled = enabled, tooltip = stringResource(Res.string.shell_tip_snippets))
         if (open && terminal != null) {
             Popup(
                 alignment = Alignment.TopEnd,

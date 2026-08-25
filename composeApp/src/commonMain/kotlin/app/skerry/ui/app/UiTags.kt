@@ -44,6 +44,13 @@ object UiTags {
      */
     const val SESSION_TABS: String = "nav.sessionTabs"
 
+    /**
+     * The work bar's overflow button, holding the actions too wide for the row. Tagged because
+     * "More actions" is also the name of every host row's menu button, and the two are told apart
+     * by where they are, which a name cannot say.
+     */
+    const val TOOLBAR_OVERFLOW: String = "nav.toolbarOverflow"
+
     // --- mobile: what navigates ---
 
     /** Item of the bottom tab bar. */

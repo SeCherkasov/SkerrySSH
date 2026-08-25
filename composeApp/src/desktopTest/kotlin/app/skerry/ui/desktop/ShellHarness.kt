@@ -23,20 +23,26 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isEnabled
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.runComposeUiTest
+import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import app.skerry.ui.AppDependencies
@@ -145,10 +151,17 @@ internal fun seededRunbooks(): RunbookManager {
     return RunbookManager(store) { "run-${seq++}" }
 }
 
+/** The window every shell test gets unless it asks for another — `runComposeUiTest`'s own default. */
+internal const val DEFAULT_SHELL_WIDTH = 1024
+
 /** Desktop shell over the seeded catalog. [withSessions] opens two demo tabs over a fake transport. */
 @OptIn(ExperimentalTestApi::class)
 internal fun runDesktopShell(
     withSessions: Boolean = true,
+    // Width of the test window. The toolbar collapses its actions into an overflow menu once they
+    // no longer fit beside the work bar's title, and that menu is a second rendering of the same
+    // actions — reachable in a test only by making the window too small for the row.
+    windowWidth: Int = DEFAULT_SHELL_WIDTH,
     // Custom window chrome, for the tests that drive the titlebar's window gestures. null (the
     // default) renders the decorated-window titlebar, like the offscreen previews.
     windowChrome: WindowChrome? = null,
@@ -156,7 +169,7 @@ internal fun runDesktopShell(
     // test scene's own [WindowInfo] is hardcoded focused, so there is no other way to drive it.
     windowInfo: WindowInfo? = null,
     body: ComposeUiTest.(DesktopShell) -> Unit,
-) = runComposeUiTest {
+) = runDesktopComposeUiTest(width = windowWidth) {
     val keyGenerator = BouncyCastleSshKeyGenerator()
     val credentials = seededVault(keyGenerator)
     val hosts = seededHosts(boundCredentialId = credentials.credentials.firstOrNull()?.id)
@@ -267,6 +280,8 @@ internal class MobileShell(
     val tunnels: TunnelManager,
     val runbooks: RunbookManager,
     val ai: AiAssistantController,
+    /** Null unless the run asked for sessions — the sheets that outlive one are tested through it. */
+    val sessions: SessionsController? = null,
 )
 
 /**
@@ -332,7 +347,7 @@ internal fun runMobileShell(
                 s is ConnectionUiState.Connected
             }
         }
-        body(MobileShell(hosts, state, snippets, tunnels, mobileRunbooks, ai))
+        body(MobileShell(hosts, state, snippets, tunnels, mobileRunbooks, ai, sessions))
     } finally {
         runner.close()
         sessions?.disconnectAll()
@@ -447,6 +462,57 @@ internal fun string(resource: StringResource, vararg args: Any): String = runBlo
  * are already carrying other Gradle workers — a timeout there fails a correct build.
  */
 internal const val CROSS_THREAD_TIMEOUT_MS = 5_000L
+
+/**
+ * Clicks the icon button named [name] once it is enabled.
+ *
+ * The session-scoped toolbar actions are disabled until the composition has caught up with the
+ * connection, and the seeded session connects on a background thread: the model says Connected
+ * before the frame that redraws the toolbar has run. A press on a disabled button is refused with
+ * nothing to show for it, so a test that clicks the instant the harness hands it the shell loses
+ * the click and fails ten seconds later on whatever the click was supposed to open, with nothing in
+ * the message pointing back here. Waiting on the button's own state rather than on a frame count is
+ * what makes that impossible rather than unlikely.
+ *
+ * Enabled, not [androidx.compose.ui.test.hasClickAction]: Compose keeps the `OnClick` action on a
+ * disabled clickable and marks it `Disabled` beside it, so matching on the action would go through
+ * on the very frame this waits out.
+ */
+@OptIn(ExperimentalTestApi::class)
+internal fun ComposeUiTest.clickIconWhenEnabled(name: String, shell: DesktopShell? = null) {
+    // `!isSelectable()` because the nav rail's own entries carry the same names as some of the
+    // toolbar's buttons ("Snippets" is both), and only the rail's are selectable navigation targets.
+    val button = hasContentDescription(name) and isEnabled() and !isSelectable()
+    try {
+        waitUntil("\"$name\" to become clickable", timeoutMillis = 10_000) {
+            onAllNodes(button).fetchSemanticsNodes().isNotEmpty()
+        }
+    } catch (timeout: ComposeTimeoutException) {
+        // "Condition still not satisfied after 10000ms" names neither the button nor the reason it
+        // stayed disabled, and this one only ever fails on a loaded runner — where a re-run to look
+        // closer costs the whole suite. The tree and the session already hold the answer.
+        throw AssertionError("\"$name\" never became enabled. ${diagnose(name, shell)}", timeout)
+    }
+    onNode(button).performClick()
+}
+
+/** What the button and the session behind it looked like when the wait above ran out. */
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.diagnose(name: String, shell: DesktopShell?): String {
+    val nodes = onAllNodes(hasContentDescription(name) and !isSelectable()).fetchSemanticsNodes()
+    val drawn = nodes.joinToString(" | ") { node ->
+        "bounds=${node.boundsInRoot} disabled=${node.config.contains(SemanticsProperties.Disabled)}"
+    }
+    val pane = shell?.sessions?.active?.focusedPane
+    val session = pane?.let { "pane=${it.id} state=${it.controller.uiState::class.simpleName}" } ?: "no active pane"
+    val runner = shell?.runner?.let { "runnerActive=${it.active} pending=${it.pending != null} phase=${it.phase}" } ?: ""
+    // Whether one more settled frame flips it: a button still disabled after the tree goes idle is
+    // a predicate that says no, not a frame the wait above failed to pump.
+    waitForIdle()
+    val afterIdle = onAllNodes(hasContentDescription(name) and isEnabled() and !isSelectable())
+        .fetchSemanticsNodes().size
+    return "${nodes.size} node(s) carry that name: $drawn. $session $runner enabledAfterIdle=$afterIdle"
+}
 
 /**
  * Every string the tree draws, in order. Unmerged: a text node absorbed into a clickable ancestor's

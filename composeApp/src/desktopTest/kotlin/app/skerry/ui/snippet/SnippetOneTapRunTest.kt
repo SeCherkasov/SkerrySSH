@@ -2,10 +2,9 @@ package app.skerry.ui.snippet
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import app.skerry.ui.desktop.clickIconWhenEnabled
 import app.skerry.ui.desktop.runDesktopShell
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
@@ -35,12 +34,7 @@ class SnippetOneTapRunTest {
         shell.snippets.save(SnippetDraft(label = "Rollout", command = "echo " + "x".repeat(300)))
         waitForIdle()
 
-        // The nav rail's Snippets destination carries the same name — the one wanted here is the
-        // toolbar button over the terminal, which has no rail tag.
-        onNode(
-            hasContentDescription(string(Res.string.shell_tip_snippets)) and
-                !hasTestTag("nav.rail.view.Snippets"),
-        ).performClick()
+        clickIconWhenEnabled(string(Res.string.shell_tip_snippets), shell)
         waitForIdle()
         onNodeWithText("Rollout").performClick()
         waitForIdle()
