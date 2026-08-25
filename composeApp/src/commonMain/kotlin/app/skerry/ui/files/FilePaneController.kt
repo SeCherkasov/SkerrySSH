@@ -95,11 +95,25 @@ class FilePaneController(
      * in [selectTo] stay consistent with [selection] writes in the same transaction.
      */
     private var anchor: String? by mutableStateOf(null)
-    private var busy = false
 
     /**
-     * Serializes the actual work of [op]/[queuedOp]. [busy] alone can only drop a racing operation;
-     * the gate is what lets a queued one wait for the in-flight listing to finish.
+     * Whether a pane operation (listing, navigation, create/delete/rename) is running or waiting its
+     * turn. Snapshot state, so a screen can say so: every operation costs a round trip, and over a
+     * phone link a listing that just sits there is indistinguishable from one that did nothing.
+     */
+    val busy: Boolean get() = pending > 0
+
+    /**
+     * Operations requested and not yet finished — the one owner of [busy]. A flag set by [op] and
+     * cleared by [queuedOp] would let one path clear what the other still owns, and the pane would
+     * report itself idle with a listing in flight.
+     */
+    private var pending: Int by mutableStateOf(0)
+
+    /**
+     * Serializes the actual work of [op]/[queuedOp]: the pane scope is main-confined in production,
+     * but nothing in the contract says so, and the gate is what makes a queued operation wait for
+     * the in-flight listing rather than interleave with it.
      */
     private val gate = Mutex()
 
@@ -176,24 +190,40 @@ class FilePaneController(
         loadedEntries().firstOrNull { it.path == resolved }?.let { setCursor(it) }
     }
 
-    /** Reloads the current directory. */
+    /** Reloads the current directory. Dropped while the pane works — see [op]. */
     fun refresh() = op { reload() }
 
+    /**
+     * Reloads the current directory without being droppable, for the callers whose listing the
+     * source has already changed underneath: a finished transfer, a saved edit. [refresh] is a
+     * keypress and may be dropped; this one may not — nobody is going to press it again, and the
+     * pane would go on showing files a move has already taken away (same failure as issue #327).
+     */
+    fun reloadNow() = queuedOp { reload() }
+
     /** Creates subdirectory [name] in the current directory and moves the cursor to it. */
-    fun mkdir(name: String) = op {
-        val created = childPath(name)
-        browser.mkdir(created)
-        reload()
-        // An active name filter can hide the just-created directory — creating something the user
-        // can't see reads as a silent failure, so drop the filter to reveal it.
-        if (nameFilter.isNotEmpty() && loadedEntries().none { it.path == created }) setNameFilter("")
-        loadedEntries().firstOrNull { it.path == created }?.let { setCursor(it) }
+    fun mkdir(name: String) {
+        val dir = path
+        queuedOp {
+            val created = childPath(dir, name)
+            browser.mkdir(created)
+            reload()
+            if (path != dir) return@queuedOp
+            // An active name filter can hide the just-created directory — creating something the user
+            // can't see reads as a silent failure, so drop the filter to reveal it.
+            if (nameFilter.isNotEmpty() && loadedEntries().none { it.path == created }) setNameFilter("")
+            loadedEntries().firstOrNull { it.path == created }?.let { setCursor(it) }
+        }
     }
 
-    /** Deletes [item] (directories recursively). */
-    fun delete(item: FileItem) = op {
-        browser.delete(item)
-        reload()
+    /**
+     * Deletes [item] (directories recursively) — the single-row path the phone's context menu uses.
+     * Same rule as [deleteAll]: the path is rebuilt from the directory and a validated name, never
+     * from the one the server put in the listing (issue #313).
+     */
+    fun delete(item: FileItem) {
+        val dir = path
+        queuedOp { deleteAll(dir, listOf(item)) }
     }
 
     /**
@@ -208,25 +238,68 @@ class FilePaneController(
      * Deletes all [operands] (F8): selected rows, or the cursored one. Each is removed
      * recursively. One [reload] afterward; no-op if [operands] is empty. Confirmation is the
      * UI's responsibility.
+     *
+     * The targets and the directory are read now, not when the queued body runs: the user confirmed
+     * *these* rows in *that* directory, and the operation may wait behind another one — including a
+     * navigation — while the listing stays live under their finger.
      */
-    fun deleteSelected() = op {
+    fun deleteSelected() {
+        val dir = path
         val targets = operands()
-        if (targets.isEmpty()) return@op
+        if (targets.isEmpty()) return
+        queuedOp { deleteAll(dir, targets) }
+    }
+
+    private suspend fun deleteAll(dir: String, targets: List<FileItem>) {
         targets.forEach { item ->
             // Deletes via a path rebuilt from [path] + a validated name, not server-controlled item.path.
             val name = item.name
             if (isUnsafeListingName(name)) {
                 throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
             }
-            browser.delete(item.copy(path = childPath(name)))
+            val target = childPath(dir, name)
+            browser.delete(item.copy(path = target))
+            // Dropped by the path that was deleted, not by the one the listing reported: the two
+            // agree for an honest source, and where they don't, the row that stays is the honest answer.
+            dropFromListing(target)
         }
         reload()
     }
 
-    /** Renames [item] to [newName] within the current directory. */
-    fun rename(item: FileItem, newName: String) = op {
-        browser.rename(item.path, childPath(newName))
+    /** Renames [item] to [newName] within the current directory, keeping the cursor on the row. */
+    fun rename(item: FileItem, newName: String) {
+        val dir = path
+        queuedOp { renameIn(dir, item, newName) }
+    }
+
+    private suspend fun renameIn(dir: String, item: FileItem, newName: String) {
+        // Same rule as [deleteAll]: the source is rebuilt from [dir] and a validated name, never
+        // from the path the server put in the listing.
+        val name = item.name
+        if (isUnsafeListingName(name)) {
+            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
+        }
+        val renamed = childPath(dir, newName)
+        browser.rename(childPath(dir, name), renamed)
+        val wasCursored = cursor == item.path
+        rewriteListing { entries ->
+            entries.mapNotNull {
+                when (it.path) {
+                    item.path -> it.copy(name = newName, path = renamed)
+                    // A rename that replaced a file leaves two rows on one path until the relist
+                    // lands, and both listings key their rows on it.
+                    renamed -> null
+                    else -> it
+                }
+            }
+        }
+        if (wasCursored) loadedEntries().firstOrNull { it.path == renamed }?.let { setCursor(it) }
         reload()
+        if (path != dir) return
+        // Same rule as [mkdir]: a new name the active filter doesn't match would take the row off
+        // screen, and a row that vanishes after a rename reads as the file being gone.
+        if (nameFilter.isNotEmpty() && loadedEntries().none { it.path == renamed }) setNameFilter("")
+        if (wasCursored) loadedEntries().firstOrNull { it.path == renamed }?.let { setCursor(it) }
     }
 
     /** Selects only [item] (plain click), setting it as the Shift-range anchor. */
@@ -413,6 +486,29 @@ class FilePaneController(
         cursorOnParent = cursor == null && hasParent
     }
 
+    /**
+     * Applies a change the source has already confirmed to the cached listing, without asking for a
+     * new one. The [reload] that follows is the authority; this is what the row does in the
+     * meantime. Every operation costs a round trip and the listing after it costs another — over a
+     * phone link, leaving the deleted row on screen for that second trip reads as "nothing
+     * happened" (issue #327). No-op outside [FilePaneState.Loaded]: there is no listing to correct.
+     *
+     * Rows are matched by path, and the paths built here join with `/`, so the rewrite only bites on
+     * a POSIX/SFTP listing. On the desktop local pane under Windows the keys are backslash-separated
+     * and nothing matches: the row survives until the relist, which for a local directory is a
+     * no-round-trip `list()`.
+     */
+    private fun rewriteListing(transform: (List<FileItem>) -> List<FileItem>) {
+        if (state !is FilePaneState.Loaded) return
+        rawEntries = transform(rawEntries).sortedForPane()
+        state = FilePaneState.Loaded(visible(rawEntries))
+        pruneSelection()
+        clampCursor()
+    }
+
+    /** Drops the row at [path] from the cached listing — see [rewriteListing]. */
+    private fun dropFromListing(path: String) = rewriteListing { entries -> entries.filterNot { it.path == path } }
+
     /** Reloads the current [path] in place (refresh/after mkdir/rename/delete). */
     private suspend fun reload() {
         state = loadState(path)
@@ -505,41 +601,37 @@ class FilePaneController(
     }
 
     /**
-     * Runs a pane operation, serialized via [busy]. Any [FileBrowserException] from the operation
-     * moves the pane to [FilePaneState.Error].
+     * Runs a pane operation, dropping it while the pane is already working. Only for commands the
+     * user can simply issue again — refresh, navigation — where a second request means the same
+     * thing as the first. Anything the user confirmed goes through [queuedOp].
      *
-     * [busy] is a plain (non-`@Volatile`) flag: relies on [scope] being single-threaded/
-     * main-confined. A multi-threaded dispatcher would race on [busy].
+     * The check-and-set on [pending], and [pending] itself, are not atomic: [scope] is required to
+     * be main-confined, as every production caller's is. A multi-threaded scope would lose an
+     * increment or a decrement, and a lost decrement pins the pane at [busy] for good.
      */
     private fun op(block: suspend () -> Unit) {
         if (busy) return
-        busy = true
-        scope.launch {
-            try {
-                gate.withLock { runOp(block) }
-            } finally {
-                busy = false
-            }
-        }
+        launchOp(block)
     }
 
     /**
      * Like [op], but waits its turn instead of being dropped while another operation runs. For
-     * requests arriving from outside the pane ([revealPath]): they race the pane's own first
-     * listing ([start]) and there is nothing on screen to retry from, whereas dropping a keypress
-     * the user can simply press again is exactly what [op] is for.
+     * everything the user already confirmed — a delete, a rename, a new directory — and for requests
+     * arriving from outside the pane ([revealPath]). Issue #327: a confirmed action that is silently
+     * discarded is the worst outcome the pane has, because the dialog closed and the screen looks
+     * exactly as if it had gone through.
      */
-    private fun queuedOp(block: suspend () -> Unit) {
-        scope.launch {
-            gate.withLock {
-                busy = true
-                try {
-                    runOp(block)
-                } finally {
-                    busy = false
-                }
-            }
-        }
+    private fun queuedOp(block: suspend () -> Unit) = launchOp(block)
+
+    /**
+     * Body shared by [op]/[queuedOp]. [pending] is raised before the launch, so a second [op] issued
+     * in the same frame still sees the pane as busy, and lowered on completion rather than in a
+     * `finally` inside the coroutine: a scope already cancelled never runs the body at all, and a
+     * pane stuck at [busy] would refuse every request it is given afterwards.
+     */
+    private fun launchOp(block: suspend () -> Unit) {
+        pending++
+        scope.launch { gate.withLock { runOp(block) } }.invokeOnCompletion { pending-- }
     }
 
     /** Body shared by [op]/[queuedOp]: runs the operation, mapping a failure into [FilePaneState.Error]. */
@@ -552,9 +644,6 @@ class FilePaneController(
             state = FilePaneState.Error(e.failure)
         }
     }
-
-    /** Path of child [name] in the current directory. */
-    private fun childPath(name: String): String = childPath(path, name)
 
     /**
      * Lexical parent of an absolute path for the "up" action. Does not resolve `"$path/.."` via

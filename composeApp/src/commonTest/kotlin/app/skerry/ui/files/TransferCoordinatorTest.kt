@@ -257,6 +257,32 @@ class TransferCoordinatorTest {
         assertTrue(r.local.selection.isEmpty())
     }
 
+    /**
+     * Issue #327's bug class on the transfer path: F9 on the destination pane while the move runs
+     * leaves that pane working when the move finishes. A relist dropped there is one nobody will
+     * ask for again, and the pane goes on showing files the move has already taken away.
+     */
+    @Test
+    fun `a move relists the panes even with a listing already in flight`() = runTest {
+        val r = rig()
+        val held = CompletableDeferred<Unit>()
+        r.remoteFake.listGate = held
+        r.remote.refresh() // the user's F9, answered from the tree as it is now
+        advanceUntilIdle()
+
+        r.local.toggle(r.local.entry("a.txt"))
+        r.coordinator.moveSelection(fromLocal = true)
+        advanceUntilIdle()
+
+        r.remoteFake.listGate = null
+        held.complete(Unit) // the stale listing lands, without the moved file in it
+        advanceUntilIdle()
+
+        val remoteNames = (r.remote.state as FilePaneState.Loaded).entries.map { it.name }
+        assertTrue("a.txt" in remoteNames, "expected the moved file on remote, have: $remoteNames")
+        assertTrue("a.txt" !in (r.local.state as FilePaneState.Loaded).entries.map { it.name })
+    }
+
     @Test
     fun `moveSelection from local moves a directory recursively then deletes it`() = runTest {
         val r = rig()

@@ -32,7 +32,6 @@ import app.skerry.ui.files.TransferCoordinator
 import app.skerry.ui.files.fileDisplayPath
 import app.skerry.ui.files.platformLocalBrowser
 import app.skerry.ui.generated.resources.Res
-import app.skerry.ui.generated.resources.ftail_local_label
 import app.skerry.ui.generated.resources.ftail_open_failed
 import app.skerry.ui.generated.resources.sftp_connecting
 import app.skerry.ui.generated.resources.sftp_create
@@ -166,22 +165,7 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                     val downloadHere = remember(c) {
                         { item: FileItem -> c.remote.selectOnly(item); c.downloadSelection() }
                     }
-                    MobileFilesBreadcrumbRow(
-                        pane.label.ifBlank { stringResource(Res.string.ftail_local_label) },
-                        pane.path,
-                        mono, onGoToPath = pane::goToPath,
-                        // The funnel both opens and closes: closing while filter text is present
-                        // also clears it, so the icon is never a visible no-op.
-                        onToggleFilter = {
-                            if (filterOpen || pane.nameFilter.isNotEmpty()) {
-                                pane.setNameFilter("")
-                                filterOpen = false
-                            } else {
-                                filterOpen = true
-                            }
-                        },
-                        filterActive = filterOpen || pane.nameFilter.isNotEmpty(),
-                    )
+                    MobileLiveBreadcrumb(pane, mono, filterOpen, onFilterOpenChange = { filterOpen = it })
                     if (filterOpen || pane.nameFilter.isNotEmpty()) {
                         MobileFilterRow(pane, mono, onClose = { filterOpen = false })
                     }
@@ -243,6 +227,7 @@ private fun LiveMobileFilesView(controller: ConnectionController, subtitle: Stri
                 title = stringResource(Res.string.sftp_new_folder),
                 confirmLabel = stringResource(Res.string.sftp_create),
                 initial = "",
+                existing = pane.currentEntryNames(),
                 onConfirm = { pane.mkdir(it); creatingFolder = false },
                 onDismiss = { creatingFolder = false },
             )

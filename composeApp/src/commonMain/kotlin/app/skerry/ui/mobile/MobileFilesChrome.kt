@@ -37,13 +37,16 @@ import app.skerry.ui.files.FilePaneController
 import app.skerry.ui.files.PathJumpField
 import app.skerry.ui.files.fileDisplayPath
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_fkey_refresh
 import app.skerry.ui.generated.resources.sftp_connecting
 import app.skerry.ui.generated.resources.sftp_files_title
 import app.skerry.ui.generated.resources.sftp_filter_hint
+import app.skerry.ui.generated.resources.sftp_loading
 import app.skerry.ui.generated.resources.sftp_no_session
 import app.skerry.ui.generated.resources.sftp_no_session_hint
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
@@ -94,6 +97,10 @@ internal fun MobileFilesBreadcrumbRow(
     // Live mode: the trailing funnel icon toggles the quick-filter row; [filterActive] tints it.
     onToggleFilter: (() -> Unit)? = null,
     filterActive: Boolean = false,
+    // Live mode: asks the pane for the directory again — the phone's F9. [busy] means an operation
+    // is already in flight, and the control says so instead of pretending a tap would do anything.
+    onRefresh: (() -> Unit)? = null,
+    busy: Boolean = false,
 ) {
     var editing by remember(path) { mutableStateOf(false) }
     // Drawn filtered, edited raw: what the field submits has to be the path the pane is actually in
@@ -144,17 +151,33 @@ internal fun MobileFilesBreadcrumbRow(
                 ),
             )
         }
+        if (onRefresh != null && !editing) {
+            // One node across both states, and it keeps its name: a node swapped in place of another
+            // is an insertion a screen reader says nothing about, and it would drop the focus of
+            // whoever just activated it. What changed is the pane's state, not the button's identity,
+            // so the state goes to the live region below and the button only goes inert.
+            IconBtn(
+                if (busy) "sync" else "refresh",
+                onClick = onRefresh,
+                // A finger, not a mouse: the glyph stays 18sp and the hit box is the button. Two
+                // 18dp targets 6dp apart on a phone means the funnel takes the press meant for the
+                // refresh — the same "the button did nothing" this screen is being fixed for.
+                box = 32,
+                tint = Skerry.colors.faint,
+                label = stringResource(Res.string.ftail_fkey_refresh),
+                enabled = !busy,
+            )
+            // A round trip that starts and ends in silence is what makes a phone link read as
+            // "nothing happened" — for a screen reader that is the only signal there is.
+            StatusAnnouncer(if (busy) stringResource(Res.string.sftp_loading) else "")
+        }
         if (onToggleFilter != null && !editing) {
-            Sym(
+            IconBtn(
                 "filter_alt",
-                contentDescription = stringResource(Res.string.sftp_tip_filter_toggle),
-                size = 18.sp,
-                color = if (filterActive) Skerry.colors.cyanBright else Skerry.colors.faint,
-                modifier = Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onToggleFilter,
-                ),
+                onClick = onToggleFilter,
+                box = 32,
+                tint = if (filterActive) Skerry.colors.cyanBright else Skerry.colors.faint,
+                label = stringResource(Res.string.sftp_tip_filter_toggle),
             )
         }
     }

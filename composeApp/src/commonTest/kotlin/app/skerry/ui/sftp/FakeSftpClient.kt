@@ -45,9 +45,12 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
     var listGate: CompletableDeferred<Unit>? = null
 
     override suspend fun list(path: String): List<SftpEntry> {
-        listGate?.await()
         val dir = children[realpathSync(path)] ?: throw SftpException("No directory $path")
-        return dir.values.toList()
+        // Answered from the tree as it was when the request arrived, like a real round trip: a
+        // listing held in flight must be able to land stale.
+        val answer = dir.values.toList()
+        listGate?.await()
+        return answer
     }
 
     override suspend fun stat(path: String): SftpEntry? {

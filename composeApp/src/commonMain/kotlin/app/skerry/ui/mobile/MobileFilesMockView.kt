@@ -46,7 +46,9 @@ internal fun MockMobileFilesView(mono: FontFamily) {
     Box(Modifier.fillMaxSize().background(Skerry.colors.bg)) {
         Column(Modifier.fillMaxSize()) {
             MobileFilesTitle()
-            MobileFilesBreadcrumbRow(label = "prod-web-01", path = "/var/www", mono = mono)
+            // The screenshot path draws what the live screen draws: a preview breadcrumb without
+            // the refresh the live one now carries is store-asset drift.
+            MobileFilesBreadcrumbRow(label = "prod-web-01", path = "/var/www", mono = mono, onRefresh = {})
             Column(Modifier.fillMaxWidth().padding(top = 12.dp, start = 12.dp, end = 12.dp)) {
                 MOCK_REMOTE_FILES.forEach { MockFileRow(it, mono) }
             }
