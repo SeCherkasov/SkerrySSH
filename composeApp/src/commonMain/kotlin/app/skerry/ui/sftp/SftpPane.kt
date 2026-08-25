@@ -62,6 +62,7 @@ import org.jetbrains.compose.resources.stringResource
 import androidx.compose.runtime.DisposableEffect
 import app.skerry.ui.design.HLine
 import app.skerry.ui.design.IconBtn
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.fieldFocus
@@ -178,6 +179,11 @@ internal fun LivePane(
             )
             HLine()
         }
+        // The listing and the failure notice are two branches of the same `when`, so the switch
+        // between them is an insertion, not a change a screen reader is told about (WCAG 4.1.3).
+        // The announcer sits above it, outlives the switch and carries the reason itself; every
+        // other state says nothing, so navigation churn stays silent.
+        StatusAnnouncer((pane.state as? FilePaneState.Error)?.let { fileBrowserFailureText(it.failure) } ?: "")
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val st = pane.state) {
                 FilePaneState.Loading -> PaneNotice("sync", stringResource(Res.string.sftp_loading), null, Skerry.colors.faint)

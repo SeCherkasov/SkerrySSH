@@ -634,14 +634,23 @@ class FilePaneController(
         scope.launch { gate.withLock { runOp(block) } }.invokeOnCompletion { pending-- }
     }
 
-    /** Body shared by [op]/[queuedOp]: runs the operation, mapping a failure into [FilePaneState.Error]. */
+    /**
+     * Body shared by [op]/[queuedOp]: runs the operation, mapping a failure into
+     * [FilePaneState.Error].
+     *
+     * Throwable, not [FileBrowserException]: this runs on the scope the whole composition shares,
+     * and that scope carries a plain Job. Anything the source throws without wrapping — a walk over
+     * a server's listing that overflows the stack, a bug — used to leave the launch uncaught, which
+     * cancels every other session's coroutines and, on Android, kills the process. The pane showed
+     * nothing at all for an action the user had confirmed.
+     */
     private suspend fun runOp(block: suspend () -> Unit) {
         try {
             block()
         } catch (e: CancellationException) {
             throw e
-        } catch (e: FileBrowserException) {
-            state = FilePaneState.Error(e.failure)
+        } catch (@Suppress("TooGenericExceptionCaught") e: Throwable) {
+            state = FilePaneState.Error((e as? FileBrowserException)?.failure ?: FileBrowserFailure.Unexpected)
         }
     }
 

@@ -5,6 +5,7 @@ import app.skerry.shared.files.FileBrowserException
 import app.skerry.shared.files.FileBrowserFailure
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
+import app.skerry.shared.files.TreeWalkLimit
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntryType
 
@@ -17,6 +18,13 @@ internal class TransferPlan<T> {
     val dirs = mutableListOf<String>()
     val files = mutableListOf<T>()
 }
+
+/**
+ * What a walk knows about one entry before it plans it: the listing's [name], [type] and [size], and
+ * nothing else. Deliberately not a [FileItem] — that carries a path, and on the remote side the path
+ * in a listing is the server's to choose; every path a walk uses is rebuilt from a validated name.
+ */
+private class WalkEntry(val name: String, val type: FileItemType, val size: Long)
 
 /** One download task: [name] for the progress bar, remote [remotePath] to local [localPath]. */
 internal data class DownloadTask(val name: String, val remotePath: String, val localPath: String, val size: Long)
@@ -37,13 +45,14 @@ internal suspend fun buildDownloadPlan(
     remoteDir: String,
 ): TransferPlan<DownloadTask> {
     val walk = DownloadWalk(sftp)
-    items.forEach { walk.walk(it.name, childPath(remoteDir, it.name), it.type, it.size, localDir) }
+    items.forEach { walk.walk(WalkEntry(it.name, it.type, it.size), childPath(remoteDir, it.name), localDir, depth = 0) }
     return walk.plan
 }
 
 /**
  * Walks a remote tree entry, filling the plan it carries. A file becomes a download task; a directory adds a
- * local subdirectory and recurses; symlinks/other are skipped.
+ * local subdirectory and recurses; symlinks/other are skipped. [depth] is how far below the selected
+ * item this entry sits, checked against [TreeWalkLimit] before descending.
  *
  * Path-traversal guard against an untrusted server: [name] must be a plain name (no `/`/`\`
  * separators, not `.`/`..`, not empty). Child remote paths are rebuilt from the parent + a
@@ -52,22 +61,29 @@ internal suspend fun buildDownloadPlan(
  */
 private class DownloadWalk(private val sftp: SftpClient) {
     val plan = TransferPlan<DownloadTask>()
+    private val limit = TreeWalkLimit()
 
-    suspend fun walk(name: String, remotePath: String, type: FileItemType, size: Long, localDir: String) {
-        if (isUnsafeListingName(name)) {
-            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
+    suspend fun walk(entry: WalkEntry, remotePath: String, localDir: String, depth: Int) {
+        if (isUnsafeListingName(entry.name)) {
+            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = entry.name)
         }
-        val localPath = childPath(localDir, name)
-        when (type) {
-            FileItemType.File -> plan.files += DownloadTask(name, remotePath, localPath, size)
+        val localPath = childPath(localDir, entry.name)
+        when (entry.type) {
+            FileItemType.File -> {
+                limit.count()
+                plan.files += DownloadTask(entry.name, remotePath, localPath, entry.size)
+            }
             FileItemType.Directory -> {
+                limit.count()
+                limit.descend(depth + 1)
                 plan.dirs += localPath
                 // De-duplicated by name, not by path: the walk reads the SFTP client directly rather
                 // than the browser that de-duplicates for the panel, and every local path it writes
                 // is built from the name. A repeat would plan two tasks onto one local file, and the
                 // second would overwrite the first while the progress bar counted two.
                 sftp.list(remotePath).distinctBy { it.name }.forEach { child ->
-                    walk(child.name, childPath(remotePath, child.name), child.type.toItemType(), child.size, localPath)
+                    val next = WalkEntry(child.name, child.type.toItemType(), child.size)
+                    walk(next, childPath(remotePath, child.name), localPath, depth + 1)
                 }
             }
             FileItemType.Symlink, FileItemType.Other -> Unit
@@ -82,30 +98,37 @@ internal suspend fun buildUploadPlan(
     remoteDir: String,
 ): TransferPlan<UploadTask> {
     val walk = UploadWalk(localBrowser)
-    items.forEach { walk.walk(it.name, it.path, it.type, it.size, remoteDir) }
+    items.forEach { walk.walk(WalkEntry(it.name, it.type, it.size), it.path, remoteDir, depth = 0) }
     return walk.plan
 }
 
 /**
  * Walks a local tree entry, filling the plan it carries (mirrors [DownloadWalk]). A file becomes an upload task;
  * a directory adds a remote subdirectory and recurses ([localBrowser] lists the local FS);
- * symlinks/other are skipped. Remote paths are rebuilt from [remoteDir] + a validated name; local
- * paths come from the trusted local listing.
+ * symlinks/other are skipped. [depth] is bounded by the same [TreeWalkLimit]: a local loop is a bind
+ * mount away, and the plan is built before a byte moves either way. Remote paths are rebuilt from
+ * [remoteDir] + a validated name; local paths come from the trusted local listing.
  */
 private class UploadWalk(private val localBrowser: FileBrowser) {
     val plan = TransferPlan<UploadTask>()
+    private val limit = TreeWalkLimit()
 
-    suspend fun walk(name: String, localPath: String, type: FileItemType, size: Long, remoteDir: String) {
-        if (isUnsafeListingName(name)) {
-            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = name)
+    suspend fun walk(entry: WalkEntry, localPath: String, remoteDir: String, depth: Int) {
+        if (isUnsafeListingName(entry.name)) {
+            throw FileBrowserException(FileBrowserFailure.IllegalName, detail = entry.name)
         }
-        val remotePath = childPath(remoteDir, name)
-        when (type) {
-            FileItemType.File -> plan.files += UploadTask(name, localPath, remotePath, size)
+        val remotePath = childPath(remoteDir, entry.name)
+        when (entry.type) {
+            FileItemType.File -> {
+                limit.count()
+                plan.files += UploadTask(entry.name, localPath, remotePath, entry.size)
+            }
             FileItemType.Directory -> {
+                limit.count()
+                limit.descend(depth + 1)
                 plan.dirs += remotePath
                 localBrowser.list(localPath).forEach { child ->
-                    walk(child.name, child.path, child.type, child.size, remotePath)
+                    walk(WalkEntry(child.name, child.type, child.size), child.path, remotePath, depth + 1)
                 }
             }
             FileItemType.Symlink, FileItemType.Other -> Unit

@@ -42,11 +42,11 @@ class SftpFileBrowser(
      * Recursive delete: a directory is emptied first (contents removed by the same [deleteTree]),
      * then removed with `rmdir`; a file/symlink/other uses `remove` (`SSH_FXP_REMOVE` removes the
      * link itself, not its target — a symlink's target directory is not entered). SFTP has no
-     * protocol-level recursive delete, so the traversal is client-side. Tree depth is unbounded:
-     * pathologically deep trees could in theory overflow the stack.
+     * protocol-level recursive delete, so the traversal is client-side, over listings the server
+     * writes — so it is bounded by [refuseTooDeep], and by nothing else: see [deleteTree].
      */
     override suspend fun delete(item: FileItem): Unit = guard {
-        deleteTree(item.path, item.type == FileItemType.Directory)
+        deleteTree(item.path, item.type == FileItemType.Directory, depth = 0)
     }
 
     /**
@@ -54,19 +54,33 @@ class SftpFileBrowser(
      * calls here throw [SftpException], caught by the outer [guard] (the whole recursion runs inside
      * its single try). Before descending into a child, verifies its path is actually nested under
      * [path] — otherwise a server returning a listing entry outside the directory (by bug or by
-     * intent) could cause deletion of something the user didn't select.
+     * intent) could cause deletion of something the user didn't select. That check passes at every
+     * level of a directory listed as its own child, because the path only grows: [refuseTooDeep] is
+     * what ends such a walk, and [FileBrowserFailure.TreeTooLarge] then passes through [guard]
+     * untouched. It ends the recursion; it does not promise the tree is untouched. Files beside the
+     * loop at each level are removed on the way down, and SFTP has no recursive delete to make that
+     * atomic — a mid-tree refusal here has the same shape a permission denied always had.
+     *
+     * Depth is the only bound. This walk deletes as it goes rather than deciding first, so a cap on
+     * how many entries it may take on would stop it with most of the tree already gone, on a verb
+     * where "refused" and "half done" are not the same answer at all. Width is bounded through
+     * depth: it holds no plan, only one listing per active level.
+     *
+     * The listing is not de-duplicated here, unlike [list]: an entry dropped from it is an entry
+     * never removed, and `rmdir` would then fail on a directory that is not empty.
      */
-    private suspend fun deleteTree(path: String, isDirectory: Boolean) {
+    private suspend fun deleteTree(path: String, isDirectory: Boolean, depth: Int) {
         if (!isDirectory) {
             sftp.remove(path)
             return
         }
+        refuseTooDeep(depth + 1)
         val prefix = if (path.endsWith("/")) path else "$path/"
         sftp.list(path).forEach { child ->
             if (!child.path.startsWith(prefix)) {
                 throw SftpException("Listing $path returned a path outside the directory: ${child.path}")
             }
-            deleteTree(child.path, child.type == SftpEntryType.Directory)
+            deleteTree(child.path, child.type == SftpEntryType.Directory, depth + 1)
         }
         sftp.rmdir(path)
     }

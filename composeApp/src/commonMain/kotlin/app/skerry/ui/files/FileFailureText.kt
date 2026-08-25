@@ -15,6 +15,9 @@ import app.skerry.ui.generated.resources.ftail_err_open_target
 import app.skerry.ui.generated.resources.ftail_err_session_closed
 import app.skerry.ui.generated.resources.ftail_err_sftp
 import app.skerry.ui.generated.resources.ftail_err_too_large
+import app.skerry.ui.generated.resources.ftail_err_tree_too_deep
+import app.skerry.ui.generated.resources.ftail_err_tree_too_large
+import app.skerry.ui.generated.resources.ftail_err_unexpected
 import app.skerry.ui.generated.resources.ftail_transfer_error
 import org.jetbrains.compose.resources.stringResource
 
@@ -28,6 +31,11 @@ fun fileBrowserFailureText(failure: FileBrowserFailure): String = stringResource
         FileBrowserFailure.OpenSource -> Res.string.ftail_err_open_source
         FileBrowserFailure.OpenTarget -> Res.string.ftail_err_open_target
         FileBrowserFailure.TooLarge -> Res.string.ftail_err_too_large
+        // The pane's own walk is the recursive delete, which is bounded by depth and never by size,
+        // so the reason it stops is never "too large" — and the transfer wording would name a verb
+        // this operation has nothing to do with.
+        FileBrowserFailure.TreeTooLarge -> Res.string.ftail_err_tree_too_deep
+        FileBrowserFailure.Unexpected -> Res.string.ftail_err_unexpected
     },
 )
 
@@ -52,5 +60,6 @@ fun transferFailureText(failure: FileTransferFailure): String = stringResource(
         FileTransferFailure.OpenSource -> Res.string.ftail_err_open_source
         FileTransferFailure.OpenTarget -> Res.string.ftail_err_open_target
         FileTransferFailure.SessionClosed -> Res.string.ftail_err_session_closed
+        FileTransferFailure.TreeTooLarge -> Res.string.ftail_err_tree_too_large
     },
 )

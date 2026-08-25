@@ -295,6 +295,28 @@ class FileEditControllerTest {
         assertTrue(c.conflict)
         assertEquals("one\n", browser.contents.getValue(PATH).decodeToString())
     }
+
+    @Test
+    fun `a read that dies on something the source never wraps stops spinning`() = runTest {
+        // The editor runs on the session's scope, which the whole composition shares: an unwrapped
+        // throw used to leave it Loading for good and take that scope with it.
+        browser.unwrapped = true
+        val c = opened()
+
+        assertEquals(FileEditState.Failed(FileEditFailure.Read), c.state)
+    }
+
+    @Test
+    fun `a save that dies the same way is still reported`() = runTest {
+        val c = opened()
+        c.edit("server {\n  listen 80;\n}\n")
+        browser.unwrapped = true
+
+        c.save(); advanceUntilIdle()
+
+        assertEquals(FileEditFailure.Write, c.saveFailure)
+        assertFalse(c.saving)
+    }
 }
 
 /** In-memory [FileContentBrowser]; navigation isn't exercised by the editor. */
@@ -310,6 +332,9 @@ private class FakeContentBrowser : FileContentBrowser, FileBrowser {
     /** When set, [stat] fails — the editor must not lose its conflict baseline over it. */
     var statFails = false
 
+    /** When set, read/write die on something the source is not supposed to throw at all. */
+    var unwrapped = false
+
     override suspend fun realpath(path: String) = path
     override suspend fun list(path: String): List<FileItem> = emptyList()
     override suspend fun mkdir(path: String) = Unit
@@ -322,11 +347,13 @@ private class FakeContentBrowser : FileContentBrowser, FileBrowser {
     }
 
     override suspend fun readFile(path: String, maxBytes: Long): ByteArray {
+        if (unwrapped) throw StackOverflowError()
         failure?.let { throw FileBrowserException(it) }
         return contents[path] ?: throw FileBrowserException(FileBrowserFailure.Sftp)
     }
 
     override suspend fun writeFile(path: String, data: ByteArray) {
+        if (unwrapped) throw StackOverflowError()
         failure?.let { throw FileBrowserException(it) }
         writes++
         contents[path] = data

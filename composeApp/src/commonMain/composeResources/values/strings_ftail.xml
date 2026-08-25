@@ -28,6 +28,9 @@
     <string name="ftail_err_open_target">Failed to open the save target</string>
     <string name="ftail_err_session_closed">Session closed before it started</string>
     <string name="ftail_err_too_large">File is too large to open</string>
+    <string name="ftail_err_tree_too_large">Folder tree is too deep or too large to transfer</string>
+    <string name="ftail_err_tree_too_deep">Folder tree is too deep to walk</string>
+    <string name="ftail_err_unexpected">Unexpected error</string>
 
     <!-- Viewer/editor (F3/F4) failures -->
     <string name="ftail_edit_err_read">Failed to read the file</string>

@@ -136,6 +136,11 @@ internal fun MobileLivePane(
     val scroll = rememberScrollState()
     LaunchedEffect(pane.path) { scroll.scrollTo(0) }
 
+    // The listing and the failure notice are two branches of the same `when`, so the switch
+    // between them is an insertion, not a change a screen reader is told about (WCAG 4.1.3).
+    // The announcer sits above it, outlives the switch and carries the reason itself; every
+    // other state says nothing, so navigation churn stays silent.
+    StatusAnnouncer((pane.state as? FilePaneState.Error)?.let { fileBrowserFailureText(it.failure) } ?: "")
     Box(modifier.fillMaxWidth()) {
         when (val st = pane.state) {
             FilePaneState.Loading -> MobileFilesNoticeBox("sync", stringResource(Res.string.sftp_loading), null, Skerry.colors.faint)

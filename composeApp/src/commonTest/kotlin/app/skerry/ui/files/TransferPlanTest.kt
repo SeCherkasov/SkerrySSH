@@ -4,6 +4,8 @@ import app.skerry.shared.files.FileBrowserException
 import app.skerry.shared.files.FileBrowserFailure
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
+import app.skerry.shared.files.MAX_TREE_DEPTH
+import app.skerry.shared.files.MAX_TREE_ENTRIES
 import app.skerry.shared.files.SftpFileBrowser
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.sftp.SftpEntryType
@@ -82,6 +84,145 @@ class TransferPlanTest {
         }
 
         assertEquals(FileBrowserFailure.IllegalName, failure.failure)
+    }
+
+    @Test
+    fun `a nested listing that repeats a name is planned once`() = runTest {
+        // The walk reads the SFTP client directly, not the de-duplicated browser, and it builds every
+        // local path from the entry's name — so a repeat inside a directory being downloaded plans two
+        // tasks writing the same local file, and the second silently overwrites the first while the
+        // progress bar counts two.
+        val entry = SftpEntry("dup.txt", "$REMOTE/proj/dup.txt", SftpEntryType.File, 5, 0, 0b110_100_100)
+        val remote = remote().apply {
+            listAnswer = { path -> if (path == "$REMOTE/proj") listOf(entry, entry) else null }
+        }
+
+        val plan = buildDownloadPlan(
+            remote,
+            listOf(item("proj", FileItemType.Directory, "$REMOTE/proj")),
+            localDir = LOCAL,
+            remoteDir = REMOTE,
+        )
+
+        assertEquals(listOf("$LOCAL/proj/dup.txt"), plan.files.map { it.localPath })
+    }
+
+    @Test
+    fun `a directory that lists itself as its own child stops the walk`() = runTest {
+        // A bind mount that contains itself, a FUSE mount, or a server that simply says so: the tree
+        // has no bottom, and the walk runs until the stack or the heap gives out — before a byte has
+        // moved, and outside the transfer's own error handling (#306).
+        val remote = remote().apply {
+            seedDir("$REMOTE/loop")
+            listAnswer = { path ->
+                if (path.endsWith("/loop")) {
+                    listOf(SftpEntry("loop", "$path/loop", SftpEntryType.Directory, 0, 0, 0b111_101_101))
+                } else {
+                    null
+                }
+            }
+        }
+
+        val failure = assertFailsWith<FileBrowserException> {
+            buildDownloadPlan(
+                remote,
+                listOf(item("loop", FileItemType.Directory, "$REMOTE/loop")),
+                localDir = LOCAL,
+                remoteDir = REMOTE,
+            )
+        }
+
+        assertEquals(FileBrowserFailure.TreeTooLarge, failure.failure)
+    }
+
+    @Test
+    fun `an upload walk over a local loop stops the same way`() = runTest {
+        // The upload walk carries its own copy of the guard, like the name check above.
+        val local = FakeSftpClient(startDir = LOCAL).apply {
+            seedDir("$LOCAL/loop")
+            listAnswer = { path ->
+                if (path.endsWith("/loop")) {
+                    listOf(SftpEntry("loop", "$path/loop", SftpEntryType.Directory, 0, 0, 0b111_101_101))
+                } else {
+                    null
+                }
+            }
+        }
+
+        val failure = assertFailsWith<FileBrowserException> {
+            buildUploadPlan(
+                SftpFileBrowser(local, "This Mac"),
+                listOf(item("loop", FileItemType.Directory, "$LOCAL/loop")),
+                remoteDir = REMOTE,
+            )
+        }
+
+        assertEquals(FileBrowserFailure.TreeTooLarge, failure.failure)
+    }
+
+    @Test
+    fun `a plan bigger than the cap stops before it is built`() = runTest {
+        // Depth is not the only way out of a bounded plan: one directory whose listing never ends
+        // is flat and still unbounded. The depth cap says nothing about it.
+        val remote = remote().apply {
+            seedDir("$REMOTE/wide")
+            val wide = (0..MAX_TREE_ENTRIES).map {
+                SftpEntry("f$it", "$REMOTE/wide/f$it", SftpEntryType.File, 1, 0, 0b110_100_100)
+            }
+            listAnswer = { path -> if (path == "$REMOTE/wide") wide else null }
+        }
+
+        val failure = assertFailsWith<FileBrowserException> {
+            buildDownloadPlan(
+                remote,
+                listOf(item("wide", FileItemType.Directory, "$REMOTE/wide")),
+                localDir = LOCAL,
+                remoteDir = REMOTE,
+            )
+        }
+
+        assertEquals(FileBrowserFailure.TreeTooLarge, failure.failure)
+    }
+
+    @Test
+    fun `a tree exactly as wide as the cap allows is still planned whole`() = runTest {
+        // The other half of the same boundary: the directory itself is one of the entries the walk
+        // takes on, so the last file the cap allows is the one that makes the count exact.
+        val remote = remote().apply {
+            seedDir("$REMOTE/wide")
+            val wide = (1 until MAX_TREE_ENTRIES).map {
+                SftpEntry("f$it", "$REMOTE/wide/f$it", SftpEntryType.File, 1, 0, 0b110_100_100)
+            }
+            listAnswer = { path -> if (path == "$REMOTE/wide") wide else null }
+        }
+
+        val plan = buildDownloadPlan(
+            remote,
+            listOf(item("wide", FileItemType.Directory, "$REMOTE/wide")),
+            localDir = LOCAL,
+            remoteDir = REMOTE,
+        )
+
+        assertEquals(MAX_TREE_ENTRIES - 1, plan.files.size)
+    }
+
+    @Test
+    fun `a tree exactly as deep as the cap allows is still planned whole`() = runTest {
+        // The caps bound a tree that has no bottom, not a tree anyone keeps: the last level the cap
+        // allows has to go through, or the bound is one level tighter than it says it is.
+        val remote = remote()
+        val deepest = (1..MAX_TREE_DEPTH).fold(REMOTE) { dir, level -> "$dir/d$level".also { remote.seedDir(it) } }
+        remote.seedFile("$deepest/leaf.txt", size = 1)
+
+        val plan = buildDownloadPlan(
+            remote,
+            listOf(item("d1", FileItemType.Directory, "$REMOTE/d1")),
+            localDir = LOCAL,
+            remoteDir = REMOTE,
+        )
+
+        assertEquals(MAX_TREE_DEPTH, plan.dirs.size)
+        assertEquals(1, plan.files.size)
     }
 
     @Test
@@ -169,26 +310,5 @@ class TransferPlanTest {
         assertEquals("$REMOTE/a.txt", safeRemoteChild("a.txt", REMOTE))
         assertFailsWith<FileBrowserException> { safeRemoteChild("../a.txt", REMOTE) }
         assertFailsWith<FileBrowserException> { safeRemoteChild("..", REMOTE) }
-    }
-
-    @Test
-    fun `a nested listing that repeats a name is planned once`() = runTest {
-        // The walk reads the SFTP client directly, not the de-duplicated browser, and it builds every
-        // local path from the entry's name — so a repeat inside a directory being downloaded plans two
-        // tasks writing the same local file, and the second silently overwrites the first while the
-        // progress bar counts two.
-        val entry = SftpEntry("dup.txt", "$REMOTE/proj/dup.txt", SftpEntryType.File, 5, 0, 0b110_100_100)
-        val remote = remote().apply {
-            listAnswer = { path -> if (path == "$REMOTE/proj") listOf(entry, entry) else null }
-        }
-
-        val plan = buildDownloadPlan(
-            remote,
-            listOf(item("proj", FileItemType.Directory, "$REMOTE/proj")),
-            localDir = LOCAL,
-            remoteDir = REMOTE,
-        )
-
-        assertEquals(listOf("$LOCAL/proj/dup.txt"), plan.files.map { it.localPath })
     }
 }

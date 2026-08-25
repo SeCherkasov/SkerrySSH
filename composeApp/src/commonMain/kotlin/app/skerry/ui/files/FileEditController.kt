@@ -156,9 +156,10 @@ class FileEditController(
                 state = FileEditState.Failed(
                     if (e.failure == FileBrowserFailure.TooLarge) FileEditFailure.TooLarge else FileEditFailure.Read,
                 )
-            } catch (_: Exception) {
+            } catch (@Suppress("TooGenericExceptionCaught") _: Throwable) {
                 // Anything the source didn't wrap still has to land somewhere: an unhandled type
-                // would otherwise leave the editor spinning on Loading with no explanation.
+                // would otherwise leave the editor spinning on Loading with no explanation, and an
+                // Error would take the session's shared scope down on its way out.
                 state = FileEditState.Failed(FileEditFailure.Read)
             } finally {
                 busy = false
@@ -250,7 +251,9 @@ class FileEditController(
             onSaved()
         } catch (e: CancellationException) {
             throw e
-        } catch (_: FileBrowserException) {
+        } catch (@Suppress("TooGenericExceptionCaught") _: Throwable) {
+            // Same rule as the read above: a save that ends on something the source never wraps is
+            // still a save the user asked for, and still theirs to be told about.
             saveFailure = FileEditFailure.Write
         } finally {
             saving = false
