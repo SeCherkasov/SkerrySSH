@@ -161,6 +161,91 @@ class TeamsScreenModelTest {
     }
 
     /**
+     * The row the error is talking about. A colleague who rotated their Teams identity leaves a pin
+     * that is still confirmed, so their row drew the same quiet mark as every healthy one while every
+     * seal to them was being refused — the remedy existed but had to be found by opening the ceremony
+     * row by row (#326).
+     */
+    @Test
+    fun `a member whose key was refused is marked, whatever the pin still says about them`() {
+        val rows = teamMemberRows(
+            team = team(TeamRole.OWNER),
+            members = listOf(
+                member(owner, TeamRole.OWNER),
+                member(admin, TeamRole.ADMIN),
+                member(editor, TeamRole.EDITOR),
+            ),
+            scopeGrants = emptyMap(),
+            canManage = true,
+            selfAccountId = owner,
+            pins = mapOf(
+                admin to Pin.Known("SHA256:aaa", PinOrigin.CONFIRMED),
+                editor to Pin.Known("SHA256:bbb", PinOrigin.CONFIRMED),
+            ),
+            refused = setOf(admin),
+        )
+
+        fun trustOf(id: String) = rows.single { it.member.accountId == id }.trust
+        assertEquals(PeerTrust.REFUSED, trustOf(admin), "the pin is confirmed and the published key is not it")
+        assertEquals(PeerTrust.CONFIRMED, trustOf(editor), "an unrelated row keeps its own state")
+        assertTrue(PeerTrust.REFUSED.confirmable, "the ceremony is the remedy the error points at")
+    }
+
+    /**
+     * A pin this device cannot read is refused by the same lookup, and for a reason that says nothing
+     * about the colleague's key. Drawing that as "the key they publish is not the one on record"
+     * sends the user to verify a change that never happened — the record on this device is what
+     * cannot be read.
+     */
+    @Test
+    fun `a pin this device cannot read is not reported as a key that moved`() {
+        val rows = teamMemberRows(
+            team = team(TeamRole.OWNER),
+            members = listOf(member(owner, TeamRole.OWNER), member(admin, TeamRole.ADMIN)),
+            scopeGrants = emptyMap(),
+            canManage = true,
+            selfAccountId = owner,
+            pins = mapOf(admin to Pin.Unreadable),
+            refused = setOf(admin),
+        )
+
+        assertEquals(PeerTrust.UNREADABLE, rows.single { it.member.accountId == admin }.trust)
+    }
+
+    /**
+     * A rotation walks every recipient and can refuse more than one of them, and the reader's own row
+     * is never one of them: a refusal naming this account would otherwise offer a ceremony with
+     * oneself, and with no session to say whose row is whose no row may claim anything at all.
+     */
+    @Test
+    fun `a refusal never marks the own row, nor any row when the session is unknown`() {
+        val marked = teamMemberRows(
+            team = team(TeamRole.OWNER),
+            members = listOf(member(owner, TeamRole.OWNER), member(admin, TeamRole.ADMIN), member(editor, TeamRole.EDITOR)),
+            scopeGrants = emptyMap(),
+            canManage = true,
+            selfAccountId = owner,
+            refused = setOf(owner, admin, editor),
+        )
+        assertEquals(PeerTrust.SELF, marked.single { it.member.accountId == owner }.trust)
+        assertEquals(
+            listOf(admin, editor),
+            marked.filter { it.trust == PeerTrust.REFUSED }.map { it.member.accountId }.sorted(),
+            "a rotation refuses as many recipients as it walks",
+        )
+
+        val sessionless = teamMemberRows(
+            team = team(TeamRole.OWNER),
+            members = listOf(member(owner, TeamRole.OWNER), member(admin, TeamRole.ADMIN)),
+            scopeGrants = emptyMap(),
+            canManage = true,
+            selfAccountId = null,
+            refused = setOf(admin),
+        )
+        assertTrue(sessionless.all { it.trust == PeerTrust.UNKNOWN })
+    }
+
+    /**
      * Without a live session the screen cannot say whose row is whose, and reading that as "not me"
      * put the amber "confirm this member's key" on the reader themselves.
      */

@@ -168,6 +168,8 @@
     <string name="lib_teams_peer_state_first_sight">Записан при первой встрече: так ответил сервер, никто это не подтверждал.</string>
     <string name="lib_teams_peer_state_none">На этом устройстве по этому аккаунту записей ещё нет.</string>
     <string name="lib_teams_peer_state_unreadable">Устройство не может прочитать запись по этому аккаунту.</string>
+    <string name="lib_teams_peer_refused">Ключ отклонён: отпечаток не тот, что записан</string>
+    <string name="lib_teams_peer_state_refused">Этому аккаунту ничего не запечатывается: публикуемый ключ — не тот отпечаток, что за ним записан.</string>
     <string name="lib_teams_accept">Принять</string>
     <string name="lib_teams_decline">Отклонить</string>
     <string name="lib_teams_role_owner">ВЛАДЕЛЕЦ</string>
@@ -274,7 +276,7 @@
     <string name="lib_teams_scope_members_count">с доступом: %1$d</string>
     <string name="lib_teams_err_already_shared">Эта запись уже расшарена в другой области этой команды — сначала уберите её оттуда</string>
     <string name="lib_teams_err_scopes_unsupported">Этот sync-сервер слишком старый для областей доступа — обновите сервер</string>
-    <string name="lib_teams_err_peer_key_unconfirmed">Опубликованный ключ участника не тот, что за ним записан, — под него ничего не запечатано. Сверьте отпечаток по доверенному каналу и подтвердите его в списке участников</string>
+    <string name="lib_teams_err_peer_key_unconfirmed">Опубликованный ключ участника не тот, что за ним записан, — под него ничего не запечатано. В списке участников его строка помечена: сверьте отпечаток по доверенному каналу и подтвердите его там</string>
     <string name="lib_teams_err_unconfirmed_key_ignored">Пришёл ключ команды, подписанный не тем ключом, что записан за этим аккаунтом, — он проигнорирован</string>
     <string name="lib_teams_err_invite_unverified">Приглашение не проверено — откройте команду и сверьте отпечаток пригласившего перед принятием</string>
     <string name="lib_teams_err_pin_not_recorded">Подтверждённый отпечаток не удалось сохранить на этом устройстве — этому ключу ничего не отправлено</string>

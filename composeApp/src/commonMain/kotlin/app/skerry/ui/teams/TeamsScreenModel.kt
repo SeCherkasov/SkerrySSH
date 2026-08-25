@@ -54,6 +54,12 @@ fun teamMemberRows(
     selfAccountId: String? = null,
     /** What is pinned for each member — [app.skerry.shared.team.Pin.None] for anyone absent from it. */
     pins: Map<String, Pin> = emptyMap(),
+    /**
+     * Accounts a seal was just refused for. Not a property of the pin: a colleague who rotated their
+     * identity leaves one that is still confirmed, so their row wore the same quiet mark as every
+     * healthy one while the error told the user to confirm a fingerprint it never named (#326).
+     */
+    refused: Set<String> = emptySet(),
 ): List<TeamMemberRowUi> {
     val scopeNames = team.scopes.associate { it.id to it.name }
     return members
@@ -74,6 +80,7 @@ fun teamMemberRows(
                 trust = peerTrust(
                     pins[member.accountId] ?: Pin.None,
                     self = selfAccountId?.let { it == member.accountId },
+                    refused = member.accountId in refused,
                 ),
             )
         }

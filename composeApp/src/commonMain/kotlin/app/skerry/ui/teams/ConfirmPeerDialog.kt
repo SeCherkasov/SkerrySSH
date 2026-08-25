@@ -163,7 +163,11 @@ internal fun ConfirmPeerKeyDialog(
         if (state != null) {
             Txt(
                 state,
-                color = if (trust == PeerTrust.CONFIRMED) Skerry.colors.dim else Skerry.colors.amber,
+                color = when (trust) {
+                    PeerTrust.CONFIRMED -> Skerry.colors.dim
+                    PeerTrust.REFUSED -> Skerry.colors.sunset
+                    else -> Skerry.colors.amber
+                },
                 size = 12.sp, lineHeight = 17.sp, modifier = Modifier.padding(top = 10.dp),
             )
         }
@@ -231,7 +235,14 @@ internal fun ConfirmPeerKeyDialogFor(
     // ceremony, and re-reading it after the confirm lands would have the dialog claim the answer it
     // was opened to obtain.
     val trust = produceState<PeerTrust?>(null, accountId) {
-        value = peerTrust(tc.peerPins(listOf(accountId))[accountId] ?: Pin.None, self = false)
+        value = peerTrust(
+            tc.peerPins(listOf(accountId))[accountId] ?: Pin.None,
+            self = false,
+            // Read at the same moment as the pin, and for the same reason: the dialog states what
+            // stood before this ceremony. A refusal is the one fact a confirmed pin cannot carry, and
+            // the row that was pressed is the row wearing it (#326).
+            refused = accountId in tc.refusedPeers.value,
+        )
     }.value
     ConfirmPeerKeyDialog(
         accountId = accountId,

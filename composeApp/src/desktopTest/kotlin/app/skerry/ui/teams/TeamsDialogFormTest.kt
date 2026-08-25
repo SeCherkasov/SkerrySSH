@@ -22,7 +22,9 @@ import app.skerry.ui.generated.resources.lib_teams_invite_check_retry
 import app.skerry.ui.generated.resources.lib_teams_invite_key_changed_ack
 import app.skerry.ui.generated.resources.lib_teams_key_changed_unconfirmed
 import app.skerry.ui.generated.resources.lib_teams_key_pin_unreadable
+import app.skerry.ui.generated.resources.lib_teams_peer_state_confirmed
 import app.skerry.ui.generated.resources.lib_teams_peer_state_first_sight
+import app.skerry.ui.generated.resources.lib_teams_peer_state_refused
 import app.skerry.ui.desktop.runForm
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.shared.team.Pin
@@ -450,6 +452,46 @@ class TeamsDialogFormTest {
             }
         }
         assertTrue(dismissed, "the screen was never told the dialog is gone")
+    }
+
+    /**
+     * The row the refusal was about opens this dialog, and it has to say so: the pin behind a
+     * colleague who rotated their Teams identity still reads as confirmed, so wording the state off
+     * the pin alone would greet a refused key with "confirmed" (#326).
+     */
+    @Test
+    fun `a refused key is worded as refused, not as the confirmed pin behind it`() {
+        var refusedWording = ""
+        var confirmedWording = ""
+        var ack = ""
+        var confirmed: InvitePreview? = null
+        runForm({
+            refusedWording = stringResource(Res.string.lib_teams_peer_state_refused)
+            confirmedWording = stringResource(Res.string.lib_teams_peer_state_confirmed)
+            ack = stringResource(Res.string.lib_teams_invite_key_changed_ack)
+            ConfirmPeerKeyDialog(
+                accountId = ACCOUNT,
+                check = PeerKeyVerdict.Ready(
+                    InvitePreview(ACCOUNT, PEER_FINGERPRINT, pinned = Pin.Known(MOVED_FROM, PinOrigin.CONFIRMED)),
+                ),
+                trust = PeerTrust.REFUSED,
+                ownFingerprint = OWN_FINGERPRINT,
+                busy = false,
+                onRetry = {},
+                onConfirm = { confirmed = it },
+                onDismiss = {},
+            )
+        }) {
+            waitForIdle()
+            onNodeWithContentDescription(refusedWording, substring = true).assertExists()
+            onNodeWithContentDescription(confirmedWording, substring = true).assertDoesNotExist()
+            onNodeWithTag(UiTags.FORM_SAVE).assertIsNotEnabled() // the refused key still moved (#323)
+            onNodeWithContentDescription(ack).performClick()
+            waitForIdle()
+            onNodeWithTag(UiTags.FORM_SAVE).performClick()
+            waitForIdle()
+        }
+        assertEquals(PEER_FINGERPRINT, confirmed?.fingerprint)
     }
 }
 

@@ -165,6 +165,8 @@
     <string name="lib_teams_peer_state_first_sight">On record from a first sight: this is what the server answered, and nobody has confirmed it.</string>
     <string name="lib_teams_peer_state_none">This device has nothing on record for this account yet.</string>
     <string name="lib_teams_peer_state_unreadable">This device can't read what is on record for this account.</string>
+    <string name="lib_teams_peer_refused">Key refused: not the fingerprint on record</string>
+    <string name="lib_teams_peer_state_refused">Nothing is sealed to this account: the key it publishes is not the fingerprint on record for it.</string>
     <string name="lib_teams_accept">Accept</string>
     <string name="lib_teams_decline">Decline</string>
     <string name="lib_teams_role_owner">OWNER</string>
@@ -271,7 +273,7 @@
     <string name="lib_teams_scope_members_count">%1$d with access</string>
     <string name="lib_teams_err_already_shared">This record is already shared into another scope of this team — unshare it there first</string>
     <string name="lib_teams_err_scopes_unsupported">This sync server is too old for access scopes — update the server</string>
-    <string name="lib_teams_err_peer_key_unconfirmed">A member's published key is not the one on record for them — nothing was sealed to it. Check the fingerprint over a trusted channel and confirm it in the member list</string>
+    <string name="lib_teams_err_peer_key_unconfirmed">A member's published key is not the one on record for them — nothing was sealed to it. The member list marks their row: check the fingerprint over a trusted channel and confirm it there</string>
     <string name="lib_teams_err_unconfirmed_key_ignored">A team key arrived signed by a key that is not the one on record for that account, and was ignored</string>
     <string name="lib_teams_err_invite_unverified">This invite was not verified — reopen the team and check the inviter's fingerprint before accepting</string>
     <string name="lib_teams_err_pin_not_recorded">The confirmed fingerprint couldn't be stored on this device — nothing was sent to that key</string>

@@ -168,7 +168,7 @@ internal fun TeamScreen(
             val rows = remember(team, members, grants, canManage, marks) {
                 teamMemberRows(
                     team, members, grants?.byScope.orEmpty(), canManage, grants?.complete ?: true,
-                    marks?.self, marks?.pins.orEmpty(),
+                    marks?.self, marks?.pins.orEmpty(), marks?.refused.orEmpty(),
                 )
             }
             // Read once per reread rather than per row, so every row of one paint agrees on "now".
