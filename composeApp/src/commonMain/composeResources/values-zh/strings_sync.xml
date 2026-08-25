@@ -38,7 +38,7 @@
 
     <!-- 表单字段 -->
     <string name="sync_field_server_url">服务器 URL</string>
-    <string name="sync_placeholder_server_url">https://sync.onepve.com</string>
+    <string name="sync_placeholder_server_url">https://sync.example.com</string>
     <string name="sync_field_account">账户邮箱</string>
     <string name="sync_placeholder_account">your@email.com</string>
     <string name="sync_field_master_password">同步账户主密码</string>
