@@ -5,12 +5,18 @@ import androidx.compose.runtime.mutableStateListOf
 import app.skerry.ui.sftp.TransferDirection
 import app.skerry.ui.sync.nowMillis
 
-/** Where a queue entry stands: still moving bytes, finished, or stopped by a failure. */
+/** Where a queue entry stands: waiting its turn, moving bytes, finished, or stopped by a failure. */
 sealed interface TransferStatus {
+    /** Requested while the channel was busy; starts when the operation ahead of it ends. */
+    data object Waiting : TransferStatus
     data object Active : TransferStatus
     data object Done : TransferStatus
     data class Failed(val failure: FileTransferFailure) : TransferStatus
 }
+
+/** Whether the operation is over — its row is history, and the user's to clear. */
+val TransferStatus.isFinished: Boolean
+    get() = this == TransferStatus.Done || this is TransferStatus.Failed
 
 /**
  * One line of the transfer queue: a single operation (F5/F6, a picked upload, a download to a
@@ -39,14 +45,15 @@ data class TransferEntry(
 const val MAX_COMPLETED_TRANSFERS = 3
 
 /**
- * What the transfer strip lists: the running operation plus the last few finished ones. One entry
- * per operation, opened by the operation itself (it knows the direction) and closed once, by
- * whoever runs it — [TransferCoordinator.launchExclusive] does that for every exit path, so no
- * operation can leave an entry open.
+ * What the transfer strip lists: what is waiting, what is running, and the last few finished ones.
+ * One entry per operation, opened when the operation is requested ([enqueue]) and closed once, by
+ * whoever runs it — [TransferRunner] does that for every exit path, so no operation can leave an
+ * entry open.
  *
- * Transfers are serialized by the coordinator, so at most one entry is [TransferStatus.Active] and
- * it is always the newest; every lookup here relies on that. [now] is the wall clock behind the
- * entries' elapsed time (hence the speed), injected so tests can pin it.
+ * [TransferRunner] runs operations one at a time, so at most one entry is [TransferStatus.Active];
+ * every lookup here relies on that. Waiting entries sit *after* it — they were requested later —
+ * which is why the running one is looked up rather than read off the end. [now] is the wall clock
+ * behind the entries' elapsed time (hence the speed), injected so tests can pin it.
  */
 @Stable
 class TransferQueue(private val now: () -> Long = ::nowMillis) {
@@ -64,17 +71,22 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
      */
     val latest: TransferState
         get() {
-            val last = entries.lastOrNull() ?: return TransferState.Idle
-            return when (val status = last.status) {
-                TransferStatus.Active ->
-                    TransferState.Active(last.name, last.direction, last.fileIndex, last.fileCount, last.transferred, last.total)
-                TransferStatus.Done -> TransferState.Idle
-                is TransferStatus.Failed -> TransferState.Failed(last.name, status.failure)
+            entries.lastOrNull { it.status == TransferStatus.Active }?.let {
+                return TransferState.Active(it.name, it.direction, it.fileIndex, it.fileCount, it.transferred, it.total)
             }
+            // Nothing is moving: what is left to report is how the last operation ended. That can
+            // be one that never ran — an entry abandoned by [abandon] outlives the transfer it was
+            // queued behind, and its verdict is the newer one.
+            val last = entries.lastOrNull { it.status.isFinished } ?: return TransferState.Idle
+            val failed = last.status as? TransferStatus.Failed ?: return TransferState.Idle
+            return TransferState.Failed(last.id, last.name, failed.failure)
         }
 
-    /** Whether the newest entry is still running — the caller's cue that it is theirs to close. */
-    val hasOpenEntry: Boolean get() = entries.lastOrNull()?.status == TransferStatus.Active
+    /** Whether an entry is still running — the caller's cue that it is theirs to close. */
+    val hasOpenEntry: Boolean get() = entries.any { it.status == TransferStatus.Active }
+
+    /** Whether any operation is running or still waiting for its turn on the channel. */
+    val hasWork: Boolean get() = entries.any { !it.status.isFinished }
 
     private var nextEntryId = 1L
 
@@ -82,22 +94,50 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
     private var startedAt = 0L
     private var bytesDone = 0L
 
-    /** Opens the entry of an operation about to start. */
-    fun begin(direction: TransferDirection) {
-        startedAt = now()
-        bytesDone = 0
+    /**
+     * Opens the entry of a requested operation and returns its id. The entry starts [Waiting]:
+     * every operation goes through the queue, whether or not it has to wait there. [name] is what
+     * the operation is about — the picked file, or the first of a selection — so a waiting row is
+     * not a blank line; [step] replaces it with the file actually moving once the transfer starts.
+     */
+    fun enqueue(direction: TransferDirection, name: String): Long {
+        val id = nextEntryId++
         entries += TransferEntry(
-            id = nextEntryId++,
+            id = id,
             direction = direction,
-            name = "",
+            name = name,
             fileIndex = 0,
             fileCount = 0,
             transferred = 0,
             total = 0,
             bytesDone = 0,
             elapsedMillis = 0,
-            status = TransferStatus.Active,
+            status = TransferStatus.Waiting,
         )
+        return id
+    }
+
+    /**
+     * Starts the entry [id]: from here its bytes and its elapsed time count, so a spell in the
+     * queue never shows up as a slow transfer.
+     */
+    fun activate(id: Long) {
+        startedAt = now()
+        bytesDone = 0
+        val index = entries.indexOfFirst { it.id == id }
+        if (index >= 0) entries[index] = entries[index].copy(status = TransferStatus.Active)
+    }
+
+    /**
+     * Closes a waiting entry as failed, for [failure] — the channel went away before its turn came,
+     * or the operation was refused before it could take one. Dropping the row instead would be the
+     * silent no-op the queue exists to avoid.
+     */
+    fun abandon(id: Long, failure: FileTransferFailure) {
+        val index = entries.indexOfFirst { it.id == id && it.status == TransferStatus.Waiting }
+        if (index < 0) return
+        entries[index] = entries[index].copy(status = TransferStatus.Failed(failure))
+        trim()
     }
 
     /** Progress of the file the running operation is on ([index] of [count] in the operation). */
@@ -133,20 +173,22 @@ class TransferQueue(private val now: () -> Long = ::nowMillis) {
     /** Closes the running entry (if one is still open) and trims the finished ones. */
     fun end(status: TransferStatus, name: String? = null) {
         updateActive { it.copy(status = status, name = name ?: it.name, elapsedMillis = now() - startedAt) }
-        // Oldest finished entries go first; the running one is never touched.
-        while (entries.count { it.status != TransferStatus.Active } > MAX_COMPLETED_TRANSFERS) {
-            entries.removeAt(entries.indexOfFirst { it.status != TransferStatus.Active })
+        trim()
+    }
+
+    /** Oldest finished entries go first; what is running or still waiting is never touched. */
+    private fun trim() {
+        while (entries.count { it.status.isFinished } > MAX_COMPLETED_TRANSFERS) {
+            entries.removeAt(entries.indexOfFirst { it.status.isFinished })
         }
     }
 
-    /** Drops one finished entry ([id]); a transfer still running is left alone. */
+    /**
+     * Drops entry [id]; a transfer still running is left alone. A waiting one goes — that is how
+     * the user cancels it, and [TransferRunner.cancelWaiting] releases what it was holding.
+     */
     fun dismiss(id: Long) {
         entries.removeAll { it.id == id && it.status != TransferStatus.Active }
-    }
-
-    /** Drops every finished entry at once, leaving only what is still running. */
-    fun dismissCompleted() {
-        entries.removeAll { it.status != TransferStatus.Active }
     }
 
     private fun updateActive(edit: (TransferEntry) -> TransferEntry) {

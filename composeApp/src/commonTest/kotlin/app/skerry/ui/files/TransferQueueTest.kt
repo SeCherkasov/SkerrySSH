@@ -17,12 +17,17 @@ class TransferQueueTest {
     private var clock = 1_000L
     private fun queue() = TransferQueue { clock }
 
+    /** Opens an entry and starts it right away — the shape of an operation that never had to wait. */
+    private fun TransferQueue.start(direction: TransferDirection, name: String = "") {
+        activate(enqueue(direction, name))
+    }
+
     @Test
     fun `an opened entry is the running one until it is closed`() {
         val queue = queue()
         assertFalse(queue.hasOpenEntry)
 
-        queue.begin(TransferDirection.Upload)
+        queue.start(TransferDirection.Upload)
         assertTrue(queue.hasOpenEntry)
 
         queue.end(TransferStatus.Done)
@@ -32,7 +37,7 @@ class TransferQueueTest {
     @Test
     fun `progress lands on the running entry, bytes and time accumulate over the operation`() {
         val queue = queue()
-        queue.begin(TransferDirection.Upload)
+        queue.start(TransferDirection.Upload)
         queue.step("a.txt", index = 1, count = 2, transferred = 4, total = 10)
         queue.fileFinished(10)
         clock = 3_000L
@@ -51,11 +56,11 @@ class TransferQueueTest {
     @Test
     fun `the single-line state follows the newest entry, not the newest failure`() {
         val queue = queue()
-        queue.begin(TransferDirection.Upload)
+        queue.start(TransferDirection.Upload)
         queue.fail("a.txt", FileTransferFailure.Transfer)
         assertIs<TransferState.Failed>(queue.latest)
 
-        queue.begin(TransferDirection.Upload)
+        queue.start(TransferDirection.Upload)
         queue.step("b.txt", 1, 1, 0, 10)
         val active = assertIs<TransferState.Active>(queue.latest)
         assertEquals("b.txt", active.name)
@@ -74,7 +79,7 @@ class TransferQueueTest {
         // The coordinator's blocks may close their own entry as failed and then return normally;
         // the generic "done" that follows must not overwrite the failure.
         val queue = queue()
-        queue.begin(TransferDirection.Download)
+        queue.start(TransferDirection.Download)
         queue.fail("r.txt", FileTransferFailure.DeleteSource)
 
         queue.end(TransferStatus.Done)
@@ -87,7 +92,7 @@ class TransferQueueTest {
     fun `entries keep distinct ids in the order they were opened`() {
         val queue = queue()
         repeat(3) {
-            queue.begin(TransferDirection.Upload)
+            queue.start(TransferDirection.Upload)
             queue.end(TransferStatus.Done)
         }
         val ids = queue.list.map { it.id }
@@ -100,7 +105,7 @@ class TransferQueueTest {
         val queue = queue()
         val ids = mutableListOf<Long>()
         repeat(MAX_COMPLETED_TRANSFERS + 2) {
-            queue.begin(TransferDirection.Upload)
+            queue.start(TransferDirection.Upload)
             queue.end(TransferStatus.Done)
             ids += queue.list.last().id
         }
@@ -108,25 +113,9 @@ class TransferQueueTest {
     }
 
     @Test
-    fun `dismissing separates the finished entries from the one still running`() {
-        val queue = queue()
-        queue.begin(TransferDirection.Upload)
-        queue.end(TransferStatus.Done)
-        queue.begin(TransferDirection.Download)
-        queue.step("r.txt", 1, 1, 0, 30)
-        val runningId = queue.list.last().id
-
-        queue.dismissCompleted()
-
-        val left = queue.list.single()
-        assertEquals(runningId, left.id)
-        assertEquals(TransferStatus.Active, left.status)
-    }
-
-    @Test
     fun `dismissing by id refuses to drop a running entry`() {
         val queue = queue()
-        queue.begin(TransferDirection.Upload)
+        queue.start(TransferDirection.Upload)
         val id = queue.list.single().id
 
         queue.dismiss(id)

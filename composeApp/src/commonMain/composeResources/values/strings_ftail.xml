@@ -23,9 +23,10 @@
     <!-- Typed file browser / transfer failures (raw platform text never reaches the user) -->
     <string name="ftail_err_local_io">Local filesystem error</string>
     <string name="ftail_err_sftp">SFTP error</string>
-    <string name="ftail_err_illegal_name">Unsafe name in the listing</string>
+    <string name="ftail_err_illegal_name">Unsafe file name</string>
     <string name="ftail_err_open_source">Failed to open the selected file</string>
     <string name="ftail_err_open_target">Failed to open the save target</string>
+    <string name="ftail_err_session_closed">Session closed before it started</string>
     <string name="ftail_err_too_large">File is too large to open</string>
 
     <!-- Viewer/editor (F3/F4) failures -->

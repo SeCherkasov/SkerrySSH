@@ -23,9 +23,10 @@
     <!-- 文件浏览器/传输的类型化失败原因（原始平台文本不会展示给用户） -->
     <string name="ftail_err_local_io">本地文件系统错误</string>
     <string name="ftail_err_sftp">SFTP 错误</string>
-    <string name="ftail_err_illegal_name">列表中的文件名不安全</string>
+    <string name="ftail_err_illegal_name">文件名不安全</string>
     <string name="ftail_err_open_source">无法打开所选文件</string>
     <string name="ftail_err_open_target">无法打开保存目标</string>
+    <string name="ftail_err_session_closed">会话在传输开始前已关闭</string>
     <string name="ftail_err_too_large">文件太大，无法打开</string>
 
     <!-- 查看器/编辑器（F3/F4）失败原因 -->

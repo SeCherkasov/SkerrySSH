@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.ftail_file_fallback
 import app.skerry.ui.generated.resources.sftp_unprintable_name
 import org.jetbrains.compose.resources.stringResource
 
@@ -26,6 +27,19 @@ internal fun fileDisplayName(raw: String): String {
     // filter is a scan and an allocation the name has not earned twice.
     return remember(raw, unprintable) { untrustedLabel(raw).ifBlank { unprintable } }
 }
+
+/**
+ * A transfer's file name as it is drawn — a queue row, the mobile card, what a screen reader is
+ * told about them.
+ *
+ * The empty string is the app's own sentinel here: an operation that has not named a file yet (it
+ * was refused, or failed before the first one opened). Everything else is the host's text and goes
+ * through [fileDisplayName] — whitespace included, since a name of spaces is a name the far side
+ * chose, not an absent one.
+ */
+@Composable
+internal fun transferDisplayName(raw: String): String =
+    if (raw.isEmpty()) stringResource(Res.string.ftail_file_fallback) else fileDisplayName(raw)
 
 /**
  * A directory path as it is drawn — a breadcrumb, a work-bar subtitle, the destination half of a

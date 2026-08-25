@@ -17,71 +17,10 @@ import app.skerry.ui.sync.nowMillis
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.launch
 import kotlin.coroutines.cancellation.CancellationException
 
-/**
- * Typed, user-facing reason for a failed transfer; the UI maps it to a localized string. Raw
- * exception text is never shown — a [FileBrowserException] contributes only its
- * [FileBrowserFailure], anything else lands on [Transfer].
- */
-enum class FileTransferFailure {
-    /** The byte transfer itself failed (stream/SFTP/local I/O). */
-    Transfer,
-
-    /** Files reached the destination, but a source could not be removed after a move. */
-    DeleteSource,
-
-    /** A listing entry carried a name unsafe to use as a path component. */
-    IllegalName,
-
-    /** The picked upload source could not be opened. */
-    OpenSource,
-
-    /** The chosen download target could not be opened. */
-    OpenTarget,
-}
-
-/** Maps a browser failure onto the transfer bar's reason; I/O-level causes collapse to [FileTransferFailure.Transfer]. */
-private fun FileBrowserFailure.toTransferFailure(): FileTransferFailure = when (this) {
-    FileBrowserFailure.IllegalName -> FileTransferFailure.IllegalName
-    FileBrowserFailure.OpenSource -> FileTransferFailure.OpenSource
-    FileBrowserFailure.OpenTarget -> FileTransferFailure.OpenTarget
-    FileBrowserFailure.LocalIo, FileBrowserFailure.Sftp, FileBrowserFailure.TooLarge ->
-        FileTransferFailure.Transfer
-}
-
-/** Cross-pane batch transfer state, for the bottom transfer bar. */
-sealed interface TransferState {
-    /** No transfer in progress. */
-    data object Idle : TransferState
-
-    /**
-     * Transferring file [name] ([fileIndex] of [fileCount] in the batch), [transferred] of [total]
-     * bytes ([total] = 0 if unknown).
-     */
-    data class Active(
-        val name: String,
-        val direction: TransferDirection,
-        val fileIndex: Int,
-        val fileCount: Int,
-        val transferred: Long,
-        val total: Long,
-    ) : TransferState
-
-    /**
-     * Transfer of [name] failed; [failure] is the typed reason, localized by the UI. [name] is
-     * blank when the failure happened before any file became active — the UI substitutes a
-     * localized placeholder.
-     */
-    data class Failed(val name: String, val failure: FileTransferFailure) : TransferState
-}
-
-/**
- * Overwrite conflict awaiting confirmation. [names] are entries in the destination directory that
- * would be overwritten; [proceed] runs the deferred transfer once the user confirms.
- */
-class OverwriteConflict(val names: List<String>, val proceed: () -> Unit)
+/** Top-level names an operation still on the queue is going to create in directory [dir]. */
+private class PlannedWrite(val dir: String, val names: Set<String>)
 
 /**
  * Coordinates file transfer between the [local] and [remote] panes over a single [SftpClient].
@@ -90,7 +29,8 @@ class OverwriteConflict(val names: List<String>, val proceed: () -> Unit)
  * directory, updates [transfer] for the progress bar, then reloads the destination and clears the
  * source selection. On upload, directories in the selection are skipped; on download, a directory
  * is transferred recursively (tree walked via [sftp], local subdirectories recreated via
- * [localBrowser]). At most one transfer runs at a time (serialized via [busy]).
+ * [localBrowser]). At most one transfer runs at a time; the rest wait their turn in
+ * [TransferRunner], visible on the queue as they wait.
  */
 @Stable
 class TransferCoordinator(
@@ -105,7 +45,13 @@ class TransferCoordinator(
 ) {
     private val transfers = TransferQueue(now)
 
-    /** The transfer queue, oldest first: what is moving now plus the last few finished entries. */
+    /**
+     * Runs the operations, one at a time and in order. Everything the coordinator starts goes
+     * through it, so no requested operation is ever dropped without a row saying what became of it.
+     */
+    private val runner = TransferRunner(scope, transfers)
+
+    /** The transfer queue, oldest first: what is waiting and moving now, plus the last few finished. */
     val queue: List<TransferEntry> get() = transfers.list
 
     /**
@@ -115,29 +61,47 @@ class TransferCoordinator(
     val transfer: TransferState get() = transfers.latest
 
     /**
-     * Whether bytes are moving right now — a transfer, or an editor save ([openEditor]; the same
-     * [editorWrites] lock session teardown waits on). Read by the vault's idle auto-lock, which
-     * defers locking while it is true: a lock closes the session this runs on, and a half-written
-     * file is not what a timeout should leave behind — a save is open-truncate-write, so cutting it
-     * loses the file. [busy] itself stays private: it is the serialization latch, held across the
-     * overwrite prompt too, which is the user being asked something, not work in flight.
+     * Whether this session still owes the user file work — a transfer running or waiting its turn,
+     * or an editor save ([openEditor]; the same [editorWrites] lock session teardown waits on).
+     * Read by the vault's idle auto-lock, which defers locking while it is true: a lock closes the
+     * session this runs on, and a half-written file is not what a timeout should leave behind — a
+     * save is open-truncate-write, so cutting it loses the file. A queued operation counts for the
+     * same reason: locking would close the channel its turn never came on. A question put to the
+     * user — an open "Overwrite?" dialog — does not: nothing has been requested yet.
      */
-    val writeInFlight: Boolean get() = transfer is TransferState.Active || editorWrites.isLocked
+    val writeInFlight: Boolean get() = transfers.hasWork || editorWrites.isLocked
 
     /**
      * Overwrite conflict awaiting confirmation: the destination directory already has entries
      * named [OverwriteConflict.names]. While non-null, the UI shows an "Overwrite?" dialog;
-     * [resolveOverwrite] either runs the deferred transfer or cancels it.
+     * [resolveOverwrite] either runs the deferred transfer or cancels it. Head of [conflicts].
      */
     var overwrite: OverwriteConflict? by mutableStateOf(null)
         private set
 
     /**
-     * Serializes transfers: the check-and-set on [busy] isn't atomic, but is safe since
-     * `uploadSelection`/`downloadSelection` are called from UI handlers on the main thread, same
-     * as [FilePaneController].
+     * Conflicts still to be answered, in the order they were raised. Normally at most one — the
+     * dialog is modal — but the native file picker draws over it, so a second picked upload can
+     * reach the coordinator while the first is still being asked about. Replacing the pending
+     * conflict would drop the staged copy the first one holds, which is the defect this queue
+     * exists to avoid, so they are answered one after another instead.
      */
-    private var busy = false
+    private val conflicts = ArrayDeque<OverwriteConflict>()
+
+    /**
+     * Top-level names an operation that has not finished yet will write, and where. The overwrite
+     * check reads the destination pane's *listing*, which only catches up when the pane reloads —
+     * after an operation ends. While transfers were serialized by a latch there was never a second
+     * operation to be stale about; a queue makes it stale by construction, and the two would
+     * silently overwrite each other. Worst case is a move: the second one's source is deleted after
+     * the transfer, so the file it overwrote exists nowhere. Entries are added when an operation is
+     * submitted and dropped when it leaves, however it leaves.
+     */
+    private val plannedWrites = mutableListOf<PlannedWrite>()
+
+    /** Names an operation still on the queue will write into [dir]. */
+    private fun planned(dir: String): Set<String> =
+        plannedWrites.filter { it.dir == dir }.flatMapTo(mutableSetOf()) { it.names }
 
     /**
      * Held for the duration of an editor's write ([openEditor]). The session's teardown waits on it
@@ -155,13 +119,14 @@ class TransferCoordinator(
     /**
      * Uploads the local pane's selection into the remote pane's current directory. Files are
      * uploaded as-is; directories recursively (subtree recreated on the host), symmetric with
-     * download. Symlinks/other are skipped. Progress/error go to [transfer]; serialized via [busy].
+     * download. Symlinks/other are skipped. Progress/error go to [transfer]; runs when the channel
+     * is free, waits on the queue until then.
      */
     fun uploadSelection() {
         val items = local.selectedItems()
         if (items.isEmpty()) return
         confirmOverwrite(items, remote) { destDir ->
-            launchExclusive {
+            submit(TransferDirection.Upload, items.first().name, destDir, items.map { it.name }) {
                 runUpload(items, destDir)
                 remote.reloadNow()
                 local.clearSelection()
@@ -174,16 +139,18 @@ class TransferCoordinator(
      * downloaded as-is; directories recursively: a tree-walk plan is built first
      * ([buildDownloadPlan]), local subdirectories are recreated ([ensureDir]), then files are
      * downloaded in order with a shared progress counter. Symlinks/other are skipped (never
-     * followed). Progress/error go to [transfer]; serialized via [busy].
+     * followed). Progress/error go to [transfer]; runs when the channel is free, waits on the queue
+     * until then.
      */
     fun downloadSelection() {
         val items = remote.selectedItems()
         if (items.isEmpty()) return
-        // Snapshot of the source directory at request time: while the Overwrite dialog is open,
-        // pane navigation must not move the download sources to a different directory.
+        // Snapshot of the source directory at request time: while the Overwrite dialog is open or
+        // the operation waits its turn, pane navigation must not move the download sources to a
+        // different directory.
         val sourceDir = remote.path
         confirmOverwrite(items, local) { destDir ->
-            launchExclusive {
+            submit(TransferDirection.Download, items.first().name, destDir, items.map { it.name }) {
                 runDownload(items, destDir, sourceDir)
                 local.reloadNow()
                 remote.clearSelection()
@@ -203,7 +170,7 @@ class TransferCoordinator(
             val items = local.selectedItems()
             if (items.isEmpty()) return
             confirmOverwrite(items, remote) { destDir ->
-                launchExclusive {
+                submit(TransferDirection.Upload, items.first().name, destDir, items.map { it.name }) {
                     runUpload(items, destDir)
                     val failed = deleteSources(items) { localBrowser.delete(it) }
                     remote.reloadNow()
@@ -220,7 +187,7 @@ class TransferCoordinator(
             // deletion path rebuild.
             val remoteDir = remote.path
             confirmOverwrite(items, local) { destDir ->
-                launchExclusive {
+                submit(TransferDirection.Download, items.first().name, destDir, items.map { it.name }) {
                     runDownload(items, destDir, remoteDir)
                     // Deletes via a path rebuilt from the directory snapshot + a validated name, not
                     // server-controlled item.path.
@@ -255,51 +222,91 @@ class TransferCoordinator(
      * document; desktop: chosen path). SFTP writes bytes to `target.stagingPath`; on success,
      * `target.finalize()` copies staging to the Uri; on error/cancel, `target.discard()`. Unlike
      * [downloadSelection], the target isn't tied to the local pane — this is the mobile Files
-     * screen's download-out-of-sandbox path. Progress/error go to [transfer]; serialized via the
-     * same [busy] (through [launchExclusive]). Directories are ignored (no recursive transfer here).
+     * screen's download-out-of-sandbox path. Progress/error go to [transfer]; it takes its turn on
+     * the queue like every other operation. Directories are ignored (no recursive transfer here).
+     *
+     * The target is discarded on every path that doesn't move it — a failed transfer, a failed
+     * `finalize()`, a cancelled session, an operation dropped before its turn came. On Android that
+     * is not housekeeping: the picker has already created the document at the location the user
+     * chose, so leaving it is leaving them an empty file where they asked for their data.
      * `discard()` is wrapped in [runCatching] so a cleanup failure doesn't mask the original error.
      */
     fun downloadToTarget(item: FileItem, target: DownloadTarget) {
         if (item.type != FileItemType.File) return
-        launchExclusive {
-            try {
-                transfers.begin(TransferDirection.Download)
-                transfers.step(target.displayName, 1, 1, 0, item.size)
-                sftp.download(item.path, target.stagingPath) { transferred, total ->
-                    transfers.step(target.displayName, 1, 1, transferred, total)
-                }
-                target.finalize()
-            } catch (e: Exception) { // Includes CancellationException — staging is cleaned up either way.
-                runCatching { target.discard() }
-                throw e
+        var moved = false
+        submit(
+            direction = TransferDirection.Download,
+            name = target.displayName,
+            // The target is a path the platform picker owns, not a directory this app writes into,
+            // so there is nothing for another queued operation to clash with.
+            destDir = "",
+            writes = emptyList(),
+            onFinally = { if (!moved) runCatching { target.discard() } },
+        ) {
+            transfers.step(target.displayName, 1, 1, 0, item.size)
+            sftp.download(item.path, target.stagingPath) { transferred, total ->
+                transfers.step(target.displayName, 1, 1, transferred, total)
             }
+            target.finalize()
+            moved = true
         }
     }
 
     /**
      * Fallback upload: uploads an arbitrary local [source] (from a native picker) into the remote
      * pane's current directory, for when the local pane has nothing selected. Remote name is
-     * `source.name`. Progress/error go to [transfer]; `source.cleanup()` runs on completion
-     * (success or error) and the remote pane reloads. Serialized via the same [busy] as
-     * selection-based transfers.
+     * `source.name`. Progress/error go to [transfer]; it takes its turn on the queue like every
+     * other operation, and the remote pane reloads afterwards.
+     *
+     * `source.cleanup()` runs on every path the source leaves by — a finished or failed transfer, a
+     * refused overwrite, an operation dropped before its turn came. The picker has already copied
+     * the whole file into the app's cache by the time this is called (the Uri grant is short-lived),
+     * so a path that forgets to release it leaks a full copy of whatever the user picked.
      */
     fun uploadSource(source: UploadSource) {
-        if (busy) return
-        // Snapshot of the destination directory at request time: pane navigation while the
-        // Overwrite dialog is open must not redirect the upload to a different directory (TOCTOU).
+        // The name is whatever the picker's provider reported — on Android an
+        // OpenableColumns.DISPLAY_NAME from an app we do not control — and it becomes a path
+        // component on the host, under the user's own credentials. A name that would climb out of
+        // the destination directory never gets that far, and never reaches the conflict check
+        // either: no listing entry can match it, so nothing would have been asked.
+        if (isUnsafeListingName(source.name)) {
+            refuse(source, FileTransferFailure.IllegalName)
+            return
+        }
+        // Snapshot of the destination directory at request time: pane navigation while the Overwrite
+        // dialog is open, or while the upload waits its turn, must not redirect it (TOCTOU).
         val destDir = remote.path
-        if (source.name in remote.currentEntryNames()) {
-            overwrite = OverwriteConflict(listOf(source.name)) { runUploadSource(source, destDir) }
+        if (source.name in remote.currentEntryNames() + planned(destDir)) {
+            ask(
+                OverwriteConflict(
+                    names = listOf(source.name),
+                    proceed = { runUploadSource(source, destDir) },
+                    cancel = { runner.release { source.cleanup() } },
+                ),
+            )
             return
         }
         runUploadSource(source, destDir)
     }
 
+    /**
+     * Turns a picked source away with a row that says why, and releases its staged copy. The row is
+     * the point: this is the one path where the app refuses something the user already answered a
+     * picker for, and #317 is what happens when such a refusal is silent.
+     */
+    private fun refuse(source: UploadSource, failure: FileTransferFailure) {
+        transfers.abandon(transfers.enqueue(TransferDirection.Upload, source.name), failure)
+        runner.release { source.cleanup() }
+    }
+
     private fun runUploadSource(source: UploadSource, destDir: String) {
-        launchExclusive(onFinally = { runCatching { source.cleanup() } }) {
-            // Opened first, like every other operation: whatever the block does afterwards, the
-            // entry exists to carry the outcome.
-            transfers.begin(TransferDirection.Upload)
+        submit(
+            direction = TransferDirection.Upload,
+            name = source.name,
+            destDir = destDir,
+            writes = listOf(source.name),
+            onFinally = { runCatching { source.cleanup() } },
+        ) {
             val target = childPath(destDir, source.name)
             transfers.step(source.name, 1, 1, 0, 0)
             sftp.upload(source.stagingPath, target) { transferred, total ->
@@ -332,82 +339,99 @@ class TransferCoordinator(
         ).also { it.open() }
     }
 
-    /** Drops one finished queue entry ([id]); a transfer still running is left alone. */
+    /**
+     * Drops one queue entry ([id]); a transfer still running is left alone. An entry still waiting
+     * for its turn is cancelled by dropping it, and whatever it was holding — a picked upload's
+     * staged copy, a "Save to…" document — is released with it.
+     */
     fun dismissTransfer(id: Long) {
+        runner.cancelWaiting(id)
         transfers.dismiss(id)
     }
 
-    /** Drops every finished entry at once, leaving only what is still running. */
-    fun dismissCompleted() {
-        transfers.dismissCompleted()
+    /**
+     * Releases every operation the session still owes an answer or a turn to: the channel is
+     * closing, so neither will come. Their rows are closed as failed rather than dropped — the user
+     * asked for them — and their handles go back to the platform. Called by the session teardown
+     * before the SFTP channel is closed.
+     *
+     * The unanswered questions go first and matter most: a picked upload stopped at the "Overwrite?"
+     * dialog has no queue row yet, and its staged copy is a byte-for-byte copy of whatever the user
+     * picked sitting in the app's cache. Nothing else ever comes back for it.
+     */
+    fun releaseQueued() {
+        while (conflicts.isNotEmpty()) conflicts.removeFirst().cancel()
+        overwrite = null
+        runner.releaseWaiting()
     }
 
     /**
      * Checks top-level name conflicts between [items] and destination [dest] before starting a
      * transfer. No overlap: proceeds immediately. Overlap: raises the [overwrite] dialog, deferring
      * [proceed] until confirmed ([resolveOverwrite]). Only the top level is checked (nested-tree
-     * merges aren't handled here). Silently no-ops if a transfer is already running ([busy]).
+     * merges aren't handled here).
      *
      * [proceed] receives a snapshot of the destination directory taken here (when the dialog is
      * shown): the destination pane can be navigated while the dialog is open, so reading
      * `dest.path` at confirmation time would redirect the write elsewhere (TOCTOU) while the
      * conflict check still applied to the old directory.
+     *
+     * What an operation already on the queue is going to write counts as existing ([planned]): the
+     * pane's listing does not know about it yet, and without that the two would overwrite each
+     * other with nothing asked.
      */
     private fun confirmOverwrite(items: List<FileItem>, dest: FilePaneController, proceed: (destDir: String) -> Unit) {
-        if (busy) return
         val destDir = dest.path
-        val existing = dest.currentEntryNames()
+        val existing = dest.currentEntryNames() + planned(destDir)
         val clash = items.map { it.name }.filter { it in existing }
-        if (clash.isEmpty()) proceed(destDir) else overwrite = OverwriteConflict(clash) { proceed(destDir) }
+        if (clash.isEmpty()) proceed(destDir) else ask(OverwriteConflict(clash, proceed = { proceed(destDir) }))
     }
 
-    /** User's answer to the overwrite dialog: true runs the deferred transfer, else cancels it. */
-    fun resolveOverwrite(overwrite: Boolean) {
-        val pending = this.overwrite ?: return
-        this.overwrite = null
-        if (overwrite) pending.proceed()
+    /** Puts a conflict to the user, behind any that are already waiting for an answer. */
+    private fun ask(conflict: OverwriteConflict) {
+        conflicts += conflict
+        if (overwrite == null) overwrite = conflict
     }
 
     /**
-     * Runs a transfer, serialized via [busy]: while one is active, new calls are ignored. Any
-     * error moves the bar to [TransferState.Failed] (name taken from the current active step);
-     * [CancellationException] propagates. [onFinally] is a completion hook (success/error/cancel)
-     * for the caller's resource cleanup (staging files, etc.); runs before [busy] is cleared —
-     * swallowing its own failures is the caller's responsibility (wrap in [runCatching]).
+     * User's answer to the overwrite dialog: true runs the deferred transfer, false releases what
+     * it would have consumed. The next unanswered conflict, if any, takes the dialog's place.
      */
-    private fun launchExclusive(onFinally: suspend () -> Unit = {}, block: suspend () -> Unit) {
-        if (busy) return
-        busy = true
-        scope.launch {
-            try {
-                block()
-                // A block can finish normally having already closed its own entry as failed
-                // (a move whose transfer went through but whose source delete didn't) — that
-                // verdict wins, so the entry is only marked done while it is still open.
-                if (transfers.hasOpenEntry) transfers.end(TransferStatus.Done)
-            } catch (e: CancellationException) {
-                // A cancelled operation is over too: leaving the entry Active would show a
-                // progress bar that never moves again.
-                transfers.end(TransferStatus.Failed(FileTransferFailure.Transfer))
-                throw e
-            } catch (e: Exception) {
-                val failure = (e as? FileBrowserException)?.failure?.toTransferFailure() ?: FileTransferFailure.Transfer
-                transfers.end(TransferStatus.Failed(failure))
-            } finally {
-                onFinally()
-                busy = false
-            }
-        }
+    fun resolveOverwrite(overwrite: Boolean) {
+        val pending = conflicts.removeFirstOrNull() ?: return
+        this.overwrite = conflicts.firstOrNull()
+        if (overwrite) pending.proceed() else pending.cancel()
+    }
+
+    /**
+     * Hands an operation to [runner]: it opens the queue entry ([direction] and [name] label it
+     * until the transfer names the file it is on), runs [block] when the channel is free, and
+     * closes the entry however it ends. [destDir] and [writes] are the top-level names it will
+     * create, claimed for as long as it is on the queue so the next operation's overwrite check can
+     * see them ([planned]). [onFinally] releases whatever the operation was holding and runs
+     * exactly once, whether or not [block] ever got to run — swallowing its own failures is the
+     * caller's responsibility (wrap in [runCatching]).
+     */
+    private fun submit(
+        direction: TransferDirection,
+        name: String,
+        destDir: String,
+        writes: List<String>,
+        onFinally: suspend () -> Unit = {},
+        block: suspend () -> Unit,
+    ) {
+        val plan = PlannedWrite(destDir, writes.toSet())
+        plannedWrites += plan
+        runner.submit(direction, name, onFinally = { plannedWrites.remove(plan); onFinally() }, block = block)
     }
 
     /**
      * Uploads [items] (files as-is, directories recursively via [buildUploadPlan]) into remote
      * [remoteDir], recreating the subtree on the host ([ensureDir]); ends in
-     * [TransferState.Idle]. No serialization/post-actions — called inside an already-armed
-     * [launchExclusive] block.
+     * [TransferState.Idle]. No serialization/post-actions — called inside a block [runner] has
+     * already opened the queue entry for.
      */
     private suspend fun runUpload(items: List<FileItem>, remoteDir: String) {
-        transfers.begin(TransferDirection.Upload)
         val plan = buildUploadPlan(localBrowser, items, remoteDir)
         // Directories are created in pre-order: parent always before children.
         plan.dirs.forEach { ensureDir(remoteBrowser, it) }
@@ -423,11 +447,10 @@ class TransferCoordinator(
     /**
      * Downloads [items] (files as-is, directories recursively via [buildDownloadPlan]) from remote
      * [remoteDir] into local [localDir], recreating the subtree ([ensureDir]); ends in
-     * [TransferState.Idle]. No serialization/post-actions — called inside an already-armed
-     * [launchExclusive] block.
+     * [TransferState.Idle]. No serialization/post-actions — called inside a block [runner] has
+     * already opened the queue entry for.
      */
     private suspend fun runDownload(items: List<FileItem>, localDir: String, remoteDir: String) {
-        transfers.begin(TransferDirection.Download)
         val plan = buildDownloadPlan(sftp, items, localDir, remoteDir)
         // Directories are created in pre-order: parent always before children.
         plan.dirs.forEach { ensureDir(localBrowser, it) }

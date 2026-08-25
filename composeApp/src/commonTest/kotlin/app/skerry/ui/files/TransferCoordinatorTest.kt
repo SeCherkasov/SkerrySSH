@@ -3,10 +3,8 @@ package app.skerry.ui.files
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.files.SftpFileBrowser
-import app.skerry.ui.sftp.DownloadTarget
 import app.skerry.ui.sftp.FakeSftpClient
 import app.skerry.ui.sftp.TransferDirection
-import app.skerry.ui.sftp.UploadSource
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -136,21 +134,6 @@ class TransferCoordinatorTest {
         assertTrue(r.remoteFake.downloads.none { it.first.endsWith("evil.txt") })
     }
 
-    /** Test target for "Save to..." downloads: records the staging path and finalize/discard. */
-    private class FakeDownloadTarget(
-        override val displayName: String,
-        override val stagingPath: String,
-        private val finalizeError: String? = null,
-    ) : DownloadTarget {
-        var finalized = false
-        var discarded = false
-        override suspend fun finalize() {
-            finalizeError?.let { throw RuntimeException(it) }
-            finalized = true
-        }
-        override suspend fun discard() { discarded = true }
-    }
-
     @Test
     fun `downloadToTarget streams a remote file into the picked target and finalizes it`() = runTest {
         val r = rig()
@@ -160,7 +143,10 @@ class TransferCoordinatorTest {
         advanceUntilIdle()
 
         assertEquals("$RHOME/r.txt" to "/staging/r.txt", r.remoteFake.lastDownload)
-        assertTrue(target.finalized)
+        assertEquals(1, target.finalizes)
+        // The document the picker created is now the user's file: removing it afterwards would
+        // hand them an empty one at the location they chose, which is issue #317 inverted.
+        assertEquals(0, target.discards)
         assertEquals(TransferState.Idle, r.coordinator.transfer)
     }
 
@@ -173,7 +159,7 @@ class TransferCoordinatorTest {
         advanceUntilIdle()
 
         assertIs<TransferState.Failed>(r.coordinator.transfer)
-        assertTrue(target.discarded)
+        assertEquals(1, target.discards, "exactly one release, whichever way the operation ended")
     }
 
     @Test
@@ -216,12 +202,7 @@ class TransferCoordinatorTest {
     @Test
     fun `uploadSource uploads a picked file into the remote directory and refreshes it`() = runTest {
         val r = rig()
-        val source = object : UploadSource {
-            override val name = "picked.txt"
-            override val stagingPath = "/tmp/picked.txt"
-            var cleaned = false
-            override suspend fun cleanup() { cleaned = true }
-        }
+        val source = FakeUploadSource("picked.txt", "/tmp/picked.txt")
 
         r.coordinator.uploadSource(source)
         advanceUntilIdle()
@@ -229,7 +210,7 @@ class TransferCoordinatorTest {
         val remoteNames = (r.remote.state as FilePaneState.Loaded).entries.map { it.name }
         assertTrue("picked.txt" in remoteNames)
         assertEquals(TransferState.Idle, r.coordinator.transfer)
-        assertTrue(source.cleaned)
+        assertEquals(1, source.cleanups)
     }
 
     @Test
@@ -661,21 +642,29 @@ class TransferCoordinatorTest {
     }
 
     @Test
-    fun `a second transfer requested while one runs does not open a second entry`() = runTest {
+    fun `a second transfer requested while one runs waits on the queue and then goes through`() = runTest {
         val remote = remoteFake().apply { uploadSize = 10 }
-        remote.transferGate = CompletableDeferred()
+        val gate = CompletableDeferred<Unit>()
+        remote.transferGate = gate
         val r = rig(remote = remote)
         r.local.toggle(r.local.entry("a.txt"))
         r.coordinator.uploadSelection()
         advanceUntilIdle()
 
+        r.local.clearSelection()
         r.local.toggle(r.local.entry("b.txt"))
         r.coordinator.uploadSelection()
         advanceUntilIdle()
 
-        assertEquals(1, r.coordinator.queue.size)
-        remote.transferGate!!.complete(Unit)
+        assertEquals(2, r.coordinator.queue.size)
+        assertEquals(TransferStatus.Waiting, r.coordinator.queue.last().status)
+        assertEquals("b.txt", r.coordinator.queue.last().name, "a waiting row says what it is for")
+
+        gate.complete(Unit)
         advanceUntilIdle()
+
+        assertTrue(r.coordinator.queue.all { it.status == TransferStatus.Done })
+        assertEquals("$LHOME/b.txt" to "$RHOME/b.txt", r.remoteFake.lastUpload)
     }
 
     @Test
@@ -695,11 +684,7 @@ class TransferCoordinatorTest {
     @Test
     fun `a picked upload and a download to a target each get their own queue entry`() = runTest {
         val r = rig()
-        val source = object : UploadSource {
-            override val name = "picked.txt"
-            override val stagingPath = "/tmp/picked.txt"
-            override suspend fun cleanup() = Unit
-        }
+        val source = FakeUploadSource("picked.txt", "/tmp/picked.txt")
 
         r.coordinator.uploadSource(source)
         advanceUntilIdle()
@@ -709,12 +694,7 @@ class TransferCoordinatorTest {
         assertEquals(TransferDirection.Upload, uploaded.direction)
         assertEquals(TransferStatus.Done, uploaded.status)
 
-        val target = object : DownloadTarget {
-            override val displayName = "r.txt"
-            override val stagingPath = "/tmp/r.txt"
-            override suspend fun finalize() = Unit
-            override suspend fun discard() = Unit
-        }
+        val target = FakeDownloadTarget("r.txt", "/tmp/r.txt")
         r.coordinator.downloadToTarget(r.remote.entry("r.txt"), target)
         advanceUntilIdle()
 
@@ -726,57 +706,12 @@ class TransferCoordinatorTest {
     }
 
     @Test
-    fun `dismissing the finished entries clears them all at once`() = runTest {
-        val r = rig()
-        r.local.toggle(r.local.entry("a.txt"))
-        r.coordinator.uploadSelection()
-        advanceUntilIdle()
-        r.local.toggle(r.local.entry("b.txt"))
-        r.coordinator.uploadSelection()
-        advanceUntilIdle()
-        assertEquals(2, r.coordinator.queue.size)
-
-        r.coordinator.dismissCompleted()
-
-        assertTrue(r.coordinator.queue.isEmpty())
-    }
-
-    @Test
-    fun `dismissing the finished entries leaves a running one alone`() = runTest {
-        val remote = remoteFake().apply { uploadSize = 10 }
-        val r = rig(remote = remote)
-        // One transfer all the way through, then a second held open: the bulk dismiss has to tell
-        // them apart, not simply clear or spare the whole list.
-        r.local.toggle(r.local.entry("a.txt"))
-        r.coordinator.uploadSelection()
-        advanceUntilIdle()
-        remote.transferGate = CompletableDeferred()
-        r.local.toggle(r.local.entry("b.txt"))
-        r.coordinator.uploadSelection()
-        advanceUntilIdle()
-        assertEquals(2, r.coordinator.queue.size)
-
-        r.coordinator.dismissCompleted()
-
-        val left = r.coordinator.queue.single()
-        assertEquals(TransferStatus.Active, left.status)
-        assertEquals("b.txt", left.name)
-        remote.transferGate!!.complete(Unit)
-        advanceUntilIdle()
-    }
-
-    @Test
     fun `a picked upload that fails still lands on the queue`() = runTest {
         // The fallback upload path (native picker, nothing selected in the local pane) had only
         // success coverage: its failure has to reach the queue like any other.
         val remote = remoteFake().apply { uploadError = "disk full" }
         val r = rig(remote = remote)
-        val source = object : UploadSource {
-            override val name = "picked.txt"
-            override val stagingPath = "/tmp/picked.txt"
-            var cleaned = false
-            override suspend fun cleanup() { cleaned = true }
-        }
+        val source = FakeUploadSource("picked.txt", "/tmp/picked.txt")
 
         r.coordinator.uploadSource(source)
         advanceUntilIdle()
@@ -785,7 +720,7 @@ class TransferCoordinatorTest {
         assertEquals(FileTransferFailure.Transfer, status.failure)
         // The staged copy the picker made is the coordinator's to delete on the way out — a failed
         // upload leaves it behind otherwise, and nothing else ever comes back for it.
-        assertTrue(source.cleaned)
+        assertEquals(1, source.cleanups)
     }
 
     @Test

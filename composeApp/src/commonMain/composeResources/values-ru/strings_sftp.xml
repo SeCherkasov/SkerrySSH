@@ -115,6 +115,11 @@
     <!-- Transfer queue under the panes -->
     <string name="sftp_queue_progress">%1$d% · %2$s / %3$s</string>
     <string name="sftp_queue_done">готово</string>
+    <string name="sftp_queue_waiting">ожидание</string>
+    <string name="sftp_queue_backlog">В очереди на канал: %1$d</string>
+    <string name="sftp_queue_cancel">Отменить %1$s</string>
+    <string name="sftp_queue_clear">Убрать %1$s</string>
+    <string name="sftp_queue_state">%1$s: %2$s</string>
     <string name="sftp_path_field">Перейти к пути</string>
     <string name="sftp_edit_buffer">Содержимое файла</string>
 </resources>
