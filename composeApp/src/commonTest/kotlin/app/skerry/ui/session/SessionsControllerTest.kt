@@ -1,10 +1,7 @@
 package app.skerry.ui.session
 
 import app.skerry.shared.vnc.VncRemoteDesktop
-import app.skerry.shared.vnc.VncQuality
-import app.skerry.shared.vnc.VncUpdate
 import app.skerry.ui.remote.RemoteDesktopController
-import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.ssh.DynamicForwardSpec
 import app.skerry.shared.ssh.ExecResult
@@ -20,13 +17,11 @@ import app.skerry.shared.ssh.SshTransport
 import app.skerry.shared.terminal.Asciicast
 import app.skerry.shared.terminal.CastEvent
 import app.skerry.shared.vnc.VncAuth
-import app.skerry.shared.vnc.VncPointerEvent
 import app.skerry.shared.graphics.RemoteDesktopQuality
-import app.skerry.shared.vnc.VncSession
-import app.skerry.shared.vnc.VncTransport
 import app.skerry.shared.graphics.RemoteDesktopUpdate
 import app.skerry.shared.guard.ProductionGuardPolicy
 import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.connection.FakeVncTransport
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.asSessionStatus
@@ -42,7 +37,6 @@ import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.prodGuardDialogOpen
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -278,6 +272,28 @@ class SessionsControllerTest {
         sessions.openVnc(hostId = "host-a")
 
         assertNull(sessions.addPane())
+        scope.cancel()
+    }
+
+    /**
+     * The one place the rule lives, asserted arm by arm: [SessionsController.addPane] enforces it
+     * and the toolbar's add-pane button reads it to decide whether to offer itself at all. The
+     * button used to carry a copy of the rule that had lost the remote-desktop arm.
+     */
+    @Test
+    fun `acceptsPane names every tab with nowhere to put one`() = runTest {
+        val (sessions, scope) = sessionsWithVnc(FakeVncTransport())
+        sessions.open(hostId = "host-a")
+        val shell = sessions.active!!
+        assertTrue(shell.acceptsPane, "a shell tab with room")
+        repeat(MAX_PANES - 1) { assertNotNull(sessions.addPane()) }
+        assertFalse(shell.acceptsPane, "a full grid")
+
+        sessions.openVnc(hostId = "host-b")
+        assertFalse(sessions.active!!.acceptsPane, "a remote desktop")
+
+        sessions.openPlayer("recording", Asciicast(80, 24, "cast", emptyList()))
+        assertFalse(sessions.active!!.acceptsPane, "a recording")
         scope.cancel()
     }
 
@@ -1181,35 +1197,6 @@ class SessionsControllerTest {
         assertEquals("web-1", effectiveTabTitle(liveTitle = null, fallback = "web-1"))
         assertEquals("web-1", effectiveTabTitle(liveTitle = "", fallback = "web-1"))
         assertEquals("web-1", effectiveTabTitle(liveTitle = "   ", fallback = "web-1"))
-    }
-}
-
-/** VNC transport that returns a fresh fake session on each connect; list is used to verify closes. */
-private class FakeVncTransport : VncTransport {
-    val sessions = mutableListOf<FakeVncSession>()
-    override suspend fun connect(target: SshTarget, auth: VncAuth): VncSession =
-        FakeVncSession().also { sessions += it }
-}
-
-private class FakeVncSession : VncSession {
-    var closed = false
-        private set
-
-    override val serverName = "desk"
-    override val framebuffer = RemoteFramebuffer(1, 1)
-
-    // Never emits: keeps the read loop parked (like a quiet server) until the scope is cancelled.
-    override val updates: Flow<VncUpdate> = flow { awaitCancellation() }
-
-    override suspend fun sendPointer(event: VncPointerEvent) {}
-    override suspend fun sendKey(keySym: Long, down: Boolean) {}
-    override suspend fun sendClientCutText(text: String) {}
-    override suspend fun requestUpdate(incremental: Boolean) {}
-    override suspend fun setQuality(quality: VncQuality) {}
-    override suspend fun setDesktopSize(width: Int, height: Int) {}
-    override suspend fun setLocalCursor(enabled: Boolean) {}
-    override suspend fun close() {
-        closed = true
     }
 }
 

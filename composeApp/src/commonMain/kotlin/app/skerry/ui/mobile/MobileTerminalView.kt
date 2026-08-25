@@ -63,6 +63,7 @@ import app.skerry.ui.generated.resources.term_ai_dismiss
 import app.skerry.ui.generated.resources.term_disconnect
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.app.AiPolicy
+import app.skerry.ui.design.CloseWhenUnavailable
 import app.skerry.ui.design.NoticeDialog
 import app.skerry.ui.app.LocalAi
 import app.skerry.ui.app.LocalHosts
@@ -169,6 +170,14 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     val snippets = LocalSnippets.current
     val activeTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
     val canRunSnippet = snippets != null && activeTerminal != null
+    // Same rule as the desktop toolbar's popups: the pane id survives a drop (the controller
+    // reconnects in place), so a sheet left open would be hidden by its own render guard and then
+    // be back over the terminal the moment auto-reconnect lands.
+    CloseWhenUnavailable(activeTerminal != null) {
+        paletteOpen = false
+        monitorOpen = false
+        historyOpen = false
+    }
 
     // Full-bleed only on request (More → Appearance → Interface); off, the phone keeps its bars
     // and the shell keeps this screen inside the safe area (see MobileChrome.fullBleed).

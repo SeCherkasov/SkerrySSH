@@ -2,10 +2,12 @@ package app.skerry.ui.session
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import app.skerry.ui.desktop.DesktopShell
 import app.skerry.ui.desktop.onTab
+import app.skerry.ui.desktop.clickIconWhenEnabled
 import app.skerry.ui.desktop.runDesktopShell
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
@@ -77,7 +79,7 @@ class SessionTabsTest {
         // With one pane there is nothing to synchronize, so the toggle is not drawn yet.
         onNodeWithContentDescription(string(Res.string.shell_tip_sync_panes)).assertDoesNotExist()
 
-        onNodeWithContentDescription(string(Res.string.shell_tip_add_pane)).performClick()
+        clickIconWhenEnabled(string(Res.string.shell_tip_add_pane), shell)
         waitForIdle()
         assertTrue(requireNotNull(sessions.activeTerminal).isSplit, "adding a pane splits the tab")
 
@@ -90,14 +92,15 @@ class SessionTabsTest {
     }
 
     /**
-     * A tab's grid is bounded ([MAX_PANES]). The button stays on screen but stops acting — pressing
-     * it again must not quietly drop the pane it cannot place.
+     * A tab's grid is bounded ([MAX_PANES]). The button goes disabled at the limit rather than
+     * staying lit over a refusal, so the presses past it land on nothing at all.
      */
     @Test
     fun `a full grid refuses another pane`() = runDesktopShell { shell ->
         val sessions = requireNotNull(shell.sessions)
         repeat(MAX_PANES + 1) {
-            onNodeWithContentDescription(string(Res.string.shell_tip_add_pane)).performClick()
+            val button = onNodeWithContentDescription(string(Res.string.shell_tip_add_pane))
+            if (it < MAX_PANES - 1) button.performClick() else button.assertIsNotEnabled()
             waitForIdle()
         }
         assertEquals(

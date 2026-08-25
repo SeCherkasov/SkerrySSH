@@ -29,7 +29,11 @@ class TerminalTypingTest {
     fun `a typed character reaches the session`() = runDesktopShell {
         FakeShellInput.clear()
         onRoot().performKeyInput { pressKey(Key.L) }
-        waitUntil { FakeShellInput.all().contains("l") }
+        // The write leaves on the session's own scope (Dispatchers.Default), which the test clock
+        // does not drive: the default one-second budget is the loaded runner's, not the code's.
+        waitUntil("the typed character to reach the channel", timeoutMillis = 10_000) {
+            FakeShellInput.all().contains("l")
+        }
     }
 
     /** Ctrl+C is not a character: it goes down the wire as the interrupt byte. */
@@ -37,7 +41,9 @@ class TerminalTypingTest {
     fun `ctrl-C sends the interrupt byte`() = runDesktopShell {
         FakeShellInput.clear()
         onRoot().performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.C) } }
-        waitUntil { FakeShellInput.all().contains(INTERRUPT) }
+        waitUntil("the interrupt byte to reach the channel", timeoutMillis = 10_000) {
+            FakeShellInput.all().contains(INTERRUPT)
+        }
     }
 }
 

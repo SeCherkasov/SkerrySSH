@@ -74,22 +74,28 @@ fun MenuItem(label: String, color: Color = Skerry.colors.text, onClick: () -> Un
     }
 }
 
-/** A [MenuPanel] row that carries the glyph its action has in the toolbar it collapsed out of. */
+/**
+ * A [MenuPanel] row that carries the glyph its action has in the toolbar it collapsed out of.
+ *
+ * [enabled] is the same answer the toolbar button gives: the row and the button are two renderings
+ * of one action, and a row that fires a request the button would have refused is a press that costs
+ * the user the menu and yields nothing.
+ */
 @Composable
-fun MenuActionRow(icon: String, label: String, onClick: () -> Unit) {
+fun MenuActionRow(icon: String, label: String, enabled: Boolean = true, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
             .widthIn(min = MENU_MIN_WIDTH)
             .clip(RoundedCornerShape(5.dp))
-            .handsKeyboardBack()
-            .clickable(onClick = onClick)
+            .handsKeyboardBack(enabled)
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Sym(icon, size = 15.sp, color = Skerry.colors.cyanBright)
-        Txt(label, color = Skerry.colors.dim, size = 12.sp)
+        Sym(icon, size = 15.sp, color = if (enabled) Skerry.colors.cyanBright else Skerry.colors.faint)
+        Txt(label, color = if (enabled) Skerry.colors.dim else Skerry.colors.faint, size = 12.sp)
     }
 }
 

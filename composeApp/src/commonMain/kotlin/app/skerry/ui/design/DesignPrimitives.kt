@@ -3,6 +3,7 @@ package app.skerry.ui.design
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -281,8 +282,9 @@ fun Dot(color: Color, size: Int = 6, modifier: Modifier = Modifier) {
 /**
  * Titlebar/toolbar icon button: rounded [box]dp square. Material Symbols icon sized [icon], tinted
  * [tint]; [hoverTint] recolors the icon on hover (e.g. the window close cross turning white over
- * its red hover background), `null` keeps [tint]. [enabled] false dims the glyph and swallows the
- * click, for rows where the action exists but has nothing to act on.
+ * its red hover background), `null` keeps [tint]. [enabled] false dims the glyph, refuses the click
+ * and marks the node disabled, for rows where the action exists but has nothing to act on — the
+ * tooltip still answers on hover, which is the whole point of refusing rather than no-oping.
  *
  * [tooltip] is both what the hover shows and what the button is called: the glyph is decoration and
  * carries no name of its own, so a button given no tooltip has no accessible name either.
@@ -309,11 +311,16 @@ fun IconBtn(
     // Custom light hover background (dark theme): clickable's default indication gives a dark
     // ripple that's barely visible on a dark background, so we highlight with a light overlay instead.
     val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
+    // Hover is tracked on a source of its own because `clickable` stops emitting it the moment it is
+    // disabled, and the tooltip is the only name this button has: a disabled icon would otherwise be
+    // an unlabelled grey glyph that says neither what it is nor why it is off.
+    val hover = remember { MutableInteractionSource() }
+    val hovered by hover.collectIsHoveredAsState()
     Box(
         modifier
             .size(box.dp)
             .clip(RoundedCornerShape(6.dp))
+            .hoverable(hover)
             .background(if (hovered && enabled) hoverBg else Color.Transparent)
             // Same rule as [Chip]: the press takes the keyboard, and whatever the button opens
             // (a menu, a dialog, a panel) may claim nothing back.

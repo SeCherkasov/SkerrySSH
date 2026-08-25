@@ -14,7 +14,6 @@ import app.skerry.ui.generated.resources.shell_tip_play
 import org.jetbrains.compose.resources.stringResource
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
-import app.skerry.ui.theme.Skerry
 
 /**
  * Toolbar button that opens a `.cast` file and hands the result to [onOpened] (which shows the
@@ -42,10 +41,13 @@ fun PlayRecordingButton(requests: SharedFlow<Unit>? = null, onOpened: (CastOpenR
     val currentOpen by rememberUpdatedState(open)
     // Hotkey channel (⌘P / Ctrl+Shift+P) — same action as the click.
     LaunchedEffect(requests) { requests?.collect { currentOpen() } }
+    // Disabled rather than merely tinted while a picker is up: the same rule the rest of the
+    // toolbar follows, and it draws the faint tint by itself. The guard inside [open] stays — the
+    // hotkey reaches this button whether or not it is clickable.
     IconBtn(
         "play_circle",
-        tint = if (opening) Skerry.colors.faint else Skerry.colors.dim,
         onClick = { open() },
         tooltip = stringResource(Res.string.shell_tip_play),
+        enabled = !opening,
     )
 }

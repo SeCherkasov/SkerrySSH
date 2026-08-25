@@ -146,6 +146,7 @@ class MenuChromeTest {
                             hidden = setOf(ToolbarAction.Files, ToolbarAction.Snippets),
                             state = DesktopDesignState(),
                             tabKey = null,
+                            enabled = { true },
                             onOpenSftp = {},
                             onOpenMonitor = {},
                         )

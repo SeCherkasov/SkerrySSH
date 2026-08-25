@@ -191,6 +191,13 @@ class Tab(val id: String, first: Session) {
     val isPlayer: Boolean get() = panes.first().isPlayer
 
     /**
+     * Whether another pane can join this tab. The one place the answer lives: the toolbar's add-pane
+     * button reads it to decide whether to offer itself at all, and [SessionsController.addPane]
+     * enforces it — two copies of the rule is how a button ends up looking live over a refusal.
+     */
+    val acceptsPane: Boolean get() = !isVnc && !isPlayer && !layout.isFull
+
+    /**
      * A blank tab with nothing connected: one pane, no host picked yet. Created by the "+" button;
      * the first connection fills it in place ([SessionsController.connect]).
      */
@@ -502,7 +509,7 @@ class SessionsController(
      */
     fun addPane(id: String? = activeId, slot: PaneSlot? = null): String? {
         val tab = tab(id) ?: return null
-        if (tab.isVnc || tab.isPlayer || tab.layout.isFull) return null
+        if (!tab.acceptsPane) return null
         val pane = Session(newId(), hostId = null, title = "", subtitle = "", controllerFactory())
         pane.controller.bindSessionId(pane.id)
         tab.setPanes(tab.panes + pane)

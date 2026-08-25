@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performTextInput
 import app.skerry.shared.runbook.RunbookStep
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.app.UiTags
+import app.skerry.ui.desktop.clickIconWhenEnabled
 import app.skerry.ui.desktop.onField
 import app.skerry.ui.desktop.runDesktopShell
 import app.skerry.ui.desktop.string
@@ -88,7 +89,7 @@ class RunbookEditorFormTest {
         shell.runbooks.save(RunbookDraft(label = "Runnable", steps = listOf(RunbookStep.Command(id = "s1", command = "uptime"))))
         shell.runbooks.save(RunbookDraft(label = "Synced empty procedure"))
 
-        onNodeWithContentDescription(string(Res.string.runbook_toolbar_tip)).performClick()
+        clickIconWhenEnabled(string(Res.string.runbook_toolbar_tip), shell)
         // The palette fills from the library on the shell's own scope, which waitForIdle does not
         // wait for: asserting on the frame after the click reads an empty palette on a loaded
         // runner and a full one on an idle machine (issue #330).
@@ -105,7 +106,7 @@ class RunbookEditorFormTest {
     fun `the palette says why it offers nothing`() = runDesktopShell(withSessions = true) { shell ->
         shell.runbooks.save(RunbookDraft(label = "Synced empty procedure"))
 
-        onNodeWithContentDescription(string(Res.string.runbook_toolbar_tip)).performClick()
+        clickIconWhenEnabled(string(Res.string.runbook_toolbar_tip), shell)
         waitUntil("the palette to say why it offers nothing", timeoutMillis = 10_000) {
             onAllNodesWithText(string(Res.string.runbook_none_runnable)).fetchSemanticsNodes().isNotEmpty()
         }
