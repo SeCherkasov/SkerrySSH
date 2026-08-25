@@ -3,6 +3,8 @@ package app.skerry.ui.files
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
 import app.skerry.shared.files.SftpFileBrowser
+import app.skerry.shared.sftp.SftpEntry
+import app.skerry.shared.sftp.SftpEntryType
 import app.skerry.ui.sftp.FakeSftpClient
 import app.skerry.ui.sftp.TransferDirection
 import kotlinx.coroutines.CompletableDeferred
@@ -382,6 +384,63 @@ class TransferCoordinatorTest {
         // The library text ("disk full") never reaches the bar — only the typed reason does.
         val failed = assertIs<TransferState.Failed>(r.coordinator.transfer)
         assertEquals(FileTransferFailure.Transfer, failed.failure)
+    }
+
+    @Test
+    fun `a tree with no bottom ends as a queue row that says why`() = runTest {
+        // The typed reason has to survive the whole way out — walk, coordinator, runner, queue — or
+        // the refusal reads as an ordinary transfer error and the string added for it is dead.
+        val remote = remoteFake().apply {
+            seedDir("$RHOME/loop")
+            listAnswer = { path ->
+                if (path.endsWith("/loop")) {
+                    listOf(SftpEntry("loop", "$path/loop", SftpEntryType.Directory, 0, 0, 0b111_101_101))
+                } else {
+                    null
+                }
+            }
+        }
+        val r = rig(remote = remote)
+        r.remote.refresh(); advanceUntilIdle()
+        r.remote.toggle(r.remote.entry("loop"))
+
+        r.coordinator.downloadSelection()
+        advanceUntilIdle()
+
+        assertEquals(
+            TransferStatus.Failed(FileTransferFailure.TreeTooLarge),
+            r.coordinator.queue.single().status,
+        )
+    }
+
+    @Test
+    fun `a move over a tree with no bottom keeps its sources`() = runTest {
+        // A move deletes the sources once the transfer is through. The refusal happens while the
+        // plan is being built, so nothing has moved and nothing may be deleted — the one outcome
+        // that would turn a refused transfer into lost data.
+        val remote = remoteFake().apply {
+            seedDir("$RHOME/loop")
+            listAnswer = { path ->
+                if (path.endsWith("/loop")) {
+                    listOf(SftpEntry("loop", "$path/loop", SftpEntryType.Directory, 0, 0, 0b111_101_101))
+                } else {
+                    null
+                }
+            }
+        }
+        val r = rig(remote = remote)
+        r.remote.refresh(); advanceUntilIdle()
+        r.remote.toggle(r.remote.entry("loop"))
+
+        r.coordinator.moveSelection(fromLocal = false)
+        advanceUntilIdle()
+
+        assertEquals(
+            TransferStatus.Failed(FileTransferFailure.TreeTooLarge),
+            r.coordinator.queue.single().status,
+        )
+        r.remote.refresh(); advanceUntilIdle()
+        assertTrue("loop" in (r.remote.state as FilePaneState.Loaded).entries.map { it.name }, "it deleted the source")
     }
 
     @Test

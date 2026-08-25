@@ -10,6 +10,7 @@ import app.skerry.ui.sftp.FakeSftpClient
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -91,6 +92,33 @@ class FilePaneControllerTest {
 
         assertEquals("$HOME/alpha", c.path)
         assertEquals(listOf("inside.txt"), c.loaded().entries.map { it.name })
+    }
+
+    @Test
+    fun `an operation that dies on something the source never wraps still lands on the pane`() = runTest {
+        // The pane runs on the composition-wide scope every session shares. Anything the source
+        // throws that is not a FileBrowserException used to leave that launch uncaught: the scope
+        // is a plain Job, so it takes every other session's coroutines down with it — and on
+        // Android the process — while the pane shows no error at all for an action the user
+        // confirmed.
+        val base = seededBrowser()
+        val brittle = object : FileBrowser {
+            override val label: String get() = base.label
+            override suspend fun realpath(path: String): String = base.realpath(path)
+            override suspend fun list(path: String): List<FileItem> = base.list(path)
+            override suspend fun mkdir(path: String) = base.mkdir(path)
+            override suspend fun delete(item: FileItem): Unit = throw StackOverflowError()
+            override suspend fun rename(from: String, to: String) = base.rename(from, to)
+        }
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val c = FilePaneController(brittle, scope)
+        c.start(); advanceUntilIdle()
+
+        c.delete(c.entry("readme.txt"))
+        advanceUntilIdle()
+
+        assertEquals(FilePaneState.Error(FileBrowserFailure.Unexpected), c.state)
+        assertTrue(scope.isActive, "the shared scope died with the operation")
     }
 
     @Test

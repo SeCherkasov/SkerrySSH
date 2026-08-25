@@ -42,9 +42,8 @@ interface FileBrowser {
 
     /**
      * Contents of directory [path], excluding `.` and `..`; order is not guaranteed (the panel sorts).
-     * Paths and names are both distinct — the panel keys its rows by [FileItem.path] and every
-     * operation on a row resolves its name, so a repeat of either is a crash or a wrong file, and a
-     * source that cannot promise it de-duplicates before answering.
+     * Paths are distinct — the panel keys its rows by [FileItem.path], and a repeat there is a
+     * crash, so a source that cannot promise it de-duplicates before answering.
      * @throws FileBrowserException if the path doesn't exist, isn't a directory, or access is denied
      */
     suspend fun list(path: String): List<FileItem>
@@ -122,6 +121,16 @@ enum class FileBrowserFailure {
 
     /** The file is larger than the caller's cap (whole-file read for the viewer/editor). */
     TooLarge,
+
+    /** The directory tree to transfer is deeper or bigger than a transfer plan may hold. */
+    TreeTooLarge,
+
+    /**
+     * Nothing else fits: an operation ended on something the source was not supposed to throw. The
+     * row exists so the failure is still the user's to see — an operation that ends in silence, or
+     * takes the session's scope down with it, is the outcome this value replaces.
+     */
+    Unexpected,
 }
 
 /**

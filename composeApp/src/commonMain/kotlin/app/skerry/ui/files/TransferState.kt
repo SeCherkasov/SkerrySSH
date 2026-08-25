@@ -27,6 +27,9 @@ enum class FileTransferFailure {
 
     /** The session closed while the operation was still waiting its turn on the channel. */
     SessionClosed,
+
+    /** The tree to transfer is deeper or bigger than a plan may hold — a loop, or simply too much. */
+    TreeTooLarge,
 }
 
 /** Maps a browser failure onto the transfer bar's reason; I/O-level causes collapse to [FileTransferFailure.Transfer]. */
@@ -34,7 +37,8 @@ internal fun FileBrowserFailure.toTransferFailure(): FileTransferFailure = when 
     FileBrowserFailure.IllegalName -> FileTransferFailure.IllegalName
     FileBrowserFailure.OpenSource -> FileTransferFailure.OpenSource
     FileBrowserFailure.OpenTarget -> FileTransferFailure.OpenTarget
-    FileBrowserFailure.LocalIo, FileBrowserFailure.Sftp, FileBrowserFailure.TooLarge ->
+    FileBrowserFailure.TreeTooLarge -> FileTransferFailure.TreeTooLarge
+    FileBrowserFailure.LocalIo, FileBrowserFailure.Sftp, FileBrowserFailure.TooLarge, FileBrowserFailure.Unexpected ->
         FileTransferFailure.Transfer
 }
 

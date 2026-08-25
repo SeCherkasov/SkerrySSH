@@ -28,6 +28,9 @@
     <string name="ftail_err_open_target">无法打开保存目标</string>
     <string name="ftail_err_session_closed">会话在传输开始前已关闭</string>
     <string name="ftail_err_too_large">文件太大，无法打开</string>
+    <string name="ftail_err_tree_too_large">目录树太深或太大，无法传输</string>
+    <string name="ftail_err_tree_too_deep">目录树太深，无法遍历</string>
+    <string name="ftail_err_unexpected">意外错误</string>
 
     <!-- 查看器/编辑器（F3/F4）失败原因 -->
     <string name="ftail_edit_err_read">读取文件失败</string>

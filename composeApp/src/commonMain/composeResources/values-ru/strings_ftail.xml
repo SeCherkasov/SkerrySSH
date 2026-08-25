@@ -28,6 +28,9 @@
     <string name="ftail_err_open_target">Не удалось открыть файл для записи</string>
     <string name="ftail_err_session_closed">Сессия закрыта до начала передачи</string>
     <string name="ftail_err_too_large">Файл слишком большой, чтобы открыть его</string>
+    <string name="ftail_err_tree_too_large">Дерево каталогов слишком глубокое или слишком большое для передачи</string>
+    <string name="ftail_err_tree_too_deep">Дерево каталогов слишком глубокое для обхода</string>
+    <string name="ftail_err_unexpected">Непредвиденная ошибка</string>
 
     <!-- Ошибки просмотрщика/редактора (F3/F4) -->
     <string name="ftail_edit_err_read">Не удалось прочитать файл</string>

@@ -103,6 +103,65 @@ class SftpFileBrowserTest {
     }
 
     @Test
+    fun `a delete over a directory that lists itself stops instead of recursing forever`() = runTest {
+        // This fixture's loop holds nothing but itself, which is why nothing is removed before the
+        // refusal — see the test below for what a loop with a file beside it costs.
+        // The recursive delete walks the same untrusted listing the transfer walk does, on the more
+        // destructive verb: a directory listed as its own child has no bottom, the containment check
+        // passes at every level because the path only grows, and the recursion ends as an Error that
+        // no handler on the pane's path catches.
+        client.listAnswer = { path ->
+            if (path.endsWith("/loop")) listOf(SftpEntry("loop", "$path/loop", SftpEntryType.Directory, 0, 0, 0)) else null
+        }
+
+        val failure = assertFailsWith<FileBrowserException> {
+            browser().delete(FileItem("loop", "/d/loop", FileItemType.Directory, 0, 0))
+        }
+
+        assertEquals(FileBrowserFailure.TreeTooLarge, failure.failure)
+        assertTrue(client.calls.none { it.startsWith("remove:") || it.startsWith("rmdir:") }, "it removed something")
+    }
+
+    @Test
+    fun `a loop with files beside it loses them before the refusal`() = runTest {
+        // The bound ends the recursion, and that is all it ends: SFTP has no recursive delete, so a
+        // walk that stops in the middle stops with what it has already removed gone. Recorded here
+        // rather than left to be discovered — the refusal the user is shown is not "nothing
+        // happened", and no wording can make it one.
+        client.listAnswer = { path ->
+            if (path.endsWith("/loop")) {
+                listOf(
+                    SftpEntry("keep.txt", "$path/keep.txt", SftpEntryType.File, 1, 0, 0b110_100_100),
+                    SftpEntry("loop", "$path/loop", SftpEntryType.Directory, 0, 0, 0),
+                )
+            } else {
+                null
+            }
+        }
+
+        assertFailsWith<FileBrowserException> {
+            browser().delete(FileItem("loop", "/d/loop", FileItemType.Directory, 0, 0))
+        }
+
+        assertEquals(MAX_TREE_DEPTH, client.calls.count { it.startsWith("remove:") })
+    }
+
+    @Test
+    fun `a directory wider than a transfer plan may hold is still deleted whole`() = runTest {
+        // The entry cap is what a plan held whole in memory costs. This walk holds no plan and
+        // deletes as it goes, so the same cap would stop it with most of the tree already gone —
+        // and report the tree as refused, on an operation that destroyed two thirds of it. A tree
+        // with no bottom is bounded by depth, which refuses before anything is removed.
+        val wide = List(MAX_TREE_ENTRIES + 1) { SftpEntry("f$it", "/d/big/f$it", SftpEntryType.File, 0, 0, 0b110_100_100) }
+        client.listAnswer = { path -> if (path == "/d/big") wide else null }
+
+        browser().delete(FileItem("big", "/d/big", FileItemType.Directory, 0, 0))
+
+        assertEquals(MAX_TREE_ENTRIES + 1, client.calls.count { it.startsWith("remove:") })
+        assertTrue("rmdir:/d/big" in client.calls)
+    }
+
+    @Test
     fun `mkdir and rename are delegated`() = runTest {
         browser().mkdir("/d/new")
         browser().rename("/d/a", "/d/b")
@@ -242,11 +301,14 @@ private class RecordingSftp : SftpClient {
     var failList = false
     var cancelList = false
 
+    /** Listings a map cannot hold — a directory that lists itself as its own child. */
+    var listAnswer: ((String) -> List<SftpEntry>?)? = null
+
     override suspend fun list(path: String): List<SftpEntry> {
         if (cancelList) throw CancellationException("cancelled")
         if (failList) throw SftpException("boom")
         calls += "list:$path"
-        return listings[path] ?: listResult
+        return listAnswer?.invoke(path) ?: listings[path] ?: listResult
     }
 
     override suspend fun stat(path: String): SftpEntry? {

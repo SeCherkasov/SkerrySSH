@@ -86,10 +86,11 @@ internal class TransferRunner(private val scope: CoroutineScope, private val que
     }
 
     /**
-     * Starts the next operation, or goes idle when there is none. Any error closes its entry as
-     * [TransferStatus.Failed] (named after the step it stopped on); [CancellationException]
-     * propagates. A scope that has already died runs nothing: what is left is released instead, or
-     * the handles would sit in a queue that never advances again.
+     * Starts the next operation, or goes idle when there is none. Anything thrown closes its entry
+     * as [TransferStatus.Failed] (named after the step it stopped on) — an `Error` included, since
+     * an entry nobody closes is one the queue keeps forever; [CancellationException] propagates. A
+     * scope that has already died runs nothing: what is left is released instead, or the handles
+     * would sit in a queue that never advances again.
      *
      * [CoroutineStart.ATOMIC] closes the gap between that check and the dispatch: a scope cancelled
      * in between would otherwise skip the body altogether, and with it the `finally` that releases
@@ -120,7 +121,14 @@ internal class TransferRunner(private val scope: CoroutineScope, private val que
                 // progress bar that never moves again.
                 queue.end(TransferStatus.Failed(FileTransferFailure.Transfer))
                 throw e
-            } catch (e: Exception) {
+            } catch (@Suppress("TooGenericExceptionCaught") e: Throwable) {
+                // Throwable, not Exception: a tree walk deep enough to overflow the stack arrives as
+                // an Error, and an Exception-shaped handler lets it past — leaving the entry Active
+                // for good, with a progress bar that never moves again and an idle auto-lock that
+                // keeps deferring on it. The entry is closed and the error is not rethrown: the
+                // stack has already unwound by the time this runs, and taking the window down is not
+                // a better answer than a failed row. This closes the row, nothing more — it is not a
+                // claim that the process is healthy after every Error.
                 val failure = (e as? FileBrowserException)?.failure?.toTransferFailure() ?: FileTransferFailure.Transfer
                 queue.end(TransferStatus.Failed(failure))
             } finally {
