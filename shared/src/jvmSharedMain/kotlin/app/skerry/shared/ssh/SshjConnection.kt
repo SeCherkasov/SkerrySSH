@@ -181,6 +181,12 @@ internal class SshjConnection(
  * Bind a local listener for forwards (`-L`, `-D`): bound ourselves so the actual port can be read
  * when bindPort=0, and "port in use" is caught as [PortForwardException] before the accept loop
  * starts. The socket is closed on a failed bind — its fd would otherwise linger until GC.
+ *
+ * The socket keeps whatever bind exclusivity the platform gives it. `SO_REUSEADDR` used to be set
+ * here for the TIME_WAIT case, where on Unix the JDK sets it for a `ServerSocket` anyway — but on
+ * Windows asking for it drops `SO_EXCLUSIVEADDRUSE`, and any other local process, elevated or not,
+ * can then bind the same `127.0.0.1:port` and receive the connections meant for the tunnel: the
+ * database credentials on a `-L`, or the choice of destination on a hijacked SOCKS5 `-D` (#311).
  */
 internal fun bindForwardListener(
     bindHost: String,
@@ -191,7 +197,6 @@ internal fun bindForwardListener(
     return try {
         newSocket().apply {
             socket = this
-            reuseAddress = true
             bind(InetSocketAddress(bindHost, bindPort))
         }
     } catch (e: IOException) {

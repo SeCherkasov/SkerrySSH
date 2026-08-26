@@ -84,6 +84,16 @@ val ConnectionType.hasShell: Boolean
     get() = !isRemoteDesktop
 
 /**
+ * Whether a session on this profile carries an SFTP channel, so the file browser and "open this
+ * path" have something to talk to. SSH only: Mosh leaves the SSH hop behind once its own UDP
+ * session is up, a container exec rides a channel of its own with no subsystem, and Telnet, serial,
+ * local and the remote desktops have no file transport at all. Anything that offers files gates on
+ * this rather than on the section a profile is filed under.
+ */
+val ConnectionType.carriesSftp: Boolean
+    get() = this == ConnectionType.SSH
+
+/**
  * Whether a per-profile AI policy applies. The assistant reads a terminal and writes commands into
  * it, so it needs [hasShell]: both connection forms leave the policy picker out rather than store a
  * choice that decides nothing.

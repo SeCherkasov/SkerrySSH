@@ -40,6 +40,35 @@ class TeamsErrorAnnouncementTest {
         }
     }
 
+    /**
+     * Issue #324: a removal can fail two rotations and the reason names one of them. The count of
+     * keys the removed member kept is said in the same line and the same announcement — a second
+     * live region on one screen is heard as a second, unrelated failure.
+     */
+    @Test
+    fun `keys a removal left un-rotated are drawn and spoken with the reason`() {
+        runForm({ TeamsErrorLine(TeamsFailure.Network, size = 11.sp, unrotatedKeys = 2) }) {
+            waitForIdle()
+            val spoken = onNode(polite).fetchSemanticsNode()
+                .config[SemanticsProperties.ContentDescription].first()
+            assertTrue(spoken.contains("2"), "the second key nobody rotated is not reported: $spoken")
+            onNodeWithText(spoken).assertExists()
+        }
+    }
+
+    /** Nothing to add when every key rotated: the reason stands on its own. */
+    @Test
+    fun `a failure with no un-rotated keys says only the reason`() {
+        val reason = mutableListOf<String>()
+        runForm({ reason += teamsFailureText(TeamsFailure.Network) }) { waitForIdle() }
+        runForm({ TeamsErrorLine(TeamsFailure.Network, size = 11.sp) }) {
+            waitForIdle()
+            val spoken = onNode(polite).fetchSemanticsNode()
+                .config[SemanticsProperties.ContentDescription].first()
+            assertTrue(spoken == reason.first(), "an empty count still changed the line: $spoken")
+        }
+    }
+
     /** Every failure has something to say: an unspoken one reads as the operation having done nothing. */
     @Test
     fun `every teams failure announces something`() {

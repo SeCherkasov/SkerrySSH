@@ -91,6 +91,7 @@ import app.skerry.ui.generated.resources.lib_teams_err_too_many_requests
 import app.skerry.ui.generated.resources.lib_teams_err_unconfirmed_key_ignored
 import app.skerry.ui.generated.resources.lib_teams_err_vault_locked
 import app.skerry.ui.generated.resources.lib_teams_err_vault_unreadable
+import app.skerry.ui.generated.resources.lib_teams_keys_not_rotated
 import app.skerry.ui.generated.resources.lib_teams_header_subtitle
 import app.skerry.ui.generated.resources.lib_teams_header_title
 import app.skerry.ui.generated.resources.lib_teams_invite
@@ -148,6 +149,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
     val teams by tc.teams.collectAsState()
     val busy by tc.busy.collectAsState()
     val error by tc.lastError.collectAsState()
+    val unrotatedKeys by tc.unrotatedKeys.collectAsState()
     var selectedId by remember { mutableStateOf<String?>(null) }
     // Reread counter for team-vault stores: incremented after each operation/sync.
     var tick by remember { mutableStateOf(0) }
@@ -189,7 +191,7 @@ private fun TeamsLiveView(tc: TeamsCoordinator) {
                 LiveTeamRow(team, active = team.id == selected?.id) { selectedId = team.id }
             }
             Spacer(Modifier.weight(1f))
-            TeamsErrorLine(error, size = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp))
+            TeamsErrorLine(error, size = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp), unrotatedKeys = unrotatedKeys)
             PrimaryButton(stringResource(Res.string.lib_teams_create), onClick = { showCreate = true }, icon = "group_add", modifier = Modifier.fillMaxWidth())
         }
         VLine(Skerry.colors.line)
@@ -399,8 +401,24 @@ internal data class HistoryTarget(val recordId: String, val label: String)
  * already there rather than an insertion; same shape as SyncFormError (#244).
  */
 @Composable
-internal fun TeamsErrorLine(failure: TeamsFailure?, size: TextUnit, modifier: Modifier = Modifier) {
-    val text = failure?.let { teamsFailureText(it) } ?: ""
+internal fun TeamsErrorLine(
+    failure: TeamsFailure?,
+    size: TextUnit,
+    modifier: Modifier = Modifier,
+    /** Keys a removal left un-rotated (#324): the reason names one failure, this says how many. */
+    unrotatedKeys: Int = 0,
+) {
+    val reason = failure?.let { teamsFailureText(it) } ?: ""
+    // Said in the same block and the same announcement: the count is what the reason leaves out, and
+    // a second live region on the screen would be read as a second, unrelated failure. Broken onto
+    // its own line rather than run on with a space — the two are separate sentences, and no
+    // punctuation joining them would be right in every language.
+    val extent = if (failure != null && unrotatedKeys > 0) {
+        "\n" + stringResource(Res.string.lib_teams_keys_not_rotated, unrotatedKeys)
+    } else {
+        ""
+    }
+    val text = reason + extent
     StatusAnnouncer(text)
     if (failure == null) return
     Txt(text, color = Skerry.colors.sunset, size = size, modifier = modifier)
