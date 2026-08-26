@@ -58,7 +58,7 @@ class ShareSurfacesRenderTest {
                             viewers = 2,
                             viewerAccounts = listOf("anna@corp.io", "leo@corp.io"),
                             inputAllowed = false, inputLocked = false,
-                            controlRequestBy = "leo@corp.io",
+                            controlRequestPending = true, controlRequestBy = "leo@corp.io",
                         ),
                         teams = listOf("t1" to "Platform"),
                         onShare = { _, _ -> }, onAllowInput = {}, onAnswerRequest = {}, onStop = {}, onDismiss = {},

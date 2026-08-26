@@ -36,7 +36,11 @@ class SharedSessionViewer(
     private val teamKey: DataKey,
     private val channel: ShareChannel,
     scope: CoroutineScope,
-    /** This account, sent to the host once so it can name whoever is typing on its session. */
+    /**
+     * This account, announced to the host once. Only a host older than #312 reads it: this one takes
+     * the name from the relay, which reads it off the socket's own JWT. Kept because a viewer on
+     * this version still has to be nameable by a host on an older one.
+     */
     private val accountId: String = "",
 ) : TerminalSession {
 
@@ -101,7 +105,11 @@ class SharedSessionViewer(
 
     /**
      * Names this viewer to the host, so its hints can say who is typing. Sent once, by the caller,
-     * as soon as the socket is up — the host has no other way to tie a socket to a colleague.
+     * as soon as the socket is up.
+     *
+     * Backward compatibility only: a host on this version ignores it, because the name inside is
+     * written by whoever sealed the frame and every team member holds the key (#312). A host older
+     * than that has no other way to tie a socket to a colleague, so it is still sent.
      */
     suspend fun announce() {
         if (accountId.isBlank()) return

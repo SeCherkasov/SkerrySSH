@@ -25,7 +25,9 @@ import java.util.Base64
  * JVM (desktop + Android) implementation of [SessionShareClient] over the same Ktor client the sync
  * client uses. Frames arrive sealed and are passed through untouched — this layer only knows the
  * difference between the session's data (binary frames) and the relay's own control messages
- * (text frames, currently `viewers:N`).
+ * (text frames: `viewers:N:...` and the `from:` line that names the socket the next frame arrived
+ * on). An unknown control line is ignored, which is what lets a server add one without breaking
+ * clients older than it.
  *
  * [serverUrl] — base HTTP(S) URL with no trailing slash, as for
  * [app.skerry.shared.sync.KtorSyncClient].
@@ -117,12 +119,23 @@ private class WebSocketShareChannel(
     override suspend fun send(frame: ByteArray) = socket.send(Frame.Binary(true, frame))
 
     override suspend fun receive(): ShareEvent? {
+        // Who the relay says sent the next frame, from the `from:` line that precedes it. The server
+        // writes the two as one unit, so this only ever spans the pair; a server that sends no
+        // `from:` line leaves it null and the host names nobody.
+        var from: String? = null
         for (frame in socket.incoming) {
             when (frame) {
-                is Frame.Binary -> return ShareEvent.Data(frame.readBytes())
+                is Frame.Binary -> return ShareEvent.Data(frame.readBytes(), from)
                 // The relay's own channel. An unparseable or unknown control line is ignored rather
                 // than treated as an error: a newer server may add ones this client doesn't know.
-                is Frame.Text -> parseControl(frame.readText())?.let { return it }
+                is Frame.Text -> {
+                    val text = frame.readText()
+                    if (text.startsWith(FROM_PREFIX)) {
+                        from = decodeAccount(text.removePrefix(FROM_PREFIX))
+                        continue
+                    }
+                    parseControl(text)?.let { return it }
+                }
                 else -> Unit
             }
         }
@@ -142,13 +155,18 @@ private class WebSocketShareChannel(
         val accounts = body.substringAfter(':', "")
             .split(',')
             .filter { it.isNotBlank() }
-            .mapNotNull { runCatching { Base64.getDecoder().decode(it).decodeToString() }.getOrNull() }
-            .filter { it.isNotBlank() && it.length <= MAX_ACCOUNT_CHARS }
+            .mapNotNull { decodeAccount(it) }
         return ShareEvent.Viewers(count.coerceAtLeast(0), accounts)
     }
 
+    /** One base64 account id from a control line, or null if the relay made it up. */
+    private fun decodeAccount(encoded: String): String? =
+        runCatching { Base64.getDecoder().decode(encoded).decodeToString() }.getOrNull()
+            ?.takeIf { it.isNotBlank() && it.length <= MAX_ACCOUNT_CHARS }
+
     private companion object {
         const val VIEWERS_PREFIX = "viewers:"
+        const val FROM_PREFIX = "from:"
 
         /** Mirrors the server's account-id cap; a longer one is the relay making things up. */
         const val MAX_ACCOUNT_CHARS = 320

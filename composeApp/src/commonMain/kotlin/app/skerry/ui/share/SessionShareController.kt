@@ -43,7 +43,13 @@ sealed interface ShareUiState {
         val inputLocked: Boolean,
         /** Account that typed most recently — the "… is typing" hint over the terminal. */
         val typingBy: String? = null,
-        /** Account waiting for an answer to its "request remote control". */
+        /** Whether a viewer is waiting for an answer to its "request remote control". */
+        val controlRequestPending: Boolean = false,
+        /**
+         * Who is waiting, when the relay named the socket the request arrived on. Null against a
+         * relay older than the naming protocol: the request is still shown, it just names nobody
+         * ([controlRequestPending] is what says there is one).
+         */
         val controlRequestBy: String? = null,
     ) : ShareUiState
 
@@ -161,7 +167,9 @@ class SessionShareController(
                         },
                         // A request is never granted on its own: the host answers it, exactly like
                         // the toggle. Until then the viewer stays read-only.
-                        onControlRequest = { account -> updateLive { it.copy(controlRequestBy = account) } },
+                        onControlRequest = { account ->
+                            updateLive { it.copy(controlRequestPending = true, controlRequestBy = account) }
+                        },
                     )
                     live = host
                     state = ShareUiState.Live(
@@ -209,14 +217,14 @@ class SessionShareController(
     fun setInputAllowed(allowed: Boolean) {
         val current = state as? ShareUiState.Live ?: return
         if (current.inputLocked) return
-        state = current.copy(inputAllowed = allowed, controlRequestBy = null)
+        state = current.copy(inputAllowed = allowed, controlRequestPending = false, controlRequestBy = null)
         val host = live ?: return
         scope.launch { runCatching { host.announceControl(allowed) } }
     }
 
     /** Answers a viewer's request for control: grant lets everyone watching type, deny just clears it. */
     fun answerControlRequest(grant: Boolean) {
-        if (grant) setInputAllowed(true) else updateLive { it.copy(controlRequestBy = null) }
+        if (grant) setInputAllowed(true) else updateLive { it.copy(controlRequestPending = false, controlRequestBy = null) }
     }
 
     /**

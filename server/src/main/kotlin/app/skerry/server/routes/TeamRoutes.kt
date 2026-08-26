@@ -323,7 +323,7 @@ fun Route.teamRoutes(services: Services) {
         try {
             logRecordChanges(services, principal.accountId, teamId, scopeId, result.applied)
         } catch (e: Exception) {
-            call.application.environment.log.error("team audit write failed for $teamId (records are committed)", e)
+            call.application.environment.log.error("team audit write failed for ${logSafe(teamId)} (records are committed)", e)
         }
         if (result.changed) services.notifier.publishTeam(teamId, result.cursor)
         call.respond(PushResponse(result.records.map { it.toDto() }, result.cursor))

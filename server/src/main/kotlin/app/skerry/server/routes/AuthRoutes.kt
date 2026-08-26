@@ -58,6 +58,15 @@ fun Route.authRoutes(services: Services) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
                 return@post
             }
+            // Bounded and shape-checked before anything is stored, like every other field on this
+            // surface: the login path parses both as hex, so an unchecked one is either an account
+            // that answers 500 forever or an arbitrarily expensive anonymous challenge (#314).
+            if (malformedSalt(req.srpSalt) || malformedSrp(req.srpVerifier)) {
+                services.metrics.registrationRejected(RegistrationRejection.MALFORMED)
+                services.metrics.authAttempt(AuthKind.REGISTER, AuthOutcome.DENIED)
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("malformed SRP material"))
+                return@post
+            }
             // Optional per-instance cap (backstop for an instance left open). The count/create window
             // is a benign soft-limit race: the cap can overshoot by a few under concurrent registration,
             // never a security boundary. create() still enforces uniqueness.
@@ -104,7 +113,19 @@ fun Route.authRoutes(services: Services) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
             return@post
         }
-        val account = services.accounts.find(req.accountId)
+        // A row written before the shape of these fields was checked can still hold a value the SRP
+        // parser throws on, and there is no path that rewrites it without logging in first — which
+        // needs this very challenge (#314). Such a row reads as no account at all: the synthesized
+        // branch below answers in exactly the shape every unknown account gets, where a 400 or a 500
+        // would single the account out as one that exists and is broken.
+        val stored = services.accounts.find(req.accountId)
+        val account = stored?.takeIf { isSrpHex(it.srpSalt) && isSrpHex(it.srpVerifier) }
+        if (stored != null && account == null) {
+            // Server-side only, never a dimension of the answer: the client still gets the ordinary
+            // synthesized challenge. Without this the row is invisible — it reads as an unknown
+            // account on every attempt, so the operator's one lead is a query nobody thinks to run.
+            call.application.environment.log.warn("account {} has malformed stored SRP material", logSafe(req.accountId))
+        }
         // Anti-enumeration: a nonexistent account does NOT get a 404 (that would reveal which
         // accountIds are registered). Instead a structurally identical challenge is synthesized
         // with a deterministic fake salt and a real-shaped `B` computed from a pseudo-verifier.
@@ -130,6 +151,14 @@ fun Route.authRoutes(services: Services) {
         val req = call.receive<VerifyRequest>()
         if (tooLong(req.deviceId, req.challengeId)) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
+            return@post
+        }
+        // `A` and `M1` are parsed as hex too, and a challenge id is free to anyone (the challenge
+        // route is anonymous): unchecked, they are the same 500 and the same unbounded modexp the
+        // stored fields were (#314).
+        if (malformedSrp(req.a, req.m1)) {
+            services.metrics.authAttempt(AuthKind.SRP_VERIFY, AuthOutcome.DENIED)
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("malformed SRP proof"))
             return@post
         }
         val verified = services.srp.verify(req.challengeId, req.a, req.m1)
@@ -176,6 +205,14 @@ fun Route.authRoutes(services: Services) {
             // Prove the CURRENT password before touching anything: the SRP proof (M1) is checked
             // against the account's current verifier, so a stolen access token alone can't rotate.
             // The proof also establishes the accountId (from the one-shot challenge).
+            // Same checks as /auth/register and /auth/srp/verify, and before the proof is even
+            // looked at: a rotation that stores a malformed verifier locks the account out at the
+            // moment of the change (#314).
+            if (malformedSrp(req.a, req.m1, req.newSrpVerifier) || malformedSalt(req.newSrpSalt)) {
+                services.metrics.authAttempt(AuthKind.CHANGE_PASSWORD, AuthOutcome.DENIED)
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("malformed SRP material"))
+                return@post
+            }
             val verified = services.srp.verify(req.challengeId, req.a, req.m1)
             if (verified == null) {
                 services.metrics.authAttempt(AuthKind.CHANGE_PASSWORD, AuthOutcome.DENIED)
@@ -401,8 +438,9 @@ private fun hmacSha256(secret: String, message: String): ByteArray {
 
 /**
  * Deterministic fake SRP salt (hex) for a nonexistent account: HMAC-SHA256(server secret,
- * accountId). 32 bytes = 64 hex chars, the same length as a real client 256-bit salt, so the
- * challenge response is structurally indistinguishable from a real one. Stable across requests
+ * accountId). 32 bytes = 64 hex chars; a real salt is padded to the same width before it is
+ * answered ([app.skerry.server.auth.SrpService]), so the challenge response is structurally
+ * indistinguishable from a real one. Stable across requests
  * (anti-enumeration: a repeated challenge for the same unknown accountId returns the same salt,
  * with no "account doesn't exist" signal).
  */

@@ -17,6 +17,13 @@ import java.util.concurrent.atomic.AtomicLong
  * [maxGuestsPerShare] cap how much a team can hold open, [replayBytes] caps the catch-up buffer a
  * host's output fills, and [guestQueueFrames] caps a single viewer's backlog — a viewer that stops
  * reading is dropped rather than allowed to stall the host's shell (broadcast never suspends).
+ *
+ * The catch-up buffer and a viewer's queue are two bounds on the same frames, so they are counted
+ * in the same unit as well: the buffer is capped by bytes AND by half a viewer's queue
+ * ([HostShareSession.replayFrames]), leaving the other half as live headroom. Counted only in
+ * bytes, a history of interactive-sized frames overflowed the queue of the viewer it was replayed
+ * into — the surplus was dropped in silence and the next broadcast detached the viewer that had
+ * just joined (#310).
  */
 class ShareRelay(
     private val maxSharesPerTeam: Int = 8,
@@ -126,14 +133,32 @@ class HostShareSession internal constructor(
     // Frames from the viewers, merged into one stream for the host. CONFLATED would lose
     // keystrokes, so this is a bounded buffer: past it a flooding viewer's frames are dropped
     // rather than allowed to grow the server's heap.
-    private val input = Channel<ByteArray>(capacity = 64, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_LATEST)
+    private val input = Channel<GuestFrame>(capacity = 64, onBufferOverflow = kotlinx.coroutines.channels.BufferOverflow.DROP_LATEST)
 
     // Who is watching, in join order. CONFLATED on purpose: only the current set matters, and the
     // host must never block on delivering it. Accounts, not counts: the host's UI names the
     // colleagues on its session, and membership already tells every member who the others are.
     private val viewerCounts = Channel<List<String>>(Channel.CONFLATED)
 
-    /** Catch-up buffer: the newest [replayBytes] of host output, replayed to a viewer that joins. */
+    /**
+     * Frames of catch-up a joining viewer is sent: half its queue, so what it is caught up with
+     * always fits and the other half stays free for the live stream that follows (#310). The byte
+     * cap still applies — whichever bound is reached first evicts the oldest frame.
+     *
+     * A one-frame queue is the degenerate case: half of it rounds to nothing, so the catch-up is
+     * that single frame and nothing is left over. [init] is what keeps that the worst case.
+     */
+    private val replayFrames = (guestQueueFrames / 2).coerceAtLeast(1)
+
+    init {
+        // The whole catch-up buffer must fit into a fresh guest's queue, or [addGuest]'s offer drops
+        // a frame with no trace and the next broadcast detaches the viewer — issue #310 itself. The
+        // arithmetic above guarantees it today; this is what makes a future change to it fail loudly
+        // at startup instead of quietly at a join.
+        require(replayFrames <= guestQueueFrames) { "replay $replayFrames exceeds guest queue $guestQueueFrames" }
+    }
+
+    /** Catch-up buffer: the newest [replayBytes] / [replayFrames] of host output, whichever is less. */
     private val replay = ArrayDeque<ByteArray>()
     private var replaySize = 0
     private val replayLock = Any()
@@ -147,14 +172,20 @@ class HostShareSession internal constructor(
     /** Sends one sealed frame to every viewer. Never suspends — see the class doc on slow viewers. */
     fun broadcast(frame: ByteArray) {
         if (ended) return
-        rememberForReplay(frame)
-        guests.values.forEach { guest ->
+        // Remembering the frame and picking who is live for it happen under one lock: a join landing
+        // between the two would replay this frame out of the buffer and then be offered it again as
+        // a live frame, and the viewer would render the same output twice.
+        val live = synchronized(replayLock) {
+            rememberForReplay(frame)
+            guests.values.toList()
+        }
+        live.forEach { guest ->
             if (!guest.offer(frame)) dropGuest(guest)
         }
     }
 
     /** The next keystroke frame from any viewer, or `null` once the share is over. */
-    suspend fun receiveInput(): ByteArray? = input.receiveCatching().getOrNull()
+    suspend fun receiveInput(): GuestFrame? = input.receiveCatching().getOrNull()
 
     /** The accounts watching right now, or `null` once the share is over. */
     suspend fun receiveViewers(): List<String>? = viewerCounts.receiveCatching().getOrNull()
@@ -179,22 +210,29 @@ class HostShareSession internal constructor(
         val guest = GuestShareSession(this, guestIds.incrementAndGet(), accountId, guestQueueFrames)
         synchronized(replayLock) {
             // Under the replay lock so a broadcast racing the join can't interleave: the viewer sees
-            // the catch-up frames and then the live ones, never a live frame before its history.
+            // the catch-up frames and then the live ones, never a live frame before its history and
+            // never the same frame as both.
             if (guests.size >= maxGuests) return ShareJoin.Full
+            // The buffer is bounded to at most the queue this viewer was just given (see [init]), so
+            // every frame of it fits; eviction keeps the newest, so a history too long to deliver
+            // whole reaches the viewer as its newest tail rather than a head that renders as garbage.
             replay.forEach { guest.offer(it) }
             guests[guest.id] = guest
+            publishViewers()
         }
-        publishViewers()
         return ShareJoin.Joined(guest)
     }
 
-    internal fun submitInput(frame: ByteArray): Boolean {
+    internal fun submitInput(from: String, frame: ByteArray): Boolean {
         if (ended) return false
-        return input.trySend(frame).isSuccess
+        return input.trySend(GuestFrame(from, frame)).isSuccess
     }
 
     internal fun removeGuest(guest: GuestShareSession) {
-        if (guests.remove(guest.id) != null) publishViewers()
+        synchronized(replayLock) {
+            if (guests.remove(guest.id) == null) return
+            publishViewers()
+        }
     }
 
     private fun dropGuest(guest: GuestShareSession) {
@@ -202,6 +240,12 @@ class HostShareSession internal constructor(
         removeGuest(guest)
     }
 
+    /**
+     * Publishes who is watching. Called under [replayLock], with the change that caused it: the
+     * channel is CONFLATED, so a read taken outside the lock can be published after a later one and
+     * leave the host's panel showing a viewer list that never existed — an empty one, permanently,
+     * while somebody is still on the shell.
+     */
     private fun publishViewers() {
         if (!ended) viewerCounts.trySend(guests.values.sortedBy { it.id }.map { it.accountId })
     }
@@ -215,7 +259,7 @@ class HostShareSession internal constructor(
         synchronized(replayLock) {
             replay.addLast(frame)
             replaySize += frame.size
-            while (replaySize > replayBytes && replay.isNotEmpty()) {
+            while ((replaySize > replayBytes || replay.size > replayFrames) && replay.isNotEmpty()) {
                 replaySize -= replay.removeFirst().size
             }
         }
@@ -223,6 +267,16 @@ class HostShareSession internal constructor(
 
     internal val isEnded: Boolean get() = ended
 }
+
+/**
+ * One sealed frame on its way to the host, with the account of the socket it arrived on.
+ *
+ * [from] is the relay's own answer, taken from the JWT the socket authenticated with — not from
+ * anything inside the frame. The frame's payload is sealed under the team key, which every member
+ * holds, so a member can compose one that says whatever it likes about who sent it; this is the one
+ * part of it a viewer cannot write (#312).
+ */
+class GuestFrame(val from: String, val bytes: ByteArray)
 
 /**
  * One viewer's end of a share: reads the host's frames (starting with the catch-up buffer) and
@@ -244,7 +298,7 @@ class GuestShareSession internal constructor(
     /** Sends a keystroke frame to the host; `false` once the share is over or this viewer is gone. */
     fun sendToHost(frame: ByteArray): Boolean {
         if (gone) return false
-        return host.submitInput(frame)
+        return host.submitInput(accountId, frame)
     }
 
     /** Detaches this viewer (socket closed / left). Idempotent. */

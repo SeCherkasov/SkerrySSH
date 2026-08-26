@@ -667,6 +667,18 @@ class KtorSyncClient(
          */
         const val WS_PING_INTERVAL_MS = 30_000L
 
+        /**
+         * Largest WebSocket frame this client will read. Ktor's default is `Int.MAX_VALUE`, and the
+         * frame is materialised in full before anything the code reasons about — the 320-char bound
+         * on an account id, the share codec's own size check — ever runs. The server is not trusted
+         * (it relays sealed blobs and is often somebody else's box), so the allocation has to be
+         * bounded here too; the server bounds its own side at 4 KiB.
+         *
+         * Generous rather than tight: the largest legitimate frame is the share relay's watcher
+         * list, which is base64 account ids for up to 16 viewers and can reach several kilobytes.
+         */
+        const val WS_MAX_FRAME_BYTES = 64L * 1024
+
         /** Health-ping timeout (see [ping]) — /healthz answers in milliseconds, 5s is generous. */
         const val PING_TIMEOUT_MS = 5_000L
 
@@ -675,7 +687,10 @@ class KtorSyncClient(
             // No global values — only the per-request ping timeout applies; the sync/auth calls keep
             // the engine defaults, and WebSockets stay exempt (see WS_PING_INTERVAL_MS above).
             install(HttpTimeout)
-            install(WebSockets) { pingIntervalMillis = WS_PING_INTERVAL_MS }
+            install(WebSockets) {
+                pingIntervalMillis = WS_PING_INTERVAL_MS
+                maxFrameSize = WS_MAX_FRAME_BYTES
+            }
         }
     }
 }

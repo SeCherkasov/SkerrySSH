@@ -390,6 +390,46 @@ class SyncCoordinatorPasswordReplaceTest {
         }
     }
 
+    /**
+     * The confirmed re-run's login is the one branch of `doConnect` with no `catch` of its own, and
+     * before #308 it had no `close` either: a server that went down between the confirmation and the
+     * re-run stranded the client the re-run had opened. Two connects, so two clients, so two closes.
+     */
+    @Test
+    fun `a confirmed replace whose login fails closes the client the re-run opened`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = localVault()
+        val client = FailingSecondLogin(FakeAccountClient(crypto, account, existingAccountPassword = accountPassword))
+        val sut = coordinator(vault, client)
+        try {
+            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            sut.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
+            sut.confirmPasswordReplace()
+            sut.status.awaitStatus("the re-run to fail on the broken server") { it is SyncStatus.Failed }
+            assertEquals(2, client.closeCalls, "the confirmed re-run must not strand the client it opened")
+        } finally {
+            sut.close()
+        }
+    }
+
+    /** A server that answers the verify login and then breaks, and counts what was closed over it. */
+    private class FailingSecondLogin(private val delegate: SyncClient) : SyncClient by delegate {
+        var closeCalls = 0
+            private set
+        private var logins = 0
+
+        override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession {
+            logins++
+            if (logins > 1) throw SyncException(SyncException.Kind.SERVER_ERROR, "gone")
+            return delegate.login(accountId, authKey, device)
+        }
+
+        override suspend fun close() {
+            closeCalls++
+            delegate.close()
+        }
+    }
+
     @Test
     fun `connecting with the vault password creates the account without prompting`() = runBlocking {
         initializeVaultCrypto()

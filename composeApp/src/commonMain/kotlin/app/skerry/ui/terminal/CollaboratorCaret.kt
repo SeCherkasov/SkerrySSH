@@ -8,13 +8,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.avatarColor
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.sync.accountInitials
 import app.skerry.ui.theme.Skerry
 
@@ -44,10 +47,34 @@ internal fun CollaboratorCaret(account: String, modifier: Modifier = Modifier) {
             // Initials as well as the name: on a narrow pane the tag is what gets clipped first, and
             // two letters in a known colour still say who this is.
             Txt(accountInitials(account), color = Skerry.colors.ink, size = 8.sp, weight = FontWeight.Bold)
-            Txt(account.substringBefore('@'), color = Skerry.colors.ink, size = 10.sp, weight = FontWeight.Medium)
+            Txt(
+                // Keyed on the account, not on the caret's own recomposition: any write to the share
+                // state re-runs this while a caret is up, and the filter would walk the name again
+                // for a tag already on screen.
+                remember(account) { collaboratorTag(account) },
+                color = Skerry.colors.ink,
+                size = 10.sp,
+                weight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
+
+/**
+ * The name on the tag: the local part of an account id, filtered and capped.
+ *
+ * The id is the member's own and the server bounds only its length, so a bidi override in it would
+ * draw one colleague's caret under another's name — at the cursor of a live shell, which is the one
+ * place the host is actually looking while somebody types. Same filter every other rendering of a
+ * peer's name goes through; the cap is short because the tag sits over the terminal grid.
+ */
+internal fun collaboratorTag(account: String): String =
+    untrustedLabel(account.substringBefore('@'), maxChars = CARET_NAME_CHARS)
+
+/** How much of a name fits beside a caret before it is in the way of the line being typed. */
+private const val CARET_NAME_CHARS = 24
 
 private val CARET_BAR_WIDTH = 2.dp
 
