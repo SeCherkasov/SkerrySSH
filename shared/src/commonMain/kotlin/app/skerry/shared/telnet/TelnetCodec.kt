@@ -103,15 +103,27 @@ class TelnetCodec(
 
                 Phase.SUBNEG ->
                     when {
-                        b == IAC -> phase = Phase.SUBNEG_IAC
                         // The SB body must not grow unbounded (the server may never send SE) —
-                        // past the threshold, stop buffering and scan for the closing IAC SE.
-                        subneg.size >= MAX_SUBNEG_BYTES -> { subneg.clear(); phase = Phase.SUBNEG_DROP }
+                        // past the threshold, stop buffering and scan for the closing IAC SE. The
+                        // cap is checked before the IAC branch, not after it: an escaped 0xFF is a
+                        // body byte like any other, and letting it jump the check meant a body of
+                        // `IAC IAC` pairs grew the buffer forever without the cap ever being read.
+                        subneg.size >= MAX_SUBNEG_BYTES -> {
+                            subneg.clear()
+                            // The byte that trips the cap is consumed here, so an IAC has to carry
+                            // its meaning into the drop scanner — otherwise the closing IAC SE that
+                            // arrives exactly at the boundary is swallowed and the SB never ends.
+                            phase = if (b == IAC) Phase.SUBNEG_DROP_IAC else Phase.SUBNEG_DROP
+                        }
+                        b == IAC -> phase = Phase.SUBNEG_IAC
                         else -> subneg.add(b)
                     }
 
                 Phase.SUBNEG_IAC -> when (b) {
-                    IAC -> { subneg.add(IAC); phase = Phase.SUBNEG } // escaped 0xFF in the SB body
+                    // Escaped 0xFF in the SB body. No cap of its own: this phase is only reachable
+                    // from a SUBNEG byte that passed the check above, so the buffer is under the cap
+                    // when this appends and at most at it afterwards.
+                    IAC -> { subneg.add(IAC); phase = Phase.SUBNEG }
                     SE -> { if (reply.size < MAX_REPLY_BYTES) handleSubnegotiation(subneg, reply); phase = Phase.DATA }
                     else -> phase = Phase.DATA // malformed sequence — reset
                 }
@@ -201,7 +213,9 @@ class TelnetCodec(
         add(IAC.toByte()); add(cmd.toByte()); add(option.toByte())
     }
 
-    private companion object {
+    // Internal, not private: the cap is a number the tests have to name, and a copy of it in a
+    // test file is a copy that can drift away from the parser it claims to describe.
+    internal companion object {
         const val IAC = 255
         const val SE = 240
         const val SB = 250
