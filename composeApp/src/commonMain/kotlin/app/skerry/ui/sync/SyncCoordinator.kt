@@ -525,6 +525,10 @@ class SyncCoordinator(
         // Argon2id output, authKey is SRP material; no reason to hold them in heap until GC).
         var masterKey: MasterKey? = null
         var authKey: ByteArray? = null
+        // A client this connect opened but has not handed to [activateSession] yet — closed in the
+        // finally so no failure path strands its Ktor engine, pool and threads (issue #308). A wrong
+        // password is the common one: the user retypes it, and every attempt used to leak one.
+        var openedClient: SyncClient? = null
         try {
             // Argon2id inside try: heavy and may throw (up to OutOfMemoryError) — otherwise the password
             // wouldn't be wiped (finally) and the status would be stuck on Busy forever.
@@ -532,7 +536,7 @@ class SyncCoordinator(
             val ak = crypto.deriveAuthKey(mk).also { authKey = it }
             val deviceId = configStore.load()?.takeIf { it.accountId == accountId }?.deviceId ?: deviceIdProvider()
             val device = DeviceInfo(deviceId, deviceName, platformName)
-            val syncClient = clientFactory(serverUrl)
+            val syncClient = clientFactory(serverUrl).also { openedClient = it }
 
             // The account (remote) password is the single source of truth: every device shares one
             // account dataKey wrapped under it, so a synced device MUST unlock with the account password.
@@ -573,7 +577,6 @@ class SyncCoordinator(
                         if (e.kind == SyncException.Kind.FORBIDDEN &&
                             (failure.kind == SyncException.Kind.UNAUTHORIZED || failure.kind == SyncException.Kind.NOT_FOUND)
                         ) {
-                            runCatching { syncClient.close() }
                             _status.value = SyncStatus.Failed(SyncFailureReason.RegistrationRefusedSignInFailed, e.message)
                             return
                         }
@@ -593,7 +596,6 @@ class SyncCoordinator(
                         // would pull records we can't decrypt and push records no other device can, with
                         // nothing on screen to say so — issue #133.
                         KeyAdoption.Undecryptable -> {
-                            runCatching { syncClient.close() }
                             _status.value = SyncStatus.Failed(SyncFailureReason.AccountKeyNotAdopted)
                             return
                         }
@@ -612,21 +614,20 @@ class SyncCoordinator(
                     // The server hides "no such account" behind a wrong-password shape — both surface as
                     // Unauthorized (the UI hint tells the user to use their vault password).
                     if (e.kind == SyncException.Kind.UNAUTHORIZED || e.kind == SyncException.Kind.NOT_FOUND) {
-                        runCatching { syncClient.close() }
                         _status.value = SyncStatus.Failed(SyncFailureReason.Unauthorized)
                         return
                     }
                     throw e
                 }
-                // Verified only — close this client; the confirmed re-run opens its own. Stash the connect
-                // params + password and ask the UI to confirm (finally still wipes mk/authKey/dataKey/password).
-                runCatching { syncClient.close() }
+                // Verified only — this client is released by the finally below and the confirmed re-run
+                // opens its own. Stash the connect params + password and ask the UI to confirm
+                // (finally still wipes mk/authKey/dataKey/password).
+                //
                 // The verify above is a full SRP login: it reactivates a revoked device server-side and
                 // consumes the one-shot signal, so the confirmed re-run's login reports an ordinary live
                 // device and only what is recorded here reaches it. The debt is recorded whether or not
                 // this device is linked — it belongs to the link, not to the config, and declining the
                 // password is an answer about the password, not about the revocation ([cancelPasswordReplace]).
-                // After the close, not before: a refused write throws, and it must not strand the client.
                 if (s.reactivated) rememberReactivation(link)
                 if (!publishPendingReplace(serverUrl, accountId, masterPassword, keepConnected)) {
                     // The vault locked while this connect was on the network (the lock has no idea one is
@@ -652,14 +653,12 @@ class SyncCoordinator(
                     // locally): adoptDataKey keeps the meta in that case, so the unlock password would stay
                     // the local one and diverge from the account — re-wrap it explicitly instead.
                     KeyAdoption.AlreadyOurs -> if (!vault.rewrapUnder(masterPassword.copyOf())) {
-                        runCatching { syncClient.close() }
                         _status.value = SyncStatus.Failed(SyncFailureReason.VaultRekeyFailed)
                         return
                     }
                     // The replace the user confirmed did NOT happen (the account wrap didn't open). Connecting
                     // now would claim a password change that isn't there, on records we can't decrypt.
                     KeyAdoption.Undecryptable -> {
-                        runCatching { syncClient.close() }
                         _status.value = SyncStatus.Failed(SyncFailureReason.AccountKeyNotAdopted)
                         return
                     }
@@ -691,6 +690,7 @@ class SyncCoordinator(
             // this account on another server says nothing about this one, and paying it here would rebuild
             // a vault nobody purged records from.
             val mustReconcile = reactivated || link in reconcileDebts
+            openedClient = null // ownership passes to activateSession
             activateSession(
                 syncClient,
                 newSession,
@@ -714,6 +714,12 @@ class SyncCoordinator(
             masterKey?.zeroize()
             authKey?.fill(0)
             dataKey.zeroize()
+            // Opened but never activated: give the socket pool back rather than leaving one engine
+            // per failed attempt behind (issue #308). This is the release point for the failure
+            // paths — a `return` inside the branches above lands here, so none of them closes its
+            // own client. From the hand-off on the client belongs to the live session and is closed
+            // by `disconnect`, which is why the null-out sits before the call and not after it.
+            runCatching { openedClient?.close() }
         }
     }
 

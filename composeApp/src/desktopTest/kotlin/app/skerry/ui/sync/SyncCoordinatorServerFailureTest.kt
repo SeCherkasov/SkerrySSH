@@ -201,13 +201,33 @@ class SyncCoordinatorServerFailureTest {
     }
 
     /**
+     * Issue #308: doConnect opened its client and left it behind on every failure path — the
+     * `finally` wiped key material only. A wrong password is the common one: the user retypes it,
+     * and each attempt used to strand a Ktor engine with its pool and threads for the life of the
+     * process. Two paths, one per branch: the login fallback throwing, and register throwing.
+     */
+    @Test
+    fun `a connect that fails closes the client it opened`() {
+        val wrongPassword = RejectingClient(
+            SyncException.Kind.CONFLICT,
+            loginFailure = SyncException(SyncException.Kind.UNAUTHORIZED, "authentication failed"),
+        )
+        failedConnect(wrongPassword)
+        assertEquals(1, wrongPassword.closeCalls, "a wrong password must not strand the client it opened")
+
+        val throttled = RejectingClient(SyncException.Kind.TOO_MANY_REQUESTS)
+        failedConnect(throttled)
+        assertEquals(1, throttled.closeCalls, "a refused registration must not strand the client it opened")
+    }
+
+    /**
      * Regression test for the closed-registration edge: a closed instance answers /auth/register
      * with 403 for every account (it never looks at the id), so an existing account must fall back
      * to login — not be locked out. register → 403, login → OK: connect succeeds.
      */
     @Test
     fun `a closed instance still lets existing accounts log in via the login fallback`() {
-        val result = runBlocking {
+        val (result, closesWhileOnline) = runBlocking {
             initializeVaultCrypto()
             val vault = localVault()
             val session = SyncSession(accountId = account, accessToken = "at", refreshToken = "rt")
@@ -220,19 +240,26 @@ class SyncCoordinatorServerFailureTest {
                     key.zeroize()
                 }
             }
+            val client = RejectingClient(SyncException.Kind.FORBIDDEN, loginSession = session, wrappedDataKey = wrap)
             val sut = SyncCoordinator(
-                clientFactory = { RejectingClient(SyncException.Kind.FORBIDDEN, loginSession = session, wrappedDataKey = wrap) },
+                clientFactory = { client },
                 crypto = crypto,
                 vault = vault,
                 engineFactory = { _ -> SyncRunner { _ -> SyncOutcome(pulled = 0, pushed = 0, cursor = 0L) } },
             )
             try {
                 sut.connect(serverUrl, account, password.toCharArray())
-                sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+                val settled = sut.status.awaitStatus("the connect to settle") { it is SyncStatus.Online || it is SyncStatus.Failed }
+                // Read before the coordinator is torn down: `close` legitimately closes the live client.
+                settled to client.closeCalls
             } finally {
                 sut.close()
             }
         }
         assertTrue(result !is SyncStatus.Failed, "expected connect to succeed, got $result")
+        // The other half of #308: the release in the `finally` is for clients this connect still owns.
+        // A connect that hands its client to the live session must leave it open — closing it there
+        // would kill the session the connect just established, on every single connect.
+        assertEquals(0, closesWhileOnline, "a successful connect closed the client it handed over")
     }
 }
