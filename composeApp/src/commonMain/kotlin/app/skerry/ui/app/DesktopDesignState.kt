@@ -31,9 +31,8 @@ import app.skerry.ui.terminal.TerminalCursorStyle
 import app.skerry.ui.terminal.TerminalFont
 import app.skerry.ui.terminal.TerminalTheme
 import app.skerry.ui.terminal.TerminalThemes
+import app.skerry.ui.terminal.ToolbarRequest
 import app.skerry.ui.theme.ThemeMode
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.SharedFlow
 
 /** Left rail / top-level views of the layout. */
 enum class DesktopView { Terminal, Sftp, Monitor, Ports, Snippets, Runbooks, Vault, Known, Teams }
@@ -474,8 +473,9 @@ class DesktopDesignState(
     }
 
     /**
-     * A focus request the assistant's input has not taken yet. A flag rather than the one-shot
-     * [SharedFlow] the always-mounted AI bar used: the chord usually fires while the panel is closed,
+     * A focus request the assistant's input has not taken yet. A flag rather than a one-shot signal,
+     * for the reason [app.skerry.ui.terminal.ToolbarRequest] spells out: the chord usually fires
+     * while the panel is closed,
      * so there is no collector at that moment and an emitted event would simply be dropped — the
      * panel would open with the caret still in the terminal. The ask row clears it via
      * [consumeAssistantFocus] once it has the focus, so a later remount can't take it retroactively.
@@ -485,28 +485,23 @@ class DesktopDesignState(
     /** The ask row took the pending focus request (see [assistantFocusPending]). */
     fun consumeAssistantFocus() { assistantFocusPending = false }
 
-    // Hotkeys for the toolbar buttons that own their own state (snippet palette popup, recording
-    // toggle, file picker). Same one-shot signal as the AI bar above rather than a flag on the
-    // state: a boolean would have to be reset by the button and could re-fire on recomposition.
-    private val _snippetPaletteRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val snippetPaletteRequests: SharedFlow<Unit> = _snippetPaletteRequests
-    fun requestSnippetPalette() { _snippetPaletteRequests.tryEmit(Unit) }
+    // The hotkeys and the overflow menu for the toolbar buttons that own their own state (the two
+    // palettes, the recorder, the share panel). Flags rather than one-shot signals: the chord fires
+    // while the button may be out of composition entirely — see [ToolbarRequest].
+    val snippetPalette = ToolbarRequest()
+    val recordingToggle = ToolbarRequest()
+    val sharePanel = ToolbarRequest()
+    val runbookPalette = ToolbarRequest()
 
-    private val _recordingToggleRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val recordingToggleRequests: SharedFlow<Unit> = _recordingToggleRequests
-    fun requestRecordingToggle() { _recordingToggleRequests.tryEmit(Unit) }
+    /**
+     * Open a `.cast` in the player. Read by a driver in the window chrome rather than by the
+     * toolbar button, because ⌘⇧P is the one chord of the set that needs no session: it has to work
+     * over a remote desktop and over an already-open recording, neither of which draws a toolbar.
+     */
+    val castOpen = ToolbarRequest()
 
-    private val _sharePanelRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val sharePanelRequests: SharedFlow<Unit> = _sharePanelRequests
-    fun requestSharePanel() { _sharePanelRequests.tryEmit(Unit) }
-
-    private val _runbookPaletteRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val runbookPaletteRequests: SharedFlow<Unit> = _runbookPaletteRequests
-    fun requestRunbookPalette() { _runbookPaletteRequests.tryEmit(Unit) }
-
-    private val _castOpenRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val castOpenRequests: SharedFlow<Unit> = _castOpenRequests
-    fun requestCastOpen() { _castOpenRequests.tryEmit(Unit) }
+    /** A file picker for [castOpen] is already up — a second dialog on top of it hangs the app. */
+    var castOpening: Boolean by mutableStateOf(false)
 
     /** Whether folder [name] is collapsed (its host list hidden). */
     override fun isGroupCollapsed(name: String): Boolean = name in collapsedGroups

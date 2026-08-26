@@ -61,6 +61,8 @@ import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.SnippetRunDialog
 import app.skerry.ui.snippet.maskSecrets
 import app.skerry.ui.terminal.CommandPalette
+import app.skerry.ui.terminal.CastOpenDriver
+import app.skerry.ui.terminal.CastOpenResult
 import app.skerry.ui.terminal.CastPlayerOverlay
 import app.skerry.ui.terminal.recordingOutcomeMessage
 import app.skerry.ui.vault.VaultGate
@@ -98,6 +100,7 @@ import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalHostClickConnectMode
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalRunbookRunner
+import app.skerry.ui.design.spaceLabel
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.LocalSnippets
 import app.skerry.ui.app.LocalTerminalHistory
@@ -393,6 +396,24 @@ internal fun DesktopChrome(
         )
         Box(Modifier.fillMaxSize().background(Skerry.colors.bg).onPreviewKeyEvent(onRootKey)) {
             DesktopShell(state, onLockWithTunnels, windowChrome, bare = bareDesktop)
+            // The `.cast` picker, driven here rather than from the toolbar button that raises it:
+            // ⌘⇧P needs no session, so it has to answer over a remote desktop and over an already
+            // open recording — neither of which draws a toolbar (issue #337).
+            val playerTabTitle = stringResource(Res.string.term_player_title)
+            CastOpenDriver(state) { result ->
+                if (result is CastOpenResult.Loaded && sessions != null) {
+                    state.clearOverlay()
+                    // The file name labels the tab: it says "recording", and two recordings of the
+                    // same host stay apart (their in-file titles are both just the host name).
+                    // The name comes off a file someone else may have named, and a tab title is
+                    // also the accessible name of that tab's close button — the same reason the OSC
+                    // title is stripped in the emulator (a bidi override makes one chip read as
+                    // another). Through [spaceLabel], the rule every peer-named row already uses.
+                    sessions.openPlayer(spaceLabel(result.fileName, playerTabTitle), result.cast)
+                } else {
+                    state.showCast(result)
+                }
+            }
             // Mock/preview only: with live sessions a recording opens in its own tab (SessionView.Player),
             // and this state is never set. Esc (via ModalScrim) closes the overlay.
             state.castRecording?.let { cast -> CastPlayerOverlay(cast, onDismiss = state::closeCast) }

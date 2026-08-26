@@ -14,6 +14,8 @@ import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.ai.AiAssistantController
+import app.skerry.ui.terminal.CastOpenResult
+import app.skerry.ui.terminal.openCastFile
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.identity.CredentialManagerController
 import app.skerry.ui.known.KnownHostsController
@@ -333,3 +335,12 @@ val LocalAi: ProvidableCompositionLocal<AiAssistantController?> = staticComposit
  * vault gate (the toggle is a synced SETTINGS record in the vault).
  */
 val LocalUpdates: ProvidableCompositionLocal<UpdateNoticeController?> = staticCompositionLocalOf { null }
+
+/**
+ * How the `.cast` player asks the user for a file. The default is the real picker; a test replaces
+ * it, because the driver behind it ([app.skerry.ui.terminal.CastOpenDriver]) is composed by the
+ * window chrome and a native file dialog cannot be answered from a test — without this seam the
+ * whole playback path is reachable only by hand.
+ */
+val LocalCastPicker: ProvidableCompositionLocal<suspend () -> CastOpenResult> =
+    staticCompositionLocalOf { ::openCastFile }

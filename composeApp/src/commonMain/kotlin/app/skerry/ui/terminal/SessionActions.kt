@@ -44,7 +44,6 @@ import app.skerry.ui.generated.resources.shell_tip_play
 import app.skerry.ui.generated.resources.shell_tip_record
 import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.generated.resources.shell_tip_sync_panes
-import app.skerry.ui.generated.resources.term_player_title
 import app.skerry.ui.runbook.RunbookPaletteButton
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
@@ -91,26 +90,28 @@ internal enum class ToolbarAction(val group: ToolbarGroup, val needsSession: Boo
  * rule that only exists inside one is a rule no test can enumerate.
  */
 @Composable
-internal fun toolbarActionEnabled(action: ToolbarAction, active: Session?): Boolean {
+internal fun toolbarActionEnabled(action: ToolbarAction, active: Session?, playerBusy: Boolean = false): Boolean {
     val runner = LocalRunbookRunner.current
     return toolbarActionEnabled(
         action,
         hasTerminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal != null,
         runnerIdle = runner != null && !runner.active && runner.pending == null,
         shareLive = LocalSessionShare.current?.state is ShareUiState.Live,
+        playerBusy = playerBusy,
     )
 }
 
 /**
  * The rule behind [toolbarActionEnabled], over the three facts the composition supplies:
  * [hasTerminal] — the pane in focus is connected, [runnerIdle] — no runbook is mid-run, and
- * [shareLive] — a stream is on the air right now.
+ * [shareLive] — a stream is on the air right now, and [playerBusy] — a `.cast` picker is already up.
  */
 internal fun toolbarActionEnabled(
     action: ToolbarAction,
     hasTerminal: Boolean,
     runnerIdle: Boolean,
     shareLive: Boolean,
+    playerBusy: Boolean = false,
 ): Boolean = when (action) {
     // Nothing to send into without a connected session.
     ToolbarAction.Snippets, ToolbarAction.Record -> hasTerminal
@@ -119,7 +120,11 @@ internal fun toolbarActionEnabled(
     // Nothing to share without a connected session — but a stream already running keeps the control
     // that stops it, and on a narrow toolbar the menu row is the only copy of that control left.
     ToolbarAction.Share -> hasTerminal || shareLive
-    ToolbarAction.Files, ToolbarAction.Monitor, ToolbarAction.Play -> true
+    // A recording is watched, not run, so playback needs no session at all — only a picker that is
+    // not already up. The second file dialog on top of the first is what hangs the app, and the
+    // menu row has to refuse it as plainly as the button does.
+    ToolbarAction.Play -> !playerBusy
+    ToolbarAction.Files, ToolbarAction.Monitor -> true
 }
 
 /**
@@ -247,18 +252,6 @@ internal fun RowScope.SessionActions(
             state.showView(DesktopView.Monitor)
         }
     }
-    val playerTabTitle = stringResource(Res.string.term_player_title)
-    val onCastOpened: (CastOpenResult) -> Unit = { result ->
-        if (result is CastOpenResult.Loaded && sessions != null) {
-            state.clearOverlay()
-            // The file name labels the tab: it says "recording", and two recordings of the same
-            // host stay apart (their in-file titles are both just the host name).
-            sessions.openPlayer(result.fileName.ifBlank { playerTabTitle }, result.cast)
-        } else {
-            state.showCast(result)
-        }
-    }
-
     // Group 1 — the workspace: what the tab holds and which of its views is on screen.
     // Synchronized input: typing in one pane reaches every connected pane of this tab. Lit while on,
     // since it changes where every keystroke goes. Shown only once the tab is actually split — with
@@ -300,19 +293,19 @@ internal fun RowScope.SessionActions(
     // Group 2 — what can be sent into the session running there.
     ActionGroupSeparator(shown = groupDrawn(ToolbarGroup.Workspace) && groupDrawn(ToolbarGroup.Session))
     // Quick snippet launch into the active session without leaving for the Snippets section.
-    if (drawn(ToolbarAction.Snippets)) SnippetPaletteButton(active, state.snippetPaletteRequests)
+    if (drawn(ToolbarAction.Snippets)) SnippetPaletteButton(active, state.snippetPalette)
     // Same idea one size up: start a saved procedure here instead of going to its section.
-    if (drawn(ToolbarAction.Runbook)) RunbookPaletteButton(active, state.runbookPaletteRequests)
+    if (drawn(ToolbarAction.Runbook)) RunbookPaletteButton(active, state.runbookPalette)
     // Streams this session to a team over the sync relay (viewers watch; the host decides whether
     // they may type).
     if (drawn(ToolbarAction.Share)) {
-        ShareSessionButton(active, LocalSessionShare.current, shareableTeams(), state.sharePanelRequests)
+        ShareSessionButton(active, LocalSessionShare.current, shareableTeams(), state.sharePanel)
     }
     // Asciinema recording of this session; the stop click offers a Save-As for the .cast.
     if (drawn(ToolbarAction.Record)) {
         RecordSessionButton(
             active,
-            state.recordingToggleRequests,
+            state.recordingToggle,
             onSaved = { hostId, seconds -> teams?.reportSessionRecorded(hostId, seconds) },
         ) { state.showRecordingNotice(it) }
     }
@@ -325,7 +318,7 @@ internal fun RowScope.SessionActions(
     // sits here rather than behind a connected-only guard. Live mode opens the recording in its own
     // tab, so the shells stay reachable while it plays; the mock path (no session manager) has no
     // tabs and falls back to the overlay.
-    if (drawn(ToolbarAction.Play)) PlayRecordingButton(state.castOpenRequests, onCastOpened)
+    if (drawn(ToolbarAction.Play)) PlayRecordingButton(state)
     // Opens the assistant beside the terminal. Lit while it is open, like the info toggle; absent
     // entirely when AI is off for this host or globally, so a host that opted out shows no AI
     // affordance at all.
@@ -342,7 +335,7 @@ internal fun RowScope.SessionActions(
             hidden,
             state,
             tabKey = tab?.id,
-            enabled = { toolbarActionEnabled(it, active) },
+            enabled = { toolbarActionEnabled(it, active, playerBusy = state.castOpening) },
             onOpenSftp = openSftp,
             onOpenMonitor = openMonitor,
         )
@@ -358,21 +351,21 @@ internal fun RowScope.SessionActions(
         )
     }
     // Parked out of sight, still in composition: these buttons own the palettes, the recorder and
-    // the file pickers behind them, and dropping them from the tree would take that state with them
-    // — the overflow menu drives them through their request signals instead.
+    // the share panel behind them, and dropping them from the tree would take that state with them
+    // — the overflow menu drives them through their requests instead. The player is not here: its
+    // picker is driven by the window chrome ([CastOpenDriver]), so its button owns nothing.
     Box(Modifier.size(0.dp).clipToBounds()) {
-        if (ToolbarAction.Snippets in hidden) SnippetPaletteButton(active, state.snippetPaletteRequests)
-        if (ToolbarAction.Runbook in hidden) RunbookPaletteButton(active, state.runbookPaletteRequests)
+        if (ToolbarAction.Snippets in hidden) SnippetPaletteButton(active, state.snippetPalette)
+        if (ToolbarAction.Runbook in hidden) RunbookPaletteButton(active, state.runbookPalette)
         if (ToolbarAction.Record in hidden) {
             RecordSessionButton(
                 active,
-                state.recordingToggleRequests,
+                state.recordingToggle,
                 onSaved = { hostId, seconds -> teams?.reportSessionRecorded(hostId, seconds) },
             ) { state.showRecordingNotice(it) }
         }
-        if (ToolbarAction.Play in hidden) PlayRecordingButton(state.castOpenRequests, onCastOpened)
         if (ToolbarAction.Share in hidden) {
-            ShareSessionButton(active, LocalSessionShare.current, shareableTeams(), state.sharePanelRequests)
+            ShareSessionButton(active, LocalSessionShare.current, shareableTeams(), state.sharePanel)
         }
     }
 }
@@ -467,11 +460,11 @@ internal fun OverflowActionsButton(
                         val run: () -> Unit = when (action) {
                             ToolbarAction.Files -> onOpenSftp
                             ToolbarAction.Monitor -> onOpenMonitor
-                            ToolbarAction.Snippets -> state::requestSnippetPalette
-                            ToolbarAction.Runbook -> state::requestRunbookPalette
-                            ToolbarAction.Record -> state::requestRecordingToggle
-                            ToolbarAction.Play -> state::requestCastOpen
-                            ToolbarAction.Share -> state::requestSharePanel
+                            ToolbarAction.Snippets -> state.snippetPalette::raise
+                            ToolbarAction.Runbook -> state.runbookPalette::raise
+                            ToolbarAction.Record -> state.recordingToggle::raise
+                            ToolbarAction.Play -> state.castOpen::raise
+                            ToolbarAction.Share -> state.sharePanel::raise
                         }
                         MenuActionRow(icon = action.icon, label = stringResource(action.label), enabled = enabled(action)) {
                             open = false

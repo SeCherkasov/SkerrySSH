@@ -12,8 +12,19 @@ import kotlin.test.assertTrue
  */
 class ToolbarActionEnabledTest {
 
-    private fun enabled(action: ToolbarAction, terminal: Boolean, idle: Boolean = true, share: Boolean = false) =
-        toolbarActionEnabled(action, hasTerminal = terminal, runnerIdle = idle, shareLive = share)
+    private fun enabled(
+        action: ToolbarAction,
+        terminal: Boolean,
+        idle: Boolean = true,
+        share: Boolean = false,
+        busy: Boolean = false,
+    ) = toolbarActionEnabled(
+        action,
+        hasTerminal = terminal,
+        runnerIdle = idle,
+        shareLive = share,
+        playerBusy = busy,
+    )
 
     @Test
     fun `what needs a session to send into is off without one`() {
@@ -51,5 +62,18 @@ class ToolbarActionEnabledTest {
         for (action in listOf(ToolbarAction.Files, ToolbarAction.Monitor, ToolbarAction.Play)) {
             assertTrue(enabled(action, terminal = false), "$action with nothing connected")
         }
+    }
+
+    /**
+     * Playback is the exception to that: a recording needs no session, but it does need a picker that
+     * is not already up. A long recording parses with the window fully interactive, so both the button
+     * and the overflow row would otherwise draw lit for those seconds while every press is dropped —
+     * and a second native file dialog on top of the first hangs the app.
+     */
+    @Test
+    fun `playback is off while a picker is up`() {
+        assertFalse(enabled(ToolbarAction.Play, terminal = true, busy = true))
+        assertFalse(enabled(ToolbarAction.Play, terminal = false, busy = true))
+        assertTrue(enabled(ToolbarAction.Play, terminal = false, busy = false))
     }
 }

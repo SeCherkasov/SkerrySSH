@@ -61,8 +61,9 @@ import app.skerry.ui.generated.resources.share_starting
 import app.skerry.ui.generated.resources.share_title
 import app.skerry.ui.generated.resources.share_viewers
 import app.skerry.ui.session.Session
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
+import app.skerry.ui.terminal.OnToolbarRequest
+import app.skerry.ui.terminal.ToolbarRequest
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -87,9 +88,9 @@ fun ShareSessionButton(
     session: Session?,
     controller: SessionShareController?,
     teams: List<Pair<String, String>>,
-    // Fired by the overflow menu when the row is too narrow to show the button itself; the button
-    // owns the panel, so the menu asks it to open rather than duplicating it.
-    requests: SharedFlow<Unit>? = null,
+    // Raised by the overflow menu when the row is too narrow to show the button itself; the button
+    // owns the panel, so the ask goes to it rather than duplicating it.
+    request: ToolbarRequest? = null,
 ) {
     // Keyed on the session, like the other toolbar popups: switching tabs must not leave the panel
     // open over a different session's toolbar.
@@ -101,20 +102,32 @@ fun ShareSessionButton(
     LaunchedEffect(live, terminal?.cols, terminal?.rows) {
         if (live) controller?.announceGeometry()
     }
-    // `live` is a key too, not just a captured value: a stream stopped without the terminal changing
-    // would otherwise leave this collector opening the panel on a share that is already over.
-    LaunchedEffect(requests, terminal, live) { requests?.collect { if (live || terminal != null) open = true } }
     // A pane that is watching someone else's session gets the viewer's panel behind the same button:
     // its only control is asking the host for permission to type. Relaying a colleague's stream on
     // to a third team is never offered — the pane's own flag decides that, not the viewer registry,
     // which is keyed by pane id and cleared the moment the watched session ends.
     val watched = LocalSharedSessions.current?.watching?.get(session?.id)
     if (watched != null) {
-        WatchedSessionButton(watched, session?.subtitle.orEmpty(), requests)
+        // Ahead of this button's own reader: one request has one taker, and the panel the viewer
+        // gets is the one behind the button actually on screen.
+        WatchedSessionButton(watched, session?.subtitle.orEmpty(), request)
         return
     }
-    if (session?.controller?.isWatched == true) return
-    if (controller == null) return
+    if (session?.controller?.isWatched == true || controller == null) {
+        // Taken and dropped, not left pending. There is no button here to open a panel on, and an ask
+        // that keeps waiting is one the overflow row can raise with sync disconnected — it would then
+        // fire on whichever session is active when sync connects, putting the streaming-consent panel
+        // on screen unasked. Same rule the panel's own asks follow: one frame, one taker.
+        OnToolbarRequest(request) {}
+        return
+    }
+    // Below every early return, not above them: a reader that runs in a composition which then
+    // bails takes the ask and parks `open` in a slot nobody draws — which is why the bail-out above
+    // reads it with an empty action instead of letting this one run there.
+    //
+    // A stream stopped without the terminal changing must not leave a request opening the panel on
+    // a share that is already over — [live] is read here rather than captured at subscription.
+    OnToolbarRequest(request) { if (live || terminal != null) open = true }
     Box {
         // Nothing to share without a live session, but a stream already running keeps the control
         // that stops it. Disabled rather than dimmed-and-live: the guard used to sit in the handler,
@@ -306,13 +319,13 @@ private const val MAX_SHOWN_VIEWERS = 4
 private fun WatchedSessionButton(
     viewer: app.skerry.shared.share.SharedSessionViewer,
     hostAccount: String,
-    requests: SharedFlow<Unit>?,
+    request: ToolbarRequest?,
 ) {
     var open by remember(viewer) { mutableStateOf(false) }
     val granted by viewer.controlGranted.collectAsState()
     var asked by remember(viewer) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(requests) { requests?.collect { open = true } }
+    OnToolbarRequest(request) { open = true }
     Box {
         IconBtn(
             name = if (granted) "keyboard" else "visibility",

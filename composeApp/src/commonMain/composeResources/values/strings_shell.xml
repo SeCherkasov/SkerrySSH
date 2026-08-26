@@ -124,6 +124,12 @@
     <string name="shell_tip_pause">Pause</string>
     <string name="shell_tip_replay">Replay</string>
     <string name="shell_tip_monitor">Monitoring</string>
+    <string name="shell_view_terminal">Terminal</string>
+    <string name="shell_view_files">Files</string>
+    <string name="shell_view_monitor">Monitoring</string>
+    <string name="shell_view_runbook">Runbook</string>
+    <string name="shell_view_player">Recording</string>
+    <string name="shell_view_desktop">Remote desktop</string>
     <string name="shell_tip_disconnect">Disconnect</string>
     <string name="shell_no_hosts_yet">No hosts yet</string>
     <string name="shell_add_first_host">Add a connection to see it here.</string>
