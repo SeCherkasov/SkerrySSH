@@ -8,6 +8,7 @@ import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import net.schmizz.sshj.common.LoggerFactory
 import net.schmizz.sshj.common.Message
@@ -34,6 +35,23 @@ class SshjConnectionCleanupTest {
         }
     }
 
+    /**
+     * Issue #311: the listener must keep the platform's default bind exclusivity. `SO_REUSEADDR` is
+     * a TIME_WAIT convenience on Unix — where the JDK sets it for a `ServerSocket` anyway — but on
+     * Windows asking for it drops `SO_EXCLUSIVEADDRUSE`, and any other local process can then bind
+     * the same `127.0.0.1:port` and receive the tunnel's connections instead. Asserted through the
+     * setter rather than the socket option: the hijack itself only reproduces on Windows, while
+     * "we never ask for it" is the same statement on every platform.
+     */
+    @Test
+    fun `the forward listener never asks for SO_REUSEADDR`() {
+        val socket = ReuseAddressWatchingSocket()
+
+        bindForwardListener("127.0.0.1", 0) { socket }.use {
+            assertFalse(socket.reuseAddressRequested, "SO_REUSEADDR costs the exclusive bind on Windows")
+        }
+    }
+
     @Test
     fun `a rejected pty closes the session channel`() {
         val session = PtyRejectingSession()
@@ -43,6 +61,16 @@ class SshjConnectionCleanupTest {
         }
 
         assertTrue(session.closed)
+    }
+}
+
+/** Records whether the bind helper asked for SO_REUSEADDR, whatever the platform's default is. */
+private class ReuseAddressWatchingSocket : ServerSocket() {
+    var reuseAddressRequested = false
+
+    override fun setReuseAddress(on: Boolean) {
+        if (on) reuseAddressRequested = true
+        super.setReuseAddress(on)
     }
 }
 

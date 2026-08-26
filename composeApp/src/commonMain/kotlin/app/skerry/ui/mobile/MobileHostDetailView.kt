@@ -23,10 +23,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.skerry.shared.ssh.carriesSftp
 import app.skerry.ui.design.sanitizeServerText
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.host.HostSection
@@ -106,7 +108,7 @@ fun mobileHostDetailRows(host: Host, findHost: (String) -> Host? = { null }): Li
  * [MobileDesignState.selectedHostId] (or the preview catalog outside the gate). Connect navigates
  * to [MobileRoute.Terminal]; Tunnels to [MobileRoute.Ports]; Delete removes the profile via
  * [app.skerry.ui.host.HostManagerController] and pops back. SFTP connects to the host and opens
- * the Files tab; Snippets/edit are stubs.
+ * the Files tab; Snippets pushes the command library. Edit is still a stub.
  */
 @Composable
 fun MobileHostDetailScreen(state: MobileDesignState) {
@@ -175,21 +177,23 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
         }
 
         // Quick actions: SFTP connects to the host (like Connect, resolving the secret/password)
-        // and opens the Files tab (the active session's remote browser). Tunnels opens Ports;
-        // Snippets is not implemented.
+        // and opens the Files tab (the active session's remote browser). Tunnels opens Ports,
+        // Snippets the command library — the same screen the More hub pushes.
         val openSftp = LocalOpenSftp.current
         Row(
             Modifier.fillMaxWidth().padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            // No SFTP over RFB: a remote desktop has no file channel, so the action is inert there
-            // rather than opening a browser that can never list anything.
-            QuickAction(
-                "folder", stringResource(Res.string.shell_quick_sftp), Modifier.weight(1f),
-                onClick = if (remoteDesktop) null else ({ openSftp(host) }),
-            )
-            QuickAction("lan", stringResource(Res.string.shell_quick_tunnels), Modifier.weight(1f), onClick = { state.push(MobileRoute.Ports) })
-            QuickAction("code_blocks", stringResource(Res.string.shell_quick_snippets), Modifier.weight(1f), onClick = null)
+            // Only an SSH session carries a file channel ([carriesSftp], the same predicate the
+            // terminal's path chip reads). On anything else — a remote desktop, Telnet, serial, a
+            // container exec — the card is left out rather than drawn like a working one over a
+            // browser that can never list anything (#305 — an action that can do nothing is not
+            // drawn at all).
+            if (host.connectionType.carriesSftp) {
+                QuickAction("folder", stringResource(Res.string.shell_quick_sftp), Modifier.weight(1f)) { openSftp(host) }
+            }
+            QuickAction("lan", stringResource(Res.string.shell_quick_tunnels), Modifier.weight(1f)) { state.push(MobileRoute.Ports) }
+            QuickAction("code_blocks", stringResource(Res.string.shell_quick_snippets), Modifier.weight(1f)) { state.push(MobileRoute.Snippets) }
         }
 
         HostsDetailLabel(stringResource(Res.string.shell_details))
@@ -281,24 +285,19 @@ fun MobileHostDetailScreen(state: MobileDesignState) {
     }
 }
 
-/** Quick-action card (icon above label). [onClick] == null means the action is disabled (no ripple). */
+/** Quick-action card (icon above label). Every card drawn leads somewhere — see the row above. */
 @Composable
-private fun QuickAction(icon: String, label: String, modifier: Modifier, onClick: (() -> Unit)?) {
+private fun QuickAction(icon: String, label: String, modifier: Modifier, onClick: () -> Unit) {
     Column(
         modifier
             .clip(RoundedCornerShape(13.dp))
             .background(Skerry.colors.card)
             .border(1.dp, Skerry.colors.cyan08, RoundedCornerShape(13.dp))
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier
-                },
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClick = onClick,
             )
             .padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

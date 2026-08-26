@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.share.SessionShareCodec
 import app.skerry.shared.share.SessionShareHost
+import app.skerry.shared.share.ShareChannel
 import app.skerry.shared.share.ShareFrame
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.shared.share.shareMetaAad
@@ -14,10 +15,13 @@ import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.VaultCrypto
 import app.skerry.ui.sync.ShareLink
 import kotlinx.coroutines.CancellationException
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 /** What the share button shows about this session. */
 sealed interface ShareUiState {
@@ -103,6 +107,8 @@ class SessionShareController(
     private val scope: CoroutineScope,
     /** Monotonic milliseconds for the typing hint's lifetime; injected so tests don't wait. */
     private val nowMillis: () -> Long = { 0 },
+    /** How often a viewer may raise "wants control" (#343); injected so tests don't wait a minute. */
+    private val controlGate: ControlRequestGate = ControlRequestGate(),
 ) {
     var state: ShareUiState by mutableStateOf(ShareUiState.Off)
         private set
@@ -115,6 +121,13 @@ class SessionShareController(
     // finishing; without this the old coroutine's teardown would clear the new share's state and
     // leave a live, unstoppable stream nobody can see.
     private var generation: Long = 0
+
+    // Every read-modify-write of [state] runs under this monitor, and so does every read and write
+    // of [generation]. The socket coroutine (Dispatchers.Default) and the host's own toggle (the UI
+    // thread) each build a copy from a snapshot they read a moment earlier: unguarded, the viewer
+    // count of a frame that arrived while the host was taking input back writes `inputAllowed` true
+    // again, and the viewer keeps typing into a shell the host already closed to them.
+    private val stateLock = SynchronizedObject()
 
     // When the last keystroke arrived, so the hint can fade (see [expireTypingHint]).
     private var typingSince: Long = 0
@@ -141,45 +154,40 @@ class SessionShareController(
             return
         }
         stop()
-        val mine = ++generation
+        controlGate.reset() // a new share: nothing asked in it, nothing refused
         val shareId = newShareId()
         val codec = SessionShareCodec(crypto, shareId)
-        state = ShareUiState.Starting
-        sharedPaneId = paneId
+        val mine = synchronized(stateLock) {
+            state = ShareUiState.Starting
+            sharedPaneId = paneId
+            ++generation
+        }
         job = scope.launch {
             try {
                 val meta = crypto.seal(key, label.take(MAX_LABEL_CHARS).encodeToByteArray(), shareMetaAad(shareId))
                 shareClient.hostShare(syncSession, teamId, shareId, meta) { channel ->
-                    val host = SessionShareHost(
-                        codec = codec,
-                        teamKey = key,
-                        channel = channel,
-                        output = source.output,
-                        toShell = source.toShell,
-                        geometry = source.geometry,
-                        allowInput = { (state as? ShareUiState.Live)?.inputAllowed == true },
-                        onViewers = { accounts ->
-                            updateLive { it.copy(viewers = accounts.size, viewerAccounts = accounts) }
-                        },
-                        onTyping = { account ->
-                            typingSince = nowMillis()
-                            updateLive { it.copy(typingBy = account) }
-                        },
-                        // A request is never granted on its own: the host answers it, exactly like
-                        // the toggle. Until then the viewer stays read-only.
-                        onControlRequest = { account ->
-                            updateLive { it.copy(controlRequestPending = true, controlRequestBy = account) }
-                        },
-                    )
-                    live = host
-                    state = ShareUiState.Live(
-                        teamId = teamId,
-                        teamName = teamName,
-                        shareId = shareId,
-                        viewers = 0,
-                        inputAllowed = false,
-                        inputLocked = readOnlyOnly,
-                    )
+                    val host = hostFor(codec, key, channel, source, mine)
+                    // `stop()` only asks the coroutine to cancel, and this stretch does not suspend:
+                    // a share the host ended while the relay handshake was in flight can still get
+                    // here, and publishing would put its team and share id over the one the user
+                    // actually started.
+                    val published = synchronized(stateLock) {
+                        if (mine != generation) {
+                            false
+                        } else {
+                            live = host
+                            state = ShareUiState.Live(
+                                teamId = teamId,
+                                teamName = teamName,
+                                shareId = shareId,
+                                viewers = 0,
+                                inputAllowed = false,
+                                inputLocked = readOnlyOnly,
+                            )
+                            true
+                        }
+                    }
+                    if (!published) return@hostShare
                     // The shell can end while the socket is perfectly healthy (exit, dropped
                     // connection): end the broadcast with it instead of streaming a dead screen.
                     // Cancelled with the socket coroutine when the share stops for any other reason.
@@ -194,20 +202,95 @@ class SessionShareController(
                     }
                 }
                 // The socket closed on its own (host stopped, session gone, server restart).
-                if (mine == generation && state !is ShareUiState.Failed) state = ShareUiState.Off
+                synchronized(stateLock) {
+                    if (mine == generation && state !is ShareUiState.Failed) state = ShareUiState.Off
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (mine == generation) state = ShareUiState.Failed(shareFailure(e))
+                synchronized(stateLock) {
+                    if (mine == generation) state = ShareUiState.Failed(shareFailure(e))
+                }
             } finally {
                 // Only the current share owns these fields: a later share() has already published
                 // its own host and pane, and clearing them here would orphan its live socket.
-                if (mine == generation) {
-                    live = null
-                    sharedPaneId = null
+                synchronized(stateLock) {
+                    if (mine == generation) {
+                        live = null
+                        sharedPaneId = null
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * The host side of one share. Split out of [share] so the callbacks — which is what the
+     * generation guard is about — read on their own rather than as a wall inside the socket block.
+     * [mine] is the generation [share] took when it opened this socket.
+     */
+    private fun hostFor(
+        codec: SessionShareCodec,
+        key: DataKey,
+        channel: ShareChannel,
+        source: ShareSource,
+        mine: Long,
+    ): SessionShareHost {
+        // Every callback below belongs to *this* share and to no other, which is what [mine] is
+        // checked against. A relay that stops reading leaves the goodbye frame suspended, so the
+        // old socket stays parked in its read loop — and its callbacks close over no share of their
+        // own. Unguarded, a viewer of a share the host ended would be answered against whatever
+        // share came next: their frames typed into its shell the moment its host allowed input,
+        // their accounts drawn beside its name, their questions raised over it.
+        return SessionShareHost(
+            codec = codec,
+            teamKey = key,
+            channel = channel,
+            output = source.output,
+            toShell = source.toShell,
+            geometry = source.geometry,
+            allowInput = {
+                synchronized(stateLock) { mine == generation && (state as? ShareUiState.Live)?.inputAllowed == true }
+            },
+            onViewers = { accounts ->
+                updateOurs(mine) {
+                    val asked = it.controlRequestBy
+                    // A question from someone who has stopped watching is not a question
+                    // any more: granting it would let whoever is watching now type, and
+                    // the name over the Grant button would be of a colleague who left.
+                    val gone = asked != null && asked !in accounts
+                    if (gone) controlGate.withdrawn()
+                    it.copy(
+                        viewers = accounts.size,
+                        viewerAccounts = accounts,
+                        controlRequestPending = it.controlRequestPending && !gone,
+                        controlRequestBy = if (gone) null else asked,
+                    )
+                }
+            },
+            onTyping = { account ->
+                updateOurs(mine) {
+                    typingSince = nowMillis()
+                    it.copy(typingBy = account)
+                }
+            },
+            // A request is never granted on its own: the host answers it, exactly like
+            // the toggle. Until then the viewer stays read-only. What reaches the panel
+            // is bounded by [controlGate] — one question at a time, and an answer the
+            // host has already given is not asked again straight away (#343).
+            onControlRequest = { account ->
+                updateOurs(mine) {
+                    // Read and decided in one step, off the same snapshot the copy is
+                    // built from: this runs on the socket coroutine while the host's own
+                    // toggle runs on the UI thread, and a verdict taken from an earlier
+                    // read would put a "wants control" row over a session the viewer was
+                    // let into in the meantime. Nothing to decide either when the session
+                    // is locked read-only — no answer the host could give would change it.
+                    if (it.inputAllowed || it.inputLocked || !controlGate.admits(account)) it
+                    else it.copy(controlRequestPending = true, controlRequestBy = account)
+                }
+            },
+        )
     }
 
     /**
@@ -215,16 +298,39 @@ class SessionShareController(
      * offering a keyboard that goes nowhere. Ignored while the session is locked to read-only.
      */
     fun setInputAllowed(allowed: Boolean) {
-        val current = state as? ShareUiState.Live ?: return
-        if (current.inputLocked) return
-        state = current.copy(inputAllowed = allowed, controlRequestPending = false, controlRequestBy = null)
+        var announce = false
+        synchronized(stateLock) {
+            val current = state as? ShareUiState.Live ?: return@synchronized
+            if (current.inputLocked) {
+                // A locked session cannot grant, but the press is still an answer: leaving it
+                // unanswered keeps the row over the shell and holds the gate's one slot for the
+                // rest of the share.
+                controlGate.answered(granted = false)
+                state = current.copy(controlRequestPending = false, controlRequestBy = null)
+                return@synchronized
+            }
+            // Taking input back with a request on screen answers it too, and answers it with a no.
+            controlGate.answered(granted = allowed)
+            state = current.copy(inputAllowed = allowed, controlRequestPending = false, controlRequestBy = null)
+            announce = true
+        }
+        if (!announce) return
         val host = live ?: return
         scope.launch { runCatching { host.announceControl(allowed) } }
     }
 
-    /** Answers a viewer's request for control: grant lets everyone watching type, deny just clears it. */
+    /**
+     * Answers a viewer's request for control: grant lets everyone watching type, deny just clears
+     * it — and holds the asker off, so the row the host dismissed does not come back on the next
+     * frame (#343).
+     */
     fun answerControlRequest(grant: Boolean) {
-        if (grant) setInputAllowed(true) else updateLive { it.copy(controlRequestPending = false, controlRequestBy = null) }
+        if (grant) {
+            setInputAllowed(true)
+        } else {
+            controlGate.answered(granted = false)
+            updateLive { it.copy(controlRequestPending = false, controlRequestBy = null) }
+        }
     }
 
     /**
@@ -245,27 +351,36 @@ class SessionShareController(
 
     /** Stops sharing; viewers are told the session ended. Safe to call when nothing is shared. */
     fun stop() {
-        generation++
-        val host = live
-        val running = job
-        job = null
-        live = null
-        sharedPaneId = null
-        if (state !is ShareUiState.Failed) state = ShareUiState.Off
+        var stopping: SessionShareHost? = null
+        var running: Job? = null
+        synchronized(stateLock) {
+            generation++
+            stopping = live
+            running = job
+            job = null
+            live = null
+            sharedPaneId = null
+            if (state !is ShareUiState.Failed) state = ShareUiState.Off
+        }
+        val host = stopping
+        val previous = running
         if (host == null) {
-            running?.cancel()
+            previous?.cancel()
             return
         }
         // Say goodbye first, then let the socket's own coroutine finish: cancelling outright would
-        // leave viewers staring at a frozen screen until the relay noticed the socket was gone.
+        // leave viewers staring at a frozen screen until the relay noticed the socket was gone. A
+        // relay that stops reading never takes that goodbye, so it is bounded — otherwise one
+        // wedged relay parks a coroutine, a socket and a subscription on the pane's output for as
+        // long as the app runs, once per share the user stops.
         scope.launch {
-            runCatching { host.stop() }
-            running?.cancel()
+            runCatching { withTimeout(GOODBYE_TIMEOUT_MS) { host.stop() } }
+            previous?.cancel()
         }
     }
 
     /** Clears a failure notice so the button returns to its idle state. */
-    fun clearFailure() {
+    fun clearFailure() = synchronized(stateLock) {
         if (state is ShareUiState.Failed) state = ShareUiState.Off
     }
 
@@ -277,10 +392,19 @@ class SessionShareController(
         else -> ShareFailure.Network
     }
 
-    private inline fun updateLive(block: (ShareUiState.Live) -> ShareUiState.Live) {
-        val current = state as? ShareUiState.Live ?: return
+    /** Read and write the live state as one step; nothing happens when nothing is being shared. */
+    private inline fun updateLive(block: (ShareUiState.Live) -> ShareUiState.Live) = synchronized(stateLock) {
+        val current = state as? ShareUiState.Live ?: return@synchronized
         state = block(current)
     }
+
+    /** [updateLive] for a callback of the share [mine]: a share the host ended writes nothing. */
+    private inline fun updateOurs(mine: Long, block: (ShareUiState.Live) -> ShareUiState.Live) =
+        synchronized(stateLock) {
+            if (mine != generation) return@synchronized
+            val current = state as? ShareUiState.Live ?: return@synchronized
+            state = block(current)
+        }
 
     private companion object {
         /** The session label is a name, not a payload; the relay caps what it will store anyway. */
@@ -290,6 +414,13 @@ class SessionShareController(
         const val TYPING_HINT_MS = 2_000L
     }
 }
+
+/**
+ * How long the goodbye gets before the share is cut loose. Long enough for a healthy relay to take
+ * the End frame, short enough that a wedged one does not keep the pane's output subscribed and the
+ * socket's coroutine alive for the rest of the session.
+ */
+internal const val GOODBYE_TIMEOUT_MS = 3_000L
 
 /**
  * The terminal being shared, as the controller needs it: its live PTY output, a way to type into

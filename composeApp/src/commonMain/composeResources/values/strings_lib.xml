@@ -275,6 +275,7 @@
     <string name="lib_teams_err_scopes_unsupported">This sync server is too old for access scopes — update the server</string>
     <string name="lib_teams_err_peer_key_unconfirmed">A member's published key is not the one on record for them — nothing was sealed to it. The member list marks their row: check the fingerprint over a trusted channel and confirm it there</string>
     <string name="lib_teams_err_unconfirmed_key_ignored">A team key arrived signed by a key that is not the one on record for that account, and was ignored</string>
+    <string name="lib_teams_keys_not_rotated">Keys not rotated: %1$d — the member is removed; repeat the removal to retry</string>
     <string name="lib_teams_err_invite_unverified">This invite was not verified — reopen the team and check the inviter's fingerprint before accepting</string>
     <string name="lib_teams_err_pin_not_recorded">The confirmed fingerprint couldn't be stored on this device — nothing was sent to that key</string>
     <string name="lib_teams_err_pin_moved">What is on record for this account changed while its fingerprint was on screen — nothing was confirmed. Check it again</string>

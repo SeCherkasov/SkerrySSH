@@ -236,6 +236,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     val teams by tc.teams.collectAsState()
     val busy by tc.busy.collectAsState()
     val error by tc.lastError.collectAsState()
+    val unrotatedKeys by tc.unrotatedKeys.collectAsState()
     val syncStamps by tc.lastSyncedAt.collectAsState()
     var selectedId by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableStateOf(0) }
@@ -265,7 +266,7 @@ private fun MobileTeamsBody(tc: TeamsCoordinator) {
     // Column's trailing children they'd get whatever height the scroll body left (≈0) and collapse.
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
-        TeamsErrorLine(error, size = 11.5.sp, modifier = Modifier.padding(vertical = 6.dp))
+        TeamsErrorLine(error, size = 11.5.sp, modifier = Modifier.padding(vertical = 6.dp), unrotatedKeys = unrotatedKeys)
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),

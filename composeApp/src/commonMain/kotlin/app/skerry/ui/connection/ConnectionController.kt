@@ -12,6 +12,7 @@ import app.skerry.shared.serial.SerialUnavailableException
 import app.skerry.shared.mosh.MoshSetupException
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.carriedBySsh
+import app.skerry.shared.ssh.carriesSftp
 import app.skerry.shared.ssh.HostKeyRefusal
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
@@ -289,7 +290,7 @@ class ConnectionController(
         // Only starts from the form: while a connect is in progress or a session is open, a repeat
         // connect is ignored — otherwise a scope/connection could leak.
         if (uiState !is ConnectionUiState.Form) return
-        supportsSftp = target.connectionType == ConnectionType.SSH
+        supportsSftp = target.connectionType.carriesSftp
         lastTarget = target
         lastAuth = auth
         pendingOnConnected = onConnected

@@ -85,7 +85,13 @@ abstract class TeamsPeerPinFixture {
             return published[accountId]?.keys
         }
 
-        override suspend fun listTeams(session: SyncSession): List<TeamSummary> = teams
+        /** Set to fail the team listing the way a dropped network does — the reread after a removal. */
+        var listTeamsFails = false
+
+        override suspend fun listTeams(session: SyncSession): List<TeamSummary> {
+            if (listTeamsFails) throw SyncException(SyncException.Kind.NETWORK, "list teams failed")
+            return teams
+        }
         override suspend fun members(session: SyncSession, teamId: String): List<TeamMember> = memberList
         override suspend fun publishKey(session: SyncSession, publicKey: ByteArray, signPublicKey: ByteArray) = Unit
         override suspend fun accept(session: SyncSession, teamId: String) { accepted += teamId }
@@ -171,9 +177,17 @@ abstract class TeamsPeerPinFixture {
         return Fixture(vault, TeamVaults(teamDir, crypto, deviceId = "dev-alice", fileSystem = FileSystem.SYSTEM, now = { NOW }))
     }
 
-    protected fun coordinator(f: Fixture, client: TeamClient, ids: Iterator<String> = listOf("prod").iterator()) =
+    protected fun coordinator(
+        f: Fixture,
+        client: TeamClient,
+        ids: Iterator<String> = listOf("prod").iterator(),
+        /** Whether the sync session is still up — false is the guard clause every operation opens with. */
+        connected: () -> Boolean = { true },
+    ) =
         TeamsCoordinator(
-            live = { TeamLink(SyncSession(self, "access", "refresh"), client, "test-link") },
+            live = {
+                if (connected()) TeamLink(SyncSession(self, "access", "refresh"), client, "test-link") else null
+            },
             vault = f.vault,
             crypto = crypto,
             teamVaults = f.teamVaults,

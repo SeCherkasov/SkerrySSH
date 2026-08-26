@@ -272,6 +272,7 @@
     <string name="lib_teams_err_scopes_unsupported">此同步服务器版本过旧，不支持访问范围 — 请更新服务器</string>
     <string name="lib_teams_err_peer_key_unconfirmed">成员发布的密钥不是为其记录的那把 — 未向其封装任何密钥。成员列表已标记其所在行：请通过可信渠道核对指纹并在该处确认</string>
     <string name="lib_teams_err_unconfirmed_key_ignored">收到的团队密钥所用的签名密钥不是该账户已记录的那把，已被忽略</string>
+    <string name="lib_teams_keys_not_rotated">未轮换的密钥：%1$d — 成员已移除；请重新执行移除以重试</string>
     <string name="lib_teams_err_invite_unverified">此邀请未经验证 — 请打开团队并核对邀请者的指纹后再接受</string>
     <string name="lib_teams_err_pin_not_recorded">无法在此设备上保存已确认的指纹，未向该密钥发送任何内容</string>
     <string name="lib_teams_err_pin_moved">指纹显示期间该账户的记录已发生变化 — 未确认任何内容。请重新核对</string>

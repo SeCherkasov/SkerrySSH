@@ -300,6 +300,16 @@ class TeamsCoordinator(
     val lastError: StateFlow<TeamsFailure?> = _lastError
 
     /**
+     * Keys the last removal failed to rotate — the team key, plus one per scope the removed member
+     * held (#324). [lastError] is one value and a removal can fail twice over, so the reason is
+     * reported there and the extent here: the count is what says a second key the member still
+     * holds also stayed put. Zero for a rotation that committed while stepping over a recipient —
+     * that key did rotate.
+     */
+    private val _unrotatedKeys = MutableStateFlow(0)
+    val unrotatedKeys: StateFlow<Int> = _unrotatedKeys
+
+    /**
      * Empties the error slot — and with it the memory of what was already reported into it. The dedup
      * in [adoptingKeys] exists only so one refusal doesn't re-fire for every scope of one pass; the
      * slot is emptied at the start of every operation, and from there the warning has to be earnable
@@ -307,6 +317,7 @@ class TeamsCoordinator(
      */
     private fun resetError() {
         _lastError.value = null
+        _unrotatedKeys.value = 0
         refusals.forgetAnnounced()
     }
 
@@ -753,6 +764,9 @@ class TeamsCoordinator(
             c.removeMember(sess, teamId, accountId)
             var teamRotation: TeamsFailure? = null
             var scopeRotation: TeamsFailure? = null
+            // Keys the removed member walked away with because their rotation did not commit. Kept
+            // beside the verdicts because the single error slot cannot hold two of them (#324).
+            var unrotated = 0
             if (accountId == sess.accountId) {
                 // Voluntary leave/decline: we can't rotate (we're gone). A remaining manager rotates.
                 forgetTeamLocally(teamId)
@@ -777,6 +791,7 @@ class TeamsCoordinator(
                 } catch (e: Exception) {
                     teamRotation = e.toFailure()
                 }
+                if (teamRotation.keptByTheMember()) unrotated++
                 // Each scope rotates independently: one failing must not leave the rest un-rotated,
                 // since every skipped scope is a key the removed member still holds.
                 heldScopes.forEach { scopeId ->
@@ -787,16 +802,22 @@ class TeamsCoordinator(
                     } catch (e: Exception) {
                         e.toFailure()
                     }
+                    if (failure.keptByTheMember()) unrotated++
                     scopeRotation = moreSerious(scopeRotation, failure)
                 }
             }
-            refreshUnlocked(sess, c)
+            // Caught rather than allowed to unwind: the reread runs over the same network the
+            // rotations just failed on, and a throw here would leave `op` reporting the reread while
+            // the verdict below — and the count of keys the removed member kept — were never
+            // published at all.
+            val reread = failureOf { refreshUnlocked(sess, c) }
             // Reported after the reread, not before it: refreshUnlocked writes `lastError` of its own
             // (an unconfirmed key it steps over), so a verdict published first would be replaced by
             // the milder one. And folded rather than written twice: the team key is usually the more
             // serious of the two, but not when its own verdict is a rotation that committed while
             // skipping a recipient — a scope that did not rotate at all outranks that.
-            moreSerious(teamRotation, scopeRotation)?.let { markError(it) }
+            val verdict = moreSerious(moreSerious(teamRotation, scopeRotation), reread)
+            verdict?.let { markError(it, unrotated) }
         }
     }
 
@@ -1239,11 +1260,42 @@ class TeamsCoordinator(
         else -> current
     }
 
-    private fun markError(reason: TeamsFailure) {
+    /**
+     * Writes the error slot, and with it how many of the removed member's keys stayed put (#324 —
+     * zero for everything that is not a removal). One writer for both, and the count first: the two
+     * are read as one line, so a screen reader that catches the state between them would otherwise
+     * announce the failure once without the count and again with it. Every path through here clears
+     * a count from an earlier operation, including the guard clauses that never reach [op].
+     */
+    private fun markError(reason: TeamsFailure, unrotatedKeys: Int = 0) {
+        _unrotatedKeys.value = unrotatedKeys
         _lastError.value = reason
     }
 
-    private fun Exception.toFailure(): TeamsFailure = (this as? SyncException)?.kind.toTeamsFailure()
+}
+
+/**
+ * Whether this verdict means the key never rotated, so the removed member still holds it.
+ * [TeamsFailure.PeerKeyUnconfirmed] does not: that rotation committed, having stepped over a
+ * recipient whose published key is not the pinned one — a colleague to re-confirm, not a key
+ * that stayed put.
+ */
+private fun TeamsFailure?.keptByTheMember(): Boolean = this != null && this != TeamsFailure.PeerKeyUnconfirmed
+
+private fun Exception.toFailure(): TeamsFailure = (this as? SyncException)?.kind.toTeamsFailure()
+
+/**
+ * Runs [block] and hands back what went wrong instead of throwing it — for the steps whose failure
+ * is a verdict to report next to another one, not a reason to abandon what has already been decided.
+ * Cancellation is not a failure and still propagates.
+ */
+private suspend fun failureOf(block: suspend () -> Unit): TeamsFailure? = try {
+    block()
+    null
+} catch (e: CancellationException) {
+    throw e
+} catch (e: Exception) {
+    e.toFailure()
 }
 
 /**
