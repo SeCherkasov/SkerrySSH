@@ -82,7 +82,12 @@ object SshConfigParser {
         val blocks = mutableListOf<Block>()
         val warnings = LinkedHashSet<String>()
         var current: Block? = null
-        var ignoringMatch = false
+        // Set by a block whose options cannot be honoured: a `Match` (no host context to evaluate
+        // it against) or a `Host` line that produced no usable pattern. Both leave `current` null,
+        // which on its own is indistinguishable from "before the first Host" — and that is where
+        // the parser synthesises a global `*` block, so without this flag a malformed entry handed
+        // its User/IdentityFile to every alias in the file.
+        var skippingOptions = false
         var totalPatterns = 0
 
         for (rawLine in text.lineSequence()) {
@@ -95,29 +100,32 @@ object SshConfigParser {
             val (keyword, args) = splitKeyword(trimmed) ?: continue
             when (keyword.lowercase()) {
                 "host" -> {
-                    ignoringMatch = false
                     val tokens = tokenize(args)
                     val patterns = tokens.filter { it.length <= MAX_PATTERN_LEN }
                     if (patterns.size < tokens.size) warnings.add("Some host patterns were too long and skipped")
                     val capped = patterns.take(MAX_PATTERNS - totalPatterns)
                     if (capped.size < patterns.size) warnings.add("Too many entries — not all lines were parsed")
+                    skippingOptions = capped.isEmpty()
                     if (capped.isEmpty()) {
                         current = null
+                        warnings.add("A Host line had no usable pattern — its options were skipped")
                     } else {
                         totalPatterns += capped.size
                         current = Block(capped).also { blocks.add(it) }
                     }
                 }
                 "match" -> {
-                    ignoringMatch = true
+                    skippingOptions = true
                     current = null
                     warnings.add("Match blocks are ignored")
                 }
                 "include" -> warnings.add("Include is not supported")
                 else -> {
-                    if (ignoringMatch) continue
+                    if (skippingOptions) continue
                     val value = tokenize(args).firstOrNull() ?: continue
                     // Options before the first Host apply globally (OpenSSH) — model as a `*` block.
+                    // Only reachable before the first Host: any block that failed to parse sets
+                    // [skippingOptions] and returned above.
                     val block = current ?: Block(listOf("*")).also { blocks.add(it); current = it; totalPatterns++ }
                     block.options.putIfAbsent(keyword.lowercase(), value)
                 }

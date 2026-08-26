@@ -2,6 +2,7 @@ package app.skerry.shared.ssh
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SshConfigParserTest {
@@ -262,6 +263,63 @@ class SshConfigParserTest {
         val alias = "b".repeat(120)
         val result = parse("Host $stars\n    User u\n\nHost $alias\n    HostName 10.0.0.1")
         assertEquals("10.0.0.1", result.hosts.single { it.alias == alias }.hostName)
+    }
+
+    @Test
+    fun `options under an argument-less Host line do not become global defaults`() {
+        // "no current block" is also how the parser models options that appear before the first
+        // Host, so a Host line that produced no pattern used to hand its options to every alias.
+        val result = parse(
+            """
+            Host
+                User root
+                IdentityFile ~/.ssh/id_root
+
+            Host web
+                HostName 10.0.0.1
+            """.trimIndent()
+        )
+
+        val web = result.hosts.single { it.alias == "web" }
+        assertNull(web.user, "a malformed Host block leaked its User to every alias")
+        assertNull(web.identityFile, "a malformed Host block leaked its IdentityFile to every alias")
+        assertEquals("10.0.0.1", web.hostName)
+        assertTrue(result.warnings.any { it.contains("host", ignoreCase = true) }, "the malformed line was not reported")
+    }
+
+    @Test
+    fun `options under a Host line whose every pattern was too long are dropped`() {
+        // The other way a Host line ends up with no usable pattern: every token over the length cap.
+        val huge = "a".repeat(5_000)
+        val result = parse(
+            """
+            Host $huge
+                User root
+
+            Host web
+                HostName 10.0.0.1
+            """.trimIndent()
+        )
+
+        assertNull(result.hosts.single { it.alias == "web" }.user)
+    }
+
+    @Test
+    fun `options before the first Host still apply globally`() {
+        // The regression guard for the fix above: a real global block must survive it.
+        val result = parse(
+            """
+            User global
+            Port 2200
+
+            Host web
+                HostName 10.0.0.1
+            """.trimIndent()
+        )
+
+        val web = result.hosts.single { it.alias == "web" }
+        assertEquals("global", web.user)
+        assertEquals(2200, web.port)
     }
 
     @Test
