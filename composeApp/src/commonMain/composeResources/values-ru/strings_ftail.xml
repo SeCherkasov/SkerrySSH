@@ -29,7 +29,7 @@
     <string name="ftail_err_session_closed">Сессия закрыта до начала передачи</string>
     <string name="ftail_err_too_large">Файл слишком большой, чтобы открыть его</string>
     <string name="ftail_err_tree_too_large">Дерево каталогов слишком глубокое или слишком большое для передачи</string>
-    <string name="ftail_err_tree_too_deep">Дерево каталогов слишком глубокое для обхода</string>
+    <string name="ftail_err_dir_too_large">Дерево каталогов слишком глубокое или в каталоге слишком много объектов</string>
     <string name="ftail_err_unexpected">Непредвиденная ошибка</string>
 
     <!-- Ошибки просмотрщика/редактора (F3/F4) -->

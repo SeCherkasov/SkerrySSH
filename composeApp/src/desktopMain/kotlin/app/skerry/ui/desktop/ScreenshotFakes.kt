@@ -171,7 +171,9 @@ internal class FakeSftpClient : SftpClient {
         SftpEntry("deploy.sh", "/var/www/deploy.sh", SftpEntryType.File, 1843, 0, 0b111_101_101),
     )
 
-    override suspend fun list(path: String): List<SftpEntry> = listing
+    // No truncation: the fixture is five rows, so the limit can never bind. A fake that grows past
+    // it has to honour the contract like every other implementation does.
+    override suspend fun list(path: String, limit: Int): List<SftpEntry> = listing
     override suspend fun stat(path: String): SftpEntry? = null
     override suspend fun realpath(path: String): String = "/var/www"
     override suspend fun read(path: String, maxBytes: Long): ByteArray = ByteArray(0)

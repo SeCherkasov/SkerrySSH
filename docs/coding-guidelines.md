@@ -57,6 +57,7 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Mosh session key, framing, timing, wire messages | `mosh/MoshKey`, `MoshFragment`, `MoshTiming`, `MoshSync`, `MoshWire` (codec in jvmShared) |
 | Host tag normalisation and prod-first ordering | `tag/Tags`: `normalizeTag`, `orderTagsProdFirst` |
 | Risk scoring of a production command | `guard/ProductionGuard` + `ProductionGuardPolicy` |
+| Bounding a client-side walk over a server's listing (depth, whole plan, one listing) | `files/TreeWalkLimit`: `refuseTooDeep`, `TreeWalkLimit`, `refuseOversizedListing` |
 | App version compare, release lookup, update settings | `update/UpdateVersion`, `ReleaseInfo`, `UpdateChecker`, `UpdateSettings` |
 | Server: admin-token guard | route-scoped plugin (one, in Routes) — don't inline the check per route |
 | Server: rate limit, path id, parameter limits | helpers `requiredPathId` / `limitParam` / the rate-limit helper |

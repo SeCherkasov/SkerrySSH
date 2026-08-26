@@ -3,9 +3,12 @@ package app.skerry.ui.files
 import app.skerry.shared.files.FileBrowser
 import app.skerry.shared.files.FileBrowserException
 import app.skerry.shared.files.FileBrowserFailure
+import app.skerry.shared.files.FileContentBrowser
 import app.skerry.shared.files.FileItem
 import app.skerry.shared.files.FileItemType
+import app.skerry.shared.files.MAX_LISTING_ENTRIES
 import app.skerry.shared.files.TreeWalkLimit
+import app.skerry.shared.files.refuseOversizedListing
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntryType
 
@@ -45,7 +48,12 @@ internal suspend fun buildDownloadPlan(
     remoteDir: String,
 ): TransferPlan<DownloadTask> {
     val walk = DownloadWalk(sftp)
-    items.forEach { walk.walk(WalkEntry(it.name, it.type, it.size), childPath(remoteDir, it.name), localDir, depth = 0) }
+    items.forEach {
+        val entry = WalkEntry(it.name, it.type, it.size)
+        // Each selected item is walked in turn, so each one starts with the whole listing budget:
+        // what the one before it held is gone by the time this call runs.
+        walk.walk(entry, childPath(remoteDir, it.name), localDir, depth = 0, hold = MAX_LISTING_ENTRIES)
+    }
     return walk.plan
 }
 
@@ -63,7 +71,21 @@ private class DownloadWalk(private val sftp: SftpClient) {
     val plan = TransferPlan<DownloadTask>()
     private val limit = TreeWalkLimit()
 
-    suspend fun walk(entry: WalkEntry, remotePath: String, localDir: String, depth: Int) {
+    /**
+     * [hold] is what is left of [MAX_LISTING_ENTRIES] for the levels this call is inside, the same
+     * budget [app.skerry.shared.files.SftpFileBrowser] runs its delete under. The plan's own count
+     * cannot stand in for it: that counts entries the walk has *taken on*, and a descent into the
+     * first child of a level counts one entry while the whole listing of every level above stays
+     * alive in its frame. Sixty-four of those is a plan that never gets built because the heap went
+     * first, and an `OutOfMemoryError` is not a refusal anyone can read.
+     */
+    suspend fun walk(
+        entry: WalkEntry,
+        remotePath: String,
+        localDir: String,
+        depth: Int,
+        hold: Int,
+    ) {
         if (isUnsafeListingName(entry.name)) {
             throw FileBrowserException(FileBrowserFailure.IllegalName, detail = entry.name)
         }
@@ -81,9 +103,15 @@ private class DownloadWalk(private val sftp: SftpClient) {
                 // than the browser that de-duplicates for the panel, and every local path it writes
                 // is built from the name. A repeat would plan two tasks onto one local file, and the
                 // second would overwrite the first while the progress bar counted two.
-                sftp.list(remotePath).distinctBy { it.name }.forEach { child ->
+                // The listing is bounded as it is read, not after: the plan's own entry cap is
+                // checked per entry taken on, which is too late to stop a server answering one
+                // directory with more names than the client can hold.
+                val children = sftp.list(remotePath, hold)
+                refuseOversizedListing(remotePath, children.size, hold)
+                val childHold = hold - children.size
+                children.distinctBy { it.name }.forEach { child ->
                     val next = WalkEntry(child.name, child.type.toItemType(), child.size)
-                    walk(next, childPath(remotePath, child.name), localPath, depth + 1)
+                    walk(next, childPath(remotePath, child.name), localPath, depth + 1, childHold)
                 }
             }
             FileItemType.Symlink, FileItemType.Other -> Unit
@@ -138,18 +166,36 @@ private class UploadWalk(private val localBrowser: FileBrowser) {
 
 /**
  * Creates directory [path] in [browser] (local or remote) if missing. `mkdir` without `-p` throws
- * on an already-existing directory, which is normal on a repeat transfer: a listing check confirms
- * the directory exists before the error is ignored; otherwise (no permission / it's a file) the
- * original mkdir error is rethrown.
+ * on an already-existing directory, which is normal on a repeat transfer: a [FileContentBrowser.stat]
+ * confirms a directory is what is already there before the error is ignored; otherwise (no
+ * permission, or it is a file) the original mkdir error is rethrown.
+ *
+ * `stat` rather than a listing: the question is whether one path exists, and listing it to find out
+ * would pull a whole directory over the wire — as many entries as the server cares to answer with —
+ * once per directory in the plan.
+ *
+ * A symlink is the one case that still costs a listing. `stat` reports the link, not what it points
+ * at (SFTP's is `SSH_FXP_LSTAT`, the local one is a no-follow metadata read), and a symlinked
+ * destination directory is ordinary — so the walk that a plain `stat` cannot answer for is finished
+ * by opening it, which follows the link on both sources. A link to a file fails there, as it should.
  */
-internal suspend fun ensureDir(browser: FileBrowser, path: String) {
+internal suspend fun ensureDir(browser: FileContentBrowser, path: String) {
     try {
         browser.mkdir(path)
     } catch (e: FileBrowserException) {
-        try {
-            browser.list(path)
+        val existing = try {
+            browser.stat(path)
         } catch (_: FileBrowserException) {
-            throw e
+            null
+        }
+        when (existing?.type) {
+            FileItemType.Directory -> Unit
+            FileItemType.Symlink -> try {
+                browser.list(path)
+            } catch (_: FileBrowserException) {
+                throw e
+            }
+            else -> throw e
         }
     }
 }

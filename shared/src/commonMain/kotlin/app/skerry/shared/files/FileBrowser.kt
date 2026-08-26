@@ -122,7 +122,11 @@ enum class FileBrowserFailure {
     /** The file is larger than the caller's cap (whole-file read for the viewer/editor). */
     TooLarge,
 
-    /** The directory tree to transfer is deeper or bigger than a transfer plan may hold. */
+    /**
+     * A walk over a remote tree was refused for its size. Three shapes reach this one value: a tree
+     * with no bottom (past the depth bound), a transfer plan wider than the client can hold, and a
+     * single directory answered with more entries than there is room for.
+     */
     TreeTooLarge,
 
     /**

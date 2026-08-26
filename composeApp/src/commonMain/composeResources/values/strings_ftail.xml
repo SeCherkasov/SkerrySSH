@@ -29,7 +29,7 @@
     <string name="ftail_err_session_closed">Session closed before it started</string>
     <string name="ftail_err_too_large">File is too large to open</string>
     <string name="ftail_err_tree_too_large">Folder tree is too deep or too large to transfer</string>
-    <string name="ftail_err_tree_too_deep">Folder tree is too deep to walk</string>
+    <string name="ftail_err_dir_too_large">Folder tree is too deep, or the folder has too many entries</string>
     <string name="ftail_err_unexpected">Unexpected error</string>
 
     <!-- Viewer/editor (F3/F4) failures -->

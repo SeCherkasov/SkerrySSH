@@ -1,12 +1,17 @@
 package app.skerry.shared.sftp
 
+import app.skerry.shared.files.MAX_LISTING_ENTRIES
 import app.skerry.shared.ssh.HostKeyVerifier
 import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.ssh.SshjTransport
 import kotlinx.coroutines.test.runTest
+import com.hierynomus.sshj.sftp.RemoteResourceSelector
 import net.schmizz.sshj.SSHClient
+import net.schmizz.sshj.sftp.FileAttributes
+import net.schmizz.sshj.sftp.PathComponents
+import net.schmizz.sshj.sftp.RemoteResourceInfo
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier
 import org.apache.sshd.common.file.virtualfs.VirtualFileSystemFactory
 import org.apache.sshd.server.SshServer
@@ -90,7 +95,7 @@ class SshjSftpClientTest {
     @Test
     fun `list returns directory entries without dot and dotdot`() = runTest {
         withSftp { sftp ->
-            val names = sftp.list("/").map { it.name }
+            val names = sftp.list("/", MAX_LISTING_ENTRIES).map { it.name }
             assertTrue("readme.txt" in names, "expected readme.txt, got $names")
             assertTrue("sub" in names, "expected directory sub, got $names")
             assertTrue("." !in names && ".." !in names, "listing should not contain . or .., got $names")
@@ -98,9 +103,48 @@ class SshjSftpClientTest {
     }
 
     @Test
+    fun `the listing selector takes one entry past the limit and then breaks`() {
+        // The selector is the object `list` installs, so testing it is testing the wiring: the count
+        // and the name check both have to live on the instance `sftp.ls` is handed.
+        val selector = listingSelector("/d", limit = 2)
+
+        repeat(3) { assertEquals(RemoteResourceSelector.Result.ACCEPT, selector.select(entry("/d", "f$it"))) }
+        assertEquals(RemoteResourceSelector.Result.BREAK, selector.select(entry("/d", "f3")))
+    }
+
+    @Test
+    fun `the listing selector refuses an entry no filesystem could name`() {
+        // A cap on how many entries a listing holds is not a cap on what it weighs: an SSH string
+        // may be 32 KB. The limits are POSIX's own, so this cannot be provoked through a real server
+        // — the filesystem behind it refuses the name first — and no real server ever trips them.
+        val selector = listingSelector("/d", limit = 2)
+        selector.select(entry(parent = "/d", name = "file.txt"))
+
+        assertFailsWith<SftpException> { selector.select(entry("/d", "x".repeat(256))) }
+        assertFailsWith<SftpException> { selector.select(entry("/" + "d".repeat(4096), "f")) }
+    }
+
+    private fun entry(parent: String, name: String) =
+        RemoteResourceInfo(PathComponents(parent, name, "/"), FileAttributes.EMPTY)
+
+    @Test
+    fun `list stops one entry past the limit it was given`() = runTest {
+        // The allocation the limit exists for happens inside sshj's READDIR loop, so the stop has
+        // to be proven against a real server rather than a fake: what comes back must be limit + 1,
+        // no matter how many names the directory actually holds.
+        val wide = root.resolve("wide").createDirectory()
+        repeat(40) { wide.resolve("f$it").writeText("x") }
+
+        withSftp { sftp ->
+            assertEquals(11, sftp.list("/wide", limit = 10).size)
+            assertEquals(40, sftp.list("/wide", limit = 100).size)
+        }
+    }
+
+    @Test
     fun `list distinguishes files from directories`() = runTest {
         withSftp { sftp ->
-            val byName = sftp.list("/").associateBy { it.name }
+            val byName = sftp.list("/", MAX_LISTING_ENTRIES).associateBy { it.name }
             assertEquals(SftpEntryType.File, byName.getValue("readme.txt").type)
             assertEquals(SftpEntryType.Directory, byName.getValue("sub").type)
             assertEquals(README_BODY.length.toLong(), byName.getValue("readme.txt").size)
@@ -269,7 +313,7 @@ class SshjSftpClientTest {
     @Test
     fun `list on a missing path throws SftpException`() = runTest {
         withSftp { sftp ->
-            assertFailsWith<SftpException> { sftp.list("/does-not-exist") }
+            assertFailsWith<SftpException> { sftp.list("/does-not-exist", MAX_LISTING_ENTRIES) }
         }
     }
 
@@ -292,7 +336,7 @@ class SshjSftpClientTest {
         withSftp { sftp ->
             // stat uses lstat — the link isn't followed, type is Symlink, not the target's Directory.
             assertEquals(SftpEntryType.Symlink, sftp.stat("/sub-link")?.type)
-            val fromList = sftp.list("/").first { it.name == "sub-link" }
+            val fromList = sftp.list("/", MAX_LISTING_ENTRIES).first { it.name == "sub-link" }
             assertEquals(SftpEntryType.Symlink, fromList.type)
         }
     }
@@ -315,7 +359,7 @@ class SshjSftpClientTest {
         try {
             val sftp = connection.openSftp()
             sftp.close()
-            assertFailsWith<SftpException> { sftp.list("/") }
+            assertFailsWith<SftpException> { sftp.list("/", MAX_LISTING_ENTRIES) }
             assertFailsWith<SftpException> { sftp.stat("/readme.txt") }
         } finally {
             connection.disconnect()
