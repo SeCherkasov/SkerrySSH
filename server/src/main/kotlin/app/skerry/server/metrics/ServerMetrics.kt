@@ -301,7 +301,7 @@ enum class JwtRejection(val label: String) {
     MISSING_CLAIMS("missing_claims"),
 }
 
-enum class RegistrationRejection(val label: String) { CLOSED("closed"), CAP_REACHED("cap_reached") }
+enum class RegistrationRejection(val label: String) { CLOSED("closed"), CAP_REACHED("cap_reached"), MALFORMED("malformed") }
 
 enum class RevokedBy(val label: String) { USER("user"), ADMIN("admin") }
 

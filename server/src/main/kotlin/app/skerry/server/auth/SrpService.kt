@@ -60,7 +60,7 @@ class SrpService(
             if (overflow > 0) mine.take(overflow).forEach { pending.remove(it.key) }
             pending[challengeId] = Pending(session, accountId, now)
         }
-        return Challenge(challengeId, salt, b.toString(16))
+        return Challenge(challengeId, salt.lowercase().padStart(SALT_HEX_DIGITS, '0'), b.toString(16))
     }
 
     /**
@@ -81,6 +81,17 @@ class SrpService(
     }
 
     data class Verified(val accountId: String, val m2: String)
+
+    private companion object {
+        /**
+         * Hex digits every challenge's salt is padded to. A client salt is a 256-bit random rendered
+         * with [BigInteger.toString], which drops leading zeros, while the synthesized salt an
+         * unknown account gets is always 32 bytes of HMAC — so without padding one real account in
+         * sixteen answers with a shorter string than any unknown one ever does, and the length says
+         * the account exists. Padding is value-preserving: both ends parse the salt as a number.
+         */
+        const val SALT_HEX_DIGITS = 64
+    }
 
     private fun evictExpired() {
         val now = clock()
