@@ -43,7 +43,7 @@ class LicenseExchangeTest {
         body.u32le() // platform id
         val clientRandom = body.bytes(32)
         val premaster = decryptPremaster(readBlob(body))
-        assertEquals(48, premaster.size)
+        assertEquals(PREMASTER_BYTES, premaster.size)
         // The user and machine names travel as ANSI strings, which is what a licence server indexes on.
         assertEquals("elton", readBlob(body).decodeToString().trimEnd(Char(0)))
         assertTrue(readBlob(body).isNotEmpty())
@@ -286,6 +286,23 @@ class LicenseExchangeTest {
         return reader
     }
 
+    /**
+     * The padding above is only ever exercised for real by a premaster whose top byte happens to be
+     * zero — 1 in 256 runs, which is how this arrived as a flake in the first place. Pinned here
+     * directly so the three shapes `BigInteger.toByteArray` produces are covered every run.
+     */
+    @Test
+    fun `the padding restores exactly the bytes BigInteger drops`() {
+        val exact = ByteArray(PREMASTER_BYTES) { (it + 1).toByte() }
+        assertContentEquals(exact, exact.leftPadded(PREMASTER_BYTES))
+        // A value whose leading zero bytes BigInteger did not render.
+        val short = ByteArray(PREMASTER_BYTES - 1) { (it + 1).toByte() }
+        assertContentEquals(byteArrayOf(0) + short, short.leftPadded(PREMASTER_BYTES))
+        // A value whose top bit is set, so BigInteger prefixed a sign byte.
+        val signed = byteArrayOf(0) + ByteArray(PREMASTER_BYTES) { 0xFF.toByte() }
+        assertContentEquals(ByteArray(PREMASTER_BYTES) { 0xFF.toByte() }, signed.leftPadded(PREMASTER_BYTES))
+    }
+
     private fun readBlob(reader: RdpReader): ByteArray {
         reader.u16le()
         return reader.bytes(reader.u16le())
@@ -295,13 +312,27 @@ class LicenseExchangeTest {
     private fun decryptPremaster(blob: ByteArray): ByteArray {
         val cipher = blob.copyOfRange(0, blob.size - 8).reversedArray()
         val plain = BigInteger(1, cipher).modPow(privateKey.privateExponent, privateKey.modulus).toByteArray()
-        return plain.dropSign().reversedArray()
+        // Not dropSign(): BigInteger's big-endian form is minimal, so a premaster whose top byte
+        // happens to be zero comes back one byte short — a 1-in-256 flake in what the server reads.
+        return plain.leftPadded(PREMASTER_BYTES).reversedArray()
+    }
+
+    /** Exactly [size] big-endian bytes: a sign byte (or any surplus) trimmed, missing zeros restored. */
+    private fun ByteArray.leftPadded(size: Int): ByteArray {
+        if (this.size == size) return this
+        val out = ByteArray(size)
+        val kept = minOf(size, this.size)
+        copyInto(out, destinationOffset = size - kept, startIndex = this.size - kept)
+        return out
     }
 
     private fun ByteArray.dropSign(): ByteArray =
         if (size > 1 && this[0] == 0.toByte()) copyOfRange(1, size) else this
 
     private companion object {
+        /** MS-RDPELE 5.1.2: the premaster secret is 48 bytes, whatever its leading byte happens to be. */
+        const val PREMASTER_BYTES = 48
+
         const val TSSK_KEY_SIZE = 64
 
         /** SignatureBlob as it appears on the wire: the 512-bit value plus its eight zero bytes. */
