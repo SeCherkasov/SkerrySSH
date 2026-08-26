@@ -722,6 +722,59 @@ class RfbCodecTest {
             codec(FixtureSource(stream), CapturingSink(), RemoteFramebuffer(1, 1)).readMessage()
         }
     }
+
+    @Test
+    fun client_cut_text_is_encoded_as_latin1() = runTest {
+        // RFC 6143 7.5.6 defines ClientCutText as ISO 8859-1, and readServerCutText already decodes
+        // it that way. UTF-8 here made every non-ASCII paste arrive as mojibake on the server.
+        val sink = CapturingSink()
+        codec(FixtureSource(ByteArray(0)), sink, RemoteFramebuffer(1, 1)).writeClientCutText("café")
+
+        val msg = sink.messages.single()
+        assertEquals(6, msg[0].toInt())
+        assertEquals(4, s32At(msg, 4))
+        assertContentEquals(byteArrayOf(0x63, 0x61, 0x66, 0xE9.toByte()), msg.copyOfRange(8, msg.size))
+    }
+
+    @Test
+    fun client_cut_text_substitutes_code_points_latin1_cannot_carry() = runTest {
+        // Latin-1 has no Cyrillic and no em dash. A visible placeholder is what TigerVNC sends;
+        // dropping the characters silently would leave the user with a paste that is quietly wrong.
+        val sink = CapturingSink()
+        codec(FixtureSource(ByteArray(0)), sink, RemoteFramebuffer(1, 1)).writeClientCutText("a—привет")
+
+        val msg = sink.messages.single()
+        assertEquals(8, s32At(msg, 4))
+        assertEquals("a???????", msg.copyOfRange(8, msg.size).map { (it.toInt() and 0xFF).toChar() }.joinToString(""))
+    }
+
+    @Test
+    fun client_cut_text_sends_two_placeholders_for_one_astral_character() = runTest {
+        // An emoji is one code point and two UTF-16 chars. The body is built per char, so it costs
+        // two placeholders — the length field must agree with that, or every byte after it in the
+        // stream is read at the wrong offset.
+        val sink = CapturingSink()
+        codec(FixtureSource(ByteArray(0)), sink, RemoteFramebuffer(1, 1)).writeClientCutText("a\uD83D\uDE00b")
+
+        val msg = sink.messages.single()
+        assertEquals(4, s32At(msg, 4))
+        assertContentEquals(byteArrayOf(0x61, 0x3F, 0x3F, 0x62), msg.copyOfRange(8, msg.size))
+    }
+
+    @Test
+    fun client_cut_text_round_trips_what_server_cut_text_decodes() = runTest {
+        // The two directions must agree: whatever the read path turns bytes into, the write path
+        // must turn back into the same bytes.
+        val body = byteArrayOf(0x41, 0xE9.toByte(), 0xFF.toByte(), 0x20)
+        val stream = Wire().u8(RfbCodec.MSG_SERVER_CUT_TEXT).u8(0).u8(0).u8(0).s32(body.size).bytes(body).build()
+        val sink = CapturingSink()
+        val c = codec(FixtureSource(stream), sink, RemoteFramebuffer(1, 1))
+
+        val text = (c.readMessage().single() as VncUpdate.ClipboardText).text
+        c.writeClientCutText(text)
+
+        assertContentEquals(body, sink.messages.single().copyOfRange(8, 8 + body.size))
+    }
 }
 
 /** FramebufferUpdate with one ExtendedDesktopSize rect: header x/y carry [reason]/[status]. */
