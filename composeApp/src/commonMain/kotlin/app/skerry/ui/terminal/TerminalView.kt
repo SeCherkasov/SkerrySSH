@@ -91,6 +91,18 @@ fun TerminalView(state: DesktopDesignState) {
         assistants?.takeIf { AiPolicyDecision.of(aiPolicy).aiEnabled }?.controller(session.id, aiPolicy)
     }
     val assistantVisible = state.assistantPanel && assistantController != null
+    // An ask nobody can take has to be dropped, not kept. The panel is the only reader of the focus
+    // request, and it is not composed at all when AI is off for this host — so a chord pressed there
+    // would otherwise leave the ask parked until some later tab whose host has AI on, where the
+    // input row would steal the caret from the shell the user just switched to. Same rule the
+    // toolbar's own asks follow ([app.skerry.ui.terminal.ToolbarRequest]): one frame, one taker.
+    //
+    // Keyed on the flag as well as on the panel: the chord raises both in the same frame, so an
+    // effect keyed on the panel alone would never re-run where the panel never appears — which is
+    // the one case this is here for.
+    LaunchedEffect(assistantVisible, state.assistantFocusPending) {
+        if (!assistantVisible) state.consumeAssistantFocus()
+    }
     // A closed pane's conversation is dropped with it, so closing tabs doesn't accumulate
     // controllers (and a request left in flight there is cancelled).
     val openPaneIds = sessions?.tabs?.flatMap { it.panes.map { pane -> pane.id } }?.toSet()

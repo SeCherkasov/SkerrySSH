@@ -9,6 +9,14 @@ import app.skerry.ui.session.SessionView
 import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.DesktopView
 import app.skerry.ui.app.UiTags
+import app.skerry.ui.design.StatusAnnouncer
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_view_desktop
+import app.skerry.ui.generated.resources.shell_view_files
+import app.skerry.ui.generated.resources.shell_view_monitor
+import app.skerry.ui.generated.resources.shell_view_player
+import app.skerry.ui.generated.resources.shell_view_runbook
+import app.skerry.ui.generated.resources.shell_view_terminal
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.known.KnownHostsView
 import app.skerry.ui.app.LocalSessions
@@ -25,6 +33,7 @@ import app.skerry.ui.vault.VaultView
 import app.skerry.ui.vnc.RemoteDesktopsView
 import app.skerry.ui.app.asSessionView
 import app.skerry.ui.app.workAreaSection
+import org.jetbrains.compose.resources.stringResource
 
 /**
  * Switches the main content area. App-level views (Vault/Known/Teams/Snippets) render over
@@ -70,6 +79,12 @@ fun Viewport(state: DesktopDesignState) {
         HostSection.Terminal -> {
             // activeTerminal, not active: a remote-desktop tab renders in the branch above.
             val view = sessions?.activeTerminal?.view ?: state.view.asSessionView()
+            // A chord can swap what the work area shows without touching focus — the snippet and
+            // record shortcuts bring the terminal forward from the file panel, and the runbook
+            // dialog jumps to the run. A sighted user sees the pane change; without this the screen
+            // reader says nothing and the next keystroke goes somewhere the user was not told about.
+            // Composed above the `when` so it survives the swap it describes (see [StatusAnnouncer]).
+            StatusAnnouncer(sessionViewName(view))
             Box(Modifier.fillMaxSize().testTag(UiTags.screen(view))) {
                 when (view) {
                     SessionView.Terminal -> TerminalView(state)
@@ -84,3 +99,16 @@ fun Viewport(state: DesktopDesignState) {
         }
     }
 }
+
+/** What the work area is showing, for the live region above it. */
+@Composable
+private fun sessionViewName(view: SessionView): String = stringResource(
+    when (view) {
+        SessionView.Terminal -> Res.string.shell_view_terminal
+        SessionView.Sftp -> Res.string.shell_view_files
+        SessionView.Monitor -> Res.string.shell_view_monitor
+        SessionView.Runbook -> Res.string.shell_view_runbook
+        SessionView.Player -> Res.string.shell_view_player
+        SessionView.Vnc -> Res.string.shell_view_desktop
+    },
+)

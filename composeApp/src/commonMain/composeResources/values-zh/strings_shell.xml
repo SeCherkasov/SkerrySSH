@@ -124,6 +124,12 @@
     <string name="shell_tip_pause">暂停</string>
     <string name="shell_tip_replay">重播</string>
     <string name="shell_tip_monitor">监控</string>
+    <string name="shell_view_terminal">终端</string>
+    <string name="shell_view_files">文件</string>
+    <string name="shell_view_monitor">监控</string>
+    <string name="shell_view_runbook">运行手册</string>
+    <string name="shell_view_player">录制</string>
+    <string name="shell_view_desktop">远程桌面</string>
     <string name="shell_tip_disconnect">断开连接</string>
     <string name="shell_no_hosts_yet">还没有主机</string>
     <string name="shell_add_first_host">添加连接后会显示在这里。</string>

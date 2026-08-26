@@ -122,24 +122,23 @@ internal fun runDesktopShortcut(
         }
         DesktopShortcut.Lock -> onLock()
         DesktopShortcut.Broadcast -> state.openBroadcast()
-        // These three live in toolbar buttons that own their state; the shortcut nudges them, and
-        // asks for nothing where there is no connected pane to nudge for — the button would refuse,
-        // and a request nobody acts on is a chord spent for nothing. Not airtight: with the tab
-        // switched to Files, Monitor or a runbook the pane is still connected but the terminal
-        // toolbar is out of composition, so the request is emitted into a replay-0 flow and
-        // dropped. Closing that needs the request to become a flag the button reads when it does
-        // compose, which is a change of its own — and playback is not exempt from it but the worst
-        // case of it: its button needs no session, yet it lives in the same toolbar, so ⌘⇧P is
-        // dropped over a remote desktop and over an open recording too.
+        // These two live in toolbar buttons that own their state; the shortcut nudges them, and asks
+        // for nothing where there is no connected pane to nudge for — the button would refuse, and a
+        // request nobody acts on is a chord spent for nothing. The ask outlives the frame it was
+        // made in ([ToolbarRequest]), so the button reads it when it composes rather than having to
+        // be composed already — which is why bringing that view up on the same line works at all.
         DesktopShortcut.SnippetPalette -> {
             if (!consumesSessionChord(sessions)) return false
-            if (actsOnSessionChord(sessions)) state.requestSnippetPalette()
+            if (actsOnSessionChord(sessions)) { raiseToolbar(state, sessions); state.snippetPalette.raise() }
         }
         DesktopShortcut.ToggleRecording -> {
             if (!consumesSessionChord(sessions)) return false
-            if (actsOnSessionChord(sessions)) state.requestRecordingToggle()
+            if (actsOnSessionChord(sessions)) { raiseToolbar(state, sessions); state.recordingToggle.raise() }
         }
-        DesktopShortcut.PlayRecording -> state.requestCastOpen()
+        // Playback is the one of the set that needs no session, and its picker is driven by the
+        // window chrome rather than by the toolbar — so it works over a remote desktop and over an
+        // already-open recording, where there is no toolbar to bring up.
+        DesktopShortcut.PlayRecording -> state.castOpen.raise()
         // Only over a live terminal: the palette inserts into it, so with nothing to insert into the
         // key falls through (to the snippet hotkey) instead of opening a dead-end overlay — and over
         // a remote desktop, where it cannot fall through, it opens nothing at all.
@@ -165,6 +164,24 @@ internal fun runDesktopShortcut(
         }
     }
     return true
+}
+
+/**
+ * Bring the terminal toolbar on screen for a chord that nudges one of its buttons. Those buttons are
+ * drawn by the terminal view alone, so over the file panel, the monitor or a runbook run the ask
+ * would otherwise wait for a toolbar nobody is looking at — the palette would open on the next
+ * switch back instead of now. Find, the command palette and the assistant do the same.
+ *
+ * A recording is not in that list and cannot be: a player tab's pane never reaches Connected, so
+ * [actsOnSessionChord] is already false there and `setActiveView` refuses such a tab outright.
+ * Playback is the one chord of the set that still answers there, and it does so without a toolbar.
+ *
+ * Only ever reached with a connected pane in the active tab ([actsOnSessionChord]), which is what
+ * makes the switch total: a remote-desktop or player tab has no connected pane and never gets here.
+ */
+private fun raiseToolbar(state: DesktopDesignState, sessions: SessionsController?) {
+    state.clearOverlay()
+    sessions?.setActiveView(SessionView.Terminal)
 }
 
 /**

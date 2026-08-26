@@ -46,7 +46,13 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import app.skerry.ui.AppDependencies
+import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shell_tip_files
+import app.skerry.ui.generated.resources.shell_tip_record
+import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.app.DesktopDesignState
+import app.skerry.ui.app.LocalCastPicker
+import app.skerry.ui.terminal.CastOpenResult
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.app.UiTags
 import app.skerry.ui.ai.AiAssistantController
@@ -168,6 +174,9 @@ internal fun runDesktopShell(
     // The window's own focus, for the tests about who owns the keyboard when it comes and goes. The
     // test scene's own [WindowInfo] is hardcoded focused, so there is no other way to drive it.
     windowInfo: WindowInfo? = null,
+    // What "Play a recording" answers with. null leaves the real file dialog in place, which no test
+    // can drive — a test that exercises playback has to supply its own.
+    castPicker: (suspend () -> CastOpenResult)? = null,
     body: ComposeUiTest.(DesktopShell) -> Unit,
 ) = runDesktopComposeUiTest(width = windowWidth) {
     val keyGenerator = BouncyCastleSshKeyGenerator()
@@ -192,6 +201,7 @@ internal fun runDesktopShell(
         setContent {
             CaptureFocusManager { focusManager = it }
             WithWindowInfo(windowInfo) {
+            WithCastPicker(castPicker) {
             SkerryTheme {
                 // A live AI controller only so the settings panel offers its AI tab: without one the
                 // tab is hidden, and a walk over SETTINGS_NAV would silently skip an entry.
@@ -210,6 +220,7 @@ internal fun runDesktopShell(
                         windowChrome = windowChrome,
                     )
                 }
+            }
             }
             }
         }
@@ -252,6 +263,12 @@ private fun CaptureFocusManager(onManager: (FocusManager) -> Unit) {
 @Composable
 internal fun WithWindowInfo(info: WindowInfo?, content: @Composable () -> Unit) {
     if (info == null) content() else CompositionLocalProvider(LocalWindowInfo provides info, content = content)
+}
+
+/** Runs [content] with [pick] answering "Play a recording", or with the real dialog when null. */
+@Composable
+private fun WithCastPicker(pick: (suspend () -> CastOpenResult)?, content: @Composable () -> Unit) {
+    if (pick == null) content() else CompositionLocalProvider(LocalCastPicker provides pick, content = content)
 }
 
 /**
@@ -483,6 +500,11 @@ internal fun ComposeUiTest.clickIconWhenEnabled(name: String, shell: DesktopShel
     // `!isSelectable()` because the nav rail's own entries carry the same names as some of the
     // toolbar's buttons ("Snippets" is both), and only the rail's are selectable navigation targets.
     val button = hasContentDescription(name) and isEnabled() and !isSelectable()
+    // Where the scene's own clock stood when the wait began. `waitUntil` spends wall clock and
+    // advances this by one 60Hz tick per turn, so the two together say how many frames the wait
+    // actually bought — the difference between a starved render loop and a settled composition
+    // that simply says no.
+    val startedAt = mainClock.currentTime
     try {
         waitUntil("\"$name\" to become clickable", timeoutMillis = 10_000) {
             onAllNodes(button).fetchSemanticsNodes().isNotEmpty()
@@ -491,7 +513,11 @@ internal fun ComposeUiTest.clickIconWhenEnabled(name: String, shell: DesktopShel
         // "Condition still not satisfied after 10000ms" names neither the button nor the reason it
         // stayed disabled, and this one only ever fails on a loaded runner — where a re-run to look
         // closer costs the whole suite. The tree and the session already hold the answer.
-        throw AssertionError("\"$name\" never became enabled. ${diagnose(name, shell)}", timeout)
+        throw AssertionError(
+            "\"$name\" never became enabled. ${diagnose(name, shell)} " +
+                "sceneMsAdvanced=${mainClock.currentTime - startedAt}",
+            timeout,
+        )
     }
     onNode(button).performClick()
 }
@@ -506,13 +532,49 @@ private fun ComposeUiTest.diagnose(name: String, shell: DesktopShell?): String {
     val pane = shell?.sessions?.active?.focusedPane
     val session = pane?.let { "pane=${it.id} state=${it.controller.uiState::class.simpleName}" } ?: "no active pane"
     val runner = shell?.runner?.let { "runnerActive=${it.active} pending=${it.pending != null} phase=${it.phase}" } ?: ""
+    // The rest of the row, which is what splits the answer in half. Every session action reads the
+    // same connected pane; only the runbook one also reads the runner. So a row that is disabled
+    // whole says the toolbar composed against a pane it still believes is down, and a row where
+    // only this button is off says the runner. A row that is not there at all says the toolbar was
+    // swapped out for another view.
+    val row = TOOLBAR_NEIGHBOURS.joinToString(" ") { neighbour ->
+        val label = string(neighbour)
+        val all = onAllNodes(hasContentDescription(label) and !isSelectable()).fetchSemanticsNodes()
+        val state = when {
+            all.isEmpty() -> "absent"
+            all.any { !it.config.contains(SemanticsProperties.Disabled) } -> "on"
+            else -> "off"
+        }
+        "$label=$state"
+    }
     // Whether one more settled frame flips it: a button still disabled after the tree goes idle is
     // a predicate that says no, not a frame the wait above failed to pump.
     waitForIdle()
-    val afterIdle = onAllNodes(hasContentDescription(name) and isEnabled() and !isSelectable())
-        .fetchSemanticsNodes().size
-    return "${nodes.size} node(s) carry that name: $drawn. $session $runner enabledAfterIdle=$afterIdle"
+    val afterIdle = enabledCount(name)
+    // And whether a frame driven by hand flips it. `waitForIdle` renders nothing at all when the
+    // tree already reads as idle, and a composition left behind by a write from another thread is
+    // exactly that: settled, and one frame short.
+    mainClock.advanceTimeByFrame()
+    val afterFrame = enabledCount(name)
+    return "${nodes.size} node(s) carry that name: $drawn. $session $runner " +
+        "row[$row] enabledAfterIdle=$afterIdle enabledAfterFrame=$afterFrame"
 }
+
+/** How many nodes named [name] are enabled right now. */
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.enabledCount(name: String): Int =
+    onAllNodes(hasContentDescription(name) and isEnabled() and !isSelectable()).fetchSemanticsNodes().size
+
+/**
+ * The session actions [diagnose] reads beside the button that timed out. Files is the control case:
+ * it is enabled whenever the toolbar is drawn at all, so "absent" there means the work area is
+ * showing something else entirely.
+ */
+private val TOOLBAR_NEIGHBOURS = listOf(
+    Res.string.shell_tip_files,
+    Res.string.shell_tip_snippets,
+    Res.string.shell_tip_record,
+)
 
 /**
  * Every string the tree draws, in order. Unmerged: a text node absorbed into a clickable ancestor's

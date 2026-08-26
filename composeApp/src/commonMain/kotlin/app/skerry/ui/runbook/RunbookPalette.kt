@@ -41,7 +41,6 @@ import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.fieldName
-import kotlinx.coroutines.flow.SharedFlow
 import app.skerry.ui.design.CloseWhenUnavailable
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
@@ -61,6 +60,8 @@ import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
 import app.skerry.ui.terminal.ToolbarAction
 import app.skerry.ui.terminal.toolbarActionEnabled
+import app.skerry.ui.terminal.OnToolbarRequest
+import app.skerry.ui.terminal.ToolbarRequest
 import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
@@ -74,7 +75,7 @@ import org.jetbrains.compose.resources.stringResource
  * comes first, and the progress panel takes over from there.
  */
 @Composable
-fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
+fun RunbookPaletteButton(active: Session?, request: ToolbarRequest? = null) {
     val manager = LocalRunbooks.current
     val runner = LocalRunbookRunner.current
     val terminal = (active?.controller?.uiState as? ConnectionUiState.Connected)?.terminal
@@ -84,8 +85,8 @@ fun RunbookPaletteButton(active: Session?, requests: SharedFlow<Unit>? = null) {
     // palette without this button having to be on screen (it may be parked out of a narrow toolbar).
     // The same condition the button carries, not half of it: a request that arrives mid-run would
     // otherwise set the flag for a popup the render guard then drops without a word.
-    LaunchedEffect(requests, terminal) {
-        requests?.collect { if (terminal != null && runner?.let { !it.active && it.pending == null } == true) open = true }
+    OnToolbarRequest(request) {
+        if (terminal != null && runner?.let { !it.active && it.pending == null } == true) open = true
     }
     if (manager == null || runner == null) return
     // While this tab is part of a run, the icon is the way back to the run screen rather than a

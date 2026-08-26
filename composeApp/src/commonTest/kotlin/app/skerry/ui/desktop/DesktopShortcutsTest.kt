@@ -19,7 +19,6 @@ import app.skerry.ui.session.SessionsController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -253,12 +252,11 @@ class DesktopShortcutsTest {
         advanceUntilIdle()
         // The half that keeps the gate honest: consuming the chord and doing nothing would satisfy
         // the refusals above and the two "consumed and nothing more" tests both.
-        val asked = recordRequests(state)
         for (chord in listOf(DesktopShortcut.SnippetPalette, DesktopShortcut.ToggleRecording, DesktopShortcut.CommandPalette)) {
             assertTrue(runDesktopShortcut(chord, state, sessions) {}, "$chord acts on a connected session")
         }
         advanceUntilIdle()
-        assertEquals(listOf("snippets", "record"), asked, "both buttons are nudged")
+        assertEquals(listOf("snippets", "record"), asked(state), "both buttons are nudged")
         assertTrue(state.commandPaletteOpen, "the palette has a terminal to insert into")
         scope.cancel()
     }
@@ -283,6 +281,34 @@ class DesktopShortcutsTest {
     }
 
     /**
+     * The three chords nudge buttons that live in the terminal toolbar, and only the terminal view
+     * draws that toolbar. Pressed over the file panel, the monitor, a runbook run or a recording the
+     * request used to be emitted into a flow nobody was collecting and lost, with the chord spent —
+     * so the chord brings that view forward first, the way find and the command palette do.
+     */
+    @Test
+    fun `the session chords bring the toolbar forward`() = runTest {
+        val (sessions, scope) = sessions()
+        sessions.open(hostId = "h", title = "h", subtitle = "u@h:22", target = testTarget, auth = auth)
+        advanceUntilIdle()
+        for (chord in listOf(DesktopShortcut.SnippetPalette, DesktopShortcut.ToggleRecording)) {
+            sessions.setActiveView(SessionView.Sftp)
+            val state = DesktopDesignState()
+            assertTrue(runDesktopShortcut(chord, state, sessions) {}, "$chord acts on a connected session")
+            assertEquals(SessionView.Terminal, sessions.active?.view, "$chord nudges a button in the terminal toolbar")
+            assertEquals(1, asked(state).size, "$chord left its ask for the button that is now composing")
+        }
+        // Playback keeps its own way in: its picker is driven by the window chrome, so the chord
+        // asks for it without moving the user off whatever they were looking at.
+        sessions.setActiveView(SessionView.Sftp)
+        val state = DesktopDesignState()
+        assertTrue(runDesktopShortcut(DesktopShortcut.PlayRecording, state, sessions) {})
+        assertEquals(SessionView.Sftp, sessions.active?.view, "playback needs no toolbar")
+        assertTrue(state.castOpen.pending, "the picker was asked for")
+        scope.cancel()
+    }
+
+    /**
      * Mock mode — no session manager at all, which is how the offscreen screenshot pipeline runs
      * the app. Nothing is connected there, so nothing is nudged; the chord is consumed all the
      * same, because that shell draws a terminal too and a fall-through would type Ctrl+Shift+S into
@@ -291,13 +317,12 @@ class DesktopShortcutsTest {
     @Test
     fun `the session chords are consumed with no session manager`() = runTest {
         val state = DesktopDesignState()
-        val asked = recordRequests(state)
         for (chord in listOf(DesktopShortcut.SnippetPalette, DesktopShortcut.ToggleRecording, DesktopShortcut.CommandPalette)) {
             assertTrue(runDesktopShortcut(chord, state, sessions = null) {}, "$chord in mock mode")
         }
         advanceUntilIdle()
         assertFalse(state.commandPaletteOpen, "there is no pane for the palette to insert into")
-        assertEquals(emptyList(), asked, "no button to nudge, so nothing is asked for")
+        assertEquals(emptyList(), asked(state), "no button to nudge, so nothing is asked for")
     }
 
     /**
@@ -314,13 +339,12 @@ class DesktopShortcutsTest {
         sessions.openVnc(hostId = "h", title = "h", subtitle = "h:5900", target = testTarget, auth = VncAuth.None)
         advanceUntilIdle()
         val state = DesktopDesignState()
-        val asked = recordRequests(state)
         for (chord in listOf(DesktopShortcut.SnippetPalette, DesktopShortcut.ToggleRecording, DesktopShortcut.CommandPalette)) {
             assertTrue(runDesktopShortcut(chord, state, sessions) {}, "$chord must not reach the guest")
         }
         advanceUntilIdle()
         assertFalse(state.commandPaletteOpen, "the command palette has no terminal to insert into here")
-        assertEquals(emptyList(), asked, "no toolbar button is composed over a desktop tab")
+        assertEquals(emptyList(), asked(state), "no toolbar button is composed over a desktop tab")
         assertTrue(
             runDesktopShortcut(DesktopShortcut.FindInTerminal, state, sessions) {},
             "find must not reach the guest either",
@@ -331,15 +355,13 @@ class DesktopShortcutsTest {
     private val auth = SshAuth.Password("pw")
 
     /**
-     * Both button-nudging request flows, in the order they fire. `replay = 0`, so the collectors
-     * have to be live before the chord runs — hence the unconfined dispatcher.
+     * Which of the two button-nudging asks are waiting to be read. Read from the state rather than
+     * collected: the ask outlives the frame it was raised in, which is the whole point of it
+     * ([app.skerry.ui.terminal.ToolbarRequest]).
      */
-    private fun TestScope.recordRequests(state: DesktopDesignState): List<String> {
-        val asked = mutableListOf<String>()
-        val live = UnconfinedTestDispatcher(testScheduler)
-        backgroundScope.launch(live) { state.snippetPaletteRequests.collect { asked += "snippets" } }
-        backgroundScope.launch(live) { state.recordingToggleRequests.collect { asked += "record" } }
-        return asked
+    private fun asked(state: DesktopDesignState): List<String> = buildList {
+        if (state.snippetPalette.pending) add("snippets")
+        if (state.recordingToggle.pending) add("record")
     }
 
     private fun TestScope.sessions(vnc: FakeVncTransport? = null): Pair<SessionsController, CoroutineScope> {

@@ -124,6 +124,12 @@
     <string name="shell_tip_pause">Пауза</string>
     <string name="shell_tip_replay">Сначала</string>
     <string name="shell_tip_monitor">Мониторинг</string>
+    <string name="shell_view_terminal">Терминал</string>
+    <string name="shell_view_files">Файлы</string>
+    <string name="shell_view_monitor">Мониторинг</string>
+    <string name="shell_view_runbook">Ранбук</string>
+    <string name="shell_view_player">Запись</string>
+    <string name="shell_view_desktop">Удалённый рабочий стол</string>
     <string name="shell_tip_disconnect">Отключить</string>
     <string name="shell_no_hosts_yet">Пока нет хостов</string>
     <string name="shell_add_first_host">Добавьте подключение, и оно появится здесь.</string>

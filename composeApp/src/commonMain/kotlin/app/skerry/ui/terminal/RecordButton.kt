@@ -1,10 +1,7 @@
 package app.skerry.ui.terminal
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.getValue
 import app.skerry.shared.terminal.castFileName
 import app.skerry.shared.terminal.recordingStamp
 import app.skerry.ui.design.IconBtn
@@ -16,7 +13,6 @@ import app.skerry.ui.session.Session
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.vault.ExportOutcome
 import app.skerry.ui.vault.exportFileGuarded
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import app.skerry.ui.theme.Skerry
 
@@ -27,13 +23,13 @@ import app.skerry.ui.theme.Skerry
  * Nothing is written until the user picks a file: a recording holds whatever the server printed, so
  * it must not land on disk as a side effect of clicking a toolbar button.
  *
- * [requests] is the hotkey channel (⌘R / Ctrl+Shift+R): the shell can't toggle recording itself,
+ * [request] is the hotkey channel (⌘R / Ctrl+Shift+R): the shell can't toggle recording itself,
  * because start/stop lives on the terminal state this button holds.
  */
 @Composable
 fun RecordSessionButton(
     session: Session?,
-    requests: SharedFlow<Unit>? = null,
+    request: ToolbarRequest? = null,
     /**
      * A recording of a catalog host was saved: `(hostId, wall-clock seconds)`. Reported to the team
      * that host is shared with, if any (see [app.skerry.ui.teams.TeamsCoordinator.reportSessionRecorded]).
@@ -75,10 +71,8 @@ fun RecordSessionButton(
             }
             Unit
         }
-    // The hotkey does exactly what a click does. rememberUpdatedState so a collector started for an
-    // earlier session doesn't keep toggling a terminal that is no longer on screen.
-    val currentToggle by rememberUpdatedState(toggle)
-    LaunchedEffect(requests) { requests?.collect { currentToggle() } }
+    // The hotkey does exactly what a click does.
+    OnToolbarRequest(request) { toggle() }
     IconBtn(
         name = if (recording) "stop_circle" else "radio_button_checked",
         tint = if (recording) Skerry.colors.sunset else Skerry.colors.dim,
