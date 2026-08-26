@@ -147,18 +147,93 @@ class SftpFileBrowserTest {
     }
 
     @Test
-    fun `a directory wider than a transfer plan may hold is still deleted whole`() = runTest {
-        // The entry cap is what a plan held whole in memory costs. This walk holds no plan and
-        // deletes as it goes, so the same cap would stop it with most of the tree already gone —
-        // and report the tree as refused, on an operation that destroyed two thirds of it. A tree
-        // with no bottom is bounded by depth, which refuses before anything is removed.
-        val wide = List(MAX_TREE_ENTRIES + 1) { SftpEntry("f$it", "/d/big/f$it", SftpEntryType.File, 0, 0, 0b110_100_100) }
-        client.listAnswer = { path -> if (path == "/d/big") wide else null }
+    fun `a tree wider than a transfer plan may hold is still deleted whole`() = runTest {
+        // Two things at once. The entry cap is what a plan held whole in memory costs; this walk
+        // holds no plan and deletes as it goes, so the same cap would stop it with most of the tree
+        // already gone and report the tree as refused, on an operation that destroyed two thirds of
+        // it. And breadth must not consume the budget either: siblings are walked one after another,
+        // so each one gets the same room as the last — a budget decremented per listing instead of
+        // per level would delete the first two directories and refuse the third.
+        val perDirectory = 34_000
+        val subdirs = List(3) { SftpEntry("s$it", "/d/big/s$it", SftpEntryType.Directory, 0, 0, 0b111_101_101) }
+        client.listAnswer = { path ->
+            when {
+                path == "/d/big" -> subdirs
+                path.startsWith("/d/big/s") -> List(perDirectory) {
+                    SftpEntry("f$it", "$path/f$it", SftpEntryType.File, 0, 0, 0b110_100_100)
+                }
+                else -> null
+            }
+        }
 
         browser().delete(FileItem("big", "/d/big", FileItemType.Directory, 0, 0))
 
-        assertEquals(MAX_TREE_ENTRIES + 1, client.calls.count { it.startsWith("remove:") })
+        assertEquals(3 * perDirectory, client.calls.count { it.startsWith("remove:") })
+        assertTrue(subdirs.all { "rmdir:${it.path}" in client.calls })
         assertTrue("rmdir:/d/big" in client.calls)
+        // Every sibling asked for the same room: what the level above holds, and nothing more.
+        assertEquals(
+            listOf(MAX_LISTING_ENTRIES) + List(3) { MAX_LISTING_ENTRIES - subdirs.size },
+            client.listLimits,
+        )
+    }
+
+    @Test
+    fun `a listing bigger than the client can hold is refused, not drawn short`() = runTest {
+        // The listing is the server's answer, and nothing above this call bounds it: the transfer
+        // plan's cap is checked after the listing exists, and the de-duplication passes run over it.
+        // A listing cut short without saying so is a directory the user believes they have seen.
+        client.listAnswer = { path -> if (path == "/d/huge") oversizedListing(path, MAX_LISTING_ENTRIES + 1) else null }
+
+        val e = assertFailsWith<FileBrowserException> { browser().list("/d/huge") }
+        assertEquals(FileBrowserFailure.TreeTooLarge, e.failure)
+    }
+
+    @Test
+    fun `the browser asks the client for one entry past the cap`() = runTest {
+        // How the truncation is detected at all: the client stops one over, so "full" and "cut
+        // short" are distinguishable without holding the server's whole answer.
+        browser().list("/d")
+
+        assertEquals(listOf(MAX_LISTING_ENTRIES), client.listLimits)
+    }
+
+    @Test
+    fun `a directory too wide to list is refused before its contents are removed`() = runTest {
+        // Same shape as the depth refusal: the walk ends without promising the tree is untouched,
+        // but nothing inside the directory it refused was deleted.
+        client.listAnswer = { path -> if (path == "/d/huge") oversizedListing(path, MAX_LISTING_ENTRIES + 1) else null }
+
+        val e = assertFailsWith<FileBrowserException> {
+            browser().delete(FileItem("huge", "/d/huge", FileItemType.Directory, 0, 0))
+        }
+
+        assertEquals(FileBrowserFailure.TreeTooLarge, e.failure)
+        assertTrue(client.calls.none { it.startsWith("remove:") || it.startsWith("rmdir:") })
+    }
+
+    @Test
+    fun `listings held on the way down share one budget, not one each`() = runTest {
+        // The walk keeps every listing above it alive while it works on the level below, so a level
+        // allowed a full cap of its own would hold as many caps as the tree is deep. The first child
+        // is the directory, so the refusal lands before anything beside it is removed.
+        val held = 30_000
+        client.listAnswer = { path ->
+            when (path) {
+                "/d/deep" -> oversizedListing(path, held, firstIsDirectory = true)
+                "/d/deep/f0" -> oversizedListing(path, MAX_LISTING_ENTRIES)
+                else -> null
+            }
+        }
+
+        val e = assertFailsWith<FileBrowserException> {
+            browser().delete(FileItem("deep", "/d/deep", FileItemType.Directory, 0, 0))
+        }
+
+        assertEquals(FileBrowserFailure.TreeTooLarge, e.failure)
+        // The cap minus what the level above is holding: the nested listing is asked for the rest.
+        assertEquals(listOf(MAX_LISTING_ENTRIES, MAX_LISTING_ENTRIES - held), client.listLimits)
+        assertTrue(client.calls.none { it.startsWith("remove:") || it.startsWith("rmdir:") })
     }
 
     @Test
@@ -304,11 +379,18 @@ private class RecordingSftp : SftpClient {
     /** Listings a map cannot hold — a directory that lists itself as its own child. */
     var listAnswer: ((String) -> List<SftpEntry>?)? = null
 
-    override suspend fun list(path: String): List<SftpEntry> {
+    /** Limits the browser asked for, in call order — the contract is "at most limit + 1 entries". */
+    val listLimits = mutableListOf<Int>()
+
+    override suspend fun list(path: String, limit: Int): List<SftpEntry> {
         if (cancelList) throw CancellationException("cancelled")
         if (failList) throw SftpException("boom")
         calls += "list:$path"
-        return listAnswer?.invoke(path) ?: listings[path] ?: listResult
+        listLimits += limit
+        val all = listAnswer?.invoke(path) ?: listings[path] ?: listResult
+        // Long: the contract is "one past the limit", and a limit of Int.MAX_VALUE must not wrap
+        // into a negative ceiling here any more than it does in the real client.
+        return if (all.size.toLong() > limit.toLong() + 1) all.subList(0, limit + 1) else all
     }
 
     override suspend fun stat(path: String): SftpEntry? {
@@ -338,3 +420,20 @@ private class RecordingSftp : SftpClient {
     override suspend fun rename(from: String, to: String) { calls += "rename:$from->$to" }
     override suspend fun close() {}
 }
+
+/**
+ * A listing too big to hold in a test, generated on demand: the browser must decide on its size
+ * before it maps it, so nothing here is ever materialised.
+ */
+private fun oversizedListing(path: String, count: Int, firstIsDirectory: Boolean = false): List<SftpEntry> =
+    object : AbstractList<SftpEntry>() {
+        override val size = count
+        override fun get(index: Int) = SftpEntry(
+            "f$index",
+            "$path/f$index",
+            if (index == 0 && firstIsDirectory) SftpEntryType.Directory else SftpEntryType.File,
+            0,
+            0,
+            0b110_100_100,
+        )
+    }

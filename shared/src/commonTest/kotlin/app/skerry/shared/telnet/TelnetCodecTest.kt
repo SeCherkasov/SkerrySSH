@@ -5,17 +5,20 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-private const val IAC = 255
-private const val SE = 240
-private const val SB = 250
-private const val WILL = 251
-private const val WONT = 252
-private const val DO = 253
-private const val DONT = 254
-private const val ECHO = 1
-private const val SGA = 3
-private const val TERMINAL_TYPE = 24
-private const val NAWS = 31
+// Aliases, not copies: a second spelling of 255 in a test file is a number that can drift away from
+// the parser it claims to describe.
+private const val IAC = TelnetCodec.IAC
+private const val SE = TelnetCodec.SE
+private const val SB = TelnetCodec.SB
+private const val WILL = TelnetCodec.WILL
+private const val WONT = TelnetCodec.WONT
+private const val DO = TelnetCodec.DO
+private const val DONT = TelnetCodec.DONT
+private const val ECHO = TelnetCodec.ECHO
+private const val SGA = TelnetCodec.SGA
+private const val TERMINAL_TYPE = TelnetCodec.TERMINAL_TYPE
+private const val NAWS = TelnetCodec.NAWS
+private const val TT_SEND = TelnetCodec.TT_SEND
 
 private fun bytes(vararg v: Int) = ByteArray(v.size) { v[it].toByte() }
 
@@ -142,6 +145,41 @@ class TelnetCodecTest {
         assertEquals("", d.data.decodeToString(), "subnegotiation body reached the terminal as data")
         // The real end of the subnegotiation still works, and data after it is passed through.
         assertEquals("ok", codec.consume(bytes(IAC, SE) + "ok".encodeToByteArray()).data.decodeToString())
+    }
+
+    @Test
+    fun `a body of escaped IACs trips the cap instead of buffering without bound`() {
+        val codec = TelnetCodec()
+        // TERMINAL-TYPE SEND: a body the codec acts on, so "was it buffered?" is observable.
+        codec.consume(bytes(IAC, SB, TERMINAL_TYPE, TT_SEND))
+        // A body made only of escaped 0xFF. Each pair is one byte of body, and the escape path is
+        // the one that used to append without ever consulting the cap.
+        val d = codec.consume(ByteArray(4 * TelnetCodec.MAX_SUBNEG_BYTES) { IAC.toByte() })
+        assertTrue(d.reply.isEmpty(), "an oversized body must not be answered mid-flood")
+
+        // The body is past the cap, so the closing IAC SE must find nothing left to act on.
+        val closed = codec.consume(bytes(IAC, SE))
+        assertTrue(closed.reply.isEmpty(), "an oversized subnegotiation was buffered and answered")
+        assertEquals("", closed.data.decodeToString())
+
+        // The stream recovers: the next subnegotiation is parsed normally.
+        val next = codec.consume(bytes(IAC, SB, TERMINAL_TYPE, TT_SEND, IAC, SE))
+        assertTrue(next.reply.isNotEmpty(), "parser did not recover after the dropped body")
+    }
+
+    @Test
+    fun `an escaped IAC straddling the cap does not swallow the closing IAC SE`() {
+        val codec = TelnetCodec()
+        // TERMINAL-TYPE SEND again, so a body that was buffered would be answered and a body that
+        // was dropped would not — otherwise the two orderings of the cap check look identical here.
+        codec.consume(bytes(IAC, SB, TERMINAL_TYPE, TT_SEND))
+        // Fill the buffer to exactly the cap, so the very next byte trips it.
+        codec.consume(ByteArray(TelnetCodec.MAX_SUBNEG_BYTES - 2) { 0x20 })
+        // That next byte is the IAC of the closing sequence: the cap must not eat the marker.
+        val d = codec.consume(bytes(IAC, SE) + "after".encodeToByteArray())
+
+        assertTrue(d.reply.isEmpty(), "a body past the cap was buffered and answered")
+        assertEquals("after", d.data.decodeToString(), "the closing IAC SE was swallowed by the cap")
     }
 
     @Test

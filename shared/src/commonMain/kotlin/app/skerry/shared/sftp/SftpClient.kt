@@ -17,9 +17,21 @@ interface SftpClient {
 
     /**
      * Contents of directory [path], excluding `.` and `..`. Order is server-supplied (not sorted).
-     * @throws SftpException path doesn't exist, isn't a directory, or lacks permission
+     *
+     * At most `limit + 1` entries are read: how many a listing holds is the server's decision, and
+     * the whole answer is built in memory before the caller sees any of it. Stopping one entry past
+     * [limit] bounds that allocation while still telling a full directory apart from a truncated
+     * one — a caller that gets `limit + 1` back knows the listing was cut short, and decides what to
+     * do about it (`app.skerry.shared.files.refuseOversizedListing`). There is no default: what the
+     * client can hold is the caller's number, not this interface's.
+     *
+     * The count is not the whole size: an implementation may also refuse a listing holding an entry
+     * no filesystem could name, since a bounded number of 32 KB names is not a bounded listing.
+     *
+     * @throws SftpException path doesn't exist, isn't a directory, lacks permission, or answered
+     * with an entry whose name no filesystem could hold
      */
-    suspend fun list(path: String): List<SftpEntry>
+    suspend fun list(path: String, limit: Int): List<SftpEntry>
 
     /** Metadata for one object, or `null` if [path] doesn't exist. */
     suspend fun stat(path: String): SftpEntry?

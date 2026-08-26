@@ -570,7 +570,7 @@ private class RecordingSftpClient : SftpClient {
     var closed = false
         private set
 
-    override suspend fun list(path: String): List<SftpEntry> = emptyList()
+    override suspend fun list(path: String, limit: Int): List<SftpEntry> = emptyList()
     override suspend fun stat(path: String): SftpEntry? = null
     override suspend fun realpath(path: String): String = "/"
     override suspend fun read(path: String, maxBytes: Long): ByteArray = ByteArray(0)

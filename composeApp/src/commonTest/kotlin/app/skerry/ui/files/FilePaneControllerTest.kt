@@ -538,9 +538,9 @@ class FilePaneControllerTest {
         assertEquals("$HOME/alpha", c.path, "the navigation still lands")
         assertEquals(
             listOf("alpha", "build.log", "manual.txt", "zeta"),
-            fake.list(HOME).map { it.name }.sorted(),
+            fake.listAll(HOME).map { it.name }.sorted(),
         )
-        assertEquals(emptyList(), fake.list("$HOME/alpha").map { it.name })
+        assertEquals(emptyList(), fake.listAll("$HOME/alpha").map { it.name })
     }
 
     /** The pane says when it is working, so a screen can show it instead of looking stuck. */

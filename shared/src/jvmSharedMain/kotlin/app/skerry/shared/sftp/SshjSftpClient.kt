@@ -1,5 +1,6 @@
 package app.skerry.shared.sftp
 
+import com.hierynomus.sshj.sftp.RemoteResourceSelector
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -35,9 +36,21 @@ internal class SshjSftpClient(
 
     private val closed = AtomicBoolean(false)
 
-    override suspend fun list(path: String): List<SftpEntry> = io("Failed to read directory $path") {
+    /**
+     * `sftp.ls` accumulates `SSH_FXP_NAME` responses until the server says there are no more, so
+     * without a selector how long that list grows is the server's decision: one `ls` answered with
+     * tens of millions of names exhausts the heap during an ordinary browse, before any guard above
+     * this call gets to run. [listingSelector] bounds the accumulated list — one entry past [limit],
+     * enough for the caller to see the listing was cut short, and no more than that held.
+     *
+     * The list, not the packet. sshj reads a whole SFTP reply into its own buffer before a single
+     * entry is parsed, and that buffer is capped by sshj at 1 GiB and then kept for the life of the
+     * channel; nothing on this side of the API can bound it. What is bounded here is everything
+     * built from those packets, which is what grows without limit as the server keeps answering.
+     */
+    override suspend fun list(path: String, limit: Int): List<SftpEntry> = io("Failed to read directory $path") {
         // sshj filters . and .. out of the listing itself.
-        sftp.ls(path).map { it.toEntry() }
+        sftp.ls(path, listingSelector(path, limit)).map { it.toEntry() }
     }
 
     override suspend fun stat(path: String): SftpEntry? = withContext(Dispatchers.IO) {
@@ -171,6 +184,38 @@ internal class SshjSftpClient(
     private companion object {
         /** Default channel-level read cap for [read]; the shared contract's [SFTP_MAX_READ_BYTES]. */
         const val DEFAULT_MAX_READ_BYTES = SFTP_MAX_READ_BYTES
+    }
+}
+
+/** Longest single path component any of the filesystems behind an SFTP server can name. */
+private const val NAME_MAX = 255
+
+/** Longest whole path those same filesystems can name. */
+private const val PATH_MAX = 4096
+
+/**
+ * The selector every entry of a listing of [path] goes through: at most `limit + 1` entries taken,
+ * and an entry no filesystem could have produced refused outright.
+ *
+ * How many entries is only half of a bound. One SSH string may be 32 KB, so a hundred thousand of
+ * them is three orders of magnitude more memory than the count suggests. [NAME_MAX] and [PATH_MAX]
+ * are POSIX's own limits, so no real server trips them; one that does is describing itself, not a
+ * file the user might want, and the listing is refused rather than drawn short. What is left is the
+ * honest residual: `limit` times a name a filesystem can hold, which is the number the caller's cap
+ * was chosen against.
+ *
+ * One selector per listing — it counts.
+ */
+internal fun listingSelector(path: String, limit: Int): RemoteResourceSelector {
+    // Long, so a caller asking for Int.MAX_VALUE needs no special case: the ceiling is one past the
+    // limit whatever the limit is, and a special case is a branch nothing exercises.
+    var taken = 0L
+    val ceiling = limit.toLong() + 1
+    return RemoteResourceSelector { info ->
+        if (info.name.length > NAME_MAX || info.path.length > PATH_MAX) {
+            throw SftpException("Listing $path returned an entry no filesystem can name")
+        }
+        if (taken++ < ceiling) RemoteResourceSelector.Result.ACCEPT else RemoteResourceSelector.Result.BREAK
     }
 }
 

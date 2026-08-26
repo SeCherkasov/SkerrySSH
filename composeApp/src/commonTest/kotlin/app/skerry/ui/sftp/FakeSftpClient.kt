@@ -1,5 +1,6 @@
 package app.skerry.ui.sftp
 
+import app.skerry.shared.files.MAX_LISTING_ENTRIES
 import app.skerry.shared.sftp.SftpClient
 import app.skerry.shared.sftp.SftpEntry
 import app.skerry.shared.sftp.SftpEntryType
@@ -53,18 +54,32 @@ class FakeSftpClient(val startDir: String = "/home/skerry") : SftpClient {
      */
     var listAnswer: ((String) -> List<SftpEntry>?)? = null
 
-    override suspend fun list(path: String): List<SftpEntry> {
+    override suspend fun list(path: String, limit: Int): List<SftpEntry> {
+        listLimits += limit
         listAnswer?.invoke(realpathSync(path))?.let { answer ->
             listGate?.await()
-            return answer
+            return answer.bounded(limit)
         }
         val dir = children[realpathSync(path)] ?: throw SftpException("No directory $path")
         // Answered from the tree as it was when the request arrived, like a real round trip: a
         // listing held in flight must be able to land stale.
         val answer = dir.values.toList()
         listGate?.await()
-        return answer
+        return answer.bounded(limit)
     }
+
+    /** The whole listing, for assertions that have no ceiling of their own to name. */
+    suspend fun listAll(path: String): List<SftpEntry> = list(path, MAX_LISTING_ENTRIES)
+
+    /** Limits [list] was asked for, in call order — a walk must ask for no more than it can hold. */
+    val listLimits = mutableListOf<Int>()
+
+    /**
+     * The contract a real client honours: stop one entry past the limit, so the caller can tell a
+     * full listing from a truncated one. Long, so a limit of `Int.MAX_VALUE` needs no special case.
+     */
+    private fun List<SftpEntry>.bounded(limit: Int): List<SftpEntry> =
+        if (size.toLong() > limit.toLong() + 1) subList(0, limit + 1) else this
 
     override suspend fun stat(path: String): SftpEntry? {
         val norm = realpathSync(path)

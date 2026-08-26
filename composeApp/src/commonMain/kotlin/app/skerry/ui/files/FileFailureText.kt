@@ -15,7 +15,7 @@ import app.skerry.ui.generated.resources.ftail_err_open_target
 import app.skerry.ui.generated.resources.ftail_err_session_closed
 import app.skerry.ui.generated.resources.ftail_err_sftp
 import app.skerry.ui.generated.resources.ftail_err_too_large
-import app.skerry.ui.generated.resources.ftail_err_tree_too_deep
+import app.skerry.ui.generated.resources.ftail_err_dir_too_large
 import app.skerry.ui.generated.resources.ftail_err_tree_too_large
 import app.skerry.ui.generated.resources.ftail_err_unexpected
 import app.skerry.ui.generated.resources.ftail_transfer_error
@@ -31,10 +31,10 @@ fun fileBrowserFailureText(failure: FileBrowserFailure): String = stringResource
         FileBrowserFailure.OpenSource -> Res.string.ftail_err_open_source
         FileBrowserFailure.OpenTarget -> Res.string.ftail_err_open_target
         FileBrowserFailure.TooLarge -> Res.string.ftail_err_too_large
-        // The pane's own walk is the recursive delete, which is bounded by depth and never by size,
-        // so the reason it stops is never "too large" — and the transfer wording would name a verb
-        // this operation has nothing to do with.
-        FileBrowserFailure.TreeTooLarge -> Res.string.ftail_err_tree_too_deep
+        // Two shapes reach the pane under one value: a tree with no bottom (the recursive delete's
+        // depth bound) and a single directory the client cannot hold. The wording names both, and
+        // neither names the verb the transfer wording does — nothing is being transferred here.
+        FileBrowserFailure.TreeTooLarge -> Res.string.ftail_err_dir_too_large
         FileBrowserFailure.Unexpected -> Res.string.ftail_err_unexpected
     },
 )

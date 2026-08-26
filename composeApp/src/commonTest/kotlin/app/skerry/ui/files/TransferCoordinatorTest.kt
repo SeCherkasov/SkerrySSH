@@ -55,9 +55,9 @@ class TransferCoordinatorTest {
         advanceUntilIdle()
 
         // Remote directory is recreated along with the nested file.
-        val remoteTop = r.remoteFake.list(RHOME).map { it.name }
+        val remoteTop = r.remoteFake.listAll(RHOME).map { it.name }
         assertTrue("sub" in remoteTop, "expected remote directory sub, have: $remoteTop")
-        val remoteSub = r.remoteFake.list("$RHOME/sub").map { it.name }
+        val remoteSub = r.remoteFake.listAll("$RHOME/sub").map { it.name }
         assertTrue("inner.txt" in remoteSub, "expected remote sub/inner.txt, have: $remoteSub")
         assertEquals("$LHOME/sub/inner.txt" to "$RHOME/sub/inner.txt", r.remoteFake.lastUpload)
         assertTrue(r.local.selection.isEmpty())
@@ -91,9 +91,9 @@ class TransferCoordinatorTest {
         advanceUntilIdle()
 
         // Local subdirectories are recreated.
-        val localTop = r.localFake.list(LHOME).map { it.name }
+        val localTop = r.localFake.listAll(LHOME).map { it.name }
         assertTrue("proj" in localTop, "expected local directory proj, have: $localTop")
-        val localNested = r.localFake.list("$LHOME/proj").map { it.name }
+        val localNested = r.localFake.listAll("$LHOME/proj").map { it.name }
         assertTrue("nested" in localNested, "expected local directory proj/nested, have: $localNested")
 
         // Both files in the tree are downloaded to their local paths.
@@ -113,7 +113,7 @@ class TransferCoordinatorTest {
         r.coordinator.downloadSelection()
         advanceUntilIdle()
 
-        assertTrue("empty" in r.localFake.list(LHOME).map { it.name })
+        assertTrue("empty" in r.localFake.listAll(LHOME).map { it.name })
         assertTrue(r.remoteFake.downloads.isEmpty())
         assertEquals(TransferState.Idle, r.coordinator.transfer)
     }
@@ -274,8 +274,8 @@ class TransferCoordinatorTest {
         r.coordinator.moveSelection(fromLocal = true)
         advanceUntilIdle()
 
-        assertTrue("sub" in r.remoteFake.list(RHOME).map { it.name })
-        assertTrue("inner.txt" in r.remoteFake.list("$RHOME/sub").map { it.name })
+        assertTrue("sub" in r.remoteFake.listAll(RHOME).map { it.name })
+        assertTrue("inner.txt" in r.remoteFake.listAll("$RHOME/sub").map { it.name })
         assertTrue("sub" !in (r.local.state as FilePaneState.Loaded).entries.map { it.name })
         assertEquals(TransferState.Idle, r.coordinator.transfer)
     }
@@ -307,7 +307,7 @@ class TransferCoordinatorTest {
         r.coordinator.moveSelection(fromLocal = false)
         advanceUntilIdle()
 
-        assertTrue("proj" in r.localFake.list(LHOME).map { it.name })
+        assertTrue("proj" in r.localFake.listAll(LHOME).map { it.name })
         assertTrue("proj" !in (r.remote.state as FilePaneState.Loaded).entries.map { it.name })
         assertEquals(TransferState.Idle, r.coordinator.transfer)
     }

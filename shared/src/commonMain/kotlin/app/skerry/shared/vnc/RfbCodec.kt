@@ -506,8 +506,19 @@ class RfbCodec(
         sink.write(msg)
     }
 
+    /**
+     * ClientCutText (6). RFB (RFC 6143 7.5.6) defines the text as ISO 8859-1 — the same encoding
+     * [readBoundedLatin1] decodes the other direction with, byte 1:1 to code point. Encoding UTF-8
+     * here made the two directions disagree, so every non-ASCII paste reached the server as
+     * mojibake. A code point Latin-1 cannot carry becomes `?` (what TigerVNC substitutes); a
+     * surrogate pair is two of them. Dropping such characters instead would leave the user with a
+     * paste that is quietly short rather than visibly incomplete.
+     */
     suspend fun writeClientCutText(text: String) {
-        val body = text.encodeToByteArray()
+        val body = ByteArray(text.length) { i ->
+            val code = text[i].code
+            if (code <= 0xFF) code.toByte() else LATIN1_SUBSTITUTE
+        }
         val msg = ByteArray(8 + body.size)
         msg[0] = 6 // ClientCutText
         putU32(msg, 4, body.size.toLong())
@@ -601,6 +612,9 @@ class RfbCodec(
         const val MAX_NAME_LEN = 64 * 1024
         const val MAX_REASON_LEN = 64 * 1024
         const val MAX_CLIPBOARD_LEN = 4 * 1024 * 1024
+
+        /** What a code point outside Latin-1 becomes in an outgoing ClientCutText: `?`. */
+        const val LATIN1_SUBSTITUTE: Byte = 0x3F
 
         /** Cursor sprites are ~32-96px in practice; 1024 leaves room for hi-dpi and still caps pixels+mask at ~4.3 MB. */
         const val MAX_CURSOR_DIMENSION = 1024
