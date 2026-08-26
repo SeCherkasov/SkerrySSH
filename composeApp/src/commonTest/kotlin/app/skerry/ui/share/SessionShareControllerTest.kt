@@ -221,14 +221,18 @@ class SessionShareControllerTest {
         controller.share("t1", "Platform", "pane-1", "host", source(MutableSharedFlow(), typed), readOnlyOnly = false)
         advanceUntilIdle()
 
+        // The name on the prompt is the relay's, read off the JWT of the socket the frame arrived
+        // on — never anything the frame itself claims (#312).
+        client.channel.events.send(ShareEvent.Viewers(1, listOf("mate@x.io")))
         client.channel.events.send(
-            ShareEvent.Data(codec.seal(teamKey, ShareFrame.Hello(5, "mate@x.io"), ShareDirection.GUEST_TO_HOST)),
-        )
-        client.channel.events.send(
-            ShareEvent.Data(codec.seal(teamKey, ShareFrame.ControlRequest(5), ShareDirection.GUEST_TO_HOST)),
+            ShareEvent.Data(
+                codec.seal(teamKey, ShareFrame.ControlRequest(5), ShareDirection.GUEST_TO_HOST),
+                from = "mate@x.io",
+            ),
         )
         advanceUntilIdle()
         assertEquals("mate@x.io", assertIs<ShareUiState.Live>(controller.state).controlRequestBy)
+        assertTrue(assertIs<ShareUiState.Live>(controller.state).controlRequestPending)
         assertEquals(false, assertIs<ShareUiState.Live>(controller.state).inputAllowed, "asking must not grant")
 
         controller.answerControlRequest(grant = true)
@@ -236,6 +240,31 @@ class SessionShareControllerTest {
 
         val live = assertIs<ShareUiState.Live>(controller.state)
         assertTrue(live.inputAllowed)
+        assertEquals(null, live.controlRequestBy)
+        assertEquals(false, live.controlRequestPending)
+        scope.cancel()
+    }
+
+    /**
+     * A relay older than the naming protocol sends no account with the frame. The prompt still has
+     * to appear — asking is the viewer's only route to being allowed to type, and their own button
+     * says "Requested" either way — so the panel shows a request that names nobody.
+     */
+    @Test
+    fun `a request the relay does not name is still shown, without a name`() = cryptoTest {
+        val client = FakeShareClient()
+        val (controller, scope) = controller(client)
+        val codec = SessionShareCodec(crypto, "share-1")
+        controller.share("t1", "Platform", "pane-1", "host", source(MutableSharedFlow()), readOnlyOnly = false)
+        advanceUntilIdle()
+
+        client.channel.events.send(
+            ShareEvent.Data(codec.seal(teamKey, ShareFrame.ControlRequest(5), ShareDirection.GUEST_TO_HOST), from = null),
+        )
+        advanceUntilIdle()
+
+        val live = assertIs<ShareUiState.Live>(controller.state)
+        assertTrue(live.controlRequestPending, "an unnamed request never reached the panel")
         assertEquals(null, live.controlRequestBy)
         scope.cancel()
     }

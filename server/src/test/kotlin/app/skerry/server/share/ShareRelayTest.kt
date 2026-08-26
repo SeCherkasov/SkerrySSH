@@ -110,16 +110,48 @@ class ShareRelayTest {
         assertNull(withTimeout(2_000) { late.receive() }, "the stream ends with the share")
     }
 
+    /**
+     * Issue #310: the catch-up buffer is bounded in bytes and a viewer's queue in frames, so a
+     * history of small frames overflowed the queue at the moment of joining — the extra frames were
+     * discarded in silence, and the very next broadcast found the queue full and detached the
+     * viewer. The two bounds have to agree: whatever history a viewer is sent must fit, and leave
+     * room for the live stream that follows it.
+     */
     @Test
-    fun `viewer input reaches the host`() = runTest {
+    fun `a viewer joining a long history is caught up without being dropped by the next frame`() = runTest {
+        val relay = relay(replayBytes = 64 * 1024, guestQueueFrames = 4)
+        val host = relay.host()
+        // 16 interactive-sized frames: far under the byte cap, far over the viewer's frame queue.
+        repeat(16) { host.broadcast(byteArrayOf(it.toByte())) }
+
+        val late = relay.guest()
+        host.broadcast("live".encodeToByteArray())
+
+        assertEquals(1, host.viewers, "the frame right after the join must not detach the viewer")
+
+        host.end()
+        val received = mutableListOf<ByteArray>()
+        while (true) received += withTimeout(2_000) { late.receive() } ?: break
+        assertContentEquals("live".encodeToByteArray(), received.last(), "the live frame must follow the history")
+        val history = received.dropLast(1).map { it.single().toInt() }
+        assertTrue(history.isNotEmpty(), "a viewer that joins a live share gets some history")
+        // Whatever fits is the NEWEST tail of the history, in order — never its oldest frames.
+        assertEquals((16 - history.size until 16).toList(), history, "the catch-up must be the newest frames")
+    }
+
+    @Test
+    fun `viewer input reaches the host, named by the socket it arrived on`() = runTest {
         val relay = relay()
         val host = relay.host()
-        val guest = relay.guest()
+        val guest = relay.guest(account = "mate@x.io")
 
         assertTrue(guest.sendToHost("ls\n".encodeToByteArray()))
 
         val message = withTimeout(2_000) { host.receiveInput() }
-        assertContentEquals("ls\n".encodeToByteArray(), message)
+        assertContentEquals("ls\n".encodeToByteArray(), message?.bytes)
+        // The account comes off the socket's JWT, not out of the frame the viewer sealed (#312):
+        // the payload is opaque to the relay, and every member could seal one naming anybody.
+        assertEquals("mate@x.io", message?.from)
     }
 
     @Test

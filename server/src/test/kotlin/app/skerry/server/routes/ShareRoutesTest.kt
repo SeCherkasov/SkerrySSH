@@ -29,6 +29,7 @@ import io.ktor.websocket.readBytes
 import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
+import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -116,6 +117,39 @@ class ShareRoutesTest {
         assertContentEquals("sealed-output".encodeToByteArray(), withTimeout(5_000) { guest.nextBinary() })
 
         guest.send(Frame.Binary(true, "sealed-input".encodeToByteArray()))
+        assertContentEquals("sealed-input".encodeToByteArray(), withTimeout(5_000) { host.nextBinary() })
+
+        guest.close()
+        host.close()
+    }
+
+    /**
+     * Issue #312: the host used to learn who sent a keystroke frame from the frame itself, which is
+     * sealed under the team key every member holds. The relay names the socket instead, off the JWT
+     * it authenticated — and writes that name immediately before the frame it belongs to.
+     */
+    @Test
+    fun `a viewer's frame reaches the host named by the account its socket authenticated as`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = wsClient()
+        val (ownerToken, mateToken) = client.teamOfTwo()
+
+        val host = client.webSocketSession(hostPath("s1", meta)) { bearerAuth(ownerToken) }
+        services.awaitShare()
+        val guest = client.webSocketSession(joinPath("s1")) { bearerAuth(mateToken) }
+
+        guest.send(Frame.Binary(true, "sealed-input".encodeToByteArray()))
+
+        // The pair arrives in order and with nothing between it: the viewer list this join also
+        // produces is written under the same lock, never inside the pair.
+        val named = withTimeout(5_000) {
+            var line = host.nextText()
+            while (!line.startsWith("from:")) line = host.nextText()
+            line
+        }
+        val account = Base64.getDecoder().decode(named.removePrefix("from:")).decodeToString()
+        assertEquals("mate@x.io", account)
         assertContentEquals("sealed-input".encodeToByteArray(), withTimeout(5_000) { host.nextBinary() })
 
         guest.close()

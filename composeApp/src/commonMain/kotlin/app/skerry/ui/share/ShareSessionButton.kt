@@ -45,6 +45,7 @@ import app.skerry.ui.generated.resources.share_control_asked
 import app.skerry.ui.generated.resources.share_control_granted
 import app.skerry.ui.generated.resources.share_control_request
 import app.skerry.ui.generated.resources.share_control_wants
+import app.skerry.ui.generated.resources.share_control_wants_unnamed
 import app.skerry.ui.generated.resources.share_read_only
 import app.skerry.ui.generated.resources.share_watching
 import app.skerry.ui.generated.resources.share_deny
@@ -227,11 +228,19 @@ internal fun SharePanel(
                 }
                 // A viewer asking for control is answered in the panel: the terminal shows only who
                 // is typing, so nothing that needs a decision sits over a live shell.
-                state.controlRequestBy?.let { account ->
+                if (state.controlRequestPending) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        InitialsAvatar(account, size = 20.dp)
+                        // A relay older than the naming protocol sends no account with the request.
+                        // The answer is the same either way — granting lets everyone watching type —
+                        // so the row is shown without a name rather than not at all.
+                        val account = state.controlRequestBy
+                        if (account != null) InitialsAvatar(account, size = 20.dp)
                         Txt(
-                            stringResource(Res.string.share_control_wants, untrustedLabel(account)),
+                            if (account != null) {
+                                stringResource(Res.string.share_control_wants, untrustedLabel(account))
+                            } else {
+                                stringResource(Res.string.share_control_wants_unnamed)
+                            },
                             size = 11.5.sp,
                             color = Skerry.colors.amber,
                             modifier = Modifier.weight(1f),

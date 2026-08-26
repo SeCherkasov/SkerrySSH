@@ -5,6 +5,7 @@ import app.skerry.server.accountId
 import app.skerry.server.deviceId
 import app.skerry.server.db.TeamMemberStatus
 import app.skerry.server.jwtPrincipal
+import app.skerry.server.share.GuestFrame
 import app.skerry.server.share.GuestShareSession
 import app.skerry.server.share.HostShareSession
 import app.skerry.server.share.ShareJoin
@@ -25,6 +26,8 @@ import io.ktor.websocket.readBytes
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.Base64
 
 /** Longest sealed session label a host may register (base64 chars) — a name, not a payload. */
@@ -39,8 +42,8 @@ private const val MAX_SHARE_ID = 64
  *
  * Zero-knowledge: every frame is sealed under the team key before it reaches the server, so the
  * relay routes opaque blobs and keeps nothing. Binary frames are the session's data and are
- * relayed; text frames are the server's own control channel to the host (`viewers:N`) and are never
- * forwarded.
+ * relayed; text frames are the server's own control channel to the host (`viewers:N`, and `from:`
+ * naming the socket a keystroke frame arrived on) and are never forwarded.
  *
  * Authorization is checked at connect **and** re-checked while the socket lives (see
  * [watchAccess]): a JWT is verified only at handshake, so a member removed from the team, or a
@@ -126,17 +129,12 @@ private suspend fun DefaultWebSocketServerSession.relayHost(
     session: HostShareSession,
 ) {
     services.notifier.publishShares(request.teamId)
+    val writer = HostSocketWriter { send(it) }
     val input = launch {
-        while (true) send(Frame.Binary(true, session.receiveInput() ?: break))
+        while (true) writer.input(session.receiveInput() ?: break)
     }
     val viewers = launch {
-        while (true) {
-            val watching = session.receiveViewers() ?: break
-            // `viewers:{count}:{b64 account},{b64 account}` — the ids are base64 so an account id
-            // can never introduce a separator of its own into the control line.
-            val encoded = watching.joinToString(",") { Base64.getEncoder().encodeToString(it.toByteArray()) }
-            send(Frame.Text("viewers:${watching.size}:$encoded"))
-        }
+        while (true) writer.viewers(session.receiveViewers() ?: break)
     }
     val access = watchAccess(services, request)
     try {
@@ -152,6 +150,38 @@ private suspend fun DefaultWebSocketServerSession.relayHost(
         // ended session off every member's list.
         services.notifier.publishShares(request.teamId)
     }
+}
+
+/**
+ * Everything the host's socket is told, written by one writer.
+ *
+ * Two sources feed it — a viewer's keystrokes and the list of who is watching — and a `from:` line
+ * names only the frame that follows it immediately, so the pair goes out as one unit. A viewer list
+ * landing in the gap would leave the host holding keystrokes it cannot attribute, which on the
+ * screen is a control prompt that never appears. Kept out of the route so that property can be
+ * tested without a socket.
+ */
+internal class HostSocketWriter(private val send: suspend (Frame) -> Unit) {
+
+    private val writing = Mutex()
+
+    /**
+     * One viewer's sealed frame, preceded by the account the relay authenticated its socket as —
+     * not anything the frame claims about itself (#312).
+     */
+    suspend fun input(frame: GuestFrame) = writing.withLock {
+        send(Frame.Text("from:${encode(frame.from)}"))
+        send(Frame.Binary(true, frame.bytes))
+    }
+
+    /** `viewers:{count}:{account},{account}` — who is on the session right now. */
+    suspend fun viewers(watching: List<String>) = writing.withLock {
+        send(Frame.Text("viewers:${watching.size}:${watching.joinToString(",") { encode(it) }}"))
+    }
+
+    /** Base64 so an account id can never introduce a separator of its own into a control line. */
+    private fun encode(accountId: String): String =
+        Base64.getEncoder().encodeToString(accountId.toByteArray())
 }
 
 /** A viewer's socket: the host's frames go out, the viewer's keystrokes go back to the host. */

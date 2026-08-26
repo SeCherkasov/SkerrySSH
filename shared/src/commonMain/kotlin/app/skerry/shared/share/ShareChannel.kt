@@ -2,8 +2,15 @@ package app.skerry.shared.share
 
 /** What a share socket delivers: peer frames (sealed, opaque to the relay) and relay control news. */
 sealed interface ShareEvent {
-    /** A sealed frame from the peer — output for a viewer, keystrokes for a host. */
-    class Data(val frame: ByteArray) : ShareEvent
+    /**
+     * A sealed frame from the peer — output for a viewer, keystrokes for a host.
+     *
+     * [from] is the account the relay authenticated the sending socket as, present on a host
+     * socket and `null` everywhere else (a viewer's stream, or a server too old to say). It is the
+     * only statement about who sent a frame that the sender did not write themselves, so it is what
+     * the host puts beside "is typing" and on a "wants control" prompt (#312).
+     */
+    class Data(val frame: ByteArray, val from: String? = null) : ShareEvent
 
     /**
      * Who is watching right now (host sockets only). [accounts] is what the host's UI shows beside

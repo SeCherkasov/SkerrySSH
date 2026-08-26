@@ -22,6 +22,7 @@
     <string name="share_fail_rejected">The server refused the share.</string>
     <string name="share_fail_server">The server failed to relay the session.</string>
     <string name="share_control_wants">%1$s wants to type</string>
+    <string name="share_control_wants_unnamed">A viewer wants to type</string>
     <string name="share_grant">Allow</string>
     <string name="share_deny">Deny</string>
     <string name="share_read_only">View only</string>
