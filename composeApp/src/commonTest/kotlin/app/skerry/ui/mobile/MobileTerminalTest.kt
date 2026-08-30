@@ -130,6 +130,52 @@ class MobileTerminalTest {
         assertFalse(takesStickyCtrl(""))
     }
 
+    /**
+     * Sticky-alt is Meta: an ESC prefix. Unlike ctrl it applies to a Backspace too — Alt+Backspace
+     * (delete word) is one of the combinations the modifier is armed for.
+     */
+    @Test
+    fun sticky_meta_prefixes_soft_keyboard_input_with_esc() {
+        val esc = Char(0x1b).toString()
+        val del = Char(0x7f).toString()
+
+        assertEquals(esc + "b", applyStickyMeta(armed = true, input = "b"))
+        assertEquals(esc + del, applyStickyMeta(armed = true, input = del))
+        assertEquals("b", applyStickyMeta(armed = false, input = "b"))
+        assertEquals("", applyStickyMeta(armed = true, input = ""))
+    }
+
+    /** Ctrl+Alt+key: the C0 byte first, then the meta prefix — the order mapTerminalKey encodes. */
+    @Test
+    fun sticky_meta_composes_over_sticky_ctrl() {
+        val out = applyStickyMeta(armed = true, input = applyStickyCtrl(armed = true, input = "c"))
+
+        assertEquals(listOf(0x1b, 0x03), out.map { it.code })
+    }
+
+    /**
+     * The screen's own modifier state: what the panel arms, the IME path spends. Ctrl survives a
+     * Backspace (it was armed for the letter after it), alt does not (Alt+Backspace is the point).
+     */
+    @Test
+    fun sticky_modifiers_are_spent_by_the_input_they_apply_to() {
+        val del = Char(0x7f).toString()
+        val modifiers = StickyModifiers()
+
+        modifiers.ctrl = true
+        modifiers.alt = true
+        assertEquals(listOf(0x1b, 0x03), modifiers.applyToImeInput("c").map { it.code })
+        assertFalse(modifiers.ctrl, "ctrl is spent on the letter it encoded")
+        assertFalse(modifiers.alt)
+
+        modifiers.ctrl = true
+        assertEquals(del, modifiers.applyToImeInput(del))
+        assertTrue(modifiers.ctrl, "a Backspace must not burn ctrl")
+
+        modifiers.disarm()
+        assertFalse(modifiers.ctrl)
+    }
+
     // Arrows respecting DECCKM (application-cursor-keys)
 
     @Test

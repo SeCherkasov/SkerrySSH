@@ -89,8 +89,6 @@ import app.skerry.ui.host.isProdHostId
 import app.skerry.ui.host.prodOutline
 import app.skerry.ui.host.rememberProductionLookup
 
-/** ESC (0x1B) — prefix of arrow CSI sequences and the esc key itself. */
-internal const val ESC = "\u001b"
 
 
 /**
@@ -127,26 +125,15 @@ fun MobileTerminalScreen(state: MobileDesignState) {
             state.pop()
         }
     }
-    // sticky-ctrl is lifted to screen level so the key panel's arming also affects soft-keyboard input
-    // (the IME path bypasses the panel). Reset on session change.
-    var ctrlArmed by remember(active?.id) { mutableStateOf(false) }
+    // Sticky ctrl and alt live at screen level so the key panel's arming also affects soft-keyboard
+    // input (the IME path bypasses the panel). Reset on session change.
+    val modifiers = rememberStickyModifiers(active?.id)
     // The AI input is off by default and raised by the sparkle key: on a phone it is a whole row of
     // screen that most sessions never use, and the terminal wants every line it can get.
     var aiOpen by remember(active?.id) { mutableStateOf(false) }
-    // Callbacks are stabilized by remember (keyed on session), else a fresh lambda per PTY chunk would
-    // repaint the key panel/terminal for nothing. `ctrlArmed` is compose-state, so the lambda body sees
-    // its live value even through remember.
-    val setCtrlArmed = remember(active?.id) { { v: Boolean -> ctrlArmed = v } }
-    val imeTransform = remember(active?.id) {
-        { raw: String ->
-            // Armed ctrl applies to the first printable soft-keyboard char and is disarmed by the
-            // same predicate: a Backspace or Enter passes through and leaves the modifier armed for
-            // the letter the user armed it for.
-            val out = applyStickyCtrl(ctrlArmed, raw)
-            if (ctrlArmed && takesStickyCtrl(raw)) ctrlArmed = false
-            out
-        }
-    }
+    // Stabilized by remember, else a fresh lambda per PTY chunk would repaint the key panel and the
+    // terminal for nothing; the modifiers it reads are compose-state, so it still sees live values.
+    val imeTransform = remember(modifiers) { { raw: String -> modifiers.applyToImeInput(raw) } }
     // The snippet palette (`bolt` icon in the header) lives at the top-level Box, not inside the header —
     // otherwise the inline sheet would take part in the Row layout and break it. Available only when
     // connected and a snippet library is attached.
@@ -302,8 +289,7 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                     }
                     MobileKeybar(
                         st.terminal,
-                        ctrlArmed,
-                        onCtrlArmedChange = setCtrlArmed,
+                        modifiers,
                         aiOpen = aiOpen,
                         onToggleAi = if (aiController != null) ({ aiOpen = !aiOpen }) else null,
                         // The tab bar below owns the navigation-bar inset whenever it is there.

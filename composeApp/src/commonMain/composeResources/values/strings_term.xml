@@ -127,4 +127,35 @@
     <string name="term_autofit_restore">Restore font size</string>
     <!-- Accessible name of the invisible field the soft keyboard types into (issue #228) -->
     <string name="term_keyboard_input">Terminal input</string>
+    <!-- Key panel glyph keys (MobileKeybarLayout.kt): spoken names for the icon caps -->
+    <string name="term_key_up">Arrow up</string>
+    <string name="term_key_down">Arrow down</string>
+    <string name="term_key_left">Arrow left</string>
+    <string name="term_key_right">Arrow right</string>
+    <string name="term_key_hide_keyboard">Hide keyboard</string>
+    <string name="term_key_assistant">Assistant</string>
+    <string name="term_key_search_history">Search history</string>
+    <string name="term_key_find_output">Find in output</string>
+    <string name="term_key_cycle_suggestion">Next suggestion</string>
+    <string name="term_key_search_older">Older match</string>
+    <string name="term_key_search_newer">Newer match</string>
+    <string name="term_key_search_remove">Remove from history</string>
+    <!-- Key panel text caps: what a screen reader says instead of the printed key name -->
+    <string name="term_key_escape">Escape</string>
+    <string name="term_key_tab">Tab</string>
+    <string name="term_key_ctrl">Control</string>
+    <string name="term_key_alt">Alt</string>
+    <string name="term_key_fn">Function keys</string>
+    <string name="term_key_slash">Slash</string>
+    <string name="term_key_pipe">Pipe</string>
+    <string name="term_key_dash">Minus</string>
+    <string name="term_key_tilde">Tilde</string>
+    <string name="term_key_home">Home</string>
+    <string name="term_key_end">End</string>
+    <string name="term_key_page_up">Page up</string>
+    <string name="term_key_page_down">Page down</string>
+    <string name="term_key_function">F%1$s</string>
+    <string name="term_key_insert">Insert match</string>
+    <string name="term_key_armed">armed</string>
+    <string name="term_key_open">open</string>
 </resources>
