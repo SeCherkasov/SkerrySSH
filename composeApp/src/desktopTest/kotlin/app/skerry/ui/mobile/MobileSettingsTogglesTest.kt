@@ -13,6 +13,7 @@ import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.appearance_custom_term_theme
 import app.skerry.ui.generated.resources.settings_security_report_team_sessions
+import app.skerry.ui.generated.resources.settings_terminal_autofit
 import app.skerry.ui.generated.resources.settings_terminal_prod_warnings
 import org.jetbrains.compose.resources.StringResource
 import kotlin.test.Test
@@ -56,6 +57,19 @@ class MobileSettingsTogglesTest {
         waitForIdle()
 
         assertTrue(shell.state.customTerminalTheme)
+    }
+
+    @Test
+    fun `the auto-fit switch reaches the setting`() = runMobileShell { shell ->
+        shell.state.push(MobileRoute.Appearance)
+        waitForIdle()
+        assertFalse(shell.state.terminalAutoFit, "auto-fit is opt-in")
+
+        onSwitch(Res.string.settings_terminal_autofit).assertIsOff().performClick()
+        waitForIdle()
+
+        assertTrue(shell.state.terminalAutoFit)
+        onSwitch(Res.string.settings_terminal_autofit).assertIsOn()
     }
 
     @Test

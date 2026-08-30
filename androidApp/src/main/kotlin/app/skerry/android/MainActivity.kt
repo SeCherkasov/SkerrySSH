@@ -272,6 +272,8 @@ class MainActivity : FragmentActivity() {
                     onAllowServerClipboardWriteChange = { writeClipboardWrite(dir, it) },
                     initialReportTeamSessions = readReportTeamSessions(dir),
                     onReportTeamSessionsChange = { writeReportTeamSessions(dir, it) },
+                    initialTerminalAutoFit = readTerminalAutoFit(dir),
+                    onTerminalAutoFitChange = { writeTerminalAutoFit(dir, it) },
                     initialOpenFilePathsInSftp = readOpenFilePaths(dir),
                     onOpenFilePathsInSftpChange = { writeOpenFilePaths(dir, it) },
                     initialHighlightCommandLine = readHighlightInput(dir),
@@ -435,6 +437,17 @@ class MainActivity : FragmentActivity() {
     private fun writeReportTeamSessions(dir: File, enabled: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "teams_report_sessions").writeText(enabled.toString()) }
+        }
+    }
+
+    /** Terminal shrink-to-fit: `terminal_autofit`, default off. */
+    private fun readTerminalAutoFit(dir: File): Boolean = runCatching {
+        File(dir, "terminal_autofit").readText().trim().toBoolean()
+    }.getOrDefault(false)
+
+    private fun writeTerminalAutoFit(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_autofit").writeText(enabled.toString()) }
         }
     }
 

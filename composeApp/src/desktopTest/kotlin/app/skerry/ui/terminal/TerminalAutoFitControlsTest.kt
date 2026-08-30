@@ -35,7 +35,7 @@ class TerminalAutoFitControlsTest {
     @Test
     fun `nothing is drawn until the fit engages`() {
         val fit = TerminalAutoFitState()
-        runForm({ TerminalAutoFitControls(fit, floor) }) {
+        runForm({ TerminalAutoFitControls(fit, floor, enabled = true) }) {
             onNodeWithText("100%").assertDoesNotExist()
             onNodeWithContentDescription(string(Res.string.term_autofit_grow)).assertDoesNotExist()
             onNodeWithContentDescription(string(Res.string.term_autofit_shrink)).assertDoesNotExist()
@@ -46,10 +46,24 @@ class TerminalAutoFitControlsTest {
     }
 
     @Test
+    fun `the switch off draws nothing and keeps the announcer silent`() {
+        val fit = TerminalAutoFitState()
+        fit.onScreenSettled(wrapped = true, floor = floor)
+        runForm({ TerminalAutoFitControls(fit, floor, enabled = false) }) {
+            onNodeWithText("90%").assertDoesNotExist()
+            onNodeWithContentDescription(string(Res.string.term_autofit_grow)).assertDoesNotExist()
+            onNodeWithContentDescription(string(Res.string.term_autofit_shrink)).assertDoesNotExist()
+            // Silent, not absent: the live region has to be here already so that turning the
+            // feature back on is a change on an existing node rather than an insertion.
+            onNode(polite).assertContentDescriptionEquals("")
+        }
+    }
+
+    @Test
     fun `the engaged scale reaches the screen-reader announcer`() {
         val fit = TerminalAutoFitState()
         fit.onScreenSettled(wrapped = true, floor = floor)
-        runForm({ TerminalAutoFitControls(fit, floor) }) {
+        runForm({ TerminalAutoFitControls(fit, floor, enabled = true) }) {
             onNode(polite).assertContentDescriptionEquals("90%")
         }
     }
@@ -58,7 +72,7 @@ class TerminalAutoFitControlsTest {
     fun `a tap on plus steps the scale up and takes over from the machine`() {
         val fit = TerminalAutoFitState()
         fit.onScreenSettled(wrapped = true, floor = floor)
-        runForm({ TerminalAutoFitControls(fit, floor) }) {
+        runForm({ TerminalAutoFitControls(fit, floor, enabled = true) }) {
             onNodeWithText("90%").assertExists()
             onNodeWithContentDescription(string(Res.string.term_autofit_grow)).performClick()
             waitForIdle()
@@ -74,7 +88,7 @@ class TerminalAutoFitControlsTest {
     fun `a long press on plus restores the user's size in one gesture`() {
         val fit = TerminalAutoFitState()
         repeat(4) { fit.onScreenSettled(wrapped = true, floor = floor) }
-        runForm({ TerminalAutoFitControls(fit, floor) }) {
+        runForm({ TerminalAutoFitControls(fit, floor, enabled = true) }) {
             onNodeWithContentDescription(string(Res.string.term_autofit_grow))
                 .performTouchInput { longClick() }
             waitForIdle()
@@ -87,7 +101,7 @@ class TerminalAutoFitControlsTest {
     fun `a tap on minus steps the scale down and the button hides at the floor`() {
         val fit = TerminalAutoFitState()
         fit.onScreenSettled(wrapped = true, floor = floor)
-        runForm({ TerminalAutoFitControls(fit, floor) }) {
+        runForm({ TerminalAutoFitControls(fit, floor, enabled = true) }) {
             onNodeWithContentDescription(string(Res.string.term_autofit_shrink)).performClick()
             waitForIdle()
             assertEquals(0.9f * 0.9f, fit.scale, absoluteTolerance = 1e-4f)

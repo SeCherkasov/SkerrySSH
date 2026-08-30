@@ -68,14 +68,14 @@ class TerminalAutoFitLiveTest {
     private var frame = 0L
 
     @OptIn(ExperimentalComposeUiApi::class)
-    private fun autoFitScene(terminal: TerminalScreenState): ImageComposeScene =
+    private fun autoFitScene(terminal: TerminalScreenState, enabled: Boolean = true): ImageComposeScene =
         ImageComposeScene(width = 300, height = 400, density = Density(1f)) {
             SkerryTheme {
                 CompositionLocalProvider(
                     LocalFonts provides DesignFonts(rememberUiFont(), rememberMono(), rememberMaterialSymbols()),
                 ) {
                     Box(Modifier.fillMaxSize().background(Skerry.colors.terminalBg)) {
-                        TerminalScreen(terminal, Modifier.fillMaxSize(), autoFitEnabled = true)
+                        TerminalScreen(terminal, Modifier.fillMaxSize(), autoFitEnabled = enabled)
                     }
                 }
             }
@@ -135,6 +135,33 @@ class TerminalAutoFitLiveTest {
             waitForFrames(scene, framesAfterSettled = 30) { false }
             assertEquals(converged, terminal.autoFit.scale, "a remount reset the converged scale")
             assertTrue(terminal.autoFit.converged, "a remount re-armed convergence")
+        } finally {
+            scene.close()
+            scope.cancel()
+        }
+    }
+
+    /**
+     * The Appearance switch off (its default): the same wide output that converges the fit above
+     * must leave the font at the size the user chose, and leave the terminal without the nudge
+     * chrome. The setting is read on the phone only ([app.skerry.ui.mobile.MobileTerminalView]);
+     * what this pins is the screen's own contract behind it — a fit that keeps stepping with the
+     * switch off would rewrite a deliberately chosen font size on every wide line.
+     */
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun `with auto-fit off wide output leaves the font alone`() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val session = ScriptedSession()
+        val terminal = TerminalScreenState(session, scope, nowMillis = eagerPublishClock())
+        val scene = autoFitScene(terminal, enabled = false)
+        try {
+            waitForFrames(scene) { terminal.cols in 20..50 } // first layout resize has landed
+            session.print("ok\r\n" + "x".repeat(50) + "\r\n$ ")
+            waitForFrames(scene, framesAfterSettled = 60) { false }
+            assertEquals(1f, terminal.autoFit.scale, "the fit stepped with the switch off")
+            assertFalse(terminal.autoFit.converged, "the fit ran with the switch off")
+            assertFalse(terminal.autoFit.active, "the nudge controls surfaced with the switch off")
         } finally {
             scene.close()
             scope.cancel()

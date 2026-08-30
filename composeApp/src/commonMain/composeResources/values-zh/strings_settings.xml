@@ -102,6 +102,8 @@
     <string name="settings_terminal_clipboard_write">允许服务器写入剪贴板 (OSC 52)</string>
     <string name="settings_hide_system_bars">会话中隐藏系统栏</string>
     <string name="settings_hide_system_bars_desc">终端和远程桌面将占满整个屏幕。从屏幕边缘滑动即可让系统栏返回。</string>
+    <string name="settings_terminal_autofit">缩小字体以适应宽度</string>
+    <string name="settings_terminal_autofit_desc">输出过宽时缩小终端字体，直到不再换行。输出上方的 −/+ 小标可手动调整。</string>
     <string name="settings_terminal_open_paths">在 SFTP 中打开文件路径</string>
     <string name="settings_terminal_open_paths_desc">按住 Ctrl 点击输出中的路径，即可在文件面板中定位。</string>
     <string name="settings_terminal_open_paths_desc_mobile">长按输出中的路径，然后点按“在文件中打开”。</string>

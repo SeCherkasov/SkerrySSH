@@ -166,6 +166,28 @@ class TerminalAutoFitTest {
     }
 
     @Test
+    fun `reset returns a converged and locked fit to a fresh one`() {
+        val floor = autoFitFloor(13)
+        val fit = TerminalAutoFitState()
+        fit.onScreenSettled(wrapped = true, floor = floor)
+        fit.onScreenSettled(wrapped = false, floor = floor)
+        fit.onScreenSettled(wrapped = false, floor = floor)
+        fit.nudgeDown(floor)
+        assertTrue(fit.converged && fit.locked && fit.scale < 1f)
+
+        fit.reset()
+
+        assertEquals(1f, fit.scale)
+        assertFalse(fit.locked)
+        assertFalse(fit.converged)
+        assertFalse(fit.active)
+        // And it fits again from scratch: a reset that only cleared the flags would leave the
+        // machine in a phase where the next wide line takes it straight to convergence.
+        fit.onScreenSettled(wrapped = true, floor = floor)
+        assertEquals(0.9f, fit.scale, absoluteTolerance = 1e-4f)
+    }
+
+    @Test
     fun `the line being typed under the cursor does not shrink the font`() {
         // The user's own command line soft-wraps while being typed: rows 2-3 are one logical line
         // with the cursor on its tail. Shrinking mid-typing would yank the font under the finger.

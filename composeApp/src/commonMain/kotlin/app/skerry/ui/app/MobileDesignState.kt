@@ -172,6 +172,12 @@ class MobileDesignState(
     private val onHighlightCommandLineChange: (Boolean) -> Unit = {},
     initialHighlightOutput: Boolean = false,
     private val onHighlightOutputChange: (Boolean) -> Unit = {},
+    // Whether the terminal shrinks its font to fit wide output (More → Appearance → Terminal).
+    // Phone-only and off by default: the fit rewrites the font size the user picked, which is a
+    // rescue for wide output and an annoyance for everyone who sized the terminal on purpose.
+    // Persisted on Android; no-op default for previews/tests.
+    initialTerminalAutoFit: Boolean = false,
+    private val onTerminalAutoFitChange: (Boolean) -> Unit = {},
     // Production guard: also confirm Warn-level commands (Settings → Terminal). Off by default.
     initialConfirmProductionWarnings: Boolean = false,
     private val onConfirmProductionWarningsChange: (Boolean) -> Unit = {},
@@ -423,6 +429,13 @@ class MobileDesignState(
     var highlightOutput: Boolean by mutableStateOf(initialHighlightOutput); private set
 
     /**
+     * Whether the terminal auto-shrinks its font until wide output stops wrapping (More →
+     * Appearance → Terminal). Phone-only — there is no desktop counterpart, the fit exists for a
+     * screen too narrow for the output. Off by default: it overrides the chosen font size.
+     */
+    var terminalAutoFit: Boolean by mutableStateOf(initialTerminalAutoFit); private set
+
+    /**
      * Whether the production guard also confirms Warn-level commands (More → Terminal). Off by
      * default — desktop parity, see [app.skerry.ui.app.DesktopDesignState.confirmProductionWarnings].
      */
@@ -491,6 +504,12 @@ class MobileDesignState(
     fun toggleHideSessionSystemBars() {
         hideSessionSystemBars = !hideSessionSystemBars
         onHideSessionSystemBarsChange(hideSessionSystemBars)
+    }
+
+    /** Toggle the terminal's shrink-to-fit and report outward (for persistence). */
+    fun toggleTerminalAutoFit() {
+        terminalAutoFit = !terminalAutoFit
+        onTerminalAutoFitChange(terminalAutoFit)
     }
 
     /** Toggle offering "Open in Files" for a selected file path and report outward (for persistence). */
