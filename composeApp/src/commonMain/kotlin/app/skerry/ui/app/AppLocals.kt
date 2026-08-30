@@ -12,6 +12,7 @@ import app.skerry.shared.vault.SshCertificateInspector
 import app.skerry.shared.vault.SshKeyGenerator
 import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.Vault
+import app.skerry.shared.vault.VaultCrypto
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.ai.AiAssistantController
 import app.skerry.ui.terminal.CastOpenResult
@@ -277,6 +278,13 @@ val LocalRunSnippetOnHost: ProvidableCompositionLocal<(Host, String, List<String
 val LocalVault: ProvidableCompositionLocal<Vault?> = staticCompositionLocalOf { null }
 
 /**
+ * Vault crypto primitives — needed by the data backup flow (Settings → Security) to derive the
+ * backup-file key from the master password. Supplied behind the vault gate next to [LocalVault];
+ * `null` in mock/preview.
+ */
+val LocalVaultCrypto: ProvidableCompositionLocal<VaultCrypto?> = staticCompositionLocalOf { null }
+
+/**
  * Vault biometrics orchestrator. `null` — biometrics not configured on this platform (desktop
  * without hardware/offscreen): the settings screen hides the toggle. Supplied behind the vault gate
  * by the same providers.
@@ -344,3 +352,10 @@ val LocalUpdates: ProvidableCompositionLocal<UpdateNoticeController?> = staticCo
  */
 val LocalCastPicker: ProvidableCompositionLocal<suspend () -> CastOpenResult> =
     staticCompositionLocalOf { ::openCastFile }
+
+/**
+ * Mobile session keep-alive bridge for battery optimization exemption and autostart settings.
+ */
+val LocalKeepAliveBridge: ProvidableCompositionLocal<app.skerry.ui.keepalive.SessionKeepAliveBridge?> =
+    staticCompositionLocalOf { null }
+

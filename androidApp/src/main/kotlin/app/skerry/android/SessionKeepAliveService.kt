@@ -12,6 +12,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import app.skerry.ui.keepalive.KeepAliveNotificationRegistry
@@ -79,6 +80,8 @@ class SessionKeepAliveService : Service() {
     private val sessionHosts = LinkedHashMap<String, String>()
     // Registered while the service lives; re-shows notifications when one is swiped away.
     private var dismissReceiver: BroadcastReceiver? = null
+    // CPU partial wake lock held while at least one session is open (prevents lock-screen socket freeze).
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -86,9 +89,30 @@ class SessionKeepAliveService : Service() {
     }
 
     override fun onDestroy() {
+        releaseWakeLock()
         dismissReceiver?.let { unregisterReceiver(it) }
         dismissReceiver = null
         super.onDestroy()
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock == null && bridgeInstance?.isWakeLockEnabled == true) {
+            val pm = getSystemService(PowerManager::class.java)
+            wakeLock = pm?.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "skerry:session_keepalive")?.apply {
+                setReferenceCounted(false)
+                // Auto-release after 12 hours to prevent indefinite battery drain
+                acquire(12 * 60 * 60 * 1000L)
+            }
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let {
+            if (it.isHeld) {
+                runCatching { it.release() }
+            }
+            wakeLock = null
+        }
     }
 
     /**
@@ -174,11 +198,13 @@ class SessionKeepAliveService : Service() {
         notificationManager().cancelAll()
         val snapshot = SessionKeepAliveService.bridgeInstance?.snapshotSessions().orEmpty()
         if (snapshot.isEmpty()) {
+            releaseWakeLock()
             startForegroundCompat(buildSummaryNotification(0))
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
+        acquireWakeLock()
         snapshot.forEach { (sessionId, hostLabel) ->
             sessionHosts[sessionId] = hostLabel
             addSessionInternal(sessionId, hostLabel)
@@ -226,6 +252,7 @@ class SessionKeepAliveService : Service() {
     private fun addSessionInternal(sessionId: String, hostLabel: String) {
         createChannel()
         if (sessions.isEmpty) {
+            acquireWakeLock()
             // First session (or the service was dead and is re-promoting): go foreground. The
             // summary notification is the one Android requires to stay; sessions follow below.
             startForegroundCompat(buildSummaryNotification(1))
@@ -244,12 +271,16 @@ class SessionKeepAliveService : Service() {
         }
         val notifId = sessions.remove(sessionId)
         if (notifId == null) { // idempotent; a lone stray remove must not leave an idle service
-            if (sessions.isEmpty) stopSelf()
+            if (sessions.isEmpty) {
+                releaseWakeLock()
+                stopSelf()
+            }
             return
         }
         sessionHosts.remove(sessionId)
         notificationManager().cancel(notifId)
         if (sessions.isEmpty) {
+            releaseWakeLock()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         } else {

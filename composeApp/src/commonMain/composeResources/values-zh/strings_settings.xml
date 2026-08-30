@@ -265,4 +265,91 @@
     <string name="settings_terminal_prod_warnings_desc">在带 #prod 标签的主机上，除危险命令外也确认警告级命令（kill、停止服务、卸载软件包）。root 会话不适用 sudo 规则（在那里没有意义），但无论如何都会确认破坏性警告。</string>
     <string name="settings_kb_remote_group">远程桌面</string>
     <string name="settings_kb_release_keyboard">释放键盘（交还给应用）</string>
+
+    <!-- Keep-Alive / Power Management -->
+
+    <string name="keepalive_title">后台与锁屏保活</string>
+
+    <string name="keepalive_subtitle_optimal">正常运行 (已开启深度保活)</string>
+
+    <string name="keepalive_subtitle_warning">建议优化 (防断连)</string>
+
+    <string name="keepalive_header_desc">在切出应用或手机锁屏状态下持续保活终端会话，防止网络通信被系统静默冻结。</string>
+
+    <string name="keepalive_device_detected">检测到设备：%1$s</string>
+
+    <string name="keepalive_step1_title">1. 忽略电池优化 (防切后台断连)</string>
+
+    <string name="keepalive_step1_desc">允许应用在后台持续使用网络，防止被系统深度省电休眠切断 TCP 连接与心跳包。</string>
+
+    <string name="keepalive_step1_btn">一键申请电池优化白名单</string>
+
+    <string name="keepalive_step2_title">2. 允许自启动与后台运行</string>
+
+    <string name="keepalive_step2_desc">允许保活服务在有活动连接时持续驻留，防止后台进程被系统策略强行清除。</string>
+
+    <string name="keepalive_step2_btn">前往自启动与后台管理</string>
+
+    <string name="keepalive_step3_title">3. 多任务加锁与锁屏防杀</string>
+
+    <string name="keepalive_step3_desc_xiaomi">在“手机管家”➔“电池设置”中将“锁屏清理内存”设为“从不”；在多任务界面长按/下拉 Skerry 卡片点击锁定图标。</string>
+
+    <string name="keepalive_step3_desc_generic">在系统的多任务卡片界面长按/下拉锁定应用，并在系统电池设置中关闭锁屏清理。</string>
+
+    <string name="keepalive_step3_btn">打开应用系统详情页</string>
+
+    <string name="keepalive_notice_safety">SkerrySSH 仅在有活跃终端连接时才会申请 CPU 唤醒锁；一旦所有会话关闭，将自动彻底释放系统资源，绝不偷跑电量。</string>
+
+    <string name="keepalive_banner_warning">未开启后台防断连优化，切后台或锁屏可能导致终端断开连接。</string>
+
+    <string name="keepalive_banner_setup">去设置</string>
+
+    <string name="keepalive_banner_dont_show">不再提示</string>
+
+    <!-- Data backup -->
+
+    <string name="settings_backup_title">数据备份</string>
+
+    <string name="settings_backup_desc">导出或导入账号同步的全部数据（主机、片段、运行手册、密钥）。</string>
+
+    <string name="settings_backup_export">导出数据…</string>
+
+    <string name="settings_backup_import">导入数据…</string>
+
+    <string name="settings_backup_pw_label">主密码</string>
+
+    <string name="settings_backup_pw_hint">输入主密码以解锁备份。</string>
+
+    <string name="settings_backup_export_encrypted">加密导出（默认）</string>
+
+    <string name="settings_backup_export_encrypted_sub">每条记录用主密码派生的密钥加密，文件需主密码才能打开。</string>
+
+    <string name="settings_backup_export_plain">明文导出</string>
+
+    <string name="settings_backup_export_plain_sub">所有记录完全解密成可读 JSON，可直接查看和手工修改。</string>
+
+    <string name="settings_backup_export_plain_warning">警告：明文文件包含所有密码与私钥，请妥善保管，不要发给他人。</string>
+
+    <string name="settings_backup_export_action">导出</string>
+
+    <string name="settings_backup_import_action">导入</string>
+
+    <string name="settings_backup_import_records">备份中包含 %1$d 条记录</string>
+
+    <string name="settings_backup_encrypted_note">此备份已加密，输入主密码以读取。</string>
+
+    <string name="settings_backup_merge">合并</string>
+
+    <string name="settings_backup_merge_sub">保留现有数据，备份中较新的记录生效。</string>
+
+    <string name="settings_backup_replace">覆盖</string>
+
+    <string name="settings_backup_replace_sub">将先删除当前全部同步数据。</string>
+
+    <string name="settings_backup_import_confirm">确认覆盖</string>
+
+    <string name="settings_backup_err_password">主密码错误</string>
+
+    <string name="settings_backup_err_corrupted">此文件不是有效的备份</string>
+
 </resources>
