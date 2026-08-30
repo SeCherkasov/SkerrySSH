@@ -96,6 +96,9 @@ fun navigateAfterConnect(state: MobileDesignState, dest: MobileConnectDest): Uni
     MobileConnectDest.Files -> state.push(MobileRoute.Files)
 }
 
+/** ESC (0x1B) — the meta prefix sticky-alt puts in front of what it modifies. */
+internal const val ESC = "\u001b"
+
 /**
  * Control sequence for the terminal key panel's Ctrl+key (sticky-ctrl): the C0 code = the uppercased
  * char code masked with 0x1F. So Ctrl+C → ETX (0x03), Ctrl+[ → ESC (0x1B). Returns a one-char string
@@ -121,3 +124,13 @@ fun takesStickyCtrl(input: String): Boolean = input.isNotEmpty() && input[0].cod
 
 fun applyStickyCtrl(armed: Boolean, input: String): String =
     if (armed && takesStickyCtrl(input)) controlByte(input[0]) + input.substring(1) else input
+
+/**
+ * Applies sticky-alt (Meta) to soft-keyboard input: an ESC prefix, which is how a terminal carries
+ * Alt+key (readline word operations — Alt+B/F, Alt+Backspace to delete a word). Unlike sticky-ctrl
+ * this applies to any non-empty input, printable or not: Alt+Backspace is one of the combinations
+ * the modifier is armed for. Composed over [applyStickyCtrl] so Ctrl+Alt+key keeps the ESC outermost,
+ * as [app.skerry.ui.terminal.mapTerminalKey] encodes it for the physical keyboard.
+ */
+fun applyStickyMeta(armed: Boolean, input: String): String =
+    if (armed && input.isNotEmpty()) ESC + input else input
