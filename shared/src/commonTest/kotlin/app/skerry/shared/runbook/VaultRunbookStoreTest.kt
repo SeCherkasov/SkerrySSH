@@ -66,4 +66,20 @@ class VaultRunbookStoreTest {
         assertEquals("Drain", stored.label)
         assertNull(stored.group)
     }
+
+    @Test
+    fun `reorder updates and persists order in layout`() {
+        val vault = FakeVault()
+        val store = VaultRunbookStore(vault)
+        store.put(runbook("r1"))
+        store.put(runbook("r2"))
+        store.put(runbook("r3"))
+
+        assertEquals(listOf("r1", "r2", "r3"), store.all().map { it.id })
+
+        store.reorder { listOf(it[2], it[0], it[1]) }
+
+        val freshStore = VaultRunbookStore(vault)
+        assertEquals(listOf("r3", "r1", "r2"), freshStore.all().map { it.id })
+    }
 }

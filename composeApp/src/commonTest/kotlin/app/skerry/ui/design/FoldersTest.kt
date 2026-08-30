@@ -13,7 +13,7 @@ class FoldersTest {
     private fun folders(vararg rows: Row) = foldersOf(rows.toList()) { it.group }
 
     @Test
-    fun named_folders_come_first_alphabetically_and_ungrouped_last() {
+    fun named_folders_appear_in_source_order_and_ungrouped_last() {
         val result = folders(
             Row("a", "staging"),
             Row("b", null),
@@ -21,16 +21,17 @@ class FoldersTest {
             Row("d", "staging"),
         )
 
-        assertEquals(listOf("Production", "staging", UNGROUPED_FOLDER), result.map { it.name })
-        assertEquals(listOf("a", "d"), result[1].items.map { it.id })
+        assertEquals(listOf("staging", "Production", UNGROUPED_FOLDER), result.map { it.name })
+        assertEquals(listOf("a", "d"), result[0].items.map { it.id })
+        assertEquals(listOf("c"), result[1].items.map { it.id })
         assertEquals(listOf("b"), result[2].items.map { it.id })
     }
 
     @Test
-    fun sorting_is_case_insensitive_so_a_lowercase_folder_is_not_exiled_to_the_end() {
+    fun folders_preserve_order_of_first_appearance() {
         val result = folders(Row("a", "zebra"), Row("b", "Alpha"), Row("c", "beta"))
 
-        assertEquals(listOf("Alpha", "beta", "zebra"), result.map { it.name })
+        assertEquals(listOf("zebra", "Alpha", "beta"), result.map { it.name })
     }
 
     @Test

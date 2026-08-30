@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -178,9 +179,16 @@ internal fun MobileFolderHeader(
     dropTarget: Boolean,
     onToggle: () -> Unit,
     onEdit: (() -> Unit)?,
+    isDragging: Boolean = false,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(start = 18.dp, end = 22.dp, top = 16.dp, bottom = 4.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 18.dp, end = 22.dp, top = if (isDragging) 8.dp else 16.dp, bottom = 4.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isDragging) Skerry.colors.card else Color.Transparent)
+            .border(1.dp, if (isDragging) Skerry.colors.cyan else Color.Transparent, RoundedCornerShape(6.dp))
+            .padding(horizontal = if (isDragging) 8.dp else 0.dp, vertical = if (isDragging) 6.dp else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -212,7 +220,7 @@ internal fun MobileFolderHeader(
         // far right, where it read as a column of unrelated numbers down the screen.
         Txt(
             "${name.uppercase()} · $count",
-            color = if (dropTarget) Skerry.colors.cyanBright else Skerry.colors.faint,
+            color = if (isDragging || dropTarget) Skerry.colors.cyanBright else Skerry.colors.faint,
             size = 12.sp,
             weight = FontWeight.SemiBold,
             letterSpacing = 0.6.sp,

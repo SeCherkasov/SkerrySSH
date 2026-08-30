@@ -208,14 +208,32 @@ internal fun HostRow(
 /** Cyan indicator line marking where a dragged host/folder will be inserted. */
 @Composable
 internal fun DropLine() {
-    Box(
+    Row(
         Modifier
             .fillMaxWidth()
-            .padding(end = 8.dp, top = 2.dp, bottom = 2.dp)
-            .height(2.dp)
-            .clip(RoundedCornerShape(1.dp))
-            .background(Skerry.colors.cyan),
-    )
+            .padding(end = 8.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(5.dp)
+                .clip(RoundedCornerShape(2.5.dp))
+                .background(Skerry.colors.cyanBright)
+        )
+        Box(
+            Modifier
+                .weight(1f)
+                .height(3.dp)
+                .clip(RoundedCornerShape(1.5.dp))
+                .background(Skerry.colors.cyan)
+        )
+        Box(
+            Modifier
+                .size(5.dp)
+                .clip(RoundedCornerShape(2.5.dp))
+                .background(Skerry.colors.cyanBright)
+        )
+    }
 }
 
 @Composable

@@ -14,4 +14,14 @@ interface RunbookStore {
 
     /** Removes the record by id; missing id is a no-op. */
     fun remove(id: String)
+
+    /**
+     * Atomically computes and applies an order/content transform across all runbooks.
+     */
+    fun reorder(transform: (List<Runbook>) -> List<Runbook>) {
+        val current = all()
+        val updated = transform(current)
+        current.forEach { remove(it.id) }
+        updated.forEach { put(it) }
+    }
 }

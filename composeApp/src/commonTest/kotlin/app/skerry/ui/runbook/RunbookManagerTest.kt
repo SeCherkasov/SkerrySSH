@@ -16,6 +16,11 @@ class RunbookManagerTest {
         override fun all(): List<Runbook> = items.values.toList()
         override fun put(runbook: Runbook) { items[runbook.id] = runbook }
         override fun remove(id: String) { items.remove(id) }
+        override fun reorder(transform: (List<Runbook>) -> List<Runbook>) {
+            val updated = transform(all())
+            items.clear()
+            updated.forEach { items[it.id] = it }
+        }
     }
 
     private fun manager(store: RunbookStore = MemoryStore()): RunbookManager {
@@ -142,5 +147,40 @@ class RunbookManagerTest {
         assertTrue(m.runbooks.isEmpty())
         m.reload()
         assertEquals(listOf("Synced"), m.runbooks.map { it.runbook.label })
+    }
+
+    @Test
+    fun `renameGroup updates group across runbooks`() {
+        val m = manager()
+        m.save(draft("R1", "uptime").copy(group = "Deploy"))
+        m.save(draft("R2", "uptime").copy(group = "Deploy"))
+        m.save(draft("R3", "uptime").copy(group = "Backup"))
+
+        m.renameGroup("Deploy", "Deployment")
+
+        assertEquals(listOf("Deployment", "Deployment", "Backup"), m.runbooks.map { it.runbook.group })
+    }
+
+    @Test
+    fun `deleteGroup ungroups runbooks without deleting them`() {
+        val m = manager()
+        m.save(draft("R1", "uptime").copy(group = "Deploy"))
+        m.save(draft("R2", "uptime").copy(group = "Backup"))
+
+        m.deleteGroup("Deploy")
+
+        assertEquals(null, m.runbooks.first { it.runbook.label == "R1" }.runbook.group)
+        assertEquals("Backup", m.runbooks.first { it.runbook.label == "R2" }.runbook.group)
+    }
+
+    @Test
+    fun `moveRunbook reorders and persists`() {
+        val m = manager()
+        val r1 = m.save(draft("R1", "uptime").copy(group = "Deploy"))
+        val r2 = m.save(draft("R2", "uptime").copy(group = "Deploy"))
+
+        m.moveRunbook(r2, "Deploy", 0)
+
+        assertEquals(listOf(r2, r1), m.runbooks.map { it.id })
     }
 }
