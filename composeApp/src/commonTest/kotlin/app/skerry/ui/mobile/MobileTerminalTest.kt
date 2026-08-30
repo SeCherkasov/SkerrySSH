@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import app.skerry.ui.terminal.ArrowKey
 import app.skerry.ui.terminal.arrowSequence
 
@@ -108,6 +110,24 @@ class MobileTerminalTest {
     fun sticky_ctrl_passes_through_when_not_armed_or_empty() {
         assertEquals("c", applyStickyCtrl(armed = false, input = "c"))
         assertEquals("", applyStickyCtrl(armed = true, input = ""))
+    }
+
+    /**
+     * Backspace and Enter reach this path as the bytes they already are (DEL, CR), and masking a byte
+     * that is already control produces a different control byte: DEL and 0x1F gives US, so armed ctrl
+     * turned a Backspace into a stray 0x1F and the line never lost a character.
+     */
+    @Test
+    fun sticky_ctrl_leaves_a_control_byte_alone() {
+        val del = Char(0x7f).toString()
+        val cr = Char(0x0d).toString()
+
+        assertEquals(del, applyStickyCtrl(armed = true, input = del))
+        assertEquals(cr, applyStickyCtrl(armed = true, input = cr))
+        assertFalse(takesStickyCtrl(del), "a Backspace would burn the armed modifier")
+        assertFalse(takesStickyCtrl(cr))
+        assertTrue(takesStickyCtrl("c"))
+        assertFalse(takesStickyCtrl(""))
     }
 
     // Arrows respecting DECCKM (application-cursor-keys)

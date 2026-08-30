@@ -139,10 +139,11 @@ fun MobileTerminalScreen(state: MobileDesignState) {
     val setCtrlArmed = remember(active?.id) { { v: Boolean -> ctrlArmed = v } }
     val imeTransform = remember(active?.id) {
         { raw: String ->
-            // Armed ctrl applies to the first soft-keyboard char and is disarmed immediately (raw is
-            // always non-empty here — TerminalScreen calls imeTransform only on real input).
+            // Armed ctrl applies to the first printable soft-keyboard char and is disarmed by the
+            // same predicate: a Backspace or Enter passes through and leaves the modifier armed for
+            // the letter the user armed it for.
             val out = applyStickyCtrl(ctrlArmed, raw)
-            if (ctrlArmed) ctrlArmed = false
+            if (ctrlArmed && takesStickyCtrl(raw)) ctrlArmed = false
             out
         }
     }

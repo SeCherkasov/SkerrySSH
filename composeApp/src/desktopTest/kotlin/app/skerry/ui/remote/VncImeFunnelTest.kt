@@ -13,7 +13,7 @@ import app.skerry.shared.graphics.RemoteFramebuffer
 import app.skerry.ui.app.LocalUserActivity
 import app.skerry.ui.desktop.runForm
 import app.skerry.ui.mobile.VncImeField
-import app.skerry.ui.terminal.ANCHOR
+import app.skerry.ui.design.FUNNEL_TEXT
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -27,10 +27,10 @@ import kotlin.test.assertTrue
  *
  * Everything typed here goes to a remote machine, and on a Windows or VNC login screen that is a
  * password. The field held the last 64 characters of it in its own `TextFieldValue` — which is
- * `EditableText` in the semantics tree, readable by any accessibility service. The terminal's
- * funnel has diffed against a constant anchor since it was written
- * ([app.skerry.ui.terminal.imeDeltaToPty]); this one now does the same, and reports typing to the
- * idle auto-lock the same way (issue #291's policy: every kind of input defers the lock).
+ * `EditableText` in the semantics tree, readable by any accessibility service. Both funnels now
+ * share one implementation ([app.skerry.ui.design.ImeFunnelField]), which keeps nothing but an
+ * anchor, and this one reports typing to the idle auto-lock the same way (issue #291's policy:
+ * every kind of input defers the lock).
  */
 @OptIn(ExperimentalTestApi::class)
 class VncImeFunnelTest {
@@ -45,7 +45,7 @@ class VncImeFunnelTest {
             "the characters typed did not reach the remote desktop",
         )
         assertEquals(
-            ANCHOR,
+            FUNNEL_TEXT,
             editableText(),
             "the funnel kept what was typed — on a login screen that is the password",
         )
@@ -65,7 +65,7 @@ class VncImeFunnelTest {
             session.keys.any { it.first.keySym == backspace?.keySym && it.second },
             "clearing the field sent ${session.keys.size} events, none of them a backspace",
         )
-        assertEquals(ANCHOR, editableText(), "the field did not return to the anchor after a deletion")
+        assertEquals(FUNNEL_TEXT, editableText(), "the field did not return to its anchors after a deletion")
     }
 
     /**
