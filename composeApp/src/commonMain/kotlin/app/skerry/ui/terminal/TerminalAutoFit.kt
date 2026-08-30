@@ -153,6 +153,18 @@ class TerminalAutoFitState {
         scale = 1f
     }
 
+    /**
+     * Back to what a fresh session has: the user's own size, nothing locked, nothing converged.
+     * Called when the Appearance switch turns the fit off — the machine's memory is only meaningful
+     * while the feature is on, and carrying [locked] across an off/on cycle would leave a switch
+     * that reads as freshly enabled driving a fit that can never engage again for that session.
+     */
+    fun reset() {
+        phase = Phase.Waiting
+        scale = 1f
+        locked = false
+    }
+
     private fun stepDown(value: Float, floor: Float): Float =
         (value * AUTOFIT_STEP).coerceAtLeast(floor.coerceAtMost(1f))
 }
@@ -186,7 +198,7 @@ fun gridNeedsShrink(screen: List<List<TermCell>>, rows: Int, cursorRow: Int): Bo
 
 /**
  * Manual −/+ nudge over the mobile terminal, with the current scale as a percentage. Nothing is
- * drawn until the fit first engages ([TerminalAutoFitState.active]) — a session that never printed
+ * drawn while the feature is off ([enabled]) or until the fit first engages ([TerminalAutoFitState.active]) — a session that never printed
  * a wide line keeps its screen clean. Buttons that can do nothing are hidden, not disabled: "−"
  * disappears at the floor and "+" at the user's own size, since a permanently dead button under
  * the thumb reads as broken. Long-pressing "+" restores the user's size in one gesture.
@@ -196,13 +208,24 @@ fun gridNeedsShrink(screen: List<List<TermCell>>, rows: Int, cursorRow: Int): Bo
  * in the light themes (the RemoteDesktopBar precedent).
  */
 @Composable
-fun TerminalAutoFitControls(fit: TerminalAutoFitState, floor: Float, modifier: Modifier = Modifier) {
+fun TerminalAutoFitControls(
+    fit: TerminalAutoFitState,
+    floor: Float,
+    /**
+     * The Appearance switch. Passed in rather than gating the call site, so the announcer below
+     * keeps its mount while the feature is off: a caller that skips this composable entirely
+     * re-inserts the live region on re-enable, which is the one thing it must never do.
+     */
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
     // The announcer is composed from screen mount, BEFORE the active gate: a live region that
     // appears together with its first value is an insertion, not a change, and Android announces
     // only changes — the auto-engage moment (the one change the user did not cause themselves)
     // would stay silent. StatusAnnouncer also carries the size workaround a 0dp node needs.
-    StatusAnnouncer(if (fit.active) "${(fit.scale * 100).roundToInt()}%" else "")
-    if (!fit.active) return
+    val on = enabled && fit.active
+    StatusAnnouncer(if (on) "${(fit.scale * 100).roundToInt()}%" else "")
+    if (!on) return
     val chip = Skerry.colors.surface2.copy(alpha = 0.95f)
     Row(
         modifier,

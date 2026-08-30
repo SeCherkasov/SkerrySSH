@@ -238,6 +238,21 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             if (liveAi != null && liveAi.enabled && AiPolicyDecision.of(aiPolicy).aiEnabled) liveAi.terminalController(aiPolicy) else null
                         }
                     }
+                    // The fit's memory is per session and only meaningful while the feature is on:
+                    // cleared whenever the switch is off, so turning it back on gives a fresh fit
+                    // instead of a scale — and a `locked` — left over from before. Without this the
+                    // switch reads as freshly enabled while no wide line can ever shrink the font
+                    // again for that session.
+                    // Relies on Compose disposing TerminalScreen's convergence effect before this
+                    // one is launched: both write the same fit state, and the collector must be
+                    // gone before the clear, or the very snapshot that arrives during the flip
+                    // would step a machine that is supposed to be fresh. Compose dispatches
+                    // onForgotten before onRemembered on the same recompose context, and the
+                    // convergence effect is structurally inside `if (autoFitOn)` — so the two can
+                    // never run against each other. Named here because nothing enforces it.
+                    LaunchedEffect(st.terminal, state.terminalAutoFit) {
+                        if (!state.terminalAutoFit) st.terminal.autoFit.reset()
+                    }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         TerminalScreen(
                             st.terminal,
@@ -246,11 +261,18 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                             imeTransform = imeTransform,
                             // Wide output on a phone turns into a wall of wrapped lines; the fit
                             // converges once per session and the controls below nudge it after.
-                            autoFitEnabled = true,
+                            // Opt-in (More → Appearance → Terminal): off, the terminal keeps the
+                            // font size from Appearance no matter how wide the output gets.
+                            autoFitEnabled = state.terminalAutoFit,
                         )
+                        // Composed whether or not the feature is on, and told which it is: the
+                        // controls carry the screen-reader announcer for the scale, and a live
+                        // region re-inserted on re-enable would arrive carrying its value instead
+                        // of changing into it — announcing nothing.
                         TerminalAutoFitControls(
                             fit = st.terminal.autoFit,
                             floor = autoFitFloor(LocalTerminalAppearance.current.fontSizeSp),
+                            enabled = state.terminalAutoFit,
                             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 8.dp),
                         )
                     }
@@ -299,6 +321,10 @@ fun MobileTerminalScreen(state: MobileDesignState) {
                     // session's command queue is closed, so a nudge could only rescale glyphs
                     // without reflowing the grid — "+" would clip the tails of the very wide
                     // lines being read.
+                    // Unconditionally on, unlike the live branch above: the Appearance switch
+                    // decides whether a fit *engages*, and turning it off later must not re-wrap a
+                    // screen frozen at a scale that already fits. A session that never engaged sits
+                    // at 1f here anyway, and the effect below leaves a dead session alone.
                     TerminalScreen(st.terminal, Modifier.weight(1f).fillMaxWidth(), autoFitEnabled = true)
             }
         }

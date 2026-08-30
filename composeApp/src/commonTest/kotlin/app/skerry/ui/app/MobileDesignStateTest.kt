@@ -80,6 +80,18 @@ class MobileDesignStateTest {
     }
 
     @Test
+    fun toggleTerminalAutoFit_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = MobileDesignState(onTerminalAutoFitChange = { seen += it })
+        assertEquals(false, s.terminalAutoFit) // off by default: the fit rewrites the font size the user chose
+        s.toggleTerminalAutoFit()
+        assertEquals(true, s.terminalAutoFit)
+        s.toggleTerminalAutoFit()
+        assertEquals(false, s.terminalAutoFit)
+        assertEquals(listOf(true, false), seen)
+    }
+
+    @Test
     fun toggleAllowServerClipboardWrite_flips_and_reports() {
         val seen = mutableListOf<Boolean>()
         val s = MobileDesignState(onAllowServerClipboardWriteChange = { seen += it })

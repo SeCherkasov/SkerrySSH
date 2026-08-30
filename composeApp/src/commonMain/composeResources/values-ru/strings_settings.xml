@@ -102,6 +102,8 @@
     <string name="settings_terminal_clipboard_write">Разрешить серверу писать в буфер обмена (OSC 52)</string>
     <string name="settings_hide_system_bars">Скрывать системные панели в сессии</string>
     <string name="settings_hide_system_bars_desc">Терминал и удалённый рабочий стол занимают весь экран. Панели возвращаются свайпом от края.</string>
+    <string name="settings_terminal_autofit">Уменьшать шрифт под ширину</string>
+    <string name="settings_terminal_autofit_desc">Широкий вывод уменьшает шрифт терминала, пока строки не перестанут переноситься. Чип −/+ над выводом правит масштаб.</string>
     <string name="settings_terminal_open_paths">Открытие файловых путей в SFTP</string>
     <string name="settings_terminal_open_paths_desc">Ctrl+клик по пути в выводе открывает его в файловой панели.</string>
     <string name="settings_terminal_open_paths_desc_mobile">Долгое нажатие на путь в выводе, затем «Открыть в Файлах».</string>

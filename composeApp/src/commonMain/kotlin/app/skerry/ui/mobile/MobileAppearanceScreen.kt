@@ -50,6 +50,8 @@ import app.skerry.ui.generated.resources.appearance_custom_term_theme_desc
 import app.skerry.ui.generated.resources.appearance_section_terminal
 import app.skerry.ui.generated.resources.settings_hide_system_bars
 import app.skerry.ui.generated.resources.settings_hide_system_bars_desc
+import app.skerry.ui.generated.resources.settings_terminal_autofit
+import app.skerry.ui.generated.resources.settings_terminal_autofit_desc
 import app.skerry.ui.generated.resources.settings_terminal_open_paths
 import app.skerry.ui.generated.resources.settings_terminal_open_paths_desc_mobile
 import app.skerry.ui.generated.resources.settings_terminal_highlight_input
@@ -154,6 +156,16 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
                     fieldWidth = 52.dp,
                 )
             }
+            // Shrink-to-fit, right below the size sliders it overrides. Phone-only (there is no
+            // desktop counterpart) and off by default: a font size chosen by hand should not be
+            // rewritten by the first wide line unless the user asked for it.
+            HLine()
+            MobileToggleRow(
+                title = stringResource(Res.string.settings_terminal_autofit),
+                desc = stringResource(Res.string.settings_terminal_autofit_desc),
+                on = state.terminalAutoFit,
+                onToggle = state::toggleTerminalAutoFit,
+            )
             // Scrollback depth and default cursor style for new sessions (behaviour, desktop parity).
             // Both apply to new sessions at connect and are pushed live into already-open ones.
             HLine()

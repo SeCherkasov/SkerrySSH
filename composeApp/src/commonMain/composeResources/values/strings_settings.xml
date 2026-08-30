@@ -102,6 +102,8 @@
     <string name="settings_terminal_clipboard_write">Allow server clipboard writes (OSC 52)</string>
     <string name="settings_hide_system_bars">Hide system bars in a session</string>
     <string name="settings_hide_system_bars_desc">The terminal and the remote desktop take the whole display. The bars come back on a swipe from the edge.</string>
+    <string name="settings_terminal_autofit">Shrink the font to fit</string>
+    <string name="settings_terminal_autofit_desc">Wide output scales the terminal font down until it stops wrapping. The −/+ chip over the output adjusts it.</string>
     <string name="settings_terminal_open_paths">Open file paths in SFTP</string>
     <string name="settings_terminal_open_paths_desc">Ctrl+click a file path in the output to reveal it in the file panel.</string>
     <string name="settings_terminal_open_paths_desc_mobile">Long-press a file path in the output, then tap “Open in Files”.</string>
