@@ -168,6 +168,12 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                     collapse = state,
                     onEdit = { entry -> editing = entry; adding = false },
                     onRenameCategory = { tag -> renamingTag = tag },
+                    onMoveItems = { ids, targetGroup, targetIndex ->
+                        manager.moveSnippets(ids, targetGroup, targetIndex)
+                    },
+                    onMoveGroup = { group, targetIndex ->
+                        manager.moveGroup(group, targetIndex)
+                    },
                 )
             }
             // Clears the tab bar and the FAB above it (bottom 104dp + 56dp size + 16dp margin), so the last
@@ -270,36 +276,6 @@ private fun SnippetTagChip(tag: String) {
         Modifier.clip(RoundedCornerShape(20.dp)).background(Skerry.colors.cyan.copy(alpha = 0.12f)).padding(horizontal = 9.dp, vertical = 2.dp),
     ) {
         Txt(remember(tag) { tagChipLabel(tag) }, color = Skerry.colors.cyanBright, size = 11.sp)
-    }
-}
-
-/**
- * Snippet-run picker opened from the terminal header (`bolt` icon): list of saved commands, tap
- * runs the selected snippet in the active session via [onRun].
- */
-@Composable
-internal fun MobileSnippetRunSheet(manager: SnippetManager, onRun: (SnippetEntry) -> Unit, onDismiss: () -> Unit) {
-    var query by remember { mutableStateOf("") }
-    val all = manager.snippets
-    val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
-    // Inline sheet (like the Vault/New connection sheets), rendered at the screen's top-level Box,
-    // not via Popup: a focusable Popup shifted window insets and slightly moved the terminal header.
-    MobileBottomSheet(onDismiss = onDismiss, maxHeightFraction = 0.7f) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Txt(stringResource(Res.string.lib_snippets_run_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
-            MobileFormInput(query, { query = it }, stringResource(Res.string.lib_snippets_search))
-            if (filtered.isEmpty()) {
-                Txt(if (all.isEmpty()) stringResource(Res.string.lib_snippets_run_empty) else stringResource(Res.string.lib_snippets_no_matches), color = Skerry.colors.faint, size = 13.sp)
-            } else {
-                filtered.forEach { entry ->
-                    key(entry.id) {
-                        val onClick = remember(entry.id) { { onRun(entry) } }
-                        MobileSnippetCard(entry.snippet, onClick)
-                    }
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-        }
     }
 }
 

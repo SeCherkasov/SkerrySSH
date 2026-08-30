@@ -48,6 +48,10 @@
     <string name="lib_known_reject">Reject</string>
 
     <!-- Snippets (SnippetsView, MobileSnippetsView) -->
+    <string name="lib_collapse_all">Collapse all</string>
+    <string name="lib_expand_all">Expand all</string>
+    <string name="lib_restore_layout">Restore layout</string>
+    <string name="lib_save_default_layout">Save as default</string>
     <string name="lib_snippets_empty">No snippets yet</string>
     <string name="lib_snippets_no_matches">No matches</string>
     <string name="lib_snippets_chip_all">All</string>

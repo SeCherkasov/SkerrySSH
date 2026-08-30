@@ -52,19 +52,17 @@ fun folderLabel(name: String): String = when (name) {
 }
 
 /**
- * Split [items] into folders by [group]: named folders first, in case-insensitive alphabetical
- * order, then the [UNGROUPED_FOLDER] bucket for everything whose group is `null` or blank. Items keep
+ * Split [items] into folders by [group]: named folders in order of first appearance,
+ * then the [UNGROUPED_FOLDER] bucket for everything whose group is `null` or blank. Items keep
  * their source order inside a folder, and an empty [items] gives no folders at all.
  *
- * Alphabetical rather than first-appearance (which is what host folders use): a host list has an
- * order the user drags into shape and its folders inherit it, while a snippet, a runbook and a
- * keychain secret sit in store order — first appearance there is the order things happened to be
- * created in, which is no order at all once there are twenty of them.
+ * First-appearance matches host folders: the list has an order the user drags into shape
+ * and its folders inherit it, supporting manual drag-and-drop group reordering across devices.
  *
  * Pure function (no Compose), shared by the desktop sections and the mobile ones.
  */
 fun <T> foldersOf(items: List<T>, group: (T) -> String?): List<Folder<T>> {
-    val named = sortedMapOf<String, MutableList<T>>(compareBy({ it.lowercase() }, { it }))
+    val named = LinkedHashMap<String, MutableList<T>>()
     val ungrouped = mutableListOf<T>()
     for (item in items) {
         val name = storedFolderName(group(item))
@@ -151,4 +149,10 @@ private const val HEX = 16
 interface FolderCollapse {
     fun isGroupCollapsed(name: String): Boolean
     fun toggleGroupCollapsed(name: String)
+    fun expandGroup(name: String) {
+        if (isGroupCollapsed(name)) toggleGroupCollapsed(name)
+    }
+    fun collapseGroup(name: String) {
+        if (!isGroupCollapsed(name)) toggleGroupCollapsed(name)
+    }
 }

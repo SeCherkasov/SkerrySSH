@@ -46,6 +46,7 @@ import app.skerry.ui.design.NoteBlock
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
+import app.skerry.ui.host.GroupDialog
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.runbook_count
 import app.skerry.ui.generated.resources.runbook_delete
@@ -114,10 +115,12 @@ private sealed interface RunbookPanelMode {
 @Composable
 private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState, mono: FontFamily) {
     var selectedId by remember { mutableStateOf<String?>(null) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var mode by remember { mutableStateOf<RunbookPanelMode>(RunbookPanelMode.Run) }
     var query by remember { mutableStateOf("") }
     var helpOpen by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<RunbookEntry?>(null) }
+    var editingGroup by remember { mutableStateOf<String?>(null) }
     val history = LocalRunbookHistory.current
 
     val all = manager.runbooks
@@ -155,12 +158,25 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
                             collapse = state,
                             group = { it.runbook.group },
                             itemKey = { it.id },
+                            selectedIds = selectedIds,
+                            onEditGroup = { editingGroup = it },
+                            onMoveItems = { ids, targetGroup, targetIndex ->
+                                manager.moveRunbooks(ids, targetGroup, targetIndex)
+                            },
+                            onMoveGroup = { group, targetIndex ->
+                                manager.moveGroup(group, targetIndex)
+                            },
                         ) { entry ->
                             // Keyed by id so selecting a row doesn't recreate every row's lambda.
+                            val isSelected = entry.id in selectedIds || entry.id == selected?.id
                             val onClick = remember(entry.id) {
-                                { selectedId = entry.id; mode = RunbookPanelMode.Run }
+                                {
+                                    selectedId = entry.id
+                                    selectedIds = setOf(entry.id)
+                                    mode = RunbookPanelMode.Run
+                                }
                             }
-                            RunbookListRow(entry, entry.id == selected?.id, mono, onClick)
+                            RunbookListRow(entry, isSelected, mono, onClick)
                             HLine()
                         }
                     }
@@ -220,6 +236,20 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
                 pendingDelete = null
             },
             onDismiss = { pendingDelete = null },
+        )
+    }
+    if (editingGroup != null) {
+        GroupDialog(
+            initialName = editingGroup!!,
+            onDismiss = { editingGroup = null },
+            onSave = { newName ->
+                manager.renameGroup(editingGroup!!, newName)
+                editingGroup = null
+            },
+            onDelete = {
+                manager.deleteGroup(editingGroup!!)
+                editingGroup = null
+            },
         )
     }
 }

@@ -37,19 +37,27 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import app.skerry.ui.app.LocalSnippets
-import app.skerry.ui.design.fieldName
 import app.skerry.ui.connection.ConnectionUiState
 import app.skerry.ui.design.CloseWhenUnavailable
+import app.skerry.ui.design.CommandLine
+import app.skerry.ui.design.FilterChipRow
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.NOTE_PEEK_LINES
 import app.skerry.ui.design.NoteBlock
 import app.skerry.ui.design.RowNoteTooltip
-import app.skerry.ui.design.rememberModalPresence
-import app.skerry.ui.design.rememberRowNote
+import app.skerry.ui.design.SkerryVerticalScrollbar
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldName
+import app.skerry.ui.design.rememberModalPresence
+import app.skerry.ui.design.rememberRowNote
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_collapse_all
+import app.skerry.ui.generated.resources.lib_expand_all
+import app.skerry.ui.generated.resources.lib_restore_layout
+import app.skerry.ui.generated.resources.lib_save_default_layout
 import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.shell_tip_snippets
 import app.skerry.ui.generated.resources.term_no_matches
@@ -57,18 +65,18 @@ import app.skerry.ui.generated.resources.term_no_snippets_yet
 import app.skerry.ui.generated.resources.term_run_snippet_placeholder
 import app.skerry.ui.generated.resources.term_untitled
 import app.skerry.ui.session.Session
+import app.skerry.ui.snippet.ALL_SNIPPETS_CHIP
+import app.skerry.ui.snippet.SnippetCategoryHeader
 import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetManager
-import app.skerry.ui.snippet.UNCATEGORIZED_KEY
+import app.skerry.ui.snippet.filterSnippets
 import app.skerry.ui.snippet.groupSnippetsByCategory
 import app.skerry.ui.snippet.hasCategories
 import app.skerry.ui.snippet.matches
-import app.skerry.ui.design.tagChipLabel
-import app.skerry.ui.snippet.uncategorizedSnippetsLabel
-import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.snippet.snippetGroupChipLabel
+import app.skerry.ui.snippet.snippetGroupChips
 import app.skerry.ui.theme.Skerry
-import app.skerry.ui.design.CommandLine
-import app.skerry.ui.design.untrustedLabel
+import org.jetbrains.compose.resources.stringResource
 
 // Snippet palette: quickly run a saved command in the active terminal directly from the toolbar.
 
@@ -111,7 +119,22 @@ internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> U
     val mono = LocalFonts.current.mono
     var query by remember { mutableStateOf("") }
     val all = manager.snippets
-    val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
+    var activeChip by remember { mutableStateOf(ALL_SNIPPETS_CHIP) }
+    val filtered = remember(all, activeChip, query) {
+        filterSnippets(all, activeChip = activeChip, query = query)
+    }
+
+    // Default to collapsed in terminal palette if not customized
+    val allCategoryNames = remember(all) { groupSnippetsByCategory(all).map { it.name } }
+    var collapsedCategories by remember(all) {
+        mutableStateOf(allCategoryNames.toSet())
+    }
+    var savedCollapsedCategories by remember(all) {
+        mutableStateOf(allCategoryNames.toSet())
+    }
+    val hasTemporaryLayout = collapsedCategories != savedCollapsedCategories
+    val allCollapsed = allCategoryNames.isNotEmpty() && allCategoryNames.all { it in collapsedCategories }
+
     // Autofocus the search field on open — the palette is meant to be driven from the keyboard.
     val searchFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { searchFocus.requestFocus() }
@@ -133,32 +156,87 @@ internal fun SnippetPalette(manager: SnippetManager, onPick: (SnippetEntry) -> U
                 BasicTextField(query, { query = it }, singleLine = true, textStyle = style, cursorBrush = SolidColor(Skerry.colors.cyan), modifier = Modifier.fillMaxWidth().focusRequester(searchFocus).fieldName(placeholder))
             }
         }
-        Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
-            if (filtered.isEmpty()) {
-                Txt(if (all.isEmpty()) stringResource(Res.string.term_no_snippets_yet) else stringResource(Res.string.term_no_matches), color = Skerry.colors.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
-            } else if (hasCategories(filtered)) {
-                // Same category split as the library, so a command is two steps away instead of a
-                // scroll. No chips or collapsing here — the palette is keyboard-driven and ephemeral.
-                groupSnippetsByCategory(filtered).forEach { category ->
-                    key(category.name) {
-                        PaletteCategoryCaption(category.name)
-                        category.snippets.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
-                    }
+        if (hasCategories(all)) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                FilterChipRow(
+                    chips = remember(all) { snippetGroupChips(all) },
+                    activeChip = activeChip,
+                    onSelect = { activeChip = it },
+                    modifier = Modifier.weight(1f),
+                    label = { snippetGroupChipLabel(it) },
+                )
+                if (hasTemporaryLayout) {
+                    IconBtn(
+                        "history",
+                        onClick = { collapsedCategories = savedCollapsedCategories },
+                        box = 24,
+                        icon = 14.sp,
+                        tint = Skerry.colors.dim,
+                        tooltip = stringResource(Res.string.lib_restore_layout),
+                    )
+                    IconBtn(
+                        "bookmark",
+                        onClick = { savedCollapsedCategories = collapsedCategories },
+                        box = 24,
+                        icon = 14.sp,
+                        tint = Skerry.colors.cyanBright,
+                        tooltip = stringResource(Res.string.lib_save_default_layout),
+                    )
                 }
-            } else {
-                filtered.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
+                if (activeChip == ALL_SNIPPETS_CHIP) {
+                    IconBtn(
+                        if (allCollapsed) "unfold_more" else "unfold_less",
+                        onClick = {
+                            collapsedCategories = if (allCollapsed) emptySet() else allCategoryNames.toSet()
+                        },
+                        box = 24,
+                        icon = 15.sp,
+                        tint = Skerry.colors.dim,
+                        tooltip = stringResource(if (allCollapsed) Res.string.lib_expand_all else Res.string.lib_collapse_all),
+                    )
+                }
             }
         }
+        val scrollState = rememberScrollState()
+        Box(Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(scrollState).padding(top = 6.dp, end = 8.dp)) {
+                if (filtered.isEmpty()) {
+                    Txt(if (all.isEmpty()) stringResource(Res.string.term_no_snippets_yet) else stringResource(Res.string.term_no_matches), color = Skerry.colors.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp))
+                } else if (hasCategories(filtered) && activeChip == ALL_SNIPPETS_CHIP) {
+                    groupSnippetsByCategory(filtered).forEach { category ->
+                        val isCollapsed = if (query.isNotBlank()) false else category.name in collapsedCategories
+                        key(category.name) {
+                            SnippetCategoryHeader(
+                                category = category.name,
+                                count = category.snippets.size,
+                                collapsed = isCollapsed,
+                                onToggle = {
+                                    collapsedCategories = if (category.name in collapsedCategories) {
+                                        collapsedCategories - category.name
+                                    } else {
+                                        collapsedCategories + category.name
+                                    }
+                                },
+                            )
+                            if (!isCollapsed) {
+                                category.snippets.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
+                            }
+                        }
+                    }
+                } else {
+                    filtered.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
+                }
+            }
+            SkerryVerticalScrollbar(
+                scrollState = scrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).matchParentSize().padding(top = 4.dp, bottom = 4.dp, end = 1.dp),
+            )
+        }
     }
-}
-
-@Composable
-private fun PaletteCategoryCaption(name: String) {
-    Txt(
-        if (name == UNCATEGORIZED_KEY) uncategorizedSnippetsLabel() else tagChipLabel(name),
-        color = Skerry.colors.faint, size = 10.sp, weight = FontWeight.SemiBold, letterSpacing = 0.5.sp,
-        modifier = Modifier.padding(start = 9.dp, top = 7.dp, bottom = 2.dp),
-    )
 }
 
 /** Lines of a command a palette row previews before it ellipsizes. */

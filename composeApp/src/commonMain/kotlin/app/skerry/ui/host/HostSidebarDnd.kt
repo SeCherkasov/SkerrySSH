@@ -177,8 +177,7 @@ internal suspend fun PointerInputScope.detectDeadZoneDragGestures(
         while (true) {
             val event = awaitPointerEvent()
             val change = event.changes.firstOrNull { it.id == down.id }
-            if (change == null || (change.isConsumed && !change.changedToUpIgnoreConsumed())) {
-                // Pointer stream broken, or a deeper handler claimed a non-up change.
+            if (change == null) {
                 if (dragging) onCancel()
                 break
             }
@@ -241,7 +240,10 @@ fun Modifier.draggableHostRow(
     }
     val onEnd = {
         // Without an actual move (a micro-gesture from a tap) the catalog and disk stay untouched.
-        if (moved) state.currentHostDrop(folders())?.let(onDrop)
+        if (moved) {
+            val drop = state.activeHostDrop ?: state.currentHostDrop(folders())
+            drop?.let(onDrop)
+        }
         state.endDrag()
     }
     val onCancel = { state.endDrag() }
@@ -277,7 +279,10 @@ fun Modifier.draggableFolderHeader(
         state.refreshFolderDrop(folders())
     }
     val onEnd = {
-        if (moved) onDrop(state.currentFolderDropIndex(folders()))
+        if (moved) {
+            val dropIndex = state.activeFolderDropIndex ?: state.currentFolderDropIndex(folders())
+            onDrop(dropIndex)
+        }
         state.endDrag()
     }
     val onCancel = { state.endDrag() }
