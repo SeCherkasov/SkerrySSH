@@ -38,6 +38,11 @@ class SnippetPaletteModalPresenceTest {
         override fun remove(id: String) {
             entries.removeAll { it.id == id }
         }
+        override fun reorder(transform: (List<Snippet>) -> List<Snippet>) {
+            val updated = transform(entries.toList())
+            entries.clear()
+            entries.addAll(updated)
+        }
     }
 
     @Composable
@@ -46,7 +51,7 @@ class SnippetPaletteModalPresenceTest {
             CompositionLocalProvider(
                 LocalFonts provides DesignFonts(FontFamily.Default, FontFamily.Monospace, FontFamily.Default),
             ) {
-                SnippetPalette(manager) {}
+                SnippetPalette(manager, onPick = {})
             }
         }
     }

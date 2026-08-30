@@ -137,6 +137,11 @@ internal fun seededSnippets(): SnippetManager {
             if (i >= 0) entries[i] = snippet else entries += snippet
         }
         override fun remove(id: String) { entries.removeAll { it.id == id } }
+        override fun reorder(transform: (List<Snippet>) -> List<Snippet>) {
+            val updated = transform(entries.toList())
+            entries.clear()
+            entries.addAll(updated)
+        }
     }
     var seq = 0
     return SnippetManager(store) { "snip-${seq++}" }
@@ -152,6 +157,11 @@ internal fun seededRunbooks(): RunbookManager {
             if (i >= 0) entries[i] = runbook else entries += runbook
         }
         override fun remove(id: String) { entries.removeAll { it.id == id } }
+        override fun reorder(transform: (List<Runbook>) -> List<Runbook>) {
+            val updated = transform(entries.toList())
+            entries.clear()
+            entries.addAll(updated)
+        }
     }
     var seq = 0
     return RunbookManager(store) { "run-${seq++}" }
