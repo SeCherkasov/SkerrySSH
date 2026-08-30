@@ -1,7 +1,12 @@
 package app.skerry.android
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import app.skerry.ui.keepalive.SessionKeepAliveBridge
 
@@ -33,6 +38,125 @@ class AndroidSessionKeepAlive(
 
     private companion object {
         const val TAG = "SkerryKeepAlive"
+    }
+
+    override val isKeepAliveConfigSupported: Boolean = true
+
+    override fun isOptimizedForKeepAlive(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = context.getSystemService(PowerManager::class.java)
+            pm?.isIgnoringBatteryOptimizations(context.packageName) == true
+        } else {
+            true
+        }
+    }
+
+    override fun getManufacturer(): String {
+        return Build.MANUFACTURER.orEmpty()
+    }
+
+    override fun requestKeepAliveOptimization() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (!launchIntent(intent)) {
+                val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (!launchIntent(fallback)) {
+                    openAppDetailsSettings()
+                }
+            }
+        }
+    }
+
+    override fun openAutostartSettings() {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val intents = getManufacturerAutostartIntents(manufacturer)
+
+        val launched = intents.any { launchIntent(it) }
+        if (!launched) {
+            openAppDetailsSettings()
+        }
+    }
+
+    private fun getManufacturerAutostartIntents(manufacturer: String): List<Intent> {
+        return when {
+            manufacturer.contains("xiaomi") || manufacturer.contains("redmi") -> getXiaomiAutostartIntents()
+            manufacturer.contains("huawei") || manufacturer.contains("honor") -> getHuaweiAutostartIntents()
+            manufacturer.contains("oppo") || manufacturer.contains("realme") || manufacturer.contains("oneplus") -> getOppoAutostartIntents()
+            manufacturer.contains("vivo") || manufacturer.contains("iqoo") -> getVivoAutostartIntents()
+            else -> emptyList()
+        }
+    }
+
+    private fun getXiaomiAutostartIntents(): List<Intent> = listOf(
+        Intent().apply {
+            component = ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")
+        },
+        Intent("miui.intent.action.OP_AUTO_START"),
+        Intent().apply {
+            component = ComponentName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity")
+            putExtra("package_name", context.packageName)
+            putExtra("package_label", context.applicationInfo.loadLabel(context.packageManager))
+        }
+    )
+
+    private fun getHuaweiAutostartIntents(): List<Intent> = listOf(
+        Intent().apply {
+            component = ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")
+        },
+        Intent().apply {
+            component = ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.bootstart.BootStartActivity")
+        },
+        Intent().apply {
+            component = ComponentName("com.hihonor.systemmanager", "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity")
+        }
+    )
+
+    private fun getOppoAutostartIntents(): List<Intent> = listOf(
+        Intent().apply {
+            component = ComponentName("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity")
+        },
+        Intent().apply {
+            component = ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity")
+        },
+        Intent().apply {
+            component = ComponentName("com.oplus.battery", "com.oplus.powermanager.fuelgaue.PowerUsageModelActivity")
+        }
+    )
+
+    private fun getVivoAutostartIntents(): List<Intent> = listOf(
+        Intent().apply {
+            component = ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity")
+        },
+        Intent().apply {
+            component = ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity")
+        },
+        Intent().apply {
+            component = ComponentName("com.iqoo.secure", "com.iqoo.secure.safeguard.PurviewTabActivity")
+        }
+    )
+
+    override fun openAppDetailsSettings() {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        launchIntent(intent)
+    }
+
+    private fun launchIntent(intent: Intent): Boolean {
+        return try {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "failed to launch intent: $intent", e)
+            false
+        }
     }
 
     // sessionId -> host label. The source of truth for "is the service needed at all"; the service

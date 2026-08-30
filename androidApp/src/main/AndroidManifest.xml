@@ -21,6 +21,9 @@
     <!-- Notification for the keep-alive service. Optional: without it the service still runs, the
          notification is simply not shown. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Partial wake lock during active sessions to prevent CPU suspend & socket freeze on lock screen -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="false"
