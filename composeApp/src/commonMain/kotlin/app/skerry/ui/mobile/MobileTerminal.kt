@@ -104,10 +104,20 @@ fun navigateAfterConnect(state: MobileDesignState, dest: MobileConnectDest): Uni
 fun controlByte(c: Char): String = (c.uppercaseChar().code and 0x1F).toChar().toString()
 
 /**
- * Applies sticky-ctrl to a string typed on the soft keyboard (terminal IME path: text captured by a
- * hidden field, bypassing the key panel). If ctrl is armed and input is non-empty, the first char is
- * encoded as Ctrl+<char> ([controlByte]) and the rest passes through; the modifier applies to one
- * keystroke (the caller disarms it via the same predicate). No change when unarmed or input is empty.
+ * Whether armed ctrl applies to this soft-keyboard input at all — i.e. whether it starts with a
+ * printable character. Backspace and Enter reach the IME path as the bytes they already are (DEL,
+ * CR), and [controlByte] masks a control byte into a different one: Ctrl armed over a Backspace sent
+ * a stray 0x1F and the line lost nothing. The caller disarms on this predicate, so a Backspace does
+ * not burn a modifier the user armed for the next letter.
  */
+fun takesStickyCtrl(input: String): Boolean = input.isNotEmpty() && input[0].code in 0x20..0x7e
+
+/**
+ * Applies sticky-ctrl to a string typed on the soft keyboard (terminal IME path: text captured by a
+ * hidden field, bypassing the key panel). If ctrl is armed and the input [takesStickyCtrl], the first
+ * char is encoded as Ctrl+<char> ([controlByte]) and the rest passes through; the modifier applies to
+ * one keystroke (the caller disarms it via the same predicate).
+ */
+
 fun applyStickyCtrl(armed: Boolean, input: String): String =
-    if (armed && input.isNotEmpty()) controlByte(input[0]) + input.substring(1) else input
+    if (armed && takesStickyCtrl(input)) controlByte(input[0]) + input.substring(1) else input

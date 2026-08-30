@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -40,7 +38,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
@@ -75,12 +72,10 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -98,7 +93,7 @@ import app.skerry.shared.terminal.searchTerminal
 import app.skerry.shared.terminal.TerminalState
 import app.skerry.ui.app.LocalUserActivity
 import app.skerry.ui.design.ClaimKeyboard
-import app.skerry.ui.design.fieldName
+import app.skerry.ui.design.ImeFunnelField
 import app.skerry.ui.generated.resources.term_keyboard_input
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
@@ -258,8 +253,6 @@ fun TerminalScreen(
     val focusRequester = remember { FocusRequester() }
     // Hidden IME field (touch input): holds focus/keyboard, always reset to the anchor.
     val imeFocusRequester = remember { FocusRequester() }
-    val imeBaseline = remember { TextFieldValue(ANCHOR, selection = TextRange(ANCHOR.length)) }
-    var imeValue by remember { mutableStateOf(imeBaseline) }
     // System clipboard, the platform's own path where it has one ([SystemClipboard]); reads/writes
     // go through clipboardScope (called fire-and-forget from non-suspend key/mouse handlers).
     val clipboard = rememberSystemClipboard()
@@ -1342,49 +1335,42 @@ fun TerminalScreen(
           }
       }
 
-      // Touch input: an invisible field captures soft-keyboard characters. Diff against the anchor
-      // ([imeDeltaToPty]) and reset immediately — the field is just a "funnel" into the PTY, holds no text.
-      // Stood down while the search panel is open: two fields fighting over the soft keyboard would
-      // send the query into the PTY.
+      // Touch input: an invisible field captures soft-keyboard characters ([ImeFunnelField]), holding
+      // no text of its own. Stood down while the search panel is open: two fields fighting over the
+      // soft keyboard would send the query into the PTY.
       if (imeInput && !closed && !searchOpen) {
-          BasicTextField(
-              value = imeValue,
-              onValueChange = { nv ->
-                  val raw = imeDeltaToPty(ANCHOR, nv.text)
-                  // sticky-ctrl etc. apply only to real input (not to an empty delta).
-                  val out = if (raw.isEmpty()) raw else imeTransform?.invoke(raw) ?: raw
-                  if (out.isNotEmpty()) {
-                      // The vault's idle auto-lock sees no key event for this path (the soft keyboard
-                      // is its own window), and typing into a session is the plainest evidence there
-                      // is that the user is still here.
-                      userActivity()
-                      state.clearSelection()
-                      textToolbar.hide()
-                      // While reverse-search is open — the soft keyboard edits the query, not the PTY:
-                      // DEL → backspace, Enter(CR) → accept, printable chars → into the query.
-                      if (state.reverseSearch.query != null) {
-                          for (ch in out) when (ch.code) {
-                              127, 8 -> state.reverseSearch.backspace() // DEL / BS
-                              13, 10 -> state.reverseSearch.accept() // CR / LF — accept
-                              else -> if (ch.code >= 0x20) state.reverseSearch.append(ch.toString())
-                          }
-                      } else {
-                          state.typeInput(out) // feeds autocomplete (soft keyboard), then goes to the PTY
-                      }
-                  }
-                  imeValue = imeBaseline
-              },
-              // Nothing is drawn in it, so the name is the only thing a reader that lands here gets.
-              modifier = Modifier.size(1.dp).fieldName(stringResource(Res.string.term_keyboard_input)).focusRequester(imeFocusRequester),
-              textStyle = TextStyle(color = Color.Transparent),
-              cursorBrush = SolidColor(Color.Transparent),
+          ImeFunnelField(
+              name = stringResource(Res.string.term_keyboard_input),
+              modifier = Modifier.focusRequester(imeFocusRequester),
               keyboardOptions = KeyboardOptions(
                   capitalization = KeyboardCapitalization.None,
                   autoCorrectEnabled = false,
                   keyboardType = KeyboardType.Ascii,
                   imeAction = ImeAction.None,
               ),
-          )
+          ) { raw ->
+              // The funnel reports real input only, so sticky-ctrl never burns on an empty delta.
+              val out = imeTransform?.invoke(raw) ?: raw
+              if (out.isNotEmpty()) {
+                  // The vault's idle auto-lock sees no key event for this path (the soft keyboard
+                  // is its own window), and typing into a session is the plainest evidence there
+                  // is that the user is still here.
+                  userActivity()
+                  state.clearSelection()
+                  textToolbar.hide()
+                  // While reverse-search is open — the soft keyboard edits the query, not the PTY:
+                  // DEL → backspace, Enter(CR) → accept, printable chars → into the query.
+                  if (state.reverseSearch.query != null) {
+                      for (ch in out) when (ch.code) {
+                          127, 8 -> state.reverseSearch.backspace() // DEL / BS
+                          13, 10 -> state.reverseSearch.accept() // CR / LF — accept
+                          else -> if (ch.code >= 0x20) state.reverseSearch.append(ch.toString())
+                      }
+                  } else {
+                      state.typeInput(out) // feeds autocomplete (soft keyboard), then goes to the PTY
+                  }
+              }
+          }
       }
 
       // Sharing hint under the cursor (see [cursorOverlay]): positioned from the bottom edge, so it

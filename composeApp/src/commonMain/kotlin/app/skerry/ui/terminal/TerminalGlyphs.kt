@@ -63,10 +63,10 @@ import app.skerry.ui.theme.Skerry
  * ([LocalTextToolbar]). Typing clears both selection and menu.
  *
  * [imeInput] enables the mobile input path: the soft keyboard does not send key events to
- * [onPreviewKeyEvent], so input is captured from a hidden `BasicTextField` ([imeDeltaToPty]).
+ * [onPreviewKeyEvent], so input is captured from a hidden field ([app.skerry.ui.design.ImeFunnelField]).
  * Desktop keeps this `false`, relying on the physical keyboard via [mapTerminalKey].
  *
- * [imeTransform] (IME path only) post-processes a non-empty [imeDeltaToPty] result before sending —
+ * [imeTransform] (IME path only) post-processes what the funnel reports before sending —
  * the mobile key panel routes it through sticky-ctrl ([app.skerry.ui.mobile.applyStickyCtrl]) so
  * Ctrl+<letter> works from the soft keyboard too, not just from panel keys.
  *
