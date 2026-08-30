@@ -58,4 +58,20 @@ class VaultSnippetStoreTest {
         assertEquals("Disk", stored.label)
         assertNull(stored.group)
     }
+
+    @Test
+    fun `reorder updates and persists order in layout`() {
+        val vault = FakeVault()
+        val store = VaultSnippetStore(vault)
+        store.put(snippet("s1"))
+        store.put(snippet("s2"))
+        store.put(snippet("s3"))
+
+        assertEquals(listOf("s1", "s2", "s3"), store.all().map { it.id })
+
+        store.reorder { listOf(it[2], it[0], it[1]) }
+
+        val freshStore = VaultSnippetStore(vault)
+        assertEquals(listOf("s3", "s1", "s2"), freshStore.all().map { it.id })
+    }
 }

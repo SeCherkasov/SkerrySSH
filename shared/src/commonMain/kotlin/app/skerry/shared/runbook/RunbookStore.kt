@@ -14,4 +14,10 @@ interface RunbookStore {
 
     /** Removes the record by id; missing id is a no-op. */
     fun remove(id: String)
+
+    /**
+     * Atomically computes and applies an order/content transform across all runbooks.
+     * Implementations must ensure atomicity (e.g., via transaction) and preserve the id set.
+     */
+    fun reorder(transform: (List<Runbook>) -> List<Runbook>)
 }

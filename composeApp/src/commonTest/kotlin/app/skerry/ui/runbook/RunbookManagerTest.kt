@@ -16,6 +16,11 @@ class RunbookManagerTest {
         override fun all(): List<Runbook> = items.values.toList()
         override fun put(runbook: Runbook) { items[runbook.id] = runbook }
         override fun remove(id: String) { items.remove(id) }
+        override fun reorder(transform: (List<Runbook>) -> List<Runbook>) {
+            val updated = transform(all())
+            items.clear()
+            updated.forEach { items[it.id] = it }
+        }
     }
 
     private fun manager(store: RunbookStore = MemoryStore()): RunbookManager {

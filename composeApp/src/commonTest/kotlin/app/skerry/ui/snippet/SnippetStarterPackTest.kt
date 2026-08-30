@@ -66,4 +66,9 @@ private class FakeStore : SnippetStore {
     override fun remove(id: String) {
         entries.removeAll { it.id == id }
     }
+    override fun reorder(transform: (List<Snippet>) -> List<Snippet>) {
+        val updated = transform(entries.toList())
+        entries.clear()
+        entries.addAll(updated)
+    }
 }
