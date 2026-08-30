@@ -28,6 +28,7 @@ import app.skerry.ui.design.GhostButton
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
 import app.skerry.ui.design.PrimaryButton
+import app.skerry.ui.design.SkerryVerticalScrollbar
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.generated.resources.Res
@@ -142,11 +143,17 @@ fun RunbookRunPanel(runner: RunbookRunner, run: RunbookSessionRun, modifier: Mod
         // Held outside the collapse branch, or every expand would land the list back at the top.
         val stepScroll = rememberScrollState()
         if (!collapsed) {
-            Column(
-                Modifier.heightIn(max = 260.dp).verticalScroll(stepScroll),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                run.steps.forEach { state -> key(state) { StepRow(state, mono) } }
+            Box(Modifier.fillMaxWidth().heightIn(max = 260.dp)) {
+                Column(
+                    Modifier.fillMaxWidth().verticalScroll(stepScroll).padding(end = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    run.steps.forEach { state -> key(state) { StepRow(state, mono) } }
+                }
+                SkerryVerticalScrollbar(
+                    scrollState = stepScroll,
+                    modifier = Modifier.align(Alignment.CenterEnd).matchParentSize().padding(top = 2.dp, bottom = 2.dp, end = 1.dp),
+                )
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

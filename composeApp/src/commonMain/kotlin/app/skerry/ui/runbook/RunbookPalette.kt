@@ -40,14 +40,21 @@ import app.skerry.ui.app.LocalRunbookRunner
 import app.skerry.ui.app.LocalRunbooks
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.connection.ConnectionUiState
-import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.CloseWhenUnavailable
+import app.skerry.ui.design.FilterChipRow
 import app.skerry.ui.design.IconBtn
 import app.skerry.ui.design.LocalFonts
+import app.skerry.ui.design.SkerryVerticalScrollbar
 import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
+import app.skerry.ui.design.fieldName
 import app.skerry.ui.design.rememberModalPresence
+import app.skerry.ui.design.untrustedLabel
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.lib_collapse_all
+import app.skerry.ui.generated.resources.lib_expand_all
+import app.skerry.ui.generated.resources.lib_restore_layout
+import app.skerry.ui.generated.resources.lib_save_default_layout
 import app.skerry.ui.generated.resources.runbook_empty
 import app.skerry.ui.generated.resources.runbook_no_matches
 import app.skerry.ui.generated.resources.runbook_none_runnable
@@ -58,11 +65,11 @@ import app.skerry.ui.generated.resources.runbook_toolbar_tip
 import app.skerry.ui.generated.resources.runbook_untitled
 import app.skerry.ui.session.Session
 import app.skerry.ui.session.SessionView
-import app.skerry.ui.terminal.ToolbarAction
-import app.skerry.ui.terminal.toolbarActionEnabled
+import app.skerry.ui.snippet.SnippetCategoryHeader
 import app.skerry.ui.terminal.OnToolbarRequest
+import app.skerry.ui.terminal.ToolbarAction
 import app.skerry.ui.terminal.ToolbarRequest
-import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.terminal.toolbarActionEnabled
 import app.skerry.ui.theme.Skerry
 import org.jetbrains.compose.resources.stringResource
 
@@ -153,7 +160,22 @@ internal fun RunbookPalette(manager: RunbookManager, onPick: (RunbookEntry) -> U
     // nothing, so it is not offered here (the section's card explains it instead).
     val saved = manager.runbooks
     val all = remember(saved) { saved.filter { it.runbook.steps.isNotEmpty() } }
-    val filtered = if (query.isBlank()) all else all.filter { it.matches(query) }
+    var activeChip by remember { mutableStateOf(ALL_RUNBOOKS_CHIP) }
+    val filtered = remember(all, activeChip, query) {
+        filterRunbooks(all, activeChip = activeChip, query = query)
+    }
+
+    // Default to collapsed in terminal palette if not customized
+    val allCategoryNames = remember(all) { groupRunbooksByCategory(all).map { it.name } }
+    var collapsedCategories by remember(all) {
+        mutableStateOf(allCategoryNames.toSet())
+    }
+    var savedCollapsedCategories by remember(all) {
+        mutableStateOf(allCategoryNames.toSet())
+    }
+    val hasTemporaryLayout = collapsedCategories != savedCollapsedCategories
+    val allCollapsed = allCategoryNames.isNotEmpty() && allCategoryNames.all { it in collapsedCategories }
+
     val searchFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { searchFocus.requestFocus() }
     Column(
@@ -182,20 +204,93 @@ internal fun RunbookPalette(manager: RunbookManager, onPick: (RunbookEntry) -> U
                 )
             }
         }
-        Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()).padding(top = 6.dp)) {
-            if (filtered.isEmpty()) {
-                Txt(
-                    // Three different facts: nothing saved, nothing runnable, nothing matching.
-                    when {
-                        saved.isEmpty() -> stringResource(Res.string.runbook_empty)
-                        all.isEmpty() -> stringResource(Res.string.runbook_none_runnable)
-                        else -> stringResource(Res.string.runbook_no_matches)
-                    },
-                    color = Skerry.colors.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp),
+        if (hasRunbookCategories(all)) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                FilterChipRow(
+                    chips = remember(all) { runbookGroupChips(all) },
+                    activeChip = activeChip,
+                    onSelect = { activeChip = it },
+                    modifier = Modifier.weight(1f),
+                    label = { runbookGroupChipLabel(it) },
                 )
-            } else {
-                filtered.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
+                if (hasTemporaryLayout) {
+                    IconBtn(
+                        "history",
+                        onClick = { collapsedCategories = savedCollapsedCategories },
+                        box = 24,
+                        icon = 14.sp,
+                        tint = Skerry.colors.dim,
+                        tooltip = stringResource(Res.string.lib_restore_layout),
+                    )
+                    IconBtn(
+                        "bookmark",
+                        onClick = { savedCollapsedCategories = collapsedCategories },
+                        box = 24,
+                        icon = 14.sp,
+                        tint = Skerry.colors.cyanBright,
+                        tooltip = stringResource(Res.string.lib_save_default_layout),
+                    )
+                }
+                if (activeChip == ALL_RUNBOOKS_CHIP) {
+                    IconBtn(
+                        if (allCollapsed) "unfold_more" else "unfold_less",
+                        onClick = {
+                            collapsedCategories = if (allCollapsed) emptySet() else allCategoryNames.toSet()
+                        },
+                        box = 24,
+                        icon = 15.sp,
+                        tint = Skerry.colors.dim,
+                        tooltip = stringResource(if (allCollapsed) Res.string.lib_expand_all else Res.string.lib_collapse_all),
+                    )
+                }
             }
+        }
+        val scrollState = rememberScrollState()
+        Box(Modifier.fillMaxWidth().heightIn(max = 300.dp)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(scrollState).padding(top = 6.dp, end = 8.dp)) {
+                if (filtered.isEmpty()) {
+                    Txt(
+                        // Three different facts: nothing saved, nothing runnable, nothing matching.
+                        when {
+                            saved.isEmpty() -> stringResource(Res.string.runbook_empty)
+                            all.isEmpty() -> stringResource(Res.string.runbook_none_runnable)
+                            else -> stringResource(Res.string.runbook_no_matches)
+                        },
+                        color = Skerry.colors.faint, size = 11.5.sp, font = mono, modifier = Modifier.padding(8.dp),
+                    )
+                } else if (hasRunbookCategories(filtered) && activeChip == ALL_RUNBOOKS_CHIP) {
+                    groupRunbooksByCategory(filtered).forEach { category ->
+                        val isCollapsed = if (query.isNotBlank()) false else category.name in collapsedCategories
+                        key(category.name) {
+                            SnippetCategoryHeader(
+                                category = category.name,
+                                count = category.runbooks.size,
+                                collapsed = isCollapsed,
+                                onToggle = {
+                                    collapsedCategories = if (category.name in collapsedCategories) {
+                                        collapsedCategories - category.name
+                                    } else {
+                                        collapsedCategories + category.name
+                                    }
+                                },
+                            )
+                            if (!isCollapsed) {
+                                category.runbooks.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
+                            }
+                        }
+                    }
+                } else {
+                    filtered.forEach { entry -> key(entry.id) { PaletteRow(entry, mono) { onPick(entry) } } }
+                }
+            }
+            SkerryVerticalScrollbar(
+                scrollState = scrollState,
+                modifier = Modifier.align(Alignment.CenterEnd).matchParentSize().padding(top = 4.dp, bottom = 4.dp, end = 1.dp),
+            )
         }
     }
 }

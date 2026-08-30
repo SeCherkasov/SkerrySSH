@@ -48,6 +48,10 @@
     <string name="lib_known_reject">拒绝</string>
 
     <!-- 片段（SnippetsView、MobileSnippetsView） -->
+    <string name="lib_collapse_all">全折叠</string>
+    <string name="lib_expand_all">全展开</string>
+    <string name="lib_restore_layout">恢复常用</string>
+    <string name="lib_save_default_layout">保存默认</string>
     <string name="lib_snippets_empty">暂无片段</string>
     <string name="lib_snippets_no_matches">无匹配</string>
     <string name="lib_snippets_chip_all">全部</string>

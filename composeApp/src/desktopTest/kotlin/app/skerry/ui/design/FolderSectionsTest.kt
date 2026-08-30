@@ -120,4 +120,19 @@ class FolderSectionsTest {
             onNodeWithText("Production").assertIsDisplayed()
         }
     }
+
+    @Test
+    fun `collapseGroup collapses an expanded group and is idempotent`() {
+        val collapse = Collapse()
+        collapse.collapseGroup("Production")
+        assertEquals(setOf("Production"), collapse.collapsed)
+        // Idempotent: collapsing again does not toggle it back to expanded
+        collapse.collapseGroup("Production")
+        assertEquals(setOf("Production"), collapse.collapsed)
+
+        collapse.expandGroup("Production")
+        assertEquals(emptySet(), collapse.collapsed)
+        collapse.expandGroup("Production")
+        assertEquals(emptySet(), collapse.collapsed)
+    }
 }

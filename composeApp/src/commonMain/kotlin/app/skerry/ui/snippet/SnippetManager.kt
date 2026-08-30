@@ -141,8 +141,42 @@ class SnippetManager(
         )
         store.put(snippet)
         val existing = find(id)
-        if (existing != null) existing.snippet = snippet else snippets = snippets + SnippetEntry(snippet)
+        if (existing != null) {
+            existing.snippet = snippet
+            snippets = snippets.map { if (it.id == id) SnippetEntry(snippet) else it }
+        } else {
+            snippets = snippets + SnippetEntry(snippet)
+        }
         return id
+    }
+
+    /** Move snippet [snippetId] to [targetGroup] at [targetIndexInGroup]. */
+    fun moveSnippet(snippetId: String, targetGroup: String?, targetIndexInGroup: Int) {
+        moveSnippets(setOf(snippetId), targetGroup, targetIndexInGroup)
+    }
+
+    /** Move multiple snippets [snippetIds] to [targetGroup] at [targetIndexInGroup]. */
+    fun moveSnippets(snippetIds: Set<String>, targetGroup: String?, targetIndexInGroup: Int) {
+        store.reorder { moveSnippetsToGroup(it, snippetIds, targetGroup, targetIndexInGroup) }
+        snippets = store.all().map { SnippetEntry(it.canonical()) }
+    }
+
+    /** Move folder [group] to [targetGroupIndex] among folders. */
+    fun moveGroup(group: String?, targetGroupIndex: Int) {
+        store.reorder { moveSnippetGroup(it, group, targetGroupIndex) }
+        snippets = store.all().map { SnippetEntry(it.canonical()) }
+    }
+
+    /** Rename group [oldName] to [newName] across all snippets. */
+    fun renameGroup(oldName: String, newName: String) {
+        store.reorder { renameSnippetGroup(it, oldName, newName) }
+        snippets = store.all().map { SnippetEntry(it.canonical()) }
+    }
+
+    /** Delete group [name]: ungroups its snippets, setting group to null (items are kept). */
+    fun deleteGroup(name: String) {
+        store.reorder { renameSnippetGroup(it, name, null) }
+        snippets = store.all().map { SnippetEntry(it.canonical()) }
     }
 
     /**

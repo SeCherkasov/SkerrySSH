@@ -7,6 +7,7 @@ import app.skerry.ui.host.rowSubtitle
 import app.skerry.ui.host.rowLabel
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -170,9 +171,11 @@ private fun MobileHostFolder(
     // (stable slot-table position); takeIf controls pencil visibility.
     val onEdit = remember(state, folder.name) { { state.openRenameGroup(folder.name) } }
         .takeIf { controller != null && folder.name != UNGROUPED_LABEL }
+    val isAnyFolderDragging = dragState.draggingFolderName != null
+    val isThisFolderDragging = dragState.draggingFolderName == folder.name
     // Highlights the target folder while a host is dragged over it.
     val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
-    val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
+    val folderAlpha = if (isThisFolderDragging) 0.6f else 1f
     // Insertion line index within the folder, excluding the dragged host (like moveHostToGroup).
     val others = folder.hosts.filter { it.id != dragState.draggingHostId }
     val dropIndex = if (isDropTarget) dragState.activeHostDrop?.index?.coerceIn(0, others.size) else null
@@ -186,7 +189,12 @@ private fun MobileHostFolder(
             Modifier
                 .folderHeaderAnchor(dragState, folder.name)
                 // Section-aware, like desktop: the index counts only the folders on screen.
-                .draggableFolderHeader(dragState, folder.name, foldersProvider, longPress = true) { index ->
+                .draggableFolderHeader(
+                    state = dragState,
+                    name = folder.name,
+                    folders = foldersProvider,
+                    longPress = true,
+                ) { index ->
                     controller.moveFolderInSection(group, index, section)
                 }
         } else {
@@ -196,10 +204,11 @@ private fun MobileHostFolder(
             // folder.name is a stable key (drag/collapse); the ungrouped bucket shows a localized
             // label while keeping the key technical ([UNGROUPED_LABEL]).
             val folderTitle = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folder.name
-            MobileFolderHeader(folderTitle, folder.hosts.size, collapsed, isDropTarget, onToggle, onEdit)
+            MobileFolderHeader(folderTitle, folder.hosts.size, collapsed, isDropTarget, onToggle, onEdit, isDragging = isThisFolderDragging)
         }
-        // A collapsed folder shows only its header; the host list (and its drag targets) is hidden.
-        if (!collapsed) {
+        // A collapsed folder shows only its header; when any folder is dragged, all folders
+        // temporarily collapse to allow fast, compact and predictable folder reordering.
+        if (!collapsed && !isAnyFolderDragging) {
             Column(Modifier.padding(horizontal = 22.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 folder.hosts.forEach { host ->
                     key(host.id) {
@@ -240,14 +249,32 @@ private fun MobileHostFolder(
  */
 @Composable
 private fun MobileDropLine(horizontal: Dp = 18.dp) {
-    Box(
+    Row(
         Modifier
             .fillMaxWidth()
-            .padding(horizontal = horizontal, vertical = 3.dp)
-            .height(2.dp)
-            .clip(RoundedCornerShape(1.dp))
-            .background(Skerry.colors.cyan),
-    )
+            .padding(horizontal = horizontal, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Skerry.colors.cyanBright)
+        )
+        Box(
+            Modifier
+                .weight(1f)
+                .height(3.dp)
+                .clip(RoundedCornerShape(1.5.dp))
+                .background(Skerry.colors.cyan)
+        )
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(Skerry.colors.cyanBright)
+        )
+    }
 }
 
 /**

@@ -303,9 +303,11 @@ internal fun LiveHostFolder(
     // Edit pencil in the header, except for the synthetic "Ungrouped" bucket (not renameable).
     val onEditGroup = if (folder.name == UNGROUPED_LABEL) null
         else remember(state, folder.name) { { state.openRenameGroup(folder.name) } }
+    val isAnyFolderDragging = dragState.draggingFolderName != null
+    val isThisFolderDragging = dragState.draggingFolderName == folder.name
     // Highlights the target folder while a host is dragged over it.
     val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
-    val folderAlpha = if (dragState.draggingFolderName == folder.name) 0.4f else 1f
+    val folderAlpha = if (isThisFolderDragging) 0.6f else 1f
     // Insertion line within the folder: the index excludes the dragged host (like moveHostToGroup),
     // so it's anchored to visible rows via neighbors from the same filtered list.
     val others = folder.hosts.filter { it.id != dragState.draggingHostId }
@@ -315,16 +317,35 @@ internal fun LiveHostFolder(
         Modifier
             .padding(bottom = 2.dp)
             .alpha(folderAlpha)
-            .clip(RoundedCornerShape(6.dp))
-            // After clip, so bounds match the folder's visible (rounded) area, not its corners.
-            .folderRangeAnchor(dragState, folder.name)
-            .border(1.dp, if (isDropTarget) Skerry.colors.cyan else Color.Transparent, RoundedCornerShape(6.dp)),
+            .folderRangeAnchor(dragState, folder.name),
     ) {
         Box(
-            Modifier.folderHeaderAnchor(dragState, folder.name)
+            Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(
+                    when {
+                        isThisFolderDragging -> Skerry.colors.card
+                        isDropTarget -> Skerry.colors.cyan.copy(alpha = 0.12f)
+                        else -> Color.Transparent
+                    }
+                )
+                .border(
+                    1.dp,
+                    when {
+                        isThisFolderDragging -> Skerry.colors.cyan
+                        isDropTarget -> Skerry.colors.cyanBright
+                        else -> Color.Transparent
+                    },
+                    RoundedCornerShape(6.dp)
+                )
+                .folderHeaderAnchor(dragState, folder.name)
                 // Section-aware: the drop index counts the folders this sidebar shows, not the
                 // catalog's (a folder of the other section is invisible here and keeps its place).
-                .draggableFolderHeader(dragState, folder.name, foldersProvider) { index ->
+                .draggableFolderHeader(
+                    state = dragState,
+                    name = folder.name,
+                    folders = foldersProvider,
+                ) { index ->
                     controller.moveFolderInSection(group, index, section)
                 },
         ) {
@@ -332,8 +353,9 @@ internal fun LiveHostFolder(
             val headerName = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folder.name
             FolderHeader(headerName, folder.hosts.size, collapsed, onToggleCollapsed, onEditGroup)
         }
-        // A collapsed folder shows only the header; the host list (and its drag targets) is hidden.
-        if (!collapsed) Column(Modifier.padding(start = 22.dp)) {
+        // A collapsed folder shows only the header; when any folder is dragged, all folders
+        // temporarily collapse to allow fast, compact and predictable folder reordering.
+        if (!collapsed && !isAnyFolderDragging) Column(Modifier.padding(start = 22.dp)) {
             if (folder.name == UNGROUPED_LABEL) {
                 // No-group bucket: sub-group by connection type with a small header per transport.
                 // Reorder insertion lines are dropped here (ordering a typeless bucket is moot); a
