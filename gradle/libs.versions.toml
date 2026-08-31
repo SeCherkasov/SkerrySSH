@@ -53,8 +53,8 @@ okio = "3.18.1"
 atomicfu = "0.33.0"
 # --- Phase 2 sync ---
 # Exposed — the server's type-safe SQL layer; SQLite by default, PostgreSQL via DB URL
-exposed = "1.4.0"
-sqlite-jdbc = "3.53.2.1"
+exposed = "1.5.0"
+sqlite-jdbc = "3.53.4.0"
 postgresql = "42.7.13"
 hikari = "7.1.0"
 # Nimbus SRP6a — an audited SRP-6a implementation, used by the server and the JVM sync client
@@ -85,7 +85,7 @@ camerax = "1.4.1"
 # without AVX-512 nobody has established. Which is why a bump still owes a live generation on such
 # a CPU, on Linux and on Windows, before the hold comes off. Cost of the hold: 1.9.0 keeps the
 # generateStream crash on emoji that upstream fixed in 1.9.1.
-llamatik = "1.9.0"
+llamatik = "1.10.1"
 # ML Kit barcode-scanning — QR recognition in the camera frame (Android, on-device, no network)
 mlkit-barcode = "17.3.0"
 # JNA platform bindings — desktop-only; used for the Linux/X11 _NET_WM_MOVERESIZE native window drag
