@@ -1,14 +1,11 @@
 package app.skerry.shared.sync
 
 import app.skerry.server.config.ServerConfig
-import app.skerry.server.module
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.RecordType
 import app.skerry.shared.vault.initializeVaultCrypto
 import app.skerry.shared.vault.recordAad
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -44,7 +41,7 @@ class SyncE2eTest {
                 "SKERRY_PORT" to "$port",
             ),
         )
-        val server = embeddedServer(Netty, port = port) { module(config) }.start(wait = false)
+        val server = startTestServer(config, port)
         val client = KtorSyncClient("http://localhost:$port")
         val vaultDir = Files.createTempDirectory("skerry-e2e-vault")
         try {
@@ -118,7 +115,7 @@ class SyncE2eTest {
                 "SKERRY_PORT" to "$port",
             ),
         )
-        val server = embeddedServer(Netty, port = port) { module(config) }.start(wait = false)
+        val server = startTestServer(config, port)
         val client = KtorSyncClient("http://localhost:$port")
         val vaultDir = Files.createTempDirectory("skerry-e2e-vault")
         try {
@@ -173,7 +170,7 @@ class SyncE2eTest {
                 "SKERRY_PORT" to "$port",
             ),
         )
-        val server = embeddedServer(Netty, port = port) { module(config) }.start(wait = false)
+        val server = startTestServer(config, port)
         val client = KtorSyncClient("http://localhost:$port")
         try {
             val syncSalt = crypto.deriveSyncSalt(accountId)

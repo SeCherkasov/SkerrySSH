@@ -28,6 +28,8 @@ mandatory. Tests included (see `RoutesTestSupport` on the server).
 | Task | Abstraction |
 |---|---|
 | Vault-backed JSON store (list of records) | `vault/VaultRecordCodec` |
+| Sorting records by a stored id list, and validating a reorder transform | `vault/RecordOrder`: `sortedByOrder`, `requireSameIds` — an id the order doesn't mention ranks last |
+| Manual order of a list that has to survive LWW sync | a singleton record of its own: `vault/WorkspaceLayout` (host tree), `vault/LibraryOrder` + `LibraryOrderStore` (snippets, runbooks) — `Vault.records()` order can't carry it |
 | Atomic file write with 0600 permissions | `vault/atomicWriteUtf8` (vault / log / bio) |
 | Constant-time secret comparison | `vault/constantTimeEquals` |
 | Port-forward state | `ssh/ForwardState` |

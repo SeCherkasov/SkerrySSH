@@ -1,16 +1,14 @@
 package app.skerry.shared.share
 
 import app.skerry.server.config.ServerConfig
-import app.skerry.server.module
 import app.skerry.shared.sync.DeviceInfo
 import app.skerry.shared.sync.KtorSyncClient
 import app.skerry.shared.sync.SyncSession
+import app.skerry.shared.sync.startTestServer
 import app.skerry.shared.team.TeamRole
 import app.skerry.shared.vault.DataKey
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.initializeVaultCrypto
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,7 +54,7 @@ class SessionShareE2eTest {
                 "SKERRY_PORT" to "$port",
             ),
         )
-        val server = embeddedServer(Netty, port = port) { module(config) }.start(wait = false)
+        val server = startTestServer(config, port)
         val sync = KtorSyncClient("http://localhost:$port")
         val shares = KtorSessionShareClient("http://localhost:$port", KtorSyncClient.defaultHttpClient())
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -163,7 +161,7 @@ class SessionShareE2eTest {
                 "SKERRY_PORT" to "$port",
             ),
         )
-        val server = embeddedServer(Netty, port = port) { module(config) }.start(wait = false)
+        val server = startTestServer(config, port)
         val sync = KtorSyncClient("http://localhost:$port")
         val shares = KtorSessionShareClient("http://localhost:$port", KtorSyncClient.defaultHttpClient())
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

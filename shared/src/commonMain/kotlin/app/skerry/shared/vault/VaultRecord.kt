@@ -39,6 +39,13 @@ enum class RecordType {
     TEAM_PEER,
 
     /**
+     * Manual order of the snippet and runbook libraries — one record, see
+     * [app.skerry.shared.vault.LibraryOrder]. A type of its own rather than a field of the layout
+     * record: it follows the snippets sync toggle, not the hosts one.
+     */
+    LIBRARY_ORDER,
+
+    /**
      * Snapshot of a deleted record kept for the trash window (see [app.skerry.shared.vault.TrashStore]).
      * A separate type, not a fatter tombstone: tombstones stay empty, and clients that don't know
      * this type keep the record verbatim without ever showing it.

@@ -30,11 +30,16 @@ internal class FakeVault : Vault {
         private set
 
     /**
-     * Whether the most recent record read happened while a [transaction] was held. A store that reads
-     * outside the transaction and writes inside it still passes [lastPutInTransaction] while leaving
-     * the check-then-write race wide open, which is the whole point of holding one.
+     * How many record reads happened with no [transaction] held. A store that reads outside the
+     * transaction and writes inside it still passes [lastPutInTransaction] while leaving the
+     * check-then-write race wide open, which is the whole point of holding one.
+     *
+     * A counter and not a "was the last read in a transaction" flag: the last read of a
+     * read-compute-write is the one right before the write, and that one sits inside the block in
+     * every implementation — including the racy one, where the snapshot it recomputes from was taken
+     * outside. Only counting the reads that escaped can tell the two apart.
      */
-    var lastReadInTransaction: Boolean = false
+    var readsOutsideTransaction: Int = 0
         private set
 
     override fun <T> transaction(block: () -> T): T {
@@ -54,7 +59,7 @@ internal class FakeVault : Vault {
     override fun reset() { entries.clear() }
 
     override fun records(): List<VaultRecord> {
-        lastReadInTransaction = transactionDepth > 0
+        if (transactionDepth == 0) readsOutsideTransaction++
         return entries.values.map { it.record }
     }
 
@@ -62,7 +67,7 @@ internal class FakeVault : Vault {
     override fun mergeRemote(remote: List<VaultRecord>): MergeResult = MergeResult.EMPTY
 
     override fun openPayload(id: String): ByteArray? {
-        lastReadInTransaction = transactionDepth > 0
+        if (transactionDepth == 0) readsOutsideTransaction++
         return if (id in unreadable) null else entries[id]?.takeIf { !it.record.deleted }?.payload
     }
 

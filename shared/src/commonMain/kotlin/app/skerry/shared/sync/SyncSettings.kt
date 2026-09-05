@@ -43,7 +43,9 @@ data class SyncSettings(
         RecordType.TEAM, RecordType.TEAM_IDENTITY, RecordType.TEAM_PEER -> true
         // A runbook is a checklist of the same commands, saved and shared for the same reasons, so
         // it follows the snippets toggle instead of adding a switch nobody would set differently.
-        RecordType.SNIPPET, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN -> syncSnippets
+        // The library order is a list of snippet and runbook ids and nothing else, so it follows
+        // them: with snippets off, the ids of records that never leave the device don't either.
+        RecordType.SNIPPET, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN, RecordType.LIBRARY_ORDER -> syncSnippets
         RecordType.HOST,
         RecordType.GROUP,
         RecordType.IDENTITY,
