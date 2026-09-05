@@ -29,10 +29,12 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import app.skerry.ui.theme.Skerry
 import kotlinx.coroutines.CancellationException
 
@@ -173,17 +175,27 @@ class FolderDragState {
     }
 }
 
+/**
+ * Where the node actually is, in window coordinates, whether or not it is on screen.
+ *
+ * Not `boundsInWindow`: that intersects the node with the window and with every clipping ancestor,
+ * so a row scrolled out of the viewport comes back as `Rect.Zero`. A zero rect has its center at 0,
+ * which reads as "above the pointer" — and the drop index is a count of the centers above it, so
+ * every row the viewport had cut off pushed the drop one position further down the list.
+ */
+private fun LayoutCoordinates.unclippedWindowRect(): Rect = Rect(positionInWindow(), size.toSize())
+
 /** Records a row's window bounds, read by drag targets on release. */
 fun Modifier.itemBoundsAnchor(state: FolderDragState, id: String): Modifier =
-    onGloballyPositioned { state.setItemBounds(id, it.boundsInWindow()) }
+    onGloballyPositioned { state.setItemBounds(id, it.unclippedWindowRect()) }
 
 /** Records a folder block's window bounds, used to determine which folder the pointer is over. */
 fun Modifier.folderRangeAnchor(state: FolderDragState, name: String): Modifier =
-    onGloballyPositioned { state.setFolderRange(name, it.boundsInWindow()) }
+    onGloballyPositioned { state.setFolderRange(name, it.unclippedWindowRect()) }
 
 /** Records a folder header's window bounds, providing centers for folder reordering. */
 fun Modifier.folderHeaderAnchor(state: FolderDragState, name: String): Modifier =
-    onGloballyPositioned { state.setFolderHeader(name, it.boundsInWindow()) }
+    onGloballyPositioned { state.setFolderHeader(name, it.unclippedWindowRect()) }
 
 /**
  * Minimum pointer travel before a mouse press turns into a row/folder drag. Compose's built-in

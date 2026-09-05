@@ -1,10 +1,14 @@
 package app.skerry.ui.design
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -13,6 +17,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.unit.dp
 import app.skerry.ui.desktop.runForm
 import app.skerry.ui.desktop.string
 import app.skerry.ui.generated.resources.Res
@@ -283,6 +288,31 @@ class FolderSectionsTest {
         }
     }
 
+    /**
+     * A list longer than its viewport, which is what every library is. The rows scrolled out of it
+     * are still part of the order the drop index is counted over, so their geometry has to keep
+     * saying where they are — a read that clipped them to nothing would put every one of them above
+     * the pointer and push the drop that many places further down the list.
+     */
+    @Test
+    fun `rows scrolled out of the viewport do not push the drop down the list`() {
+        val items = (0 until 12).map { Holder("row-$it", null) }
+        var move: Triple<String, String?, Int>? = null
+
+        runForm({
+            Column(Modifier.height(VIEWPORT).verticalScroll(rememberScrollState())) {
+                FolderSections(
+                    items, scope = "drag", collapse = Collapse(), group = { it.group }, itemKey = { it.id },
+                    onMoveItem = { id, group, index, _ -> move = Triple(id, group, index) },
+                ) { Txt(it.id) }
+            }
+        }) {
+            drag(from = "row-0", to = "row-2")
+
+            assertEquals(Triple("row-0", null, 1), move, "the drop belongs where the pointer is, not below the list")
+        }
+    }
+
     @Test
     fun `a folder header dragged past its neighbour reports the index it landed on`() {
         val items = listOf(Holder("web-01", "Production"), Holder("db-01", "Staging"))
@@ -299,3 +329,6 @@ class FolderSectionsTest {
 
 /** Enough steps that each one stays small, as a real drag's moves are. */
 private const val DRAG_STEPS = 6
+
+/** Short enough that most of a twelve-row list is scrolled out of it. */
+private val VIEWPORT = 100.dp
