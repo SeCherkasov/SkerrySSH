@@ -158,4 +158,5 @@
     <string name="term_key_insert">Insert match</string>
     <string name="term_key_armed">armed</string>
     <string name="term_key_open">open</string>
+    <string name="term_sudo_offer">Enter — send the saved password for %1$s</string>
 </resources>

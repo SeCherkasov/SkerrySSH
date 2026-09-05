@@ -1,6 +1,14 @@
 package app.skerry.ui.vault
 
 import app.skerry.shared.ssh.KeyboardInteractiveChallenge
+import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.SshTarget
+import app.skerry.ui.terminal.TerminalSessionPrefs
+import app.skerry.ui.connection.ConnectionController
+import app.skerry.ui.connection.FakeShellChannel
+import app.skerry.ui.connection.FakeSshConnection
+import app.skerry.ui.connection.FakeSshTransport
+import app.skerry.ui.session.SessionsController
 import app.skerry.shared.ssh.KeyboardInteractivePrompt
 import app.skerry.shared.trust.HostTrustKind
 import app.skerry.shared.trust.HostTrustRequest
@@ -19,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.yield
 import kotlin.test.Test
@@ -119,5 +128,48 @@ class LockTeardownTest {
             closeSyncSetup = { closed = true },
         )
         assertTrue(closed, "the modal survives the lock and would reopen with its question already answered")
+    }
+
+    /**
+     * Issue #360: the lock has to take the pane's saved sudo password with it. The offer is armed
+     * from a live session and the lock deliberately leaves that session open, so nothing below the
+     * terminal can drop it — `tearDownForLock` reaches every pane's terminal itself. Delete that
+     * call and this is the only test that notices.
+     */
+    @Test
+    fun `locking drops a pane's saved sudo password`() = runTest {
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        val channel = FakeShellChannel()
+        val sessions = SessionsController(
+            newId = { "s0" },
+            controllerFactory = {
+                ConnectionController(
+                    transport = FakeSshTransport(FakeSshConnection(channel)),
+                    scope = scope,
+                    newSessionScope = { CoroutineScope(UnconfinedTestDispatcher(testScheduler)) },
+                    terminalPrefs = { TerminalSessionPrefs(sudoPasswordEnabled = true) },
+                )
+            },
+        )
+        sessions.open(
+            hostId = "h",
+            title = "web",
+            subtitle = "deploy@web:22",
+            target = SshTarget(host = "web", port = 22, username = "deploy"),
+            auth = SshAuth.Password("hunter2"),
+        )
+        advanceUntilIdle()
+        val terminal = sessions.active!!.focusedPane.liveTerminal!!
+        channel.emit("[sudo] password for deploy: ".encodeToByteArray())
+        advanceUntilIdle()
+        assertTrue(terminal.sudoOffer, "the offer did not arm before the lock")
+
+        tearDownForLock(tunnels = null, sessions = sessions, sync = null, snippets = null)
+
+        assertFalse(terminal.sudoOffer, "the offer survived the vault lock")
+        terminal.typeInput("\r")
+        advanceUntilIdle()
+        assertEquals(listOf("\r"), channel.written, "the saved password survived the vault lock")
+        scope.cancel()
     }
 }

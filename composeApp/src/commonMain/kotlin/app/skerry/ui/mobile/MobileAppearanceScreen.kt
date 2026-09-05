@@ -60,6 +60,8 @@ import app.skerry.ui.generated.resources.settings_terminal_highlight_output
 import app.skerry.ui.generated.resources.settings_terminal_highlight_output_desc
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
+import app.skerry.ui.generated.resources.settings_terminal_sudo_password
+import app.skerry.ui.generated.resources.settings_terminal_sudo_password_desc
 import app.skerry.ui.generated.resources.settings_terminal_cursor_style
 import app.skerry.ui.generated.resources.settings_terminal_scrollback
 import app.skerry.ui.generated.resources.appearance_title
@@ -208,6 +210,16 @@ fun MobileAppearanceScreen(state: MobileDesignState) {
                 desc = stringResource(Res.string.settings_terminal_clipboard_write_desc),
                 on = state.allowServerClipboardWrite,
                 onToggle = state::toggleAllowServerClipboardWrite,
+            )
+            // Saved password offered back at a sudo prompt (issue #360, desktop parity). Default
+            // off: nothing is sent without an explicit Enter, but the prompt is only recognised
+            // heuristically and the secret is the session's own credential.
+            HLine()
+            MobileToggleRow(
+                title = stringResource(Res.string.settings_terminal_sudo_password),
+                desc = stringResource(Res.string.settings_terminal_sudo_password_desc),
+                on = state.offerSudoPassword,
+                onToggle = state::toggleOfferSudoPassword,
             )
             // Production guard threshold (desktop parity): dangerous commands always confirm, the
             // warnings on top of them are opt-in.

@@ -667,6 +667,8 @@ fun main(args: Array<String>) {
                             onHostClickConnectModeChange = { prefs.set("host_click_connect", it.id) },
                             initialAllowServerClipboardWrite = prefs.bool("terminal_clipboard_write", false),
                             onAllowServerClipboardWriteChange = { prefs.set("terminal_clipboard_write", it) },
+                            initialOfferSudoPassword = prefs.bool("terminal_sudo_password", false),
+                            onOfferSudoPasswordChange = { prefs.set("terminal_sudo_password", it) },
                             initialReportTeamSessions = prefs.bool("teams_report_sessions", true),
                             onReportTeamSessionsChange = { prefs.set("teams_report_sessions", it) },
                             initialOpenFilePathsInSftp = prefs.bool("terminal_open_paths", true),

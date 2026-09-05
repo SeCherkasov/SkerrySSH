@@ -157,4 +157,5 @@
     <string name="term_key_insert">Вставить совпадение</string>
     <string name="term_key_armed">взведён</string>
     <string name="term_key_open">открыт</string>
+    <string name="term_sudo_offer">Enter — отправить сохранённый пароль для %1$s</string>
 </resources>

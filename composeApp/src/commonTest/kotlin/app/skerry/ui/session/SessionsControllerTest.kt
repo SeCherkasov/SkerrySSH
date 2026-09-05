@@ -42,6 +42,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -663,6 +664,53 @@ class SessionsControllerTest {
         scope.cancel()
     }
 
+    /**
+     * Issue #360: the pane that answered a sudo prompt with its saved password mirrors the *answer*,
+     * not the bytes — each pane sends its own credential to its own prompt.
+     *
+     * The sibling here has no offer of its own, which is the case that carries the risk. The
+     * mirrored answer only ever reaches panes that are themselves at a prompt
+     * ([paneSyncTargets] filters on `awaitingSecret` while the origin is taking a secret), so a
+     * bare Enter delivered here would submit an EMPTY password to that host's sudo. Nothing may
+     * reach its PTY. Routing `SudoAnswer` back to `receiveMirrored(text)` writes `\r` and fails this.
+     */
+    @Test
+    fun `a mirrored sudo answer sends nothing to a pane with no offer`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val paneId = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = paneId, hostId = "host-b")
+        val tab = sessions.active!!
+        sessions.toggleSyncInput(a)
+        val siblingPty = transport.connections.last().channels.single()
+
+        mirrorPaneInput(tab, originPaneId = a, text = "\r", kind = MirroredInput.SudoAnswer)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(emptyList(), siblingPty.written, "an empty password was submitted to the sibling's sudo")
+        scope.cancel()
+    }
+
+    /** The same fan-out still delivers ordinary typed input — the route above is narrow, not dead. */
+    @Test
+    fun `mirrored typing still reaches the tab's other panes`() = runTest {
+        val transport = FakeTransport()
+        val (sessions, scope) = sessionsWith(transport)
+        val a = sessions.open(hostId = "host-a")
+        val paneId = sessions.addPane()!!
+        sessions.connectPane(tabId = a, paneId = paneId, hostId = "host-b")
+        val tab = sessions.active!!
+        sessions.toggleSyncInput(a)
+        val siblingPty = transport.connections.last().channels.single()
+
+        mirrorPaneInput(tab, originPaneId = a, text = "id", kind = MirroredInput.Typed)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf("id"), siblingPty.written)
+        scope.cancel()
+    }
+
     @Test
     fun `connectPane refuses a remote-desktop pane`() = runTest {
         val vncTransport = FakeVncTransport()
@@ -1211,9 +1259,13 @@ private class FakeConnection : SshConnection {
     var disconnected = false
         private set
 
+    /** Every shell this connection opened, so a test can read what the pane wrote to its PTY. */
+    val channels = mutableListOf<FakeChannel>()
+
     override val isConnected: Boolean get() = !disconnected
     override suspend fun exec(command: String): ExecResult = throw UnsupportedOperationException()
-    override suspend fun openShell(size: PtySize, term: String): ShellChannel = FakeChannel()
+    override suspend fun openShell(size: PtySize, term: String): ShellChannel =
+        FakeChannel().also { channels += it }
     override suspend fun openSftp(): SftpClient = throw UnsupportedOperationException()
     override suspend fun forwardLocal(spec: LocalForwardSpec): PortForward = throw UnsupportedOperationException()
     override suspend fun forwardRemote(spec: RemoteForwardSpec): PortForward = throw UnsupportedOperationException()
@@ -1225,9 +1277,15 @@ private class FakeConnection : SshConnection {
 
 private class FakeChannel : ShellChannel {
     private val emissions = Channel<ByteArray>(Channel.UNLIMITED)
+
+    /** What the pane sent, decoded — the only way to tell "answered its own prompt" from "sent an Enter". */
+    val written = mutableListOf<String>()
+
     override val isOpen: Boolean = true
     override val output: Flow<ByteArray> = flow { for (chunk in emissions) emit(chunk) }
-    override suspend fun write(data: ByteArray) {}
+    override suspend fun write(data: ByteArray) {
+        written += data.decodeToString()
+    }
     override suspend fun resize(size: PtySize) {}
     override suspend fun close() {
         emissions.close()

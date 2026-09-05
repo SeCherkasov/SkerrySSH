@@ -115,6 +115,8 @@
     <string name="settings_terminal_host_connect_single">单击</string>
     <string name="settings_terminal_host_connect_double">双击（单击选中）</string>
     <string name="settings_terminal_clipboard_write_desc">允许远端写入系统剪贴板（tmux/vim）。默认关闭。</string>
+    <string name="settings_terminal_sudo_password">向 sudo 提供已保存的密码</string>
+    <string name="settings_terminal_sudo_password_desc">针对该账户的 sudo 提示会显示提醒；按 Enter 发送本次会话连接所用的密码。默认关闭——输出可以伪装成提示。</string>
 
     <!-- 同步部分 -->
     <string name="settings_disconnect">断开连接</string>
@@ -216,6 +218,7 @@
     <string name="settings_kb_accept_autocomplete">接受自动补全建议</string>
     <string name="settings_kb_cycle_suggestions">循环切换建议</string>
     <string name="settings_kb_search_history">搜索命令历史</string>
+    <string name="settings_kb_sudo_password">向 sudo 发送已保存的密码</string>
     <string name="settings_kb_open_link_or_path">打开链接或文件路径</string>
     <string name="settings_kb_mouse_click">Ctrl+点击</string>
     <string name="settings_kb_search_output">在输出中查找</string>

@@ -138,6 +138,7 @@ fun MobileDesignApp(
                                 state.terminalScrollback,
                                 state.terminalCursorStyle,
                                 clipboardWriteEnabled = state.allowServerClipboardWrite,
+                                sudoPasswordEnabled = state.offerSudoPassword,
                             )
                         },
                     )
@@ -170,6 +171,13 @@ fun MobileDesignApp(
     LaunchedEffect(allowClipboardWrite, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
         manager.allSessions.forEach { it.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite) }
+    }
+    // Desktop parity: turning the saved-password offer off ends it in already-open sessions and
+    // drops the password (see DesktopDesignApp).
+    val offerSudoPassword = state.offerSudoPassword
+    LaunchedEffect(offerSudoPassword, liveSessions) {
+        val manager = liveSessions ?: return@LaunchedEffect
+        manager.allSessions.forEach { it.liveTerminal?.applySudoOfferEnabled(offerSudoPassword) }
     }
     // Memoized: LocalTerminalAppearance is staticCompositionLocalOf (reference comparison); without
     // remember a new instance on every recomposition would force a rebuild of the terminal subtree.

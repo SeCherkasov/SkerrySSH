@@ -115,6 +115,8 @@
     <string name="settings_terminal_host_connect_single">Одинарный клик</string>
     <string name="settings_terminal_host_connect_double">Двойной клик (клик выделяет)</string>
     <string name="settings_terminal_clipboard_write_desc">Удалённая сторона может писать в системный буфер (tmux/vim). По умолчанию выкл.</string>
+    <string name="settings_terminal_sudo_password">Предлагать сохранённый пароль для sudo</string>
+    <string name="settings_terminal_sudo_password_desc">На запрос sudo для этой учётной записи появляется подсказка; Enter отправляет пароль, с которым открыта сессия. По умолчанию выкл. — вывод может имитировать запрос.</string>
 
     <!-- Раздел Sync (включая карточку аккаунта и устройства — бывшая вкладка Account влита сюда) -->
     <string name="settings_disconnect">Отключить</string>
@@ -216,6 +218,7 @@
     <string name="settings_kb_accept_autocomplete">Принять подсказку автодополнения</string>
     <string name="settings_kb_cycle_suggestions">Перебрать подсказки</string>
     <string name="settings_kb_search_history">Поиск по истории команд</string>
+    <string name="settings_kb_sudo_password">Отправить сохранённый пароль в sudo</string>
     <string name="settings_kb_open_link_or_path">Открыть ссылку или файловый путь</string>
     <string name="settings_kb_mouse_click">Ctrl+клик</string>
     <string name="settings_kb_search_output">Поиск по выводу</string>

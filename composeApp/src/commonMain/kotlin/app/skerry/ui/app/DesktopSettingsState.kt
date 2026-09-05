@@ -55,6 +55,8 @@ class DesktopSettingsState(
     private val onHostClickConnectModeChange: (HostClickConnectMode) -> Unit = {},
     initialAllowServerClipboardWrite: Boolean = false,
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    initialOfferSudoPassword: Boolean = false,
+    private val onOfferSudoPasswordChange: (Boolean) -> Unit = {},
     initialReportTeamSessions: Boolean = true,
     private val onReportTeamSessionsChange: (Boolean) -> Unit = {},
     initialOpenFilePathsInSftp: Boolean = true,
@@ -128,6 +130,14 @@ class DesktopSettingsState(
      * write). Off by default; snapshotted into new sessions and pushed live into open ones.
      */
     var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
+
+    /**
+     * Whether a sudo prompt is offered the password this session authenticated with (Terminal ->
+     * "Offer the saved password to sudo", issue #360). Off by default: nothing is ever sent without
+     * an explicit Enter, but the prompt is only recognised heuristically, so the user opts in.
+     * Snapshotted into new sessions - an open one keeps the answer it was born with.
+     */
+    var offerSudoPassword: Boolean by mutableStateOf(initialOfferSudoPassword); private set
 
     /**
      * Whether opening a session on a host **shared with a team** is reported to that team's activity
@@ -314,6 +324,12 @@ class DesktopSettingsState(
     fun toggleAllowServerClipboardWrite() {
         allowServerClipboardWrite = !allowServerClipboardWrite
         onAllowServerClipboardWriteChange(allowServerClipboardWrite)
+    }
+
+    /** Toggle offering the saved password at a sudo prompt and report outward (for persistence). */
+    fun toggleOfferSudoPassword() {
+        offerSudoPassword = !offerSudoPassword
+        onOfferSudoPasswordChange(offerSudoPassword)
     }
 
     /** Toggle reporting sessions on team-shared hosts and report outward (for persistence). */

@@ -17,3 +17,13 @@ internal fun eagerPublishClock(): () -> Long {
     var t = 0L
     return { t += PUBLISH_MIN_INTERVAL_MS; t }
 }
+
+/**
+ * [eagerPublishClock] with a longer step: every read also advances past [OFFER_DWELL_MS], so a sudo
+ * prompt drawn by one emit has been standing long enough by the next keystroke for the offer to be
+ * takeable. Tests about the dwell itself use the plain eager clock, where it never is.
+ */
+internal fun dwellingClock(): () -> Long {
+    var t = 0L
+    return { t += OFFER_DWELL_MS + PUBLISH_MIN_INTERVAL_MS; t }
+}

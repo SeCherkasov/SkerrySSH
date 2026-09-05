@@ -105,9 +105,11 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 import org.jetbrains.compose.resources.stringResource
+import app.skerry.ui.design.StatusAnnouncer
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.terminal_reverse_search_no_matches
 import app.skerry.ui.generated.resources.terminal_reverse_search_prompt
+import app.skerry.ui.generated.resources.term_sudo_offer
 import app.skerry.ui.theme.Skerry
 
 /** Max gap (ms) between clicks to count as double/triple click. */
@@ -1406,5 +1408,27 @@ fun TerminalScreen(
       // Transient "Copied" confirmation over the top of the terminal (right-click / Ctrl+Shift+C /
       // touch "Copy"). Same overlay slot and visual language as the DisconnectedBanner in TerminalView.
       CopiedBanner(copiedNonce, Modifier.align(Alignment.TopCenter))
+
+      // The saved password offered to a sudo prompt (issue #360). Bottom edge, not the top one the
+      // copy flash and the find bar share: the prompt it answers is on one of the last rows, and the
+      // hint has to be read together with it. Nothing is sent until Enter is pressed - see
+      // [SudoPasswordOffer] - so this line is the whole of the user's warning that the client is
+      // holding a secret ready, and it is announced as well as drawn.
+      // Read once: two reads of a snapshot value could straddle a commit and announce a hint the
+      // frame does not draw. The account and host are named because the client cannot tell it is
+      // still talking to them - an inner ssh or su leaves the prompt looking the same.
+      val sudoOffer = state.sudoOffer && !closed
+      val sudoHint = stringResource(Res.string.term_sudo_offer, state.sudoAccount)
+      StatusAnnouncer(if (sudoOffer) sudoHint else "")
+      if (sudoOffer) {
+          TerminalOverlayBanner(
+              icon = "password",
+              text = sudoHint,
+              accent = Skerry.colors.amber,
+              background = Skerry.colors.bannerScrim,
+              modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+              announced = true,
+          )
+      }
     }
 }

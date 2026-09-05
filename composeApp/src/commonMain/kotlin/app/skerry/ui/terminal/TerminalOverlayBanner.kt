@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.ui.design.LocalFonts
@@ -33,6 +34,11 @@ internal fun shouldShowCopiedFlash(nonce: Int): Boolean = nonce != 0
  * one line of mono text, a translucent [background] and a 40%-[accent] border. [contentColor] defaults
  * to [accent] but can differ (e.g. a brighter foreground on a dark accent). [modifier] positions it
  * (typically `Modifier.align(Alignment.TopCenter)`).
+ *
+ * [announced] says the caller already speaks this text through a [app.skerry.ui.design.StatusAnnouncer],
+ * which takes the pill out of the semantics tree: otherwise a screen reader swiping the terminal meets
+ * the announcer's node and the pill's own text one after the other and reads the same sentence twice.
+ * Default false — the banners that carry no announcer are only readable because their text is there.
  */
 @Composable
 internal fun TerminalOverlayBanner(
@@ -42,10 +48,12 @@ internal fun TerminalOverlayBanner(
     background: Color,
     modifier: Modifier = Modifier,
     contentColor: Color = accent,
+    announced: Boolean = false,
 ) {
     val mono = LocalFonts.current.mono
     Row(
         modifier
+            .then(if (announced) Modifier.clearAndSetSemantics {} else Modifier)
             .padding(top = 10.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(background)

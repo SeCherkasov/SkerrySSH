@@ -59,6 +59,7 @@ import app.skerry.ui.generated.resources.settings_kb_record_session
 import app.skerry.ui.generated.resources.settings_kb_release_keyboard
 import app.skerry.ui.generated.resources.settings_kb_remote_group
 import app.skerry.ui.generated.resources.settings_kb_search_history
+import app.skerry.ui.generated.resources.settings_kb_sudo_password
 import app.skerry.ui.generated.resources.settings_kb_search_output
 import app.skerry.ui.generated.resources.settings_kb_open_link_or_path
 import app.skerry.ui.generated.resources.settings_kb_mouse_click
@@ -114,6 +115,9 @@ internal fun KeyboardSection() {
         // Find in the session's output: the panel's own keys (Enter / Shift+Enter / Esc) are listed
         // with it, since they only exist while it is open.
         KeyboardBinding(stringResource(Res.string.settings_kb_search_output), "${mod("F")} · Enter / ${shift("Enter")} · Esc", live = true),
+        // Only while the saved-password offer is on screen (Settings -> Terminal), like the find
+        // panel's keys above: Enter then sends the password instead of a bare newline.
+        KeyboardBinding(stringResource(Res.string.settings_kb_sudo_password), "Enter", live = true),
         // Both conventions are live, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
         // Both conventions work, so both are listed: Ctrl+Shift+C/V and the X11 Insert pair.
         KeyboardBinding(stringResource(Res.string.settings_kb_copy_selection), "${ctrlShift("C")} / ${ctrl("Insert")}", live = true),
