@@ -129,6 +129,9 @@ internal class FakeSshConnection(
 internal class FakeShellChannel : ShellChannel {
     private val emissions = Channel<ByteArray>(Channel.UNLIMITED)
     private var eof = false
+
+    /** What the session sent, decoded — the only way to tell one answer to a prompt from another. */
+    val written = mutableListOf<String>()
     override val isOpen: Boolean = true
     override val endedWithEof: Boolean get() = eof
     override val output: Flow<ByteArray> = flow { for (chunk in emissions) emit(chunk) }
@@ -143,7 +146,9 @@ internal class FakeShellChannel : ShellChannel {
         emissions.close()
     }
 
-    override suspend fun write(data: ByteArray) {}
+    override suspend fun write(data: ByteArray) {
+        written += data.decodeToString()
+    }
     override suspend fun resize(size: PtySize) {}
     /** Server/transport-side drop: the channel ends WITHOUT EOF (reconnect candidate). */
     override suspend fun close() {

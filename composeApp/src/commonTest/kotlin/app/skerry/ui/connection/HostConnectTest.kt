@@ -8,8 +8,14 @@ import app.skerry.shared.ssh.SshAuth
 import app.skerry.shared.ssh.SshTarget
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
+import app.skerry.ui.terminal.PromptRow
+import app.skerry.ui.terminal.OFFER_DWELL_MS
+import app.skerry.ui.terminal.SudoPasswordOffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Pure helpers wiring a host to a session (host → address/label, keychain secret → auth
@@ -130,6 +136,63 @@ class HostConnectTest {
         val c = Credential("c5", "cert", CredentialSecret.Certificate("PEMDATA", "CERTDATA", null))
         assertEquals(SshAuth.Certificate("PEMDATA", "CERTDATA", null), c.toSshAuth())
     }
+
+    // --- The sudo offer (issue #360): what a session may hand back to a sudo prompt ---
+
+    @Test
+    fun sudo_offer_is_absent_while_the_setting_is_off() {
+        assertNull(sudoOfferFor(sshTarget("deploy"), SshAuth.Password("hunter2"), enabled = false))
+    }
+
+    @Test
+    fun sudo_offer_needs_a_password_credential() {
+        assertNull(sudoOfferFor(sshTarget("deploy"), SshAuth.PublicKey("PEMDATA", null), enabled = true))
+        assertNull(sudoOfferFor(sshTarget("deploy"), SshAuth.Password(""), enabled = true))
+    }
+
+    /** With no account name there is nothing to match a prompt against — see [SudoPasswordOffer]. */
+    @Test
+    fun sudo_offer_needs_a_username() {
+        assertNull(sudoOfferFor(sshTarget("   "), SshAuth.Password("hunter2"), enabled = true))
+    }
+
+    @Test
+    fun sudo_offer_answers_a_prompt_for_the_connected_account() {
+        val offer = sudoOfferFor(sshTarget("deploy"), SshAuth.Password("hunter2"), enabled = true)
+        assertNotNull(offer)
+        offer.observe(PromptRow(0, "[sudo] password for deploy: "), now = 0)
+        assertEquals("hunter2", offer.take(now = OFFER_DWELL_MS))
+
+        offer.observe(PromptRow(0, "[sudo] password for root: "), now = 0)
+        assertNull(offer.take(now = OFFER_DWELL_MS), "a prompt for another account was answered")
+    }
+
+    /**
+     * A container profile execs into an image once the host's SSH leg is up: the shell on screen is
+     * not the account that authenticated, and the host's password has no business in it.
+     */
+    @Test
+    fun sudo_offer_is_absent_for_a_container_profile() {
+        val target = sshTarget("deploy").copy(connectionType = ConnectionType.CONTAINER)
+        assertNull(sudoOfferFor(target, SshAuth.Password("hunter2"), enabled = true))
+    }
+
+    /** The hint has to name whose secret it is about to send — an inner ssh looks the same. */
+    @Test
+    fun sudo_offer_names_the_account_and_host() {
+        val offer = sudoOfferFor(sshTarget("deploy"), SshAuth.Password("hunter2"), enabled = true)
+        assertNotNull(offer)
+        assertEquals("deploy@10.0.0.5", offer.account)
+    }
+
+    /** The secret must not reach a log or a crash report through a stray interpolation. */
+    @Test
+    fun sudo_offer_redacts_its_password() {
+        val offer = SudoPasswordOffer("deploy", "deploy@10.0.0.5", "hunter2")
+        assertTrue("hunter2" !in offer.toString(), offer.toString())
+    }
+
+    private fun sshTarget(username: String) = SshTarget(host = "10.0.0.5", port = 22, username = username)
 
     @Test
     fun short_cipher_drops_vendor_suffix() {

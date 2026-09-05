@@ -154,4 +154,5 @@
     <string name="term_key_insert">插入匹配项</string>
     <string name="term_key_armed">已启用</string>
     <string name="term_key_open">已打开</string>
+    <string name="term_sudo_offer">Enter — 发送 %1$s 的已保存密码</string>
 </resources>

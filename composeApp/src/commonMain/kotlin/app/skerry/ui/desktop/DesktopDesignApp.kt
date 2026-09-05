@@ -268,6 +268,7 @@ fun DesktopDesignApp(
                                 state.settings.terminalScrollback,
                                 state.settings.terminalCursorStyle,
                                 clipboardWriteEnabled = state.settings.allowServerClipboardWrite,
+                                sudoPasswordEnabled = state.settings.offerSudoPassword,
                             )
                         },
                     )
@@ -307,6 +308,14 @@ fun DesktopDesignApp(
     LaunchedEffect(allowClipboardWrite, liveSessions) {
         val manager = liveSessions ?: return@LaunchedEffect
         manager.allSessions.forEach { it.liveTerminal?.applyClipboardWriteEnabled(allowClipboardWrite) }
+    }
+    // Turning the saved-password offer off applies to ALREADY open sessions live: the offer ends and
+    // the password is dropped. One direction only - a session that connected without one has no
+    // credential to build it from, so turning the setting on takes effect at the next connect.
+    val offerSudoPassword = state.settings.offerSudoPassword
+    LaunchedEffect(offerSudoPassword, liveSessions) {
+        val manager = liveSessions ?: return@LaunchedEffect
+        manager.allSessions.forEach { it.liveTerminal?.applySudoOfferEnabled(offerSudoPassword) }
     }
     // Memoized: LocalTerminalAppearance is staticCompositionLocalOf (reference comparison), and
     // DesktopDesignApp recomposes on tab/session switches and vault events. Without remember a new

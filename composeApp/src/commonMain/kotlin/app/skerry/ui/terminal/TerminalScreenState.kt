@@ -16,6 +16,7 @@ import app.skerry.shared.terminal.DEFAULT_MAX_SCROLLBACK
 import app.skerry.shared.terminal.MouseButton
 import app.skerry.shared.terminal.SessionRecorder
 import app.skerry.shared.terminal.epochMillis
+import app.skerry.shared.terminal.isPasswordPrompt
 import app.skerry.shared.terminal.MouseEventType
 import app.skerry.shared.terminal.MouseTracking
 import app.skerry.shared.terminal.TermCell
@@ -25,7 +26,6 @@ import app.skerry.shared.terminal.TerminalPos
 import app.skerry.shared.terminal.TerminalSelection
 import app.skerry.shared.terminal.TerminalSession
 import app.skerry.shared.terminal.TerminalState
-import app.skerry.shared.terminal.wrapsToNextRow
 import app.skerry.shared.terminal.TerminalStepMark
 import app.skerry.shared.terminal.bracketedPasteWrap
 import app.skerry.shared.terminal.encodeMouseReport
@@ -80,6 +80,10 @@ class TerminalScreenState(
     // an untrusted host must not silently overwrite the system clipboard until the user opts in.
     // Snapshotted at connect; also pushed live into an open session via [applyClipboardWriteEnabled].
     clipboardWriteEnabled: Boolean = false,
+    // The password this session authenticated with, offered back at a sudo prompt for the same
+    // account (Terminal -> "Offer the saved password to sudo"). Null is the default and means the
+    // feature is off for this session: nothing here can then send anything the user did not type.
+    private val sudo: SudoPasswordOffer? = null,
     // Monotonic milliseconds, injectable for tests. Two readers: the search refresh throttle and
     // the publish-rate cap in the emulator owner loop. Must not step backwards (a wall clock
     // would) — a backwards step would skip search refreshes for minutes and stretch the publish
@@ -554,6 +558,15 @@ class TerminalScreenState(
         // clears it — the same window every cross-thread engine write already lives with.
         if (altScreen != emulator.altScreen) autocomplete.reset()
         altScreen = emulator.altScreen
+        // Arm or disarm the saved-password offer from the row that was just drawn, and stamp when
+        // it appeared: the dwell [SudoPasswordOffer.take] requires is measured from here, which is
+        // the only place that knows when the prompt reached the screen. Never on the alternate
+        // screen — a fullscreen TUI paints arbitrary text, a line reading like a sudo prompt
+        // included, and an Enter there edits a buffer.
+        sudo?.observe(
+            if (altScreen) PromptRow(-1, "") else PromptRow(cursorRow, cursorLine().rowText()),
+            nowMillis(),
+        )
         // The echo of what was typed arrives here, and the ghost continues what this snapshot shows —
         // so this is where it is recomputed. Also clears it on entering a fullscreen TUI (vim/htop):
         // there is no "line" there.
@@ -719,8 +732,24 @@ class TerminalScreenState(
      * reaches the tracked line only where the sender says what it did to it
      * ([TerminalCommandGuard.trackSent]).
      */
-    fun typeInput(text: String, guarded: Boolean = true, mirror: Boolean = true) {
+    fun typeInput(text: String, guarded: Boolean = true, mirror: Boolean = true, mirrored: Boolean = false) {
         inputVersion++
+        // The saved password offered at a sudo prompt (issue #360): Enter takes it, and anything
+        // else declines the offer and is forwarded normally. Ahead of the secret path below because
+        // this Enter is not input for the host at all - it is the answer to the client's own offer.
+        // Only a keypress made on this pane can take it: input mirrored from a synchronized pane
+        // was aimed at that pane's screen, and the user reading its prompt never saw this one.
+        if (sudo != null && sudoOffer) {
+            if (!mirrored && isEnterKey(text) && sendSudoPassword()) {
+                // Carries no bytes: each synchronized pane answers its own prompt with its own
+                // credential, and a pane with no offer standing is left alone. paneSyncTargets has
+                // already narrowed the fan-out to panes at a password prompt, so a bare Enter
+                // forwarded there would submit an empty password and burn one of their attempts.
+                if (mirror) inputMirror?.invoke(text, MirroredInput.SudoAnswer)
+                return
+            }
+            declineSudoOffer()
+        }
         // Server not echoing input (password entry / line-mode signaled by the transport): do not
         // track the line or write it to history, so a secret does not persist and surface as a
         // suggestion. SSH echo status is unavailable (always false), so a password prompt is also
@@ -801,9 +830,9 @@ class TerminalScreenState(
     private val guard = TerminalCommandGuard(
         engine = autocomplete,
         altScreen = { altScreen },
-        lineToCursor = ::screenLineToCursor,
-        rowText = ::screenRowText,
-        lineContinues = ::screenRowContinues,
+        lineToCursor = { cursorLine().toCursor() },
+        rowText = { cursorLine().logicalText() },
+        lineContinues = { cursorLine().continues() },
     )
 
     /**
@@ -869,100 +898,108 @@ class TerminalScreenState(
     fun dismissGuardedCommand() = guard.hold.dismiss()
 
     /**
-     * Visible cursor row up to the cursor column — the shell line as the user sees it, prompt
-     * included ([ProductionGuard.promptCandidates] strips it). Reads the published [screen]
-     * snapshot, like [atPasswordPrompt]. [cursorRow] indexes that snapshot directly (the emulator
-     * counts scrollback into it), so it must NOT be offset by the screen's start — doing that ran
-     * off the end as soon as any history existed, and the guard then saw an empty line.
+     * The shell line the cursor sits on, read off the published [screen] snapshot (UI thread, no
+     * race with the emulator). Built per call: it is a view over the snapshot, and the snapshot is
+     * replaced wholesale on every publish.
      */
-    private fun screenLineToCursor(): String {
-        val grid = screen
-        if (grid.isEmpty() || rows <= 0) return ""
-        val line = grid.getOrNull(cursorRow) ?: return ""
-        return line.take(cursorCol.coerceIn(0, line.size)).joinToString("") { it.text }
+    private fun cursorLine(): CursorLine = CursorLine(screen, cursorRow, cursorCol, rows)
+
+    /**
+     * Whether the current cursor row looks like a password prompt (echo is usually off there). The
+     * rule itself is [isPasswordPrompt], shared with the sudo detector so the two cannot disagree
+     * about what a prompt is — a row that offers the saved password but does not read as a prompt
+     * would put a hand-typed secret into history.
+     */
+    private fun atPasswordPrompt(): Boolean = isPasswordPrompt(cursorLine().rowText())
+
+    /**
+     * Whether an offer of the saved password stands on the prompt the cursor is on. Armed by the
+     * publish path ([SudoPasswordOffer.observe]) rather than computed here, so reading it costs a
+     * snapshot read per frame instead of joining the cursor row; the terminal draws its hint from
+     * this and [typeInput] turns the next Enter into the password. See [SudoPasswordOffer] for why
+     * an explicit keypress — and the dwell before it — is the whole of the safety here.
+     */
+    val sudoOffer: Boolean get() = sudo?.stands == true
+
+    /**
+     * The forms of Enter that may answer the saved-password offer: the two plain ones, plus the
+     * numpad's SS3 under application-keypad mode (DECKPAM), which a TUI can leave set behind it.
+     * Without that one the hint names a key that spends the offer on an empty answer instead of
+     * taking it. Deliberately narrower than [RUN_LINE_CONTROLS] otherwise: readline's Ctrl-O also
+     * runs the line, but the offer is answered by the key its hint names and by nothing else.
+     */
+    private fun isEnterKey(text: String): Boolean =
+        text == "\r" || text == "\n" || text == NUMPAD_ENTER_SS3
+
+    /** Whose password the hint says it is about to send, so a nested shell shows as a mismatch. */
+    val sudoAccount: String get() = sudo?.account.orEmpty()
+
+    /**
+     * The user is answering the prompt themselves — by typing, pasting, or from another surface.
+     * The Enter that ends what they are entering has to commit that, not the saved password.
+     */
+    private fun declineSudoOffer() {
+        sudo?.decline()
     }
 
     /**
-     * The whole visible shell line, joined across its soft-wrapped rows, trailing blanks trimmed.
-     * Beside [screenLineToCursor] because the guard needs both: the shell runs the LINE, not the
-     * part of it left of the cursor — a recalled line with the cursor stepped back inside it is
-     * longer than what the cursor bounds, and one that wrapped leaves the cursor on the tail row
-     * with the head, where the risk usually sits, above it. Bounded by the grid.
+     * Hand the saved password to the prompt on screen, if the offer still stands. Returns whether
+     * it was sent, because the caller has a keystroke in hand either way: an offer withdrawn by a
+     * redraw, a viewer of the shared session, or an unserved dwell must not swallow the Enter.
+     *
+     * Sent through [send], not [sendUserInput]: nothing about it belongs on the tracked line, and
+     * the secret itself is never mirrored into synchronized panes — it belongs to this session's
+     * host, and the pane beside it may be another one. What a pane mirrors is the answer, so each
+     * one answers its own prompt with its own credential ([MirroredInput.SudoAnswer]).
      */
-    private fun screenRowText(): String {
-        val grid = screen
-        if (grid.isEmpty() || rows <= 0) return ""
-        if (grid.getOrNull(cursorRow) == null) return ""
-        return buildString {
-            for (row in logicalLineRows(grid)) grid[row].forEach { append(it.text) }
-        }.trimEnd()
+    private fun sendSudoPassword(): Boolean {
+        val secret = sudo?.take(nowMillis()) ?: return false
+        // The same reset the secret path in [typeInput] makes: with the echo off nothing will
+        // redraw, and a ghost left over from the line the prompt interrupted would sit at the
+        // cursor of a password prompt.
+        autocomplete.reset()
+        refreshSuggestion()
+        send(secret + "\r")
+        return true
     }
 
     /**
-     * Whether the shell's line continues past the cursor. Measured in CELLS, never in string
-     * characters: a wide glyph is one character in two columns (its continuation cell draws
-     * nothing) and a combining sequence is several characters in one, while [cursorCol] is a
-     * column — comparing against a joined string's length called a CJK row complete with text
-     * still right of the cursor. Counted across the logical line's soft-wrapped rows, so a cursor
-     * inside a wrapped line reports the tail rows too — and a cursor at the very end of the last
-     * one honestly reports nothing left.
+     * Typed input arriving from a synchronized pane ([app.skerry.ui.session.mirrorPaneInput]).
+     *
+     * The one entry point for it, so the three things that make mirrored input different cannot be
+     * got wrong at a call site: the origin pane already held and confirmed the command for the whole
+     * group, a copy that mirrored again would bounce between panes forever, and — the one that
+     * carries a secret — a keypress made on another pane's screen must never take this pane's saved
+     * password. The user read that pane's prompt, not this one's.
      */
-    private fun screenRowContinues(): Boolean {
-        val grid = screen
-        if (grid.isEmpty() || rows <= 0) return false
-        if (grid.getOrNull(cursorRow) == null) return false
-        val lineRows = logicalLineRows(grid)
-        // Clamped to the row as [screenLineToCursor] clamps: a cursor parked past the row's width
-        // would overcount what is behind it and call a continuing line complete.
-        var beforeCursor = cursorCol.coerceIn(0, grid.getOrNull(cursorRow)?.size ?: 0)
-        for (row in lineRows.first until cursorRow) beforeCursor += grid[row].size
-        var total = 0
-        for (row in lineRows) {
-            val line = grid[row]
-            var cells = line.size
-            if (row == lineRows.last) while (cells > 0 && line[cells - 1].text.isBlank()) cells--
-            total += cells
-        }
-        return total > beforeCursor
+    fun receiveMirrored(text: String) {
+        typeInput(text, guarded = false, mirror = false, mirrored = true)
     }
 
     /**
-     * Rows of the logical line the cursor sits in: soft-wrap joined, up and down from the cursor
-     * row. Capped, not merely grid-bounded: [screen] includes scrollback, and a host that never
-     * prints a newline chains wrap flags across thousands of rows — joining them would build a
-     * megabyte string on the caller's thread for a classifier that reads 512 characters of a
-     * candidate. The window keeps the rows nearest the cursor, which are the ones the shell's
-     * line actually lives on; past it the join degrades to what the old single-row read saw.
+     * Answer this pane's own sudo prompt because a synchronized pane just answered its own
+     * ([MirroredInput.SudoAnswer]). Entering one sudo password across the group is the case the
+     * toggle exists for, and the panes are separate hosts: each sends the credential it
+     * authenticated with, never the origin's.
+     *
+     * A pane whose own offer is not standing is left alone, and that is not a missed keystroke: the
+     * origin is at a sudo prompt when it takes its offer, so
+     * [app.skerry.ui.session.paneSyncTargets] has already narrowed the targets to panes that are
+     * themselves at a prompt. Sending a bare Enter here would submit an EMPTY password to that
+     * host's sudo and burn one of its three attempts — seven times over on an eight-pane group.
+     * The prompt stays on screen for its own user to answer.
      */
-    private fun logicalLineRows(grid: List<List<TermCell>>): IntRange {
-        var first = cursorRow
-        while (
-            first > 0 && cursorRow - first < MAX_JOINED_WRAP_ROWS &&
-            grid.getOrNull(first - 1)?.wrapsToNextRow() == true
-        ) first--
-        var last = cursorRow
-        while (
-            last - cursorRow < MAX_JOINED_WRAP_ROWS && last + 1 < grid.size &&
-            grid.getOrNull(last)?.wrapsToNextRow() == true
-        ) last++
-        return first..last
+    fun answerSudoPrompt() {
+        if (sendSudoPassword()) inputVersion++
     }
 
     /**
-     * Whether the current cursor row looks like a password prompt (echo is usually off there).
-     * Reads the published [screen] snapshot (UI thread, no race with the emulator) at [cursorRow],
-     * which already addresses that snapshot including scrollback. A row is treated as a
-     * prompt if it ends with ":" and contains one of the keyword hints, to avoid suppressing
-     * history on plain text like `cat passwords.txt`. Heuristic: erring toward not saving a
-     * command is safer than leaking a secret.
+     * Turning "Offer the saved password to sudo" off under a live session ends its offer and drops
+     * the password, the way [applyClipboardWriteEnabled] carries its own setting into open panes —
+     * a toggle the user reaches for because a session is behaving oddly has to take effect there.
      */
-    private fun atPasswordPrompt(): Boolean {
-        val grid = screen
-        if (grid.isEmpty() || rows <= 0) return false
-        val line = grid.getOrNull(cursorRow) ?: return false
-        val text = line.joinToString("") { it.text }.trim().lowercase()
-        if (!text.endsWith(":")) return false
-        return PASSWORD_PROMPT_HINTS.any { it in text }
+    fun applySudoOfferEnabled(enabled: Boolean) {
+        if (!enabled) sudo?.revoke()
     }
 
     /**
@@ -1068,7 +1105,7 @@ class TerminalScreenState(
      */
     private fun echoedLine(line: String): String {
         if (line.isEmpty()) return ""
-        val onScreen = screenLineToCursor()
+        val onScreen = cursorLine().toCursor()
         // Compared in place: this runs on every published snapshot, and a substring per candidate
         // length would allocate through the whole line on each batch of output.
         var length = minOf(onScreen.length, line.length)
@@ -1089,6 +1126,9 @@ class TerminalScreenState(
      */
     fun sendUserInput(text: String) {
         inputVersion++
+        // A snippet, a keybar sequence or an AI-confirmed line answering the prompt is the user
+        // entering their own secret, exactly as typing one is.
+        declineSudoOffer()
         // The engine never sees this input by itself, so it is told what the input did to the line —
         // otherwise the guard, the suggestion and the history all work off a line that was left
         // behind two commands ago. Applied here rather than posted to the emulator's queue: the next
@@ -1139,6 +1179,11 @@ class TerminalScreenState(
      */
     fun sendSharedInput(bytes: ByteArray) {
         inputVersion++
+        // A viewer of a shared session types on the same prompt the owner sees, so their keystroke
+        // ends the offer exactly as the owner's would. The hint simply goes: it is deliberately not
+        // replaced with a line explaining who withdrew it, because the owner's next Enter must
+        // commit what the viewer entered either way, and that is what the hint's absence says.
+        declineSudoOffer()
         sendBytes(bytes)
     }
 
@@ -1176,6 +1221,7 @@ class TerminalScreenState(
     /** Paste clipboard text: wraps it in markers when bracketed paste is enabled (DEC 2004). */
     fun paste(text: String, mirror: Boolean = true) {
         if (text.isEmpty()) return
+        declineSudoOffer()
         // A paste carrying a newline runs the moment it lands — on a production session it goes
         // through the same confirmation as a typed command ([TerminalCommandGuard.holdPaste]).
         // The password-prompt exemption is [typeInput]'s, for the same reason: a manager pastes the
@@ -1297,6 +1343,11 @@ class TerminalScreenState(
                     closeFailure.printStackTrace()
                 }
             } finally {
+                // The session is over (EOF, disconnect, or the pane closing with the scope): drop
+                // the saved password. The connection controller drops its own copy on a clean exit
+                // for the same reason, and a String cannot be zeroed — the least this can do is not
+                // outlive the connection it belongs to.
+                sudo?.revoke()
                 // The scope is a SupervisorJob: this coroutine dying (parser exception) does NOT
                 // take the session collector with it. Close the queue so the collector's next send
                 // fails fast instead of feeding a channel nobody drains, and return the permits of
@@ -1330,20 +1381,18 @@ class TerminalScreenState(
 }
 
 /**
- * What a synchronized pane is mirroring (see [TerminalScreenState.inputMirror]). Typing and pasting
- * stay apart because the receiving pane has to replay each the way it would have arrived there:
- * typed input feeds its autocomplete, a paste gets that pane's own bracketed-paste wrapping.
+ * What a synchronized pane is mirroring (see [TerminalScreenState.inputMirror]). The three stay
+ * apart because the receiving pane has to replay each the way it would have arrived there: typed
+ * input feeds its autocomplete, a paste gets that pane's own bracketed-paste wrapping, and the
+ * answer to a sudo prompt is the pane's own saved password rather than the origin's bytes.
  */
-enum class MirroredInput { Typed, Pasted }
+enum class MirroredInput { Typed, Pasted, SudoAnswer }
 
 /**
  * Process start mark: the default monotonic clock behind [TerminalScreenState]'s search refresh
  * throttle and its publish-rate cap.
  */
 private val STARTED_AT = TimeSource.Monotonic.markNow()
-
-/** How many soft-wrapped rows [TerminalScreenState.logicalLineRows] joins in each direction. */
-private const val MAX_JOINED_WRAP_ROWS = 64
 
 /**
  * How many PTY chunks may sit unapplied between the session collector and the emulator before the
@@ -1372,6 +1421,9 @@ internal const val FEED_BACKLOG_CHUNKS = 64
  * grows the worst-case scheduling delay of the outbound writer on a saturated pool with it.
  */
 internal const val PUBLISH_MIN_INTERVAL_MS = 16L
+
+/** Numpad Enter in application-keypad mode (DECKPAM), as `keypadSequence` in TerminalInput.kt sends it. */
+private const val NUMPAD_ENTER_SS3 = "\u001bOM"
 
 /**
  * The emulator owner loop: applies commands strictly in order and publishes snapshots at a
@@ -1519,17 +1571,6 @@ private sealed interface TerminalCommand {
     /** The runbook step the terminal should report, and the echo of its probes to hide. */
     class ExpectStep(val token: String?, val hiddenEcho: List<String>) : TerminalCommand
 }
-
-/**
- * Prompt-line keywords that mark input as secret and exempt it from history (see
- * [TerminalScreenState.atPasswordPrompt]). Covers typical sudo/ssh/passwd/su prompts and the common
- * MFA wordings: with synchronized panes a missed prompt mirrors the secret into every other pane of
- * the tab, so the list errs wide — a false match only keeps an ordinary command out of history.
- */
-private val PASSWORD_PROMPT_HINTS = listOf(
-    "password", "passphrase", "passcode", "verification code", "pin",
-    "otp", "one-time", "token", "2fa", "mfa", "authenticator", "challenge",
-)
 
 /**
  * Extract the last command and its output from flat screen [text] (rows joined by '\n', trailing

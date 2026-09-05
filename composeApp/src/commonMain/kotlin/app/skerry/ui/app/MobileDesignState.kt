@@ -161,6 +161,8 @@ class MobileDesignState(
     // and pushed live into open ones. Persisted on Android; no-op default for previews/tests.
     initialAllowServerClipboardWrite: Boolean = false,
     private val onAllowServerClipboardWriteChange: (Boolean) -> Unit = {},
+    initialOfferSudoPassword: Boolean = false,
+    private val onOfferSudoPasswordChange: (Boolean) -> Unit = {},
     initialReportTeamSessions: Boolean = true,
     private val onReportTeamSessionsChange: (Boolean) -> Unit = {},
     // Whether a file path selected in terminal output offers "Open in Files" (More → Terminal).
@@ -405,6 +407,14 @@ class MobileDesignState(
     var allowServerClipboardWrite: Boolean by mutableStateOf(initialAllowServerClipboardWrite); private set
 
     /**
+     * Whether a sudo prompt is offered the password this session authenticated with (Terminal ->
+     * "Offer the saved password to sudo", issue #360). Off by default: nothing is ever sent without
+     * an explicit Enter, but the prompt is only recognised heuristically, so the user opts in.
+     * Snapshotted into new sessions - an open one keeps the answer it was born with.
+     */
+    var offerSudoPassword: Boolean by mutableStateOf(initialOfferSudoPassword); private set
+
+    /**
      * Whether a session on a team-shared host is reported to that team's activity feed (More →
      * Security). Desktop parity, see [app.skerry.ui.app.DesktopDesignState.reportTeamSessions].
      */
@@ -534,6 +544,12 @@ class MobileDesignState(
     fun toggleAllowServerClipboardWrite() {
         allowServerClipboardWrite = !allowServerClipboardWrite
         onAllowServerClipboardWriteChange(allowServerClipboardWrite)
+    }
+
+    /** Toggle offering the saved password at a sudo prompt and report outward (for persistence). */
+    fun toggleOfferSudoPassword() {
+        offerSudoPassword = !offerSudoPassword
+        onOfferSudoPasswordChange(offerSudoPassword)
     }
 
     /** Toggle reporting sessions on team-shared hosts and report outward (for persistence). */

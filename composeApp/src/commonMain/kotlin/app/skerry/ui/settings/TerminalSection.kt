@@ -60,6 +60,8 @@ import app.skerry.ui.generated.resources.settings_terminal_highlight_output
 import app.skerry.ui.generated.resources.settings_terminal_highlight_output_desc
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write
 import app.skerry.ui.generated.resources.settings_terminal_clipboard_write_desc
+import app.skerry.ui.generated.resources.settings_terminal_sudo_password
+import app.skerry.ui.generated.resources.settings_terminal_sudo_password_desc
 import app.skerry.ui.generated.resources.settings_terminal_scrollback
 import app.skerry.ui.generated.resources.settings_terminal_scrollback_desc
 import app.skerry.ui.generated.resources.settings_terminal_section_behavior
@@ -224,6 +226,16 @@ internal fun TerminalSection(state: DesktopDesignState) {
         stringResource(Res.string.settings_terminal_clipboard_write_desc),
         on = state.settings.allowServerClipboardWrite,
         onToggle = state.settings::toggleAllowServerClipboardWrite,
+    )
+    HLine()
+    // Saved password offered back at a sudo prompt (issue #360). Default off: nothing is sent
+    // without an explicit Enter, but the prompt is only recognised heuristically and the secret is
+    // the session's own credential.
+    SettingToggleRow(
+        stringResource(Res.string.settings_terminal_sudo_password),
+        stringResource(Res.string.settings_terminal_sudo_password_desc),
+        on = state.settings.offerSudoPassword,
+        onToggle = state.settings::toggleOfferSudoPassword,
     )
     HLine(modifier = Modifier.padding(top = 12.dp))
     // Local shell: the shell binary run for local-terminal sessions (launched from the empty-tab

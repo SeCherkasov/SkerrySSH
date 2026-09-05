@@ -115,6 +115,8 @@
     <string name="settings_terminal_host_connect_single">Single click</string>
     <string name="settings_terminal_host_connect_double">Double click (click selects)</string>
     <string name="settings_terminal_clipboard_write_desc">The remote side may write to the system clipboard (tmux/vim). Off by default.</string>
+    <string name="settings_terminal_sudo_password">Offer the saved password to sudo</string>
+    <string name="settings_terminal_sudo_password_desc">A sudo prompt for this account gets a hint; Enter sends the password the session connected with. Off by default — output can imitate a prompt.</string>
 
     <!-- Sync section (also covers the account card and linked devices — merged from the former Account tab) -->
     <string name="settings_disconnect">Disconnect</string>
@@ -216,6 +218,7 @@
     <string name="settings_kb_accept_autocomplete">Accept autocomplete suggestion</string>
     <string name="settings_kb_cycle_suggestions">Cycle suggestions</string>
     <string name="settings_kb_search_history">Search command history</string>
+    <string name="settings_kb_sudo_password">Send the saved password to sudo</string>
     <string name="settings_kb_open_link_or_path">Open a link or file path</string>
     <string name="settings_kb_mouse_click">Ctrl+click</string>
     <string name="settings_kb_search_output">Find in output</string>

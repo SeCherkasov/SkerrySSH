@@ -10,6 +10,7 @@ import app.skerry.shared.vault.Credential
 import app.skerry.shared.vault.CredentialSecret
 import app.skerry.shared.vnc.VncAuth
 import app.skerry.ui.design.untrustedLabel
+import app.skerry.ui.terminal.SudoPasswordOffer
 
 /**
  * Pure helpers wiring a saved host profile to a live session. Kept separate from UI so the
@@ -67,6 +68,29 @@ fun Credential.toSshAuth(): SshAuth = when (val s = secret) {
     // Refs travel as refs: the files behind them are read by the transport at connect time, so a
     // certificate the issuer rewrote a minute ago is the one presented.
     is CredentialSecret.KeyFile -> SshAuth.KeyFile(s.privateKeyRef, s.certificateRef, s.passphrase)
+}
+
+/**
+ * The sudo offer for a session authenticating as [target] with [auth] (issue #360), or `null` when
+ * there is nothing to offer: [enabled] is off, the profile does not authenticate with a password —
+ * a key-based session has no secret a prompt could be answered with — or it carries no account name
+ * for a prompt to be matched against.
+ *
+ * Built from the credential the connection is actually using rather than from a vault lookup, which
+ * is what makes "only the credential belonging to the current host/user" true by construction: what
+ * may be offered back is exactly what got in.
+ */
+fun sudoOfferFor(target: SshTarget, auth: SshAuth, enabled: Boolean): SudoPasswordOffer? {
+    if (!enabled) return null
+    // A container profile execs into an image once the host's SSH leg is up, so the shell on screen
+    // is not the account that authenticated: a container with a same-named user printing a sudo
+    // prompt would be handed the host's password, and an image is a far weaker trust boundary than
+    // the host running it. Nesting the user does by hand (an inner ssh, su, docker exec) cannot be
+    // detected from here - which is why the hint names the account and host the password belongs to.
+    if (target.connectionType == ConnectionType.CONTAINER) return null
+    val password = (auth as? SshAuth.Password)?.secret?.takeIf { it.isNotEmpty() } ?: return null
+    val username = target.username.trim().takeIf { it.isNotEmpty() } ?: return null
+    return SudoPasswordOffer(username, untrustedLabel("$username@${target.host}"), password)
 }
 
 /**

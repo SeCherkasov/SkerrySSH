@@ -233,6 +233,19 @@ class DesktopSettingsStateTest {
         assertEquals(true, s.showTerminalTitleOnTabs)
     }
 
+    /** Issue #360. Off by default on both platforms: a heuristic holding a secret is opt-in. */
+    @Test
+    fun toggleOfferSudoPassword_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = DesktopSettingsState(onOfferSudoPasswordChange = { seen += it })
+        assertEquals(false, s.offerSudoPassword)
+        s.toggleOfferSudoPassword()
+        assertEquals(true, s.offerSudoPassword)
+        s.toggleOfferSudoPassword()
+        assertEquals(false, s.offerSudoPassword)
+        assertEquals(listOf(true, false), seen)
+    }
+
     @Test
     fun setTerminalScrollback_updates_and_reports_skipping_repeat_and_out_of_range() {
         val seen = mutableListOf<Int>()

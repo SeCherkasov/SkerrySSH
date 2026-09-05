@@ -327,6 +327,39 @@ class ConnectionController(
     }
 
     /**
+     * The terminal for a session just opened on [channel]: the emulator's settings snapshotted at
+     * connect time (they apply to the new session; an open one keeps its own), this host's command
+     * history under [historyKey] with the hook that persists it, and the sudo offer built from the
+     * credential the connection is actually using (see [sudoOfferFor]).
+     */
+    private fun newTerminal(
+        target: SshTarget,
+        auth: SshAuth,
+        channel: ShellChannel,
+        sScope: CoroutineScope,
+        historyKey: String,
+    ): TerminalScreenState {
+        val prefs = terminalPrefs()
+        return TerminalScreenState(
+            ShellTerminalSession(channel, sScope),
+            sScope,
+            initialHistory = history?.load(historyKey).orEmpty(),
+            scrollback = prefs.effectiveScrollback,
+            cursorShape = prefs.cursorStyle.shape,
+            cursorBlink = prefs.cursorStyle.blink,
+            clipboardWriteEnabled = prefs.clipboardWriteEnabled,
+            sudo = sudoOfferFor(target, auth, prefs.sudoPasswordEnabled),
+            onHistoryChanged = history?.let { store ->
+                // Moves the write off the UI thread onto the controller's scope (Default): commands
+                // are infrequent and the write is small. The label rides along so the command
+                // palette can name the host a command came from.
+                val label = "${target.username}@${target.host}"
+                { snapshot -> scope.launch { store.save(historyKey, snapshot, label) } }
+            },
+        )
+    }
+
+    /**
      * Establishes a live session to [target]/[auth]: opens the connection and shell, assembles the
      * terminal, transitions to [ConnectionUiState.Connected], and subscribes the drop observer. On
      * any error, closes the half-open connection and rethrows (the caller decides: show [Error] or
@@ -355,25 +388,7 @@ class ConnectionController(
                 target.connectionType.name, target.username, target.host, target.port,
             )
             this.historyKey = historyKey
-            val loadedHistory = history?.load(historyKey).orEmpty()
-            // Snapshot terminal settings at connect time: they apply to the new session.
-            val prefs = terminalPrefs()
-            val terminal = TerminalScreenState(
-                ShellTerminalSession(channel, sScope),
-                sScope,
-                initialHistory = loadedHistory,
-                scrollback = prefs.effectiveScrollback,
-                cursorShape = prefs.cursorStyle.shape,
-                cursorBlink = prefs.cursorStyle.blink,
-                clipboardWriteEnabled = prefs.clipboardWriteEnabled,
-                onHistoryChanged = history?.let { store ->
-                    // Moves the write off the UI thread onto the controller's scope (Default):
-                    // commands are infrequent and the write is small. The label rides along so the
-                    // command palette can name the host a command came from.
-                    val label = "${target.username}@${target.host}"
-                    { snapshot -> scope.launch { store.save(historyKey, snapshot, label) } }
-                },
-            )
+            val terminal = newTerminal(target, auth, channel, sScope, historyKey)
             // Keep-alive per the profile's cadence (0 = off, SSH-only): pings run from the moment
             // the session exists — not lazily from the status bar — so an idle session behind a NAT
             // stays alive even with no UI polling it. Created BEFORE Connected (like shellChannel)

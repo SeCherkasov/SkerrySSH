@@ -270,6 +270,8 @@ class MainActivity : FragmentActivity() {
                     onTerminalFontSizeChange = { writeTerminalFontSize(dir, it) },
                     initialAllowServerClipboardWrite = readClipboardWrite(dir),
                     onAllowServerClipboardWriteChange = { writeClipboardWrite(dir, it) },
+                    initialOfferSudoPassword = readOfferSudoPassword(dir),
+                    onOfferSudoPasswordChange = { writeOfferSudoPassword(dir, it) },
                     initialReportTeamSessions = readReportTeamSessions(dir),
                     onReportTeamSessionsChange = { writeReportTeamSessions(dir, it) },
                     initialTerminalAutoFit = readTerminalAutoFit(dir),
@@ -322,11 +324,13 @@ class MainActivity : FragmentActivity() {
                         designState.terminalScrollback,
                         designState.terminalCursorStyle,
                         designState.allowServerClipboardWrite,
+                        designState.offerSudoPassword,
                     ) {
                         KeepAliveRuntime.terminalPrefs = app.skerry.ui.terminal.TerminalSessionPrefs(
                             designState.terminalScrollback,
                             designState.terminalCursorStyle,
                             clipboardWriteEnabled = designState.allowServerClipboardWrite,
+                            sudoPasswordEnabled = designState.offerSudoPassword,
                         )
                     }
                     // A per-session notification tap: activate the tapped terminal AND navigate to
@@ -426,6 +430,20 @@ class MainActivity : FragmentActivity() {
     private fun writeClipboardWrite(dir: File, enabled: Boolean) {
         lifecycleScope.launch(Dispatchers.IO) {
             runCatching { File(dir, "terminal_clipboard_write").writeText(enabled.toString()) }
+        }
+    }
+
+    /**
+     * Offering the saved password at a sudo prompt (More → Appearance → Terminal): "true"/"false"
+     * in `terminal_sudo_password`. Missing/unreadable → false (off by default, issue #360).
+     */
+    private fun readOfferSudoPassword(dir: File): Boolean = runCatching {
+        File(dir, "terminal_sudo_password").readText().trim().toBoolean()
+    }.getOrDefault(false)
+
+    private fun writeOfferSudoPassword(dir: File, enabled: Boolean) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            runCatching { File(dir, "terminal_sudo_password").writeText(enabled.toString()) }
         }
     }
 

@@ -104,6 +104,18 @@ class MobileDesignStateTest {
     }
 
     @Test
+    fun toggleOfferSudoPassword_flips_and_reports() {
+        val seen = mutableListOf<Boolean>()
+        val s = MobileDesignState(onOfferSudoPasswordChange = { seen += it })
+        assertEquals(false, s.offerSudoPassword) // off by default (issue #360): a heuristic holds a secret
+        s.toggleOfferSudoPassword()
+        assertEquals(true, s.offerSudoPassword)
+        s.toggleOfferSudoPassword()
+        assertEquals(false, s.offerSudoPassword)
+        assertEquals(listOf(true, false), seen)
+    }
+
+    @Test
     fun toggleConfirmProductionWarnings_flips_and_reports() {
         val seen = mutableListOf<Boolean>()
         val s = MobileDesignState(onConfirmProductionWarningsChange = { seen += it })

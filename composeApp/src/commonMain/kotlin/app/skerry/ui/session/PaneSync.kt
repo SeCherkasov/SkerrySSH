@@ -47,8 +47,12 @@ internal fun mirrorPaneInput(tab: Tab, originPaneId: String, text: String, kind:
     val origin = tab.pane(originPaneId)?.liveTerminal
     paneSyncTargets(origin, tab.syncTargetsFrom(originPaneId)).forEach { target ->
         when (kind) {
-            MirroredInput.Typed -> target.typeInput(text, guarded = false, mirror = false)
+            MirroredInput.Typed -> target.receiveMirrored(text)
             MirroredInput.Pasted -> target.paste(text, mirror = false)
+            // The origin answered its own sudo prompt with its own saved password; this pane
+            // answers its own with its own. The secret itself is never mirrored — the panes are
+            // separate hosts, and one host's password has no business on another's tty.
+            MirroredInput.SudoAnswer -> target.answerSudoPrompt()
         }
     }
 }

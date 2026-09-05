@@ -63,7 +63,14 @@ fun tearDownForLock(
     // Guarded per pane, not per step: each pane holds its own decrypted credential, so one that
     // refuses to let go must not leave the panes after it holding theirs behind a locked vault.
     sessions?.tabs?.forEach { tab ->
-        tab.panes.forEach { pane -> failures.run { pane.controller.clearReconnectCredentials() } }
+        tab.panes.forEach { pane ->
+            failures.run { pane.controller.clearReconnectCredentials() }
+            // The same credential again: a pane's terminal holds its own copy to offer back at a
+            // sudo prompt (issue #360), and it must not survive the lock the reconnect copy is
+            // dropped for. Also ends any offer standing when the screen locked, so unlocking does
+            // not resume one the user never re-consented to.
+            failures.run { pane.liveTerminal?.applySudoOfferEnabled(false) }
+        }
     }
     failures.run { sync?.pauseForLock() }
     failures.run { snippets?.dismissRun() }

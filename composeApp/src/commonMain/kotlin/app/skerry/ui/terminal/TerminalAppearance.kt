@@ -135,6 +135,10 @@ data class TerminalSessionPrefs(
     // clipboard write"). Off by default (like xterm/kitty): an untrusted host can't silently
     // overwrite the clipboard until the user opts in.
     val clipboardWriteEnabled: Boolean = false,
+    // Whether a sudo prompt is offered the password the session authenticated with (Terminal ->
+    // "Offer the saved password to sudo", issue #360). Off by default: it hands a secret to a line
+    // the client only recognises heuristically, so the user opts in.
+    val sudoPasswordEnabled: Boolean = false,
 ) {
     /** Effective scrollback depth: validated preset, else the emulator default (safety net). */
     val effectiveScrollback: Int get() = scrollback.takeIf { it > 0 } ?: DEFAULT_MAX_SCROLLBACK
