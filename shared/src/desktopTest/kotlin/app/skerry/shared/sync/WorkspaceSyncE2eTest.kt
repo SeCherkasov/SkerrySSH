@@ -1,7 +1,6 @@
 package app.skerry.shared.sync
 
 import app.skerry.server.config.ServerConfig
-import app.skerry.server.module
 import app.skerry.shared.host.Host
 import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.snippet.Snippet
@@ -16,8 +15,6 @@ import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.WorkspaceLayout
 import app.skerry.shared.vault.WorkspaceLayoutStore
 import app.skerry.shared.vault.initializeVaultCrypto
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.netty.Netty
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toPath
@@ -36,11 +33,11 @@ class WorkspaceSyncE2eTest {
 
     private val accountId = "alice@example.com"
     private val masterPassword = "correct horse battery staple"
+    private val crypto = IonspinVaultCrypto()
 
     @Test
-    fun `device B sees hosts snippets and tunnels of device A in tree order`() = runBlocking {
+    fun `device B sees hosts snippets and tunnels of device A in tree and library order`() = runBlocking {
         initializeVaultCrypto()
-        val crypto = IonspinVaultCrypto()
         val port = ServerSocket(0).use { it.localPort }
         val dbFile = Files.createTempFile("skerry-ws-e2e-", ".db")
         val config = ServerConfig.fromEnv(
@@ -50,26 +47,13 @@ class WorkspaceSyncE2eTest {
                 "SKERRY_PORT" to "$port",
             ),
         )
-        val server = embeddedServer(Netty, port = port) { module(config) }.start(wait = false)
+        val server = startTestServer(config, port)
         val client = KtorSyncClient("http://localhost:$port")
         val dirA = Files.createTempDirectory("skerry-ws-a")
         val dirB = Files.createTempDirectory("skerry-ws-b")
         try {
-            // --- Device A: populate the workspace via vault stores ---
-            val vaultA = FileVault(dirA.resolve("vault.json").toString().toPath(), crypto, "devA", FileSystem.SYSTEM) { "2026-06-29T00:00:00Z" }
-            vaultA.create(masterPassword.toCharArray())
-            val hostsA = VaultHostStore(vaultA)
-            hostsA.put(Host("h1", "Web", "web.example.com", 22, "root", group = "prod"))
-            hostsA.put(Host("h2", "Db", "db.example.com", 22, "root", group = "prod"))
-            hostsA.put(Host("h3", "Bastion", "bastion.example.com", 22, "ubuntu"))
-            hostsA.reorder { it.reversed() } // tree order: h3, h2, h1
-            VaultSnippetStore(vaultA).put(Snippet("s1", "Disk", "df -h", tags = listOf("ops")))
-            VaultTunnelStore(vaultA).put(
-                Tunnel("t1", "DB tunnel", hostId = "h2", direction = TunnelDirection.Local, bindPort = 5432, destHost = "127.0.0.1", destPort = 5432),
-            )
-            VaultKnownHostsStore(vaultA).add(KnownHost("web.example.com", 22, "ssh-ed25519", "SHA256:AAA", "2026-06-29T00:00:00Z"))
-            // An empty folder (no hosts) lives in the layout record — it syncs too.
-            WorkspaceLayoutStore(vaultA).apply { write(read().copy(groups = listOf("staging"))) }
+            val vaultA = newVault(dirA, "devA")
+            populateWorkspace(vaultA)
 
             val syncSalt = crypto.deriveSyncSalt(accountId)
             val masterA = crypto.deriveMasterKey(masterPassword.toCharArray(), syncSalt)
@@ -81,7 +65,7 @@ class WorkspaceSyncE2eTest {
             val sessionB = client.login(accountId, crypto.deriveAuthKey(masterB), DeviceInfo("devB", "Phone B"))
             val dataKeyB = crypto.unwrapDataKey(masterB, client.fetchWrappedDataKey(sessionB))
                 ?: error("device B failed to unwrap dataKey")
-            val vaultB = FileVault(dirB.resolve("vault.json").toString().toPath(), crypto, "devB", FileSystem.SYSTEM) { "2026-06-29T00:00:00Z" }
+            val vaultB = newVault(dirB, "devB")
             vaultB.create(masterPassword.toCharArray())
             vaultB.unlockWithDataKey(dataKeyB) // same dataKey as A (as SyncCoordinator does)
             SyncEngine(client, vaultB).sync(sessionB)
@@ -91,8 +75,8 @@ class WorkspaceSyncE2eTest {
             assertEquals(listOf("h3", "h2", "h1"), hostsB.all().map { it.id })
             assertEquals("Web", hostsB.all().first { it.id == "h1" }.label)
             assertEquals("prod", hostsB.all().first { it.id == "h2" }.group)
-            assertEquals(listOf("s1"), VaultSnippetStore(vaultB).all().map { it.id })
-            assertEquals("df -h", VaultSnippetStore(vaultB).all().single().command)
+            assertEquals(listOf("s2", "s1"), VaultSnippetStore(vaultB).all().map { it.id })
+            assertEquals("df -h", VaultSnippetStore(vaultB).all().first { it.id == "s1" }.command)
             assertEquals(listOf("t1"), VaultTunnelStore(vaultB).all().map { it.id })
             assertEquals("h2", VaultTunnelStore(vaultB).all().single().hostId)
             assertEquals(listOf("web.example.com"), VaultKnownHostsStore(vaultB).all().map { it.host })
@@ -102,5 +86,30 @@ class WorkspaceSyncE2eTest {
             server.stop(100, 100)
             Files.deleteIfExists(dbFile)
         }
+    }
+
+    private fun newVault(dir: java.nio.file.Path, device: String) =
+        FileVault(dir.resolve("vault.json").toString().toPath(), crypto, device, FileSystem.SYSTEM) { "2026-06-29T00:00:00Z" }
+
+    /** Everything device A owns, in the order it must reach device B in. */
+    private fun populateWorkspace(vault: FileVault) {
+        vault.create(masterPassword.toCharArray())
+        val hosts = VaultHostStore(vault)
+        hosts.put(Host("h1", "Web", "web.example.com", 22, "root", group = "prod"))
+        hosts.put(Host("h2", "Db", "db.example.com", 22, "root", group = "prod"))
+        hosts.put(Host("h3", "Bastion", "bastion.example.com", 22, "ubuntu"))
+        hosts.reorder { it.reversed() } // tree order: h3, h2, h1
+        val snippets = VaultSnippetStore(vault)
+        snippets.put(Snippet("s1", "Disk", "df -h", tags = listOf("ops")))
+        snippets.put(Snippet("s2", "Load", "uptime"))
+        // Library order: s2, s1. It is a record of its own (LIBRARY_ORDER), so this also proves the
+        // server accepts the type and device B reads it back through a real merge.
+        snippets.reorder { it.reversed() }
+        VaultTunnelStore(vault).put(
+            Tunnel("t1", "DB tunnel", hostId = "h2", direction = TunnelDirection.Local, bindPort = 5432, destHost = "127.0.0.1", destPort = 5432),
+        )
+        VaultKnownHostsStore(vault).add(KnownHost("web.example.com", 22, "ssh-ed25519", "SHA256:AAA", "2026-06-29T00:00:00Z"))
+        // An empty folder (no hosts) lives in the layout record — it syncs too.
+        WorkspaceLayoutStore(vault).apply { write(read().copy(groups = listOf("staging"))) }
     }
 }

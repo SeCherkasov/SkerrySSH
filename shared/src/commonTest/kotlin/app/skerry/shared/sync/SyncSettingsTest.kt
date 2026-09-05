@@ -22,6 +22,10 @@ class SyncSettingsTest {
         val s = SyncSettings(syncSnippets = false)
         assertFalse(s.shouldSync(RecordType.SNIPPET))
         assertFalse(s.shouldSync(RecordType.RUNBOOK), "runbooks follow the snippets toggle")
+        assertFalse(
+            s.shouldSync(RecordType.LIBRARY_ORDER),
+            "the library order is a list of snippet and runbook ids and follows them",
+        )
         assertTrue(s.shouldSync(RecordType.HOST))
         assertTrue(s.shouldSync(RecordType.SETTINGS), "settings record always syncs")
     }

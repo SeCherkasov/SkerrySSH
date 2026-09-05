@@ -13,7 +13,10 @@ import kotlin.coroutines.cancellation.CancellationException
  * supported server release accepts it.
  */
 private val TYPES_NEWER_THAN_SOME_SERVERS =
-    setOf(RecordType.TRASH, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN, RecordType.TRUSTED_CA, RecordType.TEAM_PEER)
+    setOf(
+        RecordType.TRASH, RecordType.RUNBOOK, RecordType.RUNBOOK_RUN, RecordType.TRUSTED_CA,
+        RecordType.TEAM_PEER, RecordType.LIBRARY_ORDER,
+    )
 
 /**
  * How a server that predates one of [TYPES_NEWER_THAN_SOME_SERVERS] answers a push carrying it:
@@ -136,29 +139,15 @@ class SyncEngine(
         // rejects a whole push batch on an unknown type, and losing hosts/keys/settings sync
         // because a trash snapshot or a trusted CA can't be mirrored would be a far worse trade.
         // Their rejection is swallowed — those records then stay device-local until the server is
-        // updated, and the next cycle retries (push-all sends them again anyway).
+        // updated, and the next cycle retries (push-all sends them again anyway). One refused type
+        // must not silence the rest of that batch either: see [pushOptional].
         val (recentTypes, records) = local.partition { it.type in TYPES_NEWER_THAN_SOME_SERVERS }
         var pushed = 0
         if (records.isNotEmpty()) {
             client.push(session, records.map { it.toRemote() })
             pushed += records.size
         }
-        if (recentTypes.isNotEmpty()) {
-            try {
-                client.push(session, recentTypes.map { it.toRemote() })
-                pushed += recentTypes.size
-            } catch (e: CancellationException) {
-                // A `runCatching` here caught this too, so a vault auto-lock or a disconnect landing
-                // inside the push left the engine running on a cancelled job through the second pull.
-                throw e
-            } catch (e: SyncException) {
-                // Only the two answers an older server gives to a type it does not know are
-                // swallowed. A 401, a 429, a 5xx or a dropped network say nothing about the record
-                // type, and hiding them made a batch that will never be accepted look exactly like
-                // one the server is merely too old for — so nothing was ever diagnosable.
-                if (e.kind !in OLD_SERVER_REFUSALS) throw e
-            }
-        }
+        if (recentTypes.isNotEmpty()) pushed += pushOptional(session, recentTypes)
 
         // Pull again: picks up our own just-pushed records (merge is idempotent) and any remote
         // changes with a serverSeq between the first pull and the push, so the cursor doesn't skip them.
@@ -167,6 +156,41 @@ class SyncEngine(
         state.setCursor(session.accountId, cursor)
         return SyncOutcome(pulled = pulled, pushed = pushed, cursor = cursor, rejected = rejected)
     }
+
+    /**
+     * The batch of [TYPES_NEWER_THAN_SOME_SERVERS], pushed whole while the server knows every type in
+     * it and retried one type at a time when it doesn't. The server rejects a whole batch on the
+     * first type it can't name, so a single type this deployment predates would otherwise silence
+     * every other type in the batch — including [RecordType.TEAM_PEER], the pin a seal is held to
+     * (#319), whose absence on a second device fails open. The retry costs one request per type and
+     * only on a server that refused, so nothing changes for a server that is current.
+     */
+    private suspend fun pushOptional(session: SyncSession, records: List<VaultRecord>): Int {
+        if (pushSwallowingOldServer(session, records)) return records.size
+        var pushed = 0
+        for (ofOneType in records.groupBy { it.type }.values) {
+            if (pushSwallowingOldServer(session, ofOneType)) pushed += ofOneType.size
+        }
+        return pushed
+    }
+
+    /** Pushes [records], answering false for the refusal an old server gives a type it doesn't know. */
+    private suspend fun pushSwallowingOldServer(session: SyncSession, records: List<VaultRecord>): Boolean =
+        try {
+            client.push(session, records.map { it.toRemote() })
+            true
+        } catch (e: CancellationException) {
+            // A `runCatching` here caught this too, so a vault auto-lock or a disconnect landing
+            // inside the push left the engine running on a cancelled job through the second pull.
+            throw e
+        } catch (e: SyncException) {
+            // Only the two answers an older server gives to a type it does not know are swallowed.
+            // A 401, a 429, a 5xx or a dropped network say nothing about the record type, and hiding
+            // them made a batch that will never be accepted look exactly like one the server is
+            // merely too old for — so nothing was ever diagnosable.
+            if (e.kind !in OLD_SERVER_REFUSALS) throw e
+            false
+        }
 
     /** Pulls delta pages until exhausted (for future pagination), merging each page into the vault. */
     private suspend fun drainPull(session: SyncSession, from: Long, onMerged: (MergeResult) -> Unit): Long {

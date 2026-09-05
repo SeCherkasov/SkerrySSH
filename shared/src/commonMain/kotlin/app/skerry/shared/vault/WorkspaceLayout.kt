@@ -26,10 +26,6 @@ data class WorkspaceLayout(
      * list.
      */
     val remoteDesktopGroups: List<String> = emptyList(),
-    /** Global order of snippet ids in the library. */
-    val snippetOrder: List<String> = emptyList(),
-    /** Global order of runbook ids in the library. */
-    val runbookOrder: List<String> = emptyList(),
 )
 
 /**

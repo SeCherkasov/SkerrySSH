@@ -26,6 +26,7 @@ import io.ktor.server.routing.put
 private val ALLOWED_TYPES = setOf(
     "HOST", "GROUP", "IDENTITY", "CREDENTIAL", "KNOWN_HOST", "SNIPPET", "TUNNEL", "SETTINGS",
     "TEAM", "TEAM_IDENTITY", "TEAM_PEER", "TRASH", "RUNBOOK", "RUNBOOK_RUN", "TRUSTED_CA",
+    "LIBRARY_ORDER",
 )
 
 /** Ciphertext storage: dataKey wrapping, delta reads, and batch push with LWW. */

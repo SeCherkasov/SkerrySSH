@@ -5,6 +5,8 @@ import app.skerry.shared.vault.TrashStore
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultRecordCodec
 import app.skerry.shared.vault.WorkspaceLayoutStore
+import app.skerry.shared.vault.requireSameIds
+import app.skerry.shared.vault.sortedByOrder
 
 /**
  * [HostStore] over the encrypted [Vault]: each profile is a [RecordType.HOST] record whose payload
@@ -34,12 +36,7 @@ class VaultHostStore(
 
     override fun all(): List<Host> {
         if (!vault.isUnlocked) return emptyList()
-        val hosts = codec.list()
-        val order = layout.read().hostOrder
-        val rank = order.withIndex().associate { (i, id) -> id to i }
-        // Stable sort: hosts outside the order (new/synced) keep records()' relative order and are
-        // appended at the end.
-        return hosts.sortedBy { rank[it.id] ?: Int.MAX_VALUE }
+        return codec.list().sortedByOrder(layout.read().hostOrder) { it.id }
     }
 
     override fun put(host: Host) = vault.transaction {
@@ -71,11 +68,7 @@ class VaultHostStore(
         // with a stale order.
         val current = all()
         val updated = transform(current)
-        // Size + id set: a set-equality check alone would miss a duplicate (e.g. [A,B,C,A]), which
-        // would corrupt hostOrder and tree order (associate keeps the last index for a duplicate id).
-        require(updated.size == current.size && updated.map { it.id }.toSet() == current.map { it.id }.toSet()) {
-            "reorder must preserve the id set (had ${current.size}, got ${updated.size})"
-        }
+        requireSameIds(current, updated) { it.id }
         // Only rewrite profiles whose content actually changed (e.g. group via moveHostToGroup/
         // renameGroup) — a pure reorder shouldn't bump every record's version (extra sync traffic).
         val byId = current.associateBy { it.id }

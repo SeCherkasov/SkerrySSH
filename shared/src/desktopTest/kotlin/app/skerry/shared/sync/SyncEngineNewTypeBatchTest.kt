@@ -86,6 +86,32 @@ class SyncEngineNewTypeBatchTest {
         assertFalse(RecordType.TRUSTED_CA.name in pushedTypes, "the refused batch must not be recorded as pushed")
     }
 
+    /**
+     * The optional batch carries more than one type, and the server refuses a whole batch on the
+     * first type it can't name. So a deployment that predates only the newest of them must still
+     * receive the older ones — TEAM_PEER above all: it is the fingerprint every later seal is held
+     * to (#319), and a second device without it seals to whatever the server answers.
+     */
+    @Test
+    fun `one refused optional type does not silence the rest of that batch`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = newVault("devD")
+        vault.create(password.toCharArray())
+        vault.put("h1", RecordType.HOST, "host".encodeToByteArray())
+        vault.put("ca1", RecordType.TRUSTED_CA, "ca".encodeToByteArray())
+        vault.put("p1", RecordType.TEAM_PEER, "pin".encodeToByteArray())
+        vault.put("skerry.library.order", RecordType.LIBRARY_ORDER, "order".encodeToByteArray())
+
+        val client = OldServer(RecordType.LIBRARY_ORDER)
+        SyncEngine(client, vault, InMemorySyncStateStore()).sync(session)
+
+        val pushedTypes = client.pushed.map { it.type }.toSet()
+        assertTrue(RecordType.HOST.name in pushedTypes)
+        assertTrue(RecordType.TRUSTED_CA.name in pushedTypes, "a CA must still reach a server that only lacks the order type")
+        assertTrue(RecordType.TEAM_PEER.name in pushedTypes, "a verified peer pin must still reach the account's other devices")
+        assertFalse(RecordType.LIBRARY_ORDER.name in pushedTypes, "the refused type must not be recorded as pushed")
+    }
+
     @Test
     fun `a server that knows the type receives it`() = runBlocking {
         initializeVaultCrypto()

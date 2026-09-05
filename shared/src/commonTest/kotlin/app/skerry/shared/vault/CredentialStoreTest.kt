@@ -146,11 +146,12 @@ class CredentialStoreTest {
         // A plain put is a single call and holds no transaction — the control for the assertion below.
         assertFalse(vault.lastPutInTransaction)
 
+        val readsBefore = vault.readsOutsideTransaction
         store.edit("c-1", "new", note = null, group = null)
 
         // edit's read AND its put must run under a held transaction, or a concurrent mergeRemote can
         // slip a tombstone between them (TOCTOU resurrection across all synced devices).
-        assertTrue(vault.lastReadInTransaction)
+        assertEquals(readsBefore, vault.readsOutsideTransaction, "the record was read outside the transaction")
         assertTrue(vault.lastPutInTransaction)
     }
 
@@ -228,11 +229,12 @@ class CredentialStoreTest {
         // A plain put holds no transaction — the control, as in the `edit` case above.
         assertFalse(vault.lastPutInTransaction)
 
+        val readsBefore = vault.readsOutsideTransaction
         store.putKeepingMeta(Credential("c-1", "temp key", CredentialSecret.Password("y")))
 
         // Both halves: a merge landing a tombstone between a read taken outside the transaction and
         // the write inside it would still raise the deleted secret on every device.
-        assertTrue(vault.lastReadInTransaction)
+        assertEquals(readsBefore, vault.readsOutsideTransaction, "the record was read outside the transaction")
         assertTrue(vault.lastPutInTransaction)
     }
 
