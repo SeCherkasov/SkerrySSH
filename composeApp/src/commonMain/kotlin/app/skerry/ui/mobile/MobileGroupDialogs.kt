@@ -133,6 +133,7 @@ internal fun MobileGroupRenameDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
     onDelete: () -> Unit,
+    hint: String = stringResource(Res.string.conn_group_rename_hint),
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
     // Canonical here so the controller (Host.group) and the collapsed set see the same key: two
@@ -145,7 +146,7 @@ internal fun MobileGroupRenameDialog(
     MobileCenteredDialog(onDismiss = onDismiss) {
         Txt(stringResource(Res.string.conn_group_rename_title), color = Skerry.colors.text, size = 18.sp, weight = FontWeight.Bold)
         Spacer(Modifier.height(6.dp))
-        Txt(stringResource(Res.string.conn_group_rename_hint), color = Skerry.colors.dim, size = 12.5.sp)
+        Txt(hint, color = Skerry.colors.dim, size = 12.5.sp)
         Spacer(Modifier.height(14.dp))
         // Prefilled with the old name: selected on focus, so a tap and a keystroke replace it.
         CompositionLocalProvider(LocalFieldLabel provides stringResource(Res.string.shell_group_name_placeholder)) {

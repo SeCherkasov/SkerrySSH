@@ -10,7 +10,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
-import app.skerry.ui.host.detectDeadZoneDragGestures
+import app.skerry.ui.design.detectDeadZoneDragGestures
 
 /** A pane's place on the grid and where it sits on screen (window coordinates). */
 data class PaneBounds(val paneId: String, val row: Int, val column: Int, val rect: Rect)

@@ -1,26 +1,29 @@
 package app.skerry.ui.snippet
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
-import app.skerry.ui.design.UNGROUPED_FOLDER
-import app.skerry.ui.design.folderLabel
+import app.skerry.ui.design.Folder
 import app.skerry.ui.design.folderNames
 import app.skerry.ui.design.foldersOf
-import app.skerry.ui.design.hasFolders
 import app.skerry.ui.design.tagChipLabel
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.lib_snippets_chip_all
 import app.skerry.ui.generated.resources.lib_snippets_uncategorized
 import org.jetbrains.compose.resources.stringResource
 
-/** A snippet library section: group name plus its snippets (in source list order). */
-@Immutable
-data class SnippetCategory(val name: String, val snippets: List<SnippetEntry>)
+/**
+ * The library has two ways of cutting the same list, and they are not the same cut. A snippet sits
+ * in exactly one *folder* ([Snippet.group]) — that is what the sections, the drag-and-drop order and
+ * the palettes are built on ([snippetFolders]). It also carries any number of *tags*, which is what
+ * the library's filter row narrows by ([snippetCategoryChips]). Keeping one key for both would make
+ * "Uncategorized" mean "no tags" in one place and "no folder" in the other.
+ */
 
 /**
- * Technical key for the synthetic bucket holding unfiled snippets.
+ * Technical key for the synthetic bucket holding snippets without tags. Used as a filter chip value;
+ * not localized, since that would break filtering on locale change. For display, use
+ * [uncategorizedSnippetsLabel]. The folders' own bucket is [app.skerry.ui.design.UNGROUPED_FOLDER].
  */
-const val UNCATEGORIZED_KEY = UNGROUPED_FOLDER
+const val UNCATEGORIZED_KEY = "Uncategorized"
 
 /** Technical key of the "all snippets" chip at the start of the library filter row. */
 const val ALL_SNIPPETS_CHIP = "All"
@@ -36,67 +39,45 @@ const val SNIPPET_FOLDER_SCOPE = "snippet"
 fun snippetFolders(snippets: List<SnippetEntry>): List<String> =
     folderNames(snippets.map { it.snippet.group })
 
-/** Localized "uncategorized" bucket label for display. */
+/**
+ * The library's folder sections, in the order the user dragged them into
+ * ([foldersOf] with `ordered`) — the same sections the library list draws, so a palette shows a
+ * command where its owner expects it.
+ */
+fun snippetFolderSections(snippets: List<SnippetEntry>): List<Folder<SnippetEntry>> =
+    foldersOf(snippets, ordered = true) { it.snippet.group }
+
+/** Localized "uncategorized" bucket label for display (not for filtering, see [UNCATEGORIZED_KEY]). */
 @Composable
 fun uncategorizedSnippetsLabel(): String = stringResource(Res.string.lib_snippets_uncategorized)
 
-/** Chip label for display in library (tags): localized for the two technical keys, otherwise tag label (#tag). */
+/** Chip label for display: localized for the two technical keys, `#tag` for a real tag. */
 @Composable
 fun snippetChipLabel(chip: String): String = when (chip) {
     ALL_SNIPPETS_CHIP -> stringResource(Res.string.lib_snippets_chip_all)
-    UNGROUPED_FOLDER -> uncategorizedSnippetsLabel()
+    UNCATEGORIZED_KEY -> uncategorizedSnippetsLabel()
     else -> tagChipLabel(chip)
 }
 
-/** Chip label for display in palettes/drawers (group folders): localized for the two technical keys, otherwise folder label. */
-@Composable
-fun snippetGroupChipLabel(chip: String): String = when (chip) {
-    ALL_SNIPPETS_CHIP -> stringResource(Res.string.lib_snippets_chip_all)
-    UNGROUPED_FOLDER -> uncategorizedSnippetsLabel()
-    else -> folderLabel(chip)
-}
-
 /**
- * Group snippets into library sections by folder/group ([foldersOf]). Untagged/unfiled
- * snippets land in the [UNGROUPED_FOLDER] bucket, kept last. Snippets keep source order inside a
- * section. Pure function (no Compose), shared by desktop and mobile.
+ * Whether anything is tagged at all. With no tags the library's filter row is pure chrome around a
+ * single "Uncategorized" chip.
  */
-fun groupSnippetsByCategory(snippets: List<SnippetEntry>): List<SnippetCategory> {
-    val folders = foldersOf(snippets) { it.snippet.group }
-    return folders.map { SnippetCategory(it.name, it.items) }
-}
+fun hasCategories(snippets: List<SnippetEntry>): Boolean = snippets.any { it.snippet.tags.isNotEmpty() }
 
-/**
- * Whether anything is filed in a folder at all.
- */
-fun hasCategories(snippets: List<SnippetEntry>): Boolean =
-    hasFolders(snippets) { it.snippet.group }
-
-/**
- * Unique tags present in [snippets] in alphabetical order.
- */
+/** Unique tags present in [snippets], alphabetically. Tags are canonical, so a plain sort will do. */
 fun snippetTags(snippets: List<SnippetEntry>): List<String> =
     snippets.flatMap { it.snippet.tags }.distinct().sorted()
 
 /**
- * Filter chips for the snippet library: `All`, unique tags in alphabetical order, and
- * [UNCATEGORIZED_KEY] if anything is untagged.
+ * Filter chips: `All`, then every tag in use. The uncategorized chip appears only when something is
+ * actually untagged.
  */
-fun snippetCategoryChips(snippets: List<SnippetEntry>): List<String> {
-    val tags = snippetTags(snippets)
-    val hasUntagged = snippets.any { it.snippet.tags.isEmpty() }
-    return buildList {
-        add(ALL_SNIPPETS_CHIP)
-        addAll(tags)
-        if (hasUntagged) add(UNCATEGORIZED_KEY)
-    }
+fun snippetCategoryChips(snippets: List<SnippetEntry>): List<String> = buildList {
+    add(ALL_SNIPPETS_CHIP)
+    addAll(snippetTags(snippets))
+    if (snippets.any { it.snippet.tags.isEmpty() }) add(UNCATEGORIZED_KEY)
 }
-
-/**
- * Group chips for the palette/drawer: `All`, plus the group folders in [groupSnippetsByCategory] order.
- */
-fun snippetGroupChips(snippets: List<SnippetEntry>): List<String> =
-    listOf(ALL_SNIPPETS_CHIP) + groupSnippetsByCategory(snippets).map { it.name }
 
 /** Case-insensitive search across a snippet's name, command, folder, tags and notes. */
 fun SnippetEntry.matches(query: String): Boolean {
@@ -109,8 +90,8 @@ fun SnippetEntry.matches(query: String): Boolean {
 }
 
 /**
- * Narrow [snippets] by the active chip ([activeChip] = tag or group name, `All` = no filter) and [query] (AND).
- * Search is case-insensitive across label/command/tags/notes (see [SnippetEntry.matches]).
+ * Narrow [snippets] by the active chip ([activeChip] = tag, `All` = no filter) and [query] (AND).
+ * Search is case-insensitive across label/command/folder/tags/notes (see [SnippetEntry.matches]).
  */
 fun filterSnippets(
     snippets: List<SnippetEntry>,
@@ -119,8 +100,8 @@ fun filterSnippets(
 ): List<SnippetEntry> = snippets.filter { entry ->
     val chipOk = when (activeChip) {
         ALL_SNIPPETS_CHIP -> true
-        UNGROUPED_FOLDER -> entry.snippet.group.isNullOrBlank()
-        else -> entry.snippet.group?.equals(activeChip, ignoreCase = true) == true || activeChip in entry.snippet.tags
+        UNCATEGORIZED_KEY -> entry.snippet.tags.isEmpty()
+        else -> activeChip in entry.snippet.tags
     }
     chipOk && (query.isBlank() || entry.matches(query))
 }

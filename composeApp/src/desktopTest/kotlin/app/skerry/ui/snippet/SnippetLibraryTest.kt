@@ -22,6 +22,9 @@ import app.skerry.ui.generated.resources.lib_snippets_delete
 import app.skerry.ui.generated.resources.lib_snippets_run
 import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_starter_pack
+import app.skerry.ui.generated.resources.shell_group_rename_subtitle
+import app.skerry.ui.generated.resources.shtail_group_rename
+import app.skerry.ui.generated.resources.shtail_group_rename_records
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -109,6 +112,24 @@ class SnippetLibraryTest {
         onSnippetRow(DISK_SNIPPET, DISK_COMMAND).assertDoesNotExist()
     }
 
+    /**
+     * The folder header's pencil opens the host sidebar's own dialog, and its subtitle used to say
+     * the group's *hosts* move with the name. A library folder holds no hosts, and the copy is the
+     * only thing telling the two apart.
+     */
+    @Test
+    fun `the rename dialog opened from a library folder does not talk about hosts`() = runDesktopShell { shell ->
+        openSnippets()
+        shell.snippets.save(SnippetDraft(label = DISK_SNIPPET, command = DISK_COMMAND, group = OPS_GROUP))
+        waitForIdle()
+
+        onNodeWithContentDescription(string(Res.string.shtail_group_rename, OPS_GROUP)).performClick()
+        waitForIdle()
+
+        onNodeWithText(string(Res.string.shtail_group_rename_records)).assertIsDisplayed()
+        onNodeWithText(string(Res.string.shell_group_rename_subtitle)).assertDoesNotExist()
+    }
+
     private fun ComposeUiTest.openSnippets() {
         onNodeWithTag(UiTags.railView(DesktopView.Snippets)).performClick()
         waitForIdle()
@@ -140,3 +161,6 @@ private const val DOCKER_COMMAND = "docker ps"
 private const val PSQL_SNIPPET = "PostgreSQL shell"
 private const val PSQL_COMMAND = "psql -U postgres"
 private const val DB_TAG = "db"
+
+/** A folder to file a snippet under — any name a user could type. */
+private const val OPS_GROUP = "Ops"

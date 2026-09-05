@@ -39,6 +39,10 @@
     <!-- Folder header: the pencil opening the rename/delete dialog (%1$s is the group name) -->
     <string name="shtail_group_rename">Rename %1$s</string>
 
+    <!-- Rename dialog opened from a library folder header: the same dialog the host sidebar uses,
+         with a subtitle that does not say "hosts" (GroupDialog) -->
+    <string name="shtail_group_rename_records">Everything in this group moves with the new name.</string>
+
     <!-- Sidebar search field: the cross that empties the query (SidebarSearchField) -->
     <string name="shtail_search_clear">Clear search</string>
 

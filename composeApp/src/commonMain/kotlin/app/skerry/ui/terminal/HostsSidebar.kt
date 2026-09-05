@@ -48,6 +48,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.app.LocalHostClickConnectMode
+import app.skerry.ui.design.folderLinePlacement
 import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.Chip
 import app.skerry.ui.design.HLine
@@ -74,12 +75,13 @@ import app.skerry.ui.generated.resources.term_no_hosts_match
 import app.skerry.ui.generated.resources.term_search_hosts_placeholder
 import app.skerry.ui.host.ALL_HOSTS_CHIP
 import app.skerry.ui.host.HOST_GROUPS
-import app.skerry.ui.host.HostDragState
+import app.skerry.ui.design.FolderDragState
 import app.skerry.ui.host.HostManagerController
 import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.inSection
 import app.skerry.ui.host.color
 import app.skerry.ui.host.filterHosts
+import app.skerry.ui.host.asDragFolders
 import app.skerry.ui.host.groupHostsByFolder
 import app.skerry.ui.host.sidebarFolders
 import app.skerry.ui.host.hostChipLabel
@@ -218,7 +220,7 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
     val mono = LocalFonts.current.mono
     val liveHosts = LocalHosts.current
     // Manual reorder (drag-and-drop) state for the live catalog; unused on the mock path.
-    val dragState = remember { HostDragState() }
+    val dragState = remember { FolderDragState() }
     // Selected host in the live catalog — drives the single-click highlight in double-click
     // connect mode (file-manager convention: click selects, double-click opens). Also updated on
     // connect so the row that just opened reads as selected. Null = no selection.
@@ -340,18 +342,15 @@ internal fun HostsSidebar(state: DesktopDesignState, section: HostSection = Host
                     )
                 }
                 // Fresh folder list for drag targets (the gesture is keyed to the row/folder key).
-                val foldersUpdated = rememberUpdatedState(folders)
-                // Insertion line while dragging a folder: before the folder at the target index, or at the end.
-                val otherFolders = folders.filter { it.name != dragState.draggingFolderName }
-                val folderLineIndex = dragState.draggingFolderName?.let { dragState.activeFolderDropIndex }
-                val folderLineBefore = folderLineIndex?.takeIf { it < otherFolders.size }?.let { otherFolders[it].name }
+                val dragFolders = rememberUpdatedState(remember(folders) { folders.asDragFolders() })
+                val folderLine = dragState.folderLinePlacement(folders.map { it.name })
                 folders.forEach { folder ->
                     key(folder.name) {
-                        if (folder.name == folderLineBefore) DropLine()
-                        LiveHostFolder(folder, state, section, mono, dragState, liveHosts, selectedHostId, { selectedHostId = it }) { foldersUpdated.value }
+                        if (folder.name == folderLine.before) DropLine()
+                        LiveHostFolder(folder, state, mono, dragState, liveHosts, selectedHostId, { selectedHostId = it }) { dragFolders.value }
                     }
                 }
-                if (folderLineIndex != null && folderLineIndex == otherFolders.size) DropLine()
+                if (folderLine.atEnd) DropLine()
                 // Shared team hosts: per-team sections below the personal catalog, shown only outside
                 // search/filter since those narrow the personal catalog.
                 if (query.isBlank() && effectiveChip == ALL_HOSTS_CHIP) {

@@ -1,13 +1,13 @@
 package app.skerry.ui.mobile
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import app.skerry.ui.design.folderLabel
+import app.skerry.ui.design.folderLinePlacement
 import app.skerry.ui.host.rowSubtitle
 import app.skerry.ui.host.rowLabel
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -28,8 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.skerry.shared.host.Host
@@ -48,21 +45,25 @@ import app.skerry.ui.generated.resources.shell_add_first_host
 import app.skerry.ui.generated.resources.rd_no_desktops
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.host.ALL_HOSTS_CHIP
-import app.skerry.ui.host.HostDragState
+import app.skerry.ui.design.DragFolder
+import app.skerry.ui.design.FolderDropLine
+import app.skerry.ui.host.asDragFolders
+import app.skerry.ui.design.FolderDragState
 import app.skerry.ui.app.LocalHosts
 import app.skerry.ui.app.LocalSessions
 import app.skerry.ui.app.MobileDesignState
 import app.skerry.ui.teams.AutoPullTeamsOnOnline
 import app.skerry.ui.design.Txt
-import app.skerry.ui.host.folderHeaderAnchor
-import app.skerry.ui.host.folderRangeAnchor
-import app.skerry.ui.host.hostBoundsAnchor
+import app.skerry.ui.design.folderHeaderAnchor
+import app.skerry.ui.design.folderRangeAnchor
+import app.skerry.ui.design.itemBoundsAnchor
 import app.skerry.ui.host.icon
 import app.skerry.ui.session.SessionStatus
 import app.skerry.ui.session.sessionDotColor
 import app.skerry.ui.session.sessionStatusText
-import app.skerry.ui.host.draggableFolderHeader
-import app.skerry.ui.host.draggableHostRow
+import app.skerry.ui.design.draggableFolderHeader
+import app.skerry.ui.design.draggableItemRow
+import app.skerry.ui.design.visibleItemIds
 import app.skerry.ui.theme.Skerry
 import androidx.compose.ui.platform.testTag
 import app.skerry.ui.app.UiTags
@@ -105,10 +106,10 @@ private fun MobileCatalogScreen(state: MobileDesignState, section: HostSection) 
     var chip by remember { mutableStateOf(ALL_HOSTS_CHIP) }
     val list = remember(hosts, query, chip) { buildMobileHostList(hosts, query, chip) }
     // Manual reorder state (touch DnD): the gesture reports the target, the controller commits the move.
-    // Shared core with desktop ([HostDragState] + pure geometry [hostDropTarget]/[folderDropTarget]).
-    val dragState = remember { HostDragState() }
+    // Shared core with desktop ([FolderDragState] + pure geometry [itemDropTarget]/[folderDropTarget]).
+    val dragState = remember { FolderDragState() }
     // Fresh folder list for drag targets: the gesture reads it at drop time, not at gesture start.
-    val foldersUpdated = rememberUpdatedState(list.sections)
+    val dragFolders = rememberUpdatedState(remember(list) { list.sections.asDragFolders() })
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -116,17 +117,14 @@ private fun MobileCatalogScreen(state: MobileDesignState, section: HostSection) 
             HostsSearch(query, section, onChange = { query = it })
             HostsChips(list.chips, active = chip, onSelect = { chip = it })
             Spacer(Modifier.height(2.dp))
-            // Insertion line while dragging a folder: before the folder at the target index (or at the end).
-            val otherFolders = list.sections.filter { it.name != dragState.draggingFolderName }
-            val folderLineIndex = dragState.draggingFolderName?.let { dragState.activeFolderDropIndex }
-            val folderLineBefore = folderLineIndex?.takeIf { it < otherFolders.size }?.let { otherFolders[it].name }
+            val folderLine = dragState.folderLinePlacement(list.sections.map { it.name })
             list.sections.forEach { folder ->
                 key(folder.name) {
-                    if (folder.name == folderLineBefore) MobileDropLine()
-                    MobileHostFolder(folder, state, section, controller, dragState) { foldersUpdated.value }
+                    if (folder.name == folderLine.before) FolderDropLine()
+                    MobileHostFolder(folder, state, controller, dragState) { dragFolders.value }
                 }
             }
-            if (folderLineIndex != null && folderLineIndex == otherFolders.size) MobileDropLine()
+            if (folderLine.atEnd) FolderDropLine()
             // Shared team hosts (Teams): sections below the personal catalog, outside search/filter
             // (parity with the desktop sidebar). Tap connects directly (LocalConnectHost).
             if (query.isBlank() && chip == ALL_HOSTS_CHIP) {
@@ -156,10 +154,9 @@ private fun MobileCatalogScreen(state: MobileDesignState, section: HostSection) 
 private fun MobileHostFolder(
     folder: HostFolder,
     state: MobileDesignState,
-    section: HostSection,
     controller: HostManagerController?,
-    dragState: HostDragState,
-    foldersProvider: () -> List<HostFolder>,
+    dragState: FolderDragState,
+    foldersProvider: () -> List<DragFolder>,
 ) {
     // Folder group key: for an empty folder use its name (like FolderBounds), otherwise the first
     // host's group. The synthetic "Ungrouped" folder is the null group.
@@ -174,11 +171,11 @@ private fun MobileHostFolder(
     val isAnyFolderDragging = dragState.draggingFolderName != null
     val isThisFolderDragging = dragState.draggingFolderName == folder.name
     // Highlights the target folder while a host is dragged over it.
-    val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
+    val isDropTarget = dragState.draggingItemId != null && dragState.activeDrop?.group == group
     val folderAlpha = if (isThisFolderDragging) 0.6f else 1f
     // Insertion line index within the folder, excluding the dragged host (like moveHostToGroup).
-    val others = folder.hosts.filter { it.id != dragState.draggingHostId }
-    val dropIndex = if (isDropTarget) dragState.activeHostDrop?.index?.coerceIn(0, others.size) else null
+    val others = folder.hosts.filter { it.id != dragState.draggingItemId }
+    val dropIndex = if (isDropTarget) dragState.activeDrop?.index?.coerceIn(0, others.size) else null
     val lineBeforeId = dropIndex?.takeIf { it < others.size }?.let { others[it].id }
     Column(
         Modifier
@@ -188,14 +185,15 @@ private fun MobileHostFolder(
         val headerMod = if (controller != null) {
             Modifier
                 .folderHeaderAnchor(dragState, folder.name)
-                // Section-aware, like desktop: the index counts only the folders on screen.
+                // Like desktop: the index counts only the folders on screen, so the rows the
+                // search and the chip left travel with it.
                 .draggableFolderHeader(
                     state = dragState,
                     name = folder.name,
                     folders = foldersProvider,
                     longPress = true,
                 ) { index ->
-                    controller.moveFolderInSection(group, index, section)
+                    controller.moveFolderInSection(group, index, foldersProvider().visibleItemIds())
                 }
         } else {
             Modifier
@@ -203,7 +201,8 @@ private fun MobileHostFolder(
         Box(headerMod) {
             // folder.name is a stable key (drag/collapse); the ungrouped bucket shows a localized
             // label while keeping the key technical ([UNGROUPED_LABEL]).
-            val folderTitle = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folder.name
+            // Filtered like every other folder header ([folderLabel]): a synced group name is untrusted.
+            val folderTitle = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folderLabel(folder.name)
             MobileFolderHeader(folderTitle, folder.hosts.size, collapsed, isDropTarget, onToggle, onEdit, isDragging = isThisFolderDragging)
         }
         // A collapsed folder shows only its header; when any folder is dragged, all folders
@@ -212,19 +211,20 @@ private fun MobileHostFolder(
             Column(Modifier.padding(horizontal = 22.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 folder.hosts.forEach { host ->
                     key(host.id) {
-                        if (host.id == lineBeforeId) MobileDropLine(horizontal = 0.dp)
+                        if (host.id == lineBeforeId) FolderDropLine(horizontal = 0.dp)
                         // Drops row geometry when the host leaves the list (move/filter).
-                        // clearHostBounds is a no-op safe map.remove even without drag, so the effect is unconditional, as on desktop.
-                        DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
-                        // The open lambda is stabilized: every drag frame changes draggingHostId/activeHostDrop
+                        // clearItemBounds is a no-op safe map.remove even without drag, so the effect is unconditional, as on desktop.
+                        DisposableEffect(host.id) { onDispose { dragState.clearItemBounds(host.id) } }
+                        // The open lambda is stabilized: every drag frame changes draggingItemId/activeDrop
                         // and recomposes the folder — without remember the lambda would be recreated and jitter the row.
                         val onOpen = remember(host.id, state) { { state.openHost(host.id) } }
                         val rowMod = if (controller != null) {
                             Modifier
-                                .alpha(if (dragState.draggingHostId == host.id) 0.4f else 1f)
-                                .hostBoundsAnchor(dragState, host.id)
-                                .draggableHostRow(dragState, host.id, foldersProvider, longPress = true) { drop ->
-                                    controller.moveHostInSection(host.id, drop.group, drop.index, section)
+                                .alpha(if (dragState.draggingItemId == host.id) 0.4f else 1f)
+                                .itemBoundsAnchor(dragState, host.id)
+                                .draggableItemRow(dragState, host.id, foldersProvider, longPress = true) { drop ->
+                                    val onScreen = foldersProvider().visibleItemIds()
+                                    controller.moveHostInSection(host.id, drop.group, drop.index, onScreen)
                                 }
                         } else {
                             Modifier
@@ -235,45 +235,9 @@ private fun MobileHostFolder(
                     }
                 }
                 // Drop at folder end: line after the last row.
-                if (dropIndex != null && dropIndex == others.size) MobileDropLine(horizontal = 0.dp)
+                if (dropIndex != null && dropIndex == others.size) FolderDropLine(horizontal = 0.dp)
             }
         }
-    }
-}
-
-/**
- * Cyan line marking where a dragged host/folder will be inserted (parity with desktop).
- * [horizontal] is the side inset: 18dp at the folder level (outer column has no padding), 0dp
- * inside the host column (which already applies `padding(horizontal = 18.dp)`, otherwise the line
- * would be half the width of the rows).
- */
-@Composable
-private fun MobileDropLine(horizontal: Dp = 18.dp) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = horizontal, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(Skerry.colors.cyanBright)
-        )
-        Box(
-            Modifier
-                .weight(1f)
-                .height(3.dp)
-                .clip(RoundedCornerShape(1.5.dp))
-                .background(Skerry.colors.cyan)
-        )
-        Box(
-            Modifier
-                .size(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(Skerry.colors.cyanBright)
-        )
     }
 }
 

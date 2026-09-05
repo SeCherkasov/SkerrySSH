@@ -25,7 +25,6 @@
     <ID>ComplexCondition:VncCoordinates.kt$fbWidth &lt;= 0 || fbHeight &lt;= 0 || canvasWidth &lt;= 0f || canvasHeight &lt;= 0f</ID>
     <ID>CyclomaticComplexMethod:DesktopSessionActions.kt$internal fun runDesktopShortcut( shortcut: DesktopShortcut, state: DesktopDesignState, sessions: SessionsController?, onLock: () -&gt; Unit, ): Boolean</ID>
     <ID>CyclomaticComplexMethod:DesktopShortcuts.kt$fun matchDesktopShortcut(ctrl: Boolean, shift: Boolean, alt: Boolean, meta: Boolean, key: Key): DesktopShortcut?</ID>
-    <ID>CyclomaticComplexMethod:HostSidebarDnd.kt$internal suspend fun PointerInputScope.detectDeadZoneDragGestures( onStart: (Offset) -&gt; Unit, onMove: (PointerInputChange, Offset) -&gt; Unit, onEnd: () -&gt; Unit, onCancel: () -&gt; Unit, )</ID>
     <ID>CyclomaticComplexMethod:KeyboardInteractiveDialog.kt$internal fun sanitizeServerText(text: String, maxChars: Int): String</ID>
     <ID>CyclomaticComplexMethod:RemoteScreenshot.android.kt$actual suspend fun saveRemoteScreenshot(image: ImageBitmap, baseName: String): String?</ID>
     <ID>CyclomaticComplexMethod:Screenshot.kt$@OptIn(ExperimentalComposeUiApi::class) fun main()</ID>

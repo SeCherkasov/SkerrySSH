@@ -52,17 +52,23 @@ fun folderLabel(name: String): String = when (name) {
 }
 
 /**
- * Split [items] into folders by [group]: named folders in order of first appearance,
- * then the [UNGROUPED_FOLDER] bucket for everything whose group is `null` or blank. Items keep
- * their source order inside a folder, and an empty [items] gives no folders at all.
+ * Split [items] into folders by [group]: named folders first, then the [UNGROUPED_FOLDER] bucket for
+ * everything whose group is `null` or blank. Items keep their source order inside a folder, and an
+ * empty [items] gives no folders at all.
  *
- * First-appearance matches host folders: the list has an order the user drags into shape
- * and its folders inherit it, supporting manual drag-and-drop group reordering across devices.
+ * [ordered] picks which order the named folders come in, and the two answers are not
+ * interchangeable. A list the user drags into shape carries its folder order in the list itself —
+ * the folders of the snippet and runbook libraries are blocks of a manually ordered list
+ * ([app.skerry.shared.vault.LibraryOrder]), so first appearance *is* the order the user set, and
+ * sorting it away would make a folder drag do nothing visible. A list with no manual order (the
+ * keychain) has only the order things happened to be created in, which is no order at all once
+ * there are twenty of them — there the folders sort case-insensitively by name.
  *
  * Pure function (no Compose), shared by the desktop sections and the mobile ones.
  */
-fun <T> foldersOf(items: List<T>, group: (T) -> String?): List<Folder<T>> {
-    val named = LinkedHashMap<String, MutableList<T>>()
+fun <T> foldersOf(items: List<T>, ordered: Boolean = false, group: (T) -> String?): List<Folder<T>> {
+    val named: MutableMap<String, MutableList<T>> =
+        if (ordered) LinkedHashMap() else sortedMapOf(compareBy({ it.lowercase() }, { it }))
     val ungrouped = mutableListOf<T>()
     for (item in items) {
         val name = storedFolderName(group(item))
@@ -90,7 +96,7 @@ fun <T> hasFolders(items: List<T>, group: (T) -> String?): Boolean =
  * written by a client this one has no say over, and a name equal to the sentinel would otherwise
  * draw a second bucket beside the real one — same header, same Compose key, same fold state.
  */
-private fun storedFolderName(group: String?): String? =
+fun storedFolderName(group: String?): String? =
     group?.takeIf { it.isNotBlank() && it != UNGROUPED_FOLDER }
 
 /**
@@ -149,10 +155,4 @@ private const val HEX = 16
 interface FolderCollapse {
     fun isGroupCollapsed(name: String): Boolean
     fun toggleGroupCollapsed(name: String)
-    fun expandGroup(name: String) {
-        if (isGroupCollapsed(name)) toggleGroupCollapsed(name)
-    }
-    fun collapseGroup(name: String) {
-        if (!isGroupCollapsed(name)) toggleGroupCollapsed(name)
-    }
 }

@@ -13,7 +13,7 @@ class FoldersTest {
     private fun folders(vararg rows: Row) = foldersOf(rows.toList()) { it.group }
 
     @Test
-    fun named_folders_appear_in_source_order_and_ungrouped_last() {
+    fun named_folders_come_first_alphabetically_and_ungrouped_last() {
         val result = folders(
             Row("a", "staging"),
             Row("b", null),
@@ -21,17 +21,28 @@ class FoldersTest {
             Row("d", "staging"),
         )
 
-        assertEquals(listOf("staging", "Production", UNGROUPED_FOLDER), result.map { it.name })
-        assertEquals(listOf("a", "d"), result[0].items.map { it.id })
-        assertEquals(listOf("c"), result[1].items.map { it.id })
+        assertEquals(listOf("Production", "staging", UNGROUPED_FOLDER), result.map { it.name })
+        assertEquals(listOf("a", "d"), result[1].items.map { it.id })
         assertEquals(listOf("b"), result[2].items.map { it.id })
     }
 
     @Test
-    fun folders_preserve_order_of_first_appearance() {
+    fun sorting_is_case_insensitive_so_a_lowercase_folder_is_not_exiled_to_the_end() {
         val result = folders(Row("a", "zebra"), Row("b", "Alpha"), Row("c", "beta"))
 
-        assertEquals(listOf("zebra", "Alpha", "beta"), result.map { it.name })
+        assertEquals(listOf("Alpha", "beta", "zebra"), result.map { it.name })
+    }
+
+    @Test
+    fun an_ordered_list_keeps_the_folder_order_it_was_dragged_into() {
+        // The snippet and runbook libraries carry their folder order in the list itself
+        // ([app.skerry.shared.vault.LibraryOrder]), so first appearance is the order the user set.
+        // Sorting it away would make a folder drag redraw the list exactly as it was.
+        val rows = listOf(Row("a", "zebra"), Row("b", "Alpha"), Row("c", null), Row("d", "zebra"))
+        val result = foldersOf(rows, ordered = true) { it.group }
+
+        assertEquals(listOf("zebra", "Alpha", UNGROUPED_FOLDER), result.map { it.name })
+        assertEquals(listOf("a", "d"), result.first().items.map { it.id })
     }
 
     @Test

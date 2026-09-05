@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -40,6 +39,7 @@ import app.skerry.ui.app.LocalConnectHost
 import app.skerry.shared.ssh.hasShell
 import app.skerry.ui.app.LocalRunSnippetOnHost
 import app.skerry.ui.app.LocalSnippets
+import app.skerry.ui.design.DragFolder
 import app.skerry.ui.design.Badge
 import app.skerry.ui.design.Dot
 import app.skerry.ui.design.IconBtn
@@ -55,16 +55,15 @@ import app.skerry.ui.generated.resources.term_menu_delete
 import app.skerry.ui.generated.resources.term_menu_duplicate
 import app.skerry.ui.generated.resources.term_menu_edit
 import app.skerry.ui.generated.resources.term_menu_run_snippet
-import app.skerry.ui.host.HostDragState
-import app.skerry.ui.host.HostFolder
+import app.skerry.ui.design.FolderDragState
 import app.skerry.ui.host.HostManagerController
-import app.skerry.ui.host.HostSection
 import app.skerry.ui.host.MockHost
 import app.skerry.ui.host.ProdBadge
 import app.skerry.ui.host.isProdHost
 import app.skerry.ui.host.color
-import app.skerry.ui.host.draggableHostRow
-import app.skerry.ui.host.hostBoundsAnchor
+import app.skerry.ui.design.draggableItemRow
+import app.skerry.ui.design.itemBoundsAnchor
+import app.skerry.ui.design.visibleItemIds
 import app.skerry.ui.host.icon
 import app.skerry.ui.session.SessionsController
 import app.skerry.ui.session.SessionStatus
@@ -156,15 +155,14 @@ internal fun HostTypeSubheader(label: String) {
 internal fun HostRow(
     host: Host,
     state: DesktopDesignState,
-    section: HostSection,
     controller: HostManagerController,
     sessions: SessionsController?,
     connect: (Host) -> Unit,
     mono: FontFamily,
     selectedHostId: String?,
     onSelectHost: (String) -> Unit,
-    dragState: HostDragState,
-    foldersProvider: () -> List<HostFolder>,
+    dragState: FolderDragState,
+    foldersProvider: () -> List<DragFolder>,
 ) {
     // Stabilizes lambdas on (host, ...): otherwise every folder recomposition would recreate them
     // and force the row to redraw (nullable functions are unstable).
@@ -174,14 +172,15 @@ internal fun HostRow(
     val onDuplicate = remember(host, state) { { state.openDuplicateModal(host) } }
     val onDelete = remember(host, state) { { state.requestDeleteHost(host) } }
     // Forgets the row's geometry once the host leaves the list (deleted/filtered out).
-    DisposableEffect(host.id) { onDispose { dragState.clearHostBounds(host.id) } }
+    DisposableEffect(host.id) { onDispose { dragState.clearItemBounds(host.id) } }
     Box(
         Modifier
-            .alpha(if (dragState.draggingHostId == host.id) 0.4f else 1f)
-            .hostBoundsAnchor(dragState, host.id)
-            .draggableHostRow(dragState, host.id, foldersProvider) { drop ->
-                // Index is relative to the rows this sidebar shows; the controller translates it.
-                controller.moveHostInSection(host.id, drop.group, drop.index, section)
+            .alpha(if (dragState.draggingItemId == host.id) 0.4f else 1f)
+            .itemBoundsAnchor(dragState, host.id)
+            .draggableItemRow(dragState, host.id, foldersProvider) { drop ->
+                // Index is relative to the rows this sidebar shows, so the controller is told which
+                // ones those were (section, search and tag chip all narrow them) and translates it.
+                controller.moveHostInSection(host.id, drop.group, drop.index, foldersProvider().visibleItemIds())
             },
     ) {
         HostEntryRow(

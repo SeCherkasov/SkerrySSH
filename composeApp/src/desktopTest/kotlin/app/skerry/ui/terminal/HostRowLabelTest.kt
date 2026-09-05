@@ -10,8 +10,7 @@ import app.skerry.ui.app.DesktopDesignState
 import app.skerry.ui.design.MAX_UNTRUSTED_LABEL_CHARS
 import app.skerry.ui.desktop.runForm
 import app.skerry.ui.desktop.seededHosts
-import app.skerry.ui.host.HostDragState
-import app.skerry.ui.host.HostSection
+import app.skerry.ui.design.FolderDragState
 import kotlin.test.Test
 
 /**
@@ -114,14 +113,13 @@ private fun CatalogRow(host: Host) {
     HostRow(
         host = host,
         state = DesktopDesignState(),
-        section = HostSection.Terminal,
         controller = seededHosts(),
         sessions = null,
         connect = {},
         mono = FontFamily.Monospace,
         selectedHostId = null,
         onSelectHost = {},
-        dragState = HostDragState(),
+        dragState = FolderDragState(),
         foldersProvider = { emptyList() },
     )
 }

@@ -39,6 +39,7 @@ import app.skerry.ui.design.SidebarSearchField
 import app.skerry.ui.design.VLine
 import app.skerry.ui.host.GroupDialog
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shtail_group_rename_records
 import app.skerry.ui.generated.resources.lib_snippets_command_count
 import app.skerry.ui.generated.resources.lib_snippets_empty
 import app.skerry.ui.generated.resources.lib_snippets_facts_variables
@@ -102,7 +103,6 @@ private fun LiveSnippetsView(
     mono: FontFamily,
 ) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var mode by remember { mutableStateOf<PanelMode>(PanelMode.Run) }
     var helpOpen by remember { mutableStateOf(false) }
     var editingGroup by remember { mutableStateOf<String?>(null) }
@@ -151,21 +151,18 @@ private fun LiveSnippetsView(
                             collapse = collapse,
                             group = { it.snippet.group },
                             itemKey = { it.id },
-                            selectedIds = selectedIds,
                             onEditGroup = { editingGroup = it },
-                            onMoveItems = { ids, targetGroup, targetIndex ->
-                                manager.moveSnippets(ids, targetGroup, targetIndex)
-                            },
-                            onMoveGroup = { group, targetIndex ->
-                                manager.moveGroup(group, targetIndex)
-                            },
+                            // The sections hand over the ids the chip and the search left on
+                            // screen; the manager translates the index against the whole library,
+                            // or a filtered drag would reorder rows the user cannot see.
+                            onMoveItem = manager::moveSnippet,
+                            onMoveGroup = manager::moveGroup,
                         ) { entry ->
                             // Keyed by id so selecting a row doesn't recreate every row's lambda.
-                            val isSelected = entry.id in selectedIds || entry.id == selected?.id
+                            val isSelected = entry.id == selected?.id
                             val onClick = remember(entry.id) {
                                 {
                                     selectedId = entry.id
-                                    selectedIds = setOf(entry.id)
                                     mode = PanelMode.Run
                                 }
                             }
@@ -216,6 +213,7 @@ private fun LiveSnippetsView(
         GroupDialog(
             initialName = editingGroup!!,
             onDismiss = { editingGroup = null },
+            renameSubtitle = stringResource(Res.string.shtail_group_rename_records),
             onSave = { newName ->
                 manager.renameGroup(editingGroup!!, newName)
                 editingGroup = null

@@ -54,8 +54,9 @@ internal fun MobileSnippetLibrary(
     collapse: FolderCollapse,
     onEdit: (SnippetEntry) -> Unit,
     onRenameCategory: (String) -> Unit,
-    onMoveItems: ((itemIds: Set<String>, targetGroup: String?, targetIndexInGroup: Int) -> Unit)? = null,
-    onMoveGroup: ((group: String?, targetIndex: Int) -> Unit)? = null,
+    onEditGroup: ((String) -> Unit)? = null,
+    onMoveItem: ((id: String, targetGroup: String?, indexInGroup: Int, visibleIds: Set<String>) -> Unit)? = null,
+    onMoveGroup: ((group: String?, targetIndex: Int, visibleIds: Set<String>) -> Unit)? = null,
 ) {
     val tagged = hasCategories(all)
     val visible = library.visible(all)
@@ -94,7 +95,10 @@ internal fun MobileSnippetLibrary(
             itemKey = { it.id },
             headerPadding = mobileFolderHeaderPadding(),
             longPress = true,
-            onMoveItems = onMoveItems,
+            onEditGroup = onEditGroup,
+            // The chips and the search narrow this list while the store holds all of it, so the
+            // sections report which rows were on screen and the manager translates the index there.
+            onMoveItem = onMoveItem,
             onMoveGroup = onMoveGroup,
         ) { entry ->
             val onClick = remember(entry.id) { { onEdit(entry) } }

@@ -175,12 +175,27 @@ class RunbookManagerTest {
 
     @Test
     fun `moveRunbook reorders and persists`() {
-        val m = manager()
+        val store = MemoryStore()
+        val m = manager(store)
         val r1 = m.save(draft("R1", "uptime").copy(group = "Deploy"))
         val r2 = m.save(draft("R2", "uptime").copy(group = "Deploy"))
 
-        m.moveRunbook(r2, "Deploy", 0)
+        m.moveRunbook(r2, "Deploy", 0, setOf(r1, r2))
 
         assertEquals(listOf(r2, r1), m.runbooks.map { it.id })
+        // The store holds the order the other devices read.
+        assertEquals(listOf(r2, r1), store.all().map { it.id })
+    }
+
+    @Test
+    fun `moveGroup carries the whole folder`() {
+        val m = manager()
+        val r1 = m.save(draft("R1", "uptime").copy(group = "Deploy"))
+        val r2 = m.save(draft("R2", "uptime").copy(group = "Backup"))
+        val r3 = m.save(draft("R3", "uptime").copy(group = "Deploy"))
+
+        m.moveGroup("Backup", 0, setOf(r1, r2, r3))
+
+        assertEquals(listOf(r2, r1, r3), m.runbooks.map { it.id })
     }
 }

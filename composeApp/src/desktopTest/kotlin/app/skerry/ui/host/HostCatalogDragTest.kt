@@ -16,7 +16,7 @@ import kotlin.test.assertNull
  * Manual sort in the sidebar: dragging a row to another folder, within its own, and dragging a
  * folder header past its neighbour.
  *
- * The arithmetic is already covered ([HostReorderingTest], [HostDropTargetingTest]) and so is the
+ * The arithmetic is already covered ([HostReorderingTest], [app.skerry.ui.design.FolderDropTargetingTest]) and so is the
  * gesture's dead zone ([app.skerry.ui.terminal.HostRowClickJitterTest]). What neither reaches is the
  * chain in between: row geometry recorded on layout, a drop target computed from it, and a
  * controller call that writes the new order to the catalog. A drag that lands on the wrong index

@@ -59,9 +59,13 @@ import app.skerry.ui.app.UiTags
 import app.skerry.ui.design.fieldName
 
 /**
- * Dialog for creating/renaming a host group: a name field plus buttons. [onDelete] != null means
- * edit mode (shows a "Delete group" button that ungroups the group's hosts). Save is disabled when
- * the name is empty. Styled as a scrim + card, matching [DesktopDeleteHostDialog]/[ConfirmActionDialog].
+ * Dialog for creating/renaming a group: a name field plus buttons. [onDelete] != null means edit
+ * mode (shows a "Delete group" button that un-files the group's records without deleting them). Save
+ * is disabled when the name is empty. Styled as a scrim + card, matching
+ * [DesktopDeleteHostDialog]/[ConfirmActionDialog].
+ *
+ * The snippet and runbook libraries open the same dialog from their folder headers, so what a rename
+ * carries with it is said by [renameSubtitle] rather than hardcoded to hosts.
  */
 @Composable
 fun GroupDialog(
@@ -69,6 +73,7 @@ fun GroupDialog(
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
     onDelete: (() -> Unit)?,
+    renameSubtitle: String = stringResource(Res.string.shell_group_rename_subtitle),
 ) {
     val editing = onDelete != null
     var name by remember { mutableStateOf(initialName) }
@@ -99,8 +104,7 @@ fun GroupDialog(
                 color = Skerry.colors.text, size = 16.sp, weight = FontWeight.SemiBold, letterSpacing = (-0.2).sp,
             )
             Txt(
-                if (editing) stringResource(Res.string.shell_group_rename_subtitle)
-                else stringResource(Res.string.shell_group_new_subtitle),
+                if (editing) renameSubtitle else stringResource(Res.string.shell_group_new_subtitle),
                 color = Skerry.colors.dim, size = 12.5.sp, lineHeight = 18.sp,
                 modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
             )

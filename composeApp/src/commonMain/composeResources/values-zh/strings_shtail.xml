@@ -39,6 +39,10 @@
     <!-- 文件夹标题：打开重命名/删除对话框的铅笔图标（%1$s 为分组名称） -->
     <string name="shtail_group_rename">重命名 %1$s</string>
 
+    <!-- Rename dialog opened from a library folder header: the same dialog the host sidebar uses,
+         with a subtitle that does not say "hosts" (GroupDialog) -->
+    <string name="shtail_group_rename_records">该组中的所有内容都会随新名称一起移动。</string>
+
     <!-- 侧边栏搜索框：清空查询的叉号 (SidebarSearchField) -->
     <string name="shtail_search_clear">清除搜索</string>
 

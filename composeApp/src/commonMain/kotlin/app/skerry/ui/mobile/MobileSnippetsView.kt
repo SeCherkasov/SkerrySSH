@@ -40,11 +40,11 @@ import app.skerry.ui.snippet.SnippetEntry
 import app.skerry.ui.snippet.SnippetFormState
 import app.skerry.ui.snippet.SnippetManager
 import app.skerry.ui.snippet.installStarterPack
-import app.skerry.ui.snippet.matches
 import app.skerry.ui.snippet.snippetFolders
 import app.skerry.ui.snippet.snippetTagSuggestions
 import app.skerry.ui.design.tagChipLabel
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shtail_group_rename_records
 import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.lib_snippets_add_tag
 import app.skerry.ui.generated.resources.lib_snippets_delete
@@ -56,7 +56,6 @@ import app.skerry.ui.generated.resources.lib_snippets_field_name
 import app.skerry.ui.generated.resources.lib_snippets_field_notes
 import app.skerry.ui.generated.resources.lib_snippets_field_tags
 import app.skerry.ui.generated.resources.lib_snippets_new
-import app.skerry.ui.generated.resources.lib_snippets_no_matches
 import app.skerry.ui.generated.resources.lib_snippets_ph_name
 import app.skerry.ui.generated.resources.lib_snippets_ph_notes
 import app.skerry.ui.design.NOTE_PEEK_LINES
@@ -64,14 +63,11 @@ import app.skerry.ui.design.NoteBlock
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_placeholder
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_subtitle
 import app.skerry.ui.generated.resources.lib_snippets_rename_tag_title
-import app.skerry.ui.generated.resources.lib_snippets_run_empty
 import app.skerry.ui.generated.resources.lib_snippets_run_in_terminal
-import app.skerry.ui.generated.resources.lib_snippets_run_title
 import app.skerry.ui.generated.resources.lib_snippets_save_snippet
 import app.skerry.ui.generated.resources.lib_snippets_screen_title
 import app.skerry.ui.generated.resources.shell_save
 import app.skerry.ui.generated.resources.shtail_group_label
-import app.skerry.ui.generated.resources.lib_snippets_search
 import app.skerry.ui.generated.resources.lib_snippets_untitled
 import org.jetbrains.compose.resources.stringResource
 import app.skerry.ui.design.ChipButton
@@ -129,9 +125,10 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
     var adding by remember { mutableStateOf(false) }
     var helpOpen by remember { mutableStateOf(false) }
     var renamingTag by remember { mutableStateOf<String?>(null) }
+    var renamingGroup by remember { mutableStateOf<String?>(null) }
     val editSheetOpen = adding || editing != null
     // Any sheet (edit or rename) hides the tab bar and the add FAB.
-    val sheetOpen = editSheetOpen || renamingTag != null || helpOpen
+    val sheetOpen = editSheetOpen || renamingTag != null || renamingGroup != null || helpOpen
 
     // Open edit sheet hides the tab bar (otherwise it floats above the input fields over the keyboard).
     LaunchedEffect(sheetOpen) { state.modalOverlay(sheetOpen) }
@@ -168,12 +165,9 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
                     collapse = state,
                     onEdit = { entry -> editing = entry; adding = false },
                     onRenameCategory = { tag -> renamingTag = tag },
-                    onMoveItems = { ids, targetGroup, targetIndex ->
-                        manager.moveSnippets(ids, targetGroup, targetIndex)
-                    },
-                    onMoveGroup = { group, targetIndex ->
-                        manager.moveGroup(group, targetIndex)
-                    },
+                    onEditGroup = { group -> renamingGroup = group },
+                    onMoveItem = manager::moveSnippet,
+                    onMoveGroup = manager::moveGroup,
                 )
             }
             // Clears the tab bar and the FAB above it (bottom 104dp + 56dp size + 16dp margin), so the last
@@ -189,6 +183,16 @@ private fun MobileSnippetsLive(state: MobileDesignState, manager: SnippetManager
             )
         }
 
+        // Pencil on a folder header → rename/delete the folder, as on the desktop library.
+        renamingGroup?.let { group ->
+            MobileGroupRenameDialog(
+                initialName = group,
+                onDismiss = { renamingGroup = null },
+                onSave = { newName -> manager.renameGroup(group, newName); renamingGroup = null },
+                onDelete = { manager.deleteGroup(group); renamingGroup = null },
+                hint = stringResource(Res.string.shtail_group_rename_records),
+            )
+        }
         renamingTag?.let { tag ->
             MobileRenameTagSheet(
                 oldTag = tag,
