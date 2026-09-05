@@ -47,6 +47,7 @@ import app.skerry.ui.design.Sym
 import app.skerry.ui.design.Txt
 import app.skerry.ui.design.modalBody
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shtail_group_rename_records
 import app.skerry.ui.generated.resources.help_button
 import app.skerry.ui.generated.resources.runbook_delete
 import app.skerry.ui.generated.resources.runbook_delete_message
@@ -112,8 +113,9 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
     var editing by remember { mutableStateOf<RunbookEntry?>(null) }
     var adding by remember { mutableStateOf(false) }
     var helpOpen by remember { mutableStateOf(false) }
+    var renamingGroup by remember { mutableStateOf<String?>(null) }
     val sheetOpen = adding || editing != null
-    val overlayOpen = sheetOpen || helpOpen
+    val overlayOpen = sheetOpen || helpOpen || renamingGroup != null
 
     // An open sheet hides the tab bar, which would otherwise float over the fields above the keyboard.
     LaunchedEffect(overlayOpen) { state.modalOverlay(overlayOpen) }
@@ -149,12 +151,9 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
                         itemKey = { it.id },
                         headerPadding = mobileFolderHeaderPadding(),
                         longPress = true,
-                        onMoveItems = { ids, targetGroup, targetIndex ->
-                            manager.moveRunbooks(ids, targetGroup, targetIndex)
-                        },
-                        onMoveGroup = { group, targetIndex ->
-                            manager.moveGroup(group, targetIndex)
-                        },
+                        onEditGroup = { group -> renamingGroup = group },
+                        onMoveItem = manager::moveRunbook,
+                        onMoveGroup = manager::moveGroup,
                     ) { entry ->
                         RunbookCard(entry, mono) { editing = entry; adding = false }
                     }
@@ -207,6 +206,17 @@ fun MobileRunbooksScreen(state: MobileDesignState) {
                     // The confirmation dialog and the progress panel both live over the terminal.
                     state.push(MobileRoute.Terminal)
                 },
+            )
+        }
+
+        // Pencil on a folder header → rename/delete the folder, as on the desktop library.
+        renamingGroup?.let { group ->
+            MobileGroupRenameDialog(
+                initialName = group,
+                onDismiss = { renamingGroup = null },
+                onSave = { newName -> manager.renameGroup(group, newName); renamingGroup = null },
+                onDelete = { manager.deleteGroup(group); renamingGroup = null },
+                hint = stringResource(Res.string.shtail_group_rename_records),
             )
         }
 

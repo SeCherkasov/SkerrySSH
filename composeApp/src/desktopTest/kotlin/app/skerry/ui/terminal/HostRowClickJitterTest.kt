@@ -21,10 +21,10 @@ import app.skerry.ui.app.HostClickConnectMode
 import app.skerry.ui.app.LocalHostClickConnectMode
 import app.skerry.ui.design.DesignFonts
 import app.skerry.ui.design.LocalFonts
-import app.skerry.ui.host.HostDragState
-import app.skerry.ui.host.HostDrop
-import app.skerry.ui.host.HostFolder
-import app.skerry.ui.host.draggableHostRow
+import app.skerry.ui.design.FolderDragState
+import app.skerry.ui.design.FolderDrop
+import app.skerry.ui.design.DragFolder
+import app.skerry.ui.design.draggableItemRow
 import app.skerry.ui.theme.SkerryTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -52,12 +52,12 @@ class HostRowClickJitterTest {
     private fun runRowScene(
         mode: HostClickConnectMode,
         onConnect: () -> Unit,
-        onDrop: (HostDrop) -> Unit = {},
-        body: ImageComposeScene.(HostDragState) -> Unit,
+        onDrop: (FolderDrop) -> Unit = {},
+        body: ImageComposeScene.(FolderDragState) -> Unit,
     ) {
-        val dragState = HostDragState()
+        val dragState = FolderDragState()
         // The whole scene is one drop-capable folder, so a genuine drag has a target to land on.
-        val folders = listOf(HostFolder("srv", emptyList()))
+        val folders = listOf(DragFolder("srv", group = "srv", itemIds = emptyList()))
         dragState.setFolderRange("srv", Rect(0f, 0f, 400f, 300f))
         ImageComposeScene(width = 400, height = 300, density = Density(1f)).use { scene ->
             scene.setContent {
@@ -74,10 +74,10 @@ class HostRowClickJitterTest {
     @Composable
     private fun RowUnderTest(
         mode: HostClickConnectMode,
-        dragState: HostDragState,
-        folders: List<HostFolder>,
+        dragState: FolderDragState,
+        folders: List<DragFolder>,
         onConnect: () -> Unit,
-        onDrop: (HostDrop) -> Unit,
+        onDrop: (FolderDrop) -> Unit,
     ) {
         SkerryTheme {
             CompositionLocalProvider(
@@ -86,7 +86,7 @@ class HostRowClickJitterTest {
             ) {
                 // Same layering as HostRow: the drag gesture wraps the clickable row. onEdit gives
                 // the row its trailing "⋮" menu button, like the live catalog.
-                Box(Modifier.draggableHostRow(dragState, "h1", { folders }, onDrop = onDrop)) {
+                Box(Modifier.draggableItemRow(dragState, "h1", { folders }, onDrop = onDrop)) {
                     HostEntryRow(
                         label = "alpha", selected = false, dot = Color.Green, badge = null,
                         onClick = onConnect, mono = FontFamily.Monospace, icon = "dns",
@@ -184,7 +184,7 @@ class HostRowClickJitterTest {
     @Test
     fun genuineDragStillReordersAndDoesNotConnect() {
         var connects = 0
-        var drop: HostDrop? = null
+        var drop: FolderDrop? = null
         runRowScene(HostClickConnectMode.SingleClick, onConnect = { connects++ }, onDrop = { drop = it }) {
             sendPointerEvent(PointerEventType.Press, Offset(50f, 13f), timeMillis = 0)
             // Well past any reasonable dead zone, in several steps like a real drag.

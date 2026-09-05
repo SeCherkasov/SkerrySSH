@@ -201,4 +201,25 @@ class HostRowSubtitleTest {
         val default = host("d", type = ConnectionType.LOCAL).copy(username = "", address = "", port = 0)
         assertEquals("", default.rowSubtitle())
     }
+    /**
+     * What the drag engine is handed. A folder the user just created holds nothing, so its group
+     * cannot be read off a host — without the fallback a profile dropped into it would be filed
+     * under `null` and land in Ungrouped instead, and the new folder would vanish again.
+     */
+    @Test
+    fun drag_folders_carry_the_group_a_drop_into_them_should_write() {
+        val folders = groupHostsByFolder(listOf(host("a", group = "Ops"), host("b")))
+
+        assertEquals(listOf("Ops", UNGROUPED_LABEL), folders.map { it.name })
+        assertEquals(listOf("Ops", null), folders.asDragFolders().map { it.group })
+        assertEquals(listOf(listOf("a"), listOf("b")), folders.asDragFolders().map { it.itemIds })
+    }
+
+    @Test
+    fun an_empty_folder_answers_with_its_own_name() {
+        val empty = HostFolder(name = "Staging", hosts = emptyList())
+
+        assertEquals("Staging", listOf(empty).asDragFolders().single().group)
+        assertEquals(emptyList(), listOf(empty).asDragFolders().single().itemIds)
+    }
 }

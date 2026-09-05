@@ -39,6 +39,10 @@
     <!-- Шапка папки: карандаш, открывающий диалог переименования/удаления (%1$s — имя группы) -->
     <string name="shtail_group_rename">Переименовать «%1$s»</string>
 
+    <!-- Rename dialog opened from a library folder header: the same dialog the host sidebar uses,
+         with a subtitle that does not say "hosts" (GroupDialog) -->
+    <string name="shtail_group_rename_records">Всё из этой группы перейдёт под новое имя.</string>
+
     <!-- Поиск в боковой панели: крестик, очищающий запрос (SidebarSearchField) -->
     <string name="shtail_search_clear">Очистить поиск</string>
 

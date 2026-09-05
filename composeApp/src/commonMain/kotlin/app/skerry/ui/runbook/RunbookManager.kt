@@ -12,6 +12,12 @@ import app.skerry.shared.runbook.isRunnable
 import app.skerry.shared.runbook.withId
 import app.skerry.shared.tag.normalizeTags
 import app.skerry.shared.text.normalizeGroup
+import app.skerry.ui.design.FilteredFolderList
+import app.skerry.ui.design.fullFolderIndex
+import app.skerry.ui.design.fullIndexInFolder
+import app.skerry.ui.design.moveFolder
+import app.skerry.ui.design.moveIntoFolder
+import app.skerry.ui.design.renameFolder
 
 /**
  * Editable runbook fields without [Runbook.id]: the create/edit form works on a draft and
@@ -83,41 +89,46 @@ class RunbookManager(
         )
         store.put(runbook)
         val existing = find(id)
-        if (existing != null) {
-            existing.runbook = runbook
-            runbooks = runbooks.map { if (it.id == id) RunbookEntry(runbook) else it }
-        } else {
-            runbooks = runbooks + RunbookEntry(runbook)
-        }
+        if (existing != null) existing.runbook = runbook else runbooks = runbooks + RunbookEntry(runbook)
         return id
     }
 
-    /** Move runbook [runbookId] to [targetGroup] at [targetIndexInGroup]. */
-    fun moveRunbook(runbookId: String, targetGroup: String?, targetIndexInGroup: Int) {
-        moveRunbooks(setOf(runbookId), targetGroup, targetIndexInGroup)
+    /**
+     * Move runbook [runbookId] into folder [targetGroup] at [targetIndexInGroup], counted over
+     * the rows the screen was showing ([visibleIds]) — a search or a chip may have hidden some.
+     *
+     * The translation to a position in the whole library runs here rather than in the view, over the
+     * list the store hands the transform under its own lock: an index computed against the Compose
+     * snapshot would be dated to the last recomposition, and a sync apply landing in between would
+     * make it count rows the store no longer has.
+     */
+    fun moveRunbook(runbookId: String, targetGroup: String?, targetIndexInGroup: Int, visibleIds: Set<String>) =
+        reorder { all ->
+            val index = all.onScreen(visibleIds).fullIndexInFolder(runbookId, targetGroup, targetIndexInGroup)
+            moveIntoFolder(all, RunbookFolderItems, setOf(runbookId), targetGroup, index)
+        }
+
+    /** Move folder [group] to [targetGroupIndex] among the folders [visibleIds] left on screen. */
+    fun moveGroup(group: String?, targetGroupIndex: Int, visibleIds: Set<String>) = reorder { all ->
+        moveFolder(all, RunbookFolderItems, group, all.onScreen(visibleIds).fullFolderIndex(group, targetGroupIndex))
     }
 
-    /** Move multiple runbooks [runbookIds] to [targetGroup] at [targetIndexInGroup]. */
-    fun moveRunbooks(runbookIds: Set<String>, targetGroup: String?, targetIndexInGroup: Int) {
-        store.reorder { moveRunbooksToGroup(it, runbookIds, targetGroup, targetIndexInGroup) }
-        runbooks = store.all().map { RunbookEntry(it.canonical()) }
+    private fun List<Runbook>.onScreen(visibleIds: Set<String>) =
+        FilteredFolderList(this, filter { it.id in visibleIds }, { it.group }, { it.id })
+
+    /** Rename folder [oldName] to [newName] across every runbook filed under it. */
+    fun renameGroup(oldName: String, newName: String) = reorder {
+        renameFolder(it, RunbookFolderItems, oldName, newName)
     }
 
-    /** Move folder [group] to [targetGroupIndex] among folders. */
-    fun moveGroup(group: String?, targetGroupIndex: Int) {
-        store.reorder { moveRunbookGroup(it, group, targetGroupIndex) }
-        runbooks = store.all().map { RunbookEntry(it.canonical()) }
+    /** Delete folder [name]: its runbooks are un-filed, not deleted (as for hosts). */
+    fun deleteGroup(name: String) = reorder {
+        renameFolder(it, RunbookFolderItems, name, null)
     }
 
-    /** Rename group [oldName] to [newName] across all runbooks. */
-    fun renameGroup(oldName: String, newName: String) {
-        store.reorder { renameRunbookGroup(it, oldName, newName) }
-        runbooks = store.all().map { RunbookEntry(it.canonical()) }
-    }
-
-    /** Delete group [name]: ungroups its runbooks, setting group to null (items are kept). */
-    fun deleteGroup(name: String) {
-        store.reorder { renameRunbookGroup(it, name, null) }
+    /** See [app.skerry.ui.snippet.SnippetManager.reorder] — the store owns the order. */
+    private fun reorder(transform: (List<Runbook>) -> List<Runbook>) {
+        store.reorder(transform)
         runbooks = store.all().map { RunbookEntry(it.canonical()) }
     }
 

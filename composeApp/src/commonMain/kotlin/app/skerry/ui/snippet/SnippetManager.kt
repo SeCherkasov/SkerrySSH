@@ -5,6 +5,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.skerry.shared.text.normalizeGroup
+import app.skerry.ui.design.FilteredFolderList
+import app.skerry.ui.design.fullFolderIndex
+import app.skerry.ui.design.fullIndexInFolder
+import app.skerry.ui.design.moveFolder
+import app.skerry.ui.design.moveIntoFolder
+import app.skerry.ui.design.renameFolder
 import app.skerry.shared.text.normalizeNotes
 import app.skerry.shared.snippet.Snippet
 import app.skerry.shared.snippet.SnippetRunEnvironment
@@ -141,41 +147,50 @@ class SnippetManager(
         )
         store.put(snippet)
         val existing = find(id)
-        if (existing != null) {
-            existing.snippet = snippet
-            snippets = snippets.map { if (it.id == id) SnippetEntry(snippet) else it }
-        } else {
-            snippets = snippets + SnippetEntry(snippet)
-        }
+        if (existing != null) existing.snippet = snippet else snippets = snippets + SnippetEntry(snippet)
         return id
     }
 
-    /** Move snippet [snippetId] to [targetGroup] at [targetIndexInGroup]. */
-    fun moveSnippet(snippetId: String, targetGroup: String?, targetIndexInGroup: Int) {
-        moveSnippets(setOf(snippetId), targetGroup, targetIndexInGroup)
+    /**
+     * Move snippet [snippetId] into folder [targetGroup] at [targetIndexInGroup], counted over
+     * the rows the screen was showing ([visibleIds]) — a search or a chip may have hidden some.
+     *
+     * The translation to a position in the whole library runs here rather than in the view, over the
+     * list the store hands the transform under its own lock: an index computed against the Compose
+     * snapshot would be dated to the last recomposition, and a sync apply landing in between would
+     * make it count rows the store no longer has.
+     */
+    fun moveSnippet(snippetId: String, targetGroup: String?, targetIndexInGroup: Int, visibleIds: Set<String>) =
+        reorder { all ->
+            val index = all.onScreen(visibleIds).fullIndexInFolder(snippetId, targetGroup, targetIndexInGroup)
+            moveIntoFolder(all, SnippetFolderItems, setOf(snippetId), targetGroup, index)
+        }
+
+    /** Move folder [group] to [targetGroupIndex] among the folders [visibleIds] left on screen. */
+    fun moveGroup(group: String?, targetGroupIndex: Int, visibleIds: Set<String>) = reorder { all ->
+        moveFolder(all, SnippetFolderItems, group, all.onScreen(visibleIds).fullFolderIndex(group, targetGroupIndex))
     }
 
-    /** Move multiple snippets [snippetIds] to [targetGroup] at [targetIndexInGroup]. */
-    fun moveSnippets(snippetIds: Set<String>, targetGroup: String?, targetIndexInGroup: Int) {
-        store.reorder { moveSnippetsToGroup(it, snippetIds, targetGroup, targetIndexInGroup) }
-        snippets = store.all().map { SnippetEntry(it.canonical()) }
+    private fun List<Snippet>.onScreen(visibleIds: Set<String>) =
+        FilteredFolderList(this, filter { it.id in visibleIds }, { it.group }, { it.id })
+
+    /** Rename folder [oldName] to [newName] across every snippet filed under it. */
+    fun renameGroup(oldName: String, newName: String) = reorder {
+        renameFolder(it, SnippetFolderItems, oldName, newName)
     }
 
-    /** Move folder [group] to [targetGroupIndex] among folders. */
-    fun moveGroup(group: String?, targetGroupIndex: Int) {
-        store.reorder { moveSnippetGroup(it, group, targetGroupIndex) }
-        snippets = store.all().map { SnippetEntry(it.canonical()) }
+    /** Delete folder [name]: its snippets are un-filed, not deleted (as for hosts). */
+    fun deleteGroup(name: String) = reorder {
+        renameFolder(it, SnippetFolderItems, name, null)
     }
 
-    /** Rename group [oldName] to [newName] across all snippets. */
-    fun renameGroup(oldName: String, newName: String) {
-        store.reorder { renameSnippetGroup(it, oldName, newName) }
-        snippets = store.all().map { SnippetEntry(it.canonical()) }
-    }
-
-    /** Delete group [name]: ungroups its snippets, setting group to null (items are kept). */
-    fun deleteGroup(name: String) {
-        store.reorder { renameSnippetGroup(it, name, null) }
+    /**
+     * Writes a whole-list transform through the store and reloads from it, rather than reordering
+     * [snippets] in place: the store owns the order (it holds the record the other devices read), and
+     * a transform that moves a snippet between folders also rewrites its group.
+     */
+    private fun reorder(transform: (List<Snippet>) -> List<Snippet>) {
+        store.reorder(transform)
         snippets = store.all().map { SnippetEntry(it.canonical()) }
     }
 

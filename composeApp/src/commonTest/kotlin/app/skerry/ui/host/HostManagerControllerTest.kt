@@ -535,7 +535,7 @@ class SectionReorderTest {
         val controller = HostManagerController(store) { "gen" }
 
         // In the hosts sidebar the user sees [a, b] and drops b before a.
-        controller.moveHostInSection("b", targetGroup = null, targetIndexInGroup = 0, section = HostSection.Terminal)
+        controller.moveHostInSection("b", targetGroup = null, targetIndexInGroup = 0, visibleIds = setOf("a", "b"))
 
         assertEquals(listOf("b", "a", "x"), controller.hosts.map { it.id })
     }
@@ -547,7 +547,7 @@ class SectionReorderTest {
         val controller = HostManagerController(store) { "gen" }
 
         // Hosts sidebar: drop a after b (visible index 1 of [b]).
-        controller.moveHostInSection("a", targetGroup = null, targetIndexInGroup = 1, section = HostSection.Terminal)
+        controller.moveHostInSection("a", targetGroup = null, targetIndexInGroup = 1, visibleIds = setOf("a", "b"))
 
         // a sits after b, and the shells' order is what the user asked for.
         val ids = controller.hosts.map { it.id }
@@ -560,7 +560,7 @@ class SectionReorderTest {
         val store = FakeHostStore(desktop("x"), shell("a"), desktop("y"), shell("b"))
         val controller = HostManagerController(store) { "gen" }
 
-        controller.moveHostInSection("b", targetGroup = null, targetIndexInGroup = 0, section = HostSection.Terminal)
+        controller.moveHostInSection("b", targetGroup = null, targetIndexInGroup = 0, visibleIds = setOf("a", "b"))
 
         val ids = controller.hosts.map { it.id }
         assertTrue(ids.indexOf("x") < ids.indexOf("y")) // desktops untouched relative to each other
@@ -572,10 +572,39 @@ class SectionReorderTest {
         val store = FakeHostStore(shell("a"), Host("x", "x", "x.local", 5900, "", "Lab", connectionType = ConnectionType.VNC))
         val controller = HostManagerController(store) { "gen" }
 
-        controller.moveHostInSection("a", targetGroup = "Lab", targetIndexInGroup = 0, section = HostSection.Terminal)
+        controller.moveHostInSection("a", targetGroup = "Lab", targetIndexInGroup = 0, visibleIds = setOf("a"))
 
         assertEquals("Lab", controller.hosts.first { it.id == "a" }.group)
         assertEquals(listOf("x", "a"), controller.hosts.map { it.id })
+    }
+
+    @Test
+    fun `a drag under a search does not jump the rows the search hid`() {
+        // Ops holds h1..h4, all shells; the search box left h1 and h4 on screen.
+        val store = FakeHostStore(
+            shell("h1").copy(group = "Ops"), shell("h2").copy(group = "Ops"),
+            shell("h3").copy(group = "Ops"), shell("h4").copy(group = "Ops"),
+        )
+        val controller = HostManagerController(store) { "gen" }
+
+        // Drop h1 below h4: index 1 among the rows it is not, which is the end of the folder.
+        controller.moveHostInSection("h1", targetGroup = "Ops", targetIndexInGroup = 1, visibleIds = setOf("h1", "h4"))
+
+        // Counting the section alone would have put h1 second, reordering h2 and h3 unseen.
+        assertEquals(listOf("h2", "h3", "h4", "h1"), controller.hosts.map { it.id })
+    }
+
+    @Test
+    fun `a row alone on screen in its folder keeps its place`() {
+        // The search left only h2 of Ops. The drag says nothing about where it goes among h1 and h3.
+        val store = FakeHostStore(
+            shell("h1").copy(group = "Ops"), shell("h2").copy(group = "Ops"), shell("h3").copy(group = "Ops"),
+        )
+        val controller = HostManagerController(store) { "gen" }
+
+        controller.moveHostInSection("h2", targetGroup = "Ops", targetIndexInGroup = 0, visibleIds = setOf("h2"))
+
+        assertEquals(listOf("h1", "h2", "h3"), controller.hosts.map { it.id })
     }
 
     @Test
@@ -589,7 +618,7 @@ class SectionReorderTest {
         val controller = HostManagerController(store) { "gen" }
 
         // Dropped after the last folder the sidebar shows (index 1 among [Shells]) — i.e. "stay last".
-        controller.moveFolderInSection("Lab", targetGroupIndex = 1, section = HostSection.Terminal)
+        controller.moveFolderInSection("Lab", targetGroupIndex = 1, visibleIds = setOf("a", "b"))
 
         // Counting the hidden Screens folder would have landed Lab between Screens and Shells.
         assertEquals(listOf("Screens", "Shells", "Lab"), controller.hosts.mapNotNull { it.group }.distinct())

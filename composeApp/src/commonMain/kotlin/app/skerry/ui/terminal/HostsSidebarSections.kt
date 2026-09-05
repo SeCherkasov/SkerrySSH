@@ -38,6 +38,8 @@ import app.skerry.shared.host.VaultHostStore
 import app.skerry.shared.team.TeamMemberStatus
 import app.skerry.shared.team.TeamScopeRef
 import androidx.compose.runtime.collectAsState
+import app.skerry.ui.design.DragFolder
+import app.skerry.ui.design.folderLabel
 import app.skerry.ui.design.handsKeyboardBack
 import app.skerry.ui.design.SHORT_ID_CHARS
 import app.skerry.ui.teams.AutoPullTeamsOnOnline
@@ -56,7 +58,7 @@ import app.skerry.ui.generated.resources.shtail_group_rename
 import app.skerry.ui.generated.resources.shtail_group_expand
 import app.skerry.ui.generated.resources.rd_no_desktops
 import app.skerry.ui.generated.resources.term_recent_section
-import app.skerry.ui.host.HostDragState
+import app.skerry.ui.design.FolderDragState
 import app.skerry.ui.host.HostFolder
 import app.skerry.ui.host.HostGroup
 import app.skerry.ui.host.HostManagerController
@@ -65,9 +67,10 @@ import app.skerry.ui.host.inSection
 import app.skerry.ui.host.MockHost
 import app.skerry.ui.host.UNGROUPED_LABEL
 import app.skerry.ui.host.color
-import app.skerry.ui.host.draggableFolderHeader
-import app.skerry.ui.host.folderHeaderAnchor
-import app.skerry.ui.host.folderRangeAnchor
+import app.skerry.ui.design.draggableFolderHeader
+import app.skerry.ui.design.folderHeaderAnchor
+import app.skerry.ui.design.folderRangeAnchor
+import app.skerry.ui.design.visibleItemIds
 import app.skerry.ui.host.connectionTypeLabel
 import app.skerry.ui.host.groupHostsByConnectionType
 import app.skerry.ui.host.ungroupedLabel
@@ -276,20 +279,19 @@ internal fun EmptyCatalogNote() {
  * ([LocalSessions]) — status-dot color reflects the most recent session's connection state.
  *
  * Manual reorder ([dragState]): dragging the folder header reorders folders; dragging a host row
- * reorders within a folder or moves it to another (see [HostSidebarDnd]). Drops commit through
+ * reorders within a folder or moves it to another (see [app.skerry.ui.design.FolderDragState]). Drops commit through
  * [controller]; [foldersProvider] supplies the current folder list at gesture time.
  */
 @Composable
 internal fun LiveHostFolder(
     folder: HostFolder,
     state: DesktopDesignState,
-    section: HostSection,
     mono: FontFamily,
-    dragState: HostDragState,
+    dragState: FolderDragState,
     controller: HostManagerController,
     selectedHostId: String?,
     onSelectHost: (String) -> Unit,
-    foldersProvider: () -> List<HostFolder>,
+    foldersProvider: () -> List<DragFolder>,
 ) {
     val sessions = LocalSessions.current
     val connect = LocalConnectHost.current
@@ -306,12 +308,12 @@ internal fun LiveHostFolder(
     val isAnyFolderDragging = dragState.draggingFolderName != null
     val isThisFolderDragging = dragState.draggingFolderName == folder.name
     // Highlights the target folder while a host is dragged over it.
-    val isDropTarget = dragState.draggingHostId != null && dragState.activeHostDrop?.group == group
+    val isDropTarget = dragState.draggingItemId != null && dragState.activeDrop?.group == group
     val folderAlpha = if (isThisFolderDragging) 0.6f else 1f
     // Insertion line within the folder: the index excludes the dragged host (like moveHostToGroup),
     // so it's anchored to visible rows via neighbors from the same filtered list.
-    val others = folder.hosts.filter { it.id != dragState.draggingHostId }
-    val dropIndex = if (isDropTarget) dragState.activeHostDrop?.index?.coerceIn(0, others.size) else null
+    val others = folder.hosts.filter { it.id != dragState.draggingItemId }
+    val dropIndex = if (isDropTarget) dragState.activeDrop?.index?.coerceIn(0, others.size) else null
     val lineBeforeId = dropIndex?.takeIf { it < others.size }?.let { others[it].id }
     Column(
         Modifier
@@ -339,18 +341,21 @@ internal fun LiveHostFolder(
                     RoundedCornerShape(6.dp)
                 )
                 .folderHeaderAnchor(dragState, folder.name)
-                // Section-aware: the drop index counts the folders this sidebar shows, not the
-                // catalog's (a folder of the other section is invisible here and keeps its place).
+                // The drop index counts the folders this sidebar shows, not the catalog's: one the
+                // other section, the search or the chip left out is invisible here and keeps its
+                // place, so the rows on screen travel with the index.
                 .draggableFolderHeader(
                     state = dragState,
                     name = folder.name,
                     folders = foldersProvider,
                 ) { index ->
-                    controller.moveFolderInSection(group, index, section)
+                    controller.moveFolderInSection(group, index, foldersProvider().visibleItemIds())
                 },
         ) {
-            // The synthetic bucket shows the localized "no group" label; real folders show their name.
-            val headerName = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folder.name
+            // The synthetic bucket shows the localized "no group" label; a real folder shows its own
+            // name, filtered the way every other folder header filters it ([folderLabel]) — a group
+            // name can arrive over sync from a client that never normalized it.
+            val headerName = if (folder.name == UNGROUPED_LABEL) ungroupedLabel() else folderLabel(folder.name)
             FolderHeader(headerName, folder.hosts.size, collapsed, onToggleCollapsed, onEditGroup)
         }
         // A collapsed folder shows only the header; when any folder is dragged, all folders
@@ -364,7 +369,7 @@ internal fun LiveHostFolder(
                     HostTypeSubheader(connectionTypeLabel(type))
                     typeHosts.forEach { host ->
                         key(host.id) {
-                            HostRow(host, state, section, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
+                            HostRow(host, state, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
                         }
                     }
                 }
@@ -374,7 +379,7 @@ internal fun LiveHostFolder(
                 folder.hosts.forEach { host ->
                     key(host.id) {
                         if (host.id == lineBeforeId) DropLine()
-                        HostRow(host, state, section, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
+                        HostRow(host, state, controller, sessions, connect, mono, selectedHostId, onSelectHost, dragState, foldersProvider)
                     }
                 }
                 // Drop at the folder's end: the line goes after the last row.

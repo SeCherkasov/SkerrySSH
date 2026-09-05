@@ -48,6 +48,7 @@ import app.skerry.ui.design.Txt
 import app.skerry.ui.design.VLine
 import app.skerry.ui.host.GroupDialog
 import app.skerry.ui.generated.resources.Res
+import app.skerry.ui.generated.resources.shtail_group_rename_records
 import app.skerry.ui.generated.resources.runbook_count
 import app.skerry.ui.generated.resources.runbook_delete
 import app.skerry.ui.generated.resources.runbook_delete_message
@@ -115,7 +116,6 @@ private sealed interface RunbookPanelMode {
 @Composable
 private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState, mono: FontFamily) {
     var selectedId by remember { mutableStateOf<String?>(null) }
-    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var mode by remember { mutableStateOf<RunbookPanelMode>(RunbookPanelMode.Run) }
     var query by remember { mutableStateOf("") }
     var helpOpen by remember { mutableStateOf(false) }
@@ -158,21 +158,17 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
                             collapse = state,
                             group = { it.runbook.group },
                             itemKey = { it.id },
-                            selectedIds = selectedIds,
                             onEditGroup = { editingGroup = it },
-                            onMoveItems = { ids, targetGroup, targetIndex ->
-                                manager.moveRunbooks(ids, targetGroup, targetIndex)
-                            },
-                            onMoveGroup = { group, targetIndex ->
-                                manager.moveGroup(group, targetIndex)
-                            },
+                            // Translated the same way as the snippet library: the sections report
+                            // the rows the search left, the manager counts against all of them.
+                            onMoveItem = manager::moveRunbook,
+                            onMoveGroup = manager::moveGroup,
                         ) { entry ->
                             // Keyed by id so selecting a row doesn't recreate every row's lambda.
-                            val isSelected = entry.id in selectedIds || entry.id == selected?.id
+                            val isSelected = entry.id == selected?.id
                             val onClick = remember(entry.id) {
                                 {
                                     selectedId = entry.id
-                                    selectedIds = setOf(entry.id)
                                     mode = RunbookPanelMode.Run
                                 }
                             }
@@ -242,6 +238,7 @@ private fun LiveRunbooksView(manager: RunbookManager, state: DesktopDesignState,
         GroupDialog(
             initialName = editingGroup!!,
             onDismiss = { editingGroup = null },
+            renameSubtitle = stringResource(Res.string.shtail_group_rename_records),
             onSave = { newName ->
                 manager.renameGroup(editingGroup!!, newName)
                 editingGroup = null

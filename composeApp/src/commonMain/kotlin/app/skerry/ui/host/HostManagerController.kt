@@ -17,6 +17,7 @@ import app.skerry.shared.ssh.SshConfigHost
 import app.skerry.shared.ssh.SshConfigImport
 import app.skerry.shared.vault.Credential
 import app.skerry.shared.tag.normalizeTags
+import app.skerry.ui.design.filteredIndexToFull
 
 /**
  * Editable profile fields without [Host.id]: the create/edit form operates on a draft, and
@@ -220,18 +221,26 @@ class HostManagerController(
     }
 
     /**
-     * Manual reorder from a section sidebar: [targetIndexInGroup] counts only the rows of [section]
-     * the user can see, so it is translated into the catalog's own index first. Dropping a shell
-     * host below the last visible one must not push it past a remote desktop filed in the same
-     * folder — that profile is invisible here and its place is not the user's to change.
+     * Manual reorder from a sidebar: [targetIndexInGroup] counts only the rows the list had on
+     * screen ([visibleIds] — its section, its search box and its tag chip all narrow it), so it is
+     * translated into the catalog's own index first. Dropping a shell host below the last visible
+     * one must not push it past a remote desktop filed in the same folder, or past a host the
+     * search hid — neither is on screen and neither one's place is the user's to change here.
      */
-    fun moveHostInSection(hostId: String, targetGroup: String?, targetIndexInGroup: Int, section: HostSection) {
+    fun moveHostInSection(hostId: String, targetGroup: String?, targetIndexInGroup: Int, visibleIds: Set<String>) {
         store.reorder { all ->
             val group = targetGroup?.takeIf { it.isNotBlank() }
             // Same basis as moveHostToGroup's insertion: the target group without the dragged host.
             val siblings = all.filter { it.id != hostId && it.group?.takeIf(String::isNotBlank) == group }
-            val visible = siblings.withIndex().filter { it.value.section == section }.map { it.index }
-            moveHostToGroup(all, hostId, targetGroup, filteredIndexToFull(siblings.size, visible, targetIndexInGroup))
+            val visible = siblings.withIndex().filter { it.value.id in visibleIds }.map { it.index }
+            // Alone on screen in its own folder the drag says nothing about order, so the host keeps
+            // the place it has rather than being sent past every row the filter hid.
+            val here = all.filter { it.group?.takeIf(String::isNotBlank) == group }.indexOfFirst { it.id == hostId }
+            val index = filteredIndexToFull(
+                siblings.size, visible, targetIndexInGroup,
+                whenNothingVisible = if (here < 0) siblings.size else here,
+            )
+            moveHostToGroup(all, hostId, targetGroup, index)
         }
         hosts = canonicalHosts()
     }
@@ -243,18 +252,25 @@ class HostManagerController(
     }
 
     /**
-     * Folder reorder from a section sidebar: [targetGroupIndex] counts only folders that hold
-     * profiles of [section] (the ones on screen), and is translated into the catalog's folder order
-     * — a folder belonging entirely to the other section keeps its place.
+     * Folder reorder from a sidebar: [targetGroupIndex] counts only the folders that held a row on
+     * screen ([visibleIds]), and is translated into the catalog's folder order — a folder the other
+     * section, the search or the tag chip left out of this list keeps its place.
      */
-    fun moveFolderInSection(group: String?, targetGroupIndex: Int, section: HostSection) {
+    fun moveFolderInSection(group: String?, targetGroupIndex: Int, visibleIds: Set<String>) {
         store.reorder { all ->
             val moving = group?.takeIf { it.isNotBlank() }
-            val folders = all.map { it.group?.takeIf(String::isNotBlank) }.distinct().filterNot { it == moving }
+            val names = all.map { it.group?.takeIf(String::isNotBlank) }.distinct()
+            val folders = names.filterNot { it == moving }
             val visible = folders.withIndex()
-                .filter { (_, name) -> all.any { it.group?.takeIf(String::isNotBlank) == name && it.section == section } }
+                .filter { (_, name) -> all.any { it.group?.takeIf(String::isNotBlank) == name && it.id in visibleIds } }
                 .map { it.index }
-            moveGroup(all, group, filteredIndexToFull(folders.size, visible, targetGroupIndex))
+            // No other folder on screen: the drag conveys no order, so this one stays where it is.
+            val here = names.indexOf(moving)
+            val index = filteredIndexToFull(
+                folders.size, visible, targetGroupIndex,
+                whenNothingVisible = if (here < 0) folders.size else here,
+            )
+            moveGroup(all, group, index)
         }
         hosts = canonicalHosts()
     }

@@ -9,6 +9,7 @@ import app.skerry.ui.generated.resources.conn_type_container
 import app.skerry.ui.generated.resources.conn_type_local
 import app.skerry.ui.generated.resources.conn_type_mosh
 import app.skerry.ui.generated.resources.conn_type_serial
+import app.skerry.ui.design.DragFolder
 import app.skerry.ui.design.UNGROUPED_FOLDER
 import app.skerry.ui.design.ungroupedFolderLabel
 import app.skerry.ui.generated.resources.conn_type_ssh
@@ -96,3 +97,18 @@ fun connectionTypeLabel(type: ConnectionType): String = stringResource(
         ConnectionType.CONTAINER -> Res.string.conn_type_container
     },
 )
+
+/**
+ * The sidebar's folders as the drag engine sees them ([DragFolder]).
+ *
+ * An empty folder has no group derivable from its hosts, so its name is used as the group key: a
+ * host dropped into a freshly created empty group is filed under that name rather than under `null`
+ * (which would land it in Ungrouped). The synthetic [UNGROUPED_LABEL] bucket itself stays `null`.
+ */
+fun List<HostFolder>.asDragFolders(): List<DragFolder> = map { folder ->
+    DragFolder(
+        name = folder.name,
+        group = folder.hosts.firstOrNull()?.group ?: folder.name.takeIf { it != UNGROUPED_LABEL },
+        itemIds = folder.hosts.map { it.id },
+    )
+}

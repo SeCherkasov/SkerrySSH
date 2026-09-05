@@ -16,6 +16,13 @@ import androidx.compose.ui.unit.dp
 import app.skerry.ui.theme.SkerryTheme
 import kotlin.test.Test
 
+/**
+ * The `expect`/`actual` wiring of [SkerryVerticalScrollbar], both overloads.
+ *
+ * These are smoke tests and say so: the desktop scrollbar publishes no semantics node, so nothing
+ * here can tell a drawn scrollbar from the deliberate Android no-op — only that composing one over a
+ * scroll host neither fails to resolve nor throws. What the bar looks like is checked by eye.
+ */
 @OptIn(ExperimentalTestApi::class)
 class ScrollbarTest {
 
