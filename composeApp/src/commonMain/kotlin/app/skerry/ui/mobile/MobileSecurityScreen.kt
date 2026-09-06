@@ -2,7 +2,6 @@ package app.skerry.ui.mobile
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -124,52 +123,30 @@ fun MobileSecurityScreen(state: MobileDesignState) {
                 val lastChange by produceState<String?>(null, controller, reload) {
                     value = withContext(Dispatchers.Default) { controller?.lastPasswordChangeAt() }
                 }
-                Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Column(Modifier.weight(1f)) {
-                        Txt(
-                            stringResource(if (syncConfigured) Res.string.settings_security_account_password else Res.string.settings_security_master_password),
-                            color = Skerry.colors.text,
-                            size = 14.5.sp,
-                        )
-                        Txt(
-                            if (syncConfigured) stringResource(Res.string.settings_security_account_password_desc) else masterPasswordSubtitle(lastChange),
-                            color = Skerry.colors.dim,
-                            size = 11.5.sp,
-                            modifier = Modifier.padding(top = 3.dp),
-                        )
-                    }
-                    // Changing the password requires a live vault; without one it's dimmed/inert.
-                    Txt(
-                        stringResource(Res.string.settings_change),
-                        color = if (controller != null) Skerry.colors.cyanBright else Skerry.colors.faint,
-                        size = 13.sp,
-                        weight = FontWeight.Medium,
-                        modifier = if (controller != null) {
-                            Modifier.clickable { if (syncConfigured) changeAccountPwOpen = true else changePwOpen = true }
-                        } else {
-                            Modifier
-                        },
-                    )
-                }
+                // Changing the password requires a live vault; without one the row is dimmed/inert.
+                MobileSettingLinkRow(
+                    label = stringResource(if (syncConfigured) Res.string.settings_security_account_password else Res.string.settings_security_master_password),
+                    subtitle = if (syncConfigured) stringResource(Res.string.settings_security_account_password_desc) else masterPasswordSubtitle(lastChange),
+                    action = stringResource(Res.string.settings_change),
+                    onAction = if (controller != null) {
+                        { if (syncConfigured) changeAccountPwOpen = true else changePwOpen = true }
+                    } else {
+                        null
+                    },
+                )
                 HLine()
 
                 // Biometric unlock: row shows only when the factor is available (nothing to configure
                 // otherwise). A device whose enclave refuses to decrypt the vault (#23) gets the reason
                 // and a re-check instead of a toggle that can't work.
                 if (controller != null && controller.biometricUnsupported) {
-                    Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Column(Modifier.weight(1f)) {
-                            Txt(stringResource(Res.string.settings_security_biometric), color = Skerry.colors.faint, size = 14.5.sp)
-                            Txt(stringResource(Res.string.settings_security_biometric_unsupported), color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
-                        }
-                        Txt(
-                            stringResource(Res.string.settings_security_biometric_recheck),
-                            color = Skerry.colors.cyanBright,
-                            size = 13.sp,
-                            weight = FontWeight.Medium,
-                            modifier = Modifier.clickable { controller.recheckBiometricSupport(); reload++ },
-                        )
-                    }
+                    MobileSettingLinkRow(
+                        label = stringResource(Res.string.settings_security_biometric),
+                        subtitle = stringResource(Res.string.settings_security_biometric_unsupported),
+                        action = stringResource(Res.string.settings_security_biometric_recheck),
+                        onAction = { controller.recheckBiometricSupport(); reload++ },
+                        labelColor = Skerry.colors.faint,
+                    )
                     HLine()
                 } else if (controller != null && controller.canEnableBiometric()) {
                     // Prompt strings resolved in composable scope (stringResource can't be called in the onToggle lambda).

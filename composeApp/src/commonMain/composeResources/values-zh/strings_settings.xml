@@ -268,4 +268,29 @@
     <string name="settings_terminal_prod_warnings_desc">在带 #prod 标签的主机上，除危险命令外也确认警告级命令（kill、停止服务、卸载软件包）。root 会话不适用 sudo 规则（在那里没有意义），但无论如何都会确认破坏性警告。</string>
     <string name="settings_kb_remote_group">远程桌面</string>
     <string name="settings_kb_release_keyboard">释放键盘（交还给应用）</string>
+
+    <!-- Background keep-alive (More -> Background & lock screen; Android only) -->
+    <string name="keepalive_title">后台与锁屏</string>
+    <string name="keepalive_desc">锁屏后 Android 会挂起 CPU，厂商固件也会清理后台应用：keepalive 停止发出，服务器随即断开会话。</string>
+    <string name="keepalive_device">已识别：%1$s</string>
+    <string name="keepalive_wakelock">保持 CPU 唤醒</string>
+    <string name="keepalive_wakelock_desc">仅在有会话打开时持有，最后一个会话关闭即释放。会增加耗电。</string>
+    <string name="keepalive_wakelock_deferred">已保存。未能通知已打开的会话；将在下次连接时生效。</string>
+    <string name="keepalive_battery">电池优化</string>
+    <string name="keepalive_battery_on">Skerry 已排除在 Doze 与 App Standby 之外。</string>
+    <string name="keepalive_battery_off">系统可能在后台挂起 Skerry。在打开的列表中切换到全部应用，并将 Skerry 设为“不优化”。</string>
+    <string name="keepalive_autostart">自启动与后台运行</string>
+    <string name="keepalive_autostart_desc">固件有自己的白名单。不在其中时，无论 Android 设置如何，服务都会被清理。</string>
+    <string name="keepalive_recents">多任务锁定与锁屏清理</string>
+    <string name="keepalive_recents_xiaomi">安全中心 → 电池 →“锁屏后清理内存”设为“永不”。在多任务界面长按 Skerry 卡片并点击锁图标。</string>
+    <string name="keepalive_recents_samsung">电池 → 后台使用限制：不要让 Skerry 进入“深度休眠应用”，并设为“无限制”。</string>
+    <string name="keepalive_recents_generic">在多任务界面锁定 Skerry 卡片，并在系统电池设置中关闭锁屏清理内存。</string>
+    <string name="keepalive_open">打开</string>
+    <string name="keepalive_exempt">已排除</string>
+    <string name="keepalive_not_exempt">未排除</string>
+    <string name="keepalive_vendor_xiaomi">Xiaomi / Redmi / POCO</string>
+    <string name="keepalive_vendor_huawei">Huawei / Honor</string>
+    <string name="keepalive_vendor_oppo">OPPO / OnePlus / realme</string>
+    <string name="keepalive_vendor_vivo">vivo / iQOO</string>
+    <string name="keepalive_vendor_samsung">Samsung</string>
 </resources>
