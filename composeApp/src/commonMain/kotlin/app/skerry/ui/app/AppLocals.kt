@@ -14,6 +14,7 @@ import app.skerry.shared.vault.SecurityLog
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultBiometrics
 import app.skerry.ui.ai.AiAssistantController
+import app.skerry.ui.keepalive.KeepAlivePower
 import app.skerry.ui.terminal.CastOpenResult
 import app.skerry.ui.terminal.openCastFile
 import app.skerry.ui.host.HostManagerController
@@ -344,3 +345,10 @@ val LocalUpdates: ProvidableCompositionLocal<UpdateNoticeController?> = staticCo
  */
 val LocalCastPicker: ProvidableCompositionLocal<suspend () -> CastOpenResult> =
     staticCompositionLocalOf { ::openCastFile }
+
+/**
+ * The phone's background power management (wake lock, battery exemption, the ROM's autostart page)
+ * — More → "Background & lock screen". `null` on desktop and in preview, where the More row is
+ * dropped: there is no Doze and no OEM task killer to configure.
+ */
+val LocalKeepAlivePower: ProvidableCompositionLocal<KeepAlivePower?> = staticCompositionLocalOf { null }

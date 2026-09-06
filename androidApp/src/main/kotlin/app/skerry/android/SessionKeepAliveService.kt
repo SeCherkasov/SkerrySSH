@@ -12,6 +12,7 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import app.skerry.ui.keepalive.KeepAliveNotificationRegistry
@@ -40,6 +41,13 @@ class SessionKeepAliveService : Service() {
         const val ACTION_ADD = "app.skerry.android.action.KEEPALIVE_ADD"
         const val ACTION_REMOVE = "app.skerry.android.action.KEEPALIVE_REMOVE"
         const val ACTION_NOTIFICATION_DISMISSED = "app.skerry.android.action.KEEPALIVE_NOTIFICATION_DISMISSED"
+
+        /**
+         * The "keep the CPU awake" switch was flipped while sessions are already open. Without it
+         * the new value would only be read by the next connect, while the settings screen already
+         * showed it as taken.
+         */
+        const val ACTION_SYNC_WAKE_LOCK = "app.skerry.android.action.KEEPALIVE_SYNC_WAKE_LOCK"
         const val EXTRA_SESSION_ID = "app.skerry.android.extra.SESSION_ID"
         const val EXTRA_HOST_LABEL = "app.skerry.android.extra.HOST_LABEL"
         const val EXTRA_TAP_NONCE = "app.skerry.android.extra.TAP_NONCE"
@@ -53,6 +61,9 @@ class SessionKeepAliveService : Service() {
         val tapNonce: String = UUID.randomUUID().toString()
 
         private const val TAG = "SkerryKeepAlive"
+        // Shows up in `dumpsys power` and in battery attribution; the "app:reason" form is the
+        // convention the platform expects.
+        private const val WAKE_LOCK_TAG = "skerry:session-keepalive"
         private const val CHANNEL_ID = "session_keepalive"
         // One shade group for the summary + per-session notifications; without it each session is
         // a top-level notification and TalkBack announces every one separately.
@@ -79,6 +90,20 @@ class SessionKeepAliveService : Service() {
     private val sessionHosts = LinkedHashMap<String, String>()
     // Registered while the service lives; re-shows notifications when one is swiped away.
     private var dismissReceiver: BroadcastReceiver? = null
+    private val wakeLock = WakeLockGate {
+        val power = getSystemService(PowerManager::class.java)
+        if (power == null) {
+            // No PowerManager means no lock and no way to get one: sessions still run, they just
+            // suspend with the screen. Worth a line, since the switch reads as taken.
+            Log.w(TAG, "no PowerManager: open sessions will not hold the CPU awake")
+            null
+        } else {
+            AndroidWakeLockHandle(
+                power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+                    .also { it.setReferenceCounted(false) },
+            )
+        }
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -86,9 +111,19 @@ class SessionKeepAliveService : Service() {
     }
 
     override fun onDestroy() {
+        wakeLock.release()
         dismissReceiver?.let { unregisterReceiver(it) }
         dismissReceiver = null
         super.onDestroy()
+    }
+
+    /**
+     * Applies [WakeLockGate]'s rule to the current state: the session count, and the user's switch
+     * read fresh from the store rather than remembered, since the settings screen writes it.
+     * Called from every transition that can change either.
+     */
+    private fun syncWakeLock() {
+        wakeLock.sync(sessions.size, KeepAliveWakeLockSetting.isEnabled(this))
     }
 
     /**
@@ -148,6 +183,12 @@ class SessionKeepAliveService : Service() {
         }
         when (intent.action) {
             ACTION_REMOVE -> removeSession(intent)
+            ACTION_SYNC_WAKE_LOCK -> {
+                syncWakeLock()
+                // Nothing to keep alive: the switch was flipped as the last session was closing.
+                // This start never went foreground, so there is nothing to tear down but the service.
+                if (sessions.isEmpty) stopSelf()
+            }
             else -> addSession(intent) // ACTION_ADD; also the plain-start fallback path
         }
         return START_STICKY
@@ -174,6 +215,7 @@ class SessionKeepAliveService : Service() {
         notificationManager().cancelAll()
         val snapshot = SessionKeepAliveService.bridgeInstance?.snapshotSessions().orEmpty()
         if (snapshot.isEmpty()) {
+            wakeLock.release()
             startForegroundCompat(buildSummaryNotification(0))
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -234,6 +276,8 @@ class SessionKeepAliveService : Service() {
         val notifId = sessions.register(sessionId)
         notificationManager().notify(notifId, buildSessionNotification(hostLabel, sessionId, notifId))
         updateSummary()
+        // After the registration, not before it: the decision reads the session count.
+        syncWakeLock()
     }
 
     private fun removeSession(intent: Intent) {
@@ -244,12 +288,16 @@ class SessionKeepAliveService : Service() {
         }
         val notifId = sessions.remove(sessionId)
         if (notifId == null) { // idempotent; a lone stray remove must not leave an idle service
-            if (sessions.isEmpty) stopSelf()
+            if (sessions.isEmpty) {
+                wakeLock.release()
+                stopSelf()
+            }
             return
         }
         sessionHosts.remove(sessionId)
         notificationManager().cancel(notifId)
         if (sessions.isEmpty) {
+            wakeLock.release()
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         } else {
