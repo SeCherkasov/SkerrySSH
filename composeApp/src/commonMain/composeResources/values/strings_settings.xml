@@ -268,4 +268,50 @@
     <string name="settings_terminal_prod_warnings_desc">On hosts tagged #prod also confirm warnings (kill, stopping a service, uninstalling a package), not only dangerous commands. A root session drops the sudo rule — it says nothing there — and confirms destructive warnings either way.</string>
     <string name="settings_kb_remote_group">REMOTE DESKTOP</string>
     <string name="settings_kb_release_keyboard">Release the keyboard (back to the app)</string>
+
+    <!-- Keep-Alive / Power Management -->
+    <string name="keepalive_banner_dont_show">Don't show again</string>
+    <string name="keepalive_banner_setup">Set up</string>
+    <string name="keepalive_banner_warning">Background keep-alive is not configured. Connections may freeze when locked.</string>
+    <string name="keepalive_device_detected">Detected device: %1$s</string>
+    <string name="keepalive_header_desc">Keeps SSH and remote sessions alive when backgrounded or with screen locked, preventing system network socket freeze.</string>
+    <string name="keepalive_notice_safety">Skerry only holds a CPU wake lock while at least one session is actively open. All locks and background services are released when sessions end.</string>
+    <string name="keepalive_step1_btn">Request battery exemption</string>
+    <string name="keepalive_step1_desc">Exempts Skerry from Android Doze and power saving mode to maintain network sockets.</string>
+    <string name="keepalive_step1_title">1. Ignore battery optimizations</string>
+    <string name="keepalive_step2_btn">Open autostart settings</string>
+    <string name="keepalive_step2_desc">Allows the background service to keep running while connections are open.</string>
+    <string name="keepalive_step2_title">2. Allow autostart &amp; background activity</string>
+    <string name="keepalive_step3_btn">Open app settings</string>
+    <string name="keepalive_step3_desc_generic">Lock Skerry in your recent tasks screen and disable lock-screen task cleanup in system battery settings.</string>
+    <string name="keepalive_step3_desc_xiaomi">In Security app → Battery → Lock screen memory clear: set to Never. In Recents screen, long press Skerry card and tap the lock icon.</string>
+    <string name="keepalive_step3_title">3. Lock in Recents &amp; lock-screen memory</string>
+    <string name="keepalive_subtitle_optimal">Optimal (deep keep-alive active)</string>
+    <string name="keepalive_subtitle_warning">Action suggested (freeze protection)</string>
+    <string name="keepalive_title">Background &amp; lock-screen</string>
+
+    <!-- Data backup -->
+    <string name="settings_backup_desc">Export or import everything the account syncs (hosts, snippets, runbooks, keys).</string>
+    <string name="settings_backup_encrypted_note">This backup is encrypted — enter your master password to read it.</string>
+    <string name="settings_backup_err_corrupted">This file is not a valid backup</string>
+    <string name="settings_backup_err_password">Wrong master password</string>
+    <string name="settings_backup_export">Export data…</string>
+    <string name="settings_backup_export_action">Export</string>
+    <string name="settings_backup_export_encrypted">Encrypted export (default)</string>
+    <string name="settings_backup_export_encrypted_sub">Each record is sealed with a key derived from your master password; the file opens with the password only.</string>
+    <string name="settings_backup_export_plain">Plaintext export</string>
+    <string name="settings_backup_export_plain_sub">Every record fully decrypted into readable JSON — inspect or edit it directly.</string>
+    <string name="settings_backup_export_plain_warning">Warning: the plaintext file holds all your passwords and private keys. Store it safely, never share it.</string>
+    <string name="settings_backup_import">Import data…</string>
+    <string name="settings_backup_import_action">Import</string>
+    <string name="settings_backup_import_confirm">Confirm replace</string>
+    <string name="settings_backup_import_records">%1$d record(s) in this backup</string>
+    <string name="settings_backup_merge">Merge</string>
+    <string name="settings_backup_merge_sub">Existing data stays; the backup wins where it is newer.</string>
+    <string name="settings_backup_pw_hint">Confirm your master password to unlock the backup.</string>
+    <string name="settings_backup_pw_label">Master password</string>
+    <string name="settings_backup_replace">Replace</string>
+    <string name="settings_backup_replace_sub">Deletes ALL current synced data first.</string>
+    <string name="settings_backup_title">Data backup</string>
+
 </resources>

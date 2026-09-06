@@ -137,6 +137,7 @@ internal fun MobileRoutePane(state: MobileDesignState, route: MobileRoute) {
             MobileRoute.Security -> MobileSecurityScreen(state)
             MobileRoute.Trash -> MobileTrashScreen(state)
             MobileRoute.About -> MobileAboutScreen(state)
+            MobileRoute.KeepAlive -> MobileKeepAliveScreen(state)
         }
     }
 }

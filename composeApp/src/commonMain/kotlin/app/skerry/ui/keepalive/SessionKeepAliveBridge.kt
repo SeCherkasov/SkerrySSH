@@ -28,4 +28,40 @@ interface SessionKeepAliveBridge {
 
     /** The session [sessionId] is gone. Idempotent: repeated calls for a missing id are no-ops. */
     fun onSessionEnded(sessionId: String)
+
+    /**
+     * Whether battery optimizations are ignored on this device (false = system may freeze sockets in background).
+     */
+    fun isOptimizedForKeepAlive(): Boolean = true
+
+    /**
+     * Request battery optimization exemption or open system power management.
+     */
+    fun requestKeepAliveOptimization() {}
+
+    /**
+     * Open system autostart / background management settings page.
+     */
+    fun openAutostartSettings() {}
+
+    /**
+     * Open system application details settings page.
+     */
+    fun openAppDetailsSettings() {}
+
+    /**
+     * Human-readable device manufacturer (e.g. "Xiaomi", "Huawei", "OPPO", "vivo", "Samsung").
+     */
+    fun getManufacturer(): String = "Unknown"
+
+    /**
+     * Whether this platform supports mobile keep-alive configuration (true on Android).
+     */
+    val isKeepAliveConfigSupported: Boolean get() = false
+
+    /**
+     * Whether the user has enabled background keep-alive (screen-off CPU wake lock).
+     * Default false — keeping the CPU awake is a battery trade-off the user must opt into.
+     */
+    val isWakeLockEnabled: Boolean get() = false
 }

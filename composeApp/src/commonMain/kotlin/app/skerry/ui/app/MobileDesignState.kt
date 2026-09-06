@@ -52,7 +52,7 @@ enum class MobileTab(val icon: String) {
  * from Hosts, the framebuffer from Desktops or Sessions, SFTP (Files) via the host card's SFTP
  * button, and Vault/Snippets/Ports/Known/Team from the More tab.
  */
-enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Vault, Snippets, Runbooks, Ports, Known, Team, Appearance, Sync, Ai, Security, Trash, About }
+enum class MobileRoute { Terminal, Vnc, Files, HostDetail, Vault, Snippets, Runbooks, Ports, Known, Team, Appearance, Sync, Ai, Security, Trash, About, KeepAlive }
 
 /**
  * Push screens that keep the bottom navigation up. The terminal is one: per the template it is a

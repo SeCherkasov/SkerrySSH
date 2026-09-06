@@ -44,7 +44,11 @@ import app.skerry.ui.generated.resources.settings_security_title
 import app.skerry.ui.generated.resources.settings_update_status
 import app.skerry.ui.generated.resources.vault_item_count
 import app.skerry.ui.generated.resources.vault_title
+import app.skerry.ui.generated.resources.keepalive_title
+import app.skerry.ui.generated.resources.keepalive_subtitle_optimal
+import app.skerry.ui.generated.resources.keepalive_subtitle_warning
 import app.skerry.ui.app.LocalCredentials
+import app.skerry.ui.app.LocalKeepAliveBridge
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -156,6 +160,20 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
                     null
                 },
             )
+            // Keep-Alive settings: mobile background keep-alive, battery exemption & autostart guides.
+            val keepAliveBridge = LocalKeepAliveBridge.current
+            val keepAliveSupported = keepAliveBridge?.isKeepAliveConfigSupported ?: false
+            if (keepAliveSupported || preview) {
+                val isOptimized = keepAliveBridge?.isOptimizedForKeepAlive() ?: false
+                MoreRow(
+                    "battery_saver",
+                    Skerry.colors.cyanBright,
+                    stringResource(Res.string.keepalive_title),
+                    if (isOptimized) stringResource(Res.string.keepalive_subtitle_optimal) else stringResource(Res.string.keepalive_subtitle_warning),
+                    if (isOptimized) Skerry.colors.moss else Skerry.colors.amber,
+                    onClick = { state.push(MobileRoute.KeepAlive) },
+                )
+            }
             // About: subtitle is the current version, or an amber "Update x.y.z" when a newer
             // release is known (the passive mobile counterpart of the desktop status-bar notice).
             val updateVersion = LocalUpdates.current?.available?.versionLabel
