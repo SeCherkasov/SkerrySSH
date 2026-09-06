@@ -46,6 +46,7 @@ import androidx.compose.ui.test.runDesktopComposeUiTest
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import app.skerry.ui.AppDependencies
+import app.skerry.ui.keepalive.KeepAlivePower
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.shell_tip_files
 import app.skerry.ui.generated.resources.shell_tip_record
@@ -324,6 +325,8 @@ internal fun runMobileShell(
     size: DpSize = DpSize(PHONE_WIDTH, PHONE_HEIGHT),
     /** System font scale, for the layouts that have to survive one: 1f is the phone's default. */
     fontScale: Float = 1f,
+    /** Android supplies one; the rows that only exist with it are tested through a fake. */
+    keepAlivePower: KeepAlivePower? = null,
     body: ComposeUiTest.(MobileShell) -> Unit,
 ) = runComposeUiTest {
     val hosts = seededHosts()
@@ -352,6 +355,7 @@ internal fun runMobileShell(
                                 deps = AppDependencies(
                                     hosts = hosts, snippets = snippets, tunnels = tunnels,
                                     runbooks = mobileRunbooks, runbookRunner = runner,
+                                    keepAlivePower = keepAlivePower,
                                 ),
                                 state = state,
                                 sessions = sessions,

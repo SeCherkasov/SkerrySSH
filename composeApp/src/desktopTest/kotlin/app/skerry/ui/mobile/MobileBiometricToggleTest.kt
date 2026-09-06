@@ -126,8 +126,13 @@ class MobileBiometricToggleTest {
 
 private const val DEVICE = "test-device"
 
-/** An unlocked vault that holds no records and exports a real data key — all enrolment needs of it. */
-private class UnlockedVault(private val dataKey: DataKey) : Vault {
+/**
+ * An unlocked vault that holds no records and exports a real data key — all enrolment needs of it.
+ *
+ * Shared with [MobileSettingLinkRowTest], which needs a vault only so the Security screen builds a
+ * controller and its rows come alive.
+ */
+internal class UnlockedVault(private val dataKey: DataKey) : Vault {
     override fun exists(): Boolean = true
     override val isUnlocked: Boolean = true
     override fun create(password: CharArray) = Unit

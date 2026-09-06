@@ -980,6 +980,13 @@ class MainActivity : FragmentActivity() {
             sharedSessions = sharedSessions,
             securityLog = securityLog,
             localAi = localAi,
+            // Background power management (More -> Background & lock screen). The application
+            // context, not this Activity: the setting outlives any one of them, and the pages it
+            // opens are other apps' tasks. "Are there live sessions" is asked of the process-scoped
+            // keep-alive bridge, so flipping the switch mid-session reaches the running service.
+            keepAlivePower = AndroidKeepAlivePower(applicationContext) {
+                KeepAliveRuntime.bridge?.snapshotSessions()?.isNotEmpty() == true
+            },
         )
     }
 

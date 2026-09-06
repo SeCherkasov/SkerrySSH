@@ -85,4 +85,9 @@ data class AppDependencies(
     val securityLog: SecurityLog? = null,
     /** Local AI: model store + downloader + runtime; `null` for preview/mock without the subsystem. */
     val localAi: LocalAiDeps? = null,
+    /**
+     * The phone's background power management (wake lock, battery exemption, the ROM's autostart
+     * page); `null` on every platform that has none, and the More screen then drops the row.
+     */
+    val keepAlivePower: app.skerry.ui.keepalive.KeepAlivePower? = null,
 )

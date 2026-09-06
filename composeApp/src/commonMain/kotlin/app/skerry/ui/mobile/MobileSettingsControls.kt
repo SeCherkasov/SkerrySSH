@@ -21,6 +21,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,6 +73,77 @@ internal fun MoreRow(
         if (onClick != null && labelColor != Skerry.colors.sunset) Sym("chevron_right", size = 20.sp, color = Skerry.colors.faint)
     }
     if (divider) HLine(modifier = Modifier.padding(horizontal = 12.dp))
+}
+
+/**
+ * A setting that is not a switch but a place to go: name and explanation on the leading edge, one
+ * action word on the trailing one. [onAction] == null dims the word and takes the click away — the
+ * shape a settings row wears when the thing behind it isn't available yet.
+ *
+ * Shared because the Security screen ("Change", "Re-check") and the keep-alive screen ("Open") all
+ * draw the same row, and the third copy is where a shape stops being a coincidence.
+ *
+ * The click sits on the whole row, not on the word: a bare word is a 30x17dp target under the 24dp
+ * floor of WCAG 2.5.8, and a clickable leaf merges the row's semantics into itself, so a screen
+ * reader stepping through controls hears three identical "Open, button" stops with the labels they
+ * belong to left behind in the text it skipped.
+ */
+@Composable
+internal fun MobileSettingLinkRow(
+    label: String,
+    subtitle: String,
+    action: String,
+    onAction: (() -> Unit)?,
+    labelColor: Color = Skerry.colors.text,
+) {
+    val clickable = if (onAction != null) {
+        Modifier.clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            role = Role.Button,
+            onClick = onAction,
+        )
+    } else {
+        Modifier
+    }
+    SettingRowShape(label, subtitle, labelColor, clickable) {
+        Txt(
+            action,
+            color = if (onAction != null) Skerry.colors.cyanBright else Skerry.colors.faint,
+            size = 13.sp,
+            weight = FontWeight.Medium,
+        )
+    }
+}
+
+/**
+ * The same row with nothing to open: a setting that lives entirely in the firmware, where all this
+ * screen can do is name it and spell out the steps.
+ */
+@Composable
+internal fun MobileSettingNoteRow(label: String, subtitle: String) {
+    SettingRowShape(label, subtitle, Skerry.colors.text, Modifier) {}
+}
+
+@Composable
+private fun SettingRowShape(
+    label: String,
+    subtitle: String,
+    labelColor: Color,
+    clickable: Modifier,
+    trailing: @Composable () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().then(clickable).padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Txt(label, color = labelColor, size = 14.5.sp)
+            Txt(subtitle, color = Skerry.colors.dim, size = 11.5.sp, modifier = Modifier.padding(top = 3.dp))
+        }
+        trailing()
+    }
 }
 
 // Security (More -> Security push screen).

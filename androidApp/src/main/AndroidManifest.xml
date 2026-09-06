@@ -21,6 +21,26 @@
     <!-- Notification for the keep-alive service. Optional: without it the service still runs, the
          notification is simply not shown. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Partial wake lock while a session is open, and only when the user turns it on in
+         More -> Background & lock screen. Being a foreground service keeps the process, not the
+         CPU: with the screen off the device suspends between wakeups and the SSH keepalive misses
+         its interval. Off by default; the app works without it, the session just may not survive
+         a locked screen. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- The ROM settings apps whose autostart page the keep-alive screen offers to open. Declared
+         so that getApplicationInfo can answer whether the package is a system one: under Android 11
+         package visibility an undeclared package reads as "not installed", and the check that keeps
+         us from handing the intent to a sideloaded impostor would refuse every real device. -->
+    <queries>
+        <package android:name="com.miui.securitycenter" />
+        <package android:name="com.huawei.systemmanager" />
+        <package android:name="com.hihonor.systemmanager" />
+        <package android:name="com.coloros.safecenter" />
+        <package android:name="com.oplus.safecenter" />
+        <package android:name="com.iqoo.secure" />
+        <package android:name="com.vivo.permissionmanager" />
+    </queries>
 
     <application
         android:allowBackup="false"

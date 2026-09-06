@@ -21,6 +21,9 @@ import androidx.compose.ui.unit.dp
 import app.skerry.shared.ai.AiProviderKind
 import app.skerry.ui.generated.resources.Res
 import app.skerry.ui.generated.resources.appearance_title
+import app.skerry.ui.generated.resources.keepalive_exempt
+import app.skerry.ui.generated.resources.keepalive_not_exempt
+import app.skerry.ui.generated.resources.keepalive_title
 import app.skerry.ui.generated.resources.lib_snippets_screen_title
 import app.skerry.ui.generated.resources.runbook_section
 import app.skerry.ui.generated.resources.more_about
@@ -45,6 +48,8 @@ import app.skerry.ui.generated.resources.settings_update_status
 import app.skerry.ui.generated.resources.vault_item_count
 import app.skerry.ui.generated.resources.vault_title
 import app.skerry.ui.app.LocalCredentials
+import app.skerry.ui.app.LocalKeepAlivePower
+import app.skerry.ui.keepalive.rememberBatteryExemption
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -125,6 +130,20 @@ fun MobileMoreScreen(state: MobileDesignState, onLock: (() -> Unit)?) {
             // "Security" section: master password, biometrics, auto-lock, event log. Live path is
             // behind the gate (vault present); in preview the row is inert (nothing to configure without a vault).
             MoreRow("shield_lock", Skerry.colors.cyanBright, stringResource(Res.string.settings_security_title), null, Skerry.colors.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Security) })
+            // Background & lock screen: the wake lock and the system pages that decide whether a
+            // session survives the screen going off. Android only — nothing supplies the hook
+            // elsewhere, and a row that opens a screen full of settings this OS does not have would
+            // be worse than no row. The subtitle is the one state the system will tell us.
+            val power = LocalKeepAlivePower.current
+            val exempt = rememberBatteryExemption(power)
+            if (power != null) {
+                MoreRow(
+                    "battery_saver", Skerry.colors.cyanBright, stringResource(Res.string.keepalive_title),
+                    stringResource(if (exempt) Res.string.keepalive_exempt else Res.string.keepalive_not_exempt),
+                    if (exempt) Skerry.colors.dim else Skerry.colors.amber,
+                    onClick = { state.push(MobileRoute.KeepAlive) },
+                )
+            }
             // Trash: records deleted on any device of the account, restorable within the retention
             // window. Live path only — without a vault there is nothing to list.
             MoreRow("delete", Skerry.colors.cyanBright, stringResource(Res.string.more_trash), null, Skerry.colors.dim, onClick = if (preview) null else { -> state.push(MobileRoute.Trash) })
