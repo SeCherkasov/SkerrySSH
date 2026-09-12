@@ -4,8 +4,14 @@ package app.skerry.ui.connection
 
 import app.skerry.shared.ssh.ConnectionType
 import app.skerry.shared.ssh.SshAuth
+import app.skerry.shared.ssh.SshConnection
 import app.skerry.shared.ssh.SshTarget
+import app.skerry.shared.ssh.SshTransport
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -17,6 +23,11 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.test.fail
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 /**
  * Auto-reconnect after a drop: what the loop retries, when it gives up, and what it tells the
@@ -395,5 +406,247 @@ class ConnectionReconnectTest {
         assertEquals(1, conn1.roundTrips) // old loop stopped with the old session
         assertEquals(1, conn2.roundTrips) // new session pings immediately again
         scope.cancel()
+    }
+
+    /**
+     * A drop and the user closing the pane are handled by two different threads: the loss lands on
+     * the controller's scope, the click on the UI one. [ConnectionController.onSessionLost] read
+     * "still Connected" and then wrote [ConnectionUiState.Disconnected] without holding the lock
+     * [disconnect] writes [ConnectionUiState.Form] under, so a click that landed in between was
+     * undone — and [ConnectionController.connect] only ever starts from Form, so the pane could not
+     * be brought back at all, silently (issue #353: how the desktop toolbar test flaked on CI).
+     *
+     * Rounds rather than one attempt, because the window is the width of one teardown; the fix
+     * closes it, so a green run here is not luck.
+     */
+    @Test
+    fun `a drop racing an explicit disconnect leaves the form ready to connect`() {
+        // Real threads on purpose: with the loss handler and the disconnect serialized onto one
+        // dispatcher the Connected guard alone is enough, and the defect cannot be staged at all.
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            repeat(RACE_ROUNDS) { round ->
+                val dropped = FakeShellChannel()
+                val transport = ScriptedTransport(
+                    listOf(
+                        Result.success(FakeSshConnection(dropped)),
+                        Result.success(FakeSshConnection(FakeShellChannel())),
+                    ),
+                )
+                val controller = ConnectionController(transport, scope, maxReconnectAttempts = 0)
+                controller.connect(testTarget, SshAuth.Password("pw"))
+                controller.awaitState<ConnectionUiState.Connected>("round $round: the first connect")
+
+                dropped.drop() // the transport drops — handled on the controller's scope
+                controller.disconnect() // ...while the user closes the pane
+
+                controller.holdState<ConnectionUiState.Form>("round $round: the closed pane")
+                controller.connect(testTarget, SshAuth.Password("pw"))
+                controller.awaitState<ConnectionUiState.Connected>("round $round: the connect after the drop")
+                controller.disconnect()
+            }
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    /**
+     * The vault lock ends a mid-flight reconnect — the credentials it would use are gone, so no
+     * path can bring that session back. The attempt in flight has to end with it: past its last
+     * cancellation check it would otherwise publish a live session whose credentials were just
+     * wiped, on a pane the lock had already stood down. Staged through [newSessionScope], as above.
+     */
+    @Test
+    fun `a reconnect finishing after the vault locked leaves nothing open`() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val dropped = FakeShellChannel()
+        val reconnected = FakeSshConnection(FakeShellChannel())
+        val reachedWindow = CompletableDeferred<Unit>()
+        val leaveWindow = CompletableDeferred<Unit>()
+        try {
+            var sessions = 0
+            val controller = ConnectionController(
+                ScriptedTransport(listOf(Result.success(FakeSshConnection(dropped)), Result.success(reconnected))),
+                scope,
+                newSessionScope = {
+                    // Only the reconnect's own handshake is held; the first connect must complete.
+                    if (sessions++ > 0) {
+                        reachedWindow.complete(Unit)
+                        while (!leaveWindow.isCompleted) Thread.sleep(1)
+                    }
+                    CoroutineScope(SupervisorJob() + Dispatchers.Default)
+                },
+                maxReconnectAttempts = 3,
+                reconnectDelayMillis = { 0L },
+            )
+
+            controller.connect(testTarget, SshAuth.Password("pw"))
+            controller.awaitState<ConnectionUiState.Connected>("the first connect")
+            dropped.drop() // the transport drops → the reconnect attempt reaches the window
+            awaitTrue("the reconnect to reach the publication") { reachedWindow.isCompleted }
+
+            controller.clearReconnectCredentials() // the vault locks
+            leaveWindow.complete(Unit)
+
+            controller.holdState<ConnectionUiState.Disconnected>("the stood-down pane")
+            assertFalse(
+                (controller.uiState as ConnectionUiState.Disconnected).reconnecting,
+                "the pane must not claim it is reconnecting after the lock",
+            )
+            awaitTrue("the reconnected session to be released") { reconnected.disconnected }
+        } finally {
+            leaveWindow.complete(Unit)
+            scope.cancel()
+        }
+    }
+
+    /**
+     * The same defect on the connect side, staged rather than raced. Cancelling the connect job
+     * cannot stop a handshake that is already past its last `ensureActive` — everything from there
+     * to the transition is synchronous — so the pane the user has just closed came back Connected
+     * over a session whose teardown had already run, holding a connection nobody would ever close.
+     *
+     * [newSessionScope] is the hook: it is called inside exactly that window, so blocking in it
+     * puts the disconnect where the race would have put it, every run.
+     */
+    @Test
+    fun `a handshake finishing after the pane was closed leaves nothing open`() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val connection = FakeSshConnection(FakeShellChannel())
+        val reachedWindow = CompletableDeferred<Unit>()
+        val leaveWindow = CompletableDeferred<Unit>()
+        try {
+            val controller = ConnectionController(
+                ScriptedTransport(listOf(Result.success(connection))),
+                scope,
+                newSessionScope = {
+                    reachedWindow.complete(Unit)
+                    while (!leaveWindow.isCompleted) Thread.sleep(1)
+                    CoroutineScope(SupervisorJob() + Dispatchers.Default)
+                },
+                maxReconnectAttempts = 0,
+            )
+
+            controller.connect(testTarget, SshAuth.Password("pw"))
+            awaitTrue("the handshake to reach the publication") { reachedWindow.isCompleted }
+            controller.disconnect() // the user closes the pane; the handshake cannot be cancelled now
+            leaveWindow.complete(Unit)
+
+            controller.holdState<ConnectionUiState.Form>("the pane closed mid-handshake")
+            awaitTrue("the connection to be released") { connection.disconnected }
+        } finally {
+            leaveWindow.complete(Unit)
+            scope.cancel()
+        }
+    }
+
+    /**
+     * The tail of the retry loop is the same trap once more: nothing suspends between the last
+     * attempt's failure and the give-up write, so cancelling the job cannot stop it. It used to put
+     * [ConnectionUiState.Disconnected] — "reconnect failed" — over the [ConnectionUiState.Form] the
+     * user's close had already set, leaving the pane in the state [ConnectionController.connect]
+     * refuses to start from. The transport blocks without suspending, so the close lands exactly
+     * there on every run.
+     */
+    @Test
+    fun `a reconnect giving up after the pane was closed leaves the form alone`() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val dropped = FakeShellChannel()
+        val reachedRetry = CompletableDeferred<Unit>()
+        val leaveRetry = CompletableDeferred<Unit>()
+        try {
+            val controller = ConnectionController(
+                GatedRetryTransport(FakeSshConnection(dropped), reachedRetry, leaveRetry),
+                scope,
+                maxReconnectAttempts = 1, // one attempt, so its failure is the verdict
+                reconnectDelayMillis = { 0L },
+            )
+
+            controller.connect(testTarget, SshAuth.Password("pw"))
+            controller.awaitState<ConnectionUiState.Connected>("the first connect")
+            dropped.drop() // the transport drops → the only retry starts and blocks
+            awaitTrue("the last reconnect attempt to start") { reachedRetry.isCompleted }
+
+            controller.disconnect() // the user closes the pane while that attempt is doomed but alive
+            leaveRetry.complete(Unit)
+
+            controller.holdState<ConnectionUiState.Form>("the pane closed during the last attempt")
+            // The hold alone would also pass on a runner slow enough that the stale write simply
+            // had not landed yet, so the verdict is what the user does next: connecting again must
+            // get through and stay through. A stale "reconnect failed" landing before this leaves a
+            // pane connect refuses to start from; landing after it, it overwrites a live session.
+            controller.connect(testTarget, SshAuth.Password("pw"))
+            controller.awaitState<ConnectionUiState.Connected>("the connect after the closed pane")
+            controller.holdState<ConnectionUiState.Connected>("the pane connected again")
+        } finally {
+            leaveRetry.complete(Unit)
+            scope.cancel()
+        }
+    }
+}
+
+/**
+ * Succeeds, then blocks the retry inside `connect` — without suspending, so cancelling the
+ * reconnect job cannot stop it — and fails that attempt when released. Every connect after it
+ * succeeds again, so a test can ask whether the pane still works afterwards.
+ */
+private class GatedRetryTransport(
+    private val first: SshConnection,
+    private val reachedRetry: CompletableDeferred<Unit>,
+    private val leaveRetry: CompletableDeferred<Unit>,
+) : SshTransport {
+    private var calls = 0
+
+    override suspend fun connect(target: SshTarget, auth: SshAuth): SshConnection {
+        when (calls++) {
+            0 -> return first
+            1 -> {
+                reachedRetry.complete(Unit)
+                while (!leaveRetry.isCompleted) Thread.sleep(1)
+                error("route to host lost")
+            }
+            else -> return FakeSshConnection(FakeShellChannel())
+        }
+    }
+}
+
+/**
+ * Rounds of the races above. The window is one teardown wide, so a handful of rounds already hits it
+ * on a loaded machine; this many keeps it honest on an idle one. Costs a few seconds per test.
+ */
+private const val RACE_ROUNDS = 200
+
+/** Spins until [uiState] is [T], naming what was waited for and what it actually holds. */
+private inline fun <reified T> ConnectionController.awaitState(what: String, timeout: Duration = 5.seconds) {
+    val deadline = TimeSource.Monotonic.markNow() + timeout
+    while (uiState !is T) {
+        if (deadline.hasPassedNow()) {
+            fail("$what never reached ${T::class.simpleName}: uiState=${uiState::class.simpleName}")
+        }
+        // Parks rather than spins: the work being waited for runs on a pool that a busy loop on
+        // a small CI runner would starve — the very condition these tests exist for.
+        Thread.sleep(1)
+    }
+}
+
+/** Spins until [condition] holds, naming what was waited for. */
+private fun awaitTrue(what: String, timeout: Duration = 5.seconds, condition: () -> Boolean) {
+    val deadline = TimeSource.Monotonic.markNow() + timeout
+    while (!condition()) {
+        if (deadline.hasPassedNow()) fail("$what never happened")
+        Thread.sleep(1)
+    }
+}
+
+/**
+ * Fails if [uiState] leaves [T] within [window]. The assertion has to be a held one: the handler
+ * that used to overwrite the state runs on another thread and may not have landed yet.
+ */
+private inline fun <reified T> ConnectionController.holdState(what: String, window: Duration = 10.milliseconds) {
+    val deadline = TimeSource.Monotonic.markNow() + window
+    while (!deadline.hasPassedNow()) {
+        val state = uiState
+        if (state !is T) fail("$what left ${T::class.simpleName} for ${state::class.simpleName}")
+        Thread.sleep(1)
     }
 }

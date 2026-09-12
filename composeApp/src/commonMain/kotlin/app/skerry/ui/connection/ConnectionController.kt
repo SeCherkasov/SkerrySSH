@@ -248,6 +248,23 @@ class ConnectionController(
     /** Takes the pending reveal request, clearing it — a request is acted on exactly once. */
     fun takeRevealRequest(): String? = pendingRevealPath?.also { pendingRevealPath = null }
 
+    // Every transition of [uiState] and of the session's fields runs under this lock, stamped with
+    // [sessionGeneration]. They contend from every side: the two publishers ([connect] and
+    // [attachSession]), a handshake finishing in [establishSession], the retry loop in
+    // [startReconnect], a loss from the session watcher, the vault lock's
+    // [clearReconnectCredentials], and the user's [disconnect]. None of them is inline — the loss
+    // is dispatched onto [scope], the handshake runs on its own coroutine — and neither a state
+    // check nor job cancellation can stop one already under way: the loss used to read "still
+    // Connected" and then write [ConnectionUiState.Disconnected] over the [ConnectionUiState.Form]
+    // a close had just set, leaving a pane [connect] silently refuses to start from (issue #353).
+    // So the check and the assignment it guards live in one block, and a writer whose stamp is
+    // stale writes nothing — the shape [PingController] already uses.
+    private val lock = Any()
+
+    // Which session the controller owns. Every teardown retires the number, so a writer stamped
+    // with an earlier one belongs to a session that is already gone and is dropped.
+    private var sessionGeneration = 0
+
     private var connectJob: Job? = null
     // Target/auth of the last connect — used by auto-reconnect after a drop (reconnects to the same target).
     private var lastTarget: SshTarget? = null
@@ -287,17 +304,21 @@ class ConnectionController(
      * auto-reconnect after a drop (reconnect carries no such callback).
      */
     fun connect(target: SshTarget, auth: SshAuth, onConnected: ((TerminalScreenState) -> Unit)? = null) {
-        // Only starts from the form: while a connect is in progress or a session is open, a repeat
-        // connect is ignored — otherwise a scope/connection could leak.
-        if (uiState !is ConnectionUiState.Form) return
-        supportsSftp = target.connectionType.carriesSftp
-        lastTarget = target
-        lastAuth = auth
-        pendingOnConnected = onConnected
-        uiState = ConnectionUiState.Connecting
-        connectJob = scope.launch {
+        // The session this connect opens; everything it writes later is stamped with it (see [lock]).
+        val generation = synchronized(lock) {
+            // Only starts from the form: while a connect is in progress or a session is open, a repeat
+            // connect is ignored — otherwise a scope/connection could leak.
+            if (uiState !is ConnectionUiState.Form) return
+            supportsSftp = target.connectionType.carriesSftp
+            lastTarget = target
+            lastAuth = auth
+            pendingOnConnected = onConnected
+            uiState = ConnectionUiState.Connecting
+            sessionGeneration
+        }
+        val job = scope.launch {
             try {
-                establishSession(target, auth)
+                establishSession(target, auth, generation)
             } catch (e: CancellationException) {
                 // disconnect() fired mid-connect: the half-open connection is already closed inside
                 // establishSession; uiState was set to Form by disconnect() itself.
@@ -306,23 +327,32 @@ class ConnectionController(
                 // The serial transport wraps its typed failure into SshConnectionException, so the
                 // cause carries the reason the view localizes.
                 val serial = e as? SerialUnavailableException ?: e.cause as? SerialUnavailableException
-                // A throw after Connected was published (onConnected action, watcher setup) has
-                // already announced the session to the keep-alive bridge — retract it.
-                notifyKeepAliveEnded()
-                uiState = ConnectionUiState.Error(
-                    // Transport text is diagnostics only: the view shows a localized base and keeps
-                    // this as a parenthetical detail (sshj/okio messages are always English). It is
-                    // still the server's own words, so it crosses the same sanitising boundary the
-                    // reconnect banner uses.
-                    message = serverFailureDetail(e).orEmpty(),
-                    moshReason = (e as? MoshSetupException)?.reason,
-                    moshDetail = (e as? MoshSetupException)?.detail,
-                    serialProblem = serial?.problem,
-                    serialDetail = serial?.detail,
-                    hostKeyRefusal = (e as? SshHostKeyRejectedException)?.refusal,
-                    hostKeyRefusalOnHop = (e as? SshHostKeyRejectedException)?.hop == true,
-                )
+                synchronized(lock) {
+                    // The pane was closed while this connect was failing: its form is the truth now.
+                    if (generation != sessionGeneration) return@launch
+                    // A throw after Connected was published (onConnected action, watcher setup) has
+                    // already announced the session to the keep-alive bridge — retract it.
+                    notifyKeepAliveEnded()
+                    uiState = ConnectionUiState.Error(
+                        // Transport text is diagnostics only: the view shows a localized base and
+                        // keeps this as a parenthetical detail (sshj/okio messages are always
+                        // English). It is still the server's own words, so it crosses the same
+                        // sanitising boundary the reconnect banner uses.
+                        message = serverFailureDetail(e).orEmpty(),
+                        moshReason = (e as? MoshSetupException)?.reason,
+                        moshDetail = (e as? MoshSetupException)?.detail,
+                        serialProblem = serial?.problem,
+                        serialDetail = serial?.detail,
+                        hostKeyRefusal = (e as? SshHostKeyRejectedException)?.refusal,
+                        hostKeyRefusalOnHop = (e as? SshHostKeyRejectedException)?.hop == true,
+                    )
+                }
             }
+        }
+        synchronized(lock) {
+            // Still this session's connect? If a [disconnect] retired it while the job was being
+            // launched, its teardown has already run and the job only needs stopping.
+            if (generation == sessionGeneration) connectJob = job else job.cancel()
         }
     }
 
@@ -364,8 +394,12 @@ class ConnectionController(
      * terminal, transitions to [ConnectionUiState.Connected], and subscribes the drop observer. On
      * any error, closes the half-open connection and rethrows (the caller decides: show [Error] or
      * retry a reconnect attempt). Used by both the initial [connect] and auto-reconnect.
+     *
+     * Publishing is all-or-nothing under [lock] and only for [generation]: cancellation is
+     * cooperative, and everything from the last [ensureActive] to the transition is synchronous, so
+     * only the stamp can still stop a handshake a [disconnect] has overtaken.
      */
-    private suspend fun establishSession(target: SshTarget, auth: SshAuth) {
+    private suspend fun establishSession(target: SshTarget, auth: SshAuth, generation: Int) {
         var conn: SshConnection? = null
         try {
             val opened = transport.connect(target, auth)
@@ -374,69 +408,120 @@ class ConnectionController(
             val channel = opened.openShell()
             coroutineContext.ensureActive()
             val sScope = newSessionScope()
-            connection = conn
-            // IMPORTANT: the channel must be set BEFORE uiState = Connected — the status bar's
-            // reaction to that transition calls openThroughput(), which requires a live shellChannel
-            // (otherwise it throws).
-            shellChannel = channel
-            cipher = conn.cipher
-            serverVersion = conn.serverVersion
-            sessionScope = sScope
             // Command history for autocomplete: load for this host and attach a snapshot-persist
             // hook on every committed command (runs on the controller's IO scope, not the UI thread).
             val historyKey = terminalHistoryKey(
                 target.connectionType.name, target.username, target.host, target.port,
             )
-            this.historyKey = historyKey
             val terminal = newTerminal(target, auth, channel, sScope, historyKey)
-            // Keep-alive per the profile's cadence (0 = off, SSH-only): pings run from the moment
-            // the session exists — not lazily from the status bar — so an idle session behind a NAT
-            // stays alive even with no UI polling it. Created BEFORE Connected (like shellChannel)
-            // so the status bar's openPing() sees it on the transition. Doubles as the RTT source.
-            // Container sessions ride an SSH connection, so they keep the profile's cadence too.
-            if (target.connectionType.carriedBySsh && target.keepAliveSeconds > 0) {
-                ping = PingController(
-                    measure = { opened.measureRoundTrip() },
-                    scope = scope,
-                    pollIntervalMillis = target.keepAliveSeconds * 1_000L,
-                    onDead = {
-                        // Dead link (consecutive keepalives unanswered): force-close the shell
-                        // channel so the loss flows through the regular drop path (Closed without
-                        // EOF -> auto-reconnect) now, not after minutes of frozen terminal
-                        // waiting out the TCP timeout. NonCancellable like the other teardown
-                        // launches: the close must not be lost if the scope dies at that moment.
-                        scope.launch(NonCancellable) { runCatching { channel.close() } }
-                    },
-                ).also { it.start() }
+            val session = OpenedSession(target, opened, channel, sScope, historyKey, terminal)
+            var onConnected: ((TerminalScreenState) -> Unit)? = null
+            val published = synchronized(lock) {
+                if (generation != sessionGeneration) {
+                    false // the pane was closed under us
+                } else {
+                    publishSession(session)
+                    // One-shot action for the first connect (Run on host): taken and cleared BEFORE a
+                    // possible drop, so a reconnect through this same establishSession doesn't repeat
+                    // it. Run below, outside the lock — it is caller code and reaches the terminal.
+                    onConnected = pendingOnConnected
+                    pendingOnConnected = null
+                    true
+                }
             }
-            if (target.connectionType == ConnectionType.MOSH) {
-                // Mosh needs no keep-alive traffic (the protocol heartbeats every 3s on its own)
-                // and must not be declared dead (it survives outages/roaming by design), so:
-                // fixed poll cadence, no onDead. measureRoundTrip() only reads the smoothed RTT
-                // mosh already measured — the poll itself sends nothing.
-                ping = PingController(
-                    measure = { opened.measureRoundTrip() },
-                    scope = scope,
-                    pollIntervalMillis = MOSH_RTT_POLL_MILLIS,
-                ).also { it.start() }
+            if (!published) {
+                // Nothing of this session reached the controller, so dropping it is just releasing
+                // what this attempt opened.
+                sScope.cancel()
+                closeConnectionQuietly(conn)
+                return
             }
-            uiState = ConnectionUiState.Connected(terminal)
-            // Tell the platform keep-alive bridge that a session is now open (Android runs a
-            // foreground service while sessions exist; no-op on desktop). Done after Connected so
-            // the notification/keep-alive starts exactly when the session is usable.
-            notifyKeepAliveStarted(target.host)
-            // One-shot action for the first connect (Run on host): taken and cleared BEFORE a
-            // possible drop, so a reconnect through this same establishSession doesn't repeat it.
-            pendingOnConnected?.let { action -> pendingOnConnected = null; action(terminal) }
-            watchForSessionLoss(terminal, sScope)
+            onConnected?.invoke(terminal)
+            watchForSessionLoss(terminal, sScope, generation)
         } catch (e: Exception) {
-            // A throw after the session fields are published (e.g. from the onConnected action)
-            // must not leave a half-established session — keep-alive loop, session scope, open
-            // socket — behind an Error state: reuse the disconnect teardown. Before that point
-            // only the local connection exists and just needs closing.
-            if (connection != null) releaseSessionResources() else conn?.let(::closeConnectionQuietly)
+            // A throw after the session was published (e.g. from the onConnected action) must not
+            // leave a half-established session — keep-alive loop, session scope, open socket —
+            // behind an Error state: reuse the disconnect teardown, under the lock that owns those
+            // fields. Before the publication, and for a session a [disconnect] has already retired,
+            // only this attempt's own connection needs closing.
+            val ours = synchronized(lock) {
+                val published = generation == sessionGeneration && connection != null
+                if (published) releaseSessionResources()
+                published
+            }
+            if (!ours) conn?.let(::closeConnectionQuietly)
             throw e
         }
+    }
+
+    /**
+     * Everything one handshake produced, before the controller adopted any of it. Grouped so the
+     * publication is one assignment and the abandoned attempt is one release ([establishSession]).
+     */
+    private class OpenedSession(
+        val target: SshTarget,
+        val conn: SshConnection,
+        val channel: ShellChannel,
+        val scope: CoroutineScope,
+        val historyKey: String,
+        val terminal: TerminalScreenState,
+    )
+
+    /**
+     * Writes this session into the controller's fields and moves the pane to
+     * [ConnectionUiState.Connected]. Caller holds [lock] and has checked the generation: every
+     * field here is one [releaseSessionResources] clears, so the two must never interleave.
+     */
+    private fun publishSession(session: OpenedSession) {
+        val target = session.target
+        val conn = session.conn
+        val channel = session.channel
+        val terminal = session.terminal
+        connection = conn
+        // IMPORTANT: the channel must be set BEFORE uiState = Connected — the status bar's
+        // reaction to that transition calls openThroughput(), which requires a live shellChannel
+        // (otherwise it throws).
+        shellChannel = channel
+        cipher = conn.cipher
+        serverVersion = conn.serverVersion
+        sessionScope = session.scope
+        historyKey = session.historyKey
+        // Keep-alive per the profile's cadence (0 = off, SSH-only): pings run from the moment
+        // the session exists — not lazily from the status bar — so an idle session behind a NAT
+        // stays alive even with no UI polling it. Created BEFORE Connected (like shellChannel)
+        // so the status bar's openPing() sees it on the transition. Doubles as the RTT source.
+        // Container sessions ride an SSH connection, so they keep the profile's cadence too.
+        if (target.connectionType.carriedBySsh && target.keepAliveSeconds > 0) {
+            ping = PingController(
+                measure = { conn.measureRoundTrip() },
+                scope = scope,
+                pollIntervalMillis = target.keepAliveSeconds * 1_000L,
+                onDead = {
+                    // Dead link (consecutive keepalives unanswered): force-close the shell
+                    // channel so the loss flows through the regular drop path (Closed without
+                    // EOF -> auto-reconnect) now, not after minutes of frozen terminal
+                    // waiting out the TCP timeout. NonCancellable like the other teardown
+                    // launches: the close must not be lost if the scope dies at that moment.
+                    scope.launch(NonCancellable) { runCatching { channel.close() } }
+                },
+            ).also { it.start() }
+        }
+        if (target.connectionType == ConnectionType.MOSH) {
+            // Mosh needs no keep-alive traffic (the protocol heartbeats every 3s on its own)
+            // and must not be declared dead (it survives outages/roaming by design), so:
+            // fixed poll cadence, no onDead. measureRoundTrip() only reads the smoothed RTT
+            // mosh already measured — the poll itself sends nothing.
+            ping = PingController(
+                measure = { conn.measureRoundTrip() },
+                scope = scope,
+                pollIntervalMillis = MOSH_RTT_POLL_MILLIS,
+            ).also { it.start() }
+        }
+        uiState = ConnectionUiState.Connected(terminal)
+        // Tell the platform keep-alive bridge that a session is now open (Android runs a
+        // foreground service while sessions exist; no-op on desktop). Done after Connected so
+        // the notification/keep-alive starts exactly when the session is usable.
+        notifyKeepAliveStarted(target.host)
     }
 
     /**
@@ -450,13 +535,9 @@ class ConnectionController(
      * hold two sessions, and the caller's would be silently orphaned.
      */
     fun attachSession(external: TerminalSession) {
-        if (uiState !is ConnectionUiState.Form) return
-        supportsSftp = false
-        isWatched = true
-        val sScope = newSessionScope()
-        sessionScope = sScope
-        attached = external
+        if (uiState !is ConnectionUiState.Form) return // cheap bail; the binding check is below
         val prefs = terminalPrefs()
+        val sScope = newSessionScope()
         val terminal = TerminalScreenState(
             external,
             sScope,
@@ -465,8 +546,22 @@ class ConnectionController(
             cursorBlink = prefs.cursorStyle.blink,
             clipboardWriteEnabled = prefs.clipboardWriteEnabled,
         )
-        uiState = ConnectionUiState.Connected(terminal)
-        watchForSessionLoss(terminal, sScope)
+        val generation = synchronized(lock) {
+            if (uiState !is ConnectionUiState.Form) {
+                // A connect or a loss got the form first: release what this attach opened, and
+                // nothing else — a refused attach leaves the caller's session to the caller
+                // (same contract as the cheap bail above), it does not close it on their behalf.
+                sScope.cancel()
+                return
+            }
+            supportsSftp = false
+            isWatched = true
+            sessionScope = sScope
+            attached = external
+            uiState = ConnectionUiState.Connected(terminal)
+            sessionGeneration
+        }
+        watchForSessionLoss(terminal, sScope, generation)
     }
 
     /**
@@ -584,22 +679,26 @@ class ConnectionController(
 
     /** Close the session (if any) and return to the form. Cancels any active connect and auto-reconnect. */
     fun disconnect() {
-        connectJob?.cancel()
-        connectJob = null
-        reconnectJob?.cancel()
-        reconnectJob = null
-        // Drop the secret reference right away (auth may carry a password/key) — don't hold it on
-        // the heap longer than the connection's lifetime.
-        lastAuth = null
-        lastTarget = null
-        // Cancelled before Connected — discard the not-yet-fired one-shot action (Run on host).
-        pendingOnConnected = null
-        // Stop pointing at the disconnected host: a palette opened later must not attribute its
-        // commands to a session that is gone.
-        historyKey = null
-        releaseSessionResources()
-        notifyKeepAliveEnded()
-        uiState = ConnectionUiState.Form
+        synchronized(lock) {
+            // Retires the session first, so anything still in flight for it writes nothing.
+            sessionGeneration++
+            connectJob?.cancel()
+            connectJob = null
+            reconnectJob?.cancel()
+            reconnectJob = null
+            // Drop the secret reference right away (auth may carry a password/key) — don't hold it on
+            // the heap longer than the connection's lifetime.
+            lastAuth = null
+            lastTarget = null
+            // Cancelled before Connected — discard the not-yet-fired one-shot action (Run on host).
+            pendingOnConnected = null
+            // Stop pointing at the disconnected host: a palette opened later must not attribute its
+            // commands to a session that is gone.
+            historyKey = null
+            releaseSessionResources()
+            notifyKeepAliveEnded()
+            uiState = ConnectionUiState.Form
+        }
     }
 
     /**
@@ -610,21 +709,28 @@ class ConnectionController(
      * no attempts, and the user reconnects manually after unlocking.
      */
     fun clearReconnectCredentials() {
-        val wasReconnecting = reconnectJob != null
-        reconnectJob?.cancel()
-        reconnectJob = null
-        lastAuth = null
-        lastTarget = null
-        // Lock also cancels the pending first-connect action (Run on host): a snippet command must
-        // not fire into the terminal if the handshake completes after the vault is already locked.
-        pendingOnConnected = null
-        // Cancelling a mid-flight auto-reconnect is a true end: the credentials are gone, so no
-        // path can ever bring this session back — retract the keep-alive (the cancelled loop never
-        // reaches its own exhaustion notify) and stop the pane claiming "reconnecting". A still-
-        // connected session is untouched: lock leaves the socket open by design (see doc above).
-        if (wasReconnecting && uiState !is ConnectionUiState.Connected) {
-            (uiState as? ConnectionUiState.Disconnected)?.let { uiState = it.copy(reconnecting = false) }
-            notifyKeepAliveEnded()
+        synchronized(lock) {
+            val wasReconnecting = reconnectJob != null
+            reconnectJob?.cancel()
+            reconnectJob = null
+            lastAuth = null
+            lastTarget = null
+            // Lock also cancels the pending first-connect action (Run on host): a snippet command must
+            // not fire into the terminal if the handshake completes after the vault is already locked.
+            pendingOnConnected = null
+            // Cancelling a mid-flight auto-reconnect is a true end: the credentials are gone, so no
+            // path can ever bring this session back — retract the keep-alive (the cancelled loop never
+            // reaches its own exhaustion notify) and stop the pane claiming "reconnecting". A still-
+            // connected session is untouched: lock leaves the socket open by design (see doc above).
+            if (wasReconnecting && uiState !is ConnectionUiState.Connected) {
+                // Retire the session as well: the cancelled attempt may already be past its last
+                // cancellation check, and without this its writes would put the pane back on a
+                // reconnect that can no longer happen. A live session is deliberately left alone
+                // (this branch never runs for one), so its own drop still reaches the watcher.
+                sessionGeneration++
+                (uiState as? ConnectionUiState.Disconnected)?.let { uiState = it.copy(reconnecting = false) }
+                notifyKeepAliveEnded()
+            }
         }
     }
 
@@ -635,14 +741,14 @@ class ConnectionController(
      * reached ONLY on a server-side drop, which is what distinguishes an unintended loss (->
      * auto-reconnect) from an intentional close (-> Form).
      */
-    private fun watchForSessionLoss(terminal: TerminalScreenState, sScope: CoroutineScope) {
+    private fun watchForSessionLoss(terminal: TerminalScreenState, sScope: CoroutineScope, generation: Int) {
         sScope.launch {
             val closed = terminal.state.first { it is TerminalState.Closed } as TerminalState.Closed
             // Dispatch loss handling onto the main [scope] — the same one [disconnect] runs on.
             // Otherwise onSessionLost would run on the session scope (Dispatchers.Default), racing
             // reconnectJob writes/cancels against disconnect on the UI thread. On one scope they're
             // serialized.
-            scope.launch { onSessionLost(terminal, closed.cleanExit) }
+            scope.launch { onSessionLost(terminal, closed.cleanExit, generation) }
         }
     }
 
@@ -652,44 +758,55 @@ class ConnectionController(
      * saved credentials and shows a neutral "Session closed". Otherwise (transport drop), starts
      * auto-reconnect to the last [lastTarget]/[lastAuth] — but ONLY for SSH; Telnet/Serial have no
      * reconnect (see below). Without saved target/credentials, stays in
-     * [ConnectionUiState.Disconnected] with no attempts. The Connected guard prevents re-entry.
+     * [ConnectionUiState.Disconnected] with no attempts. The Connected guard prevents re-entry;
+     * [generation] names the session this loss belongs to (see [lock]).
      */
-    private fun onSessionLost(frozen: TerminalScreenState, cleanExit: Boolean) {
-        if (uiState !is ConnectionUiState.Connected) return
-        releaseSessionResources()
-        if (cleanExit) {
-            // The user closed the shell themselves (`exit`) — close the session, no reconnect. Drop
-            // the secret (auth may carry a password/key): no point holding it, there won't be a new connect.
-            lastAuth = null
-            lastTarget = null
-            notifyKeepAliveEnded()
-            uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0, cleanExit = true)
-            return
+    private fun onSessionLost(frozen: TerminalScreenState, cleanExit: Boolean, generation: Int) {
+        synchronized(lock) {
+            // Not this session's loss any more: the pane was closed (or a previous loss was already
+            // handled) while this one was on its way here (see [lock]).
+            if (generation != sessionGeneration) return
+            // Belt and braces for the one publisher that has no target to reconnect to either way:
+            // [attachSession] stamps a watcher for a session it does not own.
+            if (uiState !is ConnectionUiState.Connected) return
+            sessionGeneration++
+            releaseSessionResources()
+            if (cleanExit) {
+                // The user closed the shell themselves (`exit`) — close the session, no reconnect. Drop
+                // the secret (auth may carry a password/key): no point holding it, there won't be a new connect.
+                lastAuth = null
+                lastTarget = null
+                notifyKeepAliveEnded()
+                uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0, cleanExit = true)
+                return
+            }
+            val target = lastTarget
+            val auth = lastAuth
+            if (target == null || auth == null) {
+                notifyKeepAliveEnded()
+                uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
+                return
+            }
+            // Auto-reconnect only for SSH. It doesn't make sense for Telnet/Serial: there's no
+            // authentication, and a "drop" there is usually the server closing the session or the
+            // device disappearing (cable unplugged / rig stopped) — silently reconnecting is pointless;
+            // the user connects again manually. Mosh is excluded too: the protocol itself survives
+            // outages and roaming (that's its point), so its session never "drops" on network loss —
+            // reaching here means the server shut down or the socket died, and a silent re-bootstrap
+            // would open a brand-new remote session behind the user's back.
+            if (!target.connectionType.carriedBySsh) {
+                lastAuth = null
+                lastTarget = null
+                notifyKeepAliveEnded()
+                uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
+                return
+            }
+            // Entering auto-reconnect: the session is NOT reported ended — the platform keep-alive
+            // (foreground service) must survive the retry window, or the reconnect itself dies with it.
+            // The retry carries the generation this loss just opened, so a [disconnect] during the
+            // retry window retires the whole loop rather than only cancelling its job.
+            startReconnect(frozen, target, auth, sessionGeneration)
         }
-        val target = lastTarget
-        val auth = lastAuth
-        if (target == null || auth == null) {
-            notifyKeepAliveEnded()
-            uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
-            return
-        }
-        // Auto-reconnect only for SSH. It doesn't make sense for Telnet/Serial: there's no
-        // authentication, and a "drop" there is usually the server closing the session or the
-        // device disappearing (cable unplugged / rig stopped) — silently reconnecting is pointless;
-        // the user connects again manually. Mosh is excluded too: the protocol itself survives
-        // outages and roaming (that's its point), so its session never "drops" on network loss —
-        // reaching here means the server shut down or the socket died, and a silent re-bootstrap
-        // would open a brand-new remote session behind the user's back.
-        if (!target.connectionType.carriedBySsh) {
-            lastAuth = null
-            lastTarget = null
-            notifyKeepAliveEnded()
-            uiState = ConnectionUiState.Disconnected(frozen, reconnecting = false, attempt = 0)
-            return
-        }
-        // Entering auto-reconnect: the session is NOT reported ended — the platform keep-alive
-        // (foreground service) must survive the retry window, or the reconnect itself dies with it.
-        startReconnect(frozen, target, auth)
     }
 
     /**
@@ -700,20 +817,33 @@ class ConnectionController(
      * observer on success). Once the limit is exhausted, stays in Disconnected with
      * `reconnecting=false`. Runs on the main [scope] (outlives the old session's teardown);
      * [disconnect] cancels [reconnectJob].
+     *
+     * Called with [lock] held (from [onSessionLost]): the [reconnectJob] assignment is one of the
+     * fields that lock owns, and [generation] must be the one read under it.
      */
-    private fun startReconnect(frozen: TerminalScreenState, target: SshTarget, auth: SshAuth) {
+    private fun startReconnect(
+        frozen: TerminalScreenState,
+        target: SshTarget,
+        auth: SshAuth,
+        generation: Int,
+    ) {
         reconnectJob = scope.launch {
             var attempt = 1
             var lastError: String? = null
             while (attempt <= maxReconnectAttempts) {
-                uiState = ConnectionUiState.Disconnected(frozen, reconnecting = true, attempt = attempt)
+                // The loop's writes have no suspension point in front of them, so cancelling
+                // [reconnectJob] cannot stop one already under way — only the stamp can (see [lock]).
+                synchronized(lock) {
+                    if (generation != sessionGeneration) return@launch
+                    uiState = ConnectionUiState.Disconnected(frozen, reconnecting = true, attempt = attempt)
+                }
                 delay(reconnectDelayMillis(attempt))
                 try {
-                    establishSession(target, auth)
+                    establishSession(target, auth, generation)
                     // Success: establishSession moved to Connected and resubscribed the observer.
                     // Null the job so a later vault lock doesn't read a completed reconnect as
                     // "reconnecting" (clearReconnectCredentials keys off it).
-                    reconnectJob = null
+                    synchronized(lock) { if (generation == sessionGeneration) reconnectJob = null }
                     return@launch
                 } catch (e: CancellationException) {
                     throw e
@@ -726,14 +856,17 @@ class ConnectionController(
                     attempt++
                 }
             }
-            notifyKeepAliveEnded() // reconnect gave up — now the session is truly over
-            reconnectJob = null
-            uiState = ConnectionUiState.Disconnected(
-                frozen,
-                reconnecting = false,
-                attempt = maxReconnectAttempts,
-                lastError = lastError,
-            )
+            synchronized(lock) {
+                if (generation != sessionGeneration) return@launch
+                notifyKeepAliveEnded() // reconnect gave up — now the session is truly over
+                reconnectJob = null
+                uiState = ConnectionUiState.Disconnected(
+                    frozen,
+                    reconnecting = false,
+                    attempt = maxReconnectAttempts,
+                    lastError = lastError,
+                )
+            }
         }
     }
 

@@ -154,6 +154,45 @@ class AttachedSessionTest {
         scope.cancel()
     }
 
+    /**
+     * The refusal above is also checked a second time, under the controller's lock: between the
+     * cheap bail and that check the pane's form can be taken by whoever asked first. The attach
+     * that loses must leave both the winner's session and its own caller's alone — an attach is
+     * refused, not adopted-then-dropped.
+     *
+     * Staged through `newSessionScope`, which the controller calls inside exactly that window.
+     */
+    @Test
+    fun `an attach that loses the form leaves the winning session on the pane`() = runTest {
+        val winner = WatchedSession()
+        val loser = WatchedSession()
+        val scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+        var steal = true
+        lateinit var controller: ConnectionController
+        controller = ConnectionController(
+            transport = NoTransport,
+            scope = scope,
+            newSessionScope = {
+                if (steal) {
+                    steal = false // the winner's own attach must get through
+                    controller.attachSession(winner)
+                }
+                CoroutineScope(UnconfinedTestDispatcher(testScheduler))
+            },
+        )
+
+        controller.attachSession(loser)
+        advanceUntilIdle()
+
+        val state = assertIs<ConnectionUiState.Connected>(controller.uiState)
+        winner.emissions.emit("mine".encodeToByteArray())
+        advanceUntilIdle()
+        assertTrue(state.terminal.output.contains("mine"), "the pane kept the attach that lost the form")
+        assertFalse(loser.closed, "a refused attach must leave the caller's session alone")
+        assertFalse(winner.closed)
+        scope.cancel()
+    }
+
     @Test
     fun `a second attach is refused so one pane never holds two sessions`() = runTest {
         val first = WatchedSession()
