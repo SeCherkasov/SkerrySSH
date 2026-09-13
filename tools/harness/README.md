@@ -82,6 +82,30 @@ did not recognise `./gradlew build` at all.
 Here the runner executes the stage itself and reads the exit code. It also discards a run whose tree
 changed while it was running, rather than recording it against code that no longer exists.
 
+The exit code alone is not enough for the `tests` stage: a leaf test task restored from the build
+cache or left up to date makes `./gradlew test allTests` exit 0 without running anything, and a
+green was once recorded over results that held eight failures (#364). So the runner reads
+`**/build/test-results/*/*.xml` back afterwards and refuses to record green when a suite reports a
+failure or an error, when a suite's counts cannot be read, when a result file does not parse, when
+no suite is there at all, or when every result on disk predates the run — a full run that executed
+nothing leaves yesterday's green results behind, which say nothing about today's code.
+
+A cache hit on identical bytecode is legitimate, so what is checked is what the results *say*, never
+the cache outcome. Only one file has to be newer than the run: Gradle skips a module whose inputs
+did not move, and that module's earlier results stay true of this content. Freshness is not demanded
+at all when the last green `tests` record was pinned to the same build-visible content — editing the
+harness or a reviewer definition reopens every stage, and Gradle has nothing to re-run.
+
+A refused verdict makes the next run of the stage delete the `build/test-results/<task>/`
+directories it read. Repeating the identical command would only repeat the refusal: `--rerun` is a
+task option that binds to the task it follows, so on `test allTests` it reaches the aggregate and
+not the leaf tasks that write the XML, and being out of date does not propagate to a task's
+dependencies. A task whose output directory is gone is out of date on its own account — verified
+against `:server:test`, which went from UP-TO-DATE to FROM-CACHE and rewrote all 40 files once its
+result directory was removed. That is also the only cure for a result directory no live task owns
+any more. If the cleared results come back the same, the cache entry itself is what is being
+replayed, and the runner says so.
+
 ## The deterministic rules
 
 `checks.py` holds the rules from `docs/coding-guidelines.md` that need no judgement — a missing
