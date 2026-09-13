@@ -65,7 +65,6 @@ dependencies {
     // Storage layer: Exposed + HikariCP; SQLite by default, PostgreSQL optionally via DB URL.
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
-    implementation(libs.exposed.java.time)
     implementation(libs.hikari)
     runtimeOnly(libs.sqlite.jdbc)
     runtimeOnly(libs.postgresql)
