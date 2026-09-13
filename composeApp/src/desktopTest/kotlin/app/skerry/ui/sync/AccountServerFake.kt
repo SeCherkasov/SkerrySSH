@@ -42,6 +42,8 @@ internal class FakeAccountClient(
     private val loginGate: CompletableDeferred<Unit>? = null,
     /** Holds the account-key fetch — only the confirmed re-run gets that far, so it parks that one. */
     private val fetchGate: CompletableDeferred<Unit>? = null,
+    /** Called from inside [close], so a test can read what the coordinator was saying at that moment. */
+    private val onClose: () -> Unit = {},
 ) : SyncClient {
     // var: a password rotation ([changePassword]) swaps both to the new password's material.
     private var expectedAuthKey: ByteArray?
@@ -133,6 +135,7 @@ internal class FakeAccountClient(
     override suspend fun ping(): Boolean = false
     override suspend fun close() {
         closeCalls++
+        onClose()
     }
     override suspend fun pull(session: SyncSession, since: Long): RecordPage = nope()
     override suspend fun push(session: SyncSession, records: List<RemoteRecord>): RecordPage = nope()

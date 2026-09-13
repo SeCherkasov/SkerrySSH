@@ -97,6 +97,41 @@ class SyncCoordinatorPasswordReplaceTest {
         }
     }
 
+    /**
+     * The pause is a status like any other, and the verify login is all the client it opened was for
+     * (issue #365). Published while that client is still open, [SyncStatus.NeedsPasswordReplaceConfirm]
+     * would put the question on screen with a Ktor engine and its pool held behind it for as long as the
+     * user takes to answer — and the confirmed re-run opens a second one anyway. Read from inside
+     * `close`: the question must not be up yet at the moment the client is handed back.
+     */
+    @Test
+    fun `the paused connect releases its verify client before it asks the question`() = runBlocking<Unit> {
+        initializeVaultCrypto()
+        val vault = localVault()
+        var sut: SyncCoordinator? = null
+        val seenAtClose = mutableListOf<SyncStatus>()
+        val client = FakeAccountClient(
+            crypto,
+            account,
+            existingAccountPassword = accountPassword,
+            onClose = { sut?.status?.value?.let(seenAtClose::add) },
+        )
+        val coordinator = coordinator(vault, client)
+        sut = coordinator
+        try {
+            coordinator.connect(serverUrl, account, accountPassword.toCharArray())
+            coordinator.status.awaitStatus("the password-replace confirmation to be asked") { it is SyncStatus.NeedsPasswordReplaceConfirm }
+            assertEquals(1, client.closeCalls, "the verify's client must not be held across the question")
+            assertEquals(
+                listOf<SyncStatus>(SyncStatus.Busy),
+                seenAtClose,
+                "the question was on the status before the verify's client was released",
+            )
+        } finally {
+            coordinator.close()
+        }
+    }
+
     @Test
     fun `confirming re-keys the vault to the account password`() = runBlocking {
         initializeVaultCrypto()
