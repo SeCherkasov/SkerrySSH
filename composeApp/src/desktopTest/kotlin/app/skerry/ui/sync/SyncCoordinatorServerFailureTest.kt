@@ -53,6 +53,8 @@ class SyncCoordinatorServerFailureTest {
         private val loginFailure: SyncException? = null,
         /** The account's wrapped dataKey — only a login that succeeds ever gets this far. */
         private val wrappedDataKey: ByteArray = ByteArray(0),
+        /** Called from inside [close], so a test can read what the coordinator was saying at that moment. */
+        private val onClose: () -> Unit = {},
     ) : SyncClient {
         @Volatile
         var loginCalls = 0
@@ -70,6 +72,7 @@ class SyncCoordinatorServerFailureTest {
         override fun changes(session: SyncSession): Flow<SyncSignal> = flow { awaitCancellation() }
         override suspend fun close() {
             closeCalls++
+            onClose()
         }
         override suspend fun refresh(session: SyncSession): SyncSession = nope()
         override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession {
@@ -218,6 +221,46 @@ class SyncCoordinatorServerFailureTest {
         val throttled = RejectingClient(SyncException.Kind.TOO_MANY_REQUESTS)
         failedConnect(throttled)
         assertEquals(1, throttled.closeCalls, "a refused registration must not strand the client it opened")
+    }
+
+    /**
+     * Issue #365: the failure was published in the `catch` and the client released in the `finally`,
+     * so between the two the coordinator reported a finished attempt that still held a Ktor engine,
+     * its pool and its threads. The status is the only signal a caller has that an attempt is over —
+     * every test above waits on exactly that and then asserts the release — so the order is part of
+     * the contract, not a test detail. Asserted from the inside: at the moment the client is handed
+     * back, the failure must not be on the status yet.
+     */
+    @Test
+    fun `a failed connect releases its client before it reports the failure`() {
+        var sut: SyncCoordinator? = null
+        val seenAtClose = mutableListOf<SyncStatus>()
+        val client = RejectingClient(
+            SyncException.Kind.CONFLICT,
+            loginFailure = SyncException(SyncException.Kind.UNAUTHORIZED, "authentication failed"),
+            onClose = { sut?.status?.value?.let(seenAtClose::add) },
+        )
+        runBlocking {
+            initializeVaultCrypto()
+            val coordinator = SyncCoordinator(
+                clientFactory = { client },
+                crypto = crypto,
+                vault = localVault(),
+                engineFactory = { _ -> SyncRunner { _ -> SyncOutcome(pulled = 0, pushed = 0, cursor = 0L) } },
+            )
+            sut = coordinator
+            try {
+                coordinator.connect(serverUrl, account, password.toCharArray())
+                coordinator.status.awaitStatus("the status to come Failed") { it is SyncStatus.Failed }
+            } finally {
+                coordinator.close()
+            }
+        }
+        assertEquals(1, client.closeCalls, "the client must be closed on the way out")
+        assertTrue(
+            seenAtClose.none { it is SyncStatus.Failed },
+            "the failure was on the status before the client was released: $seenAtClose",
+        )
     }
 
     /**
