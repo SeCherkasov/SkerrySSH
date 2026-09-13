@@ -11,6 +11,8 @@ temp dir — no Gradle, no network, about a second in total.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -19,6 +21,7 @@ import sys
 import tempfile
 import time
 import unittest
+import unittest.mock
 
 HARNESS_DIR = os.path.dirname(os.path.abspath(__file__))
 TOOLS_DIR = os.path.dirname(HARNESS_DIR)
@@ -1762,6 +1765,262 @@ class TestStageRecording(SandboxCase):
             self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 2\n")
             self.assertFalse(state.stage_is_current(state.load(), "tests",
                                                     state.tree_digest("all")))
+        finally:
+            os.chdir(cwd)
+
+
+def junit_xml(name: str, tests: int = 1, failures: int = 0, errors: int = 0,
+              stdout: str = "") -> str:
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<testsuite name="{name}" tests="{tests}" skipped="0" failures="{failures}" '
+        f'errors="{errors}" timestamp="2026-09-13T10:00:00" hostname="h" time="0.4">\n'
+        f'  <testcase name="a" classname="{name}" time="0.4"/>\n'
+        f'  <system-out><![CDATA[{stdout}]]></system-out>\n'
+        '</testsuite>\n'
+    )
+
+
+class TestTestResults(SandboxCase):
+    """What the test tasks wrote, not what the build's exit code claimed.
+
+    A leaf test task restored from the build cache — or left up to date — makes
+    `./gradlew test allTests` exit 0 without running anything, so the exit code alone once
+    recorded a green over results that held eight failures (#364).
+    """
+
+    def results(self, module: str, task: str, name: str, **kw) -> None:
+        self.box.write(f"{module}/build/test-results/{task}/TEST-{name}.xml",
+                       junit_xml(name, **kw))
+
+    def test_a_suite_that_failed_is_not_a_green(self):
+        self.results("composeApp", "desktopTest", "a.Green")
+        self.results("composeApp", "desktopTest", "a.Red", failures=1)
+        ok, detail = gate.test_results_verdict(self.cwd)
+        self.assertFalse(ok)
+        self.assertIn("a.Red", detail)
+
+    def test_a_suite_that_errored_is_not_a_green(self):
+        self.results("shared", "desktopTest", "b.Boom", errors=1)
+        ok, _ = gate.test_results_verdict(self.cwd)
+        self.assertFalse(ok)
+
+    def test_results_without_a_failure_are_a_green(self):
+        self.results("shared", "desktopTest", "b.One")
+        self.results("server", "test", "c.Two", tests=3)
+        ok, detail = gate.test_results_verdict(self.cwd)
+        self.assertTrue(ok, detail)
+        self.assertIn("4 tests", detail)
+
+    def test_no_results_at_all_is_not_a_green(self):
+        ok, detail = gate.test_results_verdict(self.cwd)
+        self.assertFalse(ok)
+        self.assertIn("no test results", detail)
+
+    def test_a_result_file_that_does_not_parse_is_not_a_green(self):
+        self.results("shared", "desktopTest", "b.One")
+        self.box.write("shared/build/test-results/desktopTest/TEST-b.Cut.xml",
+                       '<?xml version="1.0"?>\n<testsuite name="b.Cut" failures="0"')
+        ok, detail = gate.test_results_verdict(self.cwd)
+        self.assertFalse(ok)
+        # The path, not the bare name: a half-written file left by an interrupted run is only
+        # cleared by deleting it, and nothing reruns it back into shape.
+        self.assertIn("shared/build/test-results/desktopTest/TEST-b.Cut.xml", detail)
+
+    def test_a_count_printed_by_a_test_is_not_read_as_a_failure(self):
+        # The counts live in the element's attributes; a test that prints `failures="2"` to
+        # stdout has its output carried into the same file verbatim.
+        self.results("shared", "desktopTest", "b.Loud", stdout='failures="2" errors="1"')
+        ok, detail = gate.test_results_verdict(self.cwd)
+        self.assertTrue(ok, detail)
+
+    def test_result_files_that_hold_no_suite_are_not_a_green(self):
+        # A test JVM that died mid-report leaves the file behind with nothing in it. Files on
+        # disk are not evidence; suites are.
+        self.box.write("shared/build/test-results/desktopTest/TEST-b.Empty.xml",
+                       '<?xml version="1.0" encoding="UTF-8"?>\n<testsuites>\n</testsuites>\n')
+        ok, detail = gate.test_results_verdict(self.cwd)
+        self.assertFalse(ok)
+        self.assertIn("no test results", detail)
+
+    def test_a_count_that_is_not_a_whole_number_is_read_as_a_failure(self):
+        for value in ("1.0", "-1", "many", ""):
+            with self.subTest(value=value):
+                self.box.write("shared/build/test-results/desktopTest/TEST-b.Odd.xml",
+                               junit_xml("b.Odd").replace('failures="0"', f'failures="{value}"'))
+                ok, _ = gate.test_results_verdict(self.cwd)
+                self.assertFalse(ok)
+
+    def test_a_long_list_of_failures_is_cut_short(self):
+        for index in range(7):
+            self.results("shared", "desktopTest", f"b.Red{index}", failures=1)
+        ok, detail = gate.test_results_verdict(self.cwd)
+        self.assertFalse(ok)
+        self.assertIn("b.Red0", detail)
+        self.assertIn("and 2 more", detail)
+        self.assertNotIn("b.Red6", detail)
+
+    def test_results_that_all_predate_the_run_are_not_a_green(self):
+        # The other half of #364: the aggregate task goes up to date after a hand-run filtered
+        # test, the full run exits 0 having executed nothing, and yesterday's green results are
+        # not evidence about today's code.
+        self.results("shared", "desktopTest", "b.Old")
+        ok, detail = gate.test_results_verdict(self.cwd, since=time.time() + 1)
+        self.assertFalse(ok)
+        self.assertIn("nothing ran", detail)
+
+    def test_one_fresh_result_carries_the_modules_that_stayed_up_to_date(self):
+        # Gradle skips a module whose inputs did not move, and its earlier results are still true
+        # of this content. Only a run where *nothing* ran proves nothing.
+        started = time.time()
+        self.results("shared", "desktopTest", "b.Untouched")
+        os.utime(os.path.join(self.cwd, "shared/build/test-results/desktopTest/TEST-b.Untouched.xml"),
+                 (started - 86400, started - 86400))
+        self.results("composeApp", "desktopTest", "a.Touched")
+        ok, detail = gate.test_results_verdict(self.cwd, since=started)
+        self.assertTrue(ok, detail)
+
+    def test_a_nested_module_is_not_invisible_to_the_guard(self):
+        self.results("features/thing", "desktopTest", "f.Red", failures=1)
+        ok, detail = gate.test_results_verdict(self.cwd)
+        self.assertFalse(ok)
+        # Not "no results at all" — the module has to be read, or a nested one would fail open
+        # while the top-level modules carried the stage green.
+        self.assertIn("f.Red", detail)
+
+    def test_a_successful_run_over_failing_results_is_not_recorded_green(self):
+        self.box.branch("fix/whatever")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.results("composeApp", "desktopTest", "a.Red", failures=1)
+        cwd = os.getcwd()
+        os.chdir(self.cwd)
+        try:
+            with unittest.mock.patch.dict(policy.STAGE_COMMANDS,
+                                          {"tests": [sys.executable, "-c", ""]}):
+                self.assertFalse(gate.run_stage("tests", self.cwd))
+            recorded = state.load(self.cwd)
+            self.assertFalse(recorded["stages"]["tests"]["ok"])
+            # Rerunning the identical no-op command would print the identical refusal. The one
+            # lever the harness owns for making Gradle run again is --rerun.
+            self.assertTrue(recorded["test_cache_dirty"])
+        finally:
+            os.chdir(cwd)
+
+    def stage(self, command: list[str]) -> bool:
+        """Drive the real `tests` stage with Gradle stubbed out."""
+        cwd = os.getcwd()
+        os.chdir(self.cwd)
+        try:
+            with unittest.mock.patch.dict(policy.STAGE_COMMANDS, {"tests": command}):
+                return gate.run_stage("tests", self.cwd)
+        finally:
+            os.chdir(cwd)
+
+    def writer(self, module: str, task: str, name: str, **kw) -> list[str]:
+        """A stubbed stage command that writes its result file the way a real run does."""
+        target = os.path.join(self.cwd, module, "build", "test-results", task, f"TEST-{name}.xml")
+        body = junit_xml(name, **kw)
+        return [sys.executable, "-c",
+                "import os,sys\n"
+                "os.makedirs(os.path.dirname(sys.argv[1]), exist_ok=True)\n"
+                "open(sys.argv[1], 'w').write(sys.argv[2])\n", target, body]
+
+    def backdate(self, module: str, task: str, name: str) -> None:
+        path = os.path.join(self.cwd, module, "build", "test-results", task, f"TEST-{name}.xml")
+        stale = time.time() - 86400
+        os.utime(path, (stale, stale))
+
+    def test_a_run_that_wrote_nothing_is_refused_and_arms_the_rerun(self):
+        # The stage's own start time is what freshness is measured against, so this has to go
+        # through run_stage: a test that calls the verdict with a since of its own proves nothing
+        # about the runner threading the right one in.
+        self.box.branch("fix/whatever")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.results("composeApp", "desktopTest", "a.Yesterday")
+        self.backdate("composeApp", "desktopTest", "a.Yesterday")
+        self.assertFalse(self.stage([sys.executable, "-c", ""]))
+        recorded = state.load(self.cwd)
+        self.assertIn("nothing ran", recorded["stages"]["tests"]["detail"])
+        self.assertTrue(recorded["test_cache_dirty"])
+
+    def test_the_armed_retry_clears_the_results_the_refusal_read(self):
+        # Marking the aggregate task out of date does not reach the leaf tasks that write the
+        # XML; removing their output does. It is also the only cure for a result directory no
+        # live task owns any more.
+        self.box.branch("fix/whatever")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.results("shared", "gone", "b.Orphan", failures=1)
+        self.assertFalse(self.stage([sys.executable, "-c", ""]))
+        self.assertTrue(self.stage(self.writer("shared", "desktopTest", "b.Fresh")))
+        self.assertFalse(os.path.exists(os.path.join(self.cwd, "shared/build/test-results/gone")))
+        self.assertFalse(state.load(self.cwd)["test_cache_dirty"])
+
+    def test_a_second_refusal_after_a_clear_points_at_the_build_cache(self):
+        # Clearing the outputs makes the task out of date, but Gradle may still hand the same
+        # outcome back from the build cache — which is how #364 happened. The operator has to be
+        # told that the next lever is the cache itself, not another run.
+        self.box.branch("fix/whatever")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.results("composeApp", "desktopTest", "a.Red", failures=1)
+        self.assertFalse(self.stage([sys.executable, "-c", ""]))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertFalse(self.stage(self.writer("composeApp", "desktopTest", "a.Red",
+                                                    failures=1)))
+        self.assertIn("build-cache", out.getvalue())
+
+    def test_results_the_run_itself_wrote_are_a_green(self):
+        self.box.branch("fix/whatever")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.assertTrue(self.stage(self.writer("shared", "desktopTest", "b.Fresh")))
+        self.assertTrue(state.load(self.cwd)["stages"]["tests"]["ok"])
+
+    def test_an_edit_the_build_cannot_see_does_not_demand_a_re_run(self):
+        # Editing the harness reopens the gate — the digest covers the rules the gate itself
+        # runs — but Gradle has nothing to re-run, so demanding fresh results would spend the
+        # whole suite reproving byte-identical Kotlin.
+        self.box.branch("fix/whatever")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.assertTrue(self.stage(self.writer("shared", "desktopTest", "b.Fresh")))
+        self.backdate("shared", "desktopTest", "b.Fresh")
+        self.box.write("tools/harness/checks.py", "# a rule changed\n")
+        self.assertTrue(self.stage([sys.executable, "-c", ""]))
+
+    def test_a_kotlin_edit_does_demand_a_re_run(self):
+        self.box.branch("fix/whatever")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.assertTrue(self.stage(self.writer("shared", "desktopTest", "b.Fresh")))
+        self.backdate("shared", "desktopTest", "b.Fresh")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 2\n")
+        self.assertFalse(self.stage([sys.executable, "-c", ""]))
+
+    def test_a_run_that_failed_on_its_own_does_not_force_the_next_one_to_rerun(self):
+        # A red test task did execute; making the retry re-run every module on top of that only
+        # spends minutes to learn the same thing.
+        self.box.branch("fix/whatever")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.results("composeApp", "desktopTest", "a.Green")
+        cwd = os.getcwd()
+        os.chdir(self.cwd)
+        try:
+            with unittest.mock.patch.dict(policy.STAGE_COMMANDS,
+                                          {"tests": [sys.executable, "-c", "raise SystemExit(1)"]}):
+                self.assertFalse(gate.run_stage("tests", self.cwd))
+            self.assertFalse(state.load(self.cwd).get("test_cache_dirty"))
+        finally:
+            os.chdir(cwd)
+
+    def test_a_successful_run_over_green_results_is_recorded(self):
+        self.box.branch("fix/whatever")
+        self.box.write("shared/src/commonMain/kotlin/A.kt", "val a = 1\n")
+        self.results("composeApp", "desktopTest", "a.Green")
+        cwd = os.getcwd()
+        os.chdir(self.cwd)
+        try:
+            with unittest.mock.patch.dict(policy.STAGE_COMMANDS,
+                                          {"tests": [sys.executable, "-c", ""]}):
+                self.assertTrue(gate.run_stage("tests", self.cwd))
+            self.assertTrue(state.load(self.cwd)["stages"]["tests"]["ok"])
         finally:
             os.chdir(cwd)
 
