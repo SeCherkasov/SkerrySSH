@@ -37,7 +37,7 @@ object Db {
     // Inlined createMissingTablesAndColumns (create + add-missing-columns + mapping consistence):
     // migrates by adding new nullable columns (Devices.platform, Devices.lastSyncVersion) to an
     // existing database without losing data. Inlined because sqlite-jdbc >= 3.50 reports
-    // supportsAlterTableWithAddColumn = true, which routes Exposed (through 0.61) into schema-sync
+    // supportsAlterTableWithAddColumn = true, which routes Exposed (still so at 1.5.0) into schema-sync
     // paths whose metadata reads misfire on SQLite: an empty PK_NAME becomes "ADD PRIMARY KEY",
     // autoincrement misdetection becomes "MODIFY COLUMN" — statements SQLite cannot execute and
     // this schema does not need. On SQLite keep only what it supports and this migration relies

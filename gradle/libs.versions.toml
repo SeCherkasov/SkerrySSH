@@ -53,8 +53,8 @@ okio = "3.18.1"
 atomicfu = "0.33.0"
 # --- Phase 2 sync ---
 # Exposed — the server's type-safe SQL layer; SQLite by default, PostgreSQL via DB URL
-exposed = "1.4.0"
-sqlite-jdbc = "3.53.2.1"
+exposed = "1.5.0"
+sqlite-jdbc = "3.53.4.0"
 postgresql = "42.7.13"
 hikari = "7.1.0"
 # Nimbus SRP6a — an audited SRP-6a implementation, used by the server and the JVM sync client
@@ -85,6 +85,10 @@ camerax = "1.4.1"
 # without AVX-512 nobody has established. Which is why a bump still owes a live generation on such
 # a CPU, on Linux and on Windows, before the hold comes off. Cost of the hold: 1.9.0 keeps the
 # generateStream crash on emoji that upstream fixed in 1.9.1.
+# 1.10.1 is the first release since that carries none: 0 in the Linux native, and the Windows one
+# still at the same pair. Its Linux live run is done — on 1.10.1, on a Zen 3, a generation loads and
+# streams — so on that version the hold waits only on the Windows one. Both halves are owed again per
+# version, which is why 1.10.1 is left out of the dependabot ignore list rather than added to it.
 llamatik = "1.9.0"
 # ML Kit barcode-scanning — QR recognition in the camera frame (Android, on-device, no network)
 mlkit-barcode = "17.3.0"
@@ -142,7 +146,6 @@ ktor-client-websockets = { module = "io.ktor:ktor-client-websockets", version.re
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
-exposed-java-time = { module = "org.jetbrains.exposed:exposed-java-time", version.ref = "exposed" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite-jdbc" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 hikari = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
