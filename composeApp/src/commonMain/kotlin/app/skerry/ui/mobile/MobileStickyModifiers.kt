@@ -10,7 +10,7 @@ import androidx.compose.runtime.setValue
 /**
  * The terminal panel's sticky ctrl and alt, held for the whole screen rather than for the panel:
  * a modifier armed on the panel has to reach soft-keyboard input too, and the IME path
- * ([app.skerry.ui.design.ImeFunnel]) bypasses the panel entirely.
+ * ([app.skerry.ui.design.ImeFunnelField]) bypasses the panel entirely.
  *
  * "Sticky" is one keystroke: [applyToImeInput] spends the modifier on the input it applied to.
  */
