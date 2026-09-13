@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * A device joining by pairing does not know the account id — it takes the one the server answers with, and
@@ -37,12 +38,24 @@ class SyncCoordinatorPairingBoundTest {
     private val password = "vault-A"
 
     /** Answers a claim with whatever account id and envelope the test asks for. */
-    private class ClaimingClient(private val accountId: String, private val envelope: ByteArray) : SyncClient {
+    private class ClaimingClient(
+        private val accountId: String,
+        private val envelope: ByteArray,
+        /** Called from inside [close], so a test can read what the coordinator was saying at that moment. */
+        private val onClose: () -> Unit = {},
+    ) : SyncClient {
+        @Volatile
+        var closeCalls = 0
+            private set
+
         override suspend fun claimPairing(code: String, device: DeviceInfo): PairingResult =
             PairingResult(accountId, envelope.copyOf(), SyncSession(accountId, "access", "refresh"))
 
         override suspend fun ping(): Boolean = false
-        override suspend fun close() = Unit
+        override suspend fun close() {
+            closeCalls++
+            onClose()
+        }
         override fun changes(session: SyncSession): Flow<SyncSignal> = flow { awaitCancellation() }
         override suspend fun register(accountId: String, authKey: ByteArray, wrappedDataKey: ByteArray, device: DeviceInfo): SyncSession = nope()
         override suspend fun login(accountId: String, authKey: ByteArray, device: DeviceInfo): SyncSession = nope()
@@ -114,6 +127,41 @@ class SyncCoordinatorPairingBoundTest {
     @Test
     fun `an account id longer than the server's own bound is refused`() {
         assertRefused(claimWith("a".repeat(MAX_ACCOUNT_ID_CHARS + 1)))
+    }
+
+    /**
+     * Issue #365: the claim published its refusal and released the client it had opened in the `finally`
+     * behind it, so a caller reading the status saw a finished claim that still held a Ktor engine and
+     * its pool. The status is the only signal the claim is over — asserted from the inside, at the moment
+     * the client is handed back the refusal must not be on it yet.
+     */
+    @Test
+    fun `a refused claim releases its client before it reports the failure`() {
+        var sut: SyncCoordinator? = null
+        val seenAtClose = mutableListOf<SyncStatus>()
+        val client = ClaimingClient("", ByteArray(64)) { sut?.status?.value?.let(seenAtClose::add) }
+        runBlocking {
+            initializeVaultCrypto()
+            val coordinator = SyncCoordinator(
+                clientFactory = { client },
+                crypto = CountingCrypto(crypto),
+                vault = newAccountVault(crypto, password),
+                configStore = InMemorySyncConfigStore(),
+                debtStore = InMemoryReconcileDebtStore(),
+            )
+            sut = coordinator
+            try {
+                coordinator.claimPairing(payload(), password.toCharArray())
+                coordinator.status.awaitStatus("the claim to be refused") { it is SyncStatus.Failed }
+            } finally {
+                coordinator.close()
+            }
+        }
+        assertEquals(1, client.closeCalls, "the client must be closed on the way out")
+        assertTrue(
+            seenAtClose.none { it is SyncStatus.Failed },
+            "the refusal was on the status before the client was released: $seenAtClose",
+        )
     }
 
     private fun assertRefused(outcome: Pair<SyncStatus, Int>) {

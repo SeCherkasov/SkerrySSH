@@ -107,7 +107,9 @@ tools/harness/gate.py run        # runs exactly the stages this change owes, in 
 ```
 
 - **Only the runner marks a stage green.** It executes the stage, reads the exit code, and pins the
-  result to a digest of the tree it ran against. A Gradle run made by hand is not recorded — not
+  result to a digest of the tree it ran against. For `tests` the exit code is not enough — it also
+  reads `**/build/test-results/*/*.xml` back and refuses a green when a suite failed, a file does
+  not parse, or every result predates the run (a full run that executed nothing also exits 0). A Gradle run made by hand is not recorded — not
   because hand runs are forbidden (iterate freely), but because nothing outside the runner can prove
   which code an exit code belonged to.
 - Stages are `checks` (the deterministic project rules), `tests`, `build` (lint on), `detekt`, and
@@ -116,8 +118,10 @@ tools/harness/gate.py run        # runs exactly the stages this change owes, in 
   Re-baselining (`./gradlew detektBaseline`) to silence your own finding is not allowed — fix it,
   or say out loud why it stays.
 - After a filtered run (`--tests`), Gradle calls the aggregate task up to date and the next full run
-  "passes" in half a second having run nothing. The runner adds `--rerun` when that has happened;
-  `cleanAllTests` does not fix it.
+  "passes" in half a second having run nothing. The runner deletes the `build/test-results/<task>/`
+  directories before the next run when that has happened, and again after any run whose results
+  refused the green — a task whose output is gone is out of date on its own account, while
+  `cleanAllTests` does not fix it and `--rerun` reaches only the task it follows.
 - If the build breaks in a way that isn't obviously yours, hand it to `ecc:kotlin-build-resolver`
   (minimal diffs, no architectural edits) instead of reshaping the design around the error.
 - New test added? Re-run it with the fix reverted to prove it actually catches the regression.

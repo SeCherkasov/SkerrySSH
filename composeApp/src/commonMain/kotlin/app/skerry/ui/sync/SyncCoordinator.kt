@@ -322,6 +322,57 @@ class SyncCoordinator(
      */
     internal fun currentSession(): SyncSession? = liveRef?.session
 
+    /**
+     * The client one attempt ([doConnect], [doClaimPairing], [doRestoreSession]) opened and has not
+     * handed to [activateSession] yet — and the order it is released in.
+     *
+     * Two rules, and the second is why this is a type rather than a local `var`:
+     * - whatever an attempt still owns is closed on every way out, so a failure does not strand a Ktor
+     *   engine with its pool and threads for the life of the process (issue #308) — a wrong password is
+     *   the common one, and the user retypes it;
+     * - the release happens BEFORE the attempt's result reaches [_status]. A terminal status is the only
+     *   signal a caller has that the attempt is over, so a `Failed` published while the client is still
+     *   open is a lie for every caller, not only for the tests that wait on it and then assert the
+     *   release (issue #365).
+     */
+    private inner class AttemptClient {
+        private var client: SyncClient? = null
+
+        /** Take ownership of a freshly opened client. */
+        fun opened(c: SyncClient): SyncClient = c.also { client = it }
+
+        /** The hand-off: from here the live session owns the client and [disconnect] is what closes it. */
+        fun handedOver() {
+            client = null
+        }
+
+        /**
+         * Give back what is still owned, if anything. Idempotent — the `finally` calls it after every path.
+         *
+         * NonCancellable, like the superseded-client close in [activateSession]: the backstop runs from a
+         * `finally` that a cancelled connect reaches too ([close] cancels the scope mid-flight), and a
+         * `close` that suspends would then resume straight into a [CancellationException] — leaving the
+         * field cleared and the engine open, which is the leak this exists to prevent. Today's clients
+         * never suspend there, so this is the guard for the first one that does.
+         *
+         * That first one would also widen a second window: [report] runs the close while the attempt's key
+         * material is still live (the wipes are in each caller's `finally`, behind the status). A
+         * non-suspending `HttpClient.close()` makes that residency microseconds; a `close` that waits on
+         * the network would not, and the wipes would have to move ahead of the report.
+         */
+        suspend fun release() {
+            val owned = client ?: return
+            client = null
+            withContext(NonCancellable) { runCatching { owned.close() } }
+        }
+
+        /** Report the attempt's result, with everything it owned already given back. */
+        suspend fun report(status: SyncStatus) {
+            release()
+            _status.value = status
+        }
+    }
+
     // Own scope: network operations must not depend on a composable's lifecycle. On mobile the form
     // recomposes on [status]: as soon as connect() sets Busy the form leaves composition, and if the
     // launch used its rememberCoroutineScope the operation would cancel mid-flight. Launching here
@@ -525,10 +576,9 @@ class SyncCoordinator(
         // Argon2id output, authKey is SRP material; no reason to hold them in heap until GC).
         var masterKey: MasterKey? = null
         var authKey: ByteArray? = null
-        // A client this connect opened but has not handed to [activateSession] yet — closed in the
-        // finally so no failure path strands its Ktor engine, pool and threads (issue #308). A wrong
-        // password is the common one: the user retypes it, and every attempt used to leak one.
-        var openedClient: SyncClient? = null
+        // The client this connect opens, and the release that has to precede every status it
+        // publishes (see [AttemptClient], issues #308 and #365).
+        val attempt = AttemptClient()
         try {
             // Argon2id inside try: heavy and may throw (up to OutOfMemoryError) — otherwise the password
             // wouldn't be wiped (finally) and the status would be stuck on Busy forever.
@@ -536,7 +586,7 @@ class SyncCoordinator(
             val ak = crypto.deriveAuthKey(mk).also { authKey = it }
             val deviceId = configStore.load()?.takeIf { it.accountId == accountId }?.deviceId ?: deviceIdProvider()
             val device = DeviceInfo(deviceId, deviceName, platformName)
-            val syncClient = clientFactory(serverUrl).also { openedClient = it }
+            val syncClient = attempt.opened(clientFactory(serverUrl))
 
             // The account (remote) password is the single source of truth: every device shares one
             // account dataKey wrapped under it, so a synced device MUST unlock with the account password.
@@ -577,7 +627,7 @@ class SyncCoordinator(
                         if (e.kind == SyncException.Kind.FORBIDDEN &&
                             (failure.kind == SyncException.Kind.UNAUTHORIZED || failure.kind == SyncException.Kind.NOT_FOUND)
                         ) {
-                            _status.value = SyncStatus.Failed(SyncFailureReason.RegistrationRefusedSignInFailed, e.message)
+                            attempt.report(SyncStatus.Failed(SyncFailureReason.RegistrationRefusedSignInFailed, e.message))
                             return
                         }
                         throw failure
@@ -596,7 +646,7 @@ class SyncCoordinator(
                         // would pull records we can't decrypt and push records no other device can, with
                         // nothing on screen to say so — issue #133.
                         KeyAdoption.Undecryptable -> {
-                            _status.value = SyncStatus.Failed(SyncFailureReason.AccountKeyNotAdopted)
+                            attempt.report(SyncStatus.Failed(SyncFailureReason.AccountKeyNotAdopted))
                             return
                         }
                     }
@@ -614,14 +664,14 @@ class SyncCoordinator(
                     // The server hides "no such account" behind a wrong-password shape — both surface as
                     // Unauthorized (the UI hint tells the user to use their vault password).
                     if (e.kind == SyncException.Kind.UNAUTHORIZED || e.kind == SyncException.Kind.NOT_FOUND) {
-                        _status.value = SyncStatus.Failed(SyncFailureReason.Unauthorized)
+                        attempt.report(SyncStatus.Failed(SyncFailureReason.Unauthorized))
                         return
                     }
                     throw e
                 }
-                // Verified only — this client is released by the finally below and the confirmed re-run
-                // opens its own. Stash the connect params + password and ask the UI to confirm
-                // (finally still wipes mk/authKey/dataKey/password).
+                // Verified only — this client is released below, before the pause reaches the status,
+                // and the confirmed re-run opens its own. Stash the connect params + password and ask
+                // the UI to confirm (finally still wipes mk/authKey/dataKey/password).
                 //
                 // The verify above is a full SRP login: it reactivates a revoked device server-side and
                 // consumes the one-shot signal, so the confirmed re-run's login reports an ordinary live
@@ -629,13 +679,18 @@ class SyncCoordinator(
                 // this device is linked — it belongs to the link, not to the config, and declining the
                 // password is an answer about the password, not about the revocation ([cancelPasswordReplace]).
                 if (s.reactivated) rememberReactivation(link)
+                // The verify is all this client was for, and the pause is a status like any other:
+                // release before publishing it, not in the finally behind it (issue #365).
+                attempt.release()
                 if (!publishPendingReplace(serverUrl, accountId, masterPassword, keepConnected)) {
                     // The vault locked while this connect was on the network (the lock has no idea one is
                     // in flight, and a sync connect does not defer the idle timer). Fall back to the saved
                     // state rather than asking a question nobody can see — the reactivation debt above is
                     // already recorded, and the user reconnects after unlocking.
-                    _status.value = configStore.load()?.let { SyncStatus.Configured(it.serverUrl, it.accountId) }
-                        ?: SyncStatus.Disabled
+                    attempt.report(
+                        configStore.load()?.let { SyncStatus.Configured(it.serverUrl, it.accountId) }
+                            ?: SyncStatus.Disabled,
+                    )
                 }
                 return
             } else {
@@ -653,13 +708,13 @@ class SyncCoordinator(
                     // locally): adoptDataKey keeps the meta in that case, so the unlock password would stay
                     // the local one and diverge from the account — re-wrap it explicitly instead.
                     KeyAdoption.AlreadyOurs -> if (!vault.rewrapUnder(masterPassword.copyOf())) {
-                        _status.value = SyncStatus.Failed(SyncFailureReason.VaultRekeyFailed)
+                        attempt.report(SyncStatus.Failed(SyncFailureReason.VaultRekeyFailed))
                         return
                     }
                     // The replace the user confirmed did NOT happen (the account wrap didn't open). Connecting
                     // now would claim a password change that isn't there, on records we can't decrypt.
                     KeyAdoption.Undecryptable -> {
-                        _status.value = SyncStatus.Failed(SyncFailureReason.AccountKeyNotAdopted)
+                        attempt.report(SyncStatus.Failed(SyncFailureReason.AccountKeyNotAdopted))
                         return
                     }
                 }
@@ -690,7 +745,7 @@ class SyncCoordinator(
             // this account on another server says nothing about this one, and paying it here would rebuild
             // a vault nobody purged records from.
             val mustReconcile = reactivated || link in reconcileDebts
-            openedClient = null // ownership passes to activateSession
+            attempt.handedOver()
             activateSession(
                 syncClient,
                 newSession,
@@ -702,11 +757,11 @@ class SyncCoordinator(
         } catch (e: CancellationException) {
             throw e // don't swallow cancellation — it would break structured concurrency
         } catch (e: SyncException) {
-            _status.value = syncFailure(e)
+            attempt.report(syncFailure(e))
         } catch (e: Exception) {
             // Unexpected (e.g. vault.unlockWithDataKey threw I/O while adopting the key) — otherwise the
             // exception would go silently to the SupervisorJob and the status stuck on Busy forever.
-            _status.value = SyncStatus.Failed(SyncFailureReason.ConnectFailed, e.message)
+            attempt.report(SyncStatus.Failed(SyncFailureReason.ConnectFailed, e.message))
         } finally {
             // Wipe all derived key material and the password (zero-knowledge): masterKey/authKey are
             // subkeys, dataKey a copy from exportDataKey (the live key stays with the vault). Idempotent.
@@ -714,12 +769,11 @@ class SyncCoordinator(
             masterKey?.zeroize()
             authKey?.fill(0)
             dataKey.zeroize()
-            // Opened but never activated: give the socket pool back rather than leaving one engine
-            // per failed attempt behind (issue #308). This is the release point for the failure
-            // paths — a `return` inside the branches above lands here, so none of them closes its
-            // own client. From the hand-off on the client belongs to the live session and is closed
-            // by `disconnect`, which is why the null-out sits before the call and not after it.
-            runCatching { openedClient?.close() }
+            // The backstop: a path that neither reported nor handed over (a throw between the two,
+            // a cancellation) still gives the engine back. Every path that publishes a status has
+            // released through it already, and from the hand-off on the client belongs to the live
+            // session and is closed by `disconnect`.
+            attempt.release()
         }
     }
 
@@ -1124,9 +1178,10 @@ class SyncCoordinator(
         var newMasterKey: MasterKey? = null
         var curAuthKey: ByteArray? = null
         var newAuthKey: ByteArray? = null
-        // A client we opened but haven't handed to [activateSession] yet — close it on any early exit
-        // so its Ktor pool/sockets don't leak.
-        var openedClient: SyncClient? = null
+        // A client we opened but haven't handed to [activateSession] yet. This one publishes no status
+        // of its own — its result reaches the caller only after the `finally` — so it needs the release,
+        // not the ordering ([AttemptClient]).
+        val attempt = AttemptClient()
         try {
             val syncSalt = crypto.deriveSyncSalt(cfg.accountId)
             val cmk = crypto.deriveMasterKey(current, syncSalt).also { curMasterKey = it }
@@ -1135,7 +1190,7 @@ class SyncCoordinator(
             val nak = crypto.deriveAuthKey(nmk).also { newAuthKey = it }
             val newWrapped = crypto.wrapDataKey(nmk, dataKey)
             val device = DeviceInfo(cfg.deviceId, deviceName, platformName)
-            val syncClient = clientFactory(cfg.serverUrl).also { openedClient = it }
+            val syncClient = attempt.opened(clientFactory(cfg.serverUrl))
 
             // keep-connected: drop the auto-restore token for the rotation window. If this device dies
             // after the server commits but before the local re-wrap, [restoreSession] must NOT silently
@@ -1187,7 +1242,7 @@ class SyncCoordinator(
             val sealed = if (cfg.keepConnected) {
                 vault.exportDataKey()?.let { dk -> try { tokens.seal(dk, newSession.refreshToken) } finally { dk.zeroize() } }
             } else null
-            openedClient = null // ownership passes to activateSession (it closes any superseded client)
+            attempt.handedOver() // activateSession closes any superseded client
             activateSession(syncClient, newSession, cfg.copy(sealedRefreshToken = sealed), resetCursor = false)
             return AccountPasswordChange.Success
         } catch (e: CancellationException) {
@@ -1199,7 +1254,7 @@ class SyncCoordinator(
             curMasterKey?.zeroize(); newMasterKey?.zeroize()
             curAuthKey?.fill(0); newAuthKey?.fill(0)
             dataKey.zeroize()
-            runCatching { openedClient?.close() } // opened but not activated (error/rewrap-failed path)
+            attempt.release() // opened but not activated (error/rewrap-failed path)
         }
     }
 
@@ -1290,11 +1345,10 @@ class SyncCoordinator(
         // Keep the unwrapped account key in an outer var to wipe in finally until adoptDataKey takes
         // ownership (null the ref after a successful adopt — else we'd wipe the live key).
         var accountDataKey: DataKey? = null
-        // A client we opened but haven't made the active [client] yet: on an error before assignment it
-        // must be closed (Ktor pool/sockets/dispatcher), else it leaks for the whole process.
-        var openedClient: SyncClient? = null
+        // The client this claim opens, released before every status it publishes ([AttemptClient]).
+        val attempt = AttemptClient()
         try {
-            val syncClient = clientFactory(parsed.serverUrl).also { openedClient = it }
+            val syncClient = attempt.opened(clientFactory(parsed.serverUrl))
             val deviceId = deviceIdProvider() // a new device for the account — always a fresh id
             val device = DeviceInfo(deviceId, deviceName, platformName)
             val result = syncClient.claimPairing(parsed.code, device)
@@ -1307,7 +1361,7 @@ class SyncCoordinator(
             // burned the one-time code, so the only way forward is a fresh one. A generic protocol error
             // would read as "try again", and trying again cannot work.
             if (result.accountId.isEmpty() || result.accountId.length > MAX_ACCOUNT_ID_CHARS) {
-                _status.value = SyncStatus.Failed(SyncFailureReason.PairingCodeInvalid)
+                attempt.report(SyncStatus.Failed(SyncFailureReason.PairingCodeInvalid))
                 return
             }
 
@@ -1315,7 +1369,7 @@ class SyncCoordinator(
             if (decoded == null) {
                 // transferKey didn't fit the envelope — a corrupt/tampered code. claimPairing already
                 // burned the one-time code on the server; a retry won't help: have the user re-pair.
-                _status.value = SyncStatus.Failed(SyncFailureReason.PairingCodeInvalid)
+                attempt.report(SyncStatus.Failed(SyncFailureReason.PairingCodeInvalid))
                 return
             }
             accountDataKey = decoded
@@ -1329,11 +1383,11 @@ class SyncCoordinator(
                 when (vault.unlock(localPassword.copyOf())) {
                     UnlockResult.Success -> {}
                     UnlockResult.WrongPassword -> {
-                        _status.value = SyncStatus.Failed(SyncFailureReason.WrongDevicePassword)
+                        attempt.report(SyncStatus.Failed(SyncFailureReason.WrongDevicePassword))
                         return
                     }
                     UnlockResult.Corrupted -> {
-                        _status.value = SyncStatus.Failed(SyncFailureReason.LocalVaultCorrupted)
+                        attempt.report(SyncStatus.Failed(SyncFailureReason.LocalVaultCorrupted))
                         return
                     }
                 }
@@ -1351,7 +1405,7 @@ class SyncCoordinator(
                 vault.exportDataKey()?.let { dk -> try { tokens.seal(dk, result.session.refreshToken) } finally { dk.zeroize() } }
             } else null
             // Client ownership passes to the [client] field on the first activation assignment.
-            openedClient = null
+            attempt.handedOver()
             // New device: no local records — full re-pull of the account's whole history
             // (resetCursor, like adoptedKey in doConnect).
             activateSession(
@@ -1364,15 +1418,15 @@ class SyncCoordinator(
         } catch (e: CancellationException) {
             throw e
         } catch (e: SyncException) {
-            _status.value = syncFailure(e)
+            attempt.report(syncFailure(e))
         } catch (e: Exception) {
             // No e.message: it can leak crypto/Ktor internals to the UI.
-            _status.value = SyncStatus.Failed(SyncFailureReason.PairingFailed)
+            attempt.report(SyncStatus.Failed(SyncFailureReason.PairingFailed))
         } finally {
             localPassword.fill(' ')
             accountDataKey?.zeroize() // if adopt wasn't reached (or the key was rejected) — wipe the unwrapped key
             parsed.transferKey.fill(0)
-            runCatching { openedClient?.close() } // opened but not made active — close it
+            attempt.release() // the backstop for a path that neither reported nor handed over
         }
     }
 
@@ -2263,17 +2317,19 @@ class SyncCoordinator(
         if (pendingReplace != null) return
         val dataKey = vault.exportDataKey() ?: return
         _status.value = SyncStatus.Busy
-        // A client we opened but haven't handed to [activateSession] yet — close it on any exit, as
-        // [doConnect] and [doClaimPairing] do. A failing refresh (dead token, 5xx, a server that flaps its
-        // health ping) would otherwise strand a Ktor engine and its pool once per attempt.
-        var openedClient: SyncClient? = null
+        // As in [doConnect] and [doClaimPairing]: a failing refresh (dead token, 5xx, a server that flaps
+        // its health ping) must not strand a Ktor engine, and the fall back to Configured below must not be
+        // published while this restore still holds one ([AttemptClient]).
+        val attempt = AttemptClient()
         try {
             val refreshToken = tokens.open(dataKey, cfg.sealedRefreshToken)
             if (refreshToken == null) {
-                _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
+                // Nothing is open yet, so the release is a no-op — reported through the attempt anyway,
+                // so an edit that ever opens the client above this check cannot reinstate #365 in silence.
+                attempt.report(SyncStatus.Configured(cfg.serverUrl, cfg.accountId))
                 return
             }
-            val syncClient = clientFactory(cfg.serverUrl).also { openedClient = it }
+            val syncClient = attempt.opened(clientFactory(cfg.serverUrl))
             val newSession = syncClient.refresh(SyncSession(cfg.accountId, "", refreshToken))
             // A reconcile interrupted before it finished must still run on this silent restore — refresh
             // carries no `reactivated` signal, so a standing debt is the only thing that redoes it before
@@ -2283,7 +2339,7 @@ class SyncCoordinator(
             // BEFORE the hand-off below, as in [doChangeAccountPassword]: a throw here with the field
             // already nulled would leave the client open and unowned, which is the leak this tracks.
             val sealed = tokens.seal(dataKey, newSession.refreshToken)
-            openedClient = null // ownership passes to activateSession (it closes any superseded client)
+            attempt.handedOver() // activateSession closes any superseded client
             activateSession(
                 syncClient,
                 newSession,
@@ -2297,10 +2353,10 @@ class SyncCoordinator(
             // Any restore failure (expired token, no connection, other) — fall back to Configured, don't
             // erase the link (reconnect by password). Catch Exception, not just SyncException: otherwise
             // something unexpected would stick on Busy (eternal spinner).
-            _status.value = SyncStatus.Configured(cfg.serverUrl, cfg.accountId)
+            attempt.report(SyncStatus.Configured(cfg.serverUrl, cfg.accountId))
         } finally {
-            runCatching { openedClient?.close() } // opened but never activated
             dataKey.zeroize() // dataKey copy — wipe it, the live key stays with the vault
+            attempt.release() // the backstop for a path that neither reported nor handed over
         }
     }
 

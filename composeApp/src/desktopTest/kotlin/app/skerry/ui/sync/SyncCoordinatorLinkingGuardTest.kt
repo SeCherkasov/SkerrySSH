@@ -278,23 +278,39 @@ class SyncCoordinatorLinkingGuardTest {
     }
 
     /**
-     * The client a failed restore opened is closed on the way out. A dead token, a 5xx or a server that
-     * flaps its health ping would otherwise strand a Ktor engine and its pool once per attempt.
+     * The client a failed restore opened is closed on the way out, and closed BEFORE the fall back to
+     * the saved link reaches the status (issue #365). A dead token, a 5xx or a server that flaps its
+     * health ping would otherwise strand a Ktor engine and its pool once per attempt, and the status —
+     * the only signal the restore is over — would say it is over while it still holds one. Read from
+     * inside `close`: the restore's own [SyncStatus.Busy] is what must still be up at that moment.
      */
     @Test
-    fun `a failed silent restore closes the client it opened`() = runBlocking<Unit> {
+    fun `a failed silent restore closes the client before it falls back to the saved link`() = runBlocking<Unit> {
         initializeVaultCrypto()
         val vault = localVault()
-        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword)
+        var sut: SyncCoordinator? = null
+        val seenAtClose = mutableListOf<SyncStatus>()
+        val client = FakeAccountClient(
+            crypto,
+            account,
+            existingAccountPassword = accountPassword,
+            onClose = { sut?.status?.value?.let(seenAtClose::add) },
+        )
         val store = InMemorySyncConfigStore().apply { save(keepConnectedLink(vault, crypto, serverUrl, account, "dev-local")) }
-        val sut = coordinator(vault, client, store)
+        val coordinator = coordinator(vault, client, store)
+        sut = coordinator
         try {
-            sut.restoreSession()
+            coordinator.restoreSession()
             awaitSync("the restore to reach the token exchange") { client.refreshing.await() }
-            sut.status.awaitStatus("the failed restore to fall back to the saved link") { it is SyncStatus.Configured }
+            coordinator.status.awaitStatus("the failed restore to fall back to the saved link") { it is SyncStatus.Configured }
             assertEquals(1, client.closeCalls, "the client must be closed on the way out")
+            assertEquals(
+                listOf<SyncStatus>(SyncStatus.Busy),
+                seenAtClose,
+                "the fall back was on the status before the client was released",
+            )
         } finally {
-            sut.close()
+            coordinator.close()
         }
     }
 
@@ -309,16 +325,35 @@ class SyncCoordinatorLinkingGuardTest {
         initializeVaultCrypto()
         val vault = localVault()
         val gate = CompletableDeferred<Unit>()
-        val client = FakeAccountClient(crypto, account, existingAccountPassword = accountPassword, loginGate = gate)
-        val sut = coordinator(vault, client, configuredStore())
+        var sut: SyncCoordinator? = null
+        val seenAtClose = mutableListOf<SyncStatus>()
+        val client = FakeAccountClient(
+            crypto,
+            account,
+            existingAccountPassword = accountPassword,
+            loginGate = gate,
+            onClose = { sut?.status?.value?.let(seenAtClose::add) },
+        )
+        val coordinator = coordinator(vault, client, configuredStore())
+        sut = coordinator
         try {
-            sut.connect(serverUrl, account, accountPassword.toCharArray())
+            coordinator.connect(serverUrl, account, accountPassword.toCharArray())
             awaitSync("the connect to reach the login") { client.loggingIn.await() }
-            sut.pauseForLock() // nothing is stashed yet — this one finds nothing
+            coordinator.pauseForLock() // nothing is stashed yet — this one finds nothing
             gate.complete(Unit)
-            sut.status.awaitStatus("the lock to take the question down") { it is SyncStatus.Configured }
+            coordinator.status.awaitStatus("the lock to take the question down") { it is SyncStatus.Configured }
+            // The verify's client is released on this path too — and before the fall back reaches the
+            // status, like every other way out of a connect (issue #365). The release here is the
+            // hand-written one the pause needs, not [AttemptClient.report]'s: what the fall back proves
+            // is that dropping it would be caught, because the pause itself publishes outside the type.
+            assertEquals(1, client.closeCalls, "the verify's client must not outlive the connect it belonged to")
+            assertEquals(
+                listOf<SyncStatus>(SyncStatus.Busy),
+                seenAtClose,
+                "the fall back was on the status before the client was released",
+            )
         } finally {
-            sut.close()
+            coordinator.close()
         }
     }
 

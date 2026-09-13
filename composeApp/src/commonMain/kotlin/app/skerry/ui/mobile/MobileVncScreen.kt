@@ -236,8 +236,8 @@ private fun MobileVncBar(
 /**
  * Hidden 1-pixel text field that holds IME focus and forwards typed characters as RFB key events.
  *
- * The same funnel the terminal uses ([ImeFunnelField]): the field is reset to its anchors after
- * every edit, so what it holds at rest is never the text typed — on a Windows or VNC login screen
+ * The same funnel the terminal uses ([ImeFunnelField]): every edit is read and then reverted to
+ * the anchors in place, so what the field holds is never the text typed — on a Windows or VNC login screen
  * that text is a password, and a field's value is `EditableText` in the semantics tree. Diffing
  * against the anchors turns insertions into key press+release and deletions into Backspace; the
  * anchors are what make a deletion visible at all. [KeyboardOptions] keep the

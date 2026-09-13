@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlin.concurrent.Volatile
 
 internal val testTarget = SshTarget(host = "h", port = 22, username = "u")
 
@@ -92,6 +93,9 @@ internal class FakeSshConnection(
     private val channel: ShellChannel,
     private val sftp: SftpClient? = null,
 ) : SshConnection {
+    // Written by the controller's teardown on one thread and read by the race tests' waits on
+    // another, with no lock between them: without this the read is free never to see the write.
+    @Volatile
     var disconnected = false
         private set
     var openSftpCalls = 0
@@ -151,7 +155,10 @@ internal class FakeShellChannel : ShellChannel {
     }
     override suspend fun resize(size: PtySize) {}
     /** Server/transport-side drop: the channel ends WITHOUT EOF (reconnect candidate). */
-    override suspend fun close() {
+    override suspend fun close() = drop()
+
+    /** [close] without the suspend, for the tests that drop a channel from outside a coroutine. */
+    fun drop() {
         emissions.close()
     }
 

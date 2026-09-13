@@ -22,11 +22,14 @@ rather than recorded against the wrong code.
 from __future__ import annotations
 
 import argparse
+import glob
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ElementTree
 
 if __package__ in (None, ""):  # invoked as a script, not as a module
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -58,6 +61,133 @@ HARNESS_RED_EVIDENCE = re.compile(r"^Ran [1-9]\d* tests?\b.*^FAILED \(", re.S | 
 # Gradle prints this only from a test task that ran and had failures. A compile error, a
 # missing dependency or a bad task name fails the build without it.
 GRADLE_RED_EVIDENCE = re.compile(r"There were failing tests|tests? completed, \d+ failed")
+
+
+# Where a Gradle test task writes its JUnit XML: <module>/build/test-results/<task>/TEST-*.xml.
+# Every module of this build is top level today; the walk is recursive anyway, because a nested
+# one whose results the guard could not see would fail open — green off the other modules' XML.
+TEST_RESULTS_GLOB = "**/build/test-results/*/*.xml"
+
+
+# The harness's own files are code the gate watches — editing a rule used to leave a stage green
+# that the rule would now fail — but Gradle cannot see them. They reopen the stage; they cannot
+# make its results stale.
+HARNESS_PREFIXES = ("tools/harness/", ".claude/")
+
+
+def _gradle_input(path: str) -> bool:
+    return not path.startswith(HARNESS_PREFIXES)
+
+
+def _results_must_be_fresh(gradle_digest: str) -> bool:
+    """Whether this run has to have executed something for its green to mean anything.
+
+    It does, unless the last green `tests` record was pinned to the same build-visible content:
+    then the results on disk are the ones that green was made of, and demanding a re-run would
+    spend the whole suite reproving byte-identical Kotlin.
+    """
+    previous = state.load().get("stages", {}).get("tests", {})
+    return not (previous.get("ok") and previous.get("gradle_digest") == gradle_digest)
+
+
+def _clear_test_results(root: str) -> list[str]:
+    """Remove the result directories a refused verdict read, so the next run has to write its own.
+
+    `--rerun` is a *task* option: it binds to the task it follows, so on `test allTests` it reaches
+    the aggregate and not the leaf tasks that write the XML — and being out of date does not
+    propagate to a task's dependencies. A test task whose output directory is gone is out of date
+    on its own account. It is also the only cure for a directory no live task owns any more — a
+    renamed target, a variant the build stopped producing — whose stale XML would otherwise be
+    read as this run's evidence forever.
+    """
+    inside = os.path.join(os.path.realpath(root), "")
+    removed: list[str] = []
+    for path in glob.glob(os.path.join(root, TEST_RESULTS_GLOB), recursive=True):
+        directory = os.path.dirname(os.path.realpath(path))
+        if directory in removed or not directory.startswith(inside):
+            continue
+        if os.path.join("build", "test-results") not in directory:
+            continue
+        shutil.rmtree(directory, ignore_errors=True)
+        removed.append(directory)
+    return removed
+
+
+def _suite_failed(element: ElementTree.Element) -> bool:
+    """A suite is clean only when it says so in digits — anything else is read as a failure.
+
+    Absent, empty or non-numeric counts are not evidence of a green suite, and a guard that reads
+    them as zero would hand back the verdict the exit code already gave for free.
+    """
+    for attribute in ("failures", "errors"):
+        raw = (element.get(attribute) or "").strip()
+        if not raw.isdigit() or int(raw):
+            return True
+    return False
+
+
+def test_results_verdict(root: str, since: float = 0.0) -> tuple[bool, str]:
+    """What the test tasks actually wrote, read back from disk.
+
+    `./gradlew test allTests` exits 0 for a leaf test task the build cache restored or left up to
+    date, so on its own the exit code says nothing about the code being gated: during #353 the
+    runner recorded `tests ok` while the results on disk still held eight failures (#364). The
+    guard is on the *results*, in two halves:
+
+    * content — every suite on disk has to report zero failures and zero errors, and the counts
+      have to be there to read. A cache hit on identical bytecode is legitimate, so what is
+      checked is what the results say, never the cache outcome;
+    * evidence — at least one result file has to be newer than `since`, the moment the stage
+      started. That is the other half of the same hole: a full run that executes nothing at all
+      exits 0 in half a second, and yesterday's green results are not about today's code.
+
+    Only *one* file has to be fresh, not all of them. Gradle skips a module whose inputs did not
+    move, and that module's earlier results stay true of this content — demanding a rerun of every
+    module would refuse a green that is honest.
+    """
+    paths = sorted(glob.glob(os.path.join(root, TEST_RESULTS_GLOB), recursive=True))
+    suites = tests = 0
+    fresh = False
+    failed: list[str] = []
+    broken: list[str] = []
+    for path in paths:
+        name = os.path.relpath(path, root)
+        try:
+            fresh = fresh or os.path.getmtime(path) >= since - MTIME_SLACK
+            for _, element in ElementTree.iterparse(path, events=("start",)):
+                if element.tag != "testsuite":
+                    continue
+                suites += 1
+                count = (element.get("tests") or "0").strip()
+                tests += int(count) if count.isdigit() else 0
+                if _suite_failed(element):
+                    failed.append(element.get("name") or name)
+        except (ElementTree.ParseError, OSError, ValueError) as exc:
+            # Named in full: nothing reruns a half-written file back into shape, and a task
+            # directory the build no longer owns is cleared by deleting it or by `clean`.
+            broken.append(f"{name} ({type(exc).__name__})")
+    detail = f"{suites} suite(s), {tests} tests"
+    if broken:
+        return False, f"{detail}; unreadable, delete or clean: {_first(broken)}"
+    if not suites:
+        # No file at all, or a file a dying test JVM left with nothing in it. Either way the run
+        # produced no evidence, and an exit code on its own is what #364 is about.
+        return False, "no test results on disk — nothing ran"
+    if failed:
+        return False, f"{detail}; failing: {_first(sorted(failed))}"
+    if not fresh:
+        return False, f"{detail}, all older than this run — nothing ran"
+    return True, detail
+
+
+# The stage's own start time against a file's mtime, with room for a coarse clock. A stale result
+# is hours old; nothing this side of a second changes a verdict.
+MTIME_SLACK = 1.0
+
+
+def _first(names: list[str], limit: int = 5) -> str:
+    head = ", ".join(names[:limit])
+    return head if len(names) <= limit else f"{head} and {len(names) - limit} more"
 
 
 def _env() -> dict:
@@ -95,6 +225,7 @@ def tail(path: str, lines: int = 40) -> str:
 def run_stage(stage: str, root: str) -> bool:
     before = state.tree_digest("all")
     started = time.time()
+    unproven = False
 
     if stage == "checks":
         findings = checks.run()
@@ -106,16 +237,40 @@ def run_stage(stage: str, root: str) -> bool:
     else:
         command = list(policy.STAGE_COMMANDS[stage])
         # A test task that ran with --tests leaves the aggregate task looking up-to-date, so the
-        # next full run reports success in half a second without executing anything. Only --rerun
-        # breaks that; cleanAllTests does not.
+        # next full run reports success in half a second without executing anything. `cleanAllTests`
+        # does not break that, and `--rerun` only reaches the task it follows, so the leaf tasks are
+        # made out of date the one way that always works: their output is removed.
+        cleared = False
         if stage == "tests" and state.load().get("test_cache_dirty"):
             command.append("--rerun")
+            for directory in _clear_test_results(root):
+                print(f"harness: cleared {os.path.relpath(directory, root)}")
+                cleared = True
         print(f"harness: {' '.join(command)}")
         code, log = _run_logged(command, stage, root)
         ok = code == 0
         detail = f"exit {code}, log {log}"
         if not ok:
             print(tail(log))
+        elif stage == "tests":
+            # An exit code is not a test run. Read what the tasks left on disk before pinning a
+            # green to this tree.
+            gradle_digest = state.digest_of(state.scoped_entries(_gradle_input))
+            ok, verdict = test_results_verdict(
+                root, started if _results_must_be_fresh(gradle_digest) else 0.0)
+            detail = f"{detail}, {verdict}"
+            unproven = not ok
+            if not ok:
+                print("harness: the run exited 0, but the results on disk do not back it — "
+                      f"{verdict}. A test task restored from the build cache or left up to date "
+                      "gates nothing; the next run of this stage clears the results it read and "
+                      "makes the tasks produce their own.")
+            if not ok and cleared:
+                # The outputs were removed before this run and came back the same, so what is
+                # being replayed is the cache entry itself — the state #364 was found in.
+                print("harness: these results were cleared before this run and came back the "
+                      "same. Gradle is replaying a cache entry for this bytecode: re-run with "
+                      "--rerun-tasks, or purge ~/.gradle/caches/build-cache-1.")
 
     after = state.tree_digest("all")
     elapsed = int(time.time() - started)
@@ -124,10 +279,16 @@ def run_stage(stage: str, root: str) -> bool:
               "Re-run it against a settled worktree.")
         return False
 
-    state.record_stage(stage, ok, extra={"detail": detail, "seconds": elapsed})
-    if stage == "tests" and ok:
+    extra = {"detail": detail, "seconds": elapsed}
+    if stage == "tests":
+        extra["gradle_digest"] = state.digest_of(state.scoped_entries(_gradle_input))
+    state.record_stage(stage, ok, extra=extra)
+    if stage == "tests":
+        # A refused verdict has to leave the retry a way out: rerunning the identical command
+        # against the same up-to-date tasks would print the identical refusal. A run that failed
+        # on its own exit code needs no such push — it did execute.
         st = state.load()
-        st["test_cache_dirty"] = False
+        st["test_cache_dirty"] = unproven
         state.save(st)
     print(f"harness: {stage} {'ok' if ok else 'FAILED'} ({elapsed}s) — {detail}")
     return ok

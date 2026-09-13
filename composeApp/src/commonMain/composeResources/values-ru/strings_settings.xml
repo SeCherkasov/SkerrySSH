@@ -268,4 +268,29 @@
     <string name="settings_terminal_prod_warnings_desc">На хостах с тегом #prod спрашивать не только на опасных командах, но и на предупреждениях (kill, остановка сервиса, удаление пакета). В сессии под root правило про sudo не действует — там оно ничего не значит, — а разрушительные предупреждения подтверждаются в любом случае.</string>
     <string name="settings_kb_remote_group">УДАЛЁННЫЙ РАБОЧИЙ СТОЛ</string>
     <string name="settings_kb_release_keyboard">Отпустить клавиатуру (вернуть приложению)</string>
+
+    <!-- Background keep-alive (More -> Background & lock screen; Android only) -->
+    <string name="keepalive_title">Фон и экран блокировки</string>
+    <string name="keepalive_desc">При выключенном экране Android останавливает процессор, а прошивки производителей чистят фоновые приложения: keepalive перестаёт уходить, и сервер разрывает сессию.</string>
+    <string name="keepalive_device">Определено: %1$s</string>
+    <string name="keepalive_wakelock">Не давать процессору уснуть</string>
+    <string name="keepalive_wakelock_desc">Удерживается только при открытой сессии, снимается с закрытием последней. Расходует батарею.</string>
+    <string name="keepalive_wakelock_deferred">Сохранено. Открытая сессия не получила изменение; оно вступит в силу при следующем подключении.</string>
+    <string name="keepalive_battery">Оптимизация батареи</string>
+    <string name="keepalive_battery_on">Skerry исключён из Doze и App Standby.</string>
+    <string name="keepalive_battery_off">Система может останавливать Skerry в фоне. В открывшемся списке переключитесь на все приложения и выберите для Skerry «Не оптимизировать».</string>
+    <string name="keepalive_autostart">Автозапуск и работа в фоне</string>
+    <string name="keepalive_autostart_desc">У прошивки свой белый список. Без записи в нём службу выгружают независимо от настройки Android.</string>
+    <string name="keepalive_recents">Закрепление в недавних и очистка при блокировке</string>
+    <string name="keepalive_recents_xiaomi">Безопасность → Батарея → «Очищать память при блокировке»: Никогда. В недавних задержите карточку Skerry и нажмите замок.</string>
+    <string name="keepalive_recents_samsung">Батарея → Ограничения фоновой работы: не держите Skerry в «Спящих приложениях», задайте «Без ограничений».</string>
+    <string name="keepalive_recents_generic">Закрепите карточку Skerry в недавних и отключите очистку памяти при блокировке в системных настройках батареи.</string>
+    <string name="keepalive_open">Открыть</string>
+    <string name="keepalive_exempt">Исключён</string>
+    <string name="keepalive_not_exempt">Не исключён</string>
+    <string name="keepalive_vendor_xiaomi">Xiaomi / Redmi / POCO</string>
+    <string name="keepalive_vendor_huawei">Huawei / Honor</string>
+    <string name="keepalive_vendor_oppo">OPPO / OnePlus / realme</string>
+    <string name="keepalive_vendor_vivo">vivo / iQOO</string>
+    <string name="keepalive_vendor_samsung">Samsung</string>
 </resources>

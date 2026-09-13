@@ -268,4 +268,29 @@
     <string name="settings_terminal_prod_warnings_desc">On hosts tagged #prod also confirm warnings (kill, stopping a service, uninstalling a package), not only dangerous commands. A root session drops the sudo rule — it says nothing there — and confirms destructive warnings either way.</string>
     <string name="settings_kb_remote_group">REMOTE DESKTOP</string>
     <string name="settings_kb_release_keyboard">Release the keyboard (back to the app)</string>
+
+    <!-- Background keep-alive (More -> Background & lock screen; Android only) -->
+    <string name="keepalive_title">Background &amp; lock screen</string>
+    <string name="keepalive_desc">With the screen off Android suspends the CPU and OEM firmware clears background apps: the keepalive stops going out and the server drops the session.</string>
+    <string name="keepalive_device">Detected: %1$s</string>
+    <string name="keepalive_wakelock">Keep the CPU awake</string>
+    <string name="keepalive_wakelock_desc">Held only while a session is open, released when the last one closes. Costs battery.</string>
+    <string name="keepalive_wakelock_deferred">Saved. The open session was not told; it takes effect on the next connection.</string>
+    <string name="keepalive_battery">Battery optimization</string>
+    <string name="keepalive_battery_on">Skerry is exempt from Doze and App Standby.</string>
+    <string name="keepalive_battery_off">The system may suspend Skerry in the background. In the list that opens switch to all apps and set Skerry to “Don't optimize”.</string>
+    <string name="keepalive_autostart">Autostart and background</string>
+    <string name="keepalive_autostart_desc">The firmware keeps a whitelist of its own. Without an entry there the service is killed regardless of the Android setting.</string>
+    <string name="keepalive_recents">Recents lock and lock-screen cleanup</string>
+    <string name="keepalive_recents_xiaomi">Security → Battery → “Clear memory on lock screen”: Never. In Recents hold the Skerry card and tap the lock.</string>
+    <string name="keepalive_recents_samsung">Battery → Background usage limits: keep Skerry out of “Deep sleeping apps” and set it to Unrestricted.</string>
+    <string name="keepalive_recents_generic">Lock the Skerry card in Recents and turn off lock-screen memory cleanup in the system battery settings.</string>
+    <string name="keepalive_open">Open</string>
+    <string name="keepalive_exempt">Exempt</string>
+    <string name="keepalive_not_exempt">Not exempt</string>
+    <string name="keepalive_vendor_xiaomi">Xiaomi / Redmi / POCO</string>
+    <string name="keepalive_vendor_huawei">Huawei / Honor</string>
+    <string name="keepalive_vendor_oppo">OPPO / OnePlus / realme</string>
+    <string name="keepalive_vendor_vivo">vivo / iQOO</string>
+    <string name="keepalive_vendor_samsung">Samsung</string>
 </resources>

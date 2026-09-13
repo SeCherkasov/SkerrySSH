@@ -284,6 +284,9 @@ fun MobileDesignApp(
         LocalSync provides deps.sync,
         // Teams — More → "Team" push screen (sharing hosts/snippets between accounts).
         LocalTeams provides deps.teams,
+        // Background power management (wake lock, battery exemption, autostart) — More -> "Background
+        // & lock screen"; null off Android, and the row disappears with it.
+        app.skerry.ui.app.LocalKeepAlivePower provides deps.keepAlivePower,
         app.skerry.ui.app.LocalSessionShare provides deps.sessionShare,
         app.skerry.ui.app.LocalSharedSessions provides deps.sharedSessions,
     ) {
