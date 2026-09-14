@@ -15,7 +15,7 @@ androidx-biometric = "1.1.0"
 androidx-fragment = "1.8.5"
 # Last CMP line with a stable material3 (1.9.0). Newer CMP only pairs with -alpha material3.
 composeMultiplatform = "1.9.3"
-kotlin = "2.4.10"
+kotlin = "2.4.20"
 material3 = "1.9.0"
 kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.11.0"
@@ -24,7 +24,7 @@ logback = "1.6.3"
 # slf4j-nop: a no-op SLF4J provider for the app. sshj logs via slf4j-api (the version pinned on the
 # classpath, see below); without any binding SLF4J prints "No SLF4J providers were found" and goes NOP.
 # An explicit nop removes the warning while keeping current behavior (sshj logs are not needed in the client anyway).
-slf4j = "2.0.18"
+slf4j = "2.0.19"
 sshj = "0.40.0"
 # jSerialComm: native access to serial ports on desktop (Linux/Windows/macOS).
 # desktopMain only — on Android serial goes over USB-OTG as a separate implementation (later).
@@ -38,7 +38,7 @@ usbSerial = "3.11.0"
 pty4j = "0.13.12"
 # full BouncyCastle: an sshj transitive (as implementation, not visible on the compile classpath),
 # added explicitly — on Android the system "BC" is stripped down and SshjTransport.ensureCryptoProvider replaces it
-bouncycastle = "1.85"
+bouncycastle = "1.86"
 # embedded SSH server for SshjTransport tests only; 3.x is still in milestone
 sshd = "2.19.0"
 # multiplatform libsodium binding (KMP, Argon2id + XChaCha20-Poly1305) for a single VaultCrypto
@@ -48,7 +48,7 @@ ionspin-libsodium = "0.9.5"
 # fixed it (URL→URI decoding); ionspin 0.9.5 still pins 2.0.2, so we override here. Desktop only.
 goterl-resource-loader = "2.1.0"
 # okio — cross-platform file I/O behind FileSystem (FileVault in commonMain, FakeFileSystem in tests)
-okio = "3.18.1"
+okio = "3.18.2"
 # atomicfu — multiplatform locks (kotlinx.atomicfu.locks) instead of JVM-only @Synchronized
 atomicfu = "0.33.0"
 # --- Phase 2 sync ---
@@ -89,7 +89,7 @@ camerax = "1.4.1"
 # still at the same pair. Its Linux live run is done — on 1.10.1, on a Zen 3, a generation loads and
 # streams — so on that version the hold waits only on the Windows one. Both halves are owed again per
 # version, which is why 1.10.1 is left out of the dependabot ignore list rather than added to it.
-llamatik = "1.9.0"
+llamatik = "1.10.1"
 # ML Kit barcode-scanning — QR recognition in the camera frame (Android, on-device, no network)
 mlkit-barcode = "17.3.0"
 # JNA platform bindings — desktop-only; used for the Linux/X11 _NET_WM_MOVERESIZE native window drag
