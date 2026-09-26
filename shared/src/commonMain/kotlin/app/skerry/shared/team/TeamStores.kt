@@ -169,6 +169,13 @@ data class TeamIdentityEntry(
 )
 
 /**
+ * The Teams identity record is on this device but cannot be read here (a payload under a replaced
+ * account key, or a sharing half that does not decode). Refused rather than replaced: see
+ * [TeamIdentityStore.ensure].
+ */
+class TeamIdentityUnreadableException : IllegalStateException("the Teams identity record cannot be read")
+
+/**
  * Account identity keypairs for Teams. Created lazily on first use ([ensure]) and synced to the
  * account's other devices normally (the type is always in shouldSync). The public halves are
  * published to the server by the coordinator; this store knows nothing about the network.
@@ -184,16 +191,22 @@ class TeamIdentityStore(private val vault: Vault, private val crypto: VaultCrypt
     }
 
     /**
-     * Account keypairs; creates and stores new ones if none exist yet (or the record is unreadable),
-     * and adds a signing pair to a legacy record that predates invite signing.
+     * Account keypairs; creates and stores new ones if none exist yet, and adds a signing pair to a
+     * legacy record that predates invite signing.
+     *
+     * A record that is there but does not read — a payload this device cannot open, or a sharing half
+     * that does not decode — throws [TeamIdentityUnreadableException] instead: a fresh pair written
+     * over it syncs to every device of the account and orphans every envelope sealed to the old one.
      */
     fun ensure(): AccountIdentity = vault.transaction {
         val existing = codec.get(IDENTITY_ID)
+        if (existing == null && vault.records().any { it.id == IDENTITY_ID && !it.deleted }) {
+            throw TeamIdentityUnreadableException()
+        }
         val decoded = existing?.let { decode(it) }
         if (decoded != null) return@transaction decoded
-        // Missing/corrupt sharing half → fresh identity. Present sharing but missing signing half →
-        // keep the (published) sharing pair, add a signing pair.
-        val sharing = existing?.let { decodeSharing(it) } ?: crypto.newSharingKeyPair()
+        // Present sharing but missing signing half → keep the (published) sharing pair, add a signing pair.
+        val sharing = if (existing == null) crypto.newSharingKeyPair() else decodeSharing(existing) ?: throw TeamIdentityUnreadableException()
         val signing = crypto.newSigningKeyPair()
         persist(sharing, signing)
         AccountIdentity(sharing, signing)

@@ -71,7 +71,6 @@
     <ID>LongParameterList:SessionShareController.kt$SessionShareController$(teamId: String, teamName: String, paneId: String, label: String, source: ShareSource, readOnlyOnly: Boolean)</ID>
     <ID>LongParameterList:SessionsController.kt$SessionsController$( tabId: String, paneId: String, hostId: String?, title: String, subtitle: String, target: SshTarget, auth: SshAuth, )</ID>
     <ID>LongParameterList:SharedSessionsList.kt$( sessions: SessionsController?, title: String, subtitle: String, viewer: TerminalSession, onPaneOpened: (String) -&gt; Unit, showTerminal: () -&gt; Unit, )</ID>
-    <ID>LongParameterList:TeamSpaces.kt$TeamSpaces$( private val keyStore: TeamKeyStore, private val teamVaults: TeamVaults, private val crypto: VaultCrypto, private val inviteCodec: TeamInviteCodec, private val accountVaultUnlocked: () -&gt; Boolean, private val markError: (TeamsFailure) -&gt; Unit, private val syncSpace: suspend (TeamScopeRef) -&gt; Unit, )</ID>
     <ID>LongParameterList:TeamSpaces.kt$TeamSpaces$( recipientPublicKey: ByteArray, identity: AccountIdentity, senderId: String, recipientId: String, teamId: String, scopeId: String, key: DataKey, name: String, epoch: Int, )</ID>
     <ID>LongParameterList:TeamSpaces.kt$TeamSpaces$(s: SyncSession, c: TeamClient, teamId: String, scopeId: String, accountId: String, identity: AccountIdentity)</ID>
     <ID>LongParameterList:TeamSpaces.kt$TeamSpaces$(s: SyncSession, c: TeamClient, teamId: String, scopeId: String, name: String, identity: AccountIdentity)</ID>

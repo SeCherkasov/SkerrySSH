@@ -54,6 +54,27 @@ class AndroidSyncStoresTest {
         assertEquals(setOf(intact), AndroidReconcileDebtStore(file).load(), "the intact debt must survive")
     }
 
+    @Test
+    fun `a save after a failed load keeps the debts the load could not read`() {
+        val file = tempFile("sync-reconcile")
+        val owed = ServerLink("https://home.test", "maya")
+        val fresh = ServerLink("https://work.test", "maya")
+        AndroidReconcileDebtStore(file).save(setOf(owed))
+        val saved = file.readBytes()
+        file.delete()
+        file.mkdir() // a directory at the path: exists, and every read of it fails
+        val store = AndroidReconcileDebtStore(file)
+        assertEquals(emptySet(), store.load(), "load stays best-effort")
+        file.delete()
+        file.writeBytes(saved)
+
+        store.save(setOf(fresh))
+        assertEquals(setOf(owed, fresh), AndroidReconcileDebtStore(file).load(), "the unread debt was erased")
+
+        store.save(emptySet())
+        assertEquals(setOf(owed), AndroidReconcileDebtStore(file).load(), "retiring one debt took the unread one along")
+    }
+
     /**
      * The 0.2.1 config file carried the reconcile intent as `pendingReconcile=true`. It has to be read
      * back as [SyncConfig.legacyPendingReconcile] — that flag is the only thing the migration in

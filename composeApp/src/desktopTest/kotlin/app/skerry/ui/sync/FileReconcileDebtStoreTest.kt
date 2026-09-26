@@ -1,8 +1,10 @@
 package app.skerry.ui.sync
 
+import java.io.IOException
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -65,5 +67,43 @@ class FileReconcileDebtStoreTest {
         Files.writeString(path, Files.readString(path) + "https%3A%2F%2Fwork.te%ZZ=maya\n")
 
         assertEquals(setOf(intact), FileReconcileDebtStore(path).load(), "the intact debt must survive")
+    }
+
+    /**
+     * [ReconcileDebtStore.load] reads a failure as "no debts" on purpose, and the coordinator then saves
+     * its own set. Written as it stood, that erased every debt the file held and nobody had read: the
+     * next connect to those links pushed back the records their accounts purged. The debts on disk are
+     * written along with the caller's until the caller names them itself.
+     */
+    @Test
+    fun `a save after a failed load keeps the debts the load could not read`() {
+        val path = Files.createTempDirectory("skerry-debts").resolve("sync-reconcile")
+        val owed = ServerLink("https://home.test", "maya")
+        val fresh = ServerLink("https://work.test", "maya")
+        FileReconcileDebtStore(path).save(setOf(owed))
+        val saved = Files.readAllBytes(path)
+        Files.delete(path)
+        Files.createDirectory(path) // a directory at the path: exists, and every read of it fails
+        val store = FileReconcileDebtStore(path)
+        assertEquals(emptySet(), store.load(), "load stays best-effort")
+        Files.delete(path)
+        Files.write(path, saved)
+
+        store.save(setOf(fresh))
+        assertEquals(setOf(owed, fresh), FileReconcileDebtStore(path).load(), "the unread debt was erased")
+
+        store.save(emptySet()) // the caller retires its own debt
+        assertEquals(setOf(owed), FileReconcileDebtStore(path).load(), "retiring one debt took the unread one along")
+    }
+
+    /** Still unreadable at the save: refused like a failed write, not written over. */
+    @Test
+    fun `a save over a file that still cannot be read is refused`() {
+        val path = Files.createTempDirectory("skerry-debts").resolve("sync-reconcile")
+        Files.createDirectory(path)
+        val store = FileReconcileDebtStore(path)
+        store.load()
+
+        assertFailsWith<IOException> { store.save(setOf(ServerLink("https://work.test", "maya"))) }
     }
 }

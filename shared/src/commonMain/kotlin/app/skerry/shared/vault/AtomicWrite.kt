@@ -3,6 +3,8 @@ package app.skerry.shared.vault
 import okio.FileSystem
 import okio.Path
 import okio.Path.Companion.toPath
+import okio.buffer
+import okio.use
 
 /**
  * Atomic UTF-8 file rewrite, shared by [FileVault], [FileSecurityLog] and
@@ -26,7 +28,13 @@ internal fun atomicWriteUtf8(
     path.parent?.let { fileSystem.createDirectories(it) }
     val tmp = path.parent?.resolve("${path.name}.tmp") ?: "${path.name}.tmp".toPath()
     try {
-        fileSystem.write(tmp) { writeUtf8(text) }
+        // Synced before the move: the rename can reach the disk ahead of the data, and a power cut
+        // in between leaves the target an empty file with the old copy already gone.
+        fileSystem.openReadWrite(tmp).use { handle ->
+            handle.resize(0)
+            handle.sink().buffer().use { it.writeUtf8(text) }
+            handle.flush()
+        }
         harden(tmp)
         fileSystem.atomicMove(tmp, path)
     } catch (e: Throwable) {

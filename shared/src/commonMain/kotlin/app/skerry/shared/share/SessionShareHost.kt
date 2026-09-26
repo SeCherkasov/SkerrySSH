@@ -71,6 +71,12 @@ class SessionShareHost(
     // afterwards would have its keystrokes dropped in silence.
     private val lastInputSeq = mutableMapOf<Long, SenderSeq>()
 
+    // Sender ids whose row was dropped, refused for the rest of the share. Dropping a row is what the
+    // relay can ask for (who is watching is its word) and what a budget does on its own, and a row
+    // that simply vanished would read the next replay of that socket's frames as a viewer joining.
+    // A viewer that really comes back does so under a fresh random id, so refusing these costs nothing.
+    private val retiredSenders = LinkedHashSet<Long>()
+
     /**
      * Runs the share until the socket closes or the caller's scope is cancelled. Sends a closing
      * [ShareFrame.End] so viewers learn the session is over instead of watching a frozen screen.
@@ -144,7 +150,7 @@ class SessionShareHost(
     private fun isFresh(frame: ShareFrame.Input, from: String?): Boolean {
         val known = lastInputSeq[frame.sender]
         if (known == null) {
-            if (!makeRoom(from)) return false
+            if (frame.sender in retiredSenders || !makeRoom(from)) return false
             lastInputSeq[frame.sender] = SenderSeq(from, frame.seq)
             return true
         }
@@ -164,7 +170,7 @@ class SessionShareHost(
     private fun makeRoom(account: String?): Boolean {
         if (account != null) {
             val mine = lastInputSeq.entries.filter { it.value.account == account }
-            if (mine.size >= MAX_SENDERS_PER_ACCOUNT) lastInputSeq.remove(mine.first().key)
+            if (mine.size >= MAX_SENDERS_PER_ACCOUNT) retire(mine.first().key)
         }
         return lastInputSeq.size < MAX_TRACKED_SENDERS
     }
@@ -173,7 +179,15 @@ class SessionShareHost(
     private fun forgetDepartedViewers(watching: List<String>) {
         val present = watching.toSet()
         val departed = lastInputSeq.entries.filter { it.value.account != null && it.value.account !in present }
-        departed.forEach { lastInputSeq.remove(it.key) }
+        departed.map { it.key }.forEach(::retire)
+    }
+
+    private fun retire(sender: Long) {
+        lastInputSeq.remove(sender)
+        retiredSenders += sender
+        // Bounded like the table itself. Reaching past it takes that many genuine sockets, which only
+        // a member sealing under invented ids produces — and a member allowed to type needs no replay.
+        if (retiredSenders.size > MAX_RETIRED_SENDERS) retiredSenders.remove(retiredSenders.first())
     }
 
     private suspend fun send(frame: ShareFrame) {
@@ -220,6 +234,9 @@ private const val MAX_TRACKED_SENDERS = 64
  * other way, all a member can ever spend of a table shared with their colleagues.
  */
 private const val MAX_SENDERS_PER_ACCOUNT = 4
+
+/** Dropped sender ids remembered as spent for the rest of the share (see `retiredSenders`). */
+private const val MAX_RETIRED_SENDERS = 4096
 
 /** One viewer socket's place in the replay window: who the relay said it was, and how far it got. */
 private class SenderSeq(val account: String?, var seq: Long)

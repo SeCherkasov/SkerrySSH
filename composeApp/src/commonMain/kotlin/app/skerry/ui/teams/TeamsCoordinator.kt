@@ -17,6 +17,7 @@ import app.skerry.shared.team.pinNotice
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamClient
 import app.skerry.shared.team.TeamIdentityStore
+import app.skerry.shared.team.TeamIdentityUnreadableException
 import app.skerry.shared.team.TeamInviteCodec
 import app.skerry.shared.team.TeamInvitePayload
 import app.skerry.shared.team.TeamKeyStore
@@ -98,6 +99,12 @@ enum class TeamsFailure {
      * forged when nothing is wrong with the invite (#319).
      */
     IdentityUnreadable,
+
+    /**
+     * The Teams identity record is on this device but does not read, so an operation that signs or
+     * publishes with it stopped instead of minting a replacement that would sync over it.
+     */
+    IdentityKept,
 }
 
 /**
@@ -214,11 +221,15 @@ class TeamsCoordinator(
     private val peerStore = TeamPeerStore(vault)
     private val inviteCodec = TeamInviteCodec(crypto)
 
+    private val opMutex = Mutex()
+    private val syncMutex = Mutex()
+
+    private val spaceFiles = TeamSpaceFiles(teamVaults, teamState, syncMutex)
+
     private val spaces = TeamSpaces(
         keyStore = keyStore,
-        teamVaults = teamVaults,
+        files = spaceFiles,
         crypto = crypto,
-        inviteCodec = inviteCodec,
         accountVaultUnlocked = { vault.isUnlocked },
         markError = { markError(it) },
         syncSpace = { syncSpace(it) },
@@ -257,8 +268,6 @@ class TeamsCoordinator(
         }
     }
 
-    private val opMutex = Mutex()
-    private val syncMutex = Mutex()
 
     // Verified invites cached between acceptPreview (the banner) and accept (the button) so accepting
     // doesn't re-run the listTeams + fetchPublicKey round-trips openVerifiedInvite already did. Reusing
@@ -971,8 +980,10 @@ class TeamsCoordinator(
         // between, and B then skips records it never received (the shape of issues #240 and #242).
         val link = live() ?: return
         val (s, c) = link
-        val spaceVault = spaces.vaultResettingStale(ref) ?: return
         syncMutex.withLock {
+            // Under the lock: a stale file is reset together with its cursors, and a cycle still
+            // running on the old file must not file its tip after that reset.
+            val spaceVault = spaces.vaultResettingStale(ref) ?: return
             try {
                 // No device-local filter (issue #174): a space vault cannot hold a credential at
                 // all — the share picker offers hosts, snippets and runbooks, and HOST_SHARE_STRIP
@@ -1026,17 +1037,14 @@ class TeamsCoordinator(
     private fun spacesOf(teamId: String): List<TeamScopeRef> =
         listOf(TeamScopeRef(teamId)) + keyStore.scopes(teamId).keys.map { TeamScopeRef(teamId, it) }
 
-    private fun forgetTeamLocally(teamId: String) {
+    private suspend fun forgetTeamLocally(teamId: String) {
         // Read the spaces first: removing the TEAM record takes the nested scope keys with it, and
         // their cursors would then never be cleared (a re-join would resume mid-stream and miss records).
-        // Every link the space was ever synced on, not just the one live now: the removal that leads here
-        // follows a network round trip, so the session can be gone or on another server by the time it
-        // runs — and a tip left standing is one a later re-join resumes from, missing everything below it.
-        val suffixes = spacesOf(teamId).map { it.key }
-        val spaceKeys = teamState.keys().filter { key -> suffixes.any { key == it || key.endsWith("\u0000$it") } }
+        val spaces = spacesOf(teamId)
+        // The files go before the key: a directory that cannot be listed throws here, and a key still
+        // on record is what makes the next refresh try the forget again.
+        spaceFiles.resetTeam(teamId, spaces)
         keyStore.remove(teamId)
-        teamVaults.resetTeam(teamId) // the team's vault and every scope vault under it
-        spaceKeys.forEach { teamState.setCursor(it, 0) }
         verifiedInvites.update { it - teamId } // decline/leave: drop any cached invite for this team
         _lastSyncedAt.update { it - teamId }
     }
@@ -1142,7 +1150,7 @@ class TeamsCoordinator(
             }
             if (!inviteCodec.verify(payload, rotatorKeys.signing)) continue
             keyStore.rekey(summary.id, payload.teamKey, payload.epoch)
-            teamVaults.reset(TeamScopeRef(summary.id)) // old-key file is unreadable under the new key
+            spaceFiles.reset(TeamScopeRef(summary.id)) // old-key file is unreadable under the new key
             adopted += summary.id
         }
         // Re-pull the re-encrypted records under the freshly adopted key (the reset dropped the stale file).
@@ -1282,7 +1290,9 @@ class TeamsCoordinator(
  */
 private fun TeamsFailure?.keptByTheMember(): Boolean = this != null && this != TeamsFailure.PeerKeyUnconfirmed
 
-private fun Exception.toFailure(): TeamsFailure = (this as? SyncException)?.kind.toTeamsFailure()
+private fun Exception.toFailure(): TeamsFailure =
+    if (this is TeamIdentityUnreadableException) TeamsFailure.IdentityKept
+    else (this as? SyncException)?.kind.toTeamsFailure()
 
 /**
  * Runs [block] and hands back what went wrong instead of throwing it — for the steps whose failure

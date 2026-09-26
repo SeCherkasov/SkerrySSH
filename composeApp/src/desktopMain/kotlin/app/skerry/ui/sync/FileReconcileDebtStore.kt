@@ -20,14 +20,18 @@ import java.nio.file.Path
  */
 class FileReconcileDebtStore(private val path: Path) : ReconcileDebtStore {
 
-    override fun load(): Set<ServerLink> {
+    private val unread = UnreadReconcileDebts(::read)
+
+    override fun load(): Set<ServerLink> = unread.load()
+
+    private fun read(): Set<ServerLink> {
         if (!Files.exists(path)) return emptySet()
-        return runCatching {
-            // Per line, so one unparseable entry (a truncated percent escape, which [decode] throws on)
-            // costs its own debt and no more. Losing that one is already a silent resurrection for its
-            // link; letting it take every intact line with it is the same failure on every link at once.
-            Files.readAllLines(path).mapNotNull { line -> runCatching { parse(line) }.getOrNull() }.toSet()
-        }.getOrDefault(emptySet())
+        // Per line, so one unparseable entry (a truncated percent escape, which [decode] throws on)
+        // costs its own debt and no more. Losing that one is already a silent resurrection for its
+        // link; letting it take every intact line with it is the same failure on every link at once.
+        // Decoded leniently for the same reason: a stray non-UTF-8 byte spoils its own line only.
+        return String(Files.readAllBytes(path), Charsets.UTF_8).lines()
+            .mapNotNull { line -> runCatching { parse(line) }.getOrNull() }.toSet()
     }
 
     private fun parse(line: String): ServerLink? {
@@ -39,11 +43,12 @@ class FileReconcileDebtStore(private val path: Path) : ReconcileDebtStore {
     }
 
     override fun save(debts: Set<ServerLink>) {
-        if (debts.isEmpty()) {
+        val all = unread.toWrite(debts)
+        if (all.isEmpty()) {
             Files.deleteIfExists(path)
             return
         }
-        val text = debts.joinToString(separator = "") { "${encode(it.serverUrl)}=${encode(it.accountId)}\n" }
+        val text = all.joinToString(separator = "") { "${encode(it.serverUrl)}=${encode(it.accountId)}\n" }
         PrivateConfig.atomicWrite(path, text.encodeToByteArray())
     }
 

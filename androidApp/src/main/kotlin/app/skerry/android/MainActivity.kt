@@ -46,6 +46,7 @@ import app.skerry.shared.vault.FileBiometricSupportStore
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.FileCredentialUsageLog
 import app.skerry.shared.vault.FileSecurityLog
+import app.skerry.shared.vault.SecurityEventType
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.IonspinVaultCrypto
 import app.skerry.shared.vault.SshjCertificateInspector
@@ -818,6 +819,7 @@ class MainActivity : FragmentActivity() {
                 }
                 teamsForSync?.onAccountSynced()
             },
+            onRecordsRejected = { count -> securityLog.record(SecurityEventType.SyncRecordsRejected, count.toString()) },
         )
         // Teams (zero-knowledge record sharing between accounts): coordinator on top of the same sync
         // session, per-team vaults in filesDir/teams (dataKey = teamKey from the account vault's TEAM

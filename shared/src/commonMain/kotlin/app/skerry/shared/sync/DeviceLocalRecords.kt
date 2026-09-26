@@ -111,7 +111,13 @@ class DeviceLocalRecords(private val vault: Vault) : DeviceLocalFilter {
         // plaintext metadata, and [TrashStore.restore] restores by the origin type inside the
         // *entry*. A record filed under `skerry.trash:HOST:…` whose entry says CREDENTIAL would
         // otherwise pass unopened and be restored as the very credential this refuses.
-        if (record.type != RecordType.CREDENTIAL && record.type != RecordType.TRASH) return Verdict.SHAREABLE
+        // Every other type is shareable by content, but readability is a question about the blob, not
+        // the type: a layout or a settings record [Vault.adoptDataKey] left behind would win LWW too.
+        if (record.type != RecordType.CREDENTIAL && record.type != RecordType.TRASH) {
+            val payload = vault.openRecordPayload(record) ?: return Verdict.UNREADABLE
+            payload.fill(0)
+            return Verdict.SHAREABLE
+        }
         // Wiped on the way out: this is a full credential in the clear — password, PEM, passphrase —
         // read to answer one bit, on a loop that runs unattended (FileVault.authenticates does the
         // same). The String the parse makes is the accepted JVM limitation named in [Credential].

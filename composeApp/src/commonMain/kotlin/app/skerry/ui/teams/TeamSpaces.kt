@@ -54,13 +54,15 @@ data class TeamScopeUi(
  */
 internal class TeamSpaces(
     private val keyStore: TeamKeyStore,
-    private val teamVaults: TeamVaults,
+    /** The spaces' files and cursors; a space is reset only through [TeamSpaceFiles.reset]. */
+    private val files: TeamSpaceFiles,
     private val crypto: VaultCrypto,
-    private val inviteCodec: TeamInviteCodec,
     private val accountVaultUnlocked: () -> Boolean,
     private val markError: (TeamsFailure) -> Unit,
     private val syncSpace: suspend (TeamScopeRef) -> Unit,
 ) {
+
+    private val inviteCodec = TeamInviteCodec(crypto)
 
     // --- keys ---
 
@@ -88,7 +90,7 @@ internal class TeamSpaces(
     fun vault(ref: TeamScopeRef): Vault? {
         if (!accountVaultUnlocked()) return null
         val key = key(ref) ?: return null
-        return teamVaults.open(ref, key)
+        return files.vaults.open(ref, key)
     }
 
     /**
@@ -99,11 +101,11 @@ internal class TeamSpaces(
     fun vaultResettingStale(ref: TeamScopeRef): Vault? {
         if (!accountVaultUnlocked()) return null
         val key = key(ref) ?: return null
-        return when (val r = teamVaults.openOrClassify(ref, key)) {
+        return when (val r = files.vaults.openOrClassify(ref, key)) {
             is TeamVaults.OpenResult.Opened -> r.vault
             TeamVaults.OpenResult.StaleKey -> {
-                teamVaults.reset(ref)
-                teamVaults.open(ref, key)
+                files.resetHeld(ref)
+                files.vaults.open(ref, key)
             }
             TeamVaults.OpenResult.Unreadable -> {
                 markError(TeamsFailure.VaultUnreadable)
@@ -128,7 +130,7 @@ internal class TeamSpaces(
         val liveIds = remote.map { it.scopeId }.toSet()
         keyStore.scopes(teamId).keys.filter { it !in liveIds }.forEach { gone ->
             keyStore.removeScope(teamId, gone)
-            teamVaults.reset(TeamScopeRef(teamId, gone))
+            files.reset(TeamScopeRef(teamId, gone))
         }
         adopted.forEach { syncSpace(it) }
         val keys = keyStore.scopes(teamId)
@@ -180,7 +182,7 @@ internal class TeamSpaces(
         } else {
             keyStore.rekeyScope(teamId, scope.scopeId, payload.teamKey, payload.epoch)
         }
-        teamVaults.reset(TeamScopeRef(teamId, scope.scopeId)) // the file is under the previous key
+        files.reset(TeamScopeRef(teamId, scope.scopeId)) // the file is under the previous key
         return true
     }
 
@@ -222,9 +224,9 @@ internal class TeamSpaces(
         forgetScope(teamId, scopeId)
     }
 
-    fun forgetScope(teamId: String, scopeId: String) {
+    suspend fun forgetScope(teamId: String, scopeId: String) {
         keyStore.removeScope(teamId, scopeId)
-        teamVaults.reset(TeamScopeRef(teamId, scopeId))
+        files.reset(TeamScopeRef(teamId, scopeId))
     }
 
     // --- rotation ---
@@ -311,7 +313,7 @@ internal class TeamSpaces(
     /** Open the space's vault under a known key (no stale-file handling — the key is the current one). */
     private fun openUnder(ref: TeamScopeRef, key: DataKey): Vault? {
         if (!accountVaultUnlocked()) return null
-        return teamVaults.open(ref, key)
+        return files.vaults.open(ref, key)
     }
 
     private fun seal(

@@ -86,6 +86,12 @@ class SyncCoordinator(
      */
     private val onSynced: () -> Unit = {},
     /**
+     * Called with [SyncOutcome.rejected] when a cycle refused records the server handed back — ones
+     * that do not authenticate under the account key or would re-type a record. The vault keeps its
+     * own copy either way, so nothing on screen changes; the platform records it in the security log.
+     */
+    private val onRecordsRejected: (Int) -> Unit = {},
+    /**
      * Factory for one sync cycle over the active client — injection point for [runSync] tests (see
      * [SyncRunner]). `null` (prod) — the real [SyncEngine] over vault/cursor/settings.
      */
@@ -1720,6 +1726,7 @@ class SyncCoordinator(
         val outcome = engineFactory(c).sync(s)
         retireDischargedDebt(s.accountId)
         _status.value = SyncStatus.Online(s.accountId, outcome.pushed, outcome.pulled)
+        if (outcome.rejected > 0) runCatching { onRecordsRejected(outcome.rejected) }
         // Pulled records from the server → refresh list managers, else synced data isn't visible until reopen.
         if (outcome.pulled > 0) {
             refreshSyncSettings() // another device may have changed "what to sync"

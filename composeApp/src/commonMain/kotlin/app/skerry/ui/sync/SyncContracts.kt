@@ -168,6 +168,40 @@ interface ReconcileDebtStore {
     fun save(debts: Set<ServerLink>)
 }
 
+/**
+ * The half of a file-backed [ReconcileDebtStore] that keeps its best-effort [ReconcileDebtStore.load]
+ * from costing debts. A failed read hands the caller an empty set, and the caller's next save would
+ * replace the file with its own set — erasing every debt the file held that nobody read, and with them
+ * the rebuild those links owe. So the first [toWrite] after a failed [load] reads the file again
+ * (throwing, as a refused write does, if it still cannot), and the debts found there are written along
+ * with the caller's until the caller names them itself.
+ *
+ * [read] returns the debts on disk (empty when there is no file) and throws when the file cannot be read.
+ */
+class UnreadReconcileDebts(private val read: () -> Set<ServerLink>) {
+    private var unread = false
+    private var carried: Set<ServerLink> = emptySet()
+
+    fun load(): Set<ServerLink> = try {
+        read().also { unread = false; carried = emptySet() }
+    } catch (_: Exception) {
+        unread = true
+        emptySet()
+    }
+
+    /** What a save of [debts] must write. */
+    fun toWrite(debts: Set<ServerLink>): Set<ServerLink> {
+        if (unread) {
+            carried = read()
+            unread = false
+        }
+        val all = debts + carried
+        // Once the caller names a carried debt it owns it, and a later save without it is a retire.
+        carried = carried - debts
+        return all
+    }
+}
+
 class InMemoryReconcileDebtStore : ReconcileDebtStore {
     private var debts: Set<ServerLink> = emptySet()
     override fun load(): Set<ServerLink> = debts

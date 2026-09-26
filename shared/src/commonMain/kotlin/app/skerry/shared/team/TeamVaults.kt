@@ -6,6 +6,8 @@ import app.skerry.shared.vault.UnlockResult
 import app.skerry.shared.vault.constantTimeEquals
 import app.skerry.shared.vault.Vault
 import app.skerry.shared.vault.VaultCrypto
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import okio.FileSystem
 import okio.Path
 
@@ -15,7 +17,9 @@ import okio.Path
  * space's key, so record blobs stay wire-compatible between members: the server and every member
  * holding the key decrypt the same bytes. The keys themselves live in a TEAM record in the account
  * vault; this only opens/creates the files.
- * Instances are cached: one [Vault] per space per process (FileVault has its own internal lock).
+ * Instances are cached: one [Vault] per space per process. The cache is under a lock of its own
+ * (FileVault's only covers one instance): a sync and a screen opening the same space at once would
+ * otherwise each build a FileVault over one file, and whichever wrote last would erase the other's writes.
  */
 class TeamVaults(
     private val dir: Path,
@@ -36,6 +40,7 @@ class TeamVaults(
     private class OpenVault(val vault: Vault, val key: ByteArray)
 
     private val open = mutableMapOf<String, OpenVault>()
+    private val lock = SynchronizedObject()
 
     /**
      * Outcome of [openOrClassify]. [StaleKey] and [Unreadable] both mean "no usable vault", but the
@@ -60,11 +65,11 @@ class TeamVaults(
         (openOrClassify(ref, key) as? OpenResult.Opened)?.vault
 
     /** Like [open] but classifies a failure as [OpenResult.StaleKey] vs [OpenResult.Unreadable]. */
-    fun openOrClassify(ref: TeamScopeRef, key: DataKey): OpenResult {
+    fun openOrClassify(ref: TeamScopeRef, key: DataKey): OpenResult = synchronized(lock) {
         requireSafe(ref)
         open[ref.key]?.let { cached ->
             if (cached.vault.isUnlocked && constantTimeEquals(cached.key, key.bytes)) {
-                return OpenResult.Opened(cached.vault)
+                return@synchronized OpenResult.Opened(cached.vault)
             }
             // Opened under a key that is no longer the one being asked for (or already locked):
             // drop it and take the normal path, which classifies the file against THIS key.
@@ -89,28 +94,28 @@ class TeamVaults(
         } else {
             // Corrupt/unreadable file: unlockWithDataKey already wiped ownedKey. Don't reset — the
             // bytes may be a transient/partial write over records not yet pushed.
-            if (vault.unlockWithDataKey(ownedKey) != UnlockResult.Success) return OpenResult.Unreadable
+            if (vault.unlockWithDataKey(ownedKey) != UnlockResult.Success) return@synchronized OpenResult.Unreadable
             // unlockWithDataKey doesn't validate the key (team-vault meta has no wrapping), so
             // validate by trial-decrypting the first live record. An empty vault accepts any key.
             // A decrypt failure here is a superseded key, not corruption — safe to reset.
             val probe = vault.records().firstOrNull { !it.deleted }
             if (probe != null && vault.openPayload(probe.id) == null) {
                 vault.lock()
-                return OpenResult.StaleKey
+                return@synchronized OpenResult.StaleKey
             }
         }
         open[ref.key] = OpenVault(vault, key.bytes.copyOf())
-        return OpenResult.Opened(vault)
+        OpenResult.Opened(vault)
     }
 
     /** Lock and forget all open vaults (e.g. when the account vault locks). */
-    fun lockAll() {
+    fun lockAll(): Unit = synchronized(lock) {
         open.values.forEach { it.vault.lock(); it.key.fill(0) }
         open.clear()
     }
 
     /** Delete one space's file (left/deleted/access revoked): the local copy is no longer needed. */
-    fun reset(ref: TeamScopeRef) {
+    fun reset(ref: TeamScopeRef): Unit = synchronized(lock) {
         requireSafe(ref)
         open.remove(ref.key)?.let { it.vault.lock(); it.key.fill(0) }
         fileSystem.delete(dir / ref.fileName, mustExist = false)
@@ -121,12 +126,14 @@ class TeamVaults(
      * (leave/delete/removal): dropping only the team vault would leave a scope's records — which the
      * account no longer has any right to — sitting on disk.
      */
-    fun resetTeam(teamId: String) {
+    fun resetTeam(teamId: String): Unit = synchronized(lock) {
         require(TeamScopeRef.isSafeId(teamId)) { "unsafe teamId" }
         reset(TeamScopeRef(teamId))
         val prefix = "${teamId}__"
-        val files = runCatching { fileSystem.list(dir) }.getOrDefault(emptyList())
-        files.map { it.name }
+        // No directory yet is nothing to delete; one that cannot be listed is a failure the caller
+        // has to see, not an empty listing that leaves the scope files on disk.
+        if (!fileSystem.exists(dir)) return@synchronized
+        fileSystem.list(dir).map { it.name }
             .filter { it.startsWith(prefix) && it.endsWith(SUFFIX) }
             .forEach { reset(TeamScopeRef(teamId, it.removePrefix(prefix).removeSuffix(SUFFIX))) }
     }

@@ -74,6 +74,7 @@ import app.skerry.ui.generated.resources.lib_teams_err_already_invited
 import app.skerry.ui.generated.resources.lib_teams_err_already_shared
 import app.skerry.ui.generated.resources.lib_teams_err_forbidden
 import app.skerry.ui.generated.resources.lib_teams_err_invite_unverified
+import app.skerry.ui.generated.resources.lib_teams_err_identity_kept
 import app.skerry.ui.generated.resources.lib_teams_err_identity_unreadable
 import app.skerry.ui.generated.resources.lib_teams_err_key_missing
 import app.skerry.ui.generated.resources.lib_teams_err_network
@@ -448,6 +449,7 @@ internal fun teamsFailureText(f: TeamsFailure): String = when (f) {
     TeamsFailure.PinNotRecorded -> stringResource(Res.string.lib_teams_err_pin_not_recorded)
     TeamsFailure.PinMovedMeanwhile -> stringResource(Res.string.lib_teams_err_pin_moved)
     TeamsFailure.IdentityUnreadable -> stringResource(Res.string.lib_teams_err_identity_unreadable)
+    TeamsFailure.IdentityKept -> stringResource(Res.string.lib_teams_err_identity_kept)
 }
 
 /** launch from click handlers: a param-less suspend block, shorter than a lambda with CoroutineScope. */

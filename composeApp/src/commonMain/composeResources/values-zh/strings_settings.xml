@@ -175,6 +175,7 @@
     <string name="settings_event_device_paired">新设备已配对</string>
     <string name="settings_event_key_exported">密钥已导出到文件</string>
     <string name="settings_event_lock_incomplete">自动锁定未完全完成</string>
+    <string name="settings_event_sync_rejected">同步拒绝了来自服务器的记录</string>
     <string name="settings_event_with_detail">%1$s：%2$s</string>
     <string name="settings_event_line">%1$s · %2$s</string>
     <string name="settings_time_today">今天 %1$s</string>

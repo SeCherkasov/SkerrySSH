@@ -218,6 +218,29 @@ class DeviceLocalCredentialSyncTest {
     }
 
     /**
+     * The rule is about the blob, not about credentials: [Vault.adoptDataKey] leaves every record of
+     * the replaced key behind, and a layout, a settings record or the team identity pushed at its
+     * version would win LWW over the copy the other devices can still open.
+     */
+    @Test
+    fun `an unreadable record of any type is not pushed`() = runBlocking {
+        initializeVaultCrypto()
+        val vault = newVault("devA")
+        vault.create(password.toCharArray())
+        vault.put("old-host", RecordType.HOST, """{"id":"old-host"}""".encodeToByteArray())
+        vault.put("group", RecordType.GROUP, """{"order":[]}""".encodeToByteArray())
+        vault.put("settings", RecordType.SETTINGS, """{"theme":"dark"}""".encodeToByteArray())
+        vault.put("identity", RecordType.TEAM_IDENTITY, """{"k":"v"}""".encodeToByteArray())
+        assertTrue(vault.adoptDataKey(IonspinVaultCrypto().newDataKey(), password.toCharArray()))
+        vault.put("h1", RecordType.HOST, """{"id":"h1"}""".encodeToByteArray())
+
+        val client = FakeSyncClient()
+        engine(client, vault).sync(session)
+
+        assertEquals(listOf("h1"), client.pushed.map { it.id }, "a record no device can open reached the server")
+    }
+
+    /**
      * What a reconcile spares is a narrower question than what the push refuses. Only a record the
      * server can never hand back — one held here because of what its payload says — may survive the
      * clear; a blob that no longer opens is dead weight the clear has always been the one to remove.

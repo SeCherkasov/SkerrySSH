@@ -39,6 +39,7 @@ import app.skerry.shared.ssh.VaultTrustedCaStore
 import app.skerry.shared.vault.BouncyCastleSshKeyGenerator
 import app.skerry.shared.vault.FileCredentialUsageLog
 import app.skerry.shared.vault.FileSecurityLog
+import app.skerry.shared.vault.SecurityEventType
 import app.skerry.shared.vault.FileVault
 import app.skerry.shared.vault.CredentialStore
 import app.skerry.shared.vault.TrashStore
@@ -301,6 +302,7 @@ private fun buildDesktopGraph(dir: Path, prefs: FilePrefs): DesktopGraph {
             reloadManagers()
             teamsForSync?.onAccountSynced()
         },
+        onRecordsRejected = { count -> securityLog.record(SecurityEventType.SyncRecordsRejected, count.toString()) },
     )
     // Teams (zero-knowledge record sharing between accounts): coordinator layered on the same sync
     // session. Per-team vaults live in config/teams/ (dataKey = teamKey from the account vault's

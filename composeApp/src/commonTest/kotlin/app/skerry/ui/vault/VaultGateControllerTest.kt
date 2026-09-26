@@ -195,6 +195,22 @@ class VaultGateControllerTest {
     }
 
     @Test
+    fun `a security log that cannot be written does not stop the vault it audits`() {
+        // The log refuses a write over a file it could not read (and any failed write): the event is
+        // lost, but the vault step it records has already happened and must still land.
+        val created = gate(FakeVault(exists = false), securityLog = ThrowingSecurityLog)
+        created.create("long enough password".toCharArray(), "long enough password".toCharArray())
+        assertEquals(VaultGateState.Unlocked, created.state)
+
+        val paired = gate(FakeVault(exists = false), securityLog = ThrowingSecurityLog)
+        paired.completePairing()
+        assertEquals(VaultGateState.Unlocked, paired.state)
+
+        val changed = gate(FakeVault(exists = true, changePasswordResult = true), securityLog = ThrowingSecurityLog)
+        assertTrue(changed.changePassword("old".toCharArray(), "new password".toCharArray()))
+    }
+
+    @Test
     fun `unlock with the right password unlocks`() {
         val vault = FakeVault(exists = true, unlockResult = UnlockResult.Success)
         val controller = gate(vault)
