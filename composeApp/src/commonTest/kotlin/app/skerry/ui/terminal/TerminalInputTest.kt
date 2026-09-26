@@ -308,4 +308,41 @@ class TerminalInputTest {
         assertFalse(isImeOwnedPrintable(imeInput = true, ctrl = true, alt = false, codePoint = 'c'.code))
         assertFalse(isImeOwnedPrintable(imeInput = false, ctrl = false, alt = false, codePoint = '3'.code))
     }
+
+    @Test
+    fun `ctrl with backspace, enter and slash sends the xterm control bytes`() {
+        assertEquals(listOf(0x08), codes(mapTerminalKey(Key.Backspace, ctrl = true, codePoint = 0)))
+        assertEquals(listOf(0x0d), codes(mapTerminalKey(Key.Enter, ctrl = true, codePoint = 0)))
+        assertEquals(listOf(0x0d), codes(mapTerminalKey(Key.NumPadEnter, ctrl = true, codePoint = 0)))
+        assertEquals(listOf(0x1f), codes(mapTerminalKey(Key.Slash, ctrl = true, codePoint = 0)))
+        assertEquals(listOf(0x1b, 0x08), codes(mapTerminalKey(Key.Backspace, ctrl = true, alt = true, codePoint = 0)))
+    }
+
+    @Test
+    fun `altgr on windows arrives as ctrl and alt and still types its character`() {
+        // German layout: AltGr+Q = '@', AltGr+7 = '{'. Windows reports AltGr as Ctrl+Alt held.
+        assertEquals("@", mapTerminalKey(Key.Q, ctrl = true, alt = true, codePoint = '@'.code))
+        assertEquals("{", mapTerminalKey(Key.Seven, ctrl = true, alt = true, codePoint = '{'.code))
+        // A real Ctrl+Alt+letter still reaches the shell as meta + control byte.
+        assertEquals(listOf(0x1b, 0x11), codes(mapTerminalKey(Key.Q, ctrl = true, alt = true, codePoint = 'q'.code)))
+        assertEquals(listOf(0x1b, 0x11), codes(mapTerminalKey(Key.Q, ctrl = true, alt = true, codePoint = 0x11)))
+        assertEquals(listOf(0x1b, 0x11), codes(mapTerminalKey(Key.Q, ctrl = true, alt = true, codePoint = 0xFFFF)))
+        assertEquals(listOf(0x1b, 0x1f), codes(mapTerminalKey(Key.Slash, ctrl = true, alt = true, codePoint = '/'.code)))
+    }
+
+    /**
+     * The layout's own letter is not AltGr: on a Russian layout Ctrl+Alt+Q may arrive carrying 'й',
+     * and Shift+Ctrl+Alt+Minus carrying '_' (Emacs C-M-_). Both are still meta + control byte.
+     */
+    @Test
+    fun `ctrl alt on a non-latin layout or with shift is not taken for altgr`() {
+        assertEquals(listOf(0x1b, 0x11), codes(mapTerminalKey(Key.Q, ctrl = true, alt = true, codePoint = 'й'.code)))
+        assertEquals(listOf(0x1b, 0x11), codes(mapTerminalKey(Key.Q, ctrl = true, alt = true, shift = true, codePoint = 'Й'.code)))
+        assertEquals(
+            listOf(0x1b, 0x1f),
+            codes(mapTerminalKey(Key.Minus, ctrl = true, alt = true, shift = true, codePoint = '_'.code)),
+        )
+        // A Latin letter from the third level is still typed (Polish AltGr+A).
+        assertEquals("ą", mapTerminalKey(Key.A, ctrl = true, alt = true, codePoint = 'ą'.code))
+    }
 }

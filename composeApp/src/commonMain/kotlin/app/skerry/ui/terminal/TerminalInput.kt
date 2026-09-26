@@ -50,14 +50,7 @@ fun mapTerminalKey(
     // Navigation and function keys come FIRST: with Ctrl/Alt/Shift they encode the modifier inside
     // CSI (ESC[1;<mod>x), so Ctrl+arrow must not fall into the ctrl block below (which would return null).
     navKeySequence(key, applicationCursor, shift, alt, ctrl)?.let { return it }
-    if (ctrl) {
-        // Ctrl+key → C0 byte. Determined from the PHYSICAL key, not codePoint: on desktop AWT sends
-        // Ctrl+C directly as the finished control byte (keyChar 0x03), but layout-dependent/lone
-        // combos as CHAR_UNDEFINED, so relying on codePoint broke Ctrl+letter in practice.
-        // Alt adds the meta ESC prefix.
-        val ctrlByte = controlByte(key, codePoint) ?: return null
-        return meta(alt, ctrlByte.toChar().toString())
-    }
+    if (ctrl) return ctrlSequence(key, codePoint, alt)
     // C0-byte editing keys — honor Alt=Meta (Alt+Backspace = delete word).
     when (key) {
         Key.Enter, Key.NumPadEnter -> return meta(alt, "\r")
@@ -106,6 +99,18 @@ fun focusReportSequence(focused: Boolean): String = if (focused) "$ESC[I" else "
 /** Meta wrapper: prepends ESC when Alt is held (xterm metaSendsEscape). */
 private fun meta(alt: Boolean, seq: String): String = if (alt) ESC + seq else seq
 
+private fun ctrlSequence(key: Key, codePoint: Int, alt: Boolean): String? {
+    // Windows reports AltGr as Ctrl+Alt held: the character the layout produced (German
+    // AltGr+Q = '@') is the keypress, not a meta control byte.
+    if (alt) altGrChar(key, codePoint)?.let { return it }
+    // Ctrl+key → C0 byte. Determined from the PHYSICAL key, not codePoint: on desktop AWT sends
+    // Ctrl+C directly as the finished control byte (keyChar 0x03), but layout-dependent/lone
+    // combos as CHAR_UNDEFINED, so relying on codePoint broke Ctrl+letter in practice.
+    // Alt adds the meta ESC prefix.
+    val ctrlByte = controlByte(key, codePoint) ?: return null
+    return meta(alt, ctrlByte.toChar().toString())
+}
+
 /**
  * Control C0 byte for Ctrl+key, or `null` if the combo isn't a control sequence. Determined from the
  * physical key first (reliable regardless of AWT's keyChar: Ctrl+C arrives as 0x03, sometimes as
@@ -119,6 +124,9 @@ private fun controlByte(key: Key, codePoint: Int): Int? {
         Key.Backslash -> 0x1c     // Ctrl+\ = FS
         Key.RightBracket -> 0x1d  // Ctrl+] = GS
         Key.Spacebar -> 0x00      // Ctrl+Space = NUL
+        Key.Slash, Key.Minus -> 0x1f // Ctrl+/ and Ctrl+_ = US
+        Key.Backspace -> 0x08     // Ctrl+Backspace = BS, as xterm sends it
+        Key.Enter, Key.NumPadEnter -> 0x0d
         else -> when (codePoint) {
             in 1..26 -> codePoint
             in 'a'.code..'z'.code -> codePoint - 'a'.code + 1
@@ -143,6 +151,44 @@ private fun printableChar(key: Key, codePoint: Int, shift: Boolean): Char? {
         val c = 'a' + idx
         if (shift) c.uppercaseChar() else c
     }
+}
+
+/**
+ * The character of a Ctrl+Alt press that is really AltGr, or `null`. A genuine Ctrl+Alt+Q arrives as
+ * `q`, as the control byte or as [CHAR_UNDEFINED] — or as the layout's own letter for the key (`й`
+ * on a Russian layout) and, with Shift, its shifted character (`_` on Minus). What remains is the
+ * third level: a symbol, or a Latin letter (Polish AltGr+A = `ą`).
+ */
+private fun altGrChar(key: Key, codePoint: Int): String? {
+    if (codePoint == 0 || codePoint == CHAR_UNDEFINED || codePoint.toChar().isISOControl()) return null
+    val ch = codePoint.toChar()
+    if (ch.lowercaseChar() == baseChar(key) || ch == shiftedChar(key)) return null
+    if (ch.isLetter() && codePoint >= LATIN_LETTERS_END) return null
+    return ch.toString()
+}
+
+/** Past Latin Extended-B: a letter from here on belongs to a script of its own, not a third level. */
+private const val LATIN_LETTERS_END = 0x0250
+
+/** The shifted character of a non-letter key [baseChar] knows, or `null`. */
+private fun shiftedChar(key: Key): Char? = when (key) {
+    Key.LeftBracket -> '{'
+    Key.Backslash -> '|'
+    Key.RightBracket -> '}'
+    Key.Slash -> '?'
+    Key.Minus -> '_'
+    else -> null
+}
+
+/** The unshifted character of a key whose control byte [controlByte] knows, or `null`. */
+private fun baseChar(key: Key): Char? = letterIndex(key)?.let { 'a' + it } ?: when (key) {
+    Key.LeftBracket -> '['
+    Key.Backslash -> '\\'
+    Key.RightBracket -> ']'
+    Key.Spacebar -> ' '
+    Key.Slash -> '/'
+    Key.Minus -> '-'
+    else -> null
 }
 
 /** Index of a letter key A..Z → 0..25, or `null` for a non-letter key. */
