@@ -20,6 +20,7 @@ class ClipboardChannelTest {
 
     @Test
     fun `a server offering text is asked for it, and the reply reaches the caller`() = runTest {
+        channel.onData(serverCaps(longNames = true))
         channel.onData(message(CB_FORMAT_LIST, formatListBody(CF_UNICODETEXT)))
 
         assertEquals(listOf(CB_FORMAT_LIST_RESPONSE, CB_FORMAT_DATA_REQUEST), sent.map { typeOf(it) })
@@ -33,6 +34,7 @@ class ClipboardChannelTest {
 
     @Test
     fun `a server offering only formats we do not take is acknowledged but not fetched`() = runTest {
+        channel.onData(serverCaps(longNames = true))
         channel.onData(message(CB_FORMAT_LIST, formatListBody(CF_BITMAP)))
 
         assertEquals(listOf(CB_FORMAT_LIST_RESPONSE), sent.map { typeOf(it) })
@@ -40,6 +42,7 @@ class ClipboardChannelTest {
 
     @Test
     fun `a failed data response is dropped rather than pasted as empty text`() = runTest {
+        channel.onData(serverCaps(longNames = true))
         channel.onData(message(CB_FORMAT_LIST, formatListBody(CF_UNICODETEXT)))
         sent.clear()
 
@@ -72,6 +75,56 @@ class ClipboardChannelTest {
         assertEquals(CB_RESPONSE_FAIL, flagsOf(sent.single()))
     }
 
+    /**
+     * A server that never agreed to long format names sends the short form: 32 bytes of name after
+     * each id, ASCII here. Read as long names, the id after a named format lands off its boundary and
+     * the text offer is missed.
+     */
+    @Test
+    fun `a short format list from a server without long names is read on its 36-byte stride`() = runTest {
+        val body = RdpWriter(72)
+            .u32le(CF_CSV).bytes("Csv".encodeToByteArray().copyOf(32))
+            .u32le(CF_UNICODETEXT).bytes(ByteArray(32))
+            .toByteArray()
+
+        channel.onData(message(CB_FORMAT_LIST, body, flags = CB_ASCII_NAMES))
+
+        assertEquals(listOf(CB_FORMAT_LIST_RESPONSE, CB_FORMAT_DATA_REQUEST), sent.map { typeOf(it) })
+    }
+
+    @Test
+    fun `our offer uses the short form unless the server agreed to long names`() = runTest {
+        channel.offerText("x")
+        assertEquals(8 + 36, sent.last().size)
+
+        channel.onData(serverCaps(longNames = true))
+        channel.offerText("x")
+        assertEquals(8 + 6, sent.last().size)
+    }
+
+    /**
+     * The server's capabilities are untrusted input: a set claiming more than it carries, or a
+     * general set cut short, leaves the short form in place instead of throwing. The general set is
+     * found behind a set of another type.
+     */
+    @Test
+    fun `malformed capabilities keep the short form and a later general set is still found`() = runTest {
+        val overlong = RdpWriter(16).u16le(1).u16le(0).u16le(1).u16le(200).u32le(2).u32le(2).toByteArray()
+        channel.onData(message(CB_CLIP_CAPS, overlong))
+        val truncated = RdpWriter(16).u16le(1).u16le(0).u16le(1).u16le(8).u32le(2).toByteArray()
+        channel.onData(message(CB_CLIP_CAPS, truncated))
+        channel.offerText("x")
+        assertEquals(8 + 36, sent.last().size)
+
+        val otherFirst = RdpWriter(32).u16le(2).u16le(0)
+            .u16le(0x7f).u16le(8).u32le(0)
+            .u16le(1).u16le(12).u32le(2).u32le(2)
+            .toByteArray()
+        channel.onData(message(CB_CLIP_CAPS, otherFirst))
+        channel.offerText("x")
+        assertEquals(8 + 6, sent.last().size)
+    }
+
     @Test
     fun `a message claiming more data than it carries is ignored`() = runTest {
         val lying = RdpWriter(16).u16le(CB_FORMAT_LIST).u16le(0).u32le(1000).u32le(CF_UNICODETEXT).toByteArray()
@@ -80,6 +133,12 @@ class ClipboardChannelTest {
 
         assertEquals(emptyList(), sent.map { typeOf(it) })
     }
+
+    /** CB_CLIP_CAPS with one general capability set. */
+    private fun serverCaps(longNames: Boolean): ByteArray = message(
+        CB_CLIP_CAPS,
+        RdpWriter(16).u16le(1).u16le(0).u16le(1).u16le(12).u32le(2).u32le(if (longNames) 2 else 0).toByteArray(),
+    )
 
     private fun message(type: Int, body: ByteArray = ByteArray(0), flags: Int = 0): ByteArray =
         RdpWriter(body.size + 8).u16le(type).u16le(flags).u32le(body.size).bytes(body).toByteArray()
@@ -114,6 +173,8 @@ class ClipboardChannelTest {
         const val CB_CLIP_CAPS = 0x0007
         const val CB_RESPONSE_OK = 0x0001
         const val CB_RESPONSE_FAIL = 0x0002
+        const val CB_ASCII_NAMES = 0x0004
+        const val CF_CSV = 0xC00A
         const val CF_BITMAP = 2
         const val CF_UNICODETEXT = 13
     }

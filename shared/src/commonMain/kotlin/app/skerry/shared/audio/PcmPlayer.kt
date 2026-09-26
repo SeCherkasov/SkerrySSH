@@ -88,18 +88,39 @@ class PcmPlayer(
     /** Formats already announced to the trace; a session alternates between two or three of them. */
     private val traced = mutableSetOf<RemoteAudioFormat>()
 
+    /**
+     * The bytes past the last whole frame of the previous block, in [tailFormat]. RDPSND does not
+     * promise whole frames per block; a device handed a partial one either throws (the desktop line)
+     * or drops it quietly (Android's `AudioTrack`), and every later sample then sits off its frame
+     * boundary. Touched by the playback path only; [flush] asks for it to go through [dropTail].
+     */
+    private var tail = ByteArray(0)
+    private var tailFormat: RemoteAudioFormat? = null
+    private var dropTail = false
+
     override fun play(format: RemoteAudioFormat, pcm: ByteArray) {
         val open = device(format) ?: return
+        val drop = synchronized(lock) { dropTail.also { dropTail = false } }
+        if (drop || format != tailFormat) tail = ByteArray(0)
+        tailFormat = format
+        val data = if (tail.isEmpty()) pcm else tail + pcm
+        val whole = data.size - data.size % format.frameBytes()
+        tail = data.copyOfRange(whole, data.size)
+        if (whole == 0) return
+        val block = if (whole == data.size) data else data.copyOf(whole)
         // A device that fails mid-block was unplugged or reclaimed; there is nothing to retry, and
         // the block it swallowed is 20 ms of a stream that keeps arriving.
-        runCatching { open.write(pcm) }.onFailure { failure ->
+        runCatching { open.write(block) }.onFailure { failure ->
             val first = synchronized(lock) { (!writesFailing).also { writesFailing = true } }
             if (first) trace("the device stopped taking blocks: $failure")
         }
     }
 
     override fun flush() {
-        val open = synchronized(lock) { sink } ?: return
+        val open = synchronized(lock) {
+            dropTail = true
+            sink
+        } ?: return
         runCatching { open.flush() }
     }
 
@@ -162,3 +183,5 @@ class PcmPlayer(
         return open
     }
 }
+
+private fun RemoteAudioFormat.frameBytes(): Int = (channels * ((bitsPerSample + 7) / 8)).coerceAtLeast(1)

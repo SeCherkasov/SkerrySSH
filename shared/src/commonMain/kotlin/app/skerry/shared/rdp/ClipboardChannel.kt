@@ -32,6 +32,13 @@ class ClipboardChannel(private val send: suspend (ByteArray) -> Unit) {
     /** Whether the server has announced text of its own that we have not fetched yet. */
     private var serverHasText = false
 
+    /**
+     * Whether both sides agreed to long format names. Until the server's capabilities say so, format
+     * lists use the short form — a fixed 32-byte name per entry — in both directions (MS-RDPECLIP
+     * 2.2.3.1).
+     */
+    private var longNames = false
+
     /** Handle one channel payload from the server. */
     suspend fun onData(data: ByteArray) {
         val reader = RdpReader(data)
@@ -47,27 +54,22 @@ class ClipboardChannel(private val send: suspend (ByteArray) -> Unit) {
                 // The server is ready: answer with our capabilities and an empty format list, which
                 // is what tells it we speak the channel at all.
                 send(capabilities())
-                send(formatList(null))
+                send(formatList(null, longNames = false))
+            }
+
+            CB_CLIP_CAPS -> {
+                val agreed = agreesToLongNames(body)
+                lock.withLock { longNames = agreed }
             }
 
             CB_FORMAT_LIST -> {
-                val hasText = announcesText(body, flags)
+                val hasText = announcesText(body, flags, lock.withLock { longNames })
                 lock.withLock { serverHasText = hasText }
                 send(formatListResponse())
                 if (hasText) send(formatDataRequest())
             }
 
-            CB_FORMAT_DATA_REQUEST -> {
-                val requested = if (body.remaining >= 4) body.u32le() else 0
-                val text = lock.withLock { offeredText }
-                send(
-                    if (requested == CF_UNICODETEXT && text != null) {
-                        formatDataResponse(text)
-                    } else {
-                        failureResponse()
-                    },
-                )
-            }
+            CB_FORMAT_DATA_REQUEST -> answerDataRequest(body)
 
             CB_FORMAT_DATA_RESPONSE -> {
                 if (flags and CB_RESPONSE_FAIL != 0) return
@@ -77,10 +79,19 @@ class ClipboardChannel(private val send: suspend (ByteArray) -> Unit) {
         }
     }
 
+    private suspend fun answerDataRequest(body: RdpReader) {
+        val requested = if (body.remaining >= 4) body.u32le() else 0
+        val text = lock.withLock { offeredText }
+        send(if (requested == CF_UNICODETEXT && text != null) formatDataResponse(text) else failureResponse())
+    }
+
     /** Offer [text] to the server as the local clipboard's new contents. */
     suspend fun offerText(text: String) {
-        lock.withLock { offeredText = text }
-        send(formatList(text))
+        val long = lock.withLock {
+            offeredText = text
+            longNames
+        }
+        send(formatList(text, long))
     }
 
     /** Text received from the server since the last call. */
@@ -91,12 +102,32 @@ class ClipboardChannel(private val send: suspend (ByteArray) -> Unit) {
         out
     }
 
-    private fun announcesText(body: RdpReader, flags: Int): Boolean {
+    private fun agreesToLongNames(body: RdpReader): Boolean {
+        if (body.remaining < 4) return false
+        var sets = body.u16le()
+        body.skip(2) // pad
+        while (sets-- > 0 && body.remaining >= 4) {
+            val type = body.u16le()
+            val length = body.u16le()
+            if (length < 4 || length - 4 > body.remaining) return false
+            val set = body.slice(length - 4)
+            if (type == CB_CAPSTYPE_GENERAL && set.remaining >= 8) {
+                set.u32le() // version
+                return set.u32le() and CB_USE_LONG_FORMAT_NAMES != 0
+            }
+        }
+        return false
+    }
+
+    private fun announcesText(body: RdpReader, flags: Int, longNames: Boolean): Boolean {
         val asciiNames = flags and CB_ASCII_NAMES != 0
         while (body.remaining >= 4) {
             val formatId = body.u32le()
-            // Long format names are null-terminated UTF-16 (or ASCII when the flag says so).
-            if (asciiNames) {
+            if (!longNames) {
+                if (body.remaining < SHORT_NAME_SIZE) return false
+                body.skip(SHORT_NAME_SIZE)
+            } else if (asciiNames) {
+                // Long format names are null-terminated UTF-16 (or ASCII when the flag says so).
                 while (body.remaining > 0 && body.u8() != 0) Unit
             } else {
                 while (body.remaining >= 2 && body.u16le() != 0) Unit
@@ -140,11 +171,12 @@ class ClipboardChannel(private val send: suspend (ByteArray) -> Unit) {
     }
 
     /** Announce what we hold; [text] null means "the local clipboard has nothing for you". */
-    private fun formatList(text: String?): ByteArray {
-        val body = RdpWriter(16)
+    private fun formatList(text: String?, longNames: Boolean): ByteArray {
+        val body = RdpWriter(4 + SHORT_NAME_SIZE)
         if (text != null) {
             body.u32le(CF_UNICODETEXT)
-            body.u16le(0) // an empty long format name
+            // An empty name: a lone terminator in the long form, 32 zero bytes in the short one.
+            body.bytes(ByteArray(if (longNames) 2 else SHORT_NAME_SIZE))
         }
         return message(CB_FORMAT_LIST, 0, body.toByteArray())
     }
@@ -165,6 +197,7 @@ class ClipboardChannel(private val send: suspend (ByteArray) -> Unit) {
 
     private companion object {
         const val HEADER_SIZE = 8
+        const val SHORT_NAME_SIZE = 32
 
         const val CB_MONITOR_READY = 0x0001
         const val CB_FORMAT_LIST = 0x0002

@@ -538,6 +538,21 @@ class RfbCodecTest {
     }
 
     @Test
+    fun desktop_size_with_unchanged_size_does_not_clear_the_framebuffer() = runTest {
+        val fb = RemoteFramebuffer(2, 1)
+        fb.setPixel(0, 0, 0xFF123456.toInt())
+        val update = Wire()
+            .u8(RfbCodec.MSG_FRAMEBUFFER_UPDATE).u8(0).u16(1)
+            .u16(0).u16(0).u16(2).u16(1).s32(RfbCodec.ENC_DESKTOP_SIZE)
+            .build()
+
+        val updates = codec(FixtureSource(update), CapturingSink(), fb).readMessage()
+
+        assertTrue(updates.none { it is VncUpdate.Resize })
+        assertEquals(0xFF123456.toInt(), fb.pixels[0])
+    }
+
+    @Test
     fun failed_own_resize_request_does_not_resize() = runTest {
         val fb = RemoteFramebuffer(2, 1)
         // reason=1 (our SetDesktopSize), status=1 (prohibited). Dimensions deliberately differ from
