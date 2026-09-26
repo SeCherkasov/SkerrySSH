@@ -50,7 +50,8 @@ class IncomingRecord(
  * is true if any record won LWW and the cursor advanced; PUT uses it to decide whether to send a
  * WS signal (a no-op push does not publish, to avoid a push -> WS -> push loop).
  */
-data class UpsertResult(val records: List<StoredRecord>, val cursor: Long, val changed: Boolean)
+/** [seqBefore] is the account cursor this push started from; [cursor] the one it left. */
+data class UpsertResult(val records: List<StoredRecord>, val cursor: Long, val changed: Boolean, val seqBefore: Long)
 
 /**
  * Encrypted vault records. Implements LWW conflict resolution
@@ -120,7 +121,7 @@ class RecordRepository(private val db: Database, private val lockAccountRow: Boo
         if (changed) {
             Accounts.update({ Accounts.id eq accountId }) { it[syncSeq] = seq }
         }
-        UpsertResult(result, seq, changed)
+        UpsertResult(result, seq, changed, seqBefore)
     }
 
     /**

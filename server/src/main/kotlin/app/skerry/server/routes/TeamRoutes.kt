@@ -127,7 +127,9 @@ fun Route.teamRoutes(services: Services) {
             services, teamId, principal.accountId, { it == TeamRoles.OWNER }, "owner role required",
         ) ?: return@delete
         services.teams.deleteTeam(teamId)
-        services.activity.record(principal.accountId, "team.delete", teamId, teamId = teamId)
+        // Account-level, not in the team's bucket: that bucket went with the team, and an event filed
+        // under the id would be the first entry of whichever team claims the id next.
+        services.activity.record(principal.accountId, "team.delete", teamId)
         // Notify all former members that membership changed so they re-read the team list.
         members.forEach { services.notifier.publishMembership(it.accountId) }
         call.respond(HttpStatusCode.OK)

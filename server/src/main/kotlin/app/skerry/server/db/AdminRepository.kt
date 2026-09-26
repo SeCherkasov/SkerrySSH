@@ -222,11 +222,7 @@ class AdminRepository(private val db: Database) {
             val heir = heirOf(teamId, accountId)
             if (heir == null) {
                 deletedTeams += teamId
-                TeamRecords.deleteWhere { TeamRecords.teamId eq teamId }
-                TeamScopeGrants.deleteWhere { TeamScopeGrants.teamId eq teamId }
-                TeamScopes.deleteWhere { TeamScopes.teamId eq teamId }
-                TeamMembers.deleteWhere { TeamMembers.teamId eq teamId }
-                Teams.deleteWhere { Teams.id eq teamId }
+                deleteTeamRows(teamId)
             } else {
                 transferred += teamId
                 newOwners[teamId] = heir

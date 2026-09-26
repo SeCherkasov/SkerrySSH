@@ -6,6 +6,7 @@ import app.skerry.server.metrics.AuthKind
 import app.skerry.server.metrics.AuthOutcome
 import app.skerry.server.metrics.TokenType
 import app.skerry.server.accountId
+import app.skerry.server.deviceId
 import app.skerry.server.jwtPrincipal
 import app.skerry.server.model.ErrorResponse
 import app.skerry.sync.wire.PairingClaimRequest
@@ -43,7 +44,7 @@ fun Route.pairingStartRoute(services: Services) {
         val ttl = (req.ttlSeconds ?: services.config.pairingTtlSeconds).coerceIn(30, 3600)
         val expiresAt = System.currentTimeMillis() + ttl * 1000
         val code = newCode()
-        services.pairing.create(code, principal.accountId, req.encryptedDataKey.unb64(), expiresAt)
+        services.pairing.create(code, principal.accountId, principal.deviceId, req.encryptedDataKey.unb64(), expiresAt)
         call.respond(PairingStartResponse(code, expiresAt))
     }
 }
@@ -58,7 +59,7 @@ fun Route.pairingClaimRoute(services: Services) {
             val req = call.receive<PairingClaimRequest>()
             // Validate before consume: an invalid request must not burn the one-time code, and an
             // oversized deviceId would fail the insert into a varchar column on PostgreSQL with a 500.
-            if (anyTooLong(req.code, req.deviceId)) {
+            if (anyTooLong(req.code) || deviceIdTooLong(req.deviceId)) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("identifier too long"))
                 return@post
             }
@@ -72,12 +73,13 @@ fun Route.pairingClaimRoute(services: Services) {
             services.metrics.tokensIssued(TokenType.ACCESS)
             services.metrics.tokensIssued(TokenType.REFRESH)
             services.devices.register(session.accountId, req.deviceId, req.deviceName, req.platform)
+            val tokens = services.issueTokens(session.accountId, req.deviceId)
             call.respond(
                 PairingClaimResponse(
                     accountId = session.accountId,
                     encryptedDataKey = session.encryptedDataKey.b64(),
-                    accessToken = services.tokens.issueAccess(session.accountId, req.deviceId),
-                    refreshToken = services.tokens.issueRefresh(session.accountId, req.deviceId),
+                    accessToken = tokens.accessToken,
+                    refreshToken = tokens.refreshToken,
                 ),
             )
         }

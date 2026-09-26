@@ -172,4 +172,20 @@ class TeamRepositoryTest {
         assertNull(repo.membership("team-1", alice))
         assertEquals(emptyList(), repo.teamsFor(bob))
     }
+
+    @Test
+    fun `deleteTeam takes the team's history with it`() = withTestDb { db ->
+        seedTwoAccounts(db)
+        val repo = TeamRepository(db)
+        val activity = ActivityRepository(db)
+        repo.create("team-1", alice, now = 10)
+        activity.record(alice, "team.create", "team-1", teamId = "team-1")
+        activity.record(alice, "team.record_share", "r1", teamId = "team-1", recordId = "r1")
+
+        assertTrue(repo.deleteTeam("team-1"))
+        // Team ids are client-chosen: whoever creates the same id next must not inherit this log.
+        repo.create("team-1", bob, now = 30)
+
+        assertEquals(emptyList(), activity.recentForTeam("team-1").map { it.event })
+    }
 }

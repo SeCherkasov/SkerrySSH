@@ -63,6 +63,8 @@ class SchemaMigrationTest {
                 // Added by the migration, so null for a device that predates them.
                 assertNull(row[Devices.platform])
                 assertNull(row[Devices.lastSyncVersion])
+                // Generation 0 is what a token without the claim reads as, so an upgrade signs nobody out.
+                assertEquals(0L, row[Devices.tokenGeneration])
             }
 
             // Idempotent from the migrated state too: the second pass must find nothing to add.

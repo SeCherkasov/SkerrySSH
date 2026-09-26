@@ -17,11 +17,12 @@ import org.jetbrains.exposed.v1.jdbc.update
  */
 class PairingRepository(private val db: Database) {
 
-    suspend fun create(code: String, accountId: String, encryptedDataKey: ByteArray, expiresAt: Long): Unit =
+    suspend fun create(code: String, accountId: String, deviceId: String, encryptedDataKey: ByteArray, expiresAt: Long): Unit =
         dbTransaction(db) {
             Pairing.insert {
                 it[Pairing.code] = code
                 it[Pairing.accountId] = accountId
+                it[Pairing.deviceId] = deviceId
                 it[Pairing.encryptedDataKey] = ExposedBlob(encryptedDataKey)
                 it[Pairing.expiresAt] = expiresAt
                 it[consumed] = false
@@ -36,6 +37,9 @@ class PairingRepository(private val db: Database) {
      * not read-then-update. Only the transaction whose UPDATE actually changed a row (count==1)
      * wins and builds a [PairingRow]; a concurrent second claim of the same code updates 0 rows and
      * gets `null`. This guarantees a code can never be claimed twice, even under a race.
+     *
+     * A code whose originating device is revoked by now is burned and refused: [revokeDevices] deletes
+     * such codes, but a start that passed authentication just before the revoke can still insert one.
      */
     suspend fun consume(code: String, now: Long = System.currentTimeMillis()): PairingRow? =
         dbTransaction(db) {
@@ -47,6 +51,8 @@ class PairingRepository(private val db: Database) {
             if (claimed != 1) return@dbTransaction null
             // This transaction won the race; the session's immutable fields are now safe to read.
             val row = Pairing.selectAll().where { Pairing.code eq code }.single()
+            val origin = row[Pairing.deviceId]
+            if (origin != null && originRevoked(row[Pairing.accountId], origin)) return@dbTransaction null
             PairingRow(
                 code = row[Pairing.code],
                 accountId = row[Pairing.accountId],
@@ -55,6 +61,12 @@ class PairingRepository(private val db: Database) {
                 consumed = true,
             )
         }
+
+    private fun originRevoked(accountId: String, deviceId: String): Boolean =
+        Devices.selectAll()
+            .where { (Devices.accountId eq accountId) and (Devices.id eq deviceId) }
+            .singleOrNull()
+            ?.get(Devices.revoked) ?: true
 
     suspend fun cleanupExpired(now: Long = System.currentTimeMillis()): Int =
         dbTransaction(db) {

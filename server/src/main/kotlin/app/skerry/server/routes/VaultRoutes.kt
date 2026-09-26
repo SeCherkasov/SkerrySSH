@@ -84,7 +84,7 @@ fun Route.vaultRoutes(services: Services) {
         // this and the cursor movement is the honest picture of that.
         services.metrics.recordsReceived(SyncScope.ACCOUNT, incoming.size, incoming.sumOf { it.blob.size.toLong() })
         val result = services.records.upsert(principal.accountId, incoming)
-        services.devices.touch(principal.accountId, principal.deviceId, syncVersion = result.cursor)
+        services.devices.touchAfterPush(principal.accountId, principal.deviceId, result.seqBefore, result.cursor)
         // Log only pushes that changed something, mirroring the empty-pull rule above. A client
         // re-pushes all of its records on every sync cycle, so without this the log is mostly no-ops
         // — and its retention window would evict the events (team history) somebody actually reads.

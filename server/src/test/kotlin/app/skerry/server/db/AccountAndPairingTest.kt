@@ -79,9 +79,10 @@ class AccountAndPairingTest {
     @Test
     fun `pairing consume is one-shot and honors TTL`() = withTestDb { db ->
         seedAccount(db)
+        DeviceRepository(db).register("alice@example.com", "devA", "Laptop")
         val repo = PairingRepository(db)
         val secret = byteArrayOf(4, 2)
-        repo.create("code123", "alice@example.com", secret, expiresAt = 1_000)
+        repo.create("code123", "alice@example.com", "devA", secret, expiresAt = 1_000)
 
         val first = repo.consume("code123", now = 500)!!
         assertContentEquals(secret, first.encryptedDataKey)
@@ -89,7 +90,22 @@ class AccountAndPairingTest {
         assertNull(repo.consume("code123", now = 600))
 
         // an expired code is not issued
-        repo.create("code456", "alice@example.com", secret, expiresAt = 1_000)
+        repo.create("code456", "alice@example.com", "devA", secret, expiresAt = 1_000)
         assertNull(repo.consume("code456", now = 2_000))
+    }
+
+    @Test
+    fun `a code its device started just before being revoked is refused`() = withTestDb { db ->
+        // The revoke deletes the device's codes, but a start that passed authentication before the
+        // revoke committed can insert one after it: the claim has to check the origin itself.
+        seedAccount(db)
+        val devices = DeviceRepository(db)
+        devices.register("alice@example.com", "devA", "Laptop")
+        devices.revoke("alice@example.com", "devA")
+        val repo = PairingRepository(db)
+        repo.create("late42", "alice@example.com", "devA", byteArrayOf(1), expiresAt = 1_000)
+
+        assertNull(repo.consume("late42", now = 500))
+        assertNull(repo.consume("late42", now = 600), "a refused code stays burned")
     }
 }

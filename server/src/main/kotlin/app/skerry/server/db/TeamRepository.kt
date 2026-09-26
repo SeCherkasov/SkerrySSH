@@ -205,13 +205,9 @@ class TeamRepository(private val db: Database) {
         } > 0
     }
 
-    /** Deletes a team entirely: records (of every scope), scopes, grants, members, and the team itself. */
+    /** Deletes a team entirely — see [deleteTeamRows]. */
     suspend fun deleteTeam(teamId: String): Boolean = dbTransaction(db) {
-        TeamRecords.deleteWhere { TeamRecords.teamId eq teamId }
-        TeamScopeGrants.deleteWhere { TeamScopeGrants.teamId eq teamId }
-        TeamScopes.deleteWhere { TeamScopes.teamId eq teamId }
-        TeamMembers.deleteWhere { TeamMembers.teamId eq teamId }
-        Teams.deleteWhere { Teams.id eq teamId } > 0
+        deleteTeamRows(teamId)
     }
 
     /** Ids of teams where the account is an active member (for WS subscriptions and record ACLs). */
@@ -239,4 +235,19 @@ class TeamRepository(private val db: Database) {
         keyEpoch = this[Teams.keyEpoch],
         createdAt = this[Teams.createdAt],
     )
+}
+
+/**
+ * Deletes a team entirely: records (of every scope), scopes, grants, members, its activity history,
+ * and the team itself. The history goes too because team ids are client-chosen: whoever creates the
+ * same id next would otherwise read this team's log as their own. Returns whether the team existed.
+ * Call inside a transaction.
+ */
+internal fun deleteTeamRows(teamId: String): Boolean {
+    TeamRecords.deleteWhere { TeamRecords.teamId eq teamId }
+    TeamScopeGrants.deleteWhere { TeamScopeGrants.teamId eq teamId }
+    TeamScopes.deleteWhere { TeamScopes.teamId eq teamId }
+    TeamMembers.deleteWhere { TeamMembers.teamId eq teamId }
+    ActivityLog.deleteWhere { ActivityLog.teamId eq teamId }
+    return Teams.deleteWhere { Teams.id eq teamId } > 0
 }

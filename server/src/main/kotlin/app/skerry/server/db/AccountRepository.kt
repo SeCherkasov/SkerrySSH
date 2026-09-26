@@ -6,9 +6,11 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.neq
+import org.jetbrains.exposed.v1.core.plus
 import org.jetbrains.exposed.v1.core.statements.api.ExposedBlob
 import org.jetbrains.exposed.v1.exceptions.ExposedSQLException
 import org.jetbrains.exposed.v1.jdbc.Database
+import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
@@ -51,7 +53,10 @@ class AccountRepository(private val db: Database) {
      *
      * Revoking the other devices forces them to re-authenticate with the new password: their
      * stateless refresh tokens would otherwise survive the change (see [app.skerry.server.auth.TokenService]),
-     * and a device re-logging in with the new password clears its own revocation.
+     * and a device re-logging in with the new password clears its own revocation. The kept device is
+     * not revoked, but its generation moves on too — a password change retires every token issued
+     * under the old one, so the caller must hand that device fresh tokens read after this commits.
+     * Pending pairing codes go as well: each one enrols a device without the new password.
      *
      * Returns the account's current `syncSeq` (for a live-pull nudge over the changes stream), or
      * `null` if the account doesn't exist.
@@ -69,9 +74,11 @@ class AccountRepository(private val db: Database) {
             it[wrappedDataKey] = ExposedBlob(newWrappedDataKey)
         }
         if (updated == 0) return@dbTransaction null
-        Devices.update({ (Devices.accountId eq accountId) and (Devices.id neq keepDeviceId) }) {
-            it[revoked] = true
+        revokeDevices(accountId, Devices.id neq keepDeviceId)
+        Devices.update({ (Devices.accountId eq accountId) and (Devices.id eq keepDeviceId) }) {
+            it[tokenGeneration] = tokenGeneration + 1L
         }
+        Pairing.deleteWhere { Pairing.accountId eq accountId }
         Accounts.selectAll().where { Accounts.id eq accountId }.single()[Accounts.syncSeq]
     }
 
@@ -112,11 +119,7 @@ class AccountRepository(private val db: Database) {
                     (Devices.revoked eq false)
             }
             .map { it[Devices.id] }
-        if (open.isNotEmpty()) {
-            Devices.update({ (Devices.accountId eq accountId) and (Devices.platform eq WebSession.PLATFORM) }) {
-                it[revoked] = true
-            }
-        }
+        if (open.isNotEmpty()) revokeDevices(accountId, Devices.platform eq WebSession.PLATFORM)
         open
     }
 
