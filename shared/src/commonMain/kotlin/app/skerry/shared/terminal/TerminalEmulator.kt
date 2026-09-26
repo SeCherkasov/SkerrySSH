@@ -1004,8 +1004,10 @@ class TerminalEmulator(
 
     private fun putCodePoint(cp: Int) {
         markDirty()
-        if (CharMetrics.isCombining(cp) && appendCombining(cp)) return // attached to the base — cursor unchanged
-        val w = CharMetrics.charWidth(cp)
+        // Below U+0300 nothing combines and nothing is wide: the bulk of streamed text skips both tables.
+        val plain = cp < FIRST_COMBINING
+        if (!plain && CharMetrics.isCombining(cp) && appendCombining(cp)) return // attached to the base — cursor unchanged
+        val w = if (plain) 1 else CharMetrics.charWidth(cp)
         if (pendingWrap) {
             // Soft wrap: the row being left logically continues on the next one — mark it wrapped
             // (for reflow) BEFORE lineFeed, while cy still points at it.
@@ -1018,7 +1020,6 @@ class TerminalEmulator(
         // otherwise place it alone in the last cell (no room for a continuation).
         if (w == 2 && cx >= cols - 1 && autoWrap) { grid[cy].wrapped = true; cx = 0; lineFeed() }
 
-        val text = CharMetrics.codePointToString(cp)
         val row = grid[cy]
         if (insertMode) {
             repeat(w) { row.add(cx, blankCell()) }
@@ -1026,14 +1027,38 @@ class TerminalEmulator(
         }
         eraseWideRemnants(row, cx, (cx + w - 1).coerceAtMost(cols - 1))
         if (w == 2 && cx < cols - 1) {
-            row[cx] = TermCell(text, style, CellWidth.Wide, currentHyperlink)
+            row[cx] = TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Wide, currentHyperlink)
             row[cx + 1] = TermCell("", style, CellWidth.Continuation, currentHyperlink)
         } else {
-            row[cx] = TermCell(text, style, CellWidth.Single, currentHyperlink)
+            row[cx] = singleCell(cp)
         }
         lastPrintedCp = cp
         val rightmost = (cx + w - 1).coerceAtMost(cols - 1)
         if (rightmost >= cols - 1) { cx = cols - 1; if (autoWrap) pendingWrap = true } else cx = rightmost + 1
+    }
+
+    // Cells printed in the current rendition, by glyph: ASCII and box drawing are what streamed text
+    // and TUI borders repeat, and a TermCell per printed byte was most of what output allocated.
+    // Cells are immutable, so one instance per glyph is safe; the set is dropped when the rendition
+    // or the open hyperlink moves on.
+    private val sharedCells = arrayOfNulls<TermCell>(SHARED_CELL_SLOTS)
+    private var sharedCellsStyle = style
+    private var sharedCellsLink: String? = null
+
+    private fun singleCell(cp: Int): TermCell {
+        val slot = when (cp) {
+            in 0x20..0x7E -> cp - 0x20
+            in 0x2500..0x257F -> ASCII_SLOTS + cp - 0x2500
+            else -> return TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Single, currentHyperlink)
+        }
+        if (sharedCellsStyle !== style || sharedCellsLink !== currentHyperlink) {
+            if (sharedCellsStyle != style || sharedCellsLink != currentHyperlink) sharedCells.fill(null)
+            sharedCellsStyle = style
+            sharedCellsLink = currentHyperlink
+        }
+        return sharedCells[slot]
+            ?: TermCell(CharMetrics.codePointToString(cp), style, CellWidth.Single, currentHyperlink)
+                .also { sharedCells[slot] = it }
     }
 
     /**
@@ -1480,7 +1505,13 @@ class TerminalEmulator(
     // can be one instance; the cache holds the last one and is replaced when the style moved on.
     private var cachedBlank = TermCell(' ', TermStyle())
 
+    // The rendition [cachedBlank] was last checked against: erases call this once per cell, and
+    // comparing colors per cell was the top of the profile for a TUI clearing line tails.
+    private var cachedBlankFor: TermStyle? = null
+
     private fun blankCell(): TermCell {
+        if (cachedBlankFor === style) return cachedBlank
+        cachedBlankFor = style
         val cached = cachedBlank
         val cs = cached.style
         if (cs.fg == style.fg && cs.bg == style.bg && cs.inverse == style.inverse) return cached
@@ -1545,6 +1576,13 @@ class TerminalEmulator(
 
         /** Window-title stack depth cap (CSI 22 t without a matching 23 t) — bloat guard. */
         const val MAX_TITLE_STACK = 128
+
+        /** First code point that can combine or draw wide; everything below is one plain column. */
+        const val FIRST_COMBINING = 0x300
+
+        /** [sharedCells] layout: printable ASCII, then the box-drawing block U+2500..U+257F. */
+        const val ASCII_SLOTS = 0x7F - 0x20
+        const val SHARED_CELL_SLOTS = ASCII_SLOTS + 0x80
 
         /** Cell grapheme-cluster length cap (base + combining) — bloat guard. */
         const val MAX_GRAPHEME_LEN = 32
