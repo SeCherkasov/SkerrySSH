@@ -3,6 +3,9 @@ package app.skerry.ui.terminal
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import app.skerry.shared.terminal.TermColor
+import app.skerry.shared.terminal.TerminalColors
+import kotlin.math.roundToInt
 
 /**
  * Terminal color theme (Appearance → theme picker): background, base text color, cursor accent,
@@ -54,3 +57,10 @@ data class TerminalTheme(
  * preview, connection screen). Set by [app.skerry.ui.desktop.DesktopDesignApp].
  */
 val LocalTerminalTheme = staticCompositionLocalOf { TerminalThemes.DEFAULT }
+
+/** The theme as the emulator reports it to OSC 10/11/12 and OSC 4 color queries. */
+fun TerminalTheme.reportedColors(): TerminalColors =
+    TerminalColors(foreground.toRgb(), background.toRgb(), cursor.toRgb(), ansi.map { it.toRgb() })
+
+private fun Color.toRgb(): TermColor.Rgb =
+    TermColor.Rgb((red * 255).roundToInt(), (green * 255).roundToInt(), (blue * 255).roundToInt())

@@ -545,6 +545,7 @@ class ConnectionController(
             cursorShape = prefs.cursorStyle.shape,
             cursorBlink = prefs.cursorStyle.blink,
             clipboardWriteEnabled = prefs.clipboardWriteEnabled,
+            answersQueries = false,
         )
         val generation = synchronized(lock) {
             if (uiState !is ConnectionUiState.Form) {
