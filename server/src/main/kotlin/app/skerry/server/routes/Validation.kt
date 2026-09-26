@@ -115,3 +115,12 @@ internal fun constantTimeEquals(a: String, b: String): Boolean {
     val hb = md.digest(b.toByteArray(Charsets.UTF_8)) // digest() resets md's state
     return MessageDigest.isEqual(ha, hb)
 }
+
+/**
+ * Highest record version a push may carry. A client writes `version + 1` per edit, so no honest
+ * device gets near it, while a record stored at `Long.MAX_VALUE` would win every later write — the
+ * next edit overflows — and stay pinned for every device or team member that shares it. A record
+ * above it is left out of the push rather than refusing the batch: the client re-pushes its whole
+ * vault each cycle, so one such record would otherwise stall every later push of that device.
+ */
+internal const val MAX_RECORD_VERSION = 1L shl 53

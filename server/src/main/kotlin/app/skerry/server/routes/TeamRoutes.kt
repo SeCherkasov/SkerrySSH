@@ -315,7 +315,7 @@ fun Route.teamRoutes(services: Services) {
         val unknown = req.records.firstOrNull { it.type !in TEAM_ALLOWED_TYPES }
         if (unknown != null) throw BadRequestException("unknown record type: ${unknown.type}")
 
-        val incoming = req.records.map { it.toIncoming() }
+        val incoming = req.records.filter { it.version <= MAX_RECORD_VERSION }.map { it.toIncoming() }
         services.metrics.recordsReceived(SyncScope.TEAM, incoming.size, incoming.sumOf { it.blob.size.toLong() })
         val result = services.teamRecords.upsert(teamId, scopeId, incoming)
         // The records are committed; the audit trail is written after them and must not undo that.

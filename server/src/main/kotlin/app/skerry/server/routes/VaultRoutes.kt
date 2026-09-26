@@ -79,7 +79,7 @@ fun Route.vaultRoutes(services: Services) {
         val unknown = req.records.firstOrNull { it.type !in ALLOWED_TYPES }
         if (unknown != null) throw BadRequestException("unknown record type: ${unknown.type}")
 
-        val incoming = req.records.map { it.toIncoming() }
+        val incoming = req.records.filter { it.version <= MAX_RECORD_VERSION }.map { it.toIncoming() }
         // Received, not applied: a client re-pushes its whole vault every cycle, and the ratio between
         // this and the cursor movement is the honest picture of that.
         services.metrics.recordsReceived(SyncScope.ACCOUNT, incoming.size, incoming.sumOf { it.blob.size.toLong() })
