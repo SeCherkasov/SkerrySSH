@@ -1129,8 +1129,9 @@ class TeamsCoordinator(
     /**
      * Adopt a rotated teamKey delivered by the server ([TeamSummary.keyEnvelope]): open+verify the
      * signed rekey envelope and, if its epoch is newer than the locally stored key, replace the key.
-     * The stale local team-vault file (still under the old key) is dropped so the next sync re-pulls
-     * the re-encrypted records. A forged/unverifiable envelope is ignored (the old key is kept).
+     * The local team-vault file is either re-sealed under the new key (our own rotation, see
+     * [TeamSpaces.adoptKey]) or dropped so the next sync re-pulls the re-encrypted records. A
+     * forged/unverifiable envelope is ignored (the old key is kept).
      */
     private suspend fun adoptRotatedKeys(s: SyncSession, c: TeamClient, remote: List<TeamSummary>, identity: AccountIdentity) {
         val adopted = mutableListOf<String>()
@@ -1140,20 +1141,25 @@ class TeamsCoordinator(
             val payload = inviteCodec.open(identity.sharing, envelope) ?: continue
             if (payload.teamId != summary.id || payload.inviteeAccountId != s.accountId) continue
             if (payload.epoch <= local.epoch) continue
+            val own = payload.inviterAccountId == s.accountId
             // Held to the pin: the envelope is signed with whatever key the server publishes for the
             // rotator, so an account whose fingerprint was verified once cannot be impersonated by a
-            // key the server swapped in afterwards (#319).
-            val rotatorKeys = when (val fetched = adoptingKeys(s, c, payload.inviterAccountId)) {
-                is PeerKeys.Pinned -> fetched.keys
-                PeerKeys.Unpublished -> continue
-                is PeerKeys.Unconfirmed -> continue // reported by the lookup
+            // key the server swapped in afterwards (#319). Our own is checked against our local key.
+            val rotatorSigning = if (own) {
+                identity.signing.publicKey
+            } else {
+                when (val fetched = adoptingKeys(s, c, payload.inviterAccountId)) {
+                    is PeerKeys.Pinned -> fetched.keys.signing
+                    PeerKeys.Unpublished -> continue
+                    is PeerKeys.Unconfirmed -> continue // reported by the lookup
+                }
             }
-            if (!inviteCodec.verify(payload, rotatorKeys.signing)) continue
-            keyStore.rekey(summary.id, payload.teamKey, payload.epoch)
-            spaceFiles.reset(TeamScopeRef(summary.id)) // old-key file is unreadable under the new key
+            if (!inviteCodec.verify(payload, rotatorSigning)) continue
+            spaces.adoptKey(TeamScopeRef(summary.id), payload.teamKey, payload.epoch, ownRotation = own)
             adopted += summary.id
         }
-        // Re-pull the re-encrypted records under the freshly adopted key (the reset dropped the stale file).
+        // Sync what moved: a re-pull under the adopted key after a reset, or the push of the records a
+        // finished rotation of our own re-encrypted.
         adopted.forEach { syncSpace(TeamScopeRef(it)) }
     }
 

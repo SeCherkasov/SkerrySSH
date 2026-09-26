@@ -84,6 +84,25 @@ internal class TeamSpaces(
         else keyStore.rekeyScope(ref.teamId, ref.scopeId, key, epoch)
     }
 
+    /**
+     * Takes a newer key for [ref] from an envelope already opened and verified.
+     *
+     * An envelope of our own ([ownRotation]) is a rotation this account committed on the server. If
+     * the space still opens under the key we hold, that rotation never finished here — the key was
+     * not stored, the records not re-encrypted — so it is finished now, as [rotate] would have: the
+     * records are re-sealed under the new key and win LWW over the old-key copies once pushed.
+     * Resetting the file instead would drop the only readable copy of what the server holds under
+     * the old key. Another device of the same account takes the same branch after a rotation that
+     * did finish elsewhere: each re-sealed copy is either the same record at the same version or an
+     * older one that loses LWW, so the cost is one redundant push. Any other envelope means the file
+     * is under a superseded key and is re-pulled.
+     */
+    suspend fun adoptKey(ref: TeamScopeRef, newKey: DataKey, epoch: Int, ownRotation: Boolean) {
+        val unfinished = if (ownRotation) key(ref)?.let { openUnder(ref, it) } else null
+        storeKey(ref, newKey, epoch)
+        if (unfinished != null) unfinished.rekeyRecords(newKey) else files.reset(ref)
+    }
+
     // --- vaults ---
 
     /** The space's vault; null when the account vault is locked or the key isn't here. */
@@ -169,21 +188,38 @@ internal class TeamSpaces(
         if (payload.inviteeAccountId != s.accountId) return false
         val local = keyStore.scope(teamId, scope.scopeId)
         if (local != null && payload.epoch <= local.epoch) return false
-        val granterKeys = when (val fetched = sealing.peerKeys(s, c, payload.inviterAccountId)) {
-            is PeerKeys.Pinned -> fetched.keys
-            PeerKeys.Unpublished -> return false
-            is PeerKeys.Unconfirmed -> return false // reported by the lookup
-        }
+        val own = payload.inviterAccountId == s.accountId
+        val granterSigning = granterSigning(s, c, sealing, payload.inviterAccountId, own) ?: return false
         // The scope id is part of the signed binding: an envelope filed under another scope by the
         // server doesn't verify here (see TeamInviteCodec).
-        if (!inviteCodec.verify(payload, granterKeys.signing, scopeId = scope.scopeId)) return false
+        if (!inviteCodec.verify(payload, granterSigning, scopeId = scope.scopeId)) return false
+        val ref = TeamScopeRef(teamId, scope.scopeId)
         if (local == null) {
             keyStore.putScope(teamId, scope.scopeId, payload.teamName, payload.teamKey, payload.epoch)
+            files.reset(ref) // a leftover file, if any, is under a key we never held
         } else {
-            keyStore.rekeyScope(teamId, scope.scopeId, payload.teamKey, payload.epoch)
+            adoptKey(ref, payload.teamKey, payload.epoch, ownRotation = own)
         }
-        files.reset(TeamScopeRef(teamId, scope.scopeId)) // the file is under the previous key
         return true
+    }
+
+    /**
+     * The signing key a grant from [inviter] is checked against, or null when there is none to trust.
+     * Our own envelope is checked against our local key, never the one the server publishes for us.
+     */
+    private suspend fun granterSigning(
+        s: SyncSession,
+        c: TeamClient,
+        sealing: SealingIdentity,
+        inviter: String,
+        own: Boolean,
+    ): ByteArray? {
+        if (own) return sealing.own.signing.publicKey
+        return when (val fetched = sealing.peerKeys(s, c, inviter)) {
+            is PeerKeys.Pinned -> fetched.keys.signing
+            PeerKeys.Unpublished -> null
+            is PeerKeys.Unconfirmed -> null // reported by the lookup
+        }
     }
 
     /**
@@ -293,7 +329,15 @@ internal class TeamSpaces(
         val envelopes = mutableMapOf<String, ByteArray>()
         var skipped = false
         for (accountId in target.recipients(s, c)) {
-            if (accountId == s.accountId) continue // we adopt the key locally, no self-envelope
+            if (accountId == s.accountId) {
+                // Sealed to our LOCAL key, never the server's copy of it. The commit is the point of no
+                // return; this envelope is what a device that could not store the key recovers it from.
+                envelopes[accountId] = seal(
+                    target.sealing.own.sharing.publicKey, target.sealing.own, s.accountId, s.accountId,
+                    target.ref.teamId, target.ref.scopeId, newKey, spaceName, newEpoch,
+                )
+                continue
+            }
             val keys = when (val fetched = target.sealing.peerKeys(s, c, accountId)) {
                 is PeerKeys.Pinned -> fetched.keys
                 PeerKeys.Unpublished -> continue // unpublished key: can't re-seal

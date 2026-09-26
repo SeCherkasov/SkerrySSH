@@ -9,6 +9,8 @@ import app.skerry.shared.team.AccountKeys
 import app.skerry.shared.team.TeamActivityEntry
 import app.skerry.shared.team.TeamSessionKind
 import app.skerry.shared.team.TeamClient
+import app.skerry.shared.team.TeamIdentityStore
+import app.skerry.shared.team.TeamInviteCodec
 import app.skerry.shared.team.TeamKeyStore
 import app.skerry.shared.team.TeamMember
 import app.skerry.shared.team.TeamMemberStatus
@@ -31,6 +33,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -54,6 +57,12 @@ class TeamsCoordinatorRotationTest {
     ) : TeamClient {
         var serverEpoch: Long = 0
         val rekeyCalls = mutableListOf<Long>()
+        /** The envelopes of the last committed rekey, by account. */
+        var committedEnvelopes: Map<String, ByteArray> = emptyMap()
+        /** Whether listTeams hands this account its envelope from the last rekey. */
+        var serveOwnEnvelope = false
+        /** Runs once the server has committed a rekey, before the call returns. */
+        var afterCommit: () -> Unit = {}
         val removed = mutableListOf<String>()
         /** Front of the deque decides each rekey: true = accept, false = throw CONFLICT. Empty = accept. */
         val rekeyOutcomes = ArrayDeque<Boolean>()
@@ -65,7 +74,8 @@ class TeamsCoordinatorRotationTest {
             TeamSummary(
                 id = teamId, ownerAccountId = self, role = TeamRole.OWNER,
                 status = TeamMemberStatus.ACTIVE, createdAt = 0, memberCount = 1 + others.size,
-                envelope = null, keyEpoch = serverEpoch, keyEnvelope = null,
+                envelope = null, keyEpoch = serverEpoch,
+                keyEnvelope = if (serveOwnEnvelope) committedEnvelopes[self] else null,
             ),
         )
 
@@ -81,7 +91,11 @@ class TeamsCoordinatorRotationTest {
             val accept = if (rekeyOutcomes.isEmpty()) true else rekeyOutcomes.removeFirst()
             if (!accept) throw SyncException(SyncException.Kind.CONFLICT, "stale epoch")
             serverEpoch = newEpoch
+            committedEnvelopes = envelopes
+            afterCommit()
         }
+
+        fun serverRecord(id: String): RemoteRecord? = store[id]?.first
 
         override suspend fun removeMember(session: SyncSession, teamId: String, accountId: String) {
             removed += accountId
@@ -219,6 +233,63 @@ class TeamsCoordinatorRotationTest {
         assertEquals(2, client.rekeyCalls.size) // retried after the conflict
         assertEquals(1, ks.get(teamId)!!.epoch) // the winning attempt committed
         assertNull(coord.lastError.value)
+    }
+
+    /**
+     * The rotating account gets an envelope of its own, sealed to its local key: the server commit is
+     * the point of no return, and the new key must survive whatever stops this device from storing it.
+     */
+    @Test
+    fun `a rotation seals the new key to the rotating account as well`() = runBlocking {
+        initializeVaultCrypto()
+        val f = newFixture()
+        val ks = TeamKeyStore(f.vault)
+        ks.put(teamId, "Ops", TeamRole.OWNER, crypto.newDataKey(), epoch = 0)
+        f.teamVaults.open(TeamScopeRef(teamId), ks.get(teamId)!!.dataKey()!!)!!.put("h1", RecordType.HOST, "x".encodeToByteArray())
+
+        val client = FakeTeamClient(self, teamId, listOf(carol to carolKeys()))
+        coordinator(f, client).removeMember(teamId, carol)
+
+        val own = assertNotNull(client.committedEnvelopes[self], "no envelope for the rotating account")
+        val identity = assertNotNull(TeamIdentityStore(f.vault, crypto).load())
+        val payload = assertNotNull(TeamInviteCodec(crypto).open(identity.sharing, own))
+        assertEquals(1, payload.epoch)
+        // It is the key the records were re-encrypted under.
+        f.teamVaults.lockAll()
+        assertContentEquals("x".encodeToByteArray(), f.teamVaults.open(TeamScopeRef(teamId), payload.teamKey)!!.openPayload("h1"))
+    }
+
+    /**
+     * The account vault locks between the server commit and the local write of the new key: the
+     * server has moved on, the key is nowhere on this device, and the records are still under the old
+     * one. The next refresh finishes the rotation from the account's own envelope — the records come
+     * out re-encrypted under the new key and pushed, not dropped with a file reset.
+     */
+    @Test
+    fun `a rotation cut short after the server commit is finished from its own envelope`() = runBlocking {
+        initializeVaultCrypto()
+        val f = newFixture()
+        val ks = TeamKeyStore(f.vault)
+        ks.put(teamId, "Ops", TeamRole.OWNER, crypto.newDataKey(), epoch = 0)
+        f.teamVaults.open(TeamScopeRef(teamId), ks.get(teamId)!!.dataKey()!!)!!.put("h1", RecordType.HOST, "secret".encodeToByteArray())
+
+        val client = FakeTeamClient(self, teamId, listOf(carol to carolKeys()))
+        client.afterCommit = { f.vault.lock() }
+        val coord = coordinator(f, client)
+        coord.removeMember(teamId, carol)
+        assertEquals(listOf(1L), client.rekeyCalls)
+        f.vault.unlock("master".toCharArray())
+        assertEquals(0, ks.get(teamId)!!.epoch, "the new key was stored after all")
+
+        client.afterCommit = {}
+        client.serveOwnEnvelope = true
+        coord.refresh()
+
+        val entry = assertNotNull(ks.get(teamId))
+        assertEquals(1, entry.epoch)
+        val newKey = entry.dataKey()!!
+        assertContentEquals("secret".encodeToByteArray(), f.teamVaults.open(TeamScopeRef(teamId), newKey)!!.openPayload("h1"))
+        assertEquals(2L, client.serverRecord("h1")?.version, "the re-encrypted record was not pushed")
     }
 
     private companion object {
