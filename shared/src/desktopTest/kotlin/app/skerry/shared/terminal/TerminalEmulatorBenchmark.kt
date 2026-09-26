@@ -8,8 +8,11 @@ import kotlin.time.measureTime
  * fail on a loaded CI runner and say nothing about the code. Opt-in with `SKERRY_BENCH=1`:
  *
  * ```
- * SKERRY_BENCH=1 ./gradlew :shared:desktopTest --tests '*TerminalEmulatorBenchmark*' --rerun -i | grep BENCH
+ * SKERRY_BENCH=1 ./gradlew :shared:desktopTest -Pskerry.bench --tests '*TerminalEmulatorBenchmark*' --rerun -i | grep BENCH
  * ```
+ *
+ * Without `-Pskerry.bench` the coverage agent runs inside the test JVM and the numbers come out
+ * about half of what the code does.
  */
 class TerminalEmulatorBenchmark {
 

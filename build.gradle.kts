@@ -50,6 +50,18 @@ extensions.configure<kotlinx.kover.gradle.plugin.dsl.KoverProjectExtension> {
     }
 }
 
+// Kover's agent instruments every test JVM and roughly halves what a benchmark measures:
+// `-Pskerry.bench` leaves it out.
+if (providers.gradleProperty("skerry.bench").isPresent) {
+    subprojects {
+        plugins.withId("org.jetbrains.kotlinx.kover") {
+            extensions.configure<kotlinx.kover.gradle.plugin.dsl.KoverProjectExtension> {
+                currentProject { instrumentation { disabledForAll.set(true) } }
+            }
+        }
+    }
+}
+
 // --- detekt: static analysis. Run: ./gradlew detektAll -----------------------------------------
 //
 // The DetektPlugin itself is not applied — the task type is registered directly, which needs no
