@@ -28,7 +28,7 @@
     <ID>CyclomaticComplexMethod:RfbEncodings.kt$private fun decodeZrleTile(c: ByteCursor, fb: RemoteFramebuffer, tileX: Int, tileY: Int, tw: Int, th: Int)</ID>
     <ID>CyclomaticComplexMethod:SessionShareFrame.kt$internal fun decodeShareFrame(plaintext: ByteArray): ShareFrame?</ID>
     <ID>CyclomaticComplexMethod:SessionShareHost.kt$SessionShareHost$private suspend fun readFromViewers()</ID>
-    <ID>CyclomaticComplexMethod:SgrParser.kt$SgrParser$fun apply(params: List&lt;IntArray&gt;, start: TermStyle): TermStyle</ID>
+    <ID>CyclomaticComplexMethod:SgrParser.kt$SgrParser$fun apply(params: CsiParams, start: TermStyle): TermStyle</ID>
     <ID>CyclomaticComplexMethod:SshConfigParser.kt$SshConfigParser$fun parse(text: String): SshConfigParseResult</ID>
     <ID>CyclomaticComplexMethod:SshjTransport.kt$SshjTransport$private fun authenticate( client: SSHClient, username: String, requested: SshAuth, hop: Boolean, host: String, port: Int, )</ID>
     <ID>CyclomaticComplexMethod:TelnetCodec.kt$TelnetCodec$fun consume(input: ByteArray): Decoded</ID>
@@ -36,7 +36,7 @@
     <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun dispatchCsi(final: Char)</ID>
     <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun esc(b: Int)</ID>
     <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun ground(b: Int)</ID>
-    <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun privateMode(final: Char, codes: List&lt;Int&gt;)</ID>
+    <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun privateMode(final: Char, codes: CsiParams)</ID>
     <ID>CyclomaticComplexMethod:TerminalEmulator.kt$TerminalEmulator$private fun privateModeSet(code: Int): Boolean?</ID>
     <ID>CyclomaticComplexMethod:TerminalMouse.kt$fun encodeMouseReport( tracking: MouseTracking, sgr: Boolean, button: MouseButton, type: MouseEventType, col: Int, row: Int, shift: Boolean = false, alt: Boolean = false, ctrl: Boolean = false, pixels: Boolean = false, pixelX: Int = 0, pixelY: Int = 0, ): ByteArray?</ID>
     <ID>CyclomaticComplexMethod:TerminalReflow.kt$TerminalReflow$fun reflow( src: List&lt;TermRow&gt;, nc: Int, nr: Int, maxScrollback: Int, cursorAbs: Int, cursorCol: Int, rowsBelowCursor: Int, trackCursor: Boolean, ): Result</ID>
