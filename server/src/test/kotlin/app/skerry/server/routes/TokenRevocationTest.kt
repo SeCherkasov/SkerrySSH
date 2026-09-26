@@ -23,6 +23,7 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.testing.testApplication
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 /**
  * What a revocation takes away has to stay taken: tokens and pairing codes a device held before a
@@ -148,5 +149,27 @@ class TokenRevocationTest {
             client.claim(code, "devX").status,
             "a pairing code started before the password change still enrolled a new device",
         )
+    }
+
+    /**
+     * The refresh race, step by step: the token is checked, a password change commits, and only then
+     * is the pair minted. It must come out under the generation that was checked — dead on arrival —
+     * not under the new one the rotation just wrote.
+     */
+    @Test
+    fun `a pair minted after a password change slipped past the refresh check is dead on arrival`() = testApplication {
+        val services = testServices()
+        application { configureServer(services) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        // The acting device stays live through its own password change; only its generation moves.
+        val before = client.registerAccount(accountId, password, deviceId = "devA")
+
+        val holder = assertNotNull(services.refreshHolder(before.refreshToken))
+        val rotated = client.changePassword(accountId, password, "new-auth-key-hex", byteArrayOf(2), deviceId = "devA")
+        assertEquals(HttpStatusCode.OK, rotated.status)
+        val minted = services.issueTokens(holder)
+
+        assertEquals(HttpStatusCode.Unauthorized, client.refresh(minted.refreshToken).status)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/vault/keys") { bearerAuth(minted.accessToken) }.status)
     }
 }

@@ -310,14 +310,7 @@ fun Route.authRoutes(services: Services) {
     rateLimit(RateLimits.REFRESH) {
     post("/auth/refresh") {
         val req = call.receive<RefreshRequest>()
-        val decoded = services.tokens.verifyRefresh(req.refreshToken)
-        // (account, device, generation) of a refresh token that is still live, or null.
-        val holder = decoded?.let { token ->
-            val did = token.getClaim("did")?.asString() ?: return@let null
-            val sub = token.subject ?: return@let null
-            val generation = services.devices.liveTokenGeneration(sub, did)
-            if (generation != null && generation == services.tokens.generationOf(token)) Triple(sub, did, generation) else null
-        }
+        val holder = services.refreshHolder(req.refreshToken)
         if (holder == null) {
             services.metrics.authAttempt(AuthKind.REFRESH, AuthOutcome.DENIED)
             call.respond(HttpStatusCode.Unauthorized, ErrorResponse("invalid refresh token"))
@@ -326,26 +319,40 @@ fun Route.authRoutes(services: Services) {
         services.metrics.authAttempt(AuthKind.REFRESH, AuthOutcome.OK)
         services.metrics.tokensIssued(TokenType.ACCESS)
         services.metrics.tokensIssued(TokenType.REFRESH)
-        val (accountId, deviceId, generation) = holder
-        // Under the generation just checked, not a fresh read: a password change committing in
-        // between must leave this pair dead on arrival rather than mint one of the new generation.
-        call.respond(services.issueTokens(accountId, deviceId, generation))
+        call.respond(services.issueTokens(holder))
     }
     }
 }
+
+/** The device a still-live refresh token belongs to, and the generation it was checked under. */
+internal data class RefreshHolder(val accountId: String, val deviceId: String, val generation: Long)
+
+/** Who [refreshToken] is for, or null when it is invalid, revoked or of an older generation. */
+internal suspend fun Services.refreshHolder(refreshToken: String): RefreshHolder? {
+    val token = tokens.verifyRefresh(refreshToken) ?: return null
+    val did = token.getClaim("did")?.asString() ?: return null
+    val sub = token.subject ?: return null
+    val generation = devices.liveTokenGeneration(sub, did) ?: return null
+    return if (generation == tokens.generationOf(token)) RefreshHolder(sub, did, generation) else null
+}
+
+/**
+ * The pair a refresh hands out, under the generation [holder] was checked with, not a fresh read: a
+ * password change committing in between must leave this pair dead on arrival rather than mint one of
+ * the new generation.
+ */
+internal fun Services.issueTokens(holder: RefreshHolder): TokenResponse = TokenResponse(
+    accessToken = tokens.issueAccess(holder.accountId, holder.deviceId, holder.generation),
+    refreshToken = tokens.issueRefresh(holder.accountId, holder.deviceId, holder.generation),
+)
 
 /**
  * A fresh token pair for the device under its current generation. Called after the write that
  * registered or rotated the device, so the pair matches what that write committed.
  */
-internal suspend fun Services.issueTokens(accountId: String, deviceId: String, generation: Long? = null): TokenResponse {
+internal suspend fun Services.issueTokens(accountId: String, deviceId: String): TokenResponse =
     // A revoked device reads as null; its tokens are refused on the revocation alone, so 0 is inert.
-    val issuedGeneration = generation ?: devices.liveTokenGeneration(accountId, deviceId) ?: 0L
-    return TokenResponse(
-        accessToken = tokens.issueAccess(accountId, deviceId, issuedGeneration),
-        refreshToken = tokens.issueRefresh(accountId, deviceId, issuedGeneration),
-    )
-}
+    issueTokens(RefreshHolder(accountId, deviceId, devices.liveTokenGeneration(accountId, deviceId) ?: 0L))
 
 /** Whether [token] is still honoured: its device is live and the token carries the current generation. */
 internal suspend fun Services.isTokenLive(accountId: String, deviceId: String, token: Payload): Boolean =
