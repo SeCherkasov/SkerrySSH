@@ -142,4 +142,26 @@ class FileHostKeyMismatchStoreTest {
         store.clear("nas", 22, "ssh-ed25519")
         assertEquals(listOf(second), FileHostKeyMismatchStore(file).all())
     }
+
+    /**
+     * A warning recorded while the file was unreadable is written as soon as a read succeeds, not
+     * with the next record or clear: the app may quit before either happens.
+     */
+    @Test
+    fun `a mismatch held in memory is written once the file can be read`() {
+        val first = HostKeyMismatch("nas", 22, "ssh-ed25519", "SHA256:OLD", "SHA256:NEW", "2026-06-22T11:00:00Z")
+        val second = HostKeyMismatch("db", 22, "ssh-ed25519", "SHA256:D1", "SHA256:D2", "2026-06-22T12:00:00Z")
+        FileHostKeyMismatchStore(file).record(first)
+        val saved = Files.readAllBytes(file)
+        Files.delete(file)
+        Files.createDirectory(file)
+        val store = FileHostKeyMismatchStore(file)
+        store.record(second)
+
+        Files.delete(file)
+        Files.write(file, saved)
+        store.all()
+
+        assertEquals(setOf(first, second), FileHostKeyMismatchStore(file).all().toSet())
+    }
 }
