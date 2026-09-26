@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 class SgrParserTest {
 
     private fun apply(raw: String, start: TermStyle = TermStyle()): TermStyle =
-        SgrParser.apply(SgrParser.parseParams(raw), start)
+        SgrParser.apply(CsiParams.of(raw), start)
 
     @Test
     fun `empty params reset to default style`() {

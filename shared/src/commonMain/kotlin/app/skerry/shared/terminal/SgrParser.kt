@@ -7,36 +7,25 @@ package app.skerry.shared.terminal
 internal object SgrParser {
 
     /**
-     * Parses SGR parameters preserving subparameter structure: each `;`-separated parameter
-     * becomes an array of its `:`-parts (modern colon form). Empty parts become 0 (e.g. the
-     * colorspace field in `58:2::r:g:b`).
+     * Applies SGR to [start] and returns the new style. A parameter's `:`-subparameters (modern
+     * colon form: `4:3`, `38:2::r:g:b`, `58:5:n`) follow it in [params] flagged as subparameters.
+     * Extended colors (38/48/58) accept both forms: colon subparameters within one parameter, or the
+     * legacy `;` form where type and components are separate parameters (consumed from the tail).
+     * An omitted field reads as 0, as in xterm.
      */
-    fun parseParams(raw: String): List<IntArray> {
-        if (raw.isEmpty()) return emptyList()
-        return raw.split(';').map { part ->
-            part.split(':').map { it.toIntOrNull() ?: 0 }.toIntArray()
-        }
-    }
-
-    /**
-     * Applies SGR to [start] and returns the new style. [params] is a list of `;`-separated
-     * parameters; each parameter is an array of its `:`-subparameters (modern colon form: `4:3`,
-     * `38:2::r:g:b`, `58:5:n`). Extended colors (38/48/58) accept both forms: colon subparameters
-     * within one parameter, or the legacy `;` form where type and components are separate
-     * parameters (consumed from the tail of the list).
-     */
-    fun apply(params: List<IntArray>, start: TermStyle): TermStyle {
-        if (params.isEmpty()) return TermStyle()
+    fun apply(params: CsiParams, start: TermStyle): TermStyle {
+        if (params.size == 0) return TermStyle()
         var style = start
         var i = 0
         while (i < params.size) {
-            val param = params[i]
-            when (val p = param.firstOrNull() ?: 0) {
-                0 -> style = TermStyle() // parseParams yields empty subparameters as 0, not -1
+            val end = groupEnd(params, i)
+            var next = end
+            when (val p = value(params, i)) {
+                0 -> style = TermStyle()
                 1 -> style = style.copy(bold = true)
                 2 -> style = style.copy(dim = true)
                 3 -> style = style.copy(italic = true)
-                4 -> style = style.copy(underlineStyle = underlineFromSub(param.getOrElse(1) { 1 }))
+                4 -> style = style.copy(underlineStyle = underlineFromSub(if (end - i > 1) value(params, i + 1) else 1))
                 5, 6 -> style = style.copy(blink = true)
                 7 -> style = style.copy(inverse = true)
                 8 -> style = style.copy(hidden = true)
@@ -49,20 +38,36 @@ internal object SgrParser {
                 27 -> style = style.copy(inverse = false)
                 28 -> style = style.copy(hidden = false)
                 29 -> style = style.copy(strikethrough = false)
-                in 30..37 -> style = style.copy(fg = TermColor.Indexed(p - 30))
-                38 -> { val (col, used) = extendedColor(params, i); style = style.copy(fg = col); i += used }
+                in 30..37 -> style = style.copy(fg = TermColor.indexed(p - 30))
+                38 -> { val (col, n) = extendedColor(params, i, end); style = style.copy(fg = col); next = n }
                 39 -> style = style.copy(fg = TermColor.Default)
-                in 40..47 -> style = style.copy(bg = TermColor.Indexed(p - 40))
-                48 -> { val (col, used) = extendedColor(params, i); style = style.copy(bg = col); i += used }
+                in 40..47 -> style = style.copy(bg = TermColor.indexed(p - 40))
+                48 -> { val (col, n) = extendedColor(params, i, end); style = style.copy(bg = col); next = n }
                 49 -> style = style.copy(bg = TermColor.Default)
-                58 -> { val (col, used) = extendedColor(params, i); style = style.copy(underlineColor = col); i += used }
+                58 -> { val (col, n) = extendedColor(params, i, end); style = style.copy(underlineColor = col); next = n }
                 59 -> style = style.copy(underlineColor = TermColor.Default)
-                in 90..97 -> style = style.copy(fg = TermColor.Indexed(8 + p - 90))
-                in 100..107 -> style = style.copy(bg = TermColor.Indexed(8 + p - 100))
+                in 90..97 -> style = style.copy(fg = TermColor.indexed(8 + p - 90))
+                in 100..107 -> style = style.copy(bg = TermColor.indexed(8 + p - 100))
             }
-            i++
+            i = next
         }
         return style
+    }
+
+    private fun value(params: CsiParams, i: Int): Int = params.at(i, 0).coerceAtLeast(0)
+
+    /** Index past the parameter starting at [i] and its `:`-subparameters. */
+    private fun groupEnd(params: CsiParams, i: Int): Int {
+        var j = i + 1
+        while (j < params.size && params.isSub(j)) j++
+        return j
+    }
+
+    /** Start of the parameter [k] parameters after the one starting at [from]. */
+    private fun skipGroups(params: CsiParams, from: Int, k: Int): Int {
+        var idx = from
+        repeat(k) { if (idx < params.size) idx = groupEnd(params, idx) }
+        return idx
     }
 
     private fun underlineFromSub(sub: Int): UnderlineStyle = when (sub) {
@@ -75,43 +80,46 @@ internal object SgrParser {
     }
 
     /**
-     * Parses an extended color (38/48/58) in either form. Returns the color and the number of
-     * EXTRA `;`-parameters consumed from [params] starting at [at] (0 for the colon form, since
-     * the color is already within the parameter).
+     * Parses an extended color (38/48/58) whose parameter spans [at] until [end], in either form.
+     * Returns the color and where parsing continues: [end] for the colon form, past the consumed
+     * legacy `;` parameters otherwise.
      */
-    private fun extendedColor(params: List<IntArray>, at: Int): Pair<TermColor, Int> {
-        val param = params[at]
+    private fun extendedColor(params: CsiParams, at: Int, end: Int): Pair<TermColor, Int> {
         // Colon form: type and components are subparameters within one parameter (38:2:..., 38:5:n).
-        if (param.size > 1) return colonColor(param) to 0
+        if (end - at > 1) return colonColor(params, at, end) to end
         // Legacy `;` form: the next parameter is the type, followed by components as separate parameters.
-        fun nextFirst(k: Int) = params.getOrNull(at + k)?.firstOrNull()
+        fun nextFirst(k: Int): Int? = skipGroups(params, at, k).takeIf { it < params.size }?.let { value(params, it) }
         return when (nextFirst(1)) {
-            5 -> (nextFirst(2)?.let { TermColor.Indexed(it.coerceIn(0, 255)) } ?: TermColor.Default) to 2
+            5 -> (nextFirst(2)?.let { TermColor.indexed(it.coerceIn(0, 255)) } ?: TermColor.Default) to skipGroups(params, at, 3)
             2 -> {
                 val r = (nextFirst(2) ?: 0).coerceIn(0, 255)
                 val g = (nextFirst(3) ?: 0).coerceIn(0, 255)
                 val b = (nextFirst(4) ?: 0).coerceIn(0, 255)
-                TermColor.Rgb(r, g, b) to 4
+                TermColor.Rgb(r, g, b) to skipGroups(params, at, 5)
             }
-            else -> TermColor.Default to 0
+            else -> TermColor.Default to end
         }
     }
 
     /**
-     * Color from a single parameter's colon subparameters: `[2, cs?, r, g, b]` -> Rgb (the
-     * optional colorspace field is skipped when there are 6+ elements), `[5, n]` -> Indexed. The
-     * first element is the 38/48/58 selector.
+     * Color from one parameter's colon subparameters, [at] until [end]: `[sel, 2, cs?, r, g, b]` ->
+     * Rgb (the optional colorspace field is skipped when there are 6+ elements), `[sel, 5, n]` ->
+     * Indexed. The first element is the 38/48/58 selector.
      */
-    private fun colonColor(param: IntArray): TermColor = when (param.getOrElse(1) { -1 }) {
-        5 -> TermColor.Indexed(param.getOrElse(2) { 0 }.coerceIn(0, 255))
-        2 -> {
-            val base = if (param.size >= 6) 3 else 2 // 38:2:cs:r:g:b vs 38:2:r:g:b
-            TermColor.Rgb(
-                param.getOrElse(base) { 0 }.coerceIn(0, 255),
-                param.getOrElse(base + 1) { 0 }.coerceIn(0, 255),
-                param.getOrElse(base + 2) { 0 }.coerceIn(0, 255),
-            )
+    private fun colonColor(params: CsiParams, at: Int, end: Int): TermColor {
+        val count = end - at
+        fun sub(k: Int, default: Int): Int = if (k < count) value(params, at + k) else default
+        return when (sub(1, -1)) {
+            5 -> TermColor.indexed(sub(2, 0).coerceIn(0, 255))
+            2 -> {
+                val base = if (count >= 6) 3 else 2 // 38:2:cs:r:g:b vs 38:2:r:g:b
+                TermColor.Rgb(
+                    sub(base, 0).coerceIn(0, 255),
+                    sub(base + 1, 0).coerceIn(0, 255),
+                    sub(base + 2, 0).coerceIn(0, 255),
+                )
+            }
+            else -> TermColor.Default
         }
-        else -> TermColor.Default
     }
 }

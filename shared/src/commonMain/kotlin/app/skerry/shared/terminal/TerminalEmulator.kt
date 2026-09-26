@@ -32,6 +32,11 @@ sealed interface TermColor {
         val BrightMagenta = Indexed(13)
         val BrightCyan = Indexed(14)
         val BrightWhite = Indexed(15)
+
+        private val INDEXED = Array(256) { Indexed(it) }
+
+        /** The shared [Indexed] for palette index [index] (0..255): SGR sets colors per sequence. */
+        fun indexed(index: Int): Indexed = INDEXED[index]
     }
 }
 
@@ -384,7 +389,7 @@ class TerminalEmulator(
     private enum class State { Ground, Esc, Csi, Osc, OscEsc, Consume, Utf8, StrSeq, StrSeqEsc }
 
     private var parser = State.Ground
-    private val params = StringBuilder()
+    private val params = CsiParams()
 
     // CSI intermediate byte (0x20..0x2f). NUL = "none seen": distinguishes it from a REAL space
     // intermediate (0x20) in DECSCUSR (`CSI Ps SP q`) — otherwise cursor-shape would be indistinguishable
@@ -534,7 +539,7 @@ class TerminalEmulator(
 
     private fun esc(b: Int) {
         when (b.toChar()) {
-            '[' -> { params.clear(); csiIntermediate = NO_INTERMEDIATE; parser = State.Csi }
+            '[' -> { params.reset(); csiIntermediate = NO_INTERMEDIATE; parser = State.Csi }
             ']' -> { osc.clear(); parser = State.Osc }
             '(' -> { pendingDesignation = 0; parser = State.Consume } // designate G0
             ')' -> { pendingDesignation = 1; parser = State.Consume } // designate G1
@@ -556,10 +561,7 @@ class TerminalEmulator(
 
     private fun csi(b: Int) {
         when {
-            // Length cap: digits/separators beyond the limit are dropped, but parsing continues to the
-            // final byte (so the tail doesn't leak into Ground as text). Real CSIs are dozens of bytes,
-            // so truncation is harmless.
-            b in 0x30..0x3f -> if (params.length < MAX_CSI_PARAMS_LEN) params.append(b.toChar()) // digits, ';', ':', markers ?<=>
+            b in 0x30..0x3f -> params.accept(b) // digits, ';', ':', markers ?<=> — bounded inside CsiParams
             b in 0x20..0x2f -> csiIntermediate = b.toChar() // intermediate bytes
             b in 0x40..0x7e -> { dispatchCsi(b.toChar()); parser = State.Ground }
             b == 0x1b -> parser = State.Esc // abandons this sequence and starts the next one
@@ -850,16 +852,16 @@ class TerminalEmulator(
     // --- CSI dispatch --------------------------------------------------------
 
     private fun dispatchCsi(final: Char) {
-        val raw = params.toString()
-        val privateMarker = raw.firstOrNull()?.takeIf { it == '?' || it == '<' || it == '=' || it == '>' }
+        val p = params
+        p.finish()
+        val privateMarker = p.marker
         // DECRQM (CSI [?] Ps $ p): request the current mode state — reply with DECRPM.
         if (csiIntermediate == '$' && final == 'p') {
-            val body = if (privateMarker == '?') raw.substring(1) else raw
-            reportMode(parseArgs(body).firstOrNull() ?: 0, private = privateMarker == '?')
+            reportMode(p.at(0, 0), private = privateMarker == '?')
             return
         }
-        if (privateMarker == '?') { privateMode(final, parseArgs(raw.substring(1))); return }
-        if (privateMarker != null) {
+        if (privateMarker == '?') { privateMode(final, p); return }
+        if (privateMarker != CsiParams.NO_MARKER) {
             // Secondary DA (CSI > c) and others — reply minimally, absorb the rest.
             if (privateMarker == '>' && final == 'c') respond("$ESC[>0;10;0c")
             // XTVERSION (CSI > q): report terminal name/version via DCS.
@@ -868,46 +870,44 @@ class TerminalEmulator(
         }
         if (csiIntermediate == '!' && final == 'p') { softReset(); return }
         // DECSCUSR (CSI Ps SP q) — cursor shape and blink.
-        if (csiIntermediate == ' ' && final == 'q') { setCursorStyle(parseArgs(raw)); return }
+        if (csiIntermediate == ' ' && final == 'q') { setCursorStyle(p.mode(0, 0)); return }
         if (csiIntermediate != NO_INTERMEDIATE) return // other intermediate sequences are absorbed
 
-        val args = parseArgs(raw)
-        fun arg(i: Int, d: Int) = args.getOrNull(i)?.takeIf { it > 0 } ?: d
         when (final) {
-            'm' -> style = SgrParser.apply(SgrParser.parseParams(raw), style)
-            '@' -> insertChars(arg(0, 1))
-            'A' -> { cy = (cy - arg(0, 1)).coerceAtLeast(topLimit()); pendingWrap = false }
-            'B', 'e' -> { cy = (cy + arg(0, 1)).coerceAtMost(bottomLimit()); pendingWrap = false }
-            'C', 'a' -> { cx = (cx + arg(0, 1)).coerceAtMost(cols - 1); pendingWrap = false }
-            'D' -> { cx = (cx - arg(0, 1)).coerceAtLeast(0); pendingWrap = false }
-            'E' -> { cy = (cy + arg(0, 1)).coerceAtMost(bottomLimit()); cx = 0; pendingWrap = false }
-            'F' -> { cy = (cy - arg(0, 1)).coerceAtLeast(topLimit()); cx = 0; pendingWrap = false }
-            'G', '`' -> { cx = (arg(0, 1) - 1).coerceIn(0, cols - 1); pendingWrap = false }
-            'd' -> { cy = absRow(arg(0, 1) - 1); pendingWrap = false }
-            'H', 'f' -> cursorTo(arg(0, 1) - 1, arg(1, 1) - 1)
+            'm' -> style = SgrParser.apply(p, style)
+            '@' -> insertChars(p.count(0, 1))
+            'A' -> { cy = (cy - p.count(0, 1)).coerceAtLeast(topLimit()); pendingWrap = false }
+            'B', 'e' -> { cy = (cy + p.count(0, 1)).coerceAtMost(bottomLimit()); pendingWrap = false }
+            'C', 'a' -> { cx = (cx + p.count(0, 1)).coerceAtMost(cols - 1); pendingWrap = false }
+            'D' -> { cx = (cx - p.count(0, 1)).coerceAtLeast(0); pendingWrap = false }
+            'E' -> { cy = (cy + p.count(0, 1)).coerceAtMost(bottomLimit()); cx = 0; pendingWrap = false }
+            'F' -> { cy = (cy - p.count(0, 1)).coerceAtLeast(topLimit()); cx = 0; pendingWrap = false }
+            'G', '`' -> { cx = (p.count(0, 1) - 1).coerceIn(0, cols - 1); pendingWrap = false }
+            'd' -> { cy = absRow(p.count(0, 1) - 1); pendingWrap = false }
+            'H', 'f' -> cursorTo(p.count(0, 1) - 1, p.count(1, 1) - 1)
             // Count is capped at the column count: the cursor hits the edge regardless, so a larger
             // repeat is pointless. Without the cap, `ESC[2147483647I` would loop ~2 billion times
             // uninterruptibly, hanging the session/UI (the server is untrusted; see other repeat commands).
-            'I' -> { repeat(arg(0, 1).coerceAtMost(cols)) { cx = nextTabStop(cx) }; pendingWrap = false }
-            'Z' -> { repeat(arg(0, 1).coerceAtMost(cols)) { cx = prevTabStop(cx) }; pendingWrap = false }
-            'J' -> eraseDisplay(args.getOrNull(0)?.takeIf { it >= 0 } ?: 0)
-            'K' -> eraseLine(args.getOrNull(0)?.takeIf { it >= 0 } ?: 0)
-            'L' -> insertLines(arg(0, 1))
-            'M' -> deleteLines(arg(0, 1))
-            'P' -> deleteChars(arg(0, 1))
-            'S' -> scrollUp(arg(0, 1))
-            'T' -> scrollDown(arg(0, 1))
-            'X' -> eraseChars(arg(0, 1))
-            'b' -> repeatLastChar(arg(0, 1))
-            'g' -> clearTabStop(args.getOrNull(0)?.takeIf { it >= 0 } ?: 0)
-            'h' -> if (args.contains(4)) insertMode = true
-            'l' -> if (args.contains(4)) insertMode = false
-            'r' -> setScrollRegion(args.getOrNull(0)?.takeIf { it > 0 } ?: 1, args.getOrNull(1)?.takeIf { it > 0 } ?: rows)
+            'I' -> { repeat(p.count(0, 1).coerceAtMost(cols)) { cx = nextTabStop(cx) }; pendingWrap = false }
+            'Z' -> { repeat(p.count(0, 1).coerceAtMost(cols)) { cx = prevTabStop(cx) }; pendingWrap = false }
+            'J' -> eraseDisplay(p.mode(0, 0))
+            'K' -> eraseLine(p.mode(0, 0))
+            'L' -> insertLines(p.count(0, 1))
+            'M' -> deleteLines(p.count(0, 1))
+            'P' -> deleteChars(p.count(0, 1))
+            'S' -> scrollUp(p.count(0, 1))
+            'T' -> scrollDown(p.count(0, 1))
+            'X' -> eraseChars(p.count(0, 1))
+            'b' -> repeatLastChar(p.count(0, 1))
+            'g' -> clearTabStop(p.mode(0, 0))
+            'h' -> if (p.contains(4)) insertMode = true
+            'l' -> if (p.contains(4)) insertMode = false
+            'r' -> setScrollRegion(p.count(0, 1), p.count(1, rows))
             's' -> saveCursor()
             'u' -> restoreCursor()
-            'n' -> deviceStatus(args.getOrNull(0) ?: 0)
-            'c' -> if ((args.getOrNull(0) ?: 0) == 0) respond("$ESC[?1;2c") // DA: VT100 with AVO
-            't' -> windowOp(args)
+            'n' -> deviceStatus(p.at(0, 0))
+            'c' -> if (p.at(0, 0) == 0) respond("$ESC[?1;2c") // DA: VT100 with AVO
+            't' -> windowOp(p)
         }
     }
 
@@ -921,9 +921,10 @@ class TerminalEmulator(
      * they're either irrelevant to an embedded terminal or a fingerprinting leak (xterm disables them
      * by default too).
      */
-    private fun windowOp(args: List<Int>) {
-        val op = args.getOrNull(0) ?: return
-        val target = args.getOrNull(1) ?: 0 // absent -> 0 (icon + window)
+    private fun windowOp(args: CsiParams) {
+        if (args.size == 0) return
+        val op = args.at(0, 0)
+        val target = args.at(1, 0) // absent -> 0 (icon + window)
         if (target != 0 && target != 2) return // icon-only (1) or other -> window title untouched
         when (op) {
             22 -> {
@@ -934,10 +935,10 @@ class TerminalEmulator(
         }
     }
 
-    private fun privateMode(final: Char, codes: List<Int>) {
+    private fun privateMode(final: Char, codes: CsiParams) {
         if (final != 'h' && final != 'l') return
         val on = final == 'h'
-        for (code in codes) when (code) {
+        for (i in 0 until codes.size) when (codes.at(i, 0)) {
             1 -> applicationCursorKeys = on
             6 -> { originMode = on; cursorTo(0, 0) }
             7 -> autoWrap = on
@@ -1314,8 +1315,7 @@ class TerminalEmulator(
      * cursor (what neovim sends on exit), 1 — blinking block, 2 — block, 3 — blinking underline,
      * 4 — underline, 5 — blinking bar, 6 — bar. Odd blink, even don't.
      */
-    private fun setCursorStyle(args: List<Int>) {
-        val n = args.getOrNull(0)?.takeIf { it >= 0 } ?: 0
+    private fun setCursorStyle(n: Int) {
         if (n == 0) { restoreDefaultCursor(); return }
         cursorShape = when (n) {
             3, 4 -> CursorShape.Underline
@@ -1528,15 +1528,6 @@ class TerminalEmulator(
         row.wrapped = false
     }
 
-    private fun parseArgs(raw: String): List<Int> {
-        if (raw.isEmpty()) return emptyList()
-        // Non-SGR CSI (cursor, DECSCUSR, modes) carry no colon; fold ':' to ';' just in case. SGR is
-        // parsed by the separate colon-aware [SgrParser.parseParams] (subparameters matter there).
-        // Capped so that relative moves and counts (`cy + n`, `cx + n`) cannot overflow Int; no
-        // screen dimension or mode number comes anywhere near the cap.
-        return raw.replace(':', ';').split(';').map { it.toIntOrNull()?.coerceAtMost(MAX_CSI_ARG) ?: -1 }
-    }
-
     /**
      * What may stay in a window title: printable, and neither reordering nor invisible.
      *
@@ -1555,12 +1546,6 @@ class TerminalEmulator(
 
         /** [stepMarkRow] when no runbook step is open — nothing to cut the output out of. */
         private const val NO_STEP_MARK = -1
-
-        /** Largest numeric CSI parameter; xterm clamps at the same value. */
-        const val MAX_CSI_ARG = 65535
-
-        /** CSI params buffer length cap (OOM guard: a server pours digits with no final byte). */
-        const val MAX_CSI_PARAMS_LEN = 1024
 
         /** OSC 52 text size cap for writing to the system clipboard (anti-flood). */
         const val MAX_CLIPBOARD_LEN = 64 * 1024
