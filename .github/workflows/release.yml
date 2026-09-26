@@ -268,6 +268,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        # The action's default list includes `tools`, which cmdline-tools 20 no longer carries,
+        # and sdkmanager fails the step on it.
+        with:
+          packages: platform-tools
 
       - name: Install Android SDK packages
         # The runner's bundled sdkmanager repository predates API 37 and can't resolve
