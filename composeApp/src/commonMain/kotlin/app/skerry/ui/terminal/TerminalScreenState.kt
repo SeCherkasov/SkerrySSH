@@ -1187,6 +1187,9 @@ class TerminalScreenState(
         sendBytes(bytes)
     }
 
+    /** Rows of [screen] above the live grid: the scrollback on the primary buffer, none on the alt one. */
+    val historyRows: Int get() = (screen.size - rows).coerceAtLeast(0)
+
     /**
      * Encode a mouse event per the emulator's current mode/encoding and send it to the PTY. Returns
      * `true` if a report was sent (event is reported in the active mode), else `false` so the
@@ -1202,8 +1205,11 @@ class TerminalScreenState(
         pixelX: Int = 0,
         pixelY: Int = 0,
     ): Boolean {
+        // [pos] is a cell of [screen], which on the primary buffer starts with the scrollback; the
+        // application counts from the top of the live screen.
         val bytes = encodeMouseReport(
-            mouseTracking, mouseSgr, button, type, pos.col, pos.row, shift, alt, ctrl,
+            mouseTracking, mouseSgr, button, type,
+            pos.col.coerceIn(0, cols - 1), (pos.row - historyRows).coerceIn(0, rows - 1), shift, alt, ctrl,
             pixels = mousePixels, pixelX = pixelX, pixelY = pixelY,
         ) ?: return false
         sendBytes(bytes)

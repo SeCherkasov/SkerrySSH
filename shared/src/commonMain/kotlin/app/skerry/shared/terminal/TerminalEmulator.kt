@@ -259,14 +259,11 @@ class TerminalEmulator(
     private var scrollTop = 0
     private var scrollBottom = this.rows - 1
 
-    // Saved cursor (DECSC/DECRC; also used by alt-screen 1049). Per VT220, DECSC also saves the
-    // active graphic set — otherwise text after DECRC would misrender as line-drawing.
-    private var savedCx = 0
-    private var savedCy = 0
-    private var savedStyle = TermStyle()
-    private var savedG0LineDrawing = false
-    private var savedG1LineDrawing = false
-    private var savedGlG1 = false
+    // Saved cursor (DECSC/DECRC; also used by alt-screen 1049), one slot per buffer as in xterm:
+    // a TUI's own DECSC must not replace the shell position 1049 put aside. Per VT220, DECSC also
+    // saves the active graphic set — otherwise text after DECRC would misrender as line-drawing.
+    private var savedPrimary = SavedCursor()
+    private var savedAlt = SavedCursor()
 
     private var tabStops = defaultTabStops(this.cols)
 
@@ -565,6 +562,7 @@ class TerminalEmulator(
             b in 0x30..0x3f -> if (params.length < MAX_CSI_PARAMS_LEN) params.append(b.toChar()) // digits, ';', ':', markers ?<=>
             b in 0x20..0x2f -> csiIntermediate = b.toChar() // intermediate bytes
             b in 0x40..0x7e -> { dispatchCsi(b.toChar()); parser = State.Ground }
+            b == 0x1b -> parser = State.Esc // abandons this sequence and starts the next one
             else -> parser = State.Ground
         }
     }
@@ -584,7 +582,8 @@ class TerminalEmulator(
     private fun oscEsc(b: Int) {
         finishOsc()
         parser = State.Ground
-        if (b != '\\'.code) process(b)
+        // Not ST: the ESC already consumed starts the next sequence, and [b] is its first byte.
+        if (b != '\\'.code) { parser = State.Esc; process(b) }
     }
 
     private fun finishOsc() {
@@ -779,8 +778,8 @@ class TerminalEmulator(
     private fun strSeqEsc(b: Int) {
         finishStrSeq()
         parser = State.Ground
-        // process(b) is safe even when b==ESC: strSeq was already cleared in finishStrSeq, so no double flush.
-        if (b != '\\'.code) process(b) // not ST — ESC starts a new sequence
+        // Not ST: the ESC already consumed starts the next sequence, and [b] is its first byte.
+        if (b != '\\'.code) { parser = State.Esc; process(b) }
     }
 
     /**
@@ -1025,6 +1024,7 @@ class TerminalEmulator(
             repeat(w) { row.add(cx, blankCell()) }
             while (row.size > cols) row.removeAt(row.size - 1)
         }
+        eraseWideRemnants(row, cx, (cx + w - 1).coerceAtMost(cols - 1))
         if (w == 2 && cx < cols - 1) {
             row[cx] = TermCell(text, style, CellWidth.Wide, currentHyperlink)
             row[cx + 1] = TermCell("", style, CellWidth.Continuation, currentHyperlink)
@@ -1046,6 +1046,7 @@ class TerminalEmulator(
     private fun appendCombining(cp: Int): Boolean {
         val row = grid[cy]
         val baseCol = when {
+            pendingWrap && row[cx].width == CellWidth.Continuation && cx >= 1 -> cx - 1 // a wide char filled the last two columns
             pendingWrap -> cx                                                    // cursor hasn't moved: cx == cols-1 (>=0), the last printed cell
             cx == 0 -> return false                                              // nothing to the left to attach to
             row[cx - 1].width == CellWidth.Continuation && cx >= 2 -> cx - 2     // under a Wide char — take the Wide cell itself
@@ -1133,8 +1134,8 @@ class TerminalEmulator(
         when (mode) {
             // Erasing the tail (0) or the whole row (2) removes its continuation — clear wrapped so
             // reflow doesn't glue the next row to it. Erasing the head (1) leaves the tail alone.
-            0 -> { for (c in cx until cols) row[c] = blankCell(); row.wrapped = false }
-            1 -> for (c in 0..cx.coerceAtMost(cols - 1)) row[c] = blankCell()
+            0 -> { eraseWideRemnants(row, cx, cols - 1); for (c in cx until cols) row[c] = blankCell(); row.wrapped = false }
+            1 -> { eraseWideRemnants(row, 0, cx.coerceAtMost(cols - 1)); for (c in 0..cx.coerceAtMost(cols - 1)) row[c] = blankCell() }
             2 -> { for (c in 0 until cols) row[c] = blankCell(); row.wrapped = false }
         }
     }
@@ -1180,7 +1181,19 @@ class TerminalEmulator(
     private fun eraseChars(n: Int) {
         markDirty()
         val row = grid[cy]
-        for (c in cx until (cx + n).coerceAtMost(cols)) row[c] = blankCell()
+        val end = (cx + n).coerceAtMost(cols)
+        eraseWideRemnants(row, cx, end - 1)
+        for (c in cx until end) row[c] = blankCell()
+    }
+
+    /**
+     * Before columns [from]..[to] of [row] are overwritten, blanks the half of a wide character that
+     * lies outside them, as xterm does. A Wide cell whose continuation is gone is still drawn two
+     * columns wide, on top of whatever replaced its right half.
+     */
+    private fun eraseWideRemnants(row: TermRow, from: Int, to: Int) {
+        if (from > 0 && row[from].width == CellWidth.Continuation) row[from - 1] = blankCell()
+        if (to < cols - 1 && row[to].width == CellWidth.Wide) row[to + 1] = blankCell()
     }
 
     private fun insertChars(n: Int) {
@@ -1232,15 +1245,16 @@ class TerminalEmulator(
     // --- Cursor / reset / alt-screen --------------------------------------
 
     private fun saveCursor() {
-        savedCx = cx; savedCy = cy; savedStyle = style
-        savedG0LineDrawing = g0LineDrawing; savedG1LineDrawing = g1LineDrawing; savedGlG1 = glG1
+        val saved = SavedCursor(cx, cy, style, g0LineDrawing, g1LineDrawing, glG1)
+        if (altScreen) savedAlt = saved else savedPrimary = saved
     }
 
     private fun restoreCursor() {
-        cx = savedCx.coerceIn(0, cols - 1)
-        cy = savedCy.coerceIn(0, rows - 1)
-        style = savedStyle
-        g0LineDrawing = savedG0LineDrawing; g1LineDrawing = savedG1LineDrawing; glG1 = savedGlG1
+        val saved = if (altScreen) savedAlt else savedPrimary
+        cx = saved.cx.coerceIn(0, cols - 1)
+        cy = saved.cy.coerceIn(0, rows - 1)
+        style = saved.style
+        g0LineDrawing = saved.g0LineDrawing; g1LineDrawing = saved.g1LineDrawing; glG1 = saved.glG1
         pendingWrap = false
     }
 
@@ -1367,7 +1381,15 @@ class TerminalEmulator(
         if (nc == cols && nr == rows) return
         markDirty()
         val wasPendingWrap = pendingWrap
-        val (newCy, newCx) = reflowPrimary(nc, nr, trackCursor = !altScreen)
+        // In the alt screen the primary buffer's cursor is the one 1049 saved: it is where the
+        // shell resumes, so it follows its text through the reflow like the live cursor would.
+        val primaryCursor = if (altScreen) savedPrimary else null
+        val (newCy, newCx) = reflowPrimary(
+            nc, nr,
+            cursorRow = primaryCursor?.cy?.coerceIn(0, rows - 1) ?: cy,
+            cursorCol = primaryCursor?.cx?.coerceIn(0, cols - 1) ?: cx,
+        )
+        if (primaryCursor != null) savedPrimary = primaryCursor.copy(cx = newCx, cy = newCy)
         if (!altScreen) grid = primaryGrid
         altGrid?.let { resizeGrid(it, nc, nr, activePrimary = false) }
         cols = nc
@@ -1390,11 +1412,11 @@ class TerminalEmulator(
     /**
      * Reflow the primary buffer (scrollback + [primaryGrid]) to width [nc]/height [nr] — the
      * algorithm in [TerminalReflow.reflow] (pure functions); here only input collection and applying the
-     * result to state. Returns the new cursor position `(cy, cx)` in new-grid coordinates (meaningful
-     * only with [trackCursor]).
+     * result to state. Returns where the primary cursor at ([cursorRow], [cursorCol]) lands, as
+     * `(cy, cx)` in new-grid coordinates.
      */
     // Caller must markDirty() first (resize does): this writer relies on its entry frame.
-    private fun reflowPrimary(nc: Int, nr: Int, trackCursor: Boolean): Pair<Int, Int> {
+    private fun reflowPrimary(nc: Int, nr: Int, cursorRow: Int, cursorCol: Int): Pair<Int, Int> {
         val src = ArrayList<TermRow>(scrollback.size + primaryGrid.size).apply {
             addAll(scrollback.rows); addAll(primaryGrid)
         }
@@ -1403,10 +1425,10 @@ class TerminalEmulator(
             nc = nc,
             nr = nr,
             maxScrollback = maxScrollback,
-            cursorAbs = scrollback.size + cy,
-            cursorCol = cx,
-            rowsBelowCursor = rows - 1 - cy,
-            trackCursor = trackCursor,
+            cursorAbs = scrollback.size + cursorRow,
+            cursorCol = cursorCol,
+            rowsBelowCursor = rows - 1 - cursorRow,
+            trackCursor = true,
         )
         scrollback.clear()
         stepMarkRow = NO_STEP_MARK // reflow rebuilds history: the row the mark pointed at is gone
@@ -1472,7 +1494,9 @@ class TerminalEmulator(
         if (raw.isEmpty()) return emptyList()
         // Non-SGR CSI (cursor, DECSCUSR, modes) carry no colon; fold ':' to ';' just in case. SGR is
         // parsed by the separate colon-aware [SgrParser.parseParams] (subparameters matter there).
-        return raw.replace(':', ';').split(';').map { it.toIntOrNull() ?: -1 }
+        // Capped so that relative moves and counts (`cy + n`, `cx + n`) cannot overflow Int; no
+        // screen dimension or mode number comes anywhere near the cap.
+        return raw.replace(':', ';').split(';').map { it.toIntOrNull()?.coerceAtMost(MAX_CSI_ARG) ?: -1 }
     }
 
     /**
@@ -1493,6 +1517,9 @@ class TerminalEmulator(
 
         /** [stepMarkRow] when no runbook step is open — nothing to cut the output out of. */
         private const val NO_STEP_MARK = -1
+
+        /** Largest numeric CSI parameter; xterm clamps at the same value. */
+        const val MAX_CSI_ARG = 65535
 
         /** CSI params buffer length cap (OOM guard: a server pours digits with no final byte). */
         const val MAX_CSI_PARAMS_LEN = 1024
@@ -1538,6 +1565,16 @@ class TerminalEmulator(
         fun defaultTabStops(cols: Int) = BooleanArray(cols) { it % TAB == 0 && it != 0 }
     }
 }
+
+/** What DECSC puts aside: cursor, rendition and the active graphic sets. */
+private data class SavedCursor(
+    val cx: Int = 0,
+    val cy: Int = 0,
+    val style: TermStyle = TermStyle(),
+    val g0LineDrawing: Boolean = false,
+    val g1LineDrawing: Boolean = false,
+    val glG1: Boolean = false,
+)
 
 /** Rows per sealed chunk of frozen scrollback (see [ScrollbackBuffer]). */
 private const val SCROLLBACK_CHUNK = 256
