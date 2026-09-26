@@ -69,6 +69,8 @@ class TeamsCoordinatorScopeTest {
         var listScopesFailure: SyncException? = null
         /** Set to make the team-key rotation fail — a 5xx, or the network dropping mid-removal. */
         var teamRekeyFailure: SyncException? = null
+        /** Runs once a scope rotation is committed — where a lock or a crash cuts the rest short. */
+        var afterRekeyScope: () -> Unit = {}
 
         private val store = linkedMapOf<String, Triple<RemoteRecord, Long, String>>() // id -> (rec, seq, scope)
         private var seq = 0L
@@ -114,6 +116,7 @@ class TeamsCoordinatorScopeTest {
             epochs[scopeId] = newEpoch
             val grants = scopes[scopeId] ?: return
             envelopes.forEach { (account, env) -> if (grants.containsKey(account)) grants[account] = env }
+            afterRekeyScope()
         }
 
         override suspend fun members(session: SyncSession, teamId: String): List<TeamMember> =
@@ -141,6 +144,8 @@ class TeamsCoordinatorScopeTest {
 
         /** Ciphertext of a record as the server holds it — used to prove a scope's blob stays sealed. */
         fun blobOf(id: String): ByteArray? = store[id]?.first?.blob
+
+        fun versionOf(id: String): Long? = store[id]?.first?.version
 
         override suspend fun publishKey(session: SyncSession, publicKey: ByteArray, signPublicKey: ByteArray) = Unit
         override suspend fun createTeam(session: SyncSession, teamId: String) = error("unused")
@@ -268,6 +273,39 @@ class TeamsCoordinatorScopeTest {
         // survives a server that ignores its own ACL.
         val blob = client.blobOf("h1")
         assertTrue(blob != null && !blob.contentEquals("""{"name":"db-prod"}""".encodeToByteArray()))
+    }
+
+    /**
+     * The scope side of an interrupted rotation: committed on the server, then the vault locked
+     * before the new key was stored. The envelope sealed to ourselves finishes it on the next
+     * refresh — the records come out re-encrypted and pushed, not dropped with a file reset.
+     */
+    @Test
+    fun `a scope rotation cut short after the server commit is finished from its own envelope`() = runBlocking {
+        initializeVaultCrypto()
+        val f = newFixture()
+        val ks = seedTeam(f)
+        val client = FakeTeamClient(self, teamId, AccountKeys(crypto.newSharingKeyPair().publicKey, crypto.newSigningKeyPair().publicKey))
+        val coord = coordinator(f, client, listOf("prod").iterator())
+        coord.createScope(teamId, "Production")
+        f.vault.put("h1", RecordType.HOST, "secret".encodeToByteArray())
+        coord.shareRecord(TeamScopeRef(teamId, "prod"), "h1", RecordType.HOST)
+        coord.grantScope(teamId, "prod", bob)
+        val pushedBefore = assertNotNull(client.versionOf("h1"))
+
+        client.afterRekeyScope = { f.vault.lock() }
+        coord.revokeScope(teamId, "prod", bob)
+        f.vault.unlock("master".toCharArray())
+        assertEquals(listOf("prod" to 1L), client.rekeyCalls)
+        assertEquals(0, ks.scope(teamId, "prod")!!.epoch, "the new key was stored after all")
+
+        client.afterRekeyScope = {}
+        coord.refresh()
+
+        assertEquals(1, ks.scope(teamId, "prod")!!.epoch)
+        val newKey = ks.scope(teamId, "prod")!!.dataKey()!!
+        assertContentEquals("secret".encodeToByteArray(), f.teamVaults.open(TeamScopeRef(teamId, "prod"), newKey)!!.openPayload("h1"))
+        assertEquals(pushedBefore + 1, client.versionOf("h1"), "the re-encrypted record was not pushed")
     }
 
     @Test
